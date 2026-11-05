@@ -14,8 +14,6 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// the iOS simulator helper (live screen + touches) is built from source here
-execFileSync("sh", [join(root, "src-tauri", "helpers", "build.sh")], { stdio: "inherit" });
 const tauri = join(root, "src-tauri");
 const binDir = join(tauri, "binaries");
 const resDir = join(tauri, "resources");
@@ -30,6 +28,9 @@ if (process.platform !== "darwin" || !archs[nodeArch]) {
 const log = (msg) => console.log(`bundle: ${msg}`);
 mkdirSync(binDir, { recursive: true });
 mkdirSync(resDir, { recursive: true });
+
+// the iOS simulator helper (live screen + touches) is built from source here
+execFileSync("sh", [join(tauri, "helpers", "build.sh")], { stdio: "inherit" });
 
 function same(src, dest) {
   if (!existsSync(dest)) return false;
