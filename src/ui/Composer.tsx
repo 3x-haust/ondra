@@ -270,18 +270,30 @@ export function Composer(props: {
       // one box that grows or shrinks in place: no cross-fade of two pictures
       const box = wrap.querySelector<HTMLElement>(".composer");
       if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return setOpenState(v);
-      const before = getComputedStyle(box);
-      const from = { height: `${box.offsetHeight}px`, borderRadius: before.borderRadius };
-      box.getAnimations().forEach((a) => a.cancel());
+      // a pill's radius is huge on paper: use what shows (half the height), so the
+      // corners ease from round to square instead of snapping at the end
+      const shape = () => {
+        const h = box.offsetHeight;
+        const r = Math.min(parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0, h / 2);
+        return { height: `${h}px`, borderRadius: `${r}px` };
+      };
+      const from = shape();
+      for (const x of [box, ...box.children]) (x as HTMLElement).getAnimations().forEach((a) => a.cancel());
+      // the signal lands after this effect: switch the class now to measure the end
+      wrap.classList.toggle("slim", !v);
       setOpenState(v);
-      const after = getComputedStyle(box);
-      const to = { height: `${box.offsetHeight}px`, borderRadius: after.borderRadius };
+      const to = shape();
       if (from.height === to.height && from.borderRadius === to.borderRadius) return;
       box.style.overflow = "hidden";
-      const a = box.animate([from, to], { duration: 200, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+      const ease = "cubic-bezier(0.32, 0.72, 0, 1)";
+      const a = box.animate([from, to], { duration: 320, easing: ease });
       const done = () => (box.style.overflow = "");
       a.onfinish = done;
       a.oncancel = done;
+      // what the bigger box adds comes in as it opens, not all at once
+      if (v)
+        for (const c of box.children)
+          (c as HTMLElement).animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 60, easing: ease, fill: "backwards" });
     }, { defer: true }),
   );
   let wrap!: HTMLDivElement;
