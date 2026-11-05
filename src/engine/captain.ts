@@ -86,16 +86,23 @@ export function jobEnded(t: Task) {
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
   followUps.set(space, n);
-  const lastUser = t.entries.map((e) => e.kind).lastIndexOf("user");
+  // what it reported since it was last given work; a card it asked and got answered is part of that work
+  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
+  let lastUser = -1;
+  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
   const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n").slice(-3500);
-  const evidence = t.entries.filter((e) => e.kind === "block" && e.block.type === "evidence").flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : []));
+  const evidence = t.entries.slice(lastUser + 1).flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
+  // main already sent this fork back since the user last spoke: once is enough
+  const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
+  const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
   const text = [
     handed ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, your answer goes back to main.` : "",
     `Fork ${t.id} "${t.title}" ${t.status === "done" ? "finished" : "failed"}.`,
     t.status === "done" ? `Summary: ${t.summary ?? ""}` : `Error: ${t.error ?? ""}`,
     t.unverified?.length ? `Not verified: ${t.unverified.join("; ")}` : "",
-    evidence.length ? `Evidence: ${evidence.slice(0, 8).join(" | ")}` : "",
+    evidence.length ? `Evidence: ${evidence.join(" | ")}` : "",
     said ? `What it reported:\n${said}` : "",
+    sentBack ? "You already sent this fork back once since the user last spoke. Report what came out and stop: no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
@@ -163,7 +170,10 @@ export function reportUp(space: string) {
     ? ""
     : jobs
         .map((t) => {
-          const lastUser = t.entries.map((e) => e.kind).lastIndexOf("user");
+          // what it reported since it was last given work; a card it asked and got answered is part of that work
+  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
+  let lastUser = -1;
+  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
           const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n");
           return said.trim() ? `${t.title}:\n${said.trim().slice(-2500)}` : "";
         })
@@ -513,7 +523,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "# A fork you started has ended (not a user message)",
       text,
       "",
-      "Tell the user what came out, short and visual (blocks), as an \"answer\". Then keep going toward what the user wanted: if the next step is clear, route it now (new or append) instead of offering it. Anything it couldn't verify that can be verified (does it really run, do the events really go out) is the next step: route it. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
+      "Tell the user what came out, short and visual (blocks), as an \"answer\". Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
   sentOf.set(space, { forks, memory: "", skills, rules, projects, recap: false });

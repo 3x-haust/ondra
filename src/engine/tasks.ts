@@ -47,6 +47,8 @@ interface Run {
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
   gates?: number;
+  /** the summary of the first done: the whole job, kept when the proof check sends it back */
+  firstDone?: string;
   /** status looks at running work (sleep, tail, ps …) this run */
   polls?: number;
   /** how many times it was told its context is long (handoff) */
@@ -862,6 +864,7 @@ async function settle(id: string, run: Run) {
     if (missing) {
       run.gates = (run.gates ?? 0) + 1;
       const summary = run.done;
+      run.firstDone ??= summary;
       run.done = undefined;
       updateTask(id, (x) => {
         x.now = "증거를 채우는 중";
@@ -871,11 +874,12 @@ async function settle(id: string, run: Run) {
         run.turnStart = Date.now();
         await request(agent, { type: "prompt", message: missing.ask });
       } catch {
-        finish(id, summary, run);
+        finish(id, run.firstDone ?? summary, run);
       }
       return;
     }
-    finish(id, run.done, run);
+    // the done after a send-back only covers the missing proof; the first one says what the job did
+    finish(id, run.firstDone ?? run.done, run);
     return;
   }
   if (run.handoff) {
