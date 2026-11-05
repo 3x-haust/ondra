@@ -397,14 +397,20 @@ function branchName(b?: string) {
 }
 
 /** First start of a task in a git repo: give it its own worktree. Silent when the folder isn't a repo. */
+/** The job had a worktree that is merged, discarded or no longer on disk. */
+async function worktreeGone(t: Task): Promise<boolean> {
+  const w = t.worktree;
+  if (!w || t.parentId || !(t.isolate ?? state.settings.isolate)) return false;
+  if (w.state !== "open") return true;
+  const there = await fsRead(`${w.path}/.git`).catch(() => null);
+  return !there || !!(there as { error?: string }).error;
+}
+
 async function isolate(id: string) {
   const t = taskById(id);
   if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return;
   const old = t.worktree;
-  if (old?.state === "open") {
-    const there = await fsRead(`${old.path}/.git`).catch(() => null);
-    if (there && !(there as { error?: string }).error) return;
-  }
+  if (old && !(await worktreeGone(t))) return;
   // merged, discarded or cleaned up: more work on it starts on a fresh worktree
   // from where the repo is now, never in the user's own checkout
   const cwd = old ? `${old.repo}${old.sub ? `/${old.sub}` : ""}` : expand(t.cwd || spaceById(t.space).folder || "~");
@@ -512,6 +518,16 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     t.startedAt ??= Date.now();
     t.now = "준비 중";
   });
+  // resuming after its worktree went away would carry on in the user's own
+  // checkout with the old paths in mind: go on in a fresh session on a new worktree
+  const before = taskById(id);
+  if (resume && before && !before.answer && (await worktreeGone(before))) {
+    resume = false;
+    updateTask(id, (t) => {
+      const last = t.legs[t.legs.length - 1];
+      if (last && !last.endedAt) last.endedAt = Date.now();
+    });
+  }
   if (!resume && !taskById(id)?.answer) await isolate(id);
   const t0 = taskById(id);
   if (!t0) return;
