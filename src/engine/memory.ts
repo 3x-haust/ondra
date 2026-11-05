@@ -190,7 +190,7 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
     const live = state.memory.filter((m) => isLive(m) && sameHome(m, scope, opts));
     const tk = new Set(tokens(t));
     const same = opts.key ? live.find((m) => m.key === opts.key) : undefined;
-    const dup = (same && norm(same.text) === norm(t) ? same : undefined) ?? live.find((m) => norm(m.text) === norm(t) || overlap(tk, new Set(tokens(m.text))).j >= 0.85);
+    const dup = (same && norm(same.text) === norm(t) ? same : undefined) ?? live.find((m) => norm(m.text) === norm(t) || overlap(tk, new Set(tokens(m.text))).j >= 0.75);
     if (dup) {
       // the same thing again: counted, not stored twice (Honcho times_derived)
       setState("memory", (m) => m.id === dup.id, (m) => ({
@@ -311,6 +311,11 @@ export function markUsed(ids: string[]) {
 // ───────────── reading
 
 const under = (dir: string, folder: string) => dir === folder || dir.startsWith(`${folder}/`);
+/** a worktree kept apart from its repo (…/worktrees/<repo>/<job>) counts as being in that repo */
+const sameRepo = (dir: string, folder: string) => {
+  const repo = /\/worktrees\/([^/]+)\//.exec(`${dir}/`)?.[1];
+  return !!repo && folder.replace(/\/+$/, "").split("/").pop() === repo;
+};
 
 /** Live pieces that apply here. `expand` turns "~/…" into an absolute path. */
 export function applying(space: SpaceId, dir: string, expand: (p: string) => string): Memory[] {
@@ -319,7 +324,7 @@ export function applying(space: SpaceId, dir: string, expand: (p: string) => str
       isLive(m) &&
       (m.scope === "global" ||
         (m.scope === "space" && m.space === space) ||
-        (m.scope === "project" && !!dir && !!m.project && under(dir, expand(m.project)))),
+        (m.scope === "project" && !!dir && !!m.project && (under(dir, expand(m.project)) || sameRepo(dir, expand(m.project))))),
   );
 }
 
@@ -331,10 +336,15 @@ export const core = (_list: Memory[]): Memory[] => [];
  * local embeddings when the query was prepared + importance + recency), cut to a budget so the prompt stays small. Pieces with no word in
  * common are left out unless they are filed under this very folder.
  */
-export function recall(list: Memory[], query: string, opts: { budget?: number; max?: number; folder?: (m: Memory) => boolean; links?: boolean } = {}): Memory[] {
+export function recall(
+  list: Memory[],
+  query: string,
+  opts: { budget?: number; max?: number; folder?: (m: Memory) => boolean; links?: boolean; /** only pieces clearly about the query */ strict?: boolean; /** strict: what the work is about (its title, topic); a piece must share a word with it */ about?: string } = {},
+): Memory[] {
   const pool = list;
   if (!pool.length) return [];
   const q = [...new Set(tokens(query))];
+  const aboutWords = new Set(tokens(opts.about ?? ""));
   const docs = pool.map((m) => ({ m, w: findWords(m) }));
   const avg = docs.reduce((n, d) => n + d.w.length, 0) / docs.length || 1;
   const df = new Map<string, number>();
@@ -348,9 +358,13 @@ export function recall(list: Memory[], query: string, opts: { budget?: number; m
   const sd = Math.sqrt(got.reduce((a, b) => a + (b - mu) ** 2, 0) / (got.length || 1)) || 1;
   const scored = docs.map(({ m, w }, i) => {
     let bm = 0;
+    let rare = 0; // distinct query words it shares that few pieces have
+    let onTopic = !opts.about;
     for (const t of q) {
       const tf = w.filter((x) => x === t || (t.length >= 3 && (x.startsWith(t) || t.startsWith(x)))).length;
       if (!tf) continue;
+      if ((df.get(t) ?? 0) <= Math.max(3, docs.length * 0.04)) rare++;
+      if (aboutWords.has(t) && (df.get(t) ?? 0) <= Math.max(3, docs.length * 0.25)) onTopic = true;
       const idf = Math.log(1 + (docs.length - (df.get(t) ?? 0) + 0.5) / ((df.get(t) ?? 0) + 0.5));
       bm += (idf * tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (w.length / avg)));
     }
@@ -358,15 +372,20 @@ export function recall(list: Memory[], query: string, opts: { budget?: number; m
     const fresh = strength(m, now);
     const sim = sims[i];
     const sem = sim === undefined || got.length < 4 ? 0 : Math.min(3, Math.max(0, (sim - mu) / sd - 1.2) * 1.5);
-    const hit = bm > 0 || sem > 0 || local;
+    // strict: one shared common word isn't enough; the words or the meaning must match.
+    // Meaning scores are relative (some piece always stands out), so they count only on topic
+    const hit = opts.strict ? onTopic && (rare >= 2 || sem > 0.8) : bm > 0 || sem > 0 || local;
     // + importance, + how often it came up again, + recency (30-day half-life)
     const seen = Math.min(0.3, 0.1 * ((m.seen ?? 1) - 1));
     const score = (bm + sem + (hit ? 0.35 * ((m.importance ?? 3) / 5) + 0.25 * fresh + seen + (local ? 0.6 : 0) : 0)) * (0.45 + 0.55 * fresh);
-    return { m, score };
+    return { m, score: opts.strict && !hit ? 0 : score };
   });
   const out: Memory[] = [];
   let used = 0;
-  for (const { m } of scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score)) {
+  const ranked = scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
+  // strict: far weaker than the best match means it is about something else
+  const floor = opts.strict && ranked.length ? ranked[0].score * 0.4 : 0;
+  for (const { m } of ranked.filter((s) => s.score >= floor)) {
     if (out.length >= (opts.max ?? 8) || used + m.text.length > (opts.budget ?? 1800)) break;
     out.push(m);
     used += m.text.length;

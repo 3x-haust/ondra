@@ -28,6 +28,10 @@ const KIND = Type.Union([Type.Literal("rule"), Type.Literal("preference"), Type.
 
 export default function (pi: any) {
   if (!URL_ || !TOKEN) return;
+  // per session: what was searched and shown, so repeats are answered at once
+  const asked = new Set<string>();
+  const shown = new Set<string>();
+  let empties = 0;
 
   pi.registerTool({
     name: "memory_search",
@@ -40,13 +44,28 @@ export default function (pi: any) {
       limit: Type.Optional(Type.Number({ description: "max results (default 8)" })),
     }),
     async execute(_id: string, p: any, signal?: AbortSignal) {
+      // the same search again gives the same answer: say so instead of spending a turn
+      const q = String(p.query ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+      if (asked.has(q)) return out("You already ran this search in this session; its results haven't changed. Use them, or decide from the code, docs or the web.");
+      asked.add(q);
       const r = await call("memory_search", p, signal);
       if (r?.error) return out(`memory_search failed: ${r.error}`);
-      if (!r?.results?.length) return out(`Nothing in memory matches (searched ${r?.total ?? 0} pieces).`);
+      if (!r?.results?.length) {
+        empties++;
+        return out(
+          r?.total
+            ? `Nothing in memory matches (searched ${r.total} pieces).${empties >= 2 ? " Memory has nothing on this; stop searching it and decide from the code, docs or the web." : ""}`
+            : "Memory is empty for this job's space. Don't search it again in this job.",
+        );
+      }
+      const fresh = r.results.filter((m: any) => !shown.has(m.id));
+      for (const m of r.results) shown.add(m.id);
+      if (!fresh.length) return out(`Only pieces you already saw (${r.results.map((m: any) => m.id).join(", ")}). Memory has nothing more on this.`);
       const tag = (m: any) => [m.kind, m.where, m.seen ? `${m.seen}x` : "", m.by === "user" ? "user's own" : "", m.paths ? `paths ${m.paths.join(" ")}` : "", m.date].filter(Boolean).join(", ");
-      const lines = r.results.map((m: any) => `[${m.id}${m.key ? ` ${m.key}` : ""}] (${tag(m)}) ${m.text}${m.cites ? `\n    cites: ${m.cites.join(", ")}` : ""}`);
+      const again = r.results.length - fresh.length;
+      const lines = fresh.map((m: any) => `[${m.id}${m.key ? ` ${m.key}` : ""}] (${tag(m)}) ${m.text}${m.cites ? `\n    cites: ${m.cites.join(", ")}` : ""}`);
       const jobs = (r.past_jobs ?? []).map((j: any) => `- ${j.date} ${j.job} (${j.outcome}): ${j.text.replace(/\s+/g, " ")}`);
-      return out([...lines, ...(jobs.length ? ["", "Past jobs that may help:", ...jobs] : [])].join("\n"));
+      return out([...lines, ...(again ? [`(${again} more you already saw)`] : []), ...(jobs.length ? ["", "Past jobs that may help:", ...jobs] : [])].join("\n"));
     },
   });
 

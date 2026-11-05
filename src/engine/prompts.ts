@@ -460,7 +460,7 @@ export function memoryPrompt(list: Memory[]): string {
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
 export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}`;
 export function relatedMemory(t: Task): Memory[] {
-  return recall(memoriesFor(t.space, homeDir(t)), relatedQuery(t), { max: 3, budget: 600, folder: (m) => m.scope === "project" });
+  return recall(memoriesFor(t.space, homeDir(t)), relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic}`, folder: (m) => m.scope === "project" });
 }
 
 function relatedLines(t: Task): string[] {

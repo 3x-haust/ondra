@@ -46,9 +46,11 @@ export async function findNotes(): Promise<Note[]> {
   const look = async (folder: string, space: SpaceId, project?: string) => {
     if (!folder || folder === "~") return;
     for (const f of await memorySources(expand(folder)).catch(() => [])) {
-      if (seen.has(f.path)) continue;
-      seen.add(f.path);
       const h = hash(f.text);
+      // the same note can sit in two places (e.g. two Claude Code config folders): read it once
+      if (seen.has(f.path) || seen.has(h)) continue;
+      seen.add(f.path);
+      seen.add(h);
       if (state.absorbed?.[f.path] !== h) out.push({ path: f.path, text: f.text, hash: h, space, project });
     }
   };
