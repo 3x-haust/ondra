@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --environment node",
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
     "dmg": "python3 scripts/dmg/build.py",
@@ -32,6 +33,7 @@
     "agent-desktop": "^1.1.0",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.12",
+    "vitest": "^5.1.0"
   }
 }
