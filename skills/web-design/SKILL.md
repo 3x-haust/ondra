@@ -10,6 +10,11 @@ description: >
 
 # Web design
 
+For implementing a supplied design (a Figma link, 피그마 그대로, 디자인 그대로),
+read and follow the `mimikyu` skill instead. Do not run concept selection or
+redesign a reference the user already chose. This skill is for creating a new
+design direction.
+
 Taste can't be guessed. Every design decision starts from real, excellent work
 and ends with the user choosing.
 

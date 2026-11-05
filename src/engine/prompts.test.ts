@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import tauriConfig from "../../src-tauri/tauri.conf.json";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
@@ -70,6 +71,31 @@ describe("coding defaults", () => {
   });
 });
 
+const bundledSkills = import.meta.glob<string>("../../skills/*/SKILL.md", { query: "?raw", import: "default", eager: true });
+const mimikyuFile = "../../skills/mimikyu/SKILL.md";
+const mimikyuPath = decodeURIComponent(new URL(mimikyuFile, import.meta.url).pathname);
+
+describe("bundled design workflow", () => {
+  it("ships an automatically discoverable mimikyu skill with the app", () => {
+    expect(tauriConfig.bundle.resources["../skills/"]).toBe("app-skills/");
+    expect(bundledSkills).toHaveProperty(mimikyuFile);
+    const skill = bundledSkills[mimikyuFile];
+    expect(skill).toMatch(/^---\nname: mimikyu\ndescription:/);
+    expect(skill).not.toContain("disable-model-invocation: true");
+    for (const trigger of ["figma.com", "피그마 링크", "디자인 그대로"]) expect(skill).toContain(trigger);
+    for (const gate of ["overall_match >= 99%", "every region >= 99%", "structural mismatches == 0"])
+      expect(skill).toContain(gate);
+    expect(skill).not.toMatch(/~\/\.mimikyu|\.\.\/\.\.\/scripts\//);
+  });
+
+  it.each([
+    ["captain", CAPTAIN_SYSTEM], ["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM],
+  ])("directs the %s role to the supplied-design workflow", (_role, prompt) => {
+    expect(prompt).toContain("mimikyu skill");
+    expect(prompt).toContain("피그마");
+  });
+});
+
 describe("worker prompt delivery", () => {
   // Only the native process/event boundary is replaced; prompt assembly, state,
   // task startup and RPC response handling all run their real implementations.
@@ -114,6 +140,31 @@ describe("worker prompt delivery", () => {
       expect(prompts.join("\n").match(/^# Coding work$/gm)).toHaveLength(1);
       const sent = vi.mocked(native.agentSend).mock.calls.find(([, command]) => command.type === "prompt")?.[1];
       expect(sent?.message).toContain(mode === "resume" ? "다시 시작" : mode === "handoff" ? "Reproduced incorrect total" : t.ask);
+      expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
+    });
+
+    it.each(["fresh", "resume", "handoff"])(`delivers bundled mimikyu to ${role} on %s without user-installed skills`, async (mode) => {
+      expect(bundledSkills).toHaveProperty(mimikyuFile);
+      vi.spyOn(native, "workerSkills").mockResolvedValue([mimikyuPath]);
+      vi.spyOn(native, "globalSkills").mockResolvedValue([]);
+      const t = task(role === "subagent" ? "parent-task" : undefined);
+      // Availability must not depend on a design keyword or a personal skill.
+      if (t.parentId) setState("tasks", [{ ...task(), id: t.parentId }]);
+      if (mode === "handoff") t.legs = [{
+        startedAt: 1, endedAt: 2,
+        handoff: { did: ["Read the design"], next: "Measure the implementation", evidence: [] },
+      }];
+      setState("tasks", (list) => [...list, t]);
+
+      await startTask(t.id, mode === "resume");
+
+      expect(native.agentSpawn).toHaveBeenCalledTimes(1);
+      const args = vi.mocked(native.agentSpawn).mock.calls[0][2];
+      expect(args).toContain("--no-skills");
+      expect(args.flatMap((arg, i) => arg === "--skill" ? [args[i + 1]] : [])).toEqual([mimikyuPath]);
+      expect(args.includes("--continue")).toBe(mode === "resume");
+      const prompts = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
+      expect(prompts[0]).toContain("mimikyu skill");
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
     });
   }
