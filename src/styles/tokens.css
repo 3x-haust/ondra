@@ -1,0 +1,240 @@
+/* Design tokens. Neutral zinc greys after T3 Code, with Ondra's blue as the one accent; colour otherwise
+   only for state (needs you, failed, done). Easy on the eyes: no pure white
+   page, no pure black text, a deep-sea dark mode. */
+:root {
+  color-scheme: light;
+  --bg: #fcfcfc;
+  --bubble: #f4f4f5;
+  --sidebar: #fafafa;
+  --card: #ffffff;
+  --muted: #fafafa;
+  --hover: #f4f4f5;
+  --active: #ececee;
+  --row-selected: #ffffff;
+  --row-selected-shadow: inset 0 0 0 1px rgba(228, 228, 231, 0.7);
+  --line: #e4e4e7;
+  --line-soft: #ededf0;
+  --input: #d4d4d8;
+  --code-bg: #f4f4f5;
+  --ink: #18181b;
+  --ink-2: #3f3f46;
+  --ink-3: #71717a;
+  --ink-4: #a1a1aa;
+  --accent: #1f6fd8;
+  --accent-hover: #1a61c2;
+  --accent-soft: rgba(31, 111, 216, 0.08);
+  --accent-line: rgba(31, 111, 216, 0.32);
+  --accent-ink: #ffffff;
+  --primary: var(--accent);
+  --primary-ink: var(--accent-ink);
+  --focus: rgba(31, 111, 216, 0.35);
+  /* state: T3-style dots — working sky, needs-you amber, asking indigo, done emerald, failed red */
+  --live: #0ea5e9;
+  --ask: #6366f1;
+  --ok: #10b981;
+  --ok-ink: #047857;
+  --warn: #f59e0b;
+  --warn-ink: #b45309;
+  --bad: #ef4444;
+  --bad-ink: #b91c1c;
+  --ok-soft: rgba(16, 185, 129, 0.08);
+  --warn-soft: rgba(245, 158, 11, 0.08);
+  --bad-soft: rgba(239, 68, 68, 0.06);
+  --bad-line: rgba(239, 68, 68, 0.22);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-composer: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --hero-glow: rgba(31, 111, 216, 0.06);
+  --diff-add: rgba(16, 185, 129, 0.1);
+  --diff-del: rgba(239, 68, 68, 0.08);
+  --diff-add-strong: rgba(16, 185, 129, 0.2);
+  --diff-del-strong: rgba(239, 68, 68, 0.16);
+  /* ── type ── */
+  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-2xs: 11.5px; /* badges, counters */
+  --fs-xs: 12.5px; /* meta, timestamps, section labels */
+  --fs-sm: 13.5px; /* secondary UI, chips, tool rows */
+  --fs-md: 14.5px; /* UI default: sidebar, buttons, menus */
+  --fs-lg: 15.5px; /* reading: messages, answers (T3: text-sm) */
+  --fs-xl: 22px; /* page titles */
+  --fs-2xl: 30px; /* the one hero line */
+  --fs-code: 13px; /* mono, sits optically with --fs-sm */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-strong: 600;
+  --lh-tight: 1.35;
+  --lh-ui: 1.5;
+  --lh-read: 1.65;
+  --tracking: -0.006em;
+  --tracking-tight: -0.03em;
+
+  /* ── space: 2px steps to 16, then 4/8 ── */
+  --s-2: 2px;
+  --s-4: 4px;
+  --s-6: 6px;
+  --s-8: 8px;
+  --s-10: 10px;
+  --s-12: 12px;
+  --s-14: 14px;
+  --s-16: 16px;
+  --s-20: 20px;
+  --s-24: 24px;
+  --s-28: 28px;
+  --s-32: 32px;
+  --s-40: 40px;
+  --s-48: 48px;
+  --s-64: 64px;
+  --s-80: 80px;
+
+  /* ── radius ── */
+  --r-bar: 2px; /* progress ticks */
+  --r-xs: 4px; /* tiny buttons inside chips */
+  --r-sm: 6px; /* rows inside menus, crumbs */
+  --r-md: 8px; /* buttons, inputs, list rows */
+  --r-lg: 8px; /* segmented controls */
+  --r-xl: 12px; /* cards: fork, result, notice, strips */
+  --r-2xl: 16px; /* composer, user bubble */
+  --r-pill: 999px;
+
+  /* ── control heights ── */
+  --h-2xs: 20px;
+  --h-xs: 24px;
+  --h-sm: 28px;
+  --h-md: 32px;
+  --h-lg: 36px;
+  --h-xl: 40px;
+  --h-2xl: 48px;
+
+  /* ── layout ── */
+  --panel-w: 440px;
+  --head-h: 52px;
+  --sidebar-w: 264px;
+  --chat-w: 736px; /* T3: 46rem */
+  --traffic-w: 84px; /* room for the macOS window buttons */
+
+  /* ── motion ── */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* things that slide or pop in */
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1); /* small overshoot: dots, pills, checks */
+  --dur-fast: 0.12s; /* hover, colour */
+  --dur: 0.16s; /* open, rotate, move */
+  --dur-slow: 0.26s; /* entering content */
+  --dur-drawer: 0.36s; /* panels */
+
+  /* ── layers ── */
+  --z-pop: 40;
+  --z-overlay: 60;
+  --z-toast: 80;
+
+  /* ── fixed colours ── */
+  --white: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.18);
+
+  /* older names still used by panel / blocks / settings */
+  --surface: var(--muted);
+  --raised: var(--card);
+  --line-strong: var(--input);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bubble: #18181a;
+  --sidebar: #0d0d0d;
+  --card: #0d0d0d;
+  --muted: rgba(255, 255, 255, 0.03);
+  --hover: rgba(255, 255, 255, 0.06);
+  --active: rgba(255, 255, 255, 0.1);
+  --row-selected: rgba(255, 255, 255, 0.07);
+  --row-selected-shadow: none;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-soft: rgba(255, 255, 255, 0.05);
+  --input: rgba(255, 255, 255, 0.14);
+  --code-bg: #111113;
+  --ink: #f1f3f7;
+  --ink-2: #c7c9ce;
+  --ink-3: #a3a3a3;
+  --ink-4: #5f5f63;
+  --accent: #4d9cf0;
+  --accent-hover: #69adf3;
+  --accent-soft: rgba(77, 156, 240, 0.13);
+  --accent-line: rgba(77, 156, 240, 0.36);
+  --accent-ink: #04111f;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --primary: var(--accent);
+  --primary-ink: var(--accent-ink);
+  --focus: rgba(77, 156, 240, 0.45);
+  --live: rgba(125, 211, 252, 0.8);
+  --ask: rgba(165, 180, 252, 0.9);
+  --ok: rgba(110, 231, 183, 0.9);
+  --ok-ink: #34d399;
+  --warn: rgba(252, 211, 77, 0.9);
+  --warn-ink: #fbbf24;
+  --bad: rgba(252, 165, 165, 0.9);
+  --bad-ink: #f87171;
+  --ok-soft: rgba(16, 185, 129, 0.14);
+  --warn-soft: rgba(245, 158, 11, 0.14);
+  --bad-soft: rgba(239, 68, 68, 0.1);
+  --bad-line: rgba(239, 68, 68, 0.26);
+  --shadow-card: none;
+  --shadow-composer: 0 14px 32px -18px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 20px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --hero-glow: rgba(77, 156, 240, 0.06);
+  --diff-add: rgba(16, 185, 129, 0.12);
+  --diff-del: rgba(239, 68, 68, 0.12);
+  --diff-add-strong: rgba(16, 185, 129, 0.22);
+  --diff-del-strong: rgba(239, 68, 68, 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000;
+    --bubble: #18181a;
+    --sidebar: #0d0d0d;
+    --card: #0d0d0d;
+    --muted: rgba(255, 255, 255, 0.03);
+    --hover: rgba(255, 255, 255, 0.06);
+    --active: rgba(255, 255, 255, 0.1);
+    --row-selected: rgba(255, 255, 255, 0.07);
+    --row-selected-shadow: none;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-soft: rgba(255, 255, 255, 0.05);
+    --input: rgba(255, 255, 255, 0.14);
+    --code-bg: #111113;
+    --ink: #f1f3f7;
+    --ink-2: #c7c9ce;
+    --ink-3: #a3a3a3;
+    --ink-4: #5f5f63;
+    --accent: #4d9cf0;
+    --accent-hover: #69adf3;
+    --accent-soft: rgba(77, 156, 240, 0.13);
+    --accent-line: rgba(77, 156, 240, 0.36);
+    --accent-ink: #04111f;
+    --scrim: rgba(0, 0, 0, 0.6);
+    --primary: var(--accent);
+    --primary-ink: var(--accent-ink);
+    --focus: rgba(77, 156, 240, 0.45);
+    --live: rgba(125, 211, 252, 0.8);
+    --ask: rgba(165, 180, 252, 0.9);
+    --ok: rgba(110, 231, 183, 0.9);
+    --ok-ink: #34d399;
+    --warn: rgba(252, 211, 77, 0.9);
+    --warn-ink: #fbbf24;
+    --bad: rgba(252, 165, 165, 0.9);
+    --bad-ink: #f87171;
+    --ok-soft: rgba(16, 185, 129, 0.14);
+    --warn-soft: rgba(245, 158, 11, 0.14);
+    --bad-soft: rgba(239, 68, 68, 0.1);
+    --bad-line: rgba(239, 68, 68, 0.26);
+    --shadow-card: none;
+    --shadow-composer: 0 14px 32px -18px rgba(0, 0, 0, 0.75);
+    --shadow-pop: 0 20px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --hero-glow: rgba(77, 156, 240, 0.06);
+    --diff-add: rgba(16, 185, 129, 0.12);
+    --diff-del: rgba(239, 68, 68, 0.12);
+    --diff-add-strong: rgba(16, 185, 129, 0.22);
+    --diff-del-strong: rgba(239, 68, 68, 0.22);
+  }
+}
