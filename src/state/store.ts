@@ -99,16 +99,25 @@ export function projectFor(space: SpaceId, cwd?: string): string | undefined {
     .filter((p) => dir === norm(p.folder) || dir.startsWith(`${norm(p.folder)}/`))
     .sort((a, b) => b.folder.length - a.folder.length)[0]?.id;
 }
+/** A project is the repo, never one of its worktree folders (…/worktrees/<repo>/<job> → …/projects/<repo>). */
+export function repoHome(folder: string): string {
+  const wt = folder.replace(/\/$/, "").match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
+  return wt ? `${wt[1]}/projects/${wt[2]}` : folder;
+}
+const gone = (folder: string) => (state.goneProjects ?? []).some((f) => norm(f) === norm(folder));
 /** Folders jobs already worked in (their repos) become projects, once. */
 export function seedProjects() {
   for (const t of state.tasks) {
-    if (t.parentId || t.answer || !t.worktree?.repo) continue;
+    if (t.parentId || t.answer || !t.worktree?.repo || t.project) continue;
+    if (gone(repoHome(t.worktree.repo))) continue;
     const id = addProject(t.space, t.worktree.repo);
     if (!t.project) setState("tasks", (x) => x.id === t.id, "project", id);
   }
 }
 /** Add a folder as a project (or return the one already there). */
 export function addProject(space: SpaceId, folder: string, name?: string): string {
+  folder = repoHome(folder);
+  if (gone(folder)) setState("goneProjects", (l) => (l ?? []).filter((f) => norm(f) !== norm(folder)));
   const have = projectsIn(space).find((p) => norm(p.folder) === norm(folder));
   if (have) return have.id;
   const id = (name || folder.split("/").filter(Boolean).pop() || "project").toLowerCase().replace(/[^a-z0-9가-힣._-]+/g, "-").slice(0, 32) || uid("p");
@@ -117,6 +126,15 @@ export function addProject(space: SpaceId, folder: string, name?: string): strin
   // jobs already in that folder join it
   for (const t of state.tasks) if (t.space === space && !t.project && projectFor(space, t.cwd) === unique) setState("tasks", (x) => x.id === t.id, "project", unique);
   return unique;
+}
+/** Delete a project: its jobs stay (under "그 밖의 일"), its chat goes; the folder itself is untouched. */
+export function removeProject(id: string) {
+  const p = (state.projects ?? []).find((x) => x.id === id);
+  if (!p) return;
+  setState("projects", (l) => (l ?? []).filter((x) => x.id !== id));
+  setState("goneProjects", (l) => [...(l ?? []).filter((f) => norm(f) !== norm(p.folder)), p.folder]);
+  setState("tasks", (t) => t.project === id && t.space === p.space, "project", undefined);
+  setState("captain", (l) => l.filter((m) => !(m.space === p.space && m.project === id)));
 }
 export const taskById = (id: string) => state.tasks.find((t) => t.id === id);
 export const accountById = (id: string) => state.accounts.find((a) => a.id === id);

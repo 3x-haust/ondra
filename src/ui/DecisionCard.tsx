@@ -1,8 +1,9 @@
 // A question a task is waiting on, with its answers as buttons.
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onCleanup, Show } from "solid-js";
 import { taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
-import { openTask } from "../state/ui";
+import { openTask, setView } from "../state/ui";
+import { sharedBrowserGo } from "../lib/native";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
@@ -22,29 +23,67 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     }
     return out.slice(-4);
   };
-  // the recommended choice starts selected; ↑↓ move, a number or Enter answers
+  // the recommended choice starts selected. Clicking, ↑↓ or a number only
+  // selects; Enter or the send button answers (never on hover, never by accident)
+  /** a job asking the user to sign in: the page it was on, to open in the browser view */
+  const loginUrl = () => {
+    if (!/로그인|login|sign.?in|인증/i.test(`${props.d.question} ${props.d.options.map((o) => o.label).join(" ")}`)) return undefined;
+    const x = t();
+    if (!x) return undefined;
+    for (let i = x.entries.length - 1; i >= 0; i--) {
+      const e = x.entries[i];
+      if (e.kind !== "tool" || e.tool.kind !== "browser") continue;
+      const m = `${e.tool.detail ?? ""} ${e.tool.target}`.match(/https?:\/\/[^\s"'<>]+/);
+      if (m) return m[0];
+    }
+    return x.entries.some((e) => e.kind === "tool" && e.tool.kind === "browser") ? "" : undefined;
+  };
+  const openLogin = () => {
+    const u = loginUrl();
+    setView({ name: "browser" });
+    if (u) setTimeout(() => void sharedBrowserGo("open", u).catch(() => {}), 600);
+  };
   const [sel, setSel] = createSignal(Math.max(0, props.d.options.findIndex((o) => o.primary)));
+  const [typed, setTyped] = createSignal("");
   let own!: HTMLInputElement;
   let list!: HTMLDivElement;
   const count = () => props.d.options.length + (props.d.ui ? 0 : 1);
-  const pick = (i: number) => {
-    if (i < props.d.options.length) void decide(props.d.id, props.d.options[i].id);
+  const select = (i: number) => {
+    setSel(i);
+    if (i === props.d.options.length) own?.focus();
+    else list.focus();
+  };
+  const ready = () => sel() < props.d.options.length || !!typed().trim();
+  const submit = () => {
+    if (sel() < props.d.options.length) void decide(props.d.id, props.d.options[sel()].id);
+    else if (typed().trim()) void decide(props.d.id, typed().trim());
     else own?.focus();
   };
+  // a number pressed anywhere (not while typing) selects that choice and
+  // brings the keyboard here, so Enter then answers
+  const anywhere = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
+    const el = document.activeElement as HTMLTextAreaElement | null;
+    if (el && list.contains(el)) return; // handled by `keys`
+    const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
+    if (typing && !(el!.id === "task-input" && !el!.value)) return;
+    if (document.querySelector('[role="dialog"]')) return;
+    e.preventDefault();
+    select(Number(e.key) - 1);
+  };
+  window.addEventListener("keydown", anywhere);
+  onCleanup(() => window.removeEventListener("keydown", anywhere));
   const keys = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const n = (sel() + (e.key === "ArrowDown" ? 1 : -1) + count()) % count();
-      setSel(n);
-      if (n === props.d.options.length) own?.focus();
-    } else if (e.key === "Enter") {
+      select((sel() + (e.key === "ArrowDown" ? 1 : -1) + count()) % count());
+    } else if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
-      pick(sel());
+      submit();
     } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= count()) {
       e.preventDefault();
-      setSel(Number(e.key) - 1);
-      pick(Number(e.key) - 1);
+      select(Number(e.key) - 1);
     }
   };
   return (
@@ -53,6 +92,13 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
         <Icon name={props.d.kind === "stalled" ? "pause" : "message"} size={14} />
         <span>{props.d.question}</span>
       </div>
+      <Show when={loginUrl() !== undefined}>
+        <button class="decision-login" onClick={openLogin}>
+          <Icon name="globe" size={14} />
+          <span>브라우저 열어 로그인</span>
+          <Show when={loginUrl()}>{(u) => <span class="muted">{u().replace(/^https?:\/\/(www\.)?/, "").split("?")[0]}</span>}</Show>
+        </button>
+      </Show>
       <Show when={props.showTask !== false && t()}>
         {(x) => (
           <button class="decision-src" onClick={() => openTask(x().id)}>
@@ -72,8 +118,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
               role="option"
               aria-selected={sel() === i()}
               classList={{ on: sel() === i(), primary: !!o.primary }}
-              onMouseEnter={() => setSel(i())}
-              onClick={() => decide(props.d.id, o.id)}
+              onClick={() => select(i())}
             >
               <span class="decision-n">{i() + 1}</span>
               <span class="decision-text">
@@ -87,10 +132,10 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
           <form
             class="decision-opt decision-own"
             classList={{ on: sel() === props.d.options.length }}
+            onClick={(e) => e.target === e.currentTarget && select(props.d.options.length)}
             onSubmit={(e) => {
               e.preventDefault();
-              const v = own.value.trim();
-              if (v) void decide(props.d.id, v);
+              submit();
             }}
           >
             <span class="decision-n">{props.d.options.length + 1}</span>
@@ -99,6 +144,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
               class="decision-input"
               placeholder="직접 입력"
               onFocus={() => setSel(props.d.options.length)}
+              onInput={(e) => setTyped(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === "ArrowUp") {
                   e.preventDefault();
@@ -107,7 +153,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
                 }
               }}
             />
-            <button class="decision-send" type="submit" aria-label="보내기">
+            {/* answers whatever is selected: a choice above, or what was typed */}
+            <button class="decision-send" classList={{ ready: ready() }} type="submit" title="보내기 (Enter)" aria-label="보내기" disabled={!ready()}>
               <Icon name="send" size={13} />
             </button>
           </form>

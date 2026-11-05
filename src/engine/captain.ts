@@ -4,8 +4,8 @@
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, projectById, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
-import type { Block, CaptainMessage, Priority, Route, SpaceId, Task } from "../state/types";
+import { accountById, addProject, projectById, projectFor, projectsIn, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
+import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, sessionsPrune, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
@@ -25,7 +25,9 @@ const projectOf = (key: string) => (pj(key) ? (state.projects ?? []).find((p) =>
 export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) && (m.project ?? undefined) === pj(key);
 const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace("~", "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
-const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: boolean }[]>();
+const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
+/** what main is told about when no user spoke: a fork it started ended, or a project it handed work to finished */
+type Event = "fork" | "project";
 /** follow-ups main made on its own since the user last spoke, per chat (stops runaway chains) */
 const followUps = new Map<string, number>();
 const busy = new Set<string>();
@@ -37,7 +39,7 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; recap: boolean }>();
+const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; recap: boolean }>();
 /** "own branch per task" choice of the request being routed, per space */
 const isolateOf = new Map<string, boolean | undefined>();
 /** Captains this page started and listens to. One left over from before a reload
@@ -74,9 +76,11 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
  */
 export function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
-  // the chat that started it gets the result (main can start a project's first job)
-  const from = state.captain.find((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
+  // the chat that owns it gets the result: the project's chat when main handed the work down
+  const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
+  const from = owners.find((m) => m.project) ?? owners[0];
   if (!from) return;
+  const handed = from.project ? handedRequest(from) : undefined;
   const space = chatKey(t.space, from.project);
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
@@ -85,16 +89,68 @@ export function jobEnded(t: Task) {
   const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n").slice(-3500);
   const evidence = t.entries.filter((e) => e.kind === "block" && e.block.type === "evidence").flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : []));
   const text = [
+    handed ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, your answer goes back to main.` : "",
     `Fork ${t.id} "${t.title}" ${t.status === "done" ? "finished" : "failed"}.`,
     t.status === "done" ? `Summary: ${t.summary ?? ""}` : `Error: ${t.error ?? ""}`,
     t.unverified?.length ? `Not verified: ${t.unverified.join("; ")}` : "",
     evidence.length ? `Evidence: ${evidence.slice(0, 8).join(" | ")}` : "",
     said ? `What it reported:\n${said}` : "",
+    // steps that build on it get its result on their own when they start
+    ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
+      state.tasks.filter((x) => x.after?.includes(t.id)),
+    ),
   ].filter(Boolean).join("\n");
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
   setState("captain", (list) => [...list.slice(-300), reply]);
-  queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: true }]);
+  queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
+}
+
+/** The request main handed down that a project-chat message belongs to (the last one before it). */
+function handedRequest(m: CaptainMessage): CaptainMessage | undefined {
+  const chat = state.captain.filter((x) => x.space === m.space && x.project === m.project);
+  const at = chat.findIndex((x) => x.id === m.id);
+  const ask = chat.slice(0, at + 1).reverse().find((x) => x.from === "me");
+  return ask?.via === "main" ? ask : undefined;
+}
+
+/**
+ * Main → project → jobs, and back the same way: when main gives a project work,
+ * the request lands in that project's chat, which owns the jobs and carries them
+ * on. Once nothing it started for that request is still going, its last answer
+ * goes back up to main.
+ */
+function handDown(spaceId: SpaceId, projectId: string, request: string, taskIds: string[]) {
+  const ask: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "me", via: "main", text: request };
+  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "captain", routes: taskIds.map((taskId) => ({ kind: "new" as const, taskId })) };
+  setState("captain", (list) => [...list.slice(-300), ask, reply]);
+}
+
+export function reportUp(space: string) {
+  const projectId = pj(space);
+  if (!projectId) return;
+  const chat = state.captain.filter((m) => inChat(m, space));
+  const last = [...chat].reverse().find((m) => m.from === "me");
+  if (!last || last.via !== "main" || last.reported) return;
+  const after = chat.slice(chat.indexOf(last) + 1);
+  if (after.some((m) => m.pending)) return;
+  const jobs = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : [])));
+  if (jobs.some((t) => t.status !== "done" && t.status !== "failed")) return;
+  // a question waiting on the user stays in the project; it goes up once answered
+  if (state.decisions.some((d) => d.taskId === `main:${space}` || jobs.some((t) => t.id === d.taskId))) return;
+  setState("captain", (m) => m.id === last.id, "reported", true);
+  const answers = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
+  const proj = projectById(projectId);
+  const text = [
+    `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
+    jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
+    answers ? `What the project reported:\n${answers}` : "",
+  ].filter(Boolean).join("\n");
+  const main = chatKey(sp(space));
+  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
+  setState("captain", (list) => [...list.slice(-300), reply]);
+  queues.set(main, [...(queues.get(main) ?? []), { text, replyId: reply.id, event: "project" }]);
+  void pump(main);
 }
 
 async function pump(space: string) {
@@ -106,6 +162,7 @@ async function pump(space: string) {
         isolateOf.set(space, next.isolate);
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, { pending: false, routes, reply, at: Date.now() });
+        if (pj(space)) reportUp(space);
       } catch (e) {
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
       }
@@ -115,7 +172,7 @@ async function pump(space: string) {
   }
 }
 
-async function routeWithRetry(space: string, text: string, cwd?: string, event?: boolean): Promise<{ reply: string; routes: Route[] }> {
+async function routeWithRetry(space: string, text: string, cwd?: string, event?: Event): Promise<{ reply: string; routes: Route[] }> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await route(space, text, cwd, event);
@@ -168,12 +225,15 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** The main chat's tools: tool_search, with read / bash behind it (extensions/main/lazy-core.ts). */
+/** The main chat's tools: tool_search and web_search, with read / bash / web_fetch behind it (extensions/lazy-core.ts, extensions/web.ts). */
 export async function mainTools(): Promise<string[]> {
-  const lazy = (await workerExtensions()).find((e) => e.endsWith("/lazy-core.ts"));
+  const all = await workerExtensions();
+  const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
+  // main looks things up on the web itself (web_search / web_fetch)
+  const web = all.filter((e) => e.endsWith("/web.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
-  if (!lazy) return ["--exclude-tools", "edit,write"];
-  return ["--no-builtin-tools", "--extension", lazy, ...WORKER_TOOLS];
+  if (!lazy) return ["--exclude-tools", "edit,write", ...web];
+  return ["--no-builtin-tools", "--extension", lazy, ...web, ...WORKER_TOOLS];
 }
 async function instructionSig(dir: string): Promise<string> {
   const dirs: string[] = [];
@@ -269,7 +329,10 @@ async function ensureCaptain(space: string) {
     "--no-skills",
     "--thinking",
     "low",
-    ...[CAPTAIN_SYSTEM, instructions(), spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
+    // the same system prompt in every main chat (any space, any project): one
+    // shared cached prefix per account. What differs per chat (space and project
+    // rules) goes into the first message instead.
+    ...[CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
   const cwd = expand(proj?.folder || space0.folder || "~");
@@ -348,7 +411,23 @@ function armIdleClear(space: string) {
  * what changed since the last message: the session already holds the rest.
  * That keeps each request to a few hundred new tokens on top of a cached prefix.
  */
-function context(space: string, text: string, cwd?: string, event?: boolean): string {
+/** Only the fork lines that changed since the last message (the session already holds the rest). */
+function forksBlock(now: string, before?: string): string {
+  if (now === before) return "# Forks: unchanged since the last message";
+  if (!before) return `# Forks (running work, as of now)\n${now}`;
+  const key = (l: string) => (l.startsWith("- ") ? l.slice(2).split(" | ")[0] : l.split(":")[0]);
+  const was = new Map(before.split("\n").map((l) => [key(l), l]));
+  const is = new Map(now.split("\n").map((l) => [key(l), l]));
+  const changed = [...is].filter(([k, l]) => was.get(k) !== l).map(([, l]) => l);
+  const gone = [...was.keys()].filter((k) => !is.has(k) && k !== "(none)");
+  return [
+    "# Forks: changes since the last message (the rest are as before)",
+    ...changed,
+    ...(gone.length ? [`no longer listed: ${gone.join(", ")}`] : []),
+  ].join("\n");
+}
+
+function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const mine = tasksIn(sp(space)).filter((t) => !pj(space) || t.project === pj(space));
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
@@ -357,13 +436,19 @@ function context(space: string, text: string, cwd?: string, event?: boolean): st
     tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.cwd} | ${t.now}`).join("\n") : "(none)",
     `Topics: ${topics.join(", ") || "(none)"}`,
   ].join("\n");
+  const space0 = spaceById(sp(space));
+  const proj = projectOf(space);
+  const rules = [spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).join("\n\n");
+  const projects = projectsIn(sp(space)).map((p) => `- ${p.name}: ${p.folder}`).join("\n") || "(none)";
   // no always-on memory: a few pieces recalled for this message alone
   const folder = projectOf(space)?.folder;
   const here = applying(sp(space), folder ? expand(folder) : "", expand);
   const others = state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
   const related = recall(others, text, { max: 3, budget: 500, folder: (m) => m.scope === "project" && here.includes(m) });
   const out: string[] = [];
-  out.push(forks === sent.forks ? "# Forks: unchanged since the last message" : `# Forks (running work, as of now)\n${forks}`);
+  if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
+  if (projects !== sent.projects) out.push(`# Projects in this space${sent.projects ? " (updated)" : ""} (name: folder)\n${projects}`, "");
+  out.push(forksBlock(forks, sent.forks));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   const skills = state.skills.filter((s) => s.enabled).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
   if (skills !== sent.skills) out.push("", `# Skills jobs can use${sent.skills ? " (updated)" : ""}\n${skills}`);
@@ -375,20 +460,28 @@ function context(space: string, text: string, cwd?: string, event?: boolean): st
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
-  if (event)
+  if (event === "project")
+    out.push(
+      "",
+      "# A project you handed work to has finished (not a user message)",
+      text,
+      "",
+      "Tell the user what came out, short (the project's chat has the details), as an \"answer\". Don't redo it. Route a next step only if what the user asked still needs one.",
+    );
+  else if (event)
     out.push(
       "",
       "# A fork you started has ended (not a user message)",
       text,
       "",
-      "Tell the user what came out, short and visual (blocks), as an \"answer\". Then keep going toward what the user wanted: if the next step is clear, route it now (new or append); if a real choice is needed, ask it in the answer. Don't redo finished work.",
+      "Tell the user what came out, short and visual (blocks), as an \"answer\". Then keep going toward what the user wanted: if the next step is clear, route it now (new or append) instead of offering it. Anything it couldn't verify that can be verified (does it really run, do the events really go out) is the next step: route it. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", skills, recap: false });
+  sentOf.set(space, { forks, memory: "", skills, rules, projects, recap: false });
   return out.join("\n");
 }
 
-async function route(space: string, text: string, cwd?: string, event?: boolean): Promise<{ reply: string; routes: Route[] }> {
+async function route(space: string, text: string, cwd?: string, event?: Event): Promise<{ reply: string; routes: Route[] }> {
   clearTimeout(idleTimers.get(space));
   await ensureCaptain(space);
   const agent = agentOf(space);
@@ -451,25 +544,70 @@ async function tidy(space: string, ms?: number) {
 
 const clampPriority = (p: unknown): Priority => (p === 0 || p === 1 || p === 2 || p === 3 ? p : 2);
 
+/**
+ * The project a new fork from the space chat belongs to: the one main named,
+ * the one its folder is in, or the one the user's message or the task names
+ * (by name or repo folder, "acme pc" → acme). New projects are made by
+ * main with a folder; this only finds ones that exist.
+ */
+function existingProject(space: SpaceId, r: any, original: string) {
+  const list = projectsIn(space);
+  if (!list.length) return undefined;
+  const named = typeof r.project === "string" ? r.project : typeof r.project?.name === "string" && !r.project.folder ? r.project.name : "";
+  const low = (x: string) => x.toLowerCase().replace(/\s+/g, "");
+  if (named) {
+    const hit = list.find((p) => low(p.name) === low(named) || p.id === named || low(p.folder.split("/").pop() ?? "") === low(named));
+    if (hit) return hit;
+  }
+  if (typeof r.cwd === "string" && r.cwd) {
+    const id = projectFor(space, r.cwd);
+    if (id) return list.find((p) => p.id === id);
+  }
+  const said = low(`${original} ${r.title ?? ""} ${r.task ?? ""} ${r.topic ?? ""}`);
+  const hits = list.filter((p) => {
+    const base = (p.folder.split("/").pop() ?? "").toLowerCase();
+    return said.includes(low(p.name)) || (base.length > 3 && said.includes(base));
+  });
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
 async function applyRoutes(space: string, raw: any[], original: string, cwd?: string): Promise<Route[]> {
   const out: Route[] = [];
   const work = raw.filter((r) => r?.kind === "new" || r?.kind === "answer").length;
   // steps of one request name each other by "key"; "after" may also name a running job's id
   const byKey = new Map<string, string>();
+  // work main gives a project goes through that project's chat
+  const handed = new Map<string, string[]>();
   for (const r of raw) {
     if (r?.kind === "answer") {
       const text = String(r.text ?? "");
       const blocks = Array.isArray(r.blocks) ? (r.blocks as Block[]) : [];
       if (text.trim() || blocks.length) out.push({ kind: "answer", text, blocks });
+    } else if (r?.kind === "ask" && typeof r.question === "string" && Array.isArray(r.options)) {
+      // main's own question, as the same card a job's question gets
+      const options = (r.options as unknown[])
+        .slice(0, 4)
+        .map((o: any, i) => (typeof o === "string" ? { id: `o${i}`, label: o } : { id: `o${i}`, label: String(o?.label ?? ""), note: o?.note ? String(o.note) : undefined }))
+        .filter((o) => o.label.trim())
+        .map((o, i) => ({ ...o, primary: i === 0 }));
+      if (options.length) {
+        const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask" };
+        setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
+        out.push({ kind: "ask", decisionId: d.id });
+      }
     } else if (r?.kind === "append" && taskById(r.taskId ?? r.workerId)) {
       const id = r.taskId ?? r.workerId;
       const message = String(r.message ?? "").trim();
-      if (message) void tell(id, message);
+      // main's word is for now, not for after the fork's current turn
+      if (message) void tell(id, message, { now: true });
       out.push({ kind: "append", taskId: id, message });
     } else if (r?.kind === "new" && (r.task || r.title)) {
-      let proj = projectOf(space);
+      let proj = projectOf(space) ?? existingProject(sp(space), r, original);
       // main starting something new: make its folder and project chat first
       if (!proj && r.project && typeof r.project.folder === "string" && r.project.folder.startsWith("/")) {
+        // a project is the repo, never one of its branch/worktree folders
+        const wt = r.project.folder.match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
+        if (wt) r.project = { name: wt[2], folder: `${wt[1]}/projects/${wt[2]}` };
         const folder = await ensureDir(r.project.folder).catch(() => "");
         if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined));
       }
@@ -492,6 +630,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
       });
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });
+      if (proj && !projectOf(space)) handed.set(proj.id, [...(handed.get(proj.id) ?? []), id]);
     } else if (r?.kind === "remember" && r.text && state.settings.learn) {
       const scope = r.scope === "global" || r.scope === "project" ? r.scope : "space";
       // project memory is filed by folder (that's how jobs find it)
@@ -507,6 +646,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
       if (id) out.push({ kind: "remember", memoryId: id });
     }
   }
+  for (const [projectId, ids] of handed) handDown(sp(space), projectId, original, ids);
   return out;
 }
 

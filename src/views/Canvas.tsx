@@ -13,6 +13,7 @@ import { throwThought } from "../engine/captain";
 import { compact, now } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
+import { Markdown } from "../ui/Markdown";
 import { changes, SidebarToggle } from "./Sidebar";
 import { Board } from "./Board";
 
@@ -20,8 +21,9 @@ import { Board } from "./Board";
 
 const W = { main: 168, proj: 220, job: 288, sub: 236 };
 const H = { main: 84, proj: 84, job: 196, sub: 84 };
-const X = { main: 0, proj: 248, job: 560, sub: 940 };
-const GAP = { job: 32, sub: 14, proj: 56 };
+const X = { main: 0, proj: 248, job: 560 };
+const GAP = { job: 28, col: 24, sub: 12, proj: 56 };
+const SUB_INDENT = 28;
 const DAY = 86_400_000;
 
 type Kind = "main" | "proj" | "job" | "sub";
@@ -54,13 +56,7 @@ function tone(t: Task): string {
   return "done";
 }
 
-/** How jobs line up under their project: newest first, what needs you first, or by name. */
-export type Order = "recent" | "status" | "name";
-const RANK: Record<string, number> = { waiting: 0, failed: 1, running: 2, queued: 3, paused: 4, done: 5 };
-const byOrder = (o: Order) => (a: Task, b: Task) =>
-  o === "name" ? a.title.localeCompare(b.title, "ko") : o === "status" ? (RANK[a.status] ?? 9) - (RANK[b.status] ?? 9) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt) : (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt);
-
-function layout(space: string, old: boolean, order: Order = "recent"): { nodes: Node[]; edges: Edge[] } {
+function layout(space: string, old: boolean): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter(
     (t) => t.space === space && !t.parentId && !t.answer && !t.archived && (old || tone(t) !== "done" || (t.finishedAt ?? t.createdAt) > now() - DAY),
   );
@@ -73,21 +69,26 @@ function layout(space: string, old: boolean, order: Order = "recent"): { nodes: 
   for (const p of projects) {
     const jobs = roots
       .filter((t) => (p.id === "_" ? !t.project || !projects.some((q) => q.id === t.project && q.id !== "_") : t.project === p.id))
-      .sort(byOrder(order));
+      .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
     const top = y;
-    for (const t of jobs) {
-      const kids = state.tasks.filter((k) => k.parentId === t.id);
-      const kidsH = kids.length * H.sub + Math.max(0, kids.length - 1) * GAP.sub;
-      const rowH = Math.max(H.job, kidsH);
-      const jy = y + (rowH - H.job) / 2;
-      nodes.push({ id: t.id, kind: "job", x: X.job, y: jy, w: W.job, h: H.job, task: t });
-      edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
-      let ky = y + (rowH - kidsH) / 2;
-      for (const k of kids) {
-        nodes.push({ id: k.id, kind: "sub", x: X.sub, y: ky, w: W.sub, h: H.sub, task: k });
-        edges.push({ from: t.id, to: k.id, tone: tone(k) });
-        ky += H.sub + GAP.sub;
-      }
+    // a grid, not one long column: up to 3 jobs side by side, a job's own
+    // sub-jobs stacked under it
+    const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
+    for (let r = 0; r < jobs.length; r += cols) {
+      const row = jobs.slice(r, r + cols);
+      let rowH = 0;
+      row.forEach((t, c) => {
+        const x = X.job + c * (W.job + GAP.col);
+        nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h: H.job, task: t });
+        edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
+        let ky = y + H.job + GAP.sub;
+        for (const k of state.tasks.filter((k) => k.parentId === t.id)) {
+          nodes.push({ id: k.id, kind: "sub", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
+          edges.push({ from: t.id, to: k.id, tone: tone(k) });
+          ky += H.sub + GAP.sub;
+        }
+        rowH = Math.max(rowH, ky - GAP.sub - y);
+      });
       y += rowH + GAP.job;
     }
     const span = jobs.length ? y - GAP.job - top : H.proj;
@@ -376,6 +377,19 @@ function Drawer(props: { t: Task; onClose: () => void }) {
   const t = () => props.t;
   const kids = () => state.tasks.filter((k) => k.parentId === t().id);
   const recent = () => steps(t()).slice(-8).reverse();
+  const ended = () => t().status === "done" || t().status === "failed";
+  /** what the job ended with: its last answer and the files / pages behind it */
+  const outcome = createMemo(() => {
+    let text = "";
+    let proof: { kind: string; ref: string }[] = [];
+    for (let i = t().entries.length - 1; i >= 0; i--) {
+      const e = t().entries[i];
+      if (e.kind === "user") break;
+      if (!text && e.kind === "text") text = e.text;
+      if (!proof.length && e.kind === "block" && e.block.type === "evidence") proof = (e.block as { items?: { kind: string; ref: string }[] }).items ?? [];
+    }
+    return { text: text || t().result || t().summary || t().error || "", proof: proof.filter((x) => x.kind === "file" || x.kind === "shot" || x.kind === "link") };
+  });
   const d = () => changes(t());
   const [msg, setMsg] = createSignal("");
   const say = () => {
@@ -396,10 +410,35 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         <button class="btn sm primary" onClick={() => openTask(t().id)}>열어서 보기</button>
       </div>
       <div class="cv-dr-body">
-        <div class="cv-dr-now">
-          <StatusRow t={t()} />
-          <Live t={t()} />
-        </div>
+        <Show
+          when={ended() && outcome().text}
+          fallback={
+            <div class="cv-dr-now">
+              <StatusRow t={t()} />
+              <Live t={t()} />
+            </div>
+          }
+        >
+          <div class="cv-dr-now">
+            <StatusRow t={t()} />
+            <Markdown class="cv-dr-result" text={outcome().text} />
+          </div>
+          <Show when={outcome().proof.length}>
+            <section>
+              <h4>근거</h4>
+              <ul class="cv-dr-steps">
+                <For each={outcome().proof}>
+                  {(x) => (
+                    <li class="link" onClick={() => (x.kind === "link" ? window.open(x.ref, "_blank") : openTask(t().id))} title={x.ref}>
+                      <span class={`cv-dr-ic`}><Icon name={x.kind === "link" ? "link" : x.kind === "shot" ? "monitor" : "file"} size={12} /></span>
+                      <span class="cv-dr-step">{x.kind === "link" ? x.ref.replace(/^https?:\/\/(www\.)?/, "") : base(x.ref)}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </section>
+          </Show>
+        </Show>
         <Show when={t().plan.length}>
           <section>
             <h4>계획</h4>
@@ -415,7 +454,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             </ol>
           </section>
         </Show>
-        <Show when={recent().length}>
+        <Show when={!ended() && recent().length}>
           <section>
             <h4>최근 단계</h4>
             <ul class="cv-dr-steps">
@@ -482,9 +521,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 
 export function Canvas() {
   const space = () => state.space;
-  const [order, setOrder] = createSignal<Order>("recent");
-  const [sortOpen, setSortOpen] = createSignal(false);
-  const graph = createMemo(() => layout(space(), showOld(), order()));
+  const graph = createMemo(() => layout(space(), showOld()));
   const byId = createMemo(() => new Map(graph().nodes.map((n) => [n.id, n])));
   // cards keyed by id: the layout is rebuilt on every update of a running job, the
   // card elements must not be (that reset live views and dropped a card mid-drag)
@@ -517,15 +554,18 @@ export function Canvas() {
     const n = id ? byId().get(id) : undefined;
     return n?.task;
   };
-  const pos = (n: Node) => (drag()?.id === n.id ? { x: drag()!.x, y: drag()!.y } : { x: n.x, y: n.y });
+  // while tidying, cards glide from where they were to their place
+  const [glide, setGlide] = createSignal<Record<string, { x: number; y: number }> | null>(null);
+  const pos = (n: Node) => (drag()?.id === n.id ? { x: drag()!.x, y: drag()!.y } : glide()?.[n.id] ?? { x: n.x, y: n.y });
 
-  const fit = (animate = true) => {
+  /** `all`: everything in view (the button, ⇧1); otherwise stay readable and start at the top. */
+  const fit = (animate = true, all = false) => {
     const ns = graph().nodes;
     if (!ns.length || !vp) return;
     const r = vp.getBoundingClientRect();
     const minX = Math.min(...ns.map((n) => n.x)), maxX = Math.max(...ns.map((n) => n.x + n.w));
     const minY = Math.min(...ns.map((n) => n.y)), maxY = Math.max(...ns.map((n) => n.y + n.h));
-    const z = Math.max(0.8, Math.min(1, (r.width - 120) / (maxX - minX), (r.height - 150) / (maxY - minY)));
+    const z = Math.max(all ? 0.3 : 0.8, Math.min(1, (r.width - 120) / (maxX - minX), (r.height - 150) / (maxY - minY)));
     if (animate) vp.classList.add("glide");
     setZoom(z);
     // too tall to fit: start at the top, readable
@@ -594,15 +634,35 @@ export function Canvas() {
     el.addEventListener("pointerup", up);
   };
 
+  /** Put every card back in line (drops where they were dragged to). */
   const resetLayout = () => {
+    const from = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const prefix = `${space()}:`;
     setState("canvas", (c) => Object.fromEntries(Object.entries(c ?? {}).filter(([k]) => !k.startsWith(prefix))));
-    queueMicrotask(() => fit());
+    const to = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+    const moved = Object.keys(to).some((id) => from[id] && (from[id].x !== to[id].x || from[id].y !== to[id].y));
+    if (!moved || matchMedia("(prefers-reduced-motion: reduce)").matches) return void queueMicrotask(() => fit());
+    const start = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 320);
+      const k = ease(t);
+      setGlide(Object.fromEntries(Object.entries(to).map(([id, p]) => {
+        const f = from[id] ?? p;
+        return [id, { x: f.x + (p.x - f.x) * k, y: f.y + (p.y - f.y) * k }];
+      })));
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        setGlide(null);
+        fit();
+      }
+    };
+    requestAnimationFrame(step);
   };
 
   const onKey = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement).closest("input, textarea") || mode() !== "canvas") return;
-    if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), fit());
+    if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), fit(true, true));
     else if (!e.metaKey && (e.key === "=" || e.key === "+")) zoomAt(1.2);
     else if (!e.metaKey && e.key === "-") zoomAt(1 / 1.2);
     else if (e.key === "Enter" && sel()) openTask(sel()!);
@@ -615,6 +675,11 @@ export function Canvas() {
     const a = byId().get(e.from), b = byId().get(e.to);
     if (!a || !b) return "";
     const pa = pos(a), pb = pos(b);
+    // a sub-job sits under its job: drop down from the job's left edge
+    if (pb.x < pa.x + a.w && pb.y >= pa.y + a.h) {
+      const x = pa.x + SUB_INDENT / 2, y1 = pa.y + a.h, y2 = pb.y + b.h / 2, r = Math.min(10, (y2 - y1) / 2);
+      return `M ${x} ${y1} L ${x} ${y2 - r} Q ${x} ${y2}, ${x + r} ${y2} L ${pb.x} ${y2}`;
+    }
     const x1 = pa.x + a.w, y1 = pa.y + a.h / 2, x2 = pb.x, y2 = pb.y + b.h / 2;
     const dx = Math.max(40, (x2 - x1) / 2);
     return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
@@ -735,28 +800,6 @@ export function Canvas() {
               </Show>
             </div>
 
-            <Show when={sortOpen()}>
-              <div class="cv-sort" role="menu">
-                <For each={[["recent", "최근순"], ["status", "상태순"], ["name", "이름순"]] as [Order, string][]}>
-                  {([id, label]) => (
-                    <button
-                      role="menuitemradio"
-                      aria-checked={order() === id}
-                      classList={{ on: order() === id }}
-                      onClick={() => {
-                        setOrder(id);
-                        setSortOpen(false);
-                        // cards you moved by hand stay where you put them
-                        queueMicrotask(() => fit());
-                      }}
-                    >
-                      {label}
-                      <Show when={order() === id}><Icon name="check" size={13} /></Show>
-                    </button>
-                  )}
-                </For>
-              </div>
-            </Show>
             <div class="cv-ctrl">
               <div class="cv-ctrl-group">
                 <button title={grid() ? "격자 숨기기" : "격자 보이기"} classList={{ on: grid() }} onClick={() => setGrid(!grid())}>
@@ -766,11 +809,10 @@ export function Canvas() {
               <div class="cv-ctrl-group">
                 <button title="확대 (+)" onClick={() => zoomAt(1.2)}><Icon name="plus" size={15} /></button>
                 <button title="축소 (−)" onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={15} /></button>
-                <button title="전체 보기 (⇧1)" onClick={() => fit()}><Icon name="fit" size={14} /></button>
+                <button title="전체 보기 (⇧1)" onClick={() => fit(true, true)}><Icon name="fit" size={14} /></button>
               </div>
               <div class="cv-ctrl-group">
-                <button title="정렬" classList={{ on: sortOpen() }} onClick={() => setSortOpen(!sortOpen())}><Icon name="sort" size={14} /></button>
-                <button title="옮긴 위치를 지우고 다시 정렬" onClick={resetLayout}><Icon name="refresh" size={14} /></button>
+                <button title="정렬" onClick={resetLayout}><Icon name="tidy" size={14} /></button>
                 <button title={showOld() ? "최근 일만" : "끝난 일 모두 보기"} classList={{ on: showOld() }} onClick={() => setShowOld(!showOld())}><Icon name="history" size={14} /></button>
               </div>
             </div>

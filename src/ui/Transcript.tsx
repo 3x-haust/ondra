@@ -1,11 +1,11 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
-import { isHolding, keepBottom } from "./stick";
+import { keepBottom } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
 import { createEffect, onCleanup, createMemo, createSignal, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
-import { live, openPanel, previewFile } from "../state/ui";
+import { live, previewFile } from "../state/ui";
 import { state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
 import { ForkCard } from "./ForkCard";
@@ -119,7 +119,8 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Ele
   /** where the closing summary starts: the run of text and blocks at the very end */
   const tailStart = createMemo(() => {
     let i = body().length;
-    while (i > 0 && (body()[i - 1].kind === "text" || body()[i - 1].kind === "block")) i--;
+    // notes added after the answer (merged, remembered) don't push it into the fold
+    while (i > 0 && (body()[i - 1].kind === "text" || body()[i - 1].kind === "block" || body()[i - 1].kind === "note")) i--;
     return i;
   });
   /** pictures never fold away: errors and diagrams stay in view after the turn */
@@ -134,9 +135,6 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Ele
     }
     return "";
   };
-  /** a turn that answered with pictures: the long text waits behind "자세히 보기" */
-  const visual = () => rest().some((e) => e.kind === "block") && answer().length > 160;
-  const [more, setMore] = createSignal(false);
   const took = () => {
     if (props.turn.ms) return props.turn.ms;
     const from = props.turn.user?.at ?? body()[0]?.at ?? 0;
@@ -182,13 +180,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Ele
             </Show>
           </div>
         </Show>
-        <Show when={visual()} fallback={<Items entries={rest()} task={props.task} live={false} />}>
-          <Items entries={rest().filter((e) => e.kind !== "text")} task={props.task} live={false} />
-          <Fold open={more()}>
-            <Markdown class="msg-text" text={answer()} />
-          </Fold>
-          <button class="more-btn" classList={{ open: more() }} onClick={() => setMore(!more())}>{more() ? "접기" : "자세히 보기"}<Icon name="chevron" size={12} /></button>
-        </Show>
+        <Items entries={rest()} task={props.task} live={false} />
         {props.tail}
         <Show when={answer() || props.turn.usage}>
           <div class="reply-foot">
@@ -429,10 +421,6 @@ function EntryView(props: { e: Entry; task: Task }) {
 export function Transcript(props: { task: Task; agentId: string }) {
   let scroller!: HTMLDivElement;
   const list = createMemo(() => turns(props.task.entries));
-  const rel = (p: string) => {
-    const root = props.task.cwd.replace(/\/$/, "");
-    return p.startsWith(`${root}/`) ? p.slice(root.length + 1) : p.replace(/^\/x\//, "");
-  };
   const liveText = () => live[props.agentId] ?? "";
   const working = () => props.task.status === "running";
   /** a running tool row already says what is happening */
@@ -440,38 +428,6 @@ export function Transcript(props: { task: Task; agentId: string }) {
     const last = props.task.entries[props.task.entries.length - 1];
     return last?.kind === "tool" && !last.tool.endedAt;
   };
-  /** Files this task edited, with line counts (Conductor-style chips under the result). */
-  const changed = createMemo(() => {
-    const m = new Map<string, { path: string; add: number; del: number }>();
-    for (const e of props.task.entries) {
-      if (e.kind !== "tool" || (e.tool.kind !== "edit" && e.tool.kind !== "write") || e.tool.note) continue;
-      const path = e.tool.detail?.startsWith("/") ? e.tool.detail : e.tool.target;
-      const f = m.get(path) ?? { path, add: 0, del: 0 };
-      f.add += e.tool.add ?? 0;
-      f.del += e.tool.del ?? 0;
-      m.set(path, f);
-    }
-    return [...m.values()];
-  });
-  const fileChips = () => (
-    <Show when={props.task.status === "done" && !props.task.answer && changed().length}>
-          <div class="file-chips">
-            <For each={changed().slice(0, 8)}>
-              {(f) => (
-                <button class="file-chip" title={`${f.path} · 열기`} onClick={() => (props.task.worktree ? openPanel("changes", rel(f.path)) : previewFile(f.path.startsWith("/") ? f.path : `${props.task.cwd}/${f.path}`))}>
-                  <Icon name="file" size={12} />
-                  <span>{f.path.split("/").pop()}</span>
-                  <Show when={f.add || f.del}>
-                    <span class="add">+{f.add}</span>
-                    <Show when={f.del}><span class="del">−{f.del}</span></Show>
-                  </Show>
-                </button>
-              )}
-            </For>
-            <Show when={changed().length > 8}><span class="file-more">외 {changed().length - 8}개</span></Show>
-          </div>
-        </Show>
-  );
   const [stick, setStick] = createSignal(true);
   const queuePos = () => {
     const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
@@ -479,17 +435,8 @@ export function Transcript(props: { task: Task; agentId: string }) {
     return i >= 0 ? i + 1 : 0;
   };
 
-  createEffect(
-    on(
-      () => [props.task.entries.length, liveText().length, props.task.shells.map((s) => s.tail.length).join()],
-      () => {
-        if (stick() && !isHolding()) queueMicrotask(() => scroller && (scroller.scrollTop = scroller.scrollHeight));
-      },
-    ),
-  );
-
   return (
-    <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el)); }} onScroll={() => setStick(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80)}>
+    <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el, setStick)); }}>
       <Show when={!stick()}>
         <button class="jump-latest" onClick={() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })}>
           <Icon name="down" size={13} />맨 아래로
@@ -505,7 +452,6 @@ export function Transcript(props: { task: Task; agentId: string }) {
               turn={t}
               task={props.task}
               open={working() && i() === list().length - 1}
-              tail={i() === list().length - 1 ? fileChips() : undefined}
             />
           )}
         </For>
@@ -523,7 +469,8 @@ export function Transcript(props: { task: Task; agentId: string }) {
             <button class="btn sm" onClick={() => void startTask(props.task.id)}>지금 시작</button>
           </div>
         </Show>
-        <Show when={working() && !liveText() && !toolRunning()}>
+        {/* waiting on its subagents: their card above already shows that */}
+        <Show when={working() && !liveText() && !toolRunning() && !state.tasks.some((k) => k.parentId === props.task.id && (k.status === "running" || k.status === "queued"))}>
           <div class="live-line">
             <span class="spin" />
             <span class="shimmer">{props.task.now || "작업 중"}</span>

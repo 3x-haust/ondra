@@ -16,9 +16,11 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(homedir(), "Library/Application Support/dev.3xhaust.ondra");
-const TOKEN = readFileSync(join(DATA, "devbridge.token"), "utf8").trim();
+// read on every call: the app writes a new one each time it restarts
+const token = () => readFileSync(join(DATA, "devbridge.token"), "utf8").trim();
 const SPACE = "home";
-const PROJECT_DIR = join(HERE, "workspace");
+// outside any repo: a folder inside ondra made jobs open ondra worktrees and task branches
+const PROJECT_DIR = join(DATA, "evals-workspace");
 
 const argv = process.argv.slice(2);
 const repeat = Number(argv[argv.indexOf("--repeat") + 1]) || 1;
@@ -34,9 +36,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function app(js) {
   for (let i = 0; i < 20; i++) {
     try {
-      const r = await fetch("http://127.0.0.1:17321/eval", { method: "POST", headers: { "x-token": TOKEN }, body: js, signal: AbortSignal.timeout(130_000) });
+      const r = await fetch("http://127.0.0.1:17321/eval", { method: "POST", headers: { "x-token": token() }, body: js, signal: AbortSignal.timeout(130_000) });
       const t = await r.text();
-      if (t.trim()) {
+      if (t.trim() && t.trim() !== '"unauthorized"') {
         const v = JSON.parse(t);
         if (typeof v === "string" && v.startsWith("ERR")) throw new Error(v);
         return v;
@@ -88,9 +90,10 @@ async function runCase(c) {
   const t0 = Date.now();
   // its own project (folder + main chat) per run, so main can't pick up an
   // earlier run's job or its old screenshot
-  const dir = join(PROJECT_DIR, `${c.name}-${Date.now().toString(36)}`);
+  // a neutral name: a folder called after the case sent jobs searching memory for it
+  const dir = join(PROJECT_DIR, `w-${Date.now().toString(36)}`);
   mkdirSync(dir, { recursive: true });
-  const project = await app(`return __ui.store.addProject("${SPACE}", ${JSON.stringify(dir)}, ${JSON.stringify(`평가 ${c.name}`)});`);
+  const project = await app(`return __ui.store.addProject("${SPACE}", ${JSON.stringify(dir)}, ${JSON.stringify(`평가 ${dir.split("-").pop()}`)});`);
   const replyId = await app(`return __ui.captain.throwThought(${JSON.stringify(c.ask)}, "${SPACE}", { project: ${JSON.stringify(project)} });`);
   let reply;
   for (let i = 0; i < 100; i++) {
@@ -105,6 +108,7 @@ async function runCase(c) {
   let tasks = [];
   while (Date.now() - t0 < limit) {
     tasks = await app(`return ${JSON.stringify(ids)}.map((id) => { const t = __ui.store.state.tasks.find((t) => t.id === id); const d = __ui.store.state.decisions.find((d) => d.taskId === id); return t && { id, status: t.status, decision: d && { id: d.id, q: d.question, options: d.options.map((o) => o.id) } }; }).filter(Boolean);`);
+    if (!Array.isArray(tasks)) throw new Error(`unexpected task list: ${JSON.stringify(tasks).slice(0, 300)}`);
     const open = tasks.filter((t) => !["done", "failed", "cancelled"].includes(t.status));
     const waiting = open.filter((t) => t.decision);
     for (const w of waiting) {
@@ -139,8 +143,8 @@ async function runCase(c) {
     checks.cleanedUp = !left.sims.length && !left.emulators;
   }
   // out of main's sight for the next case (it would add to these instead of starting fresh)
-  // tidy the sidebar: archive the jobs and drop the run's project
-  await app(`for (const id of ${JSON.stringify(ids)}) { const t = __ui.store.state.tasks.find((t) => t.id === id); if (t && t.status !== "running") __ui.tasks.archiveTask(id); } __ui.store.setState("projects", (l) => l.filter((p) => p.id !== ${JSON.stringify(project)})); return 1;`).catch(() => {});
+  // tidy up: stop what's still going (timed out), archive the jobs, drop the run's project
+  await app(`for (const id of ${JSON.stringify(ids)}) { const t = __ui.store.state.tasks.find((t) => t.id === id); if (!t) continue; if (["running", "queued", "waiting"].includes(t.status)) await __ui.tasks.pauseTask(id); __ui.tasks.archiveTask(id); } __ui.store.setState("projects", (l) => l.filter((p) => p.id !== ${JSON.stringify(project)})); return 1;`).catch(() => {});
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k);
   return {
     name: c.name, ask: c.ask, pass: !failedChecks.length, failedChecks, checks,

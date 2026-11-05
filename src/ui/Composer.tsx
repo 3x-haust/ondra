@@ -209,43 +209,64 @@ export function Composer(props: {
       return;
     }
     const f = files();
+    setEngaged(false);
     props.onSend(f.length ? `${text().trim()}\n\n첨부한 파일:\n${f.map((p) => `- ${p}`).join("\n")}` : text().trim());
     setText("");
     setFiles([]);
     queueMicrotask(grow);
   };
 
-  // Thin until used (ChatGPT-style): one row with +, model and send. Focus, text,
-  // attachments or an open menu open it: the card grows and the tray (account,
-  // limits, context) unfolds under it. A new chat (big) starts open.
-  const [focused, setFocused] = createSignal(false);
-  // WebKit doesn't focus a clicked button, so a press inside (account, context,
-  // model) would read as leaving: a press inside holds it open until one lands
-  // outside it and outside any sheet it opened
-  const [held, setHeld] = createSignal(false);
-  const away = (e: PointerEvent) => {
+  // Thin until used (ChatGPT-style): one row with +, model and send. Pressing or
+  // typing in it opens it; a press anywhere else, sending or Esc closes it.
+  // Closing waits until that press has finished as a click: shrinking under the
+  // pointer moved the page (and the size transition covered it), so the first
+  // click elsewhere used to do nothing. A new chat (big) starts open.
+  const [engaged, setEngaged] = createSignal(false);
+  let pressing = false;
+  let closeAfterPress = false;
+  const close = () => (pressing ? (closeAfterPress = true) : setEngaged(false));
+  const down = (e: PointerEvent) => {
+    pressing = true;
     const t = e.target as Element | null;
-    if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) setHeld(false);
+    if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) close();
   };
-  document.addEventListener("pointerdown", away, true);
-  onCleanup(() => document.removeEventListener("pointerdown", away, true));
-  const want = () => !!props.big || focused() || held() || !!text() || files().length > 0 || plusOpen() || !!pick();
+  const up = () => {
+    pressing = false;
+    if (!closeAfterPress) return;
+    closeAfterPress = false;
+    // after the click this press makes has been handled
+    setTimeout(() => setEngaged(false), 0);
+  };
+  document.addEventListener("pointerdown", down, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", up, true);
+  onCleanup(() => {
+    document.removeEventListener("pointerdown", down, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", up, true);
+  });
+  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input
   const inStrips = (n: EventTarget | null) => n instanceof Element && !!n.closest(".strips");
   const [open, setOpenState] = createSignal(want());
   createEffect(
     on(want, (v) => {
       if (v === open()) return;
-      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const vt = (document as Document & { startViewTransition?: (f: () => void) => unknown }).startViewTransition;
-      if (still || !vt) return setOpenState(v);
-      // names only while it runs: a named element is its own layer, and menus
-      // opened from the input would sit under the tray and the chat
-      wrap.dataset.vt = "";
-      const t = vt.call(document, () => setOpenState(v)) as { finished?: Promise<unknown>; ready?: Promise<unknown> } | undefined;
-      // a newer change cuts this one short: that's expected, not an error
-      t?.ready?.catch(() => {});
-      void (t?.finished ?? Promise.resolve()).catch(() => {}).finally(() => delete wrap.dataset.vt);
+      // one box that grows or shrinks in place: no cross-fade of two pictures
+      const box = wrap.querySelector<HTMLElement>(".composer");
+      if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return setOpenState(v);
+      const before = getComputedStyle(box);
+      const from = { height: `${box.offsetHeight}px`, borderRadius: before.borderRadius };
+      box.getAnimations().forEach((a) => a.cancel());
+      setOpenState(v);
+      const after = getComputedStyle(box);
+      const to = { height: `${box.offsetHeight}px`, borderRadius: after.borderRadius };
+      if (from.height === to.height && from.borderRadius === to.borderRadius) return;
+      box.style.overflow = "hidden";
+      const a = box.animate([from, to], { duration: 200, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+      const done = () => (box.style.overflow = "");
+      a.onfinish = done;
+      a.oncancel = done;
     }, { defer: true }),
   );
   let wrap!: HTMLDivElement;
@@ -255,11 +276,13 @@ export function Composer(props: {
       class="composer-wrap"
       ref={wrap}
       classList={{ slim: !open() }}
-      onPointerDown={(e) => !inStrips(e.target) && setHeld(true)}
-      onFocusIn={(e) => !inStrips(e.target) && setFocused(true)}
+      onPointerDown={(e) => !inStrips(e.target) && setEngaged(true)}
+      onMouseDown={(e) => !inStrips(e.target) && setEngaged(true)}
+      onFocusIn={(e) => !inStrips(e.target) && setEngaged(true)}
       onFocusOut={(e) => {
+        // leaving by keyboard (Tab); a press elsewhere is handled by `down`
         const to = e.relatedTarget as Node | null;
-        if (!to || !wrap.contains(to) || inStrips(to)) setFocused(false);
+        if (!pressing && to && !wrap.contains(to)) close();
       }}
     >
       <Show when={props.top}>
@@ -363,6 +386,10 @@ export function Composer(props: {
             }
           }}
           onKeyDown={(e) => {
+            if (e.key === "Escape" && !pick() && !e.isComposing) {
+              setEngaged(false);
+              el.blur();
+            }
             const p = pick();
             if (p && !e.isComposing) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -453,9 +480,6 @@ export function Composer(props: {
             </Show>
           </div>
           <div class="composer-meta">{props.left}</div>
-          <Show when={text().includes("\n")}>
-            <span class="composer-hint">⇧⏎ 줄바꿈</span>
-          </Show>
           <div class="composer-right">{props.right}</div>
           <Show
             when={props.running && props.onStop && !text().trim()}

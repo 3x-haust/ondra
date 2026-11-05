@@ -8,7 +8,7 @@ import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserRelease, type Env, workerEnv, workerExtensions, workerSkills, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
+import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, workerEnv, workerExtensions, workerSkills, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -94,6 +94,13 @@ export async function accountEnv(accountId: string): Promise<Env> {
 }
 
 /** What one turn used (null if nothing moved). */
+let browserCheckAt = 0;
+function recheckBrowser() {
+  if (Date.now() - browserCheckAt < 30_000) return;
+  browserCheckAt = Date.now();
+  void browserCheck().catch(() => {});
+}
+
 export function turnUsage(a: TokenStats, b: TokenStats, accountId: string, genMs?: number, ms?: number): Usage | null {
   const reset = b.input < a.input || b.cacheRead < a.cacheRead;
   const from = reset ? zero() : a;
@@ -177,6 +184,12 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     case "find":
     case "ls":
       return { name, kind: "search", target: String(args?.pattern ?? args?.path ?? ""), detail: JSON.stringify(args), now: "찾는 중" };
+    case "web_search":
+      return { name, kind: "search", target: String(args?.query ?? ""), detail: JSON.stringify(args ?? {}), now: "웹 검색 중" };
+    case "web_fetch": {
+      const url = String(args?.url ?? "");
+      return { name, kind: "read", target: url.replace(/^https?:\/\/(www\.)?/, ""), detail: url, now: "웹 페이지 읽는 중" };
+    }
     case "bash": {
       const cmd: string = args?.command ?? "";
       if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: "브라우저 사용 중" };
@@ -604,6 +617,8 @@ function handlers(id: string, run: Run) {
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
+          // the shared browser stopped answering: check it now and restart it if it hangs
+          if (ev.isError && done?.kind === "tool" && done.tool.kind === "browser" && typeof out === "string" && /Failed to read|os error 35|no response came back|daemon.*(not|no) respon/i.test(out)) recheckBrowser();
           updateTask(id, (t) => {
             const e = t.entries.find((x) => x.id === entryId);
             if (e?.kind === "tool") {
@@ -1061,6 +1076,14 @@ export async function decide(decisionId: string, optionId: string) {
   const d = state.decisions.find((x) => x.id === decisionId);
   if (!d) return;
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
+  // main asked it: the answer goes back to main as the user's message
+  if (d.taskId.startsWith("main:")) {
+    const [space, project] = d.taskId.slice(5).split("~");
+    const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
+    const { throwThought } = await import("./captain");
+    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project });
+    return;
+  }
   const t = taskById(d.taskId);
   if (!t) return;
   const agent = agentOf(t.id);

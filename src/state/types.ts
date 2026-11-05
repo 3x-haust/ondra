@@ -272,8 +272,8 @@ export interface Evidence {
   ref: string;
   ok?: boolean;
   note?: string;
-  /** what the app found in the session: ran / exists (checked), self (the job's word), or why it doesn't hold */
-  check?: "ran" | "exists" | "self" | "no-run" | "failed" | "stale" | "missing";
+  /** what the app found in the session: ran / exists / read (checked), self (the job's word), or why it doesn't hold */
+  check?: "ran" | "exists" | "read" | "self" | "no-run" | "failed" | "stale" | "missing" | "unread";
   why?: string;
 }
 
@@ -293,6 +293,7 @@ export interface Decision {
 export type Route =
   | { kind: "answer"; text: string; blocks: Block[]; taskId?: string }
   | { kind: "append"; taskId: string; message: string }
+  | { kind: "ask"; decisionId: string }
   | { kind: "new"; taskId: string }
   | { kind: "remember"; memoryId: string };
 
@@ -305,6 +306,12 @@ export interface CaptainMessage {
   from: "me" | "captain";
   /** main speaking on its own after this job ended */
   after?: string;
+  /** a request main handed down to this project's chat (shown as from main) */
+  via?: "main";
+  /** on a handed-down request: the project already reported back to main */
+  reported?: boolean;
+  /** in main's chat: this reply is a project reporting back (project id) */
+  up?: string;
   text?: string;
   /** Main's short reply line (above the forks it started). */
   reply?: string;
@@ -431,6 +438,8 @@ export interface AppState {
   settings: Settings;
   /** projects: a folder in a space with its own chat */
   projects?: Project[];
+  /** folders whose project the user deleted: never made into a project again on their own */
+  goneProjects?: string[];
   /** canvas: where the user moved nodes to */
   canvas?: Record<string, { x: number; y: number }>;
   /** next things to ask, written by the model from the real work, per chat */

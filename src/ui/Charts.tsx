@@ -581,10 +581,6 @@ export function Flow(props: { label?: string; nodes: FlowNode[]; edges?: { from:
             }>
               <polygon points={`${cx},${b.y} ${b.x + b.w},${cy} ${cx},${b.y + b.h} ${b.x},${cy}`} />
             </Show>
-            <Show when={k === "sub"}>
-              <line x1={b.x + 7} y1={b.y} x2={b.x + 7} y2={b.y + b.h} class="ch-sub" />
-              <line x1={b.x + b.w - 7} y1={b.y} x2={b.x + b.w - 7} y2={b.y + b.h} class="ch-sub" />
-            </Show>
             <text x={cx} y={cy + (n.note ? -4 : 5)} text-anchor="middle" class="ch-t">{cut(n.label, 30)}</text>
             <Show when={n.note}><text x={cx} y={cy + 15} text-anchor="middle" class="ch-n">{cut(n.note!, 36)}</text></Show>
             <Chip s={n.state} b={b} />

@@ -53,7 +53,7 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
     return { body: props.text.slice(0, i), files };
   };
   return (
-    <div class="user-turn" classList={{ editing: open() }}>
+    <div class="user-turn" classList={{ editing: open() }} data-mid={props.id}>
       <Show when={props.from}><div class="msg-from">{props.from}</div></Show>
       <Show
         when={open()}

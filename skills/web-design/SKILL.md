@@ -39,6 +39,9 @@ and ends with the user choosing.
 
 ## 3. Things that make a page look AI-made (never)
 
+- The brief leaking into the page: the concept's name or option label
+  ("편집형 프로젝트 전시", "A · 간결한 소개문"), the reference sites' names,
+  the user's direction words ("차분한", "인터랙티브") printed as copy.
 - Explanatory captions inside the design ("사례 전시 도판 · 실제 제품 화면 아님",
   "왜 추천하나요?", "작은 화면" panels). The page is the product, not a pitch.
 - Beige/cream + serif numerals + one orange accent by default; purple gradients;

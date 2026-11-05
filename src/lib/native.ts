@@ -330,6 +330,8 @@ export const browserStreamPort = (workerId: string) => call<number | null>("brow
 export const browserRelease = (workerId: string) => call<void>("browser_release", { workerId });
 /** Start (or find) the shared browser and the Browser view's own tab; its live stream port. */
 export const sharedBrowserOpen = () => call<number>("shared_browser_open", undefined, 0);
+/** check the shared browser with a fresh connection and restart it if it hangs */
+export const browserCheck = () => call<number>("browser_check", undefined, 0);
 /** Drive the Browser view's tab. */
 export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) =>
   call<void>("shared_browser_go", { action, url: url ?? null });
