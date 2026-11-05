@@ -52,14 +52,14 @@
   /* ── type ── */
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --fs-2xs: 11.5px; /* badges, counters */
-  --fs-xs: 12.5px; /* meta, timestamps, section labels */
-  --fs-sm: 13.5px; /* secondary UI, chips, tool rows */
-  --fs-md: 14.5px; /* UI default: sidebar, buttons, menus */
-  --fs-lg: 15.5px; /* reading: messages, answers (T3: text-sm) */
+  --fs-2xs: 12.5px; /* badges, counters */
+  --fs-xs: 13.5px; /* meta, timestamps, section labels */
+  --fs-sm: 14.5px; /* secondary UI, chips, tool rows */
+  --fs-md: 15.5px; /* UI default: sidebar, buttons, menus */
+  --fs-lg: 16.5px; /* reading: messages, answers (T3: text-sm) */
   --fs-xl: 22px; /* page titles */
   --fs-2xl: 30px; /* the one hero line */
-  --fs-code: 13px; /* mono, sits optically with --fs-sm */
+  --fs-code: 14px; /* mono, sits optically with --fs-sm */
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-strong: 600;
