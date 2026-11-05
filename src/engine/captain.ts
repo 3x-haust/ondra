@@ -464,7 +464,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
-    tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.cwd} | ${t.now}`).join("\n") : "(none)",
+    tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.worktree?.state === "open" ? `branch ${t.worktree.branch}` : t.cwd} | ${t.now}`).join("\n") : "(none)",
     `Topics: ${topics.join(", ") || "(none)"}`,
   ].join("\n");
   const space0 = spaceById(sp(space));

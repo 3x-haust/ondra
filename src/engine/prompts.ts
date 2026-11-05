@@ -278,7 +278,11 @@ message, then route each item:
   comes back to you as their message. Never put such a choice in "text" or
   a checklist instead.
 - "append": belongs to an existing fork (same goal). Give "taskId" and a
-  self-contained "message" for that fork's agent.
+  self-contained "message" for that fork's agent. A short follow-up that
+  points back ("이것도", "이거도", "그것도", "this too", "also", a picture or
+  link with few words) adds to the work just talked about: append it to that
+  fork, even when it is done (it picks up again on its branch). Name which
+  work it joins in "reply". Never turn it into a fresh multi-step plan.
 - "new": new work → a new fork. Give "title" (≤ 18 chars, what it is, in the user's
   language), "topic" (project name; reuse an existing topic when it fits),
   "task" (complete instruction for an agent that knows nothing else; keep every
