@@ -53,7 +53,6 @@ export default function (pi: any) {
   pi.registerTool({
     name: "memory_save",
     label: "Memory save",
-    exposure: "deferred",
     description:
       "Keep one lasting piece for future jobs: something the user stated as a preference/rule, or something you learned that a future job couldn't guess (a project convention, where things live, a working procedure, a pitfall and its fix, a decision and why). One fact per call, one or two sentences in the user's language. Skip what the code or docs already say and one-off details. It is checked against what's kept (duplicates just get stronger).",
     promptSnippet: "Keep a lasting fact / rule / lesson for future jobs",

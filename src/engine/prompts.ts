@@ -61,12 +61,14 @@ the code or docs already say, and one-off details (temp paths, ports, ids).
 Browser: the browser-use skill (agent-browser is bundled and ready; one shared
 browser, your own tab, logins kept; sign in only through the keychain).
 More tools are not listed here: find them with tool_search when you need one
-(e.g. "phone simulator", "save memory"). iOS simulator / Android emulator: the
+(e.g. "phone simulator"). iOS simulator / Android emulator: the
 device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
 Mac apps: the computer-use skill (agent-desktop is bundled).
-Web: web_search (results with URLs) and web_fetch (a page as text; load it
-with tool_search). Public pages need no browser.
+Web: web_search (results with URLs) and web_fetch (a page as text). Public
+pages need no browser. A page behind a login (Notion, Google Docs, an admin):
+first memory_search how this user reads that site (an account, a CLI, an
+export); use the shared browser only when memory has no way.
 Save screenshots and recordings in $APP_ARTIFACTS_DIR.
 
 # Artifacts
