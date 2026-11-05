@@ -29,7 +29,7 @@ Ondra is an agent workspace for macOS. You tell the main chat once; it splits th
 
 **Main splits the work.** A request like "build me a portfolio site" becomes checking the material, finding references, planning, building and verifying, and each step starts only when the one before it is done. Every job runs on its own worktree in the project folder.
 
-**See it instead of reading it.** Jobs report in blocks, not prose: plan and progress, changed files with line counts, before/after screenshots, tables, checklists. Dozens of tool calls fold into "edited 5 files", "ran 3 commands".
+**See it instead of reading it.** Jobs report in blocks, not prose: plan and progress, changed files with line counts, before/after screenshots, tables, checklists.
 
 **It only asks what needs you.** Only questions that need your intent or taste come up to main, with choices and context attached. Pick one, then press Enter, or write your own answer.
 
