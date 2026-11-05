@@ -234,3 +234,85 @@ corresponding source checkout at `3xhaustpi-engine-build/packages/coding-agent`
 supplied the CLI, RPC, JSON event, configuration and model docs and the RPC and
 custom-prompt examples; the installed engine's CLI help confirmed the flags.
 No engine SDK, extension, skill or model-provider implementation was changed.
+
+## Follow-up: isolated browser application delivery
+
+### Observed boundary
+
+Opened this worktree's actual Vite application in the bundled agent-browser,
+without headed mode, on a separate loopback origin. Entered a request through
+the main chat textbox and clicked Send. No task was manually inserted or
+started. The production composer, captain route parser, task creation,
+scheduler, subagent-block parser, prompt assembly and native API wrappers ran
+unchanged.
+
+A temporary bootstrap replaced `window.__TAURI_INTERNALS__` before application
+startup. Its allowlisted in-memory IPC fixture recorded calls and supplied a
+scripted captain `new` route, then a scripted worker `subagent` block through
+normal engine events. All native operations were intercepted; unknown commands
+were rejected. These scripted outputs exercise dispatch plumbing, not a model's
+choice to delegate or follow instructions. Neither Rust nor an engine process
+ran in this fixture.
+
+The initial state came from `freshState()`, with an empty task list, empty user
+instructions and no skills. It used synthetic account/model identifiers and
+`/fixture` paths. State saves stayed in page memory. Worktree isolation was
+disabled for this run; no worktree command was exercised. The Vite server used
+an artifact-local cache and a same-origin network policy. No user account,
+authentication, model endpoint or live app bridge was accessed.
+
+### Results
+
+All ten assertions in the captured browser observation passed:
+
+- The typed request reached the captain's prompt.
+- The parsed route created the owning task.
+- The parsed subagent block created a child linked to that task.
+- Both workers started automatically; exactly three spawn calls were recorded,
+  including the captain.
+- Each worker received its corresponding task message.
+- Both worker spawn calls contained their complete current role prompt verbatim,
+  exactly one `# Coding work` section and no `--skill` flag.
+- Optional user instructions and the skill list remained empty.
+- No unexpected IPC command or page error was recorded.
+
+The exact-prompt checks compared the recorded spawn arguments with `TASK_SYSTEM`
+and `SUB_SYSTEM` imported from the running production source. Full calls,
+events, state and assertion results were retained. The browser connection was
+closed and the fixture server received SIGTERM after evidence collection.
+
+### Remaining blocker and disposition
+
+**The actual native end-to-end path remains unverified.** Plain-browser native
+calls are fallbacks (`src/lib/native.ts`), and the production scheduler returns
+without Tauri (`src/engine/tasks.ts`). The IPC fixture activates that scheduler
+but replaces the Rust process owner rather than testing it. The real shell
+resolves persistent state through its application data directory
+(`src-tauri/src/engine.rs`, `src-tauri/src/store.rs`); its debug bridge binds the
+fixed loopback port 17321 (`src-tauri/src/devbridge.rs`). This run did not
+establish a separate native application/data/bridge environment safe to launch
+alongside the user's app. The live bridge was not used as a substitute.
+
+Consequently this proves browser application delivery **up to the intercepted
+spawn call**, including automatic child creation under scripted events, not
+Tauri IPC → Rust process → real provider delivery in one run. Earlier isolated
+engine/provider observations cannot be combined with this run into an actual
+native end-to-end pass. Both previous behavioral failures remain unchanged;
+no model evaluation or prompt tuning was repeated.
+
+Only this report changed in the repository. Production code, prompts and tests
+were left untouched. Previously passing package checks were not rerun; the
+previously documented lack of a lint setup remains a limitation. No native
+isolation infrastructure was added to widen the scope.
+
+Additional local evidence in the artifact directory listed above:
+
+- `delivery-bootstrap.js`: allowlisted IPC fixture and scripted events.
+- `serve-delivery.mjs`: loopback server and bootstrap injection.
+- `delivery-server.json`, `delivery-server.log`: server identity and startup.
+- `app-delivery-observation.json`: complete browser observation and assertions.
+- `app-delivery-summary.json`: assertion summary and cleanup actions.
+
+The server was started with `node "$APP_ARTIFACTS_DIR/serve-delivery.mjs"` from
+this worktree. Interaction used `agent-browser open`, `snapshot -i`, `fill`,
+`click` and `eval --stdin`; results were collected as text, not screenshots.
