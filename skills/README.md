@@ -17,6 +17,24 @@ The official agent-browser and agent-desktop skills ship with their binaries
 (`agent-browser skills get core`, `agent-desktop skills get desktop`); these
 files only add the app's rules on top, so they stay correct when the tools update.
 
+## Verify the macOS bundle
+
+After building the app, check the packaged files and the bundled engine's skill
+loader (no model request or personal skill installation):
+
+```sh
+node scripts/check-bundled-skills.mjs src-tauri/target/debug/bundle/macos/Ondra.app
+```
+
+Use `target/release` instead of `target/debug` for a release build. The check
+compares `skills/mimikyu/` and all its supporting files byte-for-byte with
+`Contents/Resources/app-skills/mimikyu/`, requires the `browser-use` prerequisite,
+and asks the app's own engine for `get_commands` with the worker's
+`--no-skills --skill ...` loading pattern. Its home and configuration are empty
+temporary directories; it must find exactly one `skill:mimikyu` at the bundled
+path. This verifies packaging and engine discovery, not a model's decision to
+read the full skill or a Figma implementation.
+
 ## Environment a worker receives
 
 Set by the app when it starts a worker (`worker_env` in `src-tauri/src/tools.rs`):
