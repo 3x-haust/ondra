@@ -226,22 +226,34 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
 function TerminalPane(props: { t: Task }) {
   const [mode, setMode] = createSignal<"log" | "shell">("log");
   const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
-  const list = () => [...props.t.shells].reverse();
-  const isOpen = (s: Shell, i: number) => toggled()[s.id] ?? (!s.endedAt || i === 0);
+  // what is running now; finished commands only when asked for
+  const [past, setPast] = createSignal(false);
+  const running = () => [...props.t.shells].reverse().filter((s) => !s.endedAt);
+  const ended = () => [...props.t.shells].reverse().filter((s) => s.endedAt);
+  const isOpen = (s: Shell) => toggled()[s.id] ?? !s.endedAt;
   return (
     <div class="term-pane">
       <div class="term-sub">
         <div class="seg">
-          <button classList={{ on: mode() === "log" }} onClick={() => setMode("log")}>에이전트 명령 {props.t.shells.length || ""}</button>
+          <button classList={{ on: mode() === "log" }} onClick={() => setMode("log")}>에이전트 명령 {running().length || ""}</button>
           <button classList={{ on: mode() === "shell" }} onClick={() => setMode("shell")}>내 터미널</button>
         </div>
       </div>
       <Switch>
         <Match when={mode() === "log"}>
           <div class="shells">
-            <For each={list()} fallback={<div class="pane-empty">아직 실행한 명령이 없어요.</div>}>
-              {(s, i) => <ShellCard s={s} open={isOpen(s, i())} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s, i()) }))} />}
+            <For each={running()} fallback={<div class="pane-empty">지금 실행 중인 명령이 없어요.</div>}>
+              {(s) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />}
             </For>
+            <Show when={ended().length}>
+              <button class="sb-older shells-past" classList={{ open: past() }} onClick={() => setPast(!past())}>
+                <Icon name="chevron" size={11} class="sb-older-chev" />
+                {past() ? "끝난 명령 접기" : `끝난 명령 ${ended().length}개`}
+              </button>
+              <Show when={past()}>
+                <For each={ended()}>{(s) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />}</For>
+              </Show>
+            </Show>
           </div>
         </Match>
         <Match when={mode() === "shell"}>
