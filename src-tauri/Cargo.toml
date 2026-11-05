@@ -26,7 +26,12 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 panic = "abort"
-strip = true
+# full `strip = true` leaves dylibs that macOS 27's dyld refuses to load
+# ("mis-aligned LINKEDIT string pool"), which breaks proc-macros in release builds
+strip = "debuginfo"
+
+[profile.release.build-override]
+strip = false
 
 # the embedding model runs on these; unoptimized they are ~50x slower in dev builds
 [profile.dev.package.tokenizers]
