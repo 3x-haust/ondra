@@ -257,11 +257,17 @@ export function Sidebar() {
   const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs leave the list after a few minutes; the canvas keeps them
   const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR && t.id !== openRoot();
-  const shown = () => roots().filter((t) => older() || !old(t));
+  const shown = () => roots().filter((t) => !old(t));
   const hidden = () => roots().filter(old).length;
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = () => shown().filter((t) => !t.project || !projectsIn(state.space).some((p) => p.id === t.project));
   const needs = () => roots().filter((t) => bucket(t) === "you" || bucket(t) === "review").length;
+  /** a job in this space is waiting for the user to sign in somewhere */
+  const loginAsked = () =>
+    state.decisions.some((d) => {
+      const t = state.tasks.find((x) => x.id === d.taskId);
+      return t?.space === state.space && /로그인|login|sign.?in|인증/i.test(`${d.question} ${d.options.map((o) => o.label).join(" ")}`);
+    });
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -317,10 +323,14 @@ export function Sidebar() {
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "browser" }} onClick={() => setView({ name: "browser" })} title="일들이 쓰는 브라우저: 여기서 로그인하면 모든 일이 로그인돼요">
-          <Icon name="globe" size={15} class="sb-main-ic" />
-          <span class="sb-title">브라우저</span>
-        </button>
+        {/* the browser is the jobs' tool: it shows here only while a job asks you to sign in (or you're on it) */}
+        <Show when={view().name === "browser" || loginAsked()}>
+          <button class="sb-row sb-main" classList={{ on: view().name === "browser" }} onClick={() => setView({ name: "browser" })} title="일이 로그인을 기다려요. 여기서 로그인하면 모든 일이 로그인돼요">
+            <Icon name="globe" size={15} class="sb-main-ic" />
+            <span class="sb-title">브라우저</span>
+            <Show when={loginAsked()}><span class="sb-live sb-ask" title="로그인 필요"><i /></span></Show>
+          </button>
+        </Show>
 
         <Head id="projects" label="프로젝트" count={projectsIn(state.space).length}>
           <button class="icon-btn xs" title="프로젝트 폴더 추가" onClick={() => void addFolder()}>
@@ -431,6 +441,10 @@ export function Sidebar() {
               <Icon name="chevron" size={11} class="sb-older-chev" />
               {older() ? "끝난 일 접기" : `끝난 일 ${hidden()}개`}
             </button>
+            {/* they open right here, under the button, not back in their places above */}
+            <Show when={older()}>
+              <For each={roots().filter(old)}>{(t, i) => <Row t={t} index={i()} />}</For>
+            </Show>
           </Show>
           <Show when={archived().length}>
             <button class="sb-older" classList={{ open: showArchived() }} onClick={() => setShowArchived(!showArchived())}>
