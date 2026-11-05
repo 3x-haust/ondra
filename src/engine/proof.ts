@@ -2,8 +2,10 @@
 // the job's evidence is checked against what actually happened in its session,
 // not taken on its word.
 //   test / build / run → the same command ran here, passed, and no code changed after it
-//   file / shot        → the file is really there (a screenshot is not empty)
-//   link               → the page was really opened here (web_fetch, the browser, curl)
+//   file / shot        → the file is really there (a screenshot is not empty, and not
+//                        taken before the last code change)
+//   link               → the page was really opened here (web_fetch, the browser, curl),
+//                        or it is a PR / issue this job made or acted on with gh
 import { fsRead } from "../lib/native";
 import type { Entry, Evidence, Task } from "../state/types";
 import { expand } from "./rpc";
@@ -47,6 +49,19 @@ function openedUrl(t: Task, ref: string): boolean {
   });
 }
 
+/** a GitHub PR or issue this job created, merged, viewed or commented on with gh */
+function ghTouched(t: Task, ref: string): boolean {
+  const m = ref.match(/github\.com\/[^/]+\/[^/]+\/(?:pull|issues)\/(\d+)/i);
+  if (!m) return false;
+  const num = new RegExp(`(\\s|#|/)${m[1]}(\\b|$)`);
+  return t.entries.some((e) => {
+    const x = toolAt(e);
+    if (!x || x.ok === false || x.kind !== "bash") return false;
+    const cmd = `${x.target ?? ""}\n${x.detail ?? ""}`;
+    return /\bgh\s+(pr|issue)\s+create\b/.test(cmd) || (/\bgh\s+(pr|issue|api)\b/.test(cmd) && num.test(cmd));
+  });
+}
+
 /** Each item gets `check`; anything not backed by the session gets ok:false and a reason. */
 export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidence[]> {
   const edited = lastCodeEdit(t);
@@ -65,10 +80,14 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
         const err = (f as { error?: string } | null)?.error;
         if (!f || err) return { ...e, ok: false, check: "missing", why: "파일이 없어요" };
         if (e.kind === "shot" && f.size < 4096) return { ...e, ok: false, check: "missing", why: "빈 스크린샷 같아요" };
+        // a result shot from before the last code change shows the old code
+        const changedAt = edited >= 0 ? (t.entries[edited]?.at ?? 0) : 0;
+        if (e.kind === "shot" && f.modified && f.modified < changedAt && !/before|전/i.test(`${e.ref} ${e.note ?? ""}`))
+          return { ...e, ok: false, check: "stale", why: "코드를 바꾸기 전에 찍은 사진이에요" };
         return { ...e, check: "exists" };
       }
       if (e.kind === "link" && /^https?:\/\//i.test(e.ref)) {
-        return openedUrl(t, e.ref) ? { ...e, ok: true, check: "read" } : { ...e, ok: false, check: "unread", why: "열어 본 기록이 없어요" };
+        return openedUrl(t, e.ref) || ghTouched(t, e.ref) ? { ...e, ok: true, check: "read" } : { ...e, ok: false, check: "unread", why: "열어 본 기록이 없어요" };
       }
       return { ...e, check: "self" };
     }),

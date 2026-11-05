@@ -67,17 +67,20 @@ pub struct FileText {
     text: Option<String>,
     size: u64,
     binary: bool,
+    /// last change, ms since 1970 (0 when unknown)
+    modified: u64,
 }
 
 fn read(path: &str) -> Result<FileText, String> {
     let meta = std::fs::metadata(path).map_err(|_| "파일이 없어요".to_string())?;
     let size = meta.len();
+    let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64);
     if size > MAX_READ {
-        return Ok(FileText { text: None, size, binary: false });
+        return Ok(FileText { text: None, size, binary: false, modified });
     }
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let binary = bytes.iter().take(8000).any(|b| *b == 0);
-    Ok(FileText { text: (!binary).then(|| String::from_utf8_lossy(&bytes).into_owned()), size, binary })
+    Ok(FileText { text: (!binary).then(|| String::from_utf8_lossy(&bytes).into_owned()), size, binary, modified })
 }
 
 #[tauri::command]
