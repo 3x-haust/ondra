@@ -387,7 +387,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       }
       const tasks = props.started(m);
       if (!ask || !tasks.length) continue;
-      const all = tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
+      // a finished job is finished: subagents it left stopped don't keep the request open
+      const all = tasks.flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
       const st: Req["state"] = all.some((t) => t.status === "waiting" || t.status === "failed")
         ? "ask"
         : all.some((t) => t.status === "running" || t.status === "queued" || t.status === "paused")
