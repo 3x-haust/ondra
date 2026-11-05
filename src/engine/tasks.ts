@@ -9,7 +9,7 @@ import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
+import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -399,8 +399,15 @@ function branchName(b?: string) {
 /** First start of a task in a git repo: give it its own worktree. Silent when the folder isn't a repo. */
 async function isolate(id: string) {
   const t = taskById(id);
-  if (!t || t.worktree || t.parentId || !(t.isolate ?? state.settings.isolate)) return;
-  const cwd = expand(t.cwd || spaceById(t.space).folder || "~");
+  if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return;
+  const old = t.worktree;
+  if (old?.state === "open") {
+    const there = await fsRead(`${old.path}/.git`).catch(() => null);
+    if (there && !(there as { error?: string }).error) return;
+  }
+  // merged, discarded or cleaned up: more work on it starts on a fresh worktree
+  // from where the repo is now, never in the user's own checkout
+  const cwd = old ? `${old.repo}${old.sub ? `/${old.sub}` : ""}` : expand(t.cwd || spaceById(t.space).folder || "~");
   const name = cwd.split("/").filter(Boolean).pop() ?? "repo";
   try {
     const dest = `${engine.info.dataDir}/worktrees/${slug(name)}-${id}`;

@@ -7,6 +7,16 @@ import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall } from "./memory";
 import { expand } from "./rpc";
 
+const DESIGN_IMPLEMENTATION = `# Design implementation
+When implementing a supplied design (a Figma link, "디자인 구현", "피그마
+그대로", or a provided screen to reproduce), use the bundled mimikyu skill
+without a skill command or a request to install it. Read its SKILL.md before
+implementation and follow its design → code → measured verification loop.
+Do not restart concept selection for a supplied design; web-design is for
+open-ended design direction, not replacing the reference. Do not apply mimikyu to unrelated coding
+or read-only questions about a design. Preserve repository conventions and
+report missing design data or measurement tools as unverified, not a pass.`;
+
 const CODING_WORK = `# Coding work
 Apply these defaults to coding tasks without a skill or command. Scale the
 work to its risk and size: a small change needs a short plan and focused
@@ -55,7 +65,9 @@ and expected evidence. Keep concurrent writers on disjoint files or sequence
 their edits. The owner inspects the diff and results and verifies the final
 combined state; a subagent's success summary is not proof.
 Report observations separately from inference, with commands, relevant
-before/after output or artifacts, changed files and remaining limitations.`;
+before/after output or artifacts, changed files and remaining limitations.
+
+${DESIGN_IMPLEMENTATION}`;
 
 export const TASK_SYSTEM = `# Role
 You are one agent inside Ondra, the user's agent workspace. You own one task
@@ -379,14 +391,19 @@ message, then route each item:
   recommendation first). It shows as a card the user picks from; their pick
   comes back to you as their message. Never put such a choice in "text" or
   a checklist instead.
-- "append": belongs to an existing fork (same goal). Give "taskId" and a
-  self-contained "message" for that fork's agent. Before starting anything
-  new, read what the message and any picture or link actually say (the
-  feature, screen, words in the shot) and compare it with every fork listed
-  (title, topic, branch, what it did), not just the latest one. When it is
-  part of one of them, append it there, even if that fork is done (it picks
-  up again on its branch), and name that work in "reply". Only work that
-  matches no fork is new.
+- "append": the same piece of work as an existing fork. Give "taskId" and a
+  self-contained "message" for that fork's agent. Before routing, read what
+  the message and any picture or link actually say (the feature, screen,
+  words in the shot) and compare it with every fork listed (title, topic,
+  branch, what it did), not just the latest one. It is the same work when it
+  is about what that fork is making or made: its feature or bug, a fix to its
+  result, a question about its output, its next step ("PR까지 올려", "사진이
+  이상해"). Then append, even to a done fork (it picks up again on its
+  branch), and name that work in "reply". Sharing a repo, a project or a few
+  words ("Ondra 기본 …") does not make it the same work: something else to
+  build or add there is "new". A finished fork carries a long session and its
+  own branch, so new work put into it costs more and lands on the wrong
+  branch.
 - "stop": the user wants a fork to stop or hold ("멈춰", "그만", "나중에
   하자 이거 멈춰", "stop"). Give "taskId". It stops at once and waits until the
   user resumes it; never send an "append" asking it to wind down instead.
@@ -429,7 +446,7 @@ message, then route each item:
   result depends on taste (below). Pieces that don't depend on each other run
   at the same time; for order give each a short "key" and list the keys it
   builds on in "after" (["a","b"]). When the
-  result depends on the user's taste (a site, a design, a brand, writing), the
+  result depends on undecided taste (no supplied design to reproduce), the
   steps are: references (real excellent examples, with shots) → 2–3 concepts
   built as live pages the user can try (the web-design skill) that end by
   asking which one → build the chosen one → check it. The build waits for the
@@ -516,8 +533,11 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 # Skills
 Jobs come with skills (listed in the message when they change). When a
 request fits one, start "task" with: "Use the <name> skill: read its SKILL.md
-and follow it." Implementing a design (a Figma link, "디자인 구현", "피그마
-그대로", "이 화면 만들어 줘" with a design) always uses the mimikyu skill.
+and follow it." For design implementation, include the reference and measured
+success conditions in new tasks and appended requests; workers already have
+the bundled skill and its default application rule.
+
+${DESIGN_IMPLEMENTATION}
 
 # Output
 Reply with exactly one fence and nothing else:
