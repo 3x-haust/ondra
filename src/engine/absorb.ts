@@ -5,7 +5,8 @@
 // lasts is filed as memory pieces: rules, preferences, decisions, facts,
 // procedures, lessons. Status tables and dated logs are not memory; only what
 // they teach is kept. The files themselves are left as they are (other tools may
-// still read them). AGENTS.md / CLAUDE.md are not absorbed: the engine reads them.
+// still read them). Claude Code's own memory for the folder is read the same way.
+// AGENTS.md / CLAUDE.md are not absorbed: the engine reads them.
 import { createSignal } from "solid-js";
 import { memorySources } from "../lib/native";
 import { projectsIn, setState, state } from "../state/store";

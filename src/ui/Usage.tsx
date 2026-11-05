@@ -1,4 +1,5 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
+import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
@@ -111,7 +112,9 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
           <ContextSheet agent={props.agent!} accountId={props.accountId} known={c() ? { tokens: c()!.tokens, window: c()!.window } : undefined} onClose={() => setCtxOpen(false)} />
         </Show>
       </Show>
-      <Show when={props.shells}><span class="st-sh">셸 {props.shells}</span></Show>
+      <Show when={props.shells}>
+        <button class="st-sh" title="실행 중인 셸 보기" onClick={() => openPanel("terminal")}>셸 {props.shells}</button>
+      </Show>
       <Show when={props.branch}><span class="st-br" title="이 일의 브랜치"><Icon name="branch" size={11} />{props.branch}</span></Show>
     </div>
   );

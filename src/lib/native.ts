@@ -60,6 +60,7 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 export const openUrl = (url: string) => call<void>("open_url", { url });
 export const openInEditor = (path: string) => call<void>("open_in_editor", { path });
+export const openInTerminal = (path: string) => call<void>("open_in_terminal", { path });
 
 export interface GitFile {
   path: string;
