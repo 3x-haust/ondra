@@ -159,6 +159,30 @@ pub fn run() {
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
+            // ⌘W closes the right panel, not the window (the window hides with ⌘H or its button)
+            #[cfg(target_os = "macos")]
+            {
+                let menu = Menu::default(app.handle())?;
+                for kind in menu.items()? {
+                    let Some(sub) = kind.as_submenu() else { continue };
+                    for (i, item) in sub.items()?.into_iter().enumerate() {
+                        let close = item.as_predefined_menuitem().is_some_and(|p| p.text().is_ok_and(|t| t.contains("Close")));
+                        if close {
+                            sub.remove(&item)?;
+                            let panel = MenuItem::with_id(app, "close-panel", "패널 닫기", true, Some("CmdOrCtrl+W"))?;
+                            sub.insert(&panel, i)?;
+                        }
+                    }
+                }
+                app.set_menu(menu)?;
+                app.on_menu_event(|app, event| {
+                    if event.id.as_ref() == "close-panel" {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.emit("panel:close", ());
+                        }
+                    }
+                });
+            }
             bridge::start(app.handle().clone());
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);

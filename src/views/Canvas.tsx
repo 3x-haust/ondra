@@ -546,6 +546,9 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 export function Canvas() {
   const space = () => state.space;
   const graph = createMemo(() => layout(space(), unfolded()));
+  /** projects that have finished jobs folded away (or unfolded) */
+  const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
+  const allOpen = () => foldable().length > 0 && foldable().every((id) => unfolded().includes(id));
   const byId = createMemo(() => new Map(graph().nodes.map((n) => [n.id, n])));
   // cards keyed by id: the layout is rebuilt on every update of a running job, the
   // card elements must not be (that reset live views and dropped a card mid-drag)
@@ -847,6 +850,11 @@ export function Canvas() {
               </div>
               <div class="cv-ctrl-group">
                 <button title="정렬" onClick={resetLayout}><Icon name="tidy" size={14} /></button>
+                <Show when={foldable().length}>
+                  <button title={allOpen() ? "끝난 일 모두 접기" : "끝난 일 모두 펼치기"} classList={{ on: allOpen() }} onClick={() => setUnfolded(allOpen() ? [] : foldable())}>
+                    <Icon name="history" size={14} />
+                  </button>
+                </Show>
               </div>
             </div>
 

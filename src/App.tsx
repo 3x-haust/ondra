@@ -54,6 +54,12 @@ export default function App() {
   });
   const back = () => setView(lastView);
   onMount(() => watchDevices());
+  // ⌘W (menu): close the right panel; the window stays
+  onMount(() => {
+    let un: (() => void) | undefined;
+    void onEvent("panel:close", () => panelOpen() && closePanel()).then((u) => (un = u));
+    onCleanup(() => un?.());
+  });
   if (import.meta.env.DEV)
     void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy")]).then(
       ([store, tasks, captain, ui, native, memory, absorb, tidy]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy }),

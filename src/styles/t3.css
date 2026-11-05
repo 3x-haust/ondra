@@ -8067,18 +8067,20 @@ textarea { resize: none !important; field-sizing: content; }
   max-height: 100%;
 }
 
-/* canvas: a project's finished jobs, folded */
+/* canvas: a project's finished jobs, folded into one button-like row */
 .cv-node.cv-more {
   display: flex;
   align-items: center;
-  border: 1px dashed var(--line);
-  background: transparent;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--panel, var(--bg)));
   box-shadow: none;
   cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.cv-more { display: flex; align-items: center; gap: var(--s-6); width: 100%; padding: 0 var(--s-12); font-size: var(--fs-sm); color: var(--ink-3); }
+.cv-node.cv-more:hover { border-color: var(--ink-3); }
+.cv-more { display: flex; align-items: center; gap: var(--s-8); width: 100%; padding: 0 var(--s-14); font-size: var(--fs-sm); color: var(--ink-2); }
 .cv-node.cv-more:hover .cv-more { color: var(--ink); }
-.cv-more-chev { transition: transform var(--dur) var(--ease); }
+.cv-more-chev { flex: none; transition: transform var(--dur) var(--ease); }
 .cv-more-chev.open { transform: rotate(90deg); }
 
 /* canvas: put dragged cards back in line */
@@ -8105,3 +8107,44 @@ textarea { resize: none !important; field-sizing: content; }
 .cv-retidy:hover { color: var(--ink); border-color: var(--line-2, var(--line)); }
 @keyframes cv-retidy-in { from { opacity: 0; transform: translate(-50%, -4px); } }
 .sb-live.sb-ask i { background: var(--warn); }
+
+/* results: a folder of everything, then one at a time */
+.abar .acount { font-size: var(--fs-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.abar .aname-cur { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--ink-2); }
+.abar > .acount:first-child { flex: 1; }
+.agrid {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--s-10);
+  padding: var(--s-12);
+  align-content: start;
+}
+.acell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.athumb {
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2, var(--bg-2, transparent));
+  color: var(--ink-3);
+  transition: border-color var(--dur) var(--ease);
+}
+.athumb img, .athumb video { width: 100%; height: 100%; object-fit: cover; }
+.acell:hover .athumb { border-color: var(--ink-3); }
+.aname { font-size: var(--fs-xs); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

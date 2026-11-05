@@ -1142,12 +1142,21 @@ export async function decide(decisionId: string, optionId: string) {
     finish(t.id, t.now && t.now !== "대기 중" ? t.now : "완료");
     return;
   }
+  // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself
+  if (meansStop(label)) {
+    updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
+    pauseTask(t.id);
+    return;
+  }
   const message =
     d.kind === "stalled"
       ? "이어서 진행하세요. 모두 끝났으면 done, 중간에 멈추면 handoff 블록을 보내세요."
       : `"${d.question}" → ${label}`;
   await tell(t.id, message);
 }
+
+/** The user's words ask to stop or hold the work (not "don't stop"). */
+export const meansStop = (text: string) => /멈춰|멈추|멈춤|그만|중지|중단|보류|\bstop\b|\bpause\b|\bhold\b/i.test(text) && !/말고|않|안 ?멈|계속 (진행|해)|don'?t stop|keep going|continue/i.test(text);
 
 export function pauseTask(id: string) {
   runs.delete(id);

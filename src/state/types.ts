@@ -295,6 +295,7 @@ export interface Decision {
 export type Route =
   | { kind: "answer"; text: string; blocks: Block[]; taskId?: string }
   | { kind: "append"; taskId: string; message: string }
+  | { kind: "stop"; taskId: string }
   | { kind: "ask"; decisionId: string }
   | { kind: "new"; taskId: string }
   | { kind: "remember"; memoryId: string };
