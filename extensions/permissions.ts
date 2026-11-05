@@ -11,6 +11,22 @@ const MODES: Mode[] = ["ask", "edits", "full"];
 const ALLOW = "허용";
 const DENY = "막기";
 
+/**
+ * A pkill / killall that names a program instead of something this job owns:
+ * killall always, pkill unless its pattern holds a path (the job's folder) or a port.
+ */
+export function broadKill(command: string, cwd = ""): string | undefined {
+  for (const part of command.split(/;|&&|\|\||\||\n/)) {
+    const c = part.trim().replace(/^(sudo|command|exec)\s+/, "");
+    if (/^killall\b/.test(c)) return c.slice(0, 60);
+    if (!/^pkill\b/.test(c)) continue;
+    const pattern = c.replace(/^pkill\s+/, "").replace(/(^|\s)-[a-zA-Z0-9]+(\s+(?=-))?/g, " ").trim().replace(/^['"]|['"]$/g, "");
+    if (/\//.test(pattern) || (cwd && pattern.includes(cwd)) || /:\d{2,5}\b|--port[= ]\d+/.test(pattern)) continue;
+    return c.slice(0, 60);
+  }
+  return undefined;
+}
+
 export default function (pi: any) {
   let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
 
@@ -29,6 +45,15 @@ export default function (pi: any) {
   };
 
   pi.on("tool_call", async (event: any, ctx: any) => {
+    // in every mode: killing by name also kills the user's own apps (Electron → Discord, VS Code)
+    if (event.toolName === "bash") {
+      const broad = broadKill(String(event.input?.command ?? ""), ctx.cwd);
+      if (broad)
+        return {
+          block: true,
+          reason: `\`${broad}\` 는 이름이 같은 사용자의 다른 앱까지 꺼요. 이 일이 띄운 것만 끄세요: \`pgrep -f '<이 작업 폴더 경로>'\`로 PID를 찾아 \`kill <PID>\`, 또는 \`lsof -ti :<포트> | xargs kill\`.`,
+        };
+    }
     if (mode === "full") return undefined;
     const name = event.toolName as string;
     const input = event.input ?? {};
