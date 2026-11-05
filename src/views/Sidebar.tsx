@@ -3,7 +3,7 @@
 // The git-style flow lives in the right panel's 흐름 tab.
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { anyPop, closePops } from "../ui/ModelPicker";
-import { addProject, decisionsIn, projectsIn, setSpace, state, taskById, tasksIn } from "../state/store";
+import { addProject, decisionsIn, projectsIn, removeProject, setSpace, state, taskById, tasksIn } from "../state/store";
 import { pickFolder } from "../lib/native";
 import type { Task } from "../state/types";
 import { toast, goMain, hoverTask, openTask, setHoverTask, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
@@ -133,6 +133,45 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
 
 /** Right-click on a job in the list. */
 const [menu, setMenu] = createSignal<{ id: string; x: number; y: number } | null>(null);
+const [projMenu, setProjMenu] = createSignal<{ id: string; x: number; y: number; sure?: boolean } | null>(null);
+
+/** right-click on a project: delete it (the folder and its jobs stay) */
+function ProjectMenu() {
+  const close = () => setProjMenu(null);
+  const esc = (e: KeyboardEvent) => e.key === "Escape" && projMenu() && (e.stopPropagation(), close());
+  window.addEventListener("click", close);
+  window.addEventListener("blur", close);
+  window.addEventListener("keydown", esc, true);
+  createEffect(() => anyPop() && close());
+  onCleanup(() => {
+    window.removeEventListener("click", close);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("keydown", esc, true);
+  });
+  return (
+    <Show when={projMenu()}>
+      {(m) => (
+        <div class="menu ctx-menu" style={{ left: `${Math.min(m().x, window.innerWidth - 220)}px`, top: `${Math.min(m().y, window.innerHeight - 120)}px` }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => (goMain(m().id), close())}><Icon name="arrow" size={14} class="muted" /><span class="row-title">열기</span></button>
+          <div class="menu-sep" />
+          <button
+            class="danger"
+            onClick={() => {
+              if (!m().sure) return setProjMenu({ ...m(), sure: true });
+              const v = view();
+              if (v.name === "main" && v.project === m().id) goMain();
+              removeProject(m().id);
+              close();
+            }}
+          >
+            <Icon name="trash" size={14} class="muted" />
+            <span class="row-title">{m().sure ? "한 번 더 누르면 삭제" : "프로젝트 삭제"}</span>
+          </button>
+        </div>
+      )}
+    </Show>
+  );
+}
 const [renaming, setRenaming] = createSignal<string | null>(null);
 export { renaming, setRenaming };
 
@@ -276,6 +315,10 @@ export function Sidebar() {
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
+        <button class="sb-row sb-main" classList={{ on: view().name === "browser" }} onClick={() => setView({ name: "browser" })} title="일들이 쓰는 브라우저: 여기서 로그인하면 모든 일이 로그인돼요">
+          <Icon name="globe" size={15} class="sb-main-ic" />
+          <span class="sb-title">브라우저</span>
+        </button>
 
         <Head id="projects" label="프로젝트" count={projectsIn(state.space).length}>
           <button class="icon-btn xs" title="프로젝트 폴더 추가" onClick={() => void addFolder()}>
@@ -294,7 +337,18 @@ export function Sidebar() {
               const open = () => folds()[`p:${p.id}`] ?? (curProject() === p.id || jobs().some((t) => !ended(t) || t.id === openRoot()));
               return (
                 <>
-                  <button class="sb-row sb-proj" classList={{ on: curProject() === p.id, has: all() > 0, open: open() }} onClick={() => goMain(p.id)} title={p.folder}>
+                  <button
+                    class="sb-row sb-proj"
+                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: projMenu()?.id === p.id }}
+                    onClick={() => goMain(p.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      closePops();
+                      setMenu(null);
+                      setProjMenu({ id: p.id, x: e.clientX, y: e.clientY });
+                    }}
+                    title={p.folder}
+                  >
                     <span
                       class="sb-proj-ic"
                       title={all() ? (open() ? "일 접기" : "일 펴기") : undefined}
@@ -389,6 +443,7 @@ export function Sidebar() {
         </Fold>
       </div>
       <RowMenu />
+      <ProjectMenu />
 
       <div class="sb-foot">
         <button class="row" onClick={() => setView({ name: "settings" })}>

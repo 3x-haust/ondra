@@ -1049,7 +1049,16 @@ button.route:hover {
 .toast.bad {
   color: var(--bad);
 }
+.toast > span {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .toast button {
+  flex: none;
+  white-space: nowrap;
   font-weight: var(--fw-strong);
   color: var(--ink);
 }

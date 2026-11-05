@@ -4,7 +4,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 // Every reply carries chips for the jobs it started; the jobs themselves live
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount } from "../engine/tasks";
-import { createEffect, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { projectById, setState, spaceById, state, taskById } from "../state/store";
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
@@ -54,6 +54,14 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
   return (
     <div class="reply" classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
+      <Show when={props.m.up ? projectById(props.m.up) : undefined}>
+        {(p) => (
+          <button class="reply-from" onClick={() => setView({ name: "main", project: p().id })}>
+            <Icon name="folder" size={12} />
+            {p().name}에서
+          </button>
+        )}
+      </Show>
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
@@ -224,6 +232,7 @@ export function MainView() {
   };
   const asks = () =>
     state.decisions.filter((d) => {
+      if (d.taskId.startsWith("main:")) return d.taskId === `main:${key()}`;
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
     });
@@ -302,12 +311,17 @@ export function MainView() {
           <Hero project={project()?.id} composer={composer(true)} />
         }
       >
+        <RequestBoard
+          msgs={msgs()}
+          started={started}
+          onJump={(id) => box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
         <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el)); }}>
           <div class="thread-inner convo">
             <For each={msgs()}>
               {(m) => (
                 <Show when={m.from === "me"} fallback={<Reply m={m} retry={() => retry(m)} chips={started(m)} active={openRoot()} />}>
-                  <UserMsg id={m.id} text={m.text ?? ""} at={m.at} onEdit={(t) => void editMain(m.id, t)} />
+                  <UserMsg id={m.id} text={m.text ?? ""} at={m.at} from={m.via === "main" ? "메인에서" : undefined} onEdit={m.via === "main" ? undefined : (t) => void editMain(m.id, t)} />
                 </Show>
               )}
             </For>
@@ -320,5 +334,75 @@ export function MainView() {
         </div>
       </Show>
     </div>
+  );
+}
+
+
+type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "done"; at: number };
+
+/**
+ * What the requests in this chat are doing, one line each, above the chat: the
+ * chat scrolls, this stays. Closed it is a single line; only requests still
+ * going, waiting on the user, or finished in the last few minutes are listed.
+ */
+function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessage) => Task[]; onJump: (id: string) => void }) {
+  const [open, setOpen] = createSignal(false);
+  const reqs = createMemo<Req[]>(() => {
+    const out: Req[] = [];
+    let ask: CaptainMessage | undefined;
+    for (const m of props.msgs) {
+      if (m.from === "me") {
+        ask = m;
+        continue;
+      }
+      const tasks = props.started(m);
+      if (!ask || !tasks.length) continue;
+      const all = tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
+      const st: Req["state"] = all.some((t) => t.status === "waiting" || t.status === "failed")
+        ? "ask"
+        : all.some((t) => t.status === "running" || t.status === "queued" || t.status === "paused")
+          ? "live"
+          : "done";
+      const at = Math.max(...tasks.map((t) => t.finishedAt ?? t.startedAt ?? t.createdAt));
+      const prev = out.find((r) => r.id === ask!.id);
+      if (prev) prev.tasks.push(...tasks);
+      else out.push({ id: ask.id, text: (ask.text ?? "").split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? ask.text ?? "", tasks: [...tasks], state: st, at });
+    }
+    const fresh = Date.now() - 10 * 60_000;
+    return out.filter((r) => r.state !== "done" || r.at > fresh).reverse();
+  });
+  const count = (k: Req["state"]) => reqs().filter((r) => r.state === k).length;
+  const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
+  const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
+  return (
+    <Show when={reqs().length}>
+      <div class="req-board" classList={{ open: open() }}>
+        <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
+          <span class="req-sum">
+            요청 {reqs().length}
+            <Show when={count("ask")}><span class="req-tag ask">확인 필요 {count("ask")}</span></Show>
+            <Show when={count("live")}><span class="req-tag live">진행 중 {count("live")}</span></Show>
+            <Show when={count("done")}><span class="req-tag done">끝남 {count("done")}</span></Show>
+          </span>
+          <Icon name="chevron" size={12} class="req-chev" />
+        </button>
+        <Show when={open()}>
+          <ul class="req-list">
+            <For each={reqs()}>
+              {(r) => (
+                <li>
+                  <button class="req-row" onClick={() => props.onJump(r.id)} title={r.text}>
+                    <i class={`req-dot ${r.state}`} />
+                    <span class="req-text">{r.text}</span>
+                    <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
+                    <span class={`req-state ${r.state}`}>{label[r.state]}</span>
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      </div>
+    </Show>
   );
 }

@@ -11,7 +11,7 @@ import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/
 import { closePanel, goMain, newTask, openPanel as showTool, setEditing, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
-import { rawStats, archiveTask, compactAgent, decide, discardTask, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
+import { rawStats, archiveTask, compactAgent, discardTask, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -186,7 +186,7 @@ export function TaskView(props: { id: string }) {
           if (x.status === "done" && x.worktree?.state === "open" && panelTab() === "flow") showTool("changes");
           else if (x.browser && x.shot && x.status === "running" && panelTab() === "flow") showTool("browser");
         });
-        // 1–9 answer this job's question while its input is empty
+        // Esc closes the panel
         const onKey = (e: KeyboardEvent) => {
           if (e.key === "Escape" && !paletteOpen()) {
             const el = document.activeElement as HTMLElement | null;
@@ -197,16 +197,7 @@ export function TaskView(props: { id: string }) {
             }
             return;
           }
-          const d = decision();
-          if (!d || e.metaKey || e.ctrlKey || e.altKey || paletteOpen() || !/^[1-9]$/.test(e.key)) return;
-          const el = document.activeElement as HTMLTextAreaElement | null;
-          const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
-          if (typing && !(el!.id === "task-input" && !el!.value)) return;
-          const o = d.options[Number(e.key) - 1];
-          if (o) {
-            e.preventDefault();
-            void decide(d.id, o.id);
-          }
+          // 1–9 for a question's choices: DecisionCard (selects; Enter answers)
         };
         window.addEventListener("keydown", onKey);
         onCleanup(() => window.removeEventListener("keydown", onKey));
