@@ -232,7 +232,8 @@ function Live(props: { t: Task }) {
   const what = (): "browser" | "shell" | "text" | "tool" | "question" | "summary" | "none" => {
     if (t().status === "waiting" && decisionFor(t().id)) return "question";
     if (t().status === "running") {
-      if (t().browser || lastTool()?.kind === "browser") return "browser";
+      // the browser only while it's what the job is using now (not after it moved on to the desktop or a shell)
+      if (lastTool()?.kind === "browser") return "browser";
       if (live[t().id]) return "text";
       if (shell()?.tail) return "shell";
       if (lastTool()) return "tool";

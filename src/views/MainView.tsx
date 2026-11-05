@@ -5,7 +5,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { projectById, setState, spaceById, state, taskById } from "../state/store";
+import { accountById, projectById, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
@@ -275,12 +275,15 @@ export function MainView() {
         <ModelPicker
           up={!big}
           accountId={account()}
-          model={state.settings.forkModel}
-          thinking={state.settings.forkThinking || effortFor(account()) || ""}
-          onChange={(m, t) => {
-            setState("settings", "forkModel", m);
-            setState("settings", "forkThinking", t);
-          }}
+          // the model belongs to the account this chat runs on: company and personal keep their own
+          model={accountById(account())?.model ?? ""}
+          thinking={effortFor(account()) || ""}
+          onChange={(m, t) =>
+            updateAccount(account(), (x) => {
+              if (m) x.model = m;
+              x.effort = t;
+            })
+          }
         />
       }
     />
