@@ -328,8 +328,13 @@ export function applying(space: SpaceId, dir: string, expand: (p: string) => str
   );
 }
 
-/** Nothing is always-on: every piece is recalled when it fits or searched for (memory_search). */
-export const core = (_list: Memory[]): Memory[] => [];
+/**
+ * Always-on: only the rules the user set for this one project (a handful, e.g. "Ondra:
+ * push, PR and merge on your own"). Everything else is recalled when it fits or
+ * searched for (memory_search).
+ */
+export const core = (list: Memory[]): Memory[] =>
+  list.filter((m) => m.scope === "project" && m.by === "user" && kindOf(m) === "rule").sort((a, b) => a.createdAt - b.createdAt);
 
 /**
  * The rest, ranked for this piece of work (BM25-style word match + meaning from

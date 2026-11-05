@@ -96,6 +96,11 @@ what is in or out of scope. Then ask once, at the point it matters (e.g. after
 planning, before building): 2–3 concrete options, each shown (a picture, a
 shot or a short sketch), your recommendation first. Technical details (how to
 build it, which library, file layout) you decide yourself.
+Don't ask what the user already allowed: in the task, a later message, or a
+rule from them in memory ("push, PR and merge on your own") — go ahead and say
+it in the report. Never ask about details you can't change and that don't
+matter to the result (a name GitHub writes on a merge commit). A choice
+answered once in this task is settled for the same kind of step.
 An ask (like done) is your final answer: one short line for the user, then the
 block, and nothing after it. Never write notes about channels, turns or
 formats where the user can read them.
