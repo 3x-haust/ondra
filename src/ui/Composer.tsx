@@ -226,26 +226,34 @@ export function Composer(props: {
   const [engaged, setEngaged] = createSignal(false);
   let pressing = false;
   let closeAfterPress = false;
+  let pressTimer: number | undefined;
   const close = () => (pressing ? (closeAfterPress = true) : setEngaged(false));
-  const down = (e: PointerEvent) => {
-    pressing = true;
-    const t = e.target as Element | null;
-    if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) close();
-  };
+  // A press ends on whichever comes first: pointerup, mouseup, click or a short
+  // timeout. WebKit can drop the pointerup (a press that starts a text selection),
+  // which left the input open until the next click.
   const up = () => {
+    if (!pressing) return;
     pressing = false;
+    clearTimeout(pressTimer);
     if (!closeAfterPress) return;
     closeAfterPress = false;
     // after the click this press makes has been handled
     setTimeout(() => setEngaged(false), 0);
   };
+  const down = (e: PointerEvent) => {
+    pressing = true;
+    clearTimeout(pressTimer);
+    pressTimer = window.setTimeout(up, 700);
+    const t = e.target as Element | null;
+    if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) close();
+  };
+  const ends = ["pointerup", "pointercancel", "mouseup", "click", "dragstart", "blur"] as const;
   document.addEventListener("pointerdown", down, true);
-  window.addEventListener("pointerup", up, true);
-  window.addEventListener("pointercancel", up, true);
+  for (const k of ends) window.addEventListener(k, up, true);
   onCleanup(() => {
+    clearTimeout(pressTimer);
     document.removeEventListener("pointerdown", down, true);
-    window.removeEventListener("pointerup", up, true);
-    window.removeEventListener("pointercancel", up, true);
+    for (const k of ends) window.removeEventListener(k, up, true);
   });
   const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input

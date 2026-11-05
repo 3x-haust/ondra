@@ -14,6 +14,9 @@ import {
   pickFolder,
   requestAccessibility,
   toolStatus,
+  spaceGhLogin,
+  spaceGitIdentity,
+  spaceTools,
 } from "../lib/native";
 import { ago, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -116,6 +119,15 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
   const [label, setLabel] = createSignal(cur?.label ?? "");
   const [folder, setFolder] = createSignal(cur?.folder ?? "~");
   const [rules, setRules] = createSignal(cur?.rules ?? "");
+  // this space's own GitHub login and git name/email (jobs here push and commit with them)
+  const [tools, setTools] = createSignal<Awaited<ReturnType<typeof spaceTools>>>(null);
+  const [gitName, setGitName] = createSignal<string>();
+  const [gitEmail, setGitEmail] = createSignal<string>();
+  const loadTools = () => cur && void spaceTools(cur).then(setTools);
+  loadTools();
+  // gh login happens in a terminal and the browser: check again when Ondra is back in front
+  window.addEventListener("focus", loadTools);
+  onCleanup(() => window.removeEventListener("focus", loadTools));
   let name!: HTMLInputElement;
   onMount(() => requestAnimationFrame(() => (name.focus(), name.select())));
   let saveAfterIme = false;
@@ -127,6 +139,8 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
     if (!l) return name.focus();
     saved = true;
     if (cur) setState("spaces", (x) => x.id === cur.id, { label: l, folder: folder(), rules: rules() });
+    if (cur && (gitName() !== undefined || gitEmail() !== undefined))
+      void spaceGitIdentity(cur, gitName() ?? tools()?.git_name ?? "", gitEmail() ?? tools()?.git_email ?? "");
     else setState("spaces", (list) => [...list, { id: uid("sp"), label: l, folder: folder(), rules: rules() }]);
     props.onClose();
   };
@@ -180,6 +194,25 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
             <span class="muted">변경</span>
           </button>
         </div>
+        <Show when={cur}>
+          <div class="sp-field">
+            <span>GitHub</span>
+            <div class="sp-gh">
+              <Show when={tools()?.gh_user} fallback={<span class="muted">{tools()?.default_user ? `Mac 기본 계정 · ${tools()!.default_user}` : "로그인 안 됨"}</span>}>
+                <code>{tools()!.gh_user}</code>
+              </Show>
+              <span class="spacer" />
+              <button class="btn ghost sm" onClick={() => void spaceGhLogin(cur!)}>{tools()?.gh_user ? "다시 로그인" : "이 공간 계정으로 로그인"}</button>
+            </div>
+          </div>
+          <div class="sp-field sp-git">
+            <span>커밋 작성자</span>
+            <div class="sp-git-row">
+              <input class="input" placeholder="이름" value={gitName() ?? tools()?.git_name ?? ""} onInput={(e) => setGitName(e.currentTarget.value)} />
+              <input class="input" placeholder="이메일" value={gitEmail() ?? tools()?.git_email ?? ""} onInput={(e) => setGitEmail(e.currentTarget.value)} />
+            </div>
+          </div>
+        </Show>
         <label class="sp-field">
           <span>규칙</span>
           <textarea class="textarea" rows={5} value={rules()} onInput={(e) => setRules(e.currentTarget.value)} />

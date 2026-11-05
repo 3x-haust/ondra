@@ -10,8 +10,8 @@ import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
 import { closePanel, goMain, newTask, openPanel as showTool, setEditing, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
-import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
-import { rawStats, archiveTask, compactAgent, discardTask, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
+import { fsFiles, gitChanges, openInEditor, openUrl, revealPath } from "../lib/native";
+import { rawStats, archiveTask, closeWorktree, compactAgent, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -231,8 +231,19 @@ export function TaskView(props: { id: string }) {
                 <Icon name="chevron" size={14} />
               </button>,
             );
+          // its work went into a pull request: nothing to merge here, just the PR and tidying up
+          const pr = prOf(task());
+          if (ready() && pr)
+            out.push(
+              <div class="strip">
+                <Icon name="branch" size={14} />
+                <button class="link-btn" onClick={() => void openUrl(pr.url)}>PR #{pr.n}</button>
+                <span class="rest" />
+                <button class="btn sm ghost" title="변경은 PR에 남아요" onClick={() => void closeWorktree(task().id)}>작업 폴더 정리</button>
+              </div>,
+            );
           // the changes tab already has merge / discard
-          if (ready() && !(panelOpen() && panelTab() === "changes"))
+          else if (ready() && !(panelOpen() && panelTab() === "changes"))
             out.push(
               <div class="strip">
                 <Icon name="branch" size={14} />
@@ -260,7 +271,7 @@ export function TaskView(props: { id: string }) {
                   }}
                 >
                   <Icon name="merge" size={13} />
-                  {merging() ? "합치는 중…" : "합치기"}
+                  {merging() ? "합치는 중…" : "원래 폴더에 합치기"}
                 </button>
               </div>,
             );

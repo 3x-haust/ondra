@@ -9,7 +9,7 @@ import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
+import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -47,6 +47,8 @@ interface Run {
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
   gates?: number;
+  /** status looks at running work (sleep, tail, ps …) this run */
+  polls?: number;
   /** how many times it was told its context is long (handoff) */
   longNudges?: number;
 }
@@ -209,6 +211,10 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
   }
 }
 
+/** a look at something already running: every part is a wait or a read-only status command */
+const isPoll = (cmd: string) =>
+  /\b(sleep|tail|pgrep|ps|date)\b/.test(cmd) &&
+  cmd.split(/;|&&|\|\||\|/).every((p) => !p.trim() || /^\s*(sleep|tail|head|cat|ls|ps|pgrep|date|grep|wc|cut|echo|test|\[|cd|for|do|done|if|then|fi|break)\b/.test(p.trim()));
 const keepsRunning = (cmd: string) =>
   /(&\s*$|&\s*disown|\bnohup\b|--watch\b|\bwatch\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd);
 
@@ -449,6 +455,35 @@ export async function mergeTask(id: string): Promise<boolean> {
 }
 
 /** Throw the task's changes away (worktree and branch). */
+/** The pull request this job opened or worked on, if its record names one (newest wins). */
+export function prOf(t: Task): { url: string; n: string } | undefined {
+  const re = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)/g;
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    const text = e.kind === "tool" ? `${e.tool.target} ${e.tool.detail ?? ""}` : "text" in e ? String(e.text ?? "") : "";
+    const all = [...text.matchAll(re)];
+    if (all.length) {
+      const m = all[all.length - 1];
+      return { url: m[0], n: m[1] };
+    }
+  }
+  return undefined;
+}
+
+/** A job whose work went into a pull request: remove its worktree, keep the branch (the PR needs it). */
+export async function closeWorktree(id: string) {
+  const t = taskById(id);
+  const w = t?.worktree;
+  if (!t || !w || w.state !== "open") return;
+  if (t.status === "running" || t.status === "waiting") pauseTask(id);
+  await worktreeRemove(w.repo, w.path, w.branch, true).catch((e) => toast(String(e), "bad"));
+  updateTask(id, (x) => {
+    x.worktree = { ...w, state: "discarded" };
+    x.cwd = homeDir(x);
+    push(x, { kind: "note", text: "작업 폴더를 정리했어요. 변경은 PR에 있어요" });
+  });
+}
+
 export async function discardTask(id: string) {
   const t = taskById(id);
   const w = t?.worktree;
@@ -496,7 +531,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   try {
     const t0 = taskById(id)!;
     const t = t0;
-    const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string]];
+    const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string]];
     const skills = await jobSkills(t0);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
@@ -1081,6 +1116,22 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   if (call.kind !== "bash" && call.kind !== "test") return;
   const cmd = (call.detail ?? call.target ?? "").replace(/\s+/g, " ").trim();
   if (!cmd || keepsRunning(cmd)) return;
+  // looking in on something still running (sleep, tail, ps, pgrep) is waiting, not
+  // re-running a check: telling it "that passed, finish" made a job stop its own
+  // check halfway. Repeated looks get a nudge to wait in one call instead.
+  if (isPoll(cmd)) {
+    run.polls = (run.polls ?? 0) + 1;
+    if (run.polls % 4 === 0 && (run.nudges ?? 0) < 3) {
+      run.nudges = (run.nudges ?? 0) + 1;
+      if (run.streaming)
+        void request(agentOf(id), {
+          type: "steer",
+          message:
+            "(Ondra) You are checking on the same thing turn after turn. Wait for it in one bash call instead: `for i in $(seq 1 60); do <is it done?> && break; sleep 10; done; <show the result>` (up to 10 minutes per call). Don't stop or restart what is running.",
+        }).catch(() => {});
+    }
+    return;
+  }
   const ran = (run.ran ??= new Map());
   const edits = run.edits ?? 0;
   const before = ran.get(cmd);
@@ -1285,6 +1336,13 @@ export function schedule() {
       running++;
       void startTask(k.id, k.legs.length > 0 && !k.legs[k.legs.length - 1].endedAt);
     }
+  }
+  // a subagent that was already under way when its fork ended (resumed by the user,
+  // or cut off by a restart) carries on by itself instead of waiting for the fork forever
+  for (const k of state.tasks.filter((k) => k.parentId && k.status === "queued" && k.legs.length > 0)) {
+    const p = taskById(k.parentId!);
+    if (p && (p.status === "running" || p.status === "waiting")) continue;
+    void startTask(k.id, !k.legs[k.legs.length - 1].endedAt);
   }
   const busy = state.tasks.filter((t) => !t.parentId && (t.status === "running" || (t.status === "waiting" && isAlive(agentOf(t.id)))));
   let light = busy.filter((t) => t.weight === "light").length;
