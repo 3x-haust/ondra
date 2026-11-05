@@ -8,6 +8,7 @@ The app passes them to every pi worker with `--skill`.
 | `visual-report` | How workers report: JSON blocks the app draws (rings, bars, checklists, before/after, decision buttons) instead of prose. |
 | `browser-use` | Browser use with the bundled agent-browser: one shared browser, own tab per worker, keychain sign-in, live stream, recordings as proof. |
 | `web-design` | Designing pages that look made by a designer: real references first, concepts as live prototypes, the user picks, and the tells of AI-made pages to avoid. |
+| `mimikyu` | Implementing supplied designs (Figma links, 피그마 그대로, 디자인 그대로): save the design contract, build, measure pixels and DOM, then fix until the gates pass. Available to every job without a personal skill install; Figma access and project measurement dependencies are checked when used. |
 | `goal-loop` | A goal to finish completely ("루프", "될 때까지", "100%"): the user's intent written as checks, then fix → re-check until all pass. |
 | `test-ci` | Tests and CI the way large open-source projects do them: behaviour tests that fail for real, local scripts first, a locked-down GitHub Actions workflow checked locally. |
 | `computer-use` | Computer use with the bundled agent-desktop: one worker at a time, headless input only, traces and screenshots as proof. |

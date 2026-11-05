@@ -15,6 +15,12 @@ read-only. Respect AGENTS.md / CLAUDE.md, user scope, approval boundaries and
 repository delivery rules; these defaults never authorize publishing,
 pushing, opening a PR or merging.
 
+When implementing a supplied design (a Figma link, "피그마 그대로", "디자인
+그대로"), read and follow the bundled mimikyu skill without waiting for a
+skill command. Use web-design for new design directions, not to redesign a
+supplied reference. Keep these coding checks alongside the design's measured
+verification gates.
+
 Before editing, identify the observable success condition, affected callers
 and smallest useful check. Read the implementation and nearby tests first.
 For a bug, reproduce before changing production code: execute it with a tool
