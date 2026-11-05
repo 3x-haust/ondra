@@ -823,12 +823,6 @@ button.chip:hover,
   gap: var(--s-2);
   margin-right: var(--s-4);
 }
-.composer-hint {
-  color: var(--ink-4);
-  font-size: var(--fs-xs);
-  margin-right: var(--s-8);
-  white-space: nowrap;
-}
 .cbtn {
   width: var(--h-md);
   height: var(--h-md);
@@ -2006,10 +2000,6 @@ kbd {
 }
 .more-text.open {
   max-height: none;
-}
-.more-btn {
-  justify-self: start;
-  align-self: flex-start;
 }
 
 /* chips under main's reply: the jobs it started */

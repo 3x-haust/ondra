@@ -146,6 +146,9 @@ function LiveScreen(props: { d: Device }) {
   const [busy, setBusy] = createSignal(false);
   const [, setPolling] = createSignal(false);
   const turn = () => ios && !!turned()[props.d.id];
+  /** size changes snap; only a rotation turns smoothly */
+  const [turning, setTurning] = createSignal(false);
+  createEffect(on(turn, () => { setTurning(true); setTimeout(() => setTurning(false), 400); }, { defer: true }));
   let stage!: HTMLDivElement;
   let canvas!: HTMLCanvasElement;
   let alive = true;
@@ -334,7 +337,7 @@ function LiveScreen(props: { d: Device }) {
     <div class="dev-stage" ref={stage}>
       <div
         class="dev-frame"
-        classList={{ android: !ios, busy: busy(), ready: !!size() }}
+        classList={{ android: !ios, busy: busy(), ready: !!size(), turning: turning() }}
         style={{ width: `${fit().w}px`, height: `${fit().h}px` }}
         tabIndex={0}
         role="application"
