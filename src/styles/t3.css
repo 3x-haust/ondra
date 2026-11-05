@@ -8179,4 +8179,7 @@ textarea { resize: none !important; field-sizing: content; }
 .st-cache.low { color: var(--warn); }
 .sp-gh { display: flex; align-items: center; gap: var(--s-8); min-height: 32px; }
 .sp-gh code { font-size: var(--fs-sm); }
-.sp-git-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: var(--s-8); }
+.sp-git-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s-8); }
+.sp-git-row > .input { min-width: 0; width: 100%; box-sizing: border-box; }
+.sp-gh { min-width: 0; }
+.sp-gh code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
