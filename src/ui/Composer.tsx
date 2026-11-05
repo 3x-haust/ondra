@@ -247,13 +247,18 @@ export function Composer(props: {
     const t = e.target as Element | null;
     if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) close();
   };
-  const ends = ["pointerup", "pointercancel", "mouseup", "click", "dragstart", "blur"] as const;
+  // never the input's own blur: that fires on the press itself, and closing then
+  // moved the page under the pointer so the click missed what it was on
+  const ends = ["pointerup", "pointercancel", "mouseup", "click", "dragstart"] as const;
+  const left = (e: Event) => e.target === window && up();
   document.addEventListener("pointerdown", down, true);
   for (const k of ends) window.addEventListener(k, up, true);
+  window.addEventListener("blur", left);
   onCleanup(() => {
     clearTimeout(pressTimer);
     document.removeEventListener("pointerdown", down, true);
     for (const k of ends) window.removeEventListener(k, up, true);
+    window.removeEventListener("blur", left);
   });
   const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input
