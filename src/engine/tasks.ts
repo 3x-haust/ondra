@@ -287,7 +287,15 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (t.parentId || !(b.task || b.title)) break;
         const live = state.tasks.filter((x) => x.parentId === t.id && x.status !== "done" && x.status !== "failed").length;
         if (live >= 6) break;
-        const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), b.review === true || /code-review|리뷰/i.test(String(b.title ?? "")));
+        const review = b.review === true || /code-review|리뷰/i.test(String(b.title ?? ""));
+        // one review per job: after it, the job fixes the findings and re-runs its checks
+        if (review && state.tasks.some((x) => x.parentId === t.id && x.review && x.status !== "failed")) {
+          push(t, { kind: "note", text: "리뷰는 이미 한 번 받았어요" });
+          const jobId = t.id;
+          queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message: "(Ondra) This job was already reviewed once. Don't start another review: fix what it found and re-run your checks." }).catch(() => {}));
+          break;
+        }
+        const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), review);
         const last = t.entries[t.entries.length - 1];
         if (last?.kind === "spawn") last.childIds.push(child.id);
         else push(t, { kind: "spawn", childIds: [child.id] });
@@ -608,6 +616,7 @@ function handlers(id: string, run: Run) {
           });
           run.cursor = run.text.length;
           const u = ev.message?.usage;
+          noteCall(agentOf(id), u);
           const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
           const level = run.longNudges ?? 0;
           if (run.streaming && level < HANDOFF_AT.length && prompt > HANDOFF_AT[level] && !run.done && !run.handoff) {
@@ -871,8 +880,12 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   if (!wrote.length) return null; // looked things up, answered: nothing to prove
   const changed = wrote.some((e) => e.kind === "tool" && !/\.(md|txt|html?)$/i.test(e.tool.detail ?? ""));
+  // a review is required only for a large or risky change (as the prompt says)
+  const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && !/\.(md|txt|html?)$/i.test(p)));
+  const risky = [...codeFiles].some((p) => /auth|login|session|token|secret|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
+  const needsReview = changed && (codeFiles.size >= 5 || risky);
   const kids = state.tasks.filter((x) => x.parentId === t.id);
-  const reviewed = kids.some((x) => x.review && x.status === "done");
+  const reviewed = !needsReview || kids.some((x) => x.review && x.status === "done");
   const unresolved = changed && reviewed && reviewUnresolved(t, kids);
   // check the evidence of this done against the session, and show the result on its block
   const checked = await checkEvidence(t, run.evidence ?? []);
