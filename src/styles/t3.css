@@ -8189,3 +8189,10 @@ textarea { resize: none !important; field-sizing: content; }
 .decision .blk-table { overflow-x: auto; }
 .decision .blk-table td, .decision .blk-table th { white-space: normal; overflow-wrap: anywhere; word-break: keep-all; }
 .usage-cache { font-variant-numeric: tabular-nums; }
+
+/* a long question in a job's dock scrolls inside itself instead of being cut off */
+.dock .decision {
+  max-height: 40vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
