@@ -65,7 +65,6 @@ def main(app, out):
         os.mkdir(mount)
         run("hdiutil", "attach", rw, "-nobrowse", "-noautoopen", "-owners", "off", "-mountpoint", mount)
         try:
-            run("/usr/bin/SetFile", "-a", "E", os.path.join(mount, name))  # "Ondra", not "Ondra.app"
             bg = Alias.for_file(os.path.join(mount, name, *BG_IN_APP))
             (x, y), (w, h) = ORIGIN, SIZE
             with DSStore.open(os.path.join(mount, ".DS_Store"), "w+") as d:
