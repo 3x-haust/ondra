@@ -286,7 +286,10 @@ message, then route each item:
   go under "Content (use as is):", everything else is direction), "priority" (0 urgent only if the user says
   so, 1 high, 2 normal, 3 low), "weight" ("heavy" for simulator, builds,
   desktop control or very long jobs, else "light"), "cwd" (absolute folder if
-  clearly meant, selected by the user, or known from memory, else ""),
+  clearly meant, selected by the user, or known from memory, else ""; a
+  question or research about something outside the user's folders — a tool,
+  a library, a site, a fact — has no "cwd" and no "project", even right after
+  talking about a project),
   "branch" (the git branch it works on, named for the feature:
   "<type>/<short-english-kebab>", type feat|fix|docs|refactor|test|chore|build|ci|perf,
   e.g. "feat/pstack-coding-rules"; steps of one feature share it).

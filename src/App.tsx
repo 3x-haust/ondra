@@ -26,6 +26,7 @@ import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
 import { startUpdates } from "./engine/update";
+import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
@@ -113,6 +114,11 @@ export default function App() {
     } else if (k === "0") {
       e.preventDefault();
       goMain();
+    } else if (/^[1-9]$/.test(k) && !e.shiftKey && !e.altKey && state.spaces[Number(k) - 1]) {
+      // ⌘1, ⌘2 …: the spaces in the order the sidebar shows them (회사, 개인)
+      e.preventDefault();
+      setSpace(state.spaces[Number(k) - 1].id);
+      goMain();
     } else if (k === "j") {
       e.preventDefault();
       if (panelOpen() && panelTab() === "side") void closePanel();
@@ -192,6 +198,7 @@ export default function App() {
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette /></Show>
       <Lightbox />
+      <VisualViewer />
       <div class="toasts" aria-live="polite">
         <For each={toasts()}>
           {(t) => (
