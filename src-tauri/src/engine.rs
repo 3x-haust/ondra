@@ -223,12 +223,17 @@ pub fn agent_spawn(
     std::fs::create_dir_all(&cwd).map_err(|e| format!("폴더를 만들 수 없습니다: {e}"))?;
 
     cmd.arg("--mode").arg("rpc").args(&args).current_dir(&cwd);
+    // several parts may add to PATH (bundled tools, a space's CLI shims): all of them go first, in order
+    let mut path_parts: Vec<&str> = Vec::new();
     for (k, v) in &env {
         if k == "PATH" {
-            cmd.env("PATH", format!("{v}:{}", with_sidecars(user_path())));
+            path_parts.push(v);
         } else {
             cmd.env(k, v);
         }
+    }
+    if !path_parts.is_empty() {
+        cmd.env("PATH", format!("{}:{}", path_parts.join(":"), with_sidecars(user_path())));
     }
     let mut child = cmd
         .stdin(Stdio::piped())

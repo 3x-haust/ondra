@@ -123,7 +123,7 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
   const [tools, setTools] = createSignal<Awaited<ReturnType<typeof spaceTools>>>(null);
   const [gitName, setGitName] = createSignal<string>();
   const [gitEmail, setGitEmail] = createSignal<string>();
-  const loadTools = () => cur && void spaceTools(cur).then(setTools);
+  const loadTools = () => cur && void spaceTools(state.spaces.find((x) => x.id === cur.id) ?? cur).then(setTools);
   loadTools();
   // gh login happens in a terminal and the browser: check again when Ondra is back in front
   window.addEventListener("focus", loadTools);
@@ -196,13 +196,30 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
         </div>
         <Show when={cur}>
           <div class="sp-field">
+            <span>CLI 로그인</span>
+            <button
+              class="sp-pick"
+              onClick={async () => {
+                const p = await pickFolder("이 공간의 CLI 로그인 폴더");
+                if (!p) return;
+                setState("spaces", (x) => x.id === cur!.id, { cliHome: tilde(p) });
+                loadTools();
+              }}
+            >
+              <Icon name="folder" size={13} />
+              <code>{tools()?.home ? tilde(tools()!.home!) : "Mac 기본"}</code>
+              <span class="spacer" />
+              <span class="muted">변경</span>
+            </button>
+          </div>
+          <div class="sp-field">
             <span>GitHub</span>
             <div class="sp-gh">
-              <Show when={tools()?.gh_user} fallback={<span class="muted">{tools()?.default_user ? `Mac 기본 계정 · ${tools()!.default_user}` : "로그인 안 됨"}</span>}>
+              <Show when={tools()?.gh_user} fallback={<span class="muted">로그인 안 됨</span>}>
                 <code>{tools()!.gh_user}</code>
               </Show>
               <span class="spacer" />
-              <button class="btn ghost sm" onClick={() => void spaceGhLogin(cur!)}>{tools()?.gh_user ? "다시 로그인" : "이 공간 계정으로 로그인"}</button>
+              <button class="btn ghost sm" onClick={() => void spaceGhLogin(state.spaces.find((x) => x.id === cur!.id) ?? cur!)}>{tools()?.gh_user ? "다시 로그인" : "로그인"}</button>
             </div>
           </div>
           <div class="sp-field sp-git">

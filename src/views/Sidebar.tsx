@@ -18,7 +18,9 @@ export type Bucket = "you" | "review" | "work" | "done";
 /** What a job needs from you. A subagent waiting on you pulls its job up. */
 export function bucket(t: Task): Bucket {
   const kids = state.tasks.filter((k) => k.parentId === t.id);
-  if (t.status === "waiting" || t.status === "failed" || kids.some((k) => k.status === "waiting" || k.status === "failed")) return "you";
+  // a subagent that failed under a job that has finished anyway needs nothing from you
+  const open = t.status !== "done";
+  if (t.status === "waiting" || t.status === "failed" || kids.some((k) => k.status === "waiting" || (open && k.status === "failed"))) return "you";
   if (t.status === "done") return t.worktree?.state === "open" ? "review" : "done";
   return "work";
 }
@@ -323,6 +325,14 @@ export function Sidebar() {
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
+        {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
+        <Show when={needs()}>
+          <button class="sb-row sb-main sb-todo" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }} title="답하거나 확인할 다음 일로 (⌘.)">
+            <Icon name="alert" size={15} class="sb-main-ic" />
+            <span class="sb-title">확인할 일</span>
+            <span class="sb-need">{needs()}</span>
+          </button>
+        </Show>
         {/* the browser is the jobs' tool: it shows here only while a job asks you to sign in (or you're on it) */}
         <Show when={view().name === "browser" || loginAsked()}>
           <button class="sb-row sb-main" classList={{ on: view().name === "browser" }} onClick={() => setView({ name: "browser" })} title="일이 로그인을 기다려요. 여기서 로그인하면 모든 일이 로그인돼요">
@@ -424,13 +434,7 @@ export function Sidebar() {
         </div>
         </Fold>
 
-        <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length}>
-          <Show when={needs()}>
-            <button class="sb-need" title="답하거나 확인할 다음 일로 (⌘.)" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }}>
-              확인할 일 {needs()}
-            </button>
-          </Show>
-        </Head>
+        <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
         <Fold open={!folds().jobs}>
         <div class="sb-list">
           <For each={loose()} fallback={<p class="sb-empty">{projectsIn(state.space).length ? "프로젝트 밖에서 맡긴 일이 여기에 생겨요" : "메인에게 일을 맡기면 여기에 생겨요"}</p>}>
