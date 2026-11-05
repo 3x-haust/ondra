@@ -46,6 +46,22 @@ fn port_file(app: &AppHandle) -> PathBuf {
     profile_dir(app).join("DevToolsActivePort")
 }
 
+/// The port the shared browser listens on, kept across restarts: jobs got it in
+/// their environment when they started, so a restarted browser must come back on
+/// the same one or every running job loses it.
+fn stable_port(app: &AppHandle) -> u16 {
+    let file = crate::engine::data_dir(app).join("browser").join("port");
+    let free = |p: u16| std::net::TcpListener::bind(("127.0.0.1", p)).is_ok();
+    if let Some(p) = std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse::<u16>().ok()).filter(|p| *p > 1024 && free(*p)) {
+        return p;
+    }
+    let p = std::net::TcpListener::bind(("127.0.0.1", 0)).ok().and_then(|l| l.local_addr().ok()).map(|a| a.port()).unwrap_or(0);
+    if p != 0 {
+        let _ = std::fs::write(&file, p.to_string());
+    }
+    p
+}
+
 fn read_port(app: &AppHandle) -> Option<u16> {
     std::fs::read_to_string(port_file(app)).ok()?.lines().next()?.trim().parse().ok()
 }
@@ -92,17 +108,20 @@ pub fn port(app: &AppHandle) -> Option<u16> {
 /// agent-browser can drive it. A Chrome that has run for hours can still answer
 /// /json/version while every agent-browser command hangs (seen after a heavy
 /// WebGL page); checked at most once a minute.
-fn works(app: &AppHandle, port: u16) -> bool {
+fn works(app: &AppHandle, port: u16, force: bool) -> bool {
     static LAST_OK: Mutex<Option<(u16, Instant)>> = Mutex::new(None);
     if let Ok(last) = LAST_OK.lock() {
-        if last.is_some_and(|(p, at)| p == port && at.elapsed() < Duration::from_secs(60)) {
+        if !force && last.is_some_and(|(p, at)| p == port && at.elapsed() < Duration::from_secs(60)) {
             return true;
         }
     }
+    // a new session every time: an already-connected one keeps answering while
+    // every new connection (each job's first command) hangs on a stuck tab
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
     let Some(mut cmd) = crate::tools::agent_browser(app) else { return true };
     cmd.env("AGENT_BROWSER_CDP", port.to_string())
-        .env("AGENT_BROWSER_SESSION", format!("ondra-health-{port}"))
-        .env("AGENT_BROWSER_IDLE_TIMEOUT_MS", "30000")
+        .env("AGENT_BROWSER_SESSION", format!("ondra-health-{port}-{stamp}"))
+        .env("AGENT_BROWSER_IDLE_TIMEOUT_MS", "5000")
         .args(["get", "url"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -136,13 +155,25 @@ fn kill_profile_chrome(app: &AppHandle, inner: &mut Inner) {
         let _ = c.wait();
     }
     let flag = format!("--user-data-dir={}", profile_dir(app).display());
-    let _ = Command::new("/usr/bin/pkill").args(["-f", &flag]).status();
+    // `--` first: without it pkill reads the pattern as an option and kills nothing
+    let _ = Command::new("/usr/bin/pkill").args(["-f", "--", &flag]).status();
     std::thread::sleep(Duration::from_millis(800));
     inner.port = None;
 }
 
 /// The shared browser's DevTools port, starting it if it is not running.
 pub fn ensure(app: &AppHandle) -> Result<u16, String> {
+    ensure_checked(app, false)
+}
+
+/// A job's browser command just failed to get an answer: check with a fresh
+/// connection now (not the once-a-minute cache) and restart the browser if it hangs.
+#[tauri::command]
+pub async fn browser_check(app: AppHandle) -> Result<u16, String> {
+    tauri::async_runtime::spawn_blocking(move || ensure_checked(&app, true)).await.map_err(|e| e.to_string())?
+}
+
+fn ensure_checked(app: &AppHandle, force: bool) -> Result<u16, String> {
     let shared = app.state::<Shared>();
     let mut inner = shared.0.lock().map_err(|_| "browser lock".to_string())?;
     // A Chrome left by an earlier run of Ondra still answers but can't start new
@@ -153,7 +184,7 @@ pub fn ensure(app: &AppHandle) -> Result<u16, String> {
         kill_profile_chrome(app, &mut inner);
     }
     if let Some(p) = inner.port.or_else(|| read_port(app)).filter(|p| ours && answers(*p)) {
-        if works(app, p) {
+        if works(app, p, force) {
             inner.port = Some(p);
             return Ok(p);
         }
@@ -176,8 +207,8 @@ pub fn ensure(app: &AppHandle) -> Result<u16, String> {
     let _ = std::fs::remove_file(port_file(app));
     let mut cmd = Command::new(&chrome);
     cmd.arg(format!("--user-data-dir={}", profile.display()))
+        .arg(format!("--remote-debugging-port={}", stable_port(app)))
         .args([
-            "--remote-debugging-port=0",
             "--remote-debugging-address=127.0.0.1",
             // never touch the user's keychain for Chrome's own cookie key
             "--use-mock-keychain",

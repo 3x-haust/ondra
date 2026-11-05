@@ -292,6 +292,7 @@ pub fn run() {
             git::git_revert_file,
             tools::browser_stream_port,
             browser::shared_browser_open,
+            browser::browser_check,
             browser::shared_browser_go,
             browser::browser_release,
             devices::devices_list,
