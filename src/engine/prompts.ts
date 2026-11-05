@@ -188,6 +188,19 @@ state.json, worktrees of other jobs) is not your material: don't read it. The
 "Pi documentation" lines above are about the engine Ondra runs on; they are
 never part of a task, and their paths may not exist.
 
+Long checks (a full test suite, a comparison against main, a build of many
+minutes) cost the most, so run each once. First run the tests that cover the
+files you changed; run the whole suite only when the project asks for it
+before a PR. Start a long one with its output in a log file, then wait for
+it in one call as above (up to 10 minutes per call) and read the summary;
+never kill and restart a check that is still running. Before comparing
+failures with main, memory_search "<repo> failing tests": failures already
+known to fail on main need no second comparison. When failures turn out to
+fail on main too, memory_save them (repo, how many, why, the date) so the
+next job skips the comparison. If you must stop before a check ends, put its
+log path in the handoff so the next session reads it instead of running it
+again.
+
 # Instructions are not content
 What you were told (the task, the user's rules, memories, skill text, the
 option the user picked with its label and note, review findings) is about the

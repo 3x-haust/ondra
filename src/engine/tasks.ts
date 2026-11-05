@@ -47,6 +47,8 @@ interface Run {
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
   gates?: number;
+  /** status looks at running work (sleep, tail, ps …) this run */
+  polls?: number;
   /** how many times it was told its context is long (handoff) */
   longNudges?: number;
 }
@@ -209,6 +211,10 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
   }
 }
 
+/** a look at something already running: every part is a wait or a read-only status command */
+const isPoll = (cmd: string) =>
+  /\b(sleep|tail|pgrep|ps|date)\b/.test(cmd) &&
+  cmd.split(/;|&&|\|\||\|/).every((p) => !p.trim() || /^\s*(sleep|tail|head|cat|ls|ps|pgrep|date|grep|wc|cut|echo|test|\[|cd|for|do|done|if|then|fi|break)\b/.test(p.trim()));
 const keepsRunning = (cmd: string) =>
   /(&\s*$|&\s*disown|\bnohup\b|--watch\b|\bwatch\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd);
 
@@ -1081,6 +1087,22 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   if (call.kind !== "bash" && call.kind !== "test") return;
   const cmd = (call.detail ?? call.target ?? "").replace(/\s+/g, " ").trim();
   if (!cmd || keepsRunning(cmd)) return;
+  // looking in on something still running (sleep, tail, ps, pgrep) is waiting, not
+  // re-running a check: telling it "that passed, finish" made a job stop its own
+  // check halfway. Repeated looks get a nudge to wait in one call instead.
+  if (isPoll(cmd)) {
+    run.polls = (run.polls ?? 0) + 1;
+    if (run.polls % 4 === 0 && (run.nudges ?? 0) < 3) {
+      run.nudges = (run.nudges ?? 0) + 1;
+      if (run.streaming)
+        void request(agentOf(id), {
+          type: "steer",
+          message:
+            "(Ondra) You are checking on the same thing turn after turn. Wait for it in one bash call instead: `for i in $(seq 1 60); do <is it done?> && break; sleep 10; done; <show the result>` (up to 10 minutes per call). Don't stop or restart what is running.",
+        }).catch(() => {});
+    }
+    return;
+  }
   const ran = (run.ran ??= new Map());
   const edits = run.edits ?? 0;
   const before = ran.get(cmd);
