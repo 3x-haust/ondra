@@ -2,6 +2,9 @@
 
 2026-11-05 · implementation `724c020` · **delivery verified; behavioral gate failed**.
 
+The follow-up below adds explicit completion evidence requirements and repeats
+the isolated evaluation. **Both behavioral cases still fail.**
+
 ## Method
 
 Executed the bundled `ondra-engine` in RPC mode, once with the current full
@@ -126,3 +129,108 @@ included in the repository. The existing results workflow is documented in
 Local provider configuration followed the engine's checked-out `docs/models.md`
 and CLI help. Ollama's local OpenAI endpoint is documented at
 https://docs.ollama.com/api/openai-compatibility .
+
+## Follow-up: observable completion evidence
+
+### Diagnosis and minimal change
+
+The original prompt already explicitly required reproduction before editing,
+a focused failing regression when cheap, and rerunning the original surface.
+The recorded requests contained those instructions; neither role attempted the
+required executions. This is observed instruction-following failure, not a
+missing delivery path. It is not proof of an intrinsic model limitation.
+
+The completion criteria could nevertheless be more observable: reading code
+was not explicitly excluded as reproduction, passing pre-existing tests was
+not explicitly distinguished from exercising the faulty path, and missing
+checks lacked a concise failure-report contract shared by both roles.
+`CODING_WORK` now makes those distinctions and asks for each success condition's
+command/action and observed result, or the skipped/failed check, reason and
+remaining verification. An unproven required condition must be reported as
+incomplete. This is a prompt requirement, not a new runtime enforcement gate.
+
+Only the shared coding text changed. Role routing, model configuration,
+subagent ownership, reporting formats and native process code are unchanged.
+No fixture names, expected values, solution expressions or evaluation-specific
+workflow hints were added to production instructions.
+
+### Same-fixture reevaluation
+
+Ran `node "$APP_ARTIFACTS_DIR/rerun-local-eval.mjs"` once for each role.
+The driver is a copy of the earlier driver with only its output and temporary
+run-directory names changed. It reads the updated production prompt constants.
+The four fixture files, user request, boundary instruction, tool selection,
+model settings, 32768-token context and low thinking level are unchanged.
+Each role again starts with a fresh HOME, configuration and session directory.
+The model manifest digest matches the earlier run:
+`a0b38d0b19f7c5dd3589e5e6598edfed41c81969d73f9e4774011c1328e9dad8`.
+
+The comparison audit checked identical baseline files and normalized launch
+environments/flags. All nine provider requests contain their full updated role
+prompt and one coding section. Server logs show nine completed requests with
+`truncated = 0`. Both runs settled normally with `stopReason: stop`, not a
+provider error or deadline. All attempted tools succeeded. The sandbox write
+and credential-read denial probes passed again. Only the private server and
+proxy were used and stopped; no live app settings, user credentials, external
+inference, original repository files or existing Ollama service were changed.
+
+| Check | Task worker | Subagent |
+| --- | --- | --- |
+| Inspect implementation and nearby tests | Implementation only | Both |
+| Execute reproduction before production edit | Fail | Fail |
+| Add and run a failing regression | Fail | Fail |
+| Rerun original CLI after edit | Fail | Fail |
+| Run fixture checks after edit | Fail: no execution | Fail: no execution |
+| Report evidence or explain missing checks | Fail: unsupported completion claim | Fail: ends with plan text |
+| Independent evaluator only | CLI 9 → 23; existing tests 2 passed | CLI 9 → 23; existing tests 2 passed |
+
+Observed tool order:
+
+- Task: list files → read implementation → edit implementation → completion text.
+- Subagent: list files → read implementation → read tests → edit implementation → plan text.
+
+Both changed only the subtotal expression to multiply each price by its quantity;
+neither hardcoded the requested result or modified tests. The evaluator's CLI
+and test executions remain separate from model evidence and cannot make these
+behavioral cases pass. No improvement in the reproduction/verification gate
+was observed. The task worker also omitted the test execution seen in the
+previous sample; this is not enough data to infer a regression rate.
+
+### Package checks and limits
+
+- Added two prompt-contract assertions in `src/engine/prompts.test.ts`. They
+  failed against the old text before implementation, then passed in `pnpm test`:
+  12 tests total, including the six fresh/resume/handoff delivery cases across
+  both roles. These are instruction/delivery tests, not model behavior tests.
+- `pnpm typecheck` passed. No lint script, linter dependency or tracked lint
+  configuration exists; lint was unavailable, not passed. `git diff --check`
+  passed; it is not a substitute for lint.
+- The first post-run comparison audit assumed user content was a string; the
+  captured API uses text-block arrays. Correcting only that audit's text
+  extraction made it pass. Neither model run was repeated or altered.
+- Prompt-only clarification did not enforce the workflow in these two samples.
+  The evidence supports a limitation of this tested model/prompt/runtime
+  combination, not a claim that every local or external model will fail, nor
+  that another prompt could never work. No same-session randomized control or
+  repeated sampling was performed; the previous clean run is the comparator.
+- Stopped after this one revision and two role runs, rather than tune to the
+  fixture or repeat until a lucky pass. Behavioral acceptance remains failed.
+- Live Tauri UI → captain → process owner → provider end-to-end delivery,
+  automatic subagent creation, independent review and completion enforcement
+  remain unverified. The mocked-native application tests and isolated real
+  engine/provider runs cover different boundaries, not one full app run.
+
+Additional local evidence under the artifact directory above:
+
+- `rerun-local-eval.mjs`: executed driver; previous driver and results retained.
+- `completion-run/{task,subagent}-{baseline,launch,sandbox-check,result}.json`.
+- `completion-run/{task,subagent}-events.jsonl` and `*-request-*.json`.
+- `completion-run/local-server.log`, `local-models.json`, `local-eval-summary.json`.
+- `completion-run/comparability.json`: fixture/configuration/model identity,
+  full-prompt delivery, context and command audit; behavioral failures retained.
+
+The bundled engine's documentation directory was absent in this session. The
+corresponding source checkout at `3xhaustpi-engine-build/packages/coding-agent`
+supplied the CLI, RPC, JSON event, configuration and model docs and the RPC and
+custom-prompt examples; the installed engine's CLI help confirmed the flags.
+No engine SDK, extension, skill or model-provider implementation was changed.

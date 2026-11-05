@@ -37,6 +37,18 @@ describe("coding defaults", () => {
     expect(prompt).not.toMatch(/Prove: once|no re-running checks|no new test files/);
   });
 
+  it.each([
+    ["task", TASK_SYSTEM],
+    ["subagent", SUB_SYSTEM],
+  ])("requires observable completion evidence for the %s role", (_role, prompt) => {
+    for (const rule of [
+      "execute it with a tool", "Reading code or predicting output",
+      "already passed before the fix", "original failing path",
+      "check -> command/action -> observed result",
+      "what failed or was skipped, why", "report the work as incomplete",
+    ]) expect(prompt.replace(/\s+/g, " ")).toContain(rule);
+  });
+
   it("keeps role boundaries and the routing format", () => {
     expect(SUB_SYSTEM).toContain("Don't start subagents.");
     expect(TASK_SYSTEM).toContain("at most 4 at a time");

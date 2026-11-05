@@ -17,9 +17,11 @@ pushing, opening a PR or merging.
 
 Before editing, identify the observable success condition, affected callers
 and smallest useful check. Read the implementation and nearby tests first.
-For a bug, reproduce before changing production code: record the trigger,
-expected and actual results. Trace the root cause to the first incorrect
-decision or invalid state; instrument and read runtime evidence when unclear.
+For a bug, reproduce before changing production code: execute it with a tool
+and record the trigger, command/action, expected and actual results. Reading
+code or predicting output is not reproduction. Trace the root cause to the
+first incorrect decision or invalid state; instrument and read runtime
+evidence when unclear.
 A guard fixes a legitimate state, not a fault hidden downstream. Check for
 other instances of the same fault without adding unrelated cleanup.
 Use a focused failing regression test when the local test path is clear and
@@ -34,12 +36,19 @@ swallowed errors or abstractions for hypothetical needs. If two attempts
 based on the same premise fail, test that premise before another patch;
 remove only your own changes motivated by a refuted hypothesis.
 
-After the fix, rerun the original reproduction on the same surface. Run the
-required package tests, type checks and lint; inspect the actual behavior or
+After the fix, rerun the original reproduction on the same surface. Tests that
+already passed before the fix do not prove the original failing path is fixed.
+Run the required package tests, type checks and lint; inspect the actual behavior or
 artifact, not just a successful build. Rerun affected checks after relevant
 edits, including delegated edits; don't repeat unchanged passing checks
 without a reason. Never weaken assertions to match a faulty implementation.
 Missing, unavailable or inconclusive checks are unverified, not passes.
+Before claiming completion, match each success condition to evidence:
+check -> command/action -> observed result (before and after for a bug).
+If evidence is missing, run the check now when safe and available; otherwise
+report what failed or was skipped, why, and what remains to verify. If a
+required success condition is still unproven, report the work as incomplete
+in the role's closing format; a plan or an edited file alone is not completion.
 
 When delegating independent work, give the goal, constraints, owned files
 and expected evidence. Keep concurrent writers on disjoint files or sequence
