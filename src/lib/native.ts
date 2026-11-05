@@ -202,6 +202,8 @@ export interface FileText {
   text: string | null;
   size: number;
   binary: boolean;
+  /** last change, ms since 1970 (0 when unknown) */
+  modified?: number;
 }
 export const fsRead = (path: string) =>
   call<FileText>("fs_read", { path }, { text: "import { restore } from './auth/session';\n\nexport async function guard(to) {\n  await restore();\n  return to;\n}\n", size: 80, binary: false });

@@ -974,7 +974,7 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
     changed && !reviewed ? "- 코드를 바꿨는데 리뷰를 안 받았어요. 리뷰 서브에이전트({\"type\":\"subagent\",\"review\":true,…, code-review 스킬})를 띄우고 결과를 받아 고쳐 줘." : "",
     unresolved ? "- 리뷰에서 P1·P2가 나왔는데 그 뒤로 고친 게 없어요. 고치고, 고친 걸 다시 확인해 줘." : "",
     !proven ? "- done에 evidence가 없어요. 실제로 돌린 테스트·빌드·실행·스크린샷을 evidence에 넣고, 확인 못 한 건 unverified에 적어 줘." : "",
-    ...bad.map((e) => `- evidence «${e.ref}»: ${e.why}. ${e.check === "missing" ? "파일을 실제로 만들거나 경로를 고쳐 줘." : "지금 실제로 돌리고 그 결과를 적어 줘."}`),
+    ...bad.map((e) => `- evidence «${e.ref}»: ${e.why}. ${e.check === "missing" ? "파일을 실제로 만들거나 경로를 고쳐 줘." : e.kind === "shot" ? "지금 화면을 다시 찍어 그 사진을 넣어 줘." : "지금 실제로 돌리고 그 결과를 적어 줘."}`),
     "안 해 본 걸 했다고 하지 말고, 못 한 건 unverified에 적은 뒤 다시 done으로 끝내 줘.",
   ];
   return { label: `${needs.join(" · ")}`, ask: lines.filter(Boolean).join("\n") };
