@@ -67,7 +67,7 @@ pnpm install
 cp .env.example .env        # 필요하면 값 채우기
 pnpm bundle                 # agent-browser, agent-desktop, 엔진, 헤드리스 Chrome을 앱 안으로
 pnpm tauri dev              # 개발 실행
-pnpm tauri build            # .app / .dmg
+pnpm tauri build && pnpm dmg   # .app, 그다음 설치용 .dmg (pip install ds_store mac_alias)
 ```
 
 - 에이전트 엔진은 [3xhaustpi](https://github.com/3x-haust/3xhaustpi)의 coding-agent를 한 파일로 빌드해 써요. 옆 폴더에 두거나 `ONDRA_ENGINE_DIST`로 위치를 알려 줘요.

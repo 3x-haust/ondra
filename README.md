@@ -67,7 +67,7 @@ pnpm install
 cp .env.example .env        # fill in values if you need them
 pnpm bundle                 # agent-browser, agent-desktop, the engine and headless Chrome into the app
 pnpm tauri dev              # run in development
-pnpm tauri build            # .app / .dmg
+pnpm tauri build && pnpm dmg   # .app, then the install .dmg (pip install ds_store mac_alias)
 ```
 
 - The agent engine is the coding-agent from [3xhaustpi](https://github.com/3x-haust/3xhaustpi), built into a single file. Put it in a sibling folder or point `ONDRA_ENGINE_DIST` at it.
