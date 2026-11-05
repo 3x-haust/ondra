@@ -57,8 +57,9 @@ export function noteCall(agent: string, u: any) {
   if (!prompt) return;
   const r = reuse[agent] ?? { reused: 0, reusable: 0, last: 0 };
   // a session's first call, or one after the history shrank (compaction, handoff),
-  // can only reuse a shared prefix: count what it read
-  const can = r.last && prompt >= r.last ? r.last : read;
+  // had nothing of its own sent before: it says nothing about reuse, so it isn't
+  // counted (counting it made a fresh chat read 100%)
+  const can = r.last && prompt >= r.last ? r.last : 0;
   setReuse(agent, { reused: r.reused + Math.min(read, can), reusable: r.reusable + can, last: prompt, hit: read / prompt });
   persist();
 }
