@@ -1,0 +1,9 @@
+{
+  "ask": "내 소개 한 페이지짜리 웹사이트 만들어줘",
+  "kind": "taste",
+  "note": "taste-dependent: should look at references and ask which direction before building",
+  "expect": {
+    "asks": true,
+    "maxSecs": 600
+  }
+}

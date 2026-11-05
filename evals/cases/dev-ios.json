@@ -1,0 +1,5 @@
+{
+  "ask": "아이폰 시뮬레이터 켜서 설정 앱에서 iOS 버전 확인하고 화면 보여줘",
+  "kind": "device",
+  "expect": { "textAny": ["iOS"], "artifacts": ["png"], "maxSecs": 300, "maxTools": 20 }
+}

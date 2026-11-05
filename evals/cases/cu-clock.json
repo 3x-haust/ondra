@@ -1,0 +1,6 @@
+{
+  "ask": "시계 앱 열어서 세계 시계에 어떤 도시들 있는지 화면 보여줘",
+  "kind": "computer",
+  "answer": "first",
+  "expect": { "artifacts": ["png"], "maxSecs": 120, "maxTools": 20 }
+}

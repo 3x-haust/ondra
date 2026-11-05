@@ -1,0 +1,5 @@
+{
+  "ask": "안드로이드 에뮬레이터 켜서 설정 앱에서 안드로이드 버전 확인하고 화면 보여줘",
+  "kind": "device",
+  "expect": { "textAny": ["Android", "안드로이드"], "artifacts": ["png"], "maxSecs": 360, "maxTools": 20 }
+}

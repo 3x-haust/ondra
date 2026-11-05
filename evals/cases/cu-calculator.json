@@ -1,0 +1,5 @@
+{
+  "ask": "계산기로 128×37 계산하고 결과 화면 보여줘",
+  "kind": "computer",
+  "expect": { "textAny": ["4,736", "4736"], "artifacts": ["png"], "maxSecs": 120, "maxTools": 20 }
+}

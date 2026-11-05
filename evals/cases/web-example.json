@@ -1,0 +1,5 @@
+{
+  "ask": "브라우저로 https://example.com 열어서 페이지 제목이 뭔지 알려줘",
+  "kind": "browser",
+  "expect": { "textAny": ["Example Domain"], "maxSecs": 120, "maxTools": 12 }
+}
