@@ -27,7 +27,27 @@ export interface Reuse {
   reusable: number;
   last: number;
 }
-export const [reuse, setReuse] = createStore<Record<string, Reuse>>({});
+// kept across restarts, so the status line shows it before the next answer
+const KEY = "ondra.cacheReuse";
+const saved = (): Record<string, Reuse> => {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+};
+export const [reuse, setReuse] = createStore<Record<string, Reuse>>(saved());
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+const persist = () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      // the 200 most recent agents are plenty
+      const keep = Object.entries({ ...reuse }).slice(-200);
+      localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(keep)));
+    } catch {}
+  }, 1000);
+};
 
 export function noteCall(agent: string, u: any) {
   const read = Number(u?.cacheRead ?? 0);
@@ -38,6 +58,7 @@ export function noteCall(agent: string, u: any) {
   // can only reuse a shared prefix: count what it read
   const can = r.last && prompt >= r.last ? r.last : read;
   setReuse(agent, { reused: r.reused + Math.min(read, can), reusable: r.reusable + can, last: prompt });
+  persist();
 }
 
 export const reusePct = (agent: string) => {
