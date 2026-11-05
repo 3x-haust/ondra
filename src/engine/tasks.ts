@@ -8,7 +8,7 @@ import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, workerEnv, workerExtensions, workerSkills, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
+import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, workerEnv, workerExtensions, workerSkills, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -905,8 +905,27 @@ function finish(id: string, summary: string, run?: Run) {
     void deliver(t);
   } else if (t && !drainQueue(id)) {
     releaseBrowser(id);
+    void dropEmptyBranch(id);
     endedHook?.(t);
   }
+}
+
+/**
+ * A job that finished without changing any file (a question, research, a check)
+ * has nothing to merge: its worktree and branch go away on their own, so no
+ * merge bar or "+0" is left behind.
+ */
+async function dropEmptyBranch(id: string) {
+  const t = taskById(id);
+  const w = t?.worktree;
+  if (!t || !w || w.state !== "open" || t.status !== "done") return;
+  const c = await gitChanges(w.path, w.base).catch(() => null);
+  if (!c?.isRepo || c.files.length) return;
+  await worktreeRemove(w.repo, w.path, w.branch, false).catch(() => {});
+  updateTask(id, (x) => {
+    x.cwd = homeDir(x);
+    x.worktree = undefined;
+  });
 }
 
 // ─────────────────────────────── creating
