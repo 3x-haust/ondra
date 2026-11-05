@@ -267,7 +267,7 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
   old ??= replaced;
   if (old && made[0]) retireMemory(old.id, made[0].id, old === replaced ? "새 내용으로 바뀌었어요" : undefined);
   if (!opts.quiet && made.length) {
-    const what = made.length > 1 ? `${made.length}개로 나눠 기억했어요` : `기억함: ${made[0].text.slice(0, 60)}`;
+    const what = made.length > 1 ? `${made.length}개로 나눠 기억했어요` : `기억함: ${made[0].text.slice(0, 200)}`;
     toast(old ? `${what} · 예전 기억은 지난 기억으로 옮겼어요` : what, "info", { label: "취소", run: () => made.forEach((m) => removeMemory(m.id)) });
   }
   return ids[0] ?? null;
