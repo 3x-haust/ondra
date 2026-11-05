@@ -50,7 +50,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": ["app"],
     "category": "DeveloperTool",
     "externalBin": [
       "binaries/agent-browser",
@@ -67,15 +67,10 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "13.0",
-      "dmg": {
-        "background": "./dmg/background.tiff",
-        "windowSize": { "width": 660, "height": 400 },
-        "appPosition": { "x": 180, "y": 190 },
-        "applicationFolderPosition": { "x": 480, "y": 190 }
-      }
+      "minimumSystemVersion": "13.0"
     },
     "resources": {
+      "dmg/background.tiff": "dmg-background.tiff",
       "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/engine/": "engine/",
       "resources/chrome/": "chrome/",
