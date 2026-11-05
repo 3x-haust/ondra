@@ -1607,3 +1607,11 @@ body.resizing iframe {
   border-radius: inherit;
   background: var(--accent);
 }
+.toast button.toast-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  color: var(--ink-3);
+  font-weight: normal;
+}
+.toast button.toast-x:hover { color: var(--ink); }

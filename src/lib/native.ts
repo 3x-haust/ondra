@@ -440,3 +440,8 @@ export const pathsExist = (paths: string[]) => call<boolean[]>("paths_exist", { 
 export const embedTexts = (texts: string[], query = false) => call<number[][]>("embed_texts", { texts, query }, []);
 /** Answer a `bridge:call` from an engine tool. */
 export const bridgeReply = (id: number, value: string) => call<void>("bridge_reply", { id, value });
+
+/** A newer release on GitHub, or null (always null in development builds). */
+export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);
+/** Download, verify and install it; the app restarts on success. */
+export const installUpdate = () => call<void>("update_install");

@@ -9,6 +9,7 @@
 //!   git     — what a task changed
 //!   import  — rules, skills, memory and sessions from other agent tools
 
+mod update;
 mod browser;
 mod devices;
 mod engine;
@@ -141,6 +142,7 @@ pub fn run() {
     let capture_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -223,6 +225,8 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            update::update_check,
+            update::update_install,
             open_capture,
             hide_capture,
             submit_capture,
