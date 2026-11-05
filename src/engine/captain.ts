@@ -280,7 +280,13 @@ const folderOf = (space: string) => expand(projectOf(space)?.folder || spaceById
 
 /** Restart an idle main engine whose instruction files changed since it started. */
 /** What the chat was started with: its instruction files and its tools. */
-const startSig = async (dir: string) => `${await instructionSig(dir)}\n${(await mainTools()).join(" ")}`;
+// main's own instructions count too: when they change, an idle main restarts on them
+const promptSig = () => {
+  let h = 0;
+  for (let i = 0; i < CAPTAIN_SYSTEM.length; i++) h = (h * 31 + CAPTAIN_SYSTEM.charCodeAt(i)) | 0;
+  return h.toString(36);
+};
+const startSig = async (dir: string) => `${await instructionSig(dir)}\n${(await mainTools()).join(" ")}\n${promptSig()}`;
 export async function restartIfStale(space: string): Promise<boolean> {
   const agent = agentOf(space);
   if (!isAlive(agent) || !attached.has(space) || busy.has(space) || !sigOf.has(space)) return false;
