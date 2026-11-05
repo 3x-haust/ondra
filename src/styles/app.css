@@ -1615,3 +1615,7 @@ body.resizing iframe {
   font-weight: normal;
 }
 .toast button.toast-x:hover { color: var(--ink); }
+.term-sub { align-items: center; justify-content: space-between; }
+.term-count { font-size: var(--fs-sm); color: var(--ink-3); }
+button.st-sh { padding: 0; font: inherit; cursor: pointer; }
+button.st-sh:hover { text-decoration: underline; }

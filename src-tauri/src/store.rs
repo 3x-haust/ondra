@@ -373,6 +373,23 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
     Command::new("/usr/bin/open").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Opens a terminal window in a folder: Ghostty, iTerm, Warp, else Terminal.
+#[tauri::command]
+pub fn open_in_terminal(path: String) -> Result<(), String> {
+    let has = |app: &str| Path::new(&format!("/Applications/{app}.app")).exists();
+    let mut cmd = Command::new("/usr/bin/open");
+    if has("Ghostty") {
+        cmd.args(["-na", "Ghostty", "--args", &format!("--working-directory={path}")]);
+    } else if has("iTerm") {
+        cmd.args(["-a", "iTerm", &path]);
+    } else if has("Warp") {
+        cmd.args(["-a", "Warp", &path]);
+    } else {
+        cmd.args(["-a", "Terminal", &path]);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 // ───────────── inbox: throw from anywhere ─────────────
 
 /// Any `*.txt` dropped into `<data>/inbox/` becomes a task (an optional first

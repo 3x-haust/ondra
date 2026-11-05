@@ -10,14 +10,13 @@ import type { Priority, Shell, Task } from "../state/types";
 import { toast, activeTab, closePanelTab, newPanelTab, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelTab, setView, type PanelTab } from "../state/ui";
 import { discardTask, mergeTask, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openUrl, ptyOpen, revealPath } from "../lib/native";
+import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { long, now, priorityLabel, short, statusLabel } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
-import { Xterm } from "../ui/Xterm";
 import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
 
 /** The task's own branch: where it is, and merge / throw away. */
@@ -223,43 +222,35 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
   );
 }
 
+/** What the job's commands are doing now: the running ones with their live output; finished ones folded. */
 function TerminalPane(props: { t: Task }) {
-  const [mode, setMode] = createSignal<"log" | "shell">("log");
   const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
-  // what is running now; finished commands only when asked for
   const [past, setPast] = createSignal(false);
   const running = () => [...props.t.shells].reverse().filter((s) => !s.endedAt);
   const ended = () => [...props.t.shells].reverse().filter((s) => s.endedAt);
   const isOpen = (s: Shell) => toggled()[s.id] ?? !s.endedAt;
+  const card = (s: Shell) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />;
   return (
     <div class="term-pane">
       <div class="term-sub">
-        <div class="seg">
-          <button classList={{ on: mode() === "log" }} onClick={() => setMode("log")}>에이전트 명령 {running().length || ""}</button>
-          <button classList={{ on: mode() === "shell" }} onClick={() => setMode("shell")}>내 터미널</button>
-        </div>
+        <span class="term-count">{running().length ? `실행 중 ${running().length}` : "실행 중인 셸 없음"}</span>
+        <button class="btn sm ghost" onClick={() => void openInTerminal(expand(props.t.cwd))} title={props.t.cwd}>
+          <Icon name="shell" size={13} />
+          터미널에서 열기
+        </button>
       </div>
-      <Switch>
-        <Match when={mode() === "log"}>
-          <div class="shells">
-            <For each={running()} fallback={<div class="pane-empty">지금 실행 중인 명령이 없어요.</div>}>
-              {(s) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />}
-            </For>
-            <Show when={ended().length}>
-              <button class="sb-older shells-past" classList={{ open: past() }} onClick={() => setPast(!past())}>
-                <Icon name="chevron" size={11} class="sb-older-chev" />
-                {past() ? "끝난 명령 접기" : `끝난 명령 ${ended().length}개`}
-              </button>
-              <Show when={past()}>
-                <For each={ended()}>{(s) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />}</For>
-              </Show>
-            </Show>
-          </div>
-        </Match>
-        <Match when={mode() === "shell"}>
-          <Xterm id={`shell:${props.t.id}`} keep open={(c, r) => ptyOpen(`shell:${props.t.id}`, expand(props.t.cwd), null, [], [], c, r)} />
-        </Match>
-      </Switch>
+      <div class="shells">
+        <For each={running()}>{card}</For>
+        <Show when={ended().length}>
+          <button class="sb-older shells-past" classList={{ open: past() }} onClick={() => setPast(!past())}>
+            <Icon name="chevron" size={11} class="sb-older-chev" />
+            {past() ? "끝난 명령 접기" : `끝난 명령 ${ended().length}개`}
+          </button>
+          <Show when={past()}>
+            <For each={ended()}>{card}</For>
+          </Show>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -417,7 +408,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "side", label: "사이드챗", icon: "message", keys: "⌘J" },
   { kind: "artifacts", label: "결과물", icon: "spark", job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: "⌃⇧G", job: true },
-  { kind: "terminal", label: "터미널", icon: "shell", keys: "⌃`", job: true },
+  { kind: "terminal", label: "셸", icon: "shell", keys: "⌃`", job: true },
   { kind: "files", label: "파일", icon: "file", keys: "⌘P", job: true },
   { kind: "browser", label: "브라우저", icon: "globe", job: true },
   { kind: "overview", label: "정보", icon: "list", job: true },
