@@ -20,13 +20,12 @@ import { Board } from "./Board";
 // ───────────── geometry
 
 const W = { main: 168, proj: 220, job: 288, sub: 236 };
-const H = { main: 84, proj: 84, job: 196, sub: 84 };
+const H = { main: 84, proj: 84, job: 196, sub: 84, more: 40 };
 const X = { main: 0, proj: 248, job: 560 };
 const GAP = { job: 28, col: 24, sub: 12, proj: 56 };
 const SUB_INDENT = 28;
-const DAY = 86_400_000;
 
-type Kind = "main" | "proj" | "job" | "sub";
+type Kind = "main" | "proj" | "job" | "sub" | "more";
 interface Node {
   id: string;
   kind: Kind;
@@ -36,6 +35,8 @@ interface Node {
   h: number;
   task?: Task;
   project?: Project | { id: string; name: string; folder: string };
+  /** on a "more" node: how many finished jobs it folds */
+  count?: number;
 }
 interface Edge {
   from: string;
@@ -44,7 +45,12 @@ interface Edge {
 }
 
 const mode = () => "canvas" as "canvas" | "list";
-const [showOld, setShowOld] = createSignal(false);
+/** projects whose finished jobs are unfolded on the canvas */
+const [unfolded, setUnfolded] = createSignal<string[]>([]);
+const toggleDone = (id: string) => setUnfolded((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
+/** how long a finished job stays out on the canvas before it folds into "끝난 일" */
+const DONE_FOR = 10 * 60_000;
+const folded = (t: Task) => tone(t) === "done" && !t.pinned && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR;
 
 /** live = working now · ask = needs you · review = done, branch not merged · idle · done */
 function tone(t: Task): string {
@@ -56,10 +62,8 @@ function tone(t: Task): string {
   return "done";
 }
 
-function layout(space: string, old: boolean): { nodes: Node[]; edges: Edge[] } {
-  const roots = state.tasks.filter(
-    (t) => t.space === space && !t.parentId && !t.answer && !t.archived && (old || tone(t) !== "done" || (t.finishedAt ?? t.createdAt) > now() - DAY),
-  );
+function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] } {
+  const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "그 밖의 일", folder: spaceById(space as Task["space"]).folder });
   const nodes: Node[] = [];
@@ -67,9 +71,12 @@ function layout(space: string, old: boolean): { nodes: Node[]; edges: Edge[] } {
   let y = 0;
   const projNodes: Node[] = [];
   for (const p of projects) {
-    const jobs = roots
+    const all = roots
       .filter((t) => (p.id === "_" ? !t.project || !projects.some((q) => q.id === t.project && q.id !== "_") : t.project === p.id))
       .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
+    // finished jobs fold into one "끝난 일 N개" card per project; it unfolds them under it
+    const done = all.filter(folded);
+    const jobs = open.includes(p.id) ? all : all.filter((t) => !folded(t));
     const top = y;
     // a grid, not one long column: up to 3 jobs side by side, a job's own
     // sub-jobs stacked under it
@@ -91,8 +98,13 @@ function layout(space: string, old: boolean): { nodes: Node[]; edges: Edge[] } {
       });
       y += rowH + GAP.job;
     }
-    const span = jobs.length ? y - GAP.job - top : H.proj;
-    if (!jobs.length) y += H.proj + GAP.job;
+    if (done.length) {
+      nodes.push({ id: `more:${p.id}`, kind: "more", x: X.job, y, w: W.job, h: H.more, project: p, count: done.length });
+      y += H.more + GAP.job;
+    }
+    const shownAny = jobs.length || done.length;
+    const span = shownAny ? y - GAP.job - top : H.proj;
+    if (!shownAny) y += H.proj + GAP.job;
     const pn: Node = { id: `p:${p.id}`, kind: "proj", x: X.proj, y: top + (span - H.proj) / 2, w: W.proj, h: H.proj, project: p };
     projNodes.push(pn);
     nodes.push(pn);
@@ -355,6 +367,17 @@ function ProjCard(props: { n: Node; space: string }) {
   );
 }
 
+/** A project's finished jobs, folded into one line. */
+function MoreCard(props: { n: Node }) {
+  const open = () => unfolded().includes(props.n.project!.id);
+  return (
+    <div class="cv-more" title={open() ? "끝난 일 접기" : "끝난 일 펼치기"}>
+      <Icon name="chevron" size={12} class={`cv-more-chev${open() ? " open" : ""}`} />
+      <span>{open() ? "끝난 일 접기" : `끝난 일 ${props.n.count}개`}</span>
+    </div>
+  );
+}
+
 function MainCard() {
   const busy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   return (
@@ -522,7 +545,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 
 export function Canvas() {
   const space = () => state.space;
-  const graph = createMemo(() => layout(space(), showOld()));
+  const graph = createMemo(() => layout(space(), unfolded()));
   const byId = createMemo(() => new Map(graph().nodes.map((n) => [n.id, n])));
   // cards keyed by id: the layout is rebuilt on every update of a running job, the
   // card elements must not be (that reset live views and dropped a card mid-drag)
@@ -629,6 +652,7 @@ export function Canvas() {
       if (moved) return;
       if (n.kind === "main") goMain();
       else if (n.kind === "proj") goMain(n.project!.id === "_" ? undefined : n.project!.id);
+      else if (n.kind === "more") toggleDone(n.project!.id);
       else setSel(n.id);
     };
     el.addEventListener("pointermove", move);
@@ -639,7 +663,8 @@ export function Canvas() {
   const resetLayout = () => {
     const from = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const prefix = `${space()}:`;
-    setState("canvas", (c) => Object.fromEntries(Object.entries(c ?? {}).filter(([k]) => !k.startsWith(prefix))));
+    // a store merges objects, so a filtered copy would keep the old keys: drop each one
+    for (const k of Object.keys(state.canvas ?? {})) if (k.startsWith(prefix)) setState("canvas", k, undefined!);
     const to = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const moved = Object.keys(to).some((id) => from[id] && (from[id].x !== to[id].x || from[id].y !== to[id].y));
     if (!moved || matchMedia("(prefers-reduced-motion: reduce)").matches) return void queueMicrotask(() => fit());
@@ -771,7 +796,7 @@ export function Canvas() {
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => n.task && openTask(n.id)}
                   >
-                    {n.kind === "main" ? <MainCard /> : n.kind === "proj" ? <ProjCard n={node()} space={space()} /> : n.kind === "job" ? <JobCard n={node()} /> : <SubCard n={node()} />}
+                    {n.kind === "main" ? <MainCard /> : n.kind === "proj" ? <ProjCard n={node()} space={space()} /> : n.kind === "job" ? <JobCard n={node()} /> : n.kind === "more" ? <MoreCard n={node()} /> : <SubCard n={node()} />}
                   </div>
                   );
                   }}
@@ -779,6 +804,14 @@ export function Canvas() {
                 )}
               </For>
             </div>
+
+            {/* cards were dragged out of line: one press puts them back */}
+            <Show when={Object.keys(state.canvas ?? {}).some((k) => k.startsWith(`${space()}:`))}>
+              <button class="cv-retidy" onClick={resetLayout}>
+                <Icon name="tidy" size={13} />
+                다시 정렬
+              </button>
+            </Show>
 
             <div class="cv-add">
               <button class="cv-add-btn" classList={{ on: adding() }} onClick={() => (setAdding(!adding()), queueMicrotask(() => addInput?.focus()))}>
@@ -814,7 +847,6 @@ export function Canvas() {
               </div>
               <div class="cv-ctrl-group">
                 <button title="정렬" onClick={resetLayout}><Icon name="tidy" size={14} /></button>
-                <button title={showOld() ? "최근 일만" : "끝난 일 모두 보기"} classList={{ on: showOld() }} onClick={() => setShowOld(!showOld())}><Icon name="history" size={14} /></button>
               </div>
             </div>
 
