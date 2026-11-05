@@ -235,7 +235,7 @@ function Card(props: { t: Task; showSpace: boolean; byProject: boolean }) {
         <Show when={st() === "running"}>{act("멈추기", "pause", () => pauseTask(t().id))}</Show>
         <Show when={t().status === "paused"}>{act("다시 시작", "play", () => resumeTask(t().id))}</Show>
         <Show when={t().status === "queued"}>{act("지금 시작", "play", () => void startTask(t().id))}</Show>
-        <Show when={st() === "review"}>{act("합치기", "merge", () => void mergeTask(t().id), true)}</Show>
+        <Show when={st() === "review"}>{act("원래 폴더에 합치기", "merge", () => void mergeTask(t().id), true)}</Show>
         <Show when={st() === "you"}>{act("답하기", "arrow", () => openTask(t().id), true)}</Show>
       </div>
 

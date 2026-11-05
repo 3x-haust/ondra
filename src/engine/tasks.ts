@@ -455,6 +455,35 @@ export async function mergeTask(id: string): Promise<boolean> {
 }
 
 /** Throw the task's changes away (worktree and branch). */
+/** The pull request this job opened or worked on, if its record names one (newest wins). */
+export function prOf(t: Task): { url: string; n: string } | undefined {
+  const re = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)/g;
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    const text = e.kind === "tool" ? `${e.tool.target} ${e.tool.detail ?? ""}` : "text" in e ? String(e.text ?? "") : "";
+    const all = [...text.matchAll(re)];
+    if (all.length) {
+      const m = all[all.length - 1];
+      return { url: m[0], n: m[1] };
+    }
+  }
+  return undefined;
+}
+
+/** A job whose work went into a pull request: remove its worktree, keep the branch (the PR needs it). */
+export async function closeWorktree(id: string) {
+  const t = taskById(id);
+  const w = t?.worktree;
+  if (!t || !w || w.state !== "open") return;
+  if (t.status === "running" || t.status === "waiting") pauseTask(id);
+  await worktreeRemove(w.repo, w.path, w.branch, true).catch((e) => toast(String(e), "bad"));
+  updateTask(id, (x) => {
+    x.worktree = { ...w, state: "discarded" };
+    x.cwd = homeDir(x);
+    push(x, { kind: "note", text: "작업 폴더를 정리했어요. 변경은 PR에 있어요" });
+  });
+}
+
 export async function discardTask(id: string) {
   const t = taskById(id);
   const w = t?.worktree;

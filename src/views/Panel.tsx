@@ -8,7 +8,7 @@ import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, S
 import { accountById, homeDir, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { toast, activeTab, closePanelTab, newPanelTab, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelTab, setView, type PanelTab } from "../state/ui";
-import { discardTask, mergeTask, setPriority, setWeight } from "../engine/tasks";
+import { discardTask, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
@@ -45,18 +45,25 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
           >
             <button class="btn sm danger" onClick={() => void discardTask(props.t.id)}>정말 버리기</button>
           </Show>
-          <button
-            class="btn sm primary"
-            disabled={busy()}
-            onClick={async () => {
-              setBusy(true);
-              await mergeTask(props.t.id);
-              setBusy(false);
-            }}
+          <Show
+            when={prOf(props.t)}
+            fallback={
+              <button
+                class="btn sm primary"
+                disabled={busy()}
+                onClick={async () => {
+                  setBusy(true);
+                  await mergeTask(props.t.id);
+                  setBusy(false);
+                }}
+              >
+                <Icon name="merge" size={13} />
+                {busy() ? "합치는 중…" : "원래 폴더에 합치기"}
+              </button>
+            }
           >
-            <Icon name="merge" size={13} />
-            {busy() ? "합치는 중…" : "합치기"}
-          </button>
+            {(pr) => <button class="btn sm primary" onClick={() => void openUrl(pr().url)}>PR #{pr().n}</button>}
+          </Show>
         </div>
       </Show>
     </div>
