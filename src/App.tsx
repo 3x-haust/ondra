@@ -113,6 +113,11 @@ export default function App() {
     } else if (k === "0") {
       e.preventDefault();
       goMain();
+    } else if (/^[1-9]$/.test(k) && !e.shiftKey && !e.altKey && state.spaces[Number(k) - 1]) {
+      // ⌘1, ⌘2 …: the spaces in the order the sidebar shows them (회사, 개인)
+      e.preventDefault();
+      setSpace(state.spaces[Number(k) - 1].id);
+      goMain();
     } else if (k === "j") {
       e.preventDefault();
       if (panelOpen() && panelTab() === "side") void closePanel();

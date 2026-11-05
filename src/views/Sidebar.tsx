@@ -289,7 +289,7 @@ export function Sidebar() {
       <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
         <For each={state.spaces}>
           {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => (setSpace(s.id), goMain())} title={s.label}>
+            <button classList={{ on: state.space === s.id }} onClick={() => (setSpace(s.id), goMain())} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
               <span class="space-name">{s.label}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>

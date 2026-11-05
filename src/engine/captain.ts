@@ -157,11 +157,23 @@ export function reportUp(space: string) {
   if (state.decisions.some((d) => d.taskId === `main:${space}` || jobs.some((t) => t.id === d.taskId))) return;
   setState("captain", (m) => m.id === last.id, "reported", true);
   const answers = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
+  // no answer from the project (it failed or said nothing): what each job itself reported
+  const reported = answers
+    ? ""
+    : jobs
+        .map((t) => {
+          const lastUser = t.entries.map((e) => e.kind).lastIndexOf("user");
+          const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n");
+          return said.trim() ? `${t.title}:\n${said.trim().slice(-2500)}` : "";
+        })
+        .filter(Boolean)
+        .join("\n\n");
   const proj = projectById(projectId);
   const text = [
     `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
     jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
     answers ? `What the project reported:\n${answers}` : "",
+    reported ? `What the jobs reported:\n${reported}` : "",
   ].filter(Boolean).join("\n");
   const main = chatKey(sp(space));
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
@@ -182,6 +194,8 @@ async function pump(space: string) {
         if (pj(space)) reportUp(space);
       } catch (e) {
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
+        // the project couldn't answer: main still gets what the jobs reported
+        if (pj(space)) reportUp(space);
       }
     }
   } finally {
