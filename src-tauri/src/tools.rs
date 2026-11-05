@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 use tauri::{AppHandle, Manager};
@@ -521,4 +521,171 @@ fn dev_bundle(app: &AppHandle, id: &str) {
     let _ = std::process::Command::new("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
         .args(["-f".as_ref(), bundle.as_os_str()])
         .output();
+}
+
+// ───────────── per-space command-line accounts (gh, git, ssh) ─────────────
+//
+// Each space keeps its own gh login and git settings, like running every
+// command through a per-account wrapper: jobs in the 회사 space push as the
+// company account, jobs in 개인 as yours. Until a space logs in to gh, its jobs
+// use the Mac's default gh login. A space can also point at folders the user
+// already keeps (an existing GH_CONFIG_DIR, gitconfig or ssh config).
+
+fn space_dir(app: &AppHandle, space: &str) -> PathBuf {
+    let safe: String = space.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+    crate::engine::data_dir(app).join("spaces").join(if safe.is_empty() { "home".into() } else { safe })
+}
+
+fn expand_home(p: &str) -> PathBuf {
+    match p.strip_prefix("~/") {
+        Some(rest) => std::env::var("HOME").map(|h| PathBuf::from(h).join(rest)).unwrap_or_else(|_| PathBuf::from(p)),
+        None => PathBuf::from(p),
+    }
+}
+
+struct SpacePaths {
+    gh: PathBuf,
+    git: PathBuf,
+    ssh: PathBuf,
+    /** the git settings file is Ondra's own (not one the user pointed at) */
+    own_git: bool,
+}
+
+fn space_paths(app: &AppHandle, space: &str, gh_dir: Option<String>, git_config: Option<String>, ssh_config: Option<String>) -> SpacePaths {
+    let base = space_dir(app, space);
+    let pick = |v: Option<String>, d: PathBuf| v.filter(|s| !s.trim().is_empty()).map(|s| expand_home(s.trim())).unwrap_or(d);
+    let own_git = git_config.as_deref().map_or(true, |s| s.trim().is_empty());
+    SpacePaths {
+        gh: pick(gh_dir, base.join("gh")),
+        git: pick(git_config, base.join("gitconfig")),
+        ssh: pick(ssh_config, base.join("ssh_config")),
+        own_git,
+    }
+}
+
+/** the GitHub user gh is logged in as in this folder (from hosts.yml; the token is never read out) */
+fn gh_user(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("hosts.yml")).ok()?;
+    let mut in_github = false;
+    for line in text.lines() {
+        if !line.starts_with(' ') {
+            in_github = line.trim_end().trim_end_matches(':') == "github.com";
+            continue;
+        }
+        if in_github {
+            if let Some(u) = line.trim().strip_prefix("user:") {
+                let u = u.trim().trim_matches('"');
+                if !u.is_empty() {
+                    return Some(u.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/** Ondra's own git settings for a space: the user's ~/.gitconfig first, then this space's. */
+fn ensure_gitconfig(p: &SpacePaths, logged_in: bool) {
+    if !p.own_git {
+        return;
+    }
+    if let Some(dir) = p.git.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let mut text = std::fs::read_to_string(&p.git).unwrap_or_default();
+    let before = text.clone();
+    if !text.contains("path = ~/.gitconfig") {
+        text = format!("# Ondra: git settings for one space. ~/.gitconfig applies first.\n[include]\n\tpath = ~/.gitconfig\n{text}");
+    }
+    // pushes over https use this space's gh login
+    let helper = "[credential \"https://github.com\"]";
+    if logged_in && !text.contains(helper) {
+        text.push_str(&format!("{helper}\n\thelper =\n\thelper = !gh auth git-credential\n"));
+    }
+    if text != before {
+        let _ = std::fs::write(&p.git, text);
+    }
+}
+
+#[tauri::command]
+pub fn space_env(app: AppHandle, space: String, gh_dir: Option<String>, git_config: Option<String>, ssh_config: Option<String>) -> Vec<(String, String)> {
+    let p = space_paths(&app, &space, gh_dir, git_config, ssh_config);
+    let logged_in = gh_user(&p.gh).is_some();
+    ensure_gitconfig(&p, logged_in);
+    let mut env = Vec::new();
+    if logged_in {
+        env.push(("GH_CONFIG_DIR".into(), p.gh.display().to_string()));
+    }
+    if p.git.exists() {
+        env.push(("GIT_CONFIG_GLOBAL".into(), p.git.display().to_string()));
+    }
+    if p.ssh.exists() {
+        env.push(("GIT_SSH_COMMAND".into(), format!("ssh -F '{}'", p.ssh.display())));
+    }
+    env
+}
+
+#[derive(Serialize)]
+pub struct SpaceTools {
+    /** GitHub user this space is logged in as (None: it uses the Mac's default login) */
+    gh_user: Option<String>,
+    /** the Mac's default gh login */
+    default_user: Option<String>,
+    git_name: Option<String>,
+    git_email: Option<String>,
+}
+
+fn git_get(file: &Path, key: &str) -> Option<String> {
+    let out = Command::new("git").args(["config", "--file"]).arg(file).args(["--includes", "--get", key]).output().ok()?;
+    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!v.is_empty()).then_some(v)
+}
+
+#[tauri::command]
+pub fn space_tools(app: AppHandle, space: String, gh_dir: Option<String>, git_config: Option<String>, ssh_config: Option<String>) -> SpaceTools {
+    let p = space_paths(&app, &space, gh_dir, git_config, ssh_config);
+    let user = gh_user(&p.gh);
+    ensure_gitconfig(&p, user.is_some());
+    let default_dir = std::env::var("GH_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|_| expand_home("~/.config/gh"));
+    SpaceTools {
+        gh_user: user,
+        default_user: gh_user(&default_dir),
+        git_name: git_get(&p.git, "user.name"),
+        git_email: git_get(&p.git, "user.email"),
+    }
+}
+
+/** Opens a terminal that logs this space in to GitHub (gh asks in the browser). */
+#[tauri::command]
+pub fn space_gh_login(app: AppHandle, space: String, gh_dir: Option<String>) -> Result<(), String> {
+    let p = space_paths(&app, &space, gh_dir, None, None);
+    std::fs::create_dir_all(&p.gh).map_err(|e| e.to_string())?;
+    let script = space_dir(&app, &space).join("github-login.command");
+    let dir = p.gh.display().to_string().replace('\'', "'\\''");
+    std::fs::write(&script, format!("#!/bin/zsh -l\nexport GH_CONFIG_DIR='{dir}'\ngh auth login --hostname github.com --git-protocol https --web\necho\necho \"이 창은 닫아도 돼요.\"\n"))
+        .map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755));
+    }
+    Command::new("/usr/bin/open").arg(&script).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/** Sets the name and email this space commits with (empty: the one in ~/.gitconfig). */
+#[tauri::command]
+pub fn space_git_identity(app: AppHandle, space: String, git_config: Option<String>, name: String, email: String) -> Result<(), String> {
+    let p = space_paths(&app, &space, None, git_config, None);
+    ensure_gitconfig(&p, gh_user(&p.gh).is_some());
+    for (key, v) in [("user.name", name.trim()), ("user.email", email.trim())] {
+        let mut cmd = Command::new("git");
+        cmd.args(["config", "--file"]).arg(&p.git);
+        if v.is_empty() {
+            cmd.args(["--unset", key]);
+        } else {
+            cmd.args([key, v]);
+        }
+        let _ = cmd.output();
+    }
+    Ok(())
 }

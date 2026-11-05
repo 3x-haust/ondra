@@ -8,7 +8,7 @@ import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, ensureDir, fsRead, sessionsPrune, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, ensureDir, fsRead, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { addMemory, applying, isLive, KINDS, memoryLines, recall } from "./memory";
 import { failedModelIn, modelFor, nextModel } from "./models";
@@ -370,7 +370,7 @@ async function ensureCaptain(space: string) {
   ];
   const cwd = expand(proj?.folder || space0.folder || "~");
   void startSig(cwd).then((x) => sigOf.set(space, x));
-  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ["ONDRA_MAIN", "1"]]);
+  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"]]);
   markAlive(agent);
   attached.add(space);
   statsOf.delete(space);

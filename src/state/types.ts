@@ -17,6 +17,11 @@ export interface Space {
   folder: string;
   /** Extra instructions every agent in this space follows. */
   rules: string;
+  /** Command-line accounts kept apart per space: folders the user already has
+   * (empty: Ondra's own per-space ones). */
+  ghConfigDir?: string;
+  gitConfig?: string;
+  sshConfig?: string;
 }
 
 /** One turn's tokens plus the plan limits right after it. */
