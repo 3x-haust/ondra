@@ -38,6 +38,12 @@ Follow that skill for commands. This file only adds the app's rules on top.
    other jobs' tabs too). A popup your page opens is yours: `tab <n>` to it, and
    back when done. If a command fails with `tab_gone`, run
    `agent-browser tab new <url>` and carry on.
+   If a command fails with `Failed to read` / `no response came back`, the
+   shared browser stopped answering and the app restarts it on the same port:
+   wait 10 seconds, then `agent-browser open <url>` again. Don't loop on
+   `tab list` or `get url`, and don't pass a `timeout` under 60 to browser
+   commands. Public pages you only need to read (docs, articles, a README):
+   `web_fetch` is faster and never hangs.
 2. **Leave the shared state alone.** Never sign out, never `cookies clear` or
    `storage ... clear`, never `state save` / `cookies get` into files: that would
    sign out, or copy the logins of, every job and the user.
@@ -55,9 +61,12 @@ Follow that skill for commands. This file only adds the app's rules on top.
    ("키체인 승인 기다리는 중"). Never type, paste, read or print a password
    yourself: no `fill`/`type`/`keyboard` into a password field, no `get value` or
    `eval` on one, no `auth save`, `--password`, `set credentials`. If it fails
-   (nothing saved, the user denied, 2FA, captcha), send an `ask` block
-   ("로그인이 필요해요. 브라우저에서 직접 로그인해 주세요.") and wait; the user signs in
-   in the app's Browser view and you continue in the same session.
+   (nothing saved, the user denied, 2FA, captcha), first `agent-browser open`
+   the login page in your tab (the card's "브라우저 열어 로그인" button opens
+   the page your tab was last on), then send an `ask` block: question
+   "<site> 로그인이 필요해요" (name the site and account/workspace), options
+   "로그인했어요" first, then the real alternatives. Don't explain where the
+   browser is; the card does. You continue in the same session.
 5. **Proof is a picture.** For anything you claim works, save evidence under
    `$APP_ARTIFACTS_DIR`:
    - before/after: `agent-browser screenshot "$APP_ARTIFACTS_DIR/before.png"`,
