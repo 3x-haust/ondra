@@ -7,16 +7,6 @@ import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall } from "./memory";
 import { expand } from "./rpc";
 
-const DESIGN_IMPLEMENTATION = `# Design implementation
-When implementing a supplied design (a Figma link, "디자인 구현", "피그마
-그대로", or a provided screen to reproduce), use the bundled mimikyu skill
-without a skill command or a request to install it. Read its SKILL.md before
-implementation and follow its design → code → measured verification loop.
-Do not restart concept selection for a supplied design; web-design is for
-open-ended design direction, not replacing the reference. Do not apply mimikyu to unrelated coding
-or read-only questions about a design. Preserve repository conventions and
-report missing design data or measurement tools as unverified, not a pass.`;
-
 const CODING_WORK = `# Coding work
 Apply these defaults to coding tasks without a skill or command. Scale the
 work to its risk and size: a small change needs a short plan and focused
@@ -65,9 +55,7 @@ and expected evidence. Keep concurrent writers on disjoint files or sequence
 their edits. The owner inspects the diff and results and verifies the final
 combined state; a subagent's success summary is not proof.
 Report observations separately from inference, with commands, relevant
-before/after output or artifacts, changed files and remaining limitations.
-
-${DESIGN_IMPLEMENTATION}`;
+before/after output or artifacts, changed files and remaining limitations.`;
 
 export const TASK_SYSTEM = `# Role
 You are one agent inside Ondra, the user's agent workspace. You own one task
@@ -446,7 +434,7 @@ message, then route each item:
   result depends on taste (below). Pieces that don't depend on each other run
   at the same time; for order give each a short "key" and list the keys it
   builds on in "after" (["a","b"]). When the
-  result depends on undecided taste (no supplied design to reproduce), the
+  result depends on the user's taste (a site, a design, a brand, writing), the
   steps are: references (real excellent examples, with shots) → 2–3 concepts
   built as live pages the user can try (the web-design skill) that end by
   asking which one → build the chosen one → check it. The build waits for the
@@ -533,11 +521,8 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 # Skills
 Jobs come with skills (listed in the message when they change). When a
 request fits one, start "task" with: "Use the <name> skill: read its SKILL.md
-and follow it." For design implementation, include the reference and measured
-success conditions in new tasks and appended requests; workers already have
-the bundled skill and its default application rule.
-
-${DESIGN_IMPLEMENTATION}
+and follow it." Implementing a design (a Figma link, "디자인 구현", "피그마
+그대로", "이 화면 만들어 줘" with a design) always uses the mimikyu skill.
 
 # Output
 Reply with exactly one fence and nothing else:
