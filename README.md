@@ -9,7 +9,9 @@
   </picture>
 </p>
 
-<p align="center"><b>AI의 말을, 보이게.</b></p>
+<p align="center"><b>Make what AI says visible.</b></p>
+
+<p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
   <a href="https://github.com/3x-haust/ondra/releases"><img src="https://img.shields.io/github/v/release/3x-haust/ondra?include_prereleases&label=release&color=1f6fd8" alt="release"></a>
@@ -18,94 +20,88 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/main.png" width="880" alt="Ondra 메인 화면">
+  <img src="docs/assets/main.png" width="880" alt="Ondra main view">
 </p>
 
-Ondra는 macOS용 에이전트 작업 공간이에요. 메인에게 한 번 말하면, 메인이 일을 나눠 여러 에이전트에게 맡기고, 각자 끝까지 해요. 나는 메인만 보고 있으면 돼요. 길고 어려운 LLM의 말은 진행 막대, 바뀐 파일, 화면, 선택지로 바뀌어서 보여요.
+Ondra is an agent workspace for macOS. You tell the main chat once; it splits the work across several agents, and each one sees its part through to the end. You only watch the main chat. Long, hard-to-read LLM output turns into progress bars, changed files, screens and choices.
 
-## 무엇을 하나요
+## What it does
 
-**메인이 일을 나눠요.** "포트폴리오 사이트 만들어 줘" 같은 요청을 자료 확인, 레퍼런스 찾기, 계획, 만들기, 확인으로 나누고, 앞 단계가 끝나야 다음 단계가 시작돼요. 일은 프로젝트 폴더의 워크트리에서 따로 돌아요.
+**Main splits the work.** A request like "build me a portfolio site" becomes checking the material, finding references, planning, building and verifying, and each step starts only when the one before it is done. Every job runs on its own worktree in the project folder.
 
-**읽지 않고 봐요.** 일은 글 대신 블록으로 보고해요. 계획과 진행, 바뀐 파일과 줄 수, 전후 스크린샷, 표, 체크리스트로요. 도구 호출 수십 개는 "파일 5개 수정함", "명령 3개 실행함"처럼 묶여요.
+**See it instead of reading it.** Jobs report in blocks, not prose: plan and progress, changed files with line counts, before/after screenshots, tables, checklists. Dozens of tool calls fold into "edited 5 files", "ran 3 commands".
 
-**판단할 것만 물어요.** 의도나 취향이 필요한 것만 선택지와 맥락을 붙여 메인으로 올라와요. 번호로 고르거나 직접 적으면 돼요.
+**It only asks what needs you.** Only questions that need your intent or taste come up to main, with choices and context attached. Pick one, then press Enter, or write your own answer.
 
 <p align="center">
-  <img src="docs/assets/job.png" width="880" alt="일 화면과 질문 카드">
+  <img src="docs/assets/job.png" width="880" alt="A job and its question card">
 </p>
 
-**손과 눈이 있어요.**
-- 공유 브라우저: 앱 안의 헤드리스 Chrome 하나를 모든 일이 각자 탭으로 써요. 로그인은 한 번이면 되고, macOS 키체인에서 바로 가져와요. 비밀번호는 모델에 닿지 않아요.
-- 컴퓨터 유즈: 접근성 API로 맥 앱을 다뤄요. 마우스와 포커스를 가져가지 않아요.
-- 디바이스 유즈: 일마다 자기 iOS 시뮬레이터나 Android 에뮬레이터를 만들어 쓰고, 끝나면 지워요. 디바이스 화면에서 같이 보고 만질 수 있어요.
+**It has hands and eyes.**
+- Shared browser: one headless Chrome inside the app; every job gets its own tab. You sign in once, straight from the macOS Keychain. Passwords never reach the model.
+- Computer use: drives Mac apps through the Accessibility API, without taking your mouse or focus.
+- Device use: each job makes its own iOS simulator or Android emulator and removes it when done. You can watch and touch the device screen alongside it.
 
-**캔버스와 기억.** 프로젝트와 일이 어떻게 이어지는지 캔버스에서 한눈에 봐요. 규칙, 취향, 배운 점은 기억에 남고, 필요할 때만 관련된 것을 꺼내 써요.
+**Canvas and memory.** The canvas shows how projects and jobs connect at a glance. Rules, taste and lessons stay in memory, and only what's relevant is pulled in when needed.
 
 <p align="center">
-  <img src="docs/assets/canvas.png" width="880" alt="캔버스">
+  <img src="docs/assets/canvas.png" width="880" alt="Canvas">
 </p>
 
-## 설치
+## Install
 
-1. [Releases](https://github.com/3x-haust/ondra/releases)에서 `Ondra_<version>_aarch64.dmg`를 받아 Applications로 옮겨요.
-2. 베타 빌드는 공증(notarization) 전이에요. 처음 열 때 Finder에서 앱을 오른쪽 클릭하고 **열기**를 누르거나, 아래 명령을 한 번 실행해요.
+1. Download `Ondra_<version>_aarch64.dmg` from [Releases](https://github.com/3x-haust/ondra/releases) and drag Ondra into Applications.
+2. Beta builds are not notarized yet. The first time, right-click the app in Finder and choose **Open**, or run once:
 
    ```sh
    xattr -dr com.apple.quarantine /Applications/Ondra.app
    ```
-3. 설정에서 모델 계정(Codex/ChatGPT 등)을 연결하면 바로 쓸 수 있어요. 컴퓨터 유즈는 손쉬운 사용 권한, 화면 기록 권한을 한 번 물어요.
+3. Connect a model account (Codex/ChatGPT, …) in Settings and you're ready. Computer use asks once for Accessibility and Screen Recording permission.
 
-요구 사항: macOS 13 이상, Apple silicon. 디바이스 유즈에는 Xcode(iOS 시뮬레이터)나 Android SDK(에뮬레이터)가 필요해요.
+Requirements: macOS 13 or later, Apple silicon. Device use needs Xcode (iOS Simulator) or the Android SDK (emulator).
 
-## 소스에서 빌드
+## Build from source
 
 ```sh
 pnpm install
-cp .env.example .env        # 필요하면 값 채우기
-pnpm bundle                 # agent-browser, agent-desktop, 엔진, 헤드리스 Chrome을 앱 안으로
-pnpm tauri dev              # 개발 실행
+cp .env.example .env        # fill in values if you need them
+pnpm bundle                 # agent-browser, agent-desktop, the engine and headless Chrome into the app
+pnpm tauri dev              # run in development
 pnpm tauri build            # .app / .dmg
 ```
 
-- 에이전트 엔진은 [3xhaustpi](https://github.com/3x-haust/3xhaustpi)의 coding-agent를 한 파일로 빌드해 써요. 옆 폴더에 두거나 `ONDRA_ENGINE_DIST`로 위치를 알려 줘요.
-- agent-desktop 1.1.0은 macOS 27에서 pid가 -1인 앱(Xcode Device Hub)이 있으면 모든 명령이 멈춰요. `scripts/patches/`의 패치를 적용해 빌드한 바이너리를 `~/.cache/ondra/agent-desktop-patched`에 두면 번들이 그걸 써요.
+- The agent engine is the coding-agent from [3xhaustpi](https://github.com/3x-haust/3xhaustpi), built into a single file. Put it in a sibling folder or point `ONDRA_ENGINE_DIST` at it.
+- On macOS 27, agent-desktop 1.1.0 hangs on every command when an app with pid -1 (Xcode's Device Hub) is running. Build it with the patch in `scripts/patches/` and put the binary at `~/.cache/ondra/agent-desktop-patched`; the bundle step uses it.
 
-### 로컬 설정 (`.env`)
+### Local settings (`.env`)
 
-| 키 | 뜻 |
+| Key | Meaning |
 |---|---|
-| `ONDRA_PROTECTED_DEVICES` | 어떤 일도 켜거나 다루면 안 되는 기기 이름(정규식). 예: 팀이 같이 쓰는 시뮬레이터 |
-| `ONDRA_DEVICES_ALLOWED` | 일이 직접 만든 것 말고도 써도 되는 기기 |
+| `ONDRA_PROTECTED_DEVICES` | Devices no job may boot or touch (regex), e.g. simulators shared by a team |
+| `ONDRA_DEVICES_ALLOWED` | Devices a job may use besides the ones it made itself |
 
-개발 빌드는 저장소의 `.env`를, 설치한 앱은 `~/Library/Application Support/dev.3xhaust.ondra/.env`를 읽어요.
+Development builds read the repo's `.env`; the installed app reads `~/Library/Application Support/dev.3xhaust.ondra/.env`.
 
-## 구조
+## Layout
 
 ```
-src/                 SolidJS 화면
-  engine/            메인(captain)과 일(tasks), 프롬프트, 엔진 RPC
-  views/ ui/         화면과 부품 · styles/ 디자인 토큰
-src-tauri/src/       Rust: 엔진 프로세스, 공유 브라우저, 키체인, 기기, 알림
-skills/              모든 일이 받는 스킬 (visual-report, browser-use, computer-use, device-use, web-design …)
-extensions/          엔진 확장 (device 도구, 권한, 훅, 기억)
-evals/               하네스 평가와 개선 루프
-brand/ docs/         브랜드, 디자인 시스템
+src/                 SolidJS UI
+  engine/            main chat (captain) and jobs (tasks), prompts, engine RPC
+  views/ ui/         screens and parts · styles/ design tokens
+src-tauri/src/       Rust: engine process, shared browser, keychain, devices, notifications
+skills/              skills every job gets (visual-report, browser-use, computer-use, device-use, web-design …)
+extensions/          engine extensions (device tool, permissions, hooks, memory)
+evals/               harness evals and the improvement loop
+brand/ docs/         brand and design system
 ```
 
-## 평가와 개선 루프
+## Evals and the improvement loop
 
-Ondra를 고치는 기준은 "다음 요청을 혼자 잘하나"예요. `evals/cases/`의 사례를 실제로 메인에게 보내고 채점해요.
+The bar for changing Ondra is "does it do the next request well on its own". The cases in `evals/cases/` are sent to main for real and graded.
 
 ```sh
-node evals/run.mjs                  # 전체
-node evals/run.mjs cu-calculator    # 하나만
+node evals/run.mjs                  # all
+node evals/run.mjs cu-calculator    # just one
 ```
 
-완료 여부, 답, 증거 스크린샷, 걸린 시간, 도구 수, 실패한 도구, 포커스를 가져갔는지, 기기를 정리했는지를 봐요. 결과는 `evals/results/`에, 무엇을 배웠는지는 `evals/LEARNINGS.md`에 쌓여요. Claude Code에서는 `/ondra-eval`(또는 `/loop /ondra-eval`)이 돌리기 → 원인 찾기 → 스킬·프롬프트·도구 고치기 → 다시 돌리기를 반복해요.
-
-## English
-
-Ondra is a macOS workspace for AI agents. You talk to one main chat. It splits the request into jobs, runs them in parallel in their own worktrees, and reports back in visual blocks (progress, changed files, before/after shots, choices) instead of walls of text. Jobs share a headless browser with keychain sign-in, drive Mac apps through accessibility without stealing focus, and spin up their own iOS simulators or Android emulators. Only decisions that need your intent come back to you.
-
-Beta, macOS 13+ on Apple silicon. Download the dmg from [Releases](https://github.com/3x-haust/ondra/releases) (not notarized yet: right-click → Open). Build from source with `pnpm install && pnpm bundle && pnpm tauri dev`.
+Each case checks: whether it finished, the answer, evidence screenshots, time taken, tool count, failed tools, whether it took focus, and whether it cleaned up its devices. Results go to `evals/results/`; what was learned goes to `evals/LEARNINGS.md`. In Claude Code, `/ondra-eval` (or `/loop /ondra-eval`) repeats run → find the cause → fix skills, prompts or tools → run again.
