@@ -26,6 +26,7 @@ import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
 import { startUpdates } from "./engine/update";
+import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
@@ -197,6 +198,7 @@ export default function App() {
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette /></Show>
       <Lightbox />
+      <VisualViewer />
       <div class="toasts" aria-live="polite">
         <For each={toasts()}>
           {(t) => (

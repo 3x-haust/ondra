@@ -445,3 +445,5 @@ export const bridgeReply = (id: number, value: string) => call<void>("bridge_rep
 export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);
 /** Download, verify and install it; the app restarts on success. */
 export const installUpdate = () => call<void>("update_install");
+/** Save bytes as a file in ~/Downloads (a free name); returns the path. */
+export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
