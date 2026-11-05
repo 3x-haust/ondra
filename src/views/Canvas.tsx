@@ -4,8 +4,9 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
-import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { decisionFor, projectsIn, setState, spaceById, state } from "../state/store";
+import { batch, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+type P = { x: number; y: number };
+import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openTask, setView } from "../state/ui";
 import { tell } from "../engine/tasks";
@@ -47,7 +48,6 @@ interface Edge {
 const mode = () => "canvas" as "canvas" | "list";
 /** projects whose finished jobs are unfolded on the canvas */
 const [unfolded, setUnfolded] = createSignal<string[]>([]);
-const toggleDone = (id: string) => setUnfolded((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
 /** how long a finished job stays out on the canvas before it folds into "끝난 일" */
 const DONE_FOR = 10 * 60_000;
 const folded = (t: Task) => tone(t) === "done" && !t.pinned && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR;
@@ -585,6 +585,64 @@ export function Canvas() {
   // while tidying, cards glide from where they were to their place
   const [glide, setGlide] = createSignal<Record<string, { x: number; y: number }> | null>(null);
   const pos = (n: Node) => (drag()?.id === n.id ? { x: drag()!.x, y: drag()!.y } : glide()?.[n.id] ?? { x: n.x, y: n.y });
+  // cards folding into (or coming out of) a "끝난 일" card fade as they move
+  const [fade, setFade] = createSignal<Record<string, number> | null>(null);
+  const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+  /** move cards from `from` to `to` (and their opacity from `op[0]` to `op[1]`), then `done` */
+  const animate = (from: Record<string, P>, to: Record<string, P>, op: [Record<string, number>, Record<string, number>] | null, ms: number, done?: () => void) => {
+    const start = performance.now();
+    const step = (now: number) => {
+      const k = ease(Math.min(1, (now - start) / ms));
+      setGlide(Object.fromEntries(Object.entries(to).map(([id, p]) => {
+        const f = from[id] ?? p;
+        return [id, { x: f.x + (p.x - f.x) * k, y: f.y + (p.y - f.y) * k }];
+      })));
+      if (op) setFade(Object.fromEntries(Object.keys({ ...op[0], ...op[1] }).map((id) => [id, (op[0][id] ?? 1) + ((op[1][id] ?? 1) - (op[0][id] ?? 1)) * k])));
+      if (k < 1) return void requestAnimationFrame(step);
+      batch(() => {
+        done?.();
+        setGlide(null);
+        setFade(null);
+      });
+    };
+    requestAnimationFrame(step);
+  };
+  /** the project a card belongs to (sub-jobs: their job's) */
+  const projectOf = (n: Node) => {
+    let t = n.task;
+    while (t?.parentId) t = taskById(t.parentId);
+    return t ? (t.project && graph().nodes.some((x) => x.kind === "proj" && x.project?.id === t!.project) ? t.project : "_") : undefined;
+  };
+  /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. */
+  const fold = (next: string[]) => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
+    const before = graph().nodes;
+    const after = layout(space(), next).nodes;
+    const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
+    const was = at(before);
+    const will = Object.fromEntries(after.map((n) => [n.id, { x: n.x, y: n.y }]));
+    const card = (ns: Node[], pid?: string) => ns.find((n) => n.kind === "more" && n.project?.id === pid);
+    const gone = before.filter((n) => !will[n.id]);
+    const born = after.filter((n) => !was[n.id]);
+    if (gone.length) {
+      // folding: the cards shrink into the stack, then leave
+      const to = { ...will };
+      for (const n of gone) {
+        const c = card(after, projectOf(n));
+        to[n.id] = c ? { x: c.x, y: c.y } : was[n.id];
+      }
+      animate(was, to, [{}, Object.fromEntries(gone.map((n) => [n.id, 0]))], 260, () => setUnfolded(next));
+    } else {
+      // unfolding: the cards come out of the stack
+      setUnfolded(next);
+      const from = { ...was };
+      for (const n of born) {
+        const c = card(before, projectOf(n));
+        from[n.id] = c ? pos(c) : will[n.id];
+      }
+      animate(from, will, [Object.fromEntries(born.map((n) => [n.id, 0])), {}], 300);
+    }
+  };
 
   /** `all`: everything in view (the button, ⇧1); otherwise stay readable and start at the top. */
   const fit = (animate = true, all = false) => {
@@ -656,7 +714,10 @@ export function Canvas() {
       if (moved) return;
       if (n.kind === "main") goMain();
       else if (n.kind === "proj") goMain(n.project!.id === "_" ? undefined : n.project!.id);
-      else if (n.kind === "more") toggleDone(n.project!.id);
+      else if (n.kind === "more") {
+        const id = n.project!.id;
+        fold(unfolded().includes(id) ? unfolded().filter((x) => x !== id) : [...unfolded(), id]);
+      }
       else setSel(n.id);
     };
     el.addEventListener("pointermove", move);
@@ -672,22 +733,7 @@ export function Canvas() {
     const to = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const moved = Object.keys(to).some((id) => from[id] && (from[id].x !== to[id].x || from[id].y !== to[id].y));
     if (!moved || matchMedia("(prefers-reduced-motion: reduce)").matches) return void queueMicrotask(() => fit());
-    const start = performance.now();
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / 320);
-      const k = ease(t);
-      setGlide(Object.fromEntries(Object.entries(to).map(([id, p]) => {
-        const f = from[id] ?? p;
-        return [id, { x: f.x + (p.x - f.x) * k, y: f.y + (p.y - f.y) * k }];
-      })));
-      if (t < 1) requestAnimationFrame(step);
-      else {
-        setGlide(null);
-        fit();
-      }
-    };
-    requestAnimationFrame(step);
+    animate(from, to, null, 320, () => queueMicrotask(() => fit()));
   };
 
   const onKey = (e: KeyboardEvent) => {
@@ -779,7 +825,7 @@ export function Canvas() {
                 </defs>
                 <For each={graph().edges}>
                   {(e) => (
-                    <g class={`cv-edge t-${e.tone}`} classList={{ hot: !!lineage() && lineage()!.has(e.to) && lineage()!.has(e.from), dim: !!lineage() && !(lineage()!.has(e.to) && lineage()!.has(e.from)) }}>
+                    <g class={`cv-edge t-${e.tone}`} style={{ opacity: fade()?.[e.to] }} classList={{ hot: !!lineage() && lineage()!.has(e.to) && lineage()!.has(e.from), dim: !!lineage() && !(lineage()!.has(e.to) && lineage()!.has(e.from)) }}>
                       <path d={edgePath(e)} marker-end="url(#cv-arrow)" />
                     </g>
                   )}
@@ -796,7 +842,7 @@ export function Canvas() {
                     classList={{ sel: sel() === n.id, dragging: drag()?.id === n.id, dim: dim(n.id) }}
                     onPointerEnter={() => setHover(n.id)}
                     onPointerLeave={() => setHover(undefined)}
-                    style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px` }}
+                    style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => n.task && openTask(n.id)}
                   >
@@ -852,7 +898,7 @@ export function Canvas() {
               <div class="cv-ctrl-group">
                 <button title="정렬" onClick={resetLayout}><Icon name="tidy" size={14} /></button>
                 <Show when={foldable().length}>
-                  <button title={allOpen() ? "끝난 일 모두 접기" : "끝난 일 모두 펼치기"} classList={{ on: allOpen() }} onClick={() => setUnfolded(allOpen() ? [] : foldable())}>
+                  <button title={allOpen() ? "끝난 일 모두 접기" : "끝난 일 모두 펼치기"} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
                     <Icon name="history" size={14} />
                   </button>
                 </Show>
