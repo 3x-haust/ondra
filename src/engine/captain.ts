@@ -4,7 +4,7 @@
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, projectById, projectFor, projectsIn, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
+import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, sessionsPrune, workerExtensions } from "../lib/native";
@@ -104,6 +104,23 @@ export function jobEnded(t: Task) {
   setState("captain", (list) => [...list.slice(-300), reply]);
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
+}
+
+/**
+ * The project for a folder inside the space's folder: its top folder there (the
+ * repo), made a project when it isn't one yet. The space folder itself, or a
+ * folder outside it, is no project.
+ */
+export function projectForFolder(space: SpaceId, dir?: string) {
+  if (!dir?.startsWith("/") && !dir?.startsWith("~")) return undefined;
+  const base = expand(spaceById(space).folder || "").replace(/\/+$/, "");
+  const full = repoHome(expand(dir));
+  // a space on the whole home folder: its top folders are no repos (Documents, Downloads …)
+  if (!base || base === expand("~").replace(/\/+$/, "") || !full.startsWith(`${base}/`)) return undefined;
+  const top = `${base}/${full.slice(base.length + 1).split("/")[0]}`;
+  if (/^\./.test(top.split("/").pop() ?? "")) return undefined;
+  const have = projectsIn(space).find((p) => expand(p.folder).replace(/\/+$/, "") === top);
+  return have ?? projectById(addProject(space, top));
 }
 
 /** The request main handed down that a project-chat message belongs to (the last one before it). */
@@ -611,6 +628,8 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         const folder = await ensureDir(r.project.folder).catch(() => "");
         if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined));
       }
+      // work in a folder of this space with no project yet ("ondra 에 넣어줘"): that folder is the project
+      if (!proj && !projectOf(space)) proj = projectForFolder(sp(space), typeof r.cwd === "string" && r.cwd ? r.cwd : cwd);
       const dir = proj && !projectOf(space) ? proj.folder : typeof r.cwd === "string" && r.cwd ? r.cwd : cwd || proj?.folder;
       const id = createTask({
         space: sp(space),
