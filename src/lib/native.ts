@@ -60,6 +60,7 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 export const openUrl = (url: string) => call<void>("open_url", { url });
 export const openInEditor = (path: string) => call<void>("open_in_editor", { path });
+export const openInTerminal = (path: string) => call<void>("open_in_terminal", { path });
 
 export interface GitFile {
   path: string;
@@ -278,6 +279,7 @@ export const openPrivacySettings = (pane: "accessibility" | "screen") => call<vo
 export const workerEnv = (workerId: string) => call<Env>("worker_env", { workerId }, []);
 /** SKILL.md paths passed to workers with --skill. */
 export const workerSkills = () => call<string[]>("worker_skills", undefined, []);
+export const globalSkills = () => call<{ name: string; path: string; description: string }[]>("global_skills", undefined, []);
 export interface Limit {
   provider: string;
   /** minutes: 300 = 5 hours, 10080 = a week */
@@ -440,3 +442,10 @@ export const pathsExist = (paths: string[]) => call<boolean[]>("paths_exist", { 
 export const embedTexts = (texts: string[], query = false) => call<number[][]>("embed_texts", { texts, query }, []);
 /** Answer a `bridge:call` from an engine tool. */
 export const bridgeReply = (id: number, value: string) => call<void>("bridge_reply", { id, value });
+
+/** A newer release on GitHub, or null (always null in development builds). */
+export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);
+/** Download, verify and install it; the app restarts on success. */
+export const installUpdate = () => call<void>("update_install");
+/** Save bytes as a file in ~/Downloads (a free name); returns the path. */
+export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);

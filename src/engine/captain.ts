@@ -3,6 +3,7 @@
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
@@ -13,7 +14,7 @@ import { addMemory, applying, isLive, KINDS, memoryLines, recall } from "./memor
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, chooseAccount, collectStats, createTask, forkAt, onJobEnded, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, chooseAccount, collectStats, createTask, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -157,11 +158,23 @@ export function reportUp(space: string) {
   if (state.decisions.some((d) => d.taskId === `main:${space}` || jobs.some((t) => t.id === d.taskId))) return;
   setState("captain", (m) => m.id === last.id, "reported", true);
   const answers = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
+  // no answer from the project (it failed or said nothing): what each job itself reported
+  const reported = answers
+    ? ""
+    : jobs
+        .map((t) => {
+          const lastUser = t.entries.map((e) => e.kind).lastIndexOf("user");
+          const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n");
+          return said.trim() ? `${t.title}:\n${said.trim().slice(-2500)}` : "";
+        })
+        .filter(Boolean)
+        .join("\n\n");
   const proj = projectById(projectId);
   const text = [
     `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
     jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
     answers ? `What the project reported:\n${answers}` : "",
+    reported ? `What the jobs reported:\n${reported}` : "",
   ].filter(Boolean).join("\n");
   const main = chatKey(sp(space));
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
@@ -182,6 +195,8 @@ async function pump(space: string) {
         if (pj(space)) reportUp(space);
       } catch (e) {
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
+        // the project couldn't answer: main still gets what the jobs reported
+        if (pj(space)) reportUp(space);
       }
     }
   } finally {
@@ -302,6 +317,7 @@ async function ensureCaptain(space: string) {
         const parts = Array.isArray(ev.message.content) ? ev.message.content : [];
         const full = parts.filter((c: any) => c?.type === "text").map((c: any) => String(c.text ?? "")).join("");
         if (full) texts.set(space, full);
+        noteCall(agent, ev.message.usage);
         const g = genOf.get(space);
         if (g?.at) {
           g.ms += Date.now() - g.at;
@@ -450,7 +466,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
-    tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.cwd} | ${t.now}`).join("\n") : "(none)",
+    tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.worktree?.state === "open" ? `branch ${t.worktree.branch}` : t.cwd} | ${t.now}`).join("\n") : "(none)",
     `Topics: ${topics.join(", ") || "(none)"}`,
   ].join("\n");
   const space0 = spaceById(sp(space));
@@ -473,7 +489,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     const recent = state.captain
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
@@ -612,6 +628,10 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id });
       }
+    } else if (r?.kind === "stop" && taskById(r.taskId)) {
+      // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
+      pauseTask(r.taskId);
+      out.push({ kind: "stop", taskId: r.taskId });
     } else if (r?.kind === "append" && taskById(r.taskId ?? r.workerId)) {
       const id = r.taskId ?? r.workerId;
       const message = String(r.message ?? "").trim();

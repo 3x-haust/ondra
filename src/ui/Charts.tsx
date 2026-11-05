@@ -11,6 +11,8 @@
 //   · a state is color AND a word on the box (새로 · 바뀜 · 없앰 · 위험 · 안 씀)
 //   · "em" marks the main path: it stays strong, the other lines step back
 //   · too wide for the column → the other direction, never a shrunken picture
+import { Icon } from "./Icon";
+import { copyVisual, saveVisual, viewVisual } from "./exportVisual";
 import { logoPath } from "./Logos";
 import { graphlib, layout } from "@dagrejs/dagre";
 import { createMemo, For, type JSX, Show } from "solid-js";
@@ -416,6 +418,7 @@ let seq = 0;
 /** the frame every diagram shares: markers, clusters, edges, labels; nodes come from `node` */
 function Frame(props: { label?: string; laid: Laid; clusterLabels?: Map<string, string>; node: (id: string, b: Box) => JSX.Element; cls?: string; em?: boolean }) {
   const id = `c${++seq}`;
+  let svgEl!: SVGSVGElement;
   const m = (k?: string) => (k ? `url(#${id}-${k})` : undefined);
   const heads = (k: string, cls: string) => (
     <>
@@ -426,8 +429,14 @@ function Frame(props: { label?: string; laid: Laid; clusterLabels?: Map<string, 
   return (
     <div class={`blk chart ${props.cls ?? ""}`} classList={{ "has-em": !!props.em }}>
       <Show when={props.label}><div class="blk-label">{props.label}</div></Show>
+      <div class="vis-tools">
+        <button class="icon-btn xs" title="크게 보기" aria-label="크게 보기" onClick={() => viewVisual(svgEl, props.label)}><Icon name="fit" size={13} /></button>
+        <button class="icon-btn xs" title="이미지로 저장" aria-label="이미지로 저장" onClick={() => void saveVisual(svgEl, props.label)}><Icon name="download" size={13} /></button>
+        <button class="icon-btn xs" title="이미지 복사" aria-label="이미지 복사" onClick={() => void copyVisual(svgEl)}><Icon name="copy" size={13} /></button>
+      </div>
       <div class="chart-wrap">
         <svg
+          ref={svgEl}
           class="chart-svg"
           viewBox={`0 0 ${props.laid.w} ${props.laid.h}`}
           width={props.laid.w}

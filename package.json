@@ -11,7 +11,8 @@
     "test": "vitest run --environment node",
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
-    "dmg": "python3 scripts/dmg/build.py"
+    "dmg": "python3 scripts/dmg/build.py",
+    "manifest": "node scripts/release-manifest.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.3",

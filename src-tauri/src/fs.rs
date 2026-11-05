@@ -142,3 +142,26 @@ pub fn ensure_dir(path: String) -> Result<String, String> {
     std::fs::create_dir_all(&pb).map_err(|e| e.to_string())?;
     Ok(p)
 }
+
+/// Save a picture the user asked for into ~/Downloads (a free name), and return its path.
+#[tauri::command]
+pub async fn save_download(bytes: Vec<u8>, name: String) -> Result<String, String> {
+    if bytes.len() > 60 * 1024 * 1024 {
+        return Err("파일이 너무 커요".into());
+    }
+    let clean: String = name.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '\0')).take(80).collect();
+    let clean = if clean.trim().is_empty() { "ondra.png".to_string() } else { clean.trim().to_string() };
+    let dir = crate::engine::home().join("Downloads");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let p = Path::new(&clean);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("ondra").to_string();
+    let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("png").to_string();
+    let mut path = dir.join(format!("{stem}.{ext}"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} {n}.{ext}"));
+        n += 1;
+    }
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}

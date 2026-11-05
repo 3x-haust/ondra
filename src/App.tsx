@@ -2,7 +2,7 @@ import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { loaded, loadState, seedProjects, setSpace, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, togglePanel, view } from "./state/ui";
+import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, dropToast, togglePanel, view } from "./state/ui";
 import { taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
@@ -24,6 +24,9 @@ import { Panel } from "./views/Panel";
 import { TaskView } from "./views/TaskView";
 import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
+import { Icon } from "./ui/Icon";
+import { startUpdates } from "./engine/update";
+import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
@@ -51,6 +54,12 @@ export default function App() {
   });
   const back = () => setView(lastView);
   onMount(() => watchDevices());
+  // ⌘W (menu): close the right panel; the window stays
+  onMount(() => {
+    let un: (() => void) | undefined;
+    void onEvent("panel:close", () => panelOpen() && closePanel()).then((u) => (un = u));
+    onCleanup(() => un?.());
+  });
   if (import.meta.env.DEV)
     void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy")]).then(
       ([store, tasks, captain, ui, native, memory, absorb, tidy]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy }),
@@ -71,6 +80,7 @@ export default function App() {
       soonIndex();
     });
     if (!location.search.includes("fixture")) startTidy();
+    if (!location.search.includes("fixture")) startUpdates();
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
@@ -109,6 +119,11 @@ export default function App() {
       setView({ name: "settings" });
     } else if (k === "0") {
       e.preventDefault();
+      goMain();
+    } else if (/^[1-9]$/.test(k) && !e.shiftKey && !e.altKey && state.spaces[Number(k) - 1]) {
+      // ⌘1, ⌘2 …: the spaces in the order the sidebar shows them (회사, 개인)
+      e.preventDefault();
+      setSpace(state.spaces[Number(k) - 1].id);
       goMain();
     } else if (k === "j") {
       e.preventDefault();
@@ -189,12 +204,16 @@ export default function App() {
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette /></Show>
       <Lightbox />
+      <VisualViewer />
       <div class="toasts" aria-live="polite">
         <For each={toasts()}>
           {(t) => (
             <div class={`toast ${t.tone}`}>
               <span>{t.text}</span>
-              <Show when={t.action}>{(a) => <button onClick={a().run}>{a().label}</button>}</Show>
+              <Show when={t.action}>{(a) => <button onClick={() => (dropToast(t.id), a().run())}>{a().label}</button>}</Show>
+              <Show when={t.stay}>
+                <button class="toast-x" aria-label="닫기" onClick={() => dropToast(t.id)}><Icon name="x" size={13} /></button>
+              </Show>
             </div>
           )}
         </For>

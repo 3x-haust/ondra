@@ -5,7 +5,8 @@
 // lasts is filed as memory pieces: rules, preferences, decisions, facts,
 // procedures, lessons. Status tables and dated logs are not memory; only what
 // they teach is kept. The files themselves are left as they are (other tools may
-// still read them). AGENTS.md / CLAUDE.md are not absorbed: the engine reads them.
+// still read them). Claude Code's own memory for the folder is read the same way.
+// AGENTS.md / CLAUDE.md are not absorbed: the engine reads them.
 import { createSignal } from "solid-js";
 import { memorySources } from "../lib/native";
 import { projectsIn, setState, state } from "../state/store";
@@ -45,9 +46,11 @@ export async function findNotes(): Promise<Note[]> {
   const look = async (folder: string, space: SpaceId, project?: string) => {
     if (!folder || folder === "~") return;
     for (const f of await memorySources(expand(folder)).catch(() => [])) {
-      if (seen.has(f.path)) continue;
-      seen.add(f.path);
       const h = hash(f.text);
+      // the same note can sit in two places (e.g. two Claude Code config folders): read it once
+      if (seen.has(f.path) || seen.has(h)) continue;
+      seen.add(f.path);
+      seen.add(h);
       if (state.absorbed?.[f.path] !== h) out.push({ path: f.path, text: f.text, hash: h, space, project });
     }
   };

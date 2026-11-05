@@ -9,6 +9,7 @@
 //!   git     — what a task changed
 //!   import  — rules, skills, memory and sessions from other agent tools
 
+mod update;
 mod browser;
 mod devices;
 mod engine;
@@ -141,6 +142,7 @@ pub fn run() {
     let capture_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -157,6 +159,30 @@ pub fn run() {
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
+            // ⌘W closes the right panel, not the window (the window hides with ⌘H or its button)
+            #[cfg(target_os = "macos")]
+            {
+                let menu = Menu::default(app.handle())?;
+                for kind in menu.items()? {
+                    let Some(sub) = kind.as_submenu() else { continue };
+                    for (i, item) in sub.items()?.into_iter().enumerate() {
+                        let close = item.as_predefined_menuitem().is_some_and(|p| p.text().is_ok_and(|t| t.contains("Close")));
+                        if close {
+                            sub.remove(&item)?;
+                            let panel = MenuItem::with_id(app, "close-panel", "패널 닫기", true, Some("CmdOrCtrl+W"))?;
+                            sub.insert(&panel, i)?;
+                        }
+                    }
+                }
+                app.set_menu(menu)?;
+                app.on_menu_event(|app, event| {
+                    if event.id.as_ref() == "close-panel" {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.emit("panel:close", ());
+                        }
+                    }
+                });
+            }
             bridge::start(app.handle().clone());
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -223,6 +249,8 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            update::update_check,
+            update::update_install,
             open_capture,
             hide_capture,
             submit_capture,
@@ -250,6 +278,7 @@ pub fn run() {
             store::reveal_path,
             store::open_url,
             store::open_in_editor,
+            store::open_in_terminal,
             store::account_dir_path,
             store::account_providers,
             store::account_remove,
@@ -262,6 +291,7 @@ pub fn run() {
             fs::fs_files,
             fs::fs_read,
             fs::save_paste,
+            fs::save_download,
             fs::ensure_dir,
             worktree::worktree_merge,
             worktree::worktree_remove,
@@ -277,6 +307,7 @@ pub fn run() {
             tools::open_privacy_settings,
             tools::worker_env,
             tools::worker_skills,
+            tools::global_skills,
             tools::skill_list,
             tools::skill_save,
             tools::skill_remove,

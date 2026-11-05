@@ -373,6 +373,50 @@ pub fn skill_list(app: AppHandle) -> Vec<SkillFile> {
     out
 }
 
+/// Skills the user installed for every agent (~/.agents/skills), with their
+/// one-line description, so Ondra can hand a job only the ones that fit it.
+#[derive(Serialize)]
+pub struct GlobalSkill {
+    name: String,
+    path: String,
+    description: String,
+}
+
+#[tauri::command]
+pub fn global_skills() -> Vec<GlobalSkill> {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return vec![] };
+    let mut out = Vec::new();
+    for (name, path) in skill_dirs(&home.join(".agents/skills")) {
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        // front matter "description:" (a one-liner or a folded ">" block)
+        let mut desc = String::new();
+        let mut lines = text.lines().skip_while(|l| l.trim() != "---").skip(1);
+        while let Some(l) = lines.next() {
+            if l.trim() == "---" {
+                break;
+            }
+            if let Some(v) = l.strip_prefix("description:") {
+                let v = v.trim();
+                if v.starts_with('>') || v.starts_with('|') || v.is_empty() {
+                    for c in lines.by_ref() {
+                        if !c.starts_with(' ') {
+                            break;
+                        }
+                        desc.push_str(c.trim());
+                        desc.push(' ');
+                    }
+                } else {
+                    desc.push_str(v.trim_matches('"'));
+                }
+                break;
+            }
+        }
+        out.push(GlobalSkill { name, path: path.display().to_string(), description: desc.trim().chars().take(400).collect() });
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
 #[tauri::command]
 pub fn worker_skills(app: AppHandle) -> Vec<String> {
     skill_list(app).into_iter().map(|s| s.path).collect()

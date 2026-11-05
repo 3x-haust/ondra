@@ -10,14 +10,13 @@ import type { Priority, Shell, Task } from "../state/types";
 import { toast, activeTab, closePanelTab, newPanelTab, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelTab, setView, type PanelTab } from "../state/ui";
 import { discardTask, mergeTask, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openUrl, ptyOpen, revealPath } from "../lib/native";
+import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { long, now, priorityLabel, short, statusLabel } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
-import { Xterm } from "../ui/Xterm";
 import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
 
 /** The task's own branch: where it is, and merge / throw away. */
@@ -223,31 +222,35 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
   );
 }
 
+/** What the job's commands are doing now: the running ones with their live output; finished ones folded. */
 function TerminalPane(props: { t: Task }) {
-  const [mode, setMode] = createSignal<"log" | "shell">("log");
   const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
-  const list = () => [...props.t.shells].reverse();
-  const isOpen = (s: Shell, i: number) => toggled()[s.id] ?? (!s.endedAt || i === 0);
+  const [past, setPast] = createSignal(false);
+  const running = () => [...props.t.shells].reverse().filter((s) => !s.endedAt);
+  const ended = () => [...props.t.shells].reverse().filter((s) => s.endedAt);
+  const isOpen = (s: Shell) => toggled()[s.id] ?? !s.endedAt;
+  const card = (s: Shell) => <ShellCard s={s} open={isOpen(s)} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s) }))} />;
   return (
     <div class="term-pane">
       <div class="term-sub">
-        <div class="seg">
-          <button classList={{ on: mode() === "log" }} onClick={() => setMode("log")}>에이전트 명령 {props.t.shells.length || ""}</button>
-          <button classList={{ on: mode() === "shell" }} onClick={() => setMode("shell")}>내 터미널</button>
-        </div>
+        <span class="term-count">{running().length ? `실행 중 ${running().length}` : "실행 중인 셸 없음"}</span>
+        <button class="btn sm ghost" onClick={() => void openInTerminal(expand(props.t.cwd))} title={props.t.cwd}>
+          <Icon name="shell" size={13} />
+          터미널에서 열기
+        </button>
       </div>
-      <Switch>
-        <Match when={mode() === "log"}>
-          <div class="shells">
-            <For each={list()} fallback={<div class="pane-empty">아직 실행한 명령이 없어요.</div>}>
-              {(s, i) => <ShellCard s={s} open={isOpen(s, i())} toggle={() => setToggled((o) => ({ ...o, [s.id]: !isOpen(s, i()) }))} />}
-            </For>
-          </div>
-        </Match>
-        <Match when={mode() === "shell"}>
-          <Xterm id={`shell:${props.t.id}`} keep open={(c, r) => ptyOpen(`shell:${props.t.id}`, expand(props.t.cwd), null, [], [], c, r)} />
-        </Match>
-      </Switch>
+      <div class="shells">
+        <For each={running()}>{card}</For>
+        <Show when={ended().length}>
+          <button class="sb-older shells-past" classList={{ open: past() }} onClick={() => setPast(!past())}>
+            <Icon name="chevron" size={11} class="sb-older-chev" />
+            {past() ? "끝난 명령 접기" : `끝난 명령 ${ended().length}개`}
+          </button>
+          <Show when={past()}>
+            <For each={ended()}>{card}</For>
+          </Show>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -339,11 +342,19 @@ function BrowserPane(props: { t: Task }) {
   );
 }
 
-/** What the job made to be looked at: pages render here, pictures and videos play. */
+/**
+ * What the job made to be looked at: all of it as a grid first (like a folder);
+ * one opens big, ← → moves through them (like Preview), Esc goes back.
+ */
 function ArtifactsPane(props: { t: Task }) {
   const list = () => artifacts[props.t.id] ?? [];
   const [pick, setPick] = createSignal<string>();
-  const cur = () => list().find((a) => a.path === pick()) ?? list()[0];
+  const idx = () => list().findIndex((a) => a.path === pick());
+  const cur = () => (idx() >= 0 ? list()[idx()] : undefined);
+  const step = (d: number) => {
+    const n = list().length;
+    if (n && idx() >= 0) setPick(list()[(idx() + d + n) % n].path);
+  };
   const [text, setText] = createSignal<string | null>(null);
   void loadArtifacts(props.t.id);
   const timer = setInterval(() => props.t.status === "running" && void loadArtifacts(props.t.id), 3000);
@@ -353,48 +364,82 @@ function ArtifactsPane(props: { t: Task }) {
     setText(null);
     if (a && kindOf(a.name) === "text") void fsRead(a.path).then((r) => setText(r.text ?? ""));
   });
+  const onKey = (e: KeyboardEvent) => {
+    if (!cur() || (e.target as HTMLElement).closest("input, textarea, [contenteditable]")) return;
+    if (e.key === "ArrowRight") (e.preventDefault(), step(1));
+    else if (e.key === "ArrowLeft") (e.preventDefault(), step(-1));
+    else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setPick(undefined));
+  };
+  window.addEventListener("keydown", onKey, true);
+  onCleanup(() => window.removeEventListener("keydown", onKey, true));
+  const icon = (name: string) => (kindOf(name) === "page" ? "globe" : kindOf(name) === "video" ? "video" : "file");
   return (
     <div class="apane">
       <Show when={list().length} fallback={<div class="pane-empty">없음</div>}>
-        <div class="abar">
-          <div class="alist">
-            <For each={list()}>
-              {(a) => (
-                <button class="achip" classList={{ on: cur()?.path === a.path }} onClick={() => setPick(a.path)} title={a.name}>
-                  <Icon name={kindOf(a.name) === "page" ? "globe" : kindOf(a.name) === "image" ? "file" : kindOf(a.name) === "video" ? "video" : "file"} size={12} />
-                  <span>{a.name}</span>
+        <Show
+          when={cur()}
+          keyed
+          fallback={
+            <>
+              <div class="abar">
+                <span class="acount">{list().length}개</span>
+                <button class="icon-btn sm" title="Finder에서 보기" onClick={() => void revealPath(list()[0].path.replace(/\/[^/]*$/, ""))}>
+                  <Icon name="open" size={14} />
                 </button>
-              )}
-            </For>
-          </div>
-          <button class="icon-btn sm" title="Finder에서 보기" onClick={() => cur() && void revealPath(cur()!.path)}>
-            <Icon name="open" size={14} />
-          </button>
-        </div>
-        <div class="aview">
-          <Show when={cur()} keyed>
-            {(a) => (
-              <Switch fallback={<div class="pane-empty">미리 볼 수 없음</div>}>
-                <Match when={kindOf(a.name) === "page"}>
-                  <iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />
-                </Match>
-                <Match when={kindOf(a.name) === "image"}>
-                  <div class="aimg"><img src={fileSrc(a.path)} alt="" onClick={() => openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path))} /></div>
-                </Match>
-                <Match when={kindOf(a.name) === "video"}>
-                  <div class="aimg"><video src={fileSrc(a.path)} controls /></div>
-                </Match>
-                <Match when={kindOf(a.name) === "text"}>
-                  <div class="atext">
-                    <Show when={/\.md$/i.test(a.name)} fallback={<pre>{text() ?? ""}</pre>}>
-                      <Markdown class="msg-text" text={text() ?? ""} />
-                    </Show>
-                  </div>
-                </Match>
-              </Switch>
-            )}
-          </Show>
-        </div>
+              </div>
+              <div class="agrid">
+                <For each={list()}>
+                  {(a) => (
+                    <button class="acell" onClick={() => setPick(a.path)} title={a.name}>
+                      <span class="athumb">
+                        <Switch fallback={<Icon name={icon(a.name)} size={20} />}>
+                          <Match when={kindOf(a.name) === "image"}><img src={fileSrc(a.path)} alt="" loading="lazy" /></Match>
+                          <Match when={kindOf(a.name) === "video"}><video src={`${fileSrc(a.path)}#t=0.1`} preload="metadata" muted /></Match>
+                        </Switch>
+                      </span>
+                      <span class="aname">{a.name}</span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </>
+          }
+        >
+          {(a) => (
+            <>
+              <div class="abar">
+                <button class="icon-btn sm" title="모두 보기 (Esc)" onClick={() => setPick(undefined)}><Icon name="back" size={14} /></button>
+                <span class="aname-cur" title={a.name}>{a.name}</span>
+                <span class="acount">{idx() + 1}/{list().length}</span>
+                <Show when={list().length > 1}>
+                  <button class="icon-btn sm" title="이전 (←)" onClick={() => step(-1)}><Icon name="back" size={14} /></button>
+                  <button class="icon-btn sm" title="다음 (→)" onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
+                </Show>
+                <button class="icon-btn sm" title="Finder에서 보기" onClick={() => void revealPath(a.path)}><Icon name="open" size={14} /></button>
+              </div>
+              <div class="aview">
+                <Switch fallback={<div class="pane-empty">미리 볼 수 없음</div>}>
+                  <Match when={kindOf(a.name) === "page"}>
+                    <iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />
+                  </Match>
+                  <Match when={kindOf(a.name) === "image"}>
+                    <div class="aimg"><img src={fileSrc(a.path)} alt="" onClick={() => openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path))} /></div>
+                  </Match>
+                  <Match when={kindOf(a.name) === "video"}>
+                    <div class="aimg"><video src={fileSrc(a.path)} controls /></div>
+                  </Match>
+                  <Match when={kindOf(a.name) === "text"}>
+                    <div class="atext">
+                      <Show when={/\.md$/i.test(a.name)} fallback={<pre>{text() ?? ""}</pre>}>
+                        <Markdown class="msg-text" text={text() ?? ""} />
+                      </Show>
+                    </div>
+                  </Match>
+                </Switch>
+              </div>
+            </>
+          )}
+        </Show>
       </Show>
     </div>
   );
@@ -405,7 +450,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "side", label: "사이드챗", icon: "message", keys: "⌘J" },
   { kind: "artifacts", label: "결과물", icon: "spark", job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: "⌃⇧G", job: true },
-  { kind: "terminal", label: "터미널", icon: "shell", keys: "⌃`", job: true },
+  { kind: "terminal", label: "셸", icon: "shell", keys: "⌃`", job: true },
   { kind: "files", label: "파일", icon: "file", keys: "⌘P", job: true },
   { kind: "browser", label: "브라우저", icon: "globe", job: true },
   { kind: "overview", label: "정보", icon: "list", job: true },

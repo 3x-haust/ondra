@@ -207,10 +207,42 @@ pub async fn memory_sources(folder: String) -> Vec<NoteFile> {
         for f in [".cursorrules", ".windsurfrules", ".clinerules", ".github/copilot-instructions.md", "GEMINI.md"] {
             push(root.join(f));
         }
+        // Claude Code's memory for this folder (<config>/projects/<folder as a slug>/memory);
+        // MEMORY.md is only its index
+        let slug: String = folder.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+        for cfg in claude_dirs() {
+            for p in dir_files(cfg.join("projects").join(&slug).join("memory"), &["md"]) {
+                if p.file_name().is_some_and(|n| n != "MEMORY.md") {
+                    push(p);
+                }
+            }
+        }
         out
     })
     .await
     .unwrap_or_default()
+}
+
+/// Claude Code config folders: ~/.claude, $CLAUDE_CONFIG_DIR, and the ones
+/// wrappers keep under ~/.local/share/<tool>/home/.claude*.
+fn claude_dirs() -> Vec<std::path::PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else { return vec![] };
+    let mut dirs = vec![home.join(".claude")];
+    if let Some(d) = std::env::var_os("CLAUDE_CONFIG_DIR") {
+        dirs.push(d.into());
+    }
+    let share = home.join(".local/share");
+    for tool in std::fs::read_dir(&share).into_iter().flatten().flatten() {
+        for d in std::fs::read_dir(tool.path().join("home")).into_iter().flatten().flatten() {
+            if d.file_name().to_string_lossy().starts_with(".claude") && d.path().is_dir() {
+                dirs.push(d.path());
+            }
+        }
+    }
+    dirs.sort();
+    dirs.dedup();
+    dirs.retain(|d| d.join("projects").is_dir());
+    dirs
 }
 
 #[derive(serde::Deserialize)]
@@ -371,6 +403,23 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
         }
     }
     Command::new("/usr/bin/open").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// Opens a terminal window in a folder: Ghostty, iTerm, Warp, else Terminal.
+#[tauri::command]
+pub fn open_in_terminal(path: String) -> Result<(), String> {
+    let has = |app: &str| Path::new(&format!("/Applications/{app}.app")).exists();
+    let mut cmd = Command::new("/usr/bin/open");
+    if has("Ghostty") {
+        cmd.args(["-na", "Ghostty", "--args", &format!("--working-directory={path}")]);
+    } else if has("iTerm") {
+        cmd.args(["-a", "iTerm", &path]);
+    } else if has("Warp") {
+        cmd.args(["-a", "Warp", &path]);
+    } else {
+        cmd.args(["-a", "Terminal", &path]);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 // ───────────── inbox: throw from anywhere ─────────────

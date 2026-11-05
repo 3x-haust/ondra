@@ -58,6 +58,8 @@ Ondra is an agent workspace for macOS. You tell the main chat once; it splits th
    ```
 3. Connect a model account (Codex/ChatGPT, …) in Settings and you're ready. Computer use asks once for Accessibility and Screen Recording permission.
 
+From 0.2.0 on, Ondra checks GitHub Releases and offers to update itself.
+
 Requirements: macOS 13 or later, Apple silicon. Device use needs Xcode (iOS Simulator) or the Android SDK (emulator).
 
 ## Build from source
@@ -68,6 +70,7 @@ cp .env.example .env        # fill in values if you need them
 pnpm bundle                 # agent-browser, agent-desktop, the engine and headless Chrome into the app
 pnpm tauri dev              # run in development
 pnpm tauri build && pnpm dmg   # .app, then the install .dmg (pip install ds_store mac_alias)
+pnpm manifest               # latest.json for in-app updates (build with TAURI_SIGNING_PRIVATE_KEY set)
 ```
 
 - The agent engine is the coding-agent from [3xhaustpi](https://github.com/3x-haust/3xhaustpi), built into a single file. Put it in a sibling folder or point `ONDRA_ENGINE_DIST` at it.

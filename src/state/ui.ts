@@ -118,13 +118,17 @@ export interface Toast {
   text: string;
   tone: "info" | "bad";
   action?: { label: string; run: () => void };
+  /** stays until its button or close is pressed */
+  stay?: boolean;
 }
 export const [toasts, setToasts] = createSignal<Toast[]>([]);
 let seq = 0;
-export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"]) {
+export const dropToast = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
+export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"], opts: { stay?: boolean } = {}) {
   const id = ++seq;
-  setToasts((t) => [...t.slice(-2), { id, text, tone, action }]);
-  setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), tone === "bad" ? 7000 : 4000);
+  setToasts((t) => [...t.slice(-2), { id, text, tone, action, stay: opts.stay }]);
+  if (!opts.stay) setTimeout(() => dropToast(id), tone === "bad" ? 7000 : 4000);
+  return id;
 }
 
 /** Set by the open panel: plays its slide-out and resolves when done. */

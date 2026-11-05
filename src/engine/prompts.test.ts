@@ -55,6 +55,10 @@ describe("coding defaults", () => {
     expect(CAPTAIN_SYSTEM).toContain("you never do long work yourself");
     expect(CAPTAIN_SYSTEM).toContain("```route");
     expect(CAPTAIN_SYSTEM).toContain("Keep reproduction, fix and verification with one owning fork");
+    expect(CAPTAIN_SYSTEM).toContain("One request is one fork by default");
+    expect(CAPTAIN_SYSTEM).not.toContain("Split other multi-part work into small concrete steps");
+    expect(TASK_SYSTEM).toContain("Review: only for a large or risky change");
+    expect(TASK_SYSTEM).not.toContain("the completion gate requires one");
   });
 
   it("keeps optional user instructions out when empty", () => {

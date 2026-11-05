@@ -251,8 +251,6 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
             value={a().effort || "high"}
             onChange={(e) => {
               updateAccount(props.id, (x) => (x.effort = e.currentTarget.value));
-              // the new default shows (and applies) right away
-              setState("settings", "forkThinking", "");
             }}
           >
             <For each={EFFORTS}>{(x) => <option value={x.id}>{x.label}</option>}</For>

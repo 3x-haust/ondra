@@ -58,6 +58,8 @@ Ondra는 macOS용 에이전트 작업 공간이에요. 메인에게 한 번 말�
    ```
 3. 설정에서 모델 계정(Codex/ChatGPT 등)을 연결하면 바로 쓸 수 있어요. 컴퓨터 유즈는 손쉬운 사용 권한, 화면 기록 권한을 한 번 물어요.
 
+0.2.0부터는 앱이 GitHub 릴리즈를 확인해서 스스로 업데이트해요.
+
 요구 사항: macOS 13 이상, Apple silicon. 디바이스 유즈에는 Xcode(iOS 시뮬레이터)나 Android SDK(에뮬레이터)가 필요해요.
 
 ## 소스에서 빌드
@@ -68,6 +70,7 @@ cp .env.example .env        # 필요하면 값 채우기
 pnpm bundle                 # agent-browser, agent-desktop, 엔진, 헤드리스 Chrome을 앱 안으로
 pnpm tauri dev              # 개발 실행
 pnpm tauri build && pnpm dmg   # .app, 그다음 설치용 .dmg (pip install ds_store mac_alias)
+pnpm manifest               # 앱 안 업데이트용 latest.json (TAURI_SIGNING_PRIVATE_KEY를 넣고 빌드)
 ```
 
 - 에이전트 엔진은 [3xhaustpi](https://github.com/3x-haust/3xhaustpi)의 coding-agent를 한 파일로 빌드해 써요. 옆 폴더에 두거나 `ONDRA_ENGINE_DIST`로 위치를 알려 줘요.

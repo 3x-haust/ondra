@@ -5,7 +5,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { projectById, setState, spaceById, state, taskById } from "../state/store";
+import { accountById, projectById, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
@@ -99,6 +99,14 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                       <button class="reply-note" onClick={() => openTask(a().taskId)}>
                         <Icon name="handoff" size={13} />
                         <span><b>{taskById(a().taskId)?.title ?? "작업"}</b>에 전달했어요</span>
+                      </button>
+                    )}
+                  </Match>
+                  <Match when={r.kind === "stop" && r}>
+                    {(a) => (
+                      <button class="reply-note" onClick={() => openTask(a().taskId)}>
+                        <Icon name="pause" size={13} />
+                        <span><b>{taskById(a().taskId)?.title ?? "작업"}</b>을 멈췄어요</span>
                       </button>
                     )}
                   </Match>
@@ -275,12 +283,15 @@ export function MainView() {
         <ModelPicker
           up={!big}
           accountId={account()}
-          model={state.settings.forkModel}
-          thinking={state.settings.forkThinking || effortFor(account()) || ""}
-          onChange={(m, t) => {
-            setState("settings", "forkModel", m);
-            setState("settings", "forkThinking", t);
-          }}
+          // the model belongs to the account this chat runs on: company and personal keep their own
+          model={accountById(account())?.model ?? ""}
+          thinking={effortFor(account()) || ""}
+          onChange={(m, t) =>
+            updateAccount(account(), (x) => {
+              if (m) x.model = m;
+              x.effort = t;
+            })
+          }
         />
       }
     />
@@ -345,8 +356,27 @@ type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "d
  * chat scrolls, this stays. Closed it is a single line; only requests still
  * going, waiting on the user, or finished in the last few minutes are listed.
  */
+// the request board stays open or closed as the user left it (across views and restarts)
+const BOARD_KEY = "ondra.reqBoardOpen";
+const [boardOpen, setBoardOpenRaw] = createSignal((() => {
+  try {
+    return localStorage.getItem(BOARD_KEY) === "1";
+  } catch {
+    return false;
+  }
+})());
+const setBoardOpen = (v: boolean) => {
+  setBoardOpenRaw(v);
+  try {
+    localStorage.setItem(BOARD_KEY, v ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+};
+
 function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessage) => Task[]; onJump: (id: string) => void }) {
-  const [open, setOpen] = createSignal(false);
+  const open = boardOpen;
+  const setOpen = setBoardOpen;
   const reqs = createMemo<Req[]>(() => {
     const out: Req[] = [];
     let ask: CaptainMessage | undefined;
@@ -374,6 +404,17 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const count = (k: Req["state"]) => reqs().filter((r) => r.state === k).length;
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
+  /** a request's job to look at: the one that needs you, else the one working, else the last one */
+  const focus = (r: Req) => {
+    const all = r.tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
+    const pick = (ok: (t: Task) => boolean) => all.find(ok);
+    return (
+      pick((t) => t.status === "waiting" || t.status === "failed") ??
+      pick((t) => t.status === "running") ??
+      pick((t) => t.status === "queued" || t.status === "paused") ??
+      r.tasks[r.tasks.length - 1]
+    );
+  };
   return (
     <Show when={reqs().length}>
       <div class="req-board" classList={{ open: open() }}>
@@ -391,7 +432,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
             <For each={reqs()}>
               {(r) => (
                 <li>
-                  <button class="req-row" onClick={() => props.onJump(r.id)} title={r.text}>
+                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(r.id) : openTask(focus(r).id))} title={r.text}>
                     <i class={`req-dot ${r.state}`} />
                     <span class="req-text">{r.text}</span>
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
