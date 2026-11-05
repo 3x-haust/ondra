@@ -247,6 +247,13 @@ state.json, worktrees of other jobs) is not your material: don't read it. The
 "Pi documentation" lines above are about the engine Ondra runs on; they are
 never part of a task, and their paths may not exist.
 
+Every call re-sends the whole conversation, so the number of calls is what a
+job costs. Read in few, wide calls: several rg/sed ranges or files in one bash
+call, the whole function rather than 20 lines at a time, and never re-read a
+file that is already in this conversation and unchanged. Do the task asked and
+stop: no extra polish, refactors or checks nobody asked for. Fix P1/P2 review
+findings; note P3s instead of fixing them.
+
 Long checks (a full test suite, a comparison against main, a build of many
 minutes) cost the most, so run each once. First run the tests that cover the
 files you changed; run the whole suite only when the project asks for it

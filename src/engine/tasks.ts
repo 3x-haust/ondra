@@ -360,7 +360,7 @@ async function deliver(child: Task) {
   const body =
     child.status === "done"
       ? child.review
-        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2는 모두 고치고(P3는 쉬우면), 검사를 다시 돌려 증거와 함께 끝내 줘. 고칠 게 없으면 그대로 끝내도 돼.`
+        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌리고(전체 검사·리뷰를 다시 돌리지 말고) 끝내 줘. 고칠 게 없으면 그대로 끝내.`
         : `서브에이전트 "${child.title}" 완료: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
       : `서브에이전트 "${child.title}" 실패: ${child.error ?? "알 수 없는 오류"}`;
   const left = activeKids(parent.id).length;
@@ -569,7 +569,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       return;
     }
     const message = resume
-      ? ["Ondra가 다시 시작됐습니다. 하던 작업을 이어서 하세요. 먼저 plan과 now를 보내세요.", ...fresh.inbox.map((m) => `- ${m}`)].join("\n")
+      ? ["(Ondra가 다시 시작됐어요. 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 말고, 돌던 명령이 끊겼으면 그 로그부터 확인하세요.)", ...fresh.inbox.map((m) => `- ${m}`)].join("\n")
       : fresh.legs.length > 1
         ? handoffPrompt(fresh)
         : taskPrompt(fresh);
@@ -1353,12 +1353,21 @@ export function schedule() {
   const ready = (t: Task) => !(t.after ?? []).some((id) => { const d = taskById(id); return d && d.status !== "done"; });
   const queue = state.tasks.filter((t) => t.status === "queued" && !t.parentId && ready(t)).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
   for (const t of queue) {
+    if (waitsOnKids(t)) continue;
     if (t.weight === "heavy" ? heavy >= state.settings.slots.heavy : light >= state.settings.slots.light) continue;
     t.weight === "heavy" ? heavy++ : light++;
     // A task that already had a session continues it.
     void startTask(t.id, t.legs.length > 0 && !t.legs[t.legs.length - 1].endedAt);
   }
 }
+
+/** A job cut off while it was only waiting for its subagents: it stays asleep until
+ * one reports back (their result wakes it), instead of spending a turn on nothing. */
+const waitsOnKids = (t: Task) =>
+  t.legs.length > 0 &&
+  !t.legs[t.legs.length - 1].endedAt &&
+  !t.inbox.length &&
+  childrenOf(t.id).some((k) => k.status === "running" || k.status === "waiting" || (k.status === "queued" && k.legs.length > 0));
 
 export function startScheduler() {
   if (!inTauri) return;
