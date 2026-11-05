@@ -195,7 +195,8 @@ export function Composer(props: {
     grow();
   };
 
-  const ready = () => !!text().trim() && !props.disabled;
+  // a picture or file alone is enough to send
+  const ready = () => (!!text().trim() || files().length > 0) && !props.disabled;
   const send = () => {
     if (!ready()) return;
     // "/name what" typed out in full runs the command
@@ -210,7 +211,8 @@ export function Composer(props: {
     }
     const f = files();
     setEngaged(false);
-    props.onSend(f.length ? `${text().trim()}\n\n첨부한 파일:\n${f.map((p) => `- ${p}`).join("\n")}` : text().trim());
+    const list = `첨부한 파일:\n${f.map((p) => `- ${p}`).join("\n")}`;
+    props.onSend(f.length ? (text().trim() ? `${text().trim()}\n\n${list}` : list) : text().trim());
     setText("");
     setFiles([]);
     queueMicrotask(grow);

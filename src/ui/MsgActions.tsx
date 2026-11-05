@@ -47,7 +47,8 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
   const open = () => !!props.id && editing() === props.id;
   /** "…\n\n첨부한 파일:\n- a\n- b" → text and files */
   const split = () => {
-    const i = props.text.indexOf("\n\n첨부한 파일:\n");
+    // files alone ("첨부한 파일:\n- a") or after the text ("…\n\n첨부한 파일:\n- a")
+    const i = props.text.startsWith("첨부한 파일:\n") ? 0 : props.text.indexOf("\n\n첨부한 파일:\n");
     if (i < 0) return { body: props.text, files: [] as string[] };
     const files = props.text.slice(i).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).trim());
     return { body: props.text.slice(0, i), files };
