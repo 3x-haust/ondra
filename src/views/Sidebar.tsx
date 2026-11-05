@@ -49,8 +49,9 @@ const openRoot = () => {
 };
 
 /** A job's line ends when it was merged, thrown away, or had nothing to merge. */
+/** how long a finished job stays in the list */
+const DONE_FOR = 10 * 60_000;
 const ended = (t: Task) => t.status === "done" && t.worktree?.state !== "open";
-const DAY = 86_400_000;
 
 // ───────────── one row per job (T3-style thread list)
 function Row(props: { t: Task; kid?: boolean; index: number }) {
@@ -254,7 +255,8 @@ export function Sidebar() {
       .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
   );
   const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
-  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DAY && t.id !== openRoot();
+  // finished (and merged) jobs leave the list after a few minutes; the canvas keeps them
+  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR && t.id !== openRoot();
   const shown = () => roots().filter((t) => older() || !old(t));
   const hidden = () => roots().filter(old).length;
   // jobs not filed under a project row (no project, or one not in this space)
@@ -427,7 +429,7 @@ export function Sidebar() {
           <Show when={hidden()}>
             <button class="sb-older" classList={{ open: older() }} onClick={() => setOlder(!older())}>
               <Icon name="chevron" size={11} class="sb-older-chev" />
-              {older() ? "이전 일 접기" : `이전 ${hidden()}개`}
+              {older() ? "끝난 일 접기" : `끝난 일 ${hidden()}개`}
             </button>
           </Show>
           <Show when={archived().length}>
