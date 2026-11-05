@@ -3,7 +3,7 @@ import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
-import { ctx, hitPct, pctText, reusePct } from "../state/ctx";
+import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
 import { tokens } from "./bits";
@@ -19,7 +19,7 @@ const secs = (ms: number) => {
   return s ? `${m}m ${s}s` : `${m}m`;
 };
 
-/** One quiet line under an answer: speed, time, tokens; cache and plan windows on hover. */
+/** One quiet line under an answer: speed, cache hit, time, tokens; plan windows on hover. */
 export function UsageLine(props: { u: Usage; lead?: string }) {
   const detail = () =>
     [
@@ -31,6 +31,9 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
     <div class="usage-line" title={detail()}>
       <Show when={props.lead}><span>{props.lead}</span></Show>
       <Show when={props.u.tps}><span>{props.u.tps} tok/s</span></Show>
+      <Show when={promptOf(props.u)}>
+        <span class="usage-cache" title="이 답의 입력 중 캐시에서 읽은 비율">Cache hit {pctText((props.u.cacheRead / promptOf(props.u)) * 100)}%</span>
+      </Show>
       <Show when={props.u.ms}><span>{secs(props.u.ms!)}</span></Show>
       <span class="usage-tok">입력 {tokens(promptOf(props.u))} · 출력 {tokens(props.u.output)}</span>
     </div>
@@ -108,9 +111,6 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         <Show when={ctxOpen()}>
           <ContextSheet agent={props.agent!} accountId={props.accountId} known={c() ? { tokens: c()!.tokens, window: c()!.window } : undefined} onClose={() => setCtxOpen(false)} />
         </Show>
-      </Show>
-      <Show when={props.agent && hitPct(props.agent) !== undefined}>
-        <span class="st-cache" title="마지막 호출의 입력 중 캐시에서 읽은 비율">Cache hit {pctText(hitPct(props.agent!)!)}%</span>
       </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>
         <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율 (이 대화 전체)">
