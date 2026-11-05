@@ -16,3 +16,31 @@ export function noteCtx(agent: string, s: any) {
   if (!window) return;
   setCtx(agent, { tokens, window, percent: Number(c.percent ?? (tokens / window) * 100) });
 }
+
+/**
+ * Cache reuse per agent: of what was already sent (the previous call's prompt),
+ * how much the next call read back from the cache. 100% = nothing sent before was
+ * paid for again; new text never counts against it (unlike a per-call hit rate).
+ */
+export interface Reuse {
+  reused: number;
+  reusable: number;
+  last: number;
+}
+export const [reuse, setReuse] = createStore<Record<string, Reuse>>({});
+
+export function noteCall(agent: string, u: any) {
+  const read = Number(u?.cacheRead ?? 0);
+  const prompt = Number(u?.input ?? 0) + read + Number(u?.cacheWrite ?? 0);
+  if (!prompt) return;
+  const r = reuse[agent] ?? { reused: 0, reusable: 0, last: 0 };
+  // a session's first call, or one after the history shrank (compaction, handoff),
+  // can only reuse a shared prefix: count what it read
+  const can = r.last && prompt >= r.last ? r.last : read;
+  setReuse(agent, { reused: r.reused + Math.min(read, can), reusable: r.reusable + can, last: prompt });
+}
+
+export const reusePct = (agent: string) => {
+  const r = reuse[agent];
+  return r && r.reusable ? (r.reused / r.reusable) * 100 : undefined;
+};

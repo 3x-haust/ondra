@@ -6,7 +6,7 @@ import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { limits, refreshLimits, snapshot } from "../state/limits";
-import { noteCtx } from "../state/ctx";
+import { noteCall, noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
@@ -915,6 +915,12 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
 }
 
 function finish(id: string, summary: string, run?: Run) {
+  // its subagents are for it: once it is done, ones that never started go away
+  // and running ones stop (a review that runs after its job ended is wasted)
+  for (const k of activeKids(id)) {
+    if (k.status === "queued" && !k.entries.some((e) => e.kind === "tool")) removeTask(k.id);
+    else pauseTask(k.id);
+  }
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));

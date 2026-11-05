@@ -3,6 +3,7 @@
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
@@ -316,6 +317,7 @@ async function ensureCaptain(space: string) {
         const parts = Array.isArray(ev.message.content) ? ev.message.content : [];
         const full = parts.filter((c: any) => c?.type === "text").map((c: any) => String(c.text ?? "")).join("");
         if (full) texts.set(space, full);
+        noteCall(agent, ev.message.usage);
         const g = genOf.get(space);
         if (g?.at) {
           g.ms += Date.now() - g.at;
