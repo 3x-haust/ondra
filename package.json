@@ -1,6 +1,6 @@
 {
   "name": "ondra",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Throw tasks in; a captain splits them and agents run them in parallel.",
   "type": "module",
