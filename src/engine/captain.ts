@@ -634,6 +634,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
       const id = createTask({
         space: sp(space),
         title: String(r.title ?? "작업"),
+        branch: typeof r.branch === "string" ? r.branch : undefined,
         topic: proj?.name ?? String(r.topic ?? "기타"),
         ask: String(r.task ?? r.title),
         cwd: dir,

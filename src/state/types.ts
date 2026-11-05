@@ -120,6 +120,8 @@ export interface Task {
   space: SpaceId;
   topic: string;
   title: string;
+  /** the git branch main named for this work (feat/…, fix/…); task/<id> when none */
+  branch?: string;
   /** What was asked, as the captain wrote it down. */
   ask: string;
   cwd: string;

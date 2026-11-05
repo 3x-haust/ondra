@@ -369,6 +369,12 @@ async function deliver(child: Task) {
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "repo";
 
+/** "feat/pstack-coding-rules": a type and a short ascii name, or nothing */
+function branchName(b?: string) {
+  const m = /^(feat|fix|docs|refactor|test|chore|build|ci|perf|style)\/([a-z0-9][a-z0-9-]{1,40})$/.exec((b ?? "").trim().toLowerCase());
+  return m ? `${m[1]}/${m[2].replace(/-+$/, "")}` : undefined;
+}
+
 /** First start of a task in a git repo: give it its own worktree. Silent when the folder isn't a repo. */
 async function isolate(id: string) {
   const t = taskById(id);
@@ -376,7 +382,14 @@ async function isolate(id: string) {
   const cwd = expand(t.cwd || spaceById(t.space).folder || "~");
   const name = cwd.split("/").filter(Boolean).pop() ?? "repo";
   try {
-    const w = await worktreeCreate(cwd, `${engine.info.dataDir}/worktrees/${slug(name)}-${id}`, `task/${id}`);
+    const dest = `${engine.info.dataDir}/worktrees/${slug(name)}-${id}`;
+    // the feature's name when main gave one; a second job on the same feature gets its own suffix
+    const named = branchName(t.branch);
+    const w = named
+      ? await worktreeCreate(cwd, dest, named).catch((e) =>
+          /already exists|이미/.test(String(e instanceof Error ? e.message : e)) ? worktreeCreate(cwd, dest, `${named}-${id.slice(-5)}`) : Promise.reject(e),
+        )
+      : await worktreeCreate(cwd, dest, `task/${id}`);
     updateTask(id, (x) => {
       x.worktree = { ...w, state: "open" };
       x.cwd = w.sub ? `${w.path}/${w.sub}` : w.path;
@@ -901,6 +914,7 @@ function finish(id: string, summary: string, run?: Run) {
 export function createTask(f: {
   space: Task["space"];
   title: string;
+  branch?: string;
   topic: string;
   ask: string;
   cwd?: string;
@@ -922,6 +936,7 @@ export function createTask(f: {
     topic,
     title: f.title.trim().slice(0, 40) || "작업",
     ask: f.ask,
+    ...(f.branch ? { branch: f.branch } : {}),
     ...(f.after?.length ? { after: f.after } : {}),
     cwd: f.cwd?.trim() || spaceById(f.space).folder || "~",
     project: f.project ?? projectFor(f.space, f.cwd),
