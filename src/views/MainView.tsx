@@ -102,6 +102,14 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                       </button>
                     )}
                   </Match>
+                  <Match when={r.kind === "stop" && r}>
+                    {(a) => (
+                      <button class="reply-note" onClick={() => openTask(a().taskId)}>
+                        <Icon name="pause" size={13} />
+                        <span><b>{taskById(a().taskId)?.title ?? "작업"}</b>을 멈췄어요</span>
+                      </button>
+                    )}
+                  </Match>
                   <Match when={r.kind === "remember" && r}>
                     {(a) => (
                       <div class="reply-note">
@@ -348,8 +356,27 @@ type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "d
  * chat scrolls, this stays. Closed it is a single line; only requests still
  * going, waiting on the user, or finished in the last few minutes are listed.
  */
+// the request board stays open or closed as the user left it (across views and restarts)
+const BOARD_KEY = "ondra.reqBoardOpen";
+const [boardOpen, setBoardOpenRaw] = createSignal((() => {
+  try {
+    return localStorage.getItem(BOARD_KEY) === "1";
+  } catch {
+    return false;
+  }
+})());
+const setBoardOpen = (v: boolean) => {
+  setBoardOpenRaw(v);
+  try {
+    localStorage.setItem(BOARD_KEY, v ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+};
+
 function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessage) => Task[]; onJump: (id: string) => void }) {
-  const [open, setOpen] = createSignal(false);
+  const open = boardOpen;
+  const setOpen = setBoardOpen;
   const reqs = createMemo<Req[]>(() => {
     const out: Req[] = [];
     let ask: CaptainMessage | undefined;

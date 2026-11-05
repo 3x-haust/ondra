@@ -13,7 +13,7 @@ import { addMemory, applying, isLive, KINDS, memoryLines, recall } from "./memor
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, chooseAccount, collectStats, createTask, forkAt, onJobEnded, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, chooseAccount, collectStats, createTask, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -487,7 +487,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     const recent = state.captain
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
@@ -626,6 +626,10 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id });
       }
+    } else if (r?.kind === "stop" && taskById(r.taskId)) {
+      // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
+      pauseTask(r.taskId);
+      out.push({ kind: "stop", taskId: r.taskId });
     } else if (r?.kind === "append" && taskById(r.taskId ?? r.workerId)) {
       const id = r.taskId ?? r.workerId;
       const message = String(r.message ?? "").trim();
