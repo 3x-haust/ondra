@@ -26,6 +26,8 @@ export interface Reuse {
   reused: number;
   reusable: number;
   last: number;
+  /** the last call: how much of its whole prompt came from the cache (0–1) */
+  hit?: number;
 }
 // kept across restarts, so the status line shows it before the next answer
 const KEY = "ondra.cacheReuse";
@@ -57,9 +59,17 @@ export function noteCall(agent: string, u: any) {
   // a session's first call, or one after the history shrank (compaction, handoff),
   // can only reuse a shared prefix: count what it read
   const can = r.last && prompt >= r.last ? r.last : read;
-  setReuse(agent, { reused: r.reused + Math.min(read, can), reusable: r.reusable + can, last: prompt });
+  setReuse(agent, { reused: r.reused + Math.min(read, can), reusable: r.reusable + can, last: prompt, hit: read / prompt });
   persist();
 }
+
+export const hitPct = (agent: string) => {
+  const h = reuse[agent]?.hit;
+  return h === undefined ? undefined : h * 100;
+};
+
+/** one decimal, two once it is above 99.9 (so 99.99 doesn't read as 100) */
+export const pctText = (p: number) => (p >= 99.9 && p < 100 ? p.toFixed(2) : p.toFixed(1));
 
 export const reusePct = (agent: string) => {
   const r = reuse[agent];

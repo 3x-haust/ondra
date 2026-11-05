@@ -3,7 +3,7 @@ import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
-import { ctx, reusePct } from "../state/ctx";
+import { ctx, hitPct, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
 import { tokens } from "./bits";
@@ -109,9 +109,12 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
           <ContextSheet agent={props.agent!} accountId={props.accountId} known={c() ? { tokens: c()!.tokens, window: c()!.window } : undefined} onClose={() => setCtxOpen(false)} />
         </Show>
       </Show>
+      <Show when={props.agent && hitPct(props.agent) !== undefined}>
+        <span class="st-cache" title="마지막 호출의 입력 중 캐시에서 읽은 비율">Cache hit {pctText(hitPct(props.agent!)!)}%</span>
+      </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>
-        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율">
-          캐시 {reusePct(props.agent!)!.toFixed(1)}%
+        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율 (이 대화 전체)">
+          CH {pctText(reusePct(props.agent!)!)}%
         </span>
       </Show>
       <Show when={props.shells}>
