@@ -406,36 +406,44 @@ async function worktreeGone(t: Task): Promise<boolean> {
   return !there || !!(there as { error?: string }).error;
 }
 
-async function isolate(id: string) {
+/** Gives the job its own worktree. False when it can't and the job must not start
+ * (a repo it would otherwise change in place). */
+async function isolate(id: string): Promise<boolean> {
   const t = taskById(id);
-  if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return;
+  if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return true;
   const old = t.worktree;
-  if (old && !(await worktreeGone(t))) return;
+  if (old && !(await worktreeGone(t))) return true;
   // merged, discarded or cleaned up: more work on it starts on a fresh worktree
   // from where the repo is now, never in the user's own checkout
   const cwd = old ? `${old.repo}${old.sub ? `/${old.sub}` : ""}` : expand(t.cwd || spaceById(t.space).folder || "~");
   const name = cwd.split("/").filter(Boolean).pop() ?? "repo";
+  const again = old ? `-${Date.now().toString(36).slice(-4)}` : "";
+  const dest = `${engine.info.dataDir}/worktrees/${slug(name)}-${id}${again}`;
+  // the feature's name when main gave one; when that branch already exists (a
+  // second job on the feature, or this job's own earlier branch) it gets a suffix
+  const branch = branchName(t.branch) ?? `task/${id}`;
+  const taken = (e: unknown) => /already exists|이미/.test(String(e instanceof Error ? e.message : e));
   try {
-    const dest = `${engine.info.dataDir}/worktrees/${slug(name)}-${id}`;
-    // the feature's name when main gave one; a second job on the same feature gets its own suffix
-    const named = branchName(t.branch);
-    const w = named
-      ? await worktreeCreate(cwd, dest, named).catch((e) =>
-          /already exists|이미/.test(String(e instanceof Error ? e.message : e)) ? worktreeCreate(cwd, dest, `${named}-${id.slice(-5)}`) : Promise.reject(e),
-        )
-      : await worktreeCreate(cwd, dest, `task/${id}`);
+    const w = await worktreeCreate(cwd, dest, branch).catch((e) =>
+      taken(e) ? worktreeCreate(cwd, dest, `${branch}-${Date.now().toString(36).slice(-5)}`) : Promise.reject(e),
+    );
     updateTask(id, (x) => {
       x.worktree = { ...w, state: "open" };
       x.cwd = w.sub ? `${w.path}/${w.sub}` : w.path;
       push(x, { kind: "note", text: `작업 전용 브랜치 ${w.branch}에서 시작해요` });
     });
+    return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // not a repo / no commits: just work in the folder
-    updateTask(id, (x) => {
-      x.isolate = false;
-      if (!/저장소가 아니|커밋이 하나도|폴더가 없/.test(msg)) push(x, { kind: "note", text: `브랜치를 못 만들어 원래 폴더에서 작업해요 (${msg.split("\n")[0]})` });
-    });
+    // not a repo / no commits / no folder: there is nothing to keep apart, work in the folder
+    if (/저장소가 아니|커밋이 하나도|폴더가 없/.test(msg)) {
+      updateTask(id, (x) => (x.isolate = false));
+      return true;
+    }
+    // a repo: never fall back to changing the user's own checkout
+    const why = msg.split("\n").map((l) => l.trim()).filter((l) => l && !/^Preparing worktree/.test(l))[0] ?? msg;
+    fail(id, `작업 폴더를 만들지 못했어요: ${why}`);
+    return false;
   }
 }
 
@@ -528,7 +536,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       if (last && !last.endedAt) last.endedAt = Date.now();
     });
   }
-  if (!resume && !taskById(id)?.answer) await isolate(id);
+  if (!resume && !taskById(id)?.answer && !(await isolate(id))) return;
   const t0 = taskById(id);
   if (!t0) return;
   const agent = agentOf(id);
