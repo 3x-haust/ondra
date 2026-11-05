@@ -953,8 +953,9 @@ export function createTask(f: {
     inbox: [],
     origin: f.origin,
     isolate: f.isolate,
-    model: state.settings.forkModel || undefined,
-    thinking: state.settings.forkThinking || undefined,
+    // no model of its own: it runs on its account's model (each account picks its own)
+    model: undefined,
+    thinking: undefined,
     permission: state.settings.permission ?? "edits",
   };
   setState("tasks", (list) => [...list, task]);
