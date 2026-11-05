@@ -3,7 +3,7 @@
 // not taken on its word.
 //   test / build / run → the same command ran here, passed, and no code changed after it
 //   file / shot        → the file is really there (a screenshot is not empty)
-//   link               → kept as the job said (marked "자가 신고")
+//   link               → the page was really opened here (web_fetch, the browser, curl)
 import { fsRead } from "../lib/native";
 import type { Entry, Evidence, Task } from "../state/types";
 import { expand } from "./rpc";
@@ -33,6 +33,20 @@ function ranCommand(t: Task, ref: string): { at: number; ok: boolean } | null {
   return null;
 }
 
+const bareUrl = (u: string) => u.trim().replace(/^https?:\/\/(www\.)?/i, "").replace(/[#?].*$/, "").replace(/\/+$/, "").toLowerCase();
+
+/** a source counts only if this session opened it */
+function openedUrl(t: Task, ref: string): boolean {
+  const want = bareUrl(ref);
+  if (want.length < 4) return false;
+  return t.entries.some((e) => {
+    const x = toolAt(e);
+    if (!x || x.ok === false) return false;
+    const seen = `${x.target ?? ""}\n${x.detail ?? ""}`.toLowerCase().replace(/https?:\/\/(www\.)?/g, "");
+    return seen.includes(want);
+  });
+}
+
 /** Each item gets `check`; anything not backed by the session gets ok:false and a reason. */
 export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidence[]> {
   const edited = lastCodeEdit(t);
@@ -52,6 +66,9 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
         if (!f || err) return { ...e, ok: false, check: "missing", why: "파일이 없어요" };
         if (e.kind === "shot" && f.size < 4096) return { ...e, ok: false, check: "missing", why: "빈 스크린샷 같아요" };
         return { ...e, check: "exists" };
+      }
+      if (e.kind === "link" && /^https?:\/\//i.test(e.ref)) {
+        return openedUrl(t, e.ref) ? { ...e, ok: true, check: "read" } : { ...e, ok: false, check: "unread", why: "열어 본 기록이 없어요" };
       }
       return { ...e, check: "self" };
     }),

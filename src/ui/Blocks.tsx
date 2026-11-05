@@ -110,8 +110,8 @@ function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
             </Show>
             <Show when={e.why ?? e.note}><span class="ev-note">{e.why ?? e.note}</span></Show>
             <Show when={e.check}>
-              <span class={`ev-check ${e.check}`} title={e.check === "ran" ? "이 일에서 실제로 돌린 기록과 맞아요" : e.check === "exists" ? "파일이 실제로 있어요" : e.check === "self" ? "앱이 확인할 수 없어 일의 말을 그대로 적었어요" : "앱이 확인해 보니 맞지 않아요"}>
-                {e.check === "ran" || e.check === "exists" ? "앱이 확인" : e.check === "self" ? "자가 신고" : "안 맞음"}
+              <span class={`ev-check ${e.check}`} title={e.check === "ran" ? "이 일에서 실제로 돌린 기록과 맞아요" : e.check === "exists" ? "파일이 실제로 있어요" : e.check === "read" ? "이 일에서 실제로 열어 본 페이지예요" : e.check === "self" ? "앱이 확인할 수 없어 일의 말을 그대로 적었어요" : "앱이 확인해 보니 맞지 않아요"}>
+                {e.check === "ran" || e.check === "exists" || e.check === "read" ? "앱이 확인" : e.check === "self" ? "자가 신고" : "안 맞음"}
               </span>
             </Show>
           </div>
