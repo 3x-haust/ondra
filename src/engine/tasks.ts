@@ -47,7 +47,13 @@ interface Run {
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
   gates?: number;
+  /** how many times it was told its context is long (handoff) */
+  longNudges?: number;
 }
+
+// A session past this many prompt tokens is told to hand off: every later call
+// re-sends the whole context, so long sessions cost the most and think worst.
+const HANDOFF_AT = [120_000, 180_000];
 
 const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
@@ -601,6 +607,20 @@ function handlers(id: string, run: Run) {
             });
           });
           run.cursor = run.text.length;
+          const u = ev.message?.usage;
+          const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
+          const level = run.longNudges ?? 0;
+          if (run.streaming && level < HANDOFF_AT.length && prompt > HANDOFF_AT[level] && !run.done && !run.handoff) {
+            run.longNudges = level + 1;
+            const k = Math.round(prompt / 1000);
+            void request(agentOf(id), {
+              type: "steer",
+              message:
+                level === 0
+                  ? `(Ondra) This session is at ${k}k tokens. Finish the step you are on, then send a {"type":"handoff"} block (did, next, evidence) so a fresh session continues. Don't start anything new here.`
+                  : `(Ondra) This session is at ${k}k tokens. Send the {"type":"handoff"} block now.`,
+            }).catch(() => {});
+          }
           break;
         }
         case "tool_execution_start": {
@@ -786,6 +806,7 @@ async function settle(id: string, run: Run) {
   if (run.handoff) {
     const card = run.handoff;
     run.handoff = undefined;
+    run.longNudges = 0;
     updateTask(id, (x) => {
       const leg = x.legs[x.legs.length - 1];
       if (leg) {
