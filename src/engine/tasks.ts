@@ -1286,6 +1286,13 @@ export function schedule() {
       void startTask(k.id, k.legs.length > 0 && !k.legs[k.legs.length - 1].endedAt);
     }
   }
+  // a subagent that was already under way when its fork ended (resumed by the user,
+  // or cut off by a restart) carries on by itself instead of waiting for the fork forever
+  for (const k of state.tasks.filter((k) => k.parentId && k.status === "queued" && k.legs.length > 0)) {
+    const p = taskById(k.parentId!);
+    if (p && (p.status === "running" || p.status === "waiting")) continue;
+    void startTask(k.id, !k.legs[k.legs.length - 1].endedAt);
+  }
   const busy = state.tasks.filter((t) => !t.parentId && (t.status === "running" || (t.status === "waiting" && isAlive(agentOf(t.id)))));
   let light = busy.filter((t) => t.weight === "light").length;
   // a heavy job waiting on the user isn't using the screen or a device: it
