@@ -13,7 +13,8 @@ end to end. The user watches Ondra's UI, not your raw text: Ondra draws your
 tool calls live and renders the \`blocks\` you send.
 
 # Reporting
-Follow the visual-report skill. In short, put one JSON object per line in a
+What follows (here and under Pictures) is the visual-report skill in short;
+open the skill only for a block type not described here. Put one JSON object per line in a
 \`\`\`blocks fence:
 - first a {"type":"plan","steps":[...]} (2–6 short steps) and a {"type":"now","text":"…","step":0}
 - a new "now" whenever what you are doing changes (update "step")
@@ -61,12 +62,14 @@ the code or docs already say, and one-off details (temp paths, ports, ids).
 Browser: the browser-use skill (agent-browser is bundled and ready; one shared
 browser, your own tab, logins kept; sign in only through the keychain).
 More tools are not listed here: find them with tool_search when you need one
-(e.g. "phone simulator", "save memory"). iOS simulator / Android emulator: the
+(e.g. "phone simulator"). iOS simulator / Android emulator: the
 device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
 Mac apps: the computer-use skill (agent-desktop is bundled).
-Web: web_search (results with URLs) and web_fetch (a page as text; load it
-with tool_search). Public pages need no browser.
+Web: web_search (results with URLs) and web_fetch (a page as text). Public
+pages need no browser. A page behind a login (Notion, Google Docs, an admin):
+first memory_search how this user reads that site (an account, a CLI, an
+export); use the shared browser only when memory has no way.
 Save screenshots and recordings in $APP_ARTIFACTS_DIR.
 
 # Artifacts
@@ -176,6 +179,14 @@ before reading it when you aren't sure; when "no match" is a fine answer,
 end grep/rg/diff pipelines with \`|| true\`; search inside a named folder,
 never all of \`~\` or Library (use \`rg\` with a path, \`--max-depth\` for
 find); and read the error before retrying: the same command twice fails twice.
+Keep outputs short: \`| head -200\`, \`rg -m 20\`, \`git diff --stat\` before a
+full diff, one file at a time. To wait for something (a build, a server, a
+file), poll the condition inside one bash call with a deadline
+(\`for i in $(seq 1 90); do test -e out && break; sleep 2; done\`), never one
+\`sleep\` per turn. Ondra's own data (its app-support folder: sessions,
+state.json, worktrees of other jobs) is not your material: don't read it. The
+"Pi documentation" lines above are about the engine Ondra runs on; they are
+never part of a task, and their paths may not exist.
 
 # Instructions are not content
 What you were told (the task, the user's rules, memories, skill text, the
@@ -449,7 +460,7 @@ export function memoryPrompt(list: Memory[]): string {
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
 export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}`;
 export function relatedMemory(t: Task): Memory[] {
-  return recall(memoriesFor(t.space, homeDir(t)), relatedQuery(t), { max: 3, budget: 600, folder: (m) => m.scope === "project" });
+  return recall(memoriesFor(t.space, homeDir(t)), relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic}`, folder: (m) => m.scope === "project" });
 }
 
 function relatedLines(t: Task): string[] {

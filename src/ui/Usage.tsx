@@ -3,7 +3,7 @@ import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
-import { ctx } from "../state/ctx";
+import { ctx, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
 import { tokens } from "./bits";
@@ -11,7 +11,6 @@ import { state } from "../state/store";
 import { ContextSheet } from "../views/Context";
 
 const promptOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
-const cachePct = (u: Usage) => (promptOf(u) ? Math.round((u.cacheRead / promptOf(u)) * 100) : 0);
 
 const secs = (ms: number) => {
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
@@ -19,9 +18,8 @@ const secs = (ms: number) => {
   const s = Math.round((ms % 60_000) / 1000);
   return s ? `${m}m ${s}s` : `${m}m`;
 };
-const pct1 = (u: Usage) => (promptOf(u) ? Math.round((u.cacheRead / promptOf(u)) * 1000) / 10 : 0);
 
-/** One quiet line under an answer: speed, cache hit, time; tokens and plan windows on hover. */
+/** One quiet line under an answer: speed, time, tokens; cache and plan windows on hover. */
 export function UsageLine(props: { u: Usage; lead?: string }) {
   const detail = () =>
     [
@@ -33,7 +31,6 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
     <div class="usage-line" title={detail()}>
       <Show when={props.lead}><span>{props.lead}</span></Show>
       <Show when={props.u.tps}><span>{props.u.tps} tok/s</span></Show>
-      <span class="usage-cache" classList={{ low: cachePct(props.u) < 50, high: cachePct(props.u) >= 90 }}>캐시 {pct1(props.u)}%</span>
       <Show when={props.u.ms}><span>{secs(props.u.ms!)}</span></Show>
       <span class="usage-tok">입력 {tokens(promptOf(props.u))} · 출력 {tokens(props.u.output)}</span>
     </div>
@@ -111,6 +108,11 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         <Show when={ctxOpen()}>
           <ContextSheet agent={props.agent!} accountId={props.accountId} known={c() ? { tokens: c()!.tokens, window: c()!.window } : undefined} onClose={() => setCtxOpen(false)} />
         </Show>
+      </Show>
+      <Show when={props.agent && reusePct(props.agent) !== undefined}>
+        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율">
+          캐시 {reusePct(props.agent!)!.toFixed(1)}%
+        </span>
       </Show>
       <Show when={props.shells}>
         <button class="st-sh" title="실행 중인 셸 보기" onClick={() => openPanel("terminal")}>셸 {props.shells}</button>

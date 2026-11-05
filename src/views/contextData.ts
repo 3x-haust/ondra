@@ -1,6 +1,7 @@
 // What an agent's model receives, asked from the engine (`get_context`).
 // A live agent answers itself; a stopped job or chat is rebuilt in a short-lived
 // engine started with the same arguments (no session, so no conversation).
+import { jobSkills } from "../engine/skillPick";
 import { mainTools, restartIfStale } from "../engine/captain";
 import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions, workerSkills } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
@@ -114,10 +115,11 @@ function label(texts: string[], known: Part[]): Part[] {
 
 async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: Env }> {
   const t = taskById(id)!;
-  const skills = [...(await workerSkills()), ...state.skills.filter((s) => s.enabled).map((s) => s.path)];
+  const skills = await jobSkills(t);
   const model = t.model || modelFor(t.accountId);
   const args = [
     ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
+    "--no-skills",
     ...skills.flatMap((s) => ["--skill", s]),
     ...(model ? ["--model", model] : []),
     "--thinking",

@@ -115,7 +115,6 @@ export default function (pi: any) {
   pi.registerTool({
     name: "web_fetch",
     label: "Web fetch",
-    exposure: "deferred",
     description: "Read a web page as plain text (scripts, menus and styling dropped). Use after web_search to read the sources you'll cite. Pages that need sign-in or run only in a browser: use the browser instead.",
     promptSnippet: "Read a web page as text",
     parameters: Type.Object({

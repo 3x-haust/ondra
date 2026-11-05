@@ -307,6 +307,7 @@ pub fn run() {
             tools::open_privacy_settings,
             tools::worker_env,
             tools::worker_skills,
+            tools::global_skills,
             tools::skill_list,
             tools::skill_save,
             tools::skill_remove,

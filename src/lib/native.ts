@@ -279,6 +279,7 @@ export const openPrivacySettings = (pane: "accessibility" | "screen") => call<vo
 export const workerEnv = (workerId: string) => call<Env>("worker_env", { workerId }, []);
 /** SKILL.md paths passed to workers with --skill. */
 export const workerSkills = () => call<string[]>("worker_skills", undefined, []);
+export const globalSkills = () => call<{ name: string; path: string; description: string }[]>("global_skills", undefined, []);
 export interface Limit {
   provider: string;
   /** minutes: 300 = 5 hours, 10080 = a week */

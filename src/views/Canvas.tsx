@@ -371,9 +371,10 @@ function ProjCard(props: { n: Node; space: string }) {
 function MoreCard(props: { n: Node }) {
   const open = () => unfolded().includes(props.n.project!.id);
   return (
-    <div class="cv-more" title={open() ? "끝난 일 접기" : "끝난 일 펼치기"}>
+    <div class="cv-more-row" classList={{ open: open() }} title={open() ? "끝난 일 접기" : "끝난 일 펼치기"}>
       <Icon name="chevron" size={12} class={`cv-more-chev${open() ? " open" : ""}`} />
-      <span>{open() ? "끝난 일 접기" : `끝난 일 ${props.n.count}개`}</span>
+      <span>{open() ? "끝난 일 접기" : "끝난 일"}</span>
+      <Show when={!open()}><b class="cv-more-n">{props.n.count}</b></Show>
     </div>
   );
 }

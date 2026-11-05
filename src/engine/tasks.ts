@@ -1,14 +1,15 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { jobSkills } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { limits, refreshLimits, snapshot } from "../state/limits";
-import { noteCtx } from "../state/ctx";
+import { noteCall, noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, workerEnv, workerExtensions, workerSkills, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
+import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -46,7 +47,13 @@ interface Run {
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
   gates?: number;
+  /** how many times it was told its context is long (handoff) */
+  longNudges?: number;
 }
+
+// A session past this many prompt tokens is told to hand off: every later call
+// re-sends the whole context, so long sessions cost the most and think worst.
+const HANDOFF_AT = [120_000, 180_000];
 
 const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
@@ -280,7 +287,15 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (t.parentId || !(b.task || b.title)) break;
         const live = state.tasks.filter((x) => x.parentId === t.id && x.status !== "done" && x.status !== "failed").length;
         if (live >= 6) break;
-        const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), b.review === true || /code-review|리뷰/i.test(String(b.title ?? "")));
+        const review = b.review === true || /code-review|리뷰/i.test(String(b.title ?? ""));
+        // one review per job: after it, the job fixes the findings and re-runs its checks
+        if (review && state.tasks.some((x) => x.parentId === t.id && x.review && x.status !== "failed")) {
+          push(t, { kind: "note", text: "리뷰는 이미 한 번 받았어요" });
+          const jobId = t.id;
+          queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message: "(Ondra) This job was already reviewed once. Don't start another review: fix what it found and re-run your checks." }).catch(() => {}));
+          break;
+        }
+        const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), review);
         const last = t.entries[t.entries.length - 1];
         if (last?.kind === "spawn") last.childIds.push(child.id);
         else push(t, { kind: "spawn", childIds: [child.id] });
@@ -482,7 +497,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const t0 = taskById(id)!;
     const t = t0;
     const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string]];
-    const skills = [...(await workerSkills()), ...state.skills.filter((s) => s.enabled).map((s) => s.path)];
+    const skills = await jobSkills(t0);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
     // the memory given at the first start is kept for every later session (Hermes / Letta:
@@ -496,6 +511,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--session-dir",
       `${engine.info.dataDir}/sessions/${id}`,
       ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
+      // only the skills picked for this job, not every one found on the machine
+      "--no-skills",
       ...skills.flatMap((s) => ["--skill", s]),
       ...(model ? ["--model", model] : []),
       "--thinking",
@@ -598,6 +615,21 @@ function handlers(id: string, run: Run) {
             });
           });
           run.cursor = run.text.length;
+          const u = ev.message?.usage;
+          noteCall(agentOf(id), u);
+          const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
+          const level = run.longNudges ?? 0;
+          if (run.streaming && level < HANDOFF_AT.length && prompt > HANDOFF_AT[level] && !run.done && !run.handoff) {
+            run.longNudges = level + 1;
+            const k = Math.round(prompt / 1000);
+            void request(agentOf(id), {
+              type: "steer",
+              message:
+                level === 0
+                  ? `(Ondra) This session is at ${k}k tokens. Finish the step you are on, then send a {"type":"handoff"} block (did, next, evidence) so a fresh session continues. Don't start anything new here.`
+                  : `(Ondra) This session is at ${k}k tokens. Send the {"type":"handoff"} block now.`,
+            }).catch(() => {});
+          }
           break;
         }
         case "tool_execution_start": {
@@ -783,6 +815,7 @@ async function settle(id: string, run: Run) {
   if (run.handoff) {
     const card = run.handoff;
     run.handoff = undefined;
+    run.longNudges = 0;
     updateTask(id, (x) => {
       const leg = x.legs[x.legs.length - 1];
       if (leg) {
@@ -847,8 +880,12 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   if (!wrote.length) return null; // looked things up, answered: nothing to prove
   const changed = wrote.some((e) => e.kind === "tool" && !/\.(md|txt|html?)$/i.test(e.tool.detail ?? ""));
+  // a review is required only for a large or risky change (as the prompt says)
+  const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && !/\.(md|txt|html?)$/i.test(p)));
+  const risky = [...codeFiles].some((p) => /auth|login|session|token|secret|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
+  const needsReview = changed && (codeFiles.size >= 5 || risky);
   const kids = state.tasks.filter((x) => x.parentId === t.id);
-  const reviewed = kids.some((x) => x.review && x.status === "done");
+  const reviewed = !needsReview || kids.some((x) => x.review && x.status === "done");
   const unresolved = changed && reviewed && reviewUnresolved(t, kids);
   // check the evidence of this done against the session, and show the result on its block
   const checked = await checkEvidence(t, run.evidence ?? []);
@@ -878,6 +915,12 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
 }
 
 function finish(id: string, summary: string, run?: Run) {
+  // its subagents are for it: once it is done, ones that never started go away
+  // and running ones stop (a review that runs after its job ended is wasted)
+  for (const k of activeKids(id)) {
+    if (k.status === "queued" && !k.entries.some((e) => e.kind === "tool")) removeTask(k.id);
+    else pauseTask(k.id);
+  }
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
