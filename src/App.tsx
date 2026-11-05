@@ -2,7 +2,7 @@ import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { loaded, loadState, seedProjects, setSpace, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, togglePanel, view } from "./state/ui";
+import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, dropToast, togglePanel, view } from "./state/ui";
 import { taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
@@ -24,6 +24,8 @@ import { Panel } from "./views/Panel";
 import { TaskView } from "./views/TaskView";
 import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
+import { Icon } from "./ui/Icon";
+import { startUpdates } from "./engine/update";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
@@ -71,6 +73,7 @@ export default function App() {
       soonIndex();
     });
     if (!location.search.includes("fixture")) startTidy();
+    if (!location.search.includes("fixture")) startUpdates();
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
@@ -194,7 +197,10 @@ export default function App() {
           {(t) => (
             <div class={`toast ${t.tone}`}>
               <span>{t.text}</span>
-              <Show when={t.action}>{(a) => <button onClick={a().run}>{a().label}</button>}</Show>
+              <Show when={t.action}>{(a) => <button onClick={() => (dropToast(t.id), a().run())}>{a().label}</button>}</Show>
+              <Show when={t.stay}>
+                <button class="toast-x" aria-label="닫기" onClick={() => dropToast(t.id)}><Icon name="x" size={13} /></button>
+              </Show>
             </div>
           )}
         </For>

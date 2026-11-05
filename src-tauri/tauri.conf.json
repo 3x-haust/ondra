@@ -50,6 +50,7 @@
     }
   },
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "targets": ["app"],
     "category": "DeveloperTool",
@@ -77,6 +78,12 @@
       "resources/chrome/": "chrome/",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCM0U2RkQzOUZGOUZCQzgKUldUSSsvbWYwMjgrYS9RSGNBQW5KS2hvbit3aW16WVN4akN2RkxrVTNKaExZTUJsTHQ0Y3lyd28K",
+      "endpoints": ["https://github.com/3x-haust/ondra/releases/latest/download/latest.json"]
     }
   }
 }
