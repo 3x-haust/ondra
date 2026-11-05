@@ -8183,3 +8183,9 @@ textarea { resize: none !important; field-sizing: content; }
 .sp-git-row > .input { min-width: 0; width: 100%; box-sizing: border-box; }
 .sp-gh { min-width: 0; }
 .sp-gh code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a question card never grows past its border: wide content wraps or scrolls inside */
+.decision { grid-template-columns: minmax(0, 1fr); }
+.decision > * { min-width: 0; }
+.decision .blk-table { overflow-x: auto; }
+.decision .blk-table td, .decision .blk-table th { white-space: normal; overflow-wrap: anywhere; word-break: keep-all; }
+.usage-cache { font-variant-numeric: tabular-nums; }
