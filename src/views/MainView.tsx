@@ -377,6 +377,17 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const count = (k: Req["state"]) => reqs().filter((r) => r.state === k).length;
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
+  /** a request's job to look at: the one that needs you, else the one working, else the last one */
+  const focus = (r: Req) => {
+    const all = r.tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
+    const pick = (ok: (t: Task) => boolean) => all.find(ok);
+    return (
+      pick((t) => t.status === "waiting" || t.status === "failed") ??
+      pick((t) => t.status === "running") ??
+      pick((t) => t.status === "queued" || t.status === "paused") ??
+      r.tasks[r.tasks.length - 1]
+    );
+  };
   return (
     <Show when={reqs().length}>
       <div class="req-board" classList={{ open: open() }}>
@@ -394,7 +405,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
             <For each={reqs()}>
               {(r) => (
                 <li>
-                  <button class="req-row" onClick={() => props.onJump(r.id)} title={r.text}>
+                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(r.id) : openTask(focus(r).id))} title={r.text}>
                     <i class={`req-dot ${r.state}`} />
                     <span class="req-text">{r.text}</span>
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
