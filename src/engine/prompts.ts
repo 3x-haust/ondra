@@ -122,6 +122,13 @@ Web: web_search (results with URLs) and web_fetch (a page as text). Public
 pages need no browser. A page behind a login (Notion, Google Docs, an admin):
 first memory_search how this user reads that site (an account, a CLI, an
 export); use the shared browser only when memory has no way.
+Command-line logins belong to the space: Ondra already points gh, git, ssh,
+aws, gcloud, docker, vercel, supabase, firebase, eas and similar at this
+space's own accounts. Use the commands as they are, without wrappers or
+switching accounts. When one says it isn't logged in, start its login (the
+browser or device-code flow, e.g. \`gh auth login --web\`, \`vercel login\`),
+ask the user in a question card to finish it in the browser, then go on; the
+space keeps that login from then on.
 Save screenshots and recordings in $APP_ARTIFACTS_DIR.
 
 # Artifacts

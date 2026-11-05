@@ -279,15 +279,13 @@ export const openPrivacySettings = (pane: "accessibility" | "screen") => call<vo
 export const workerEnv = (workerId: string) => call<Env>("worker_env", { workerId }, []);
 /** SKILL.md paths passed to workers with --skill. */
 export const workerSkills = () => call<string[]>("worker_skills", undefined, []);
-type SpacePaths = { ghDir?: string; gitConfig?: string; sshConfig?: string };
-const spacePaths = (s: { id: string; ghConfigDir?: string; gitConfig?: string; sshConfig?: string }): SpacePaths & { space: string } => ({ space: s.id, ghDir: s.ghConfigDir, gitConfig: s.gitConfig, sshConfig: s.sshConfig });
-/** this space's gh login, git settings and ssh config, as environment for its agents */
-export const spaceEnv = (s: Parameters<typeof spacePaths>[0]) => call<[string, string][]>("space_env", spacePaths(s), []);
-export const spaceTools = (s: Parameters<typeof spacePaths>[0]) =>
-  call<{ gh_user: string | null; default_user: string | null; git_name: string | null; git_email: string | null } | null>("space_tools", spacePaths(s), null);
-export const spaceGhLogin = (s: Parameters<typeof spacePaths>[0]) => call<void>("space_gh_login", { space: s.id, ghDir: s.ghConfigDir }, undefined);
-export const spaceGitIdentity = (s: Parameters<typeof spacePaths>[0], name: string, email: string) =>
-  call<void>("space_git_identity", { space: s.id, gitConfig: s.gitConfig, name, email }, undefined);
+type SpaceRef = { id: string; cliHome?: string };
+/** this space's command-line logins (gh, git, ssh, aws, vercel …), as environment for its agents */
+export const spaceEnv = (s: SpaceRef) => call<[string, string][]>("space_env", { space: s.id, home: s.cliHome }, []);
+export const spaceTools = (s: SpaceRef) =>
+  call<{ home: string | null; gh_user: string | null; git_name: string | null; git_email: string | null } | null>("space_tools", { space: s.id, home: s.cliHome }, null);
+export const spaceGhLogin = (s: SpaceRef) => call<void>("space_gh_login", { space: s.id, home: s.cliHome }, undefined);
+export const spaceGitIdentity = (s: SpaceRef, name: string, email: string) => call<void>("space_git_identity", { space: s.id, home: s.cliHome, name, email }, undefined);
 export const globalSkills = () => call<{ name: string; path: string; description: string }[]>("global_skills", undefined, []);
 export interface Limit {
   provider: string;

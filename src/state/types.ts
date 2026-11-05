@@ -17,11 +17,9 @@ export interface Space {
   folder: string;
   /** Extra instructions every agent in this space follows. */
   rules: string;
-  /** Command-line accounts kept apart per space: folders the user already has
-   * (empty: Ondra's own per-space ones). */
-  ghConfigDir?: string;
-  gitConfig?: string;
-  sshConfig?: string;
+  /** Home folder for this space's command-line logins (gh, git, aws, vercel …).
+   * Empty: 개인 uses the Mac's own, every other space a folder of its own. */
+  cliHome?: string;
 }
 
 /** One turn's tokens plus the plan limits right after it. */
