@@ -8051,19 +8051,47 @@ textarea { resize: none !important; field-sizing: content; }
   max-height: 100%;
 }
 
-/* canvas: a project's finished jobs, folded into one button-like row */
+/* canvas: a project's finished jobs, folded into one card that reads as a stack */
 .cv-node.cv-more {
-  display: flex;
+  flex-direction: row;
   align-items: center;
-  border: 1px solid var(--line);
-  background: var(--surface-2, var(--panel, var(--bg)));
-  box-shadow: none;
-  cursor: pointer;
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+  justify-content: center;
+  background: var(--cv-card);
+  /* the cards folded under it, peeking out below */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent),
+    0 5px 0 -1px var(--cv-card),
+    0 5px 0 0 color-mix(in srgb, var(--ink) 12%, transparent),
+    0 10px 0 -2px var(--cv-card),
+    0 10px 0 -1px color-mix(in srgb, var(--ink) 8%, transparent);
 }
-.cv-node.cv-more:hover { border-color: var(--ink-3); }
-.cv-more { display: flex; align-items: center; gap: var(--s-8); width: 100%; padding: 0 var(--s-14); font-size: var(--fs-sm); color: var(--ink-2); }
-.cv-node.cv-more:hover .cv-more { color: var(--ink); }
+.cv-node.cv-more:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent),
+    0 5px 0 -1px var(--cv-card),
+    0 5px 0 0 color-mix(in srgb, var(--ink) 18%, transparent),
+    0 10px 0 -2px var(--cv-card),
+    0 10px 0 -1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+/* unfolded: a plain row, nothing hidden under it */
+.cv-node.cv-more:has(.cv-more-row.open) { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); background: transparent; }
+.cv-node.cv-more:has(.cv-more-row.open):hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 28%, transparent); }
+.cv-more-row { display: inline-flex; align-items: center; gap: var(--s-6, 6px); font-size: var(--fs-sm); font-weight: 500; color: var(--ink-2); line-height: 1; }
+.cv-node.cv-more:hover .cv-more-row { color: var(--ink); }
+.cv-more-n {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
 .cv-more-chev { flex: none; transition: transform var(--dur) var(--ease); }
 .cv-more-chev.open { transform: rotate(90deg); }
 
