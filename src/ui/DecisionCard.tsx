@@ -153,13 +153,18 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
                 }
               }}
             />
-            {/* answers whatever is selected: a choice above, or what was typed */}
-            <button class="decision-send" classList={{ ready: ready() }} type="submit" title="보내기 (Enter)" aria-label="보내기" disabled={!ready()}>
-              <Icon name="send" size={13} />
-            </button>
           </form>
         </Show>
       </div>
+      {/* answers whatever is selected, a choice or what was typed: it belongs to the card, not a row */}
+      <Show when={!props.d.ui}>
+        <div class="decision-foot">
+          <button class="decision-send" classList={{ ready: ready() }} type="button" onClick={() => submit()} disabled={!ready()}>
+            보내기
+            <kbd>Enter</kbd>
+          </button>
+        </div>
+      </Show>
     </div>
   );
 }

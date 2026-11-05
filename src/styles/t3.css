@@ -7879,14 +7879,29 @@ textarea { resize: none !important; field-sizing: content; }
 .decision-input::placeholder {
   color: var(--ink-4);
 }
+.decision-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--s-8);
+}
 .decision-send {
   flex: none;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6, 6px);
+  height: 28px;
+  padding: 0 var(--s-10, 10px) 0 var(--s-12, 12px);
+  border-radius: var(--r-md, 8px);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
   color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.decision-send kbd {
+  all: unset;
+  font-size: 11px;
+  opacity: 0.65;
 }
 .decision-opt:not(.on):hover {
   background: color-mix(in srgb, var(--ink) 4%, transparent);
