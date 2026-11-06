@@ -17,6 +17,8 @@ interface Hook {
   matcher?: string;
   command: string;
   enabled?: boolean;
+  /** only for jobs of this space; unset = every space */
+  space?: string;
 }
 
 const TIMEOUT_MS = 60_000;
@@ -35,7 +37,8 @@ function hooks(): Hook[] {
   } catch {
     cache = { mtime: -1, hooks: [] };
   }
-  return cache.hooks.filter((h) => h && h.enabled !== false && typeof h.command === "string" && h.command.trim());
+  const space = process.env.ONDRA_SPACE_KEY ?? "";
+  return cache.hooks.filter((h) => h && h.enabled !== false && typeof h.command === "string" && h.command.trim() && (!h.space || h.space === space));
 }
 
 function matches(h: Hook, tool?: string): boolean {
@@ -79,8 +82,8 @@ const textOf = (content: unknown): string =>
 
 export default function (pi: any) {
   const base = (event: HookEvent, cwd: string, tool?: string) => ({
-    payload: { event, cwd, workerId: process.env.APP_WORKER_ID ?? null, tool: tool ?? null },
-    env: { ONDRA_HOOK_EVENT: event, ONDRA_TOOL_NAME: tool ?? "" },
+    payload: { event, cwd, workerId: process.env.APP_WORKER_ID ?? null, space: process.env.ONDRA_SPACE_KEY ?? null, tool: tool ?? null },
+    env: { ONDRA_HOOK_EVENT: event, ONDRA_TOOL_NAME: tool ?? "", ONDRA_SPACE: process.env.ONDRA_SPACE_KEY ?? "" },
   });
 
   pi.on("tool_call", async (event: any, ctx: any) => {

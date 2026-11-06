@@ -157,8 +157,15 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
     const f = props.project ? projectById(props.project)?.folder : spaceById(state.space).folder;
     return f ? expand(f).replace(/\/+$/, "") : "";
   };
+  // folders that belong to the other space (its folder and its projects')
+  const elsewhere = () =>
+    [...state.spaces.filter((s) => s.id !== state.space).map((s) => s.folder), ...(state.projects ?? []).filter((p) => p.space !== state.space).map((p) => p.folder)]
+      .filter((f) => f && f !== "~")
+      .map((f) => expand(f).replace(/\/+$/, ""));
   const inHere = (cwd: string) => {
     const r = root();
+    const c0 = expand(cwd || "").replace(/\/+$/, "");
+    if (elsewhere().some((f) => c0 === f || c0.startsWith(`${f}/`))) return false;
     if (!r || r === expand("~").replace(/\/+$/, "")) return !props.project;
     const c = repoHome(expand(cwd || "")).replace(/\/+$/, "");
     return c === r || c.startsWith(`${r}/`);

@@ -117,7 +117,7 @@ What makes a browser agent slow is the number of turns, not the commands
    page (and an `ask` when it leaves this machine). Never export cookies or
    tokens to a file for it (no `derive-client`, no `cookies get`).
 6. **Reuse what worked.** Recipes for a site live in
-   `"$APP_ARTIFACTS_DIR/../../browser-recipes/<domain>/"`. Before exploring a
+   `"$ONDRA_RECIPES_DIR/<domain>/"` (this space's own; the other space keeps its own). Before exploring a
    site, `ls` that folder; a recipe is a `batch` JSON or an `eval` script with
    one comment line on what it does and its inputs. Run it; if it fails, explore
    as usual and fix the recipe. After a flow you'll likely repeat (a dashboard

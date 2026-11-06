@@ -451,6 +451,8 @@ export const deviceRecord = (d: Device) => call<string>("device_record", { platf
 /** Ids of devices being recorded now. */
 export const deviceRecording = () => call<string[]>("device_recording", undefined, []);
 export const ensureDir = (path: string) => call<string>("ensure_dir", { path }, path);
+/** A folder with only this space's job and main-chat logs (btw and the side chat read there). */
+export const spaceLogs = (space: string, ids: string[]) => call<string>("space_logs", { space, ids }, "");
 /** Write the memory as markdown files (one per piece + an index) into the app's memory folder. Returns the folder. */
 /** memory/rule files other agent tools keep in a folder */
 export const memorySources = (folder: string) => call<{ path: string; text: string }[]>("memory_sources", { folder }, []);

@@ -1,4 +1,4 @@
-// The board: every job of the space (or of all spaces) at a glance, as columns
+// The board: every job of the space at a glance, as columns
 // by state or by project. Cards act in place: stop, start now, merge, and
 // "말하기" sends a change to a job without opening it, so several jobs can be
 // steered one after another.
@@ -17,7 +17,6 @@ import { changes } from "./Sidebar";
 type Col = { id: string; label: string; tone: string; hint?: string; tasks: Task[] };
 
 const [groupBy, setGroupBy] = createSignal<"state" | "project">("state");
-const [allSpaces, setAllSpaces] = createSignal(false);
 const [showOld, setShowOld] = createSignal(false);
 
 const DAY = 86_400_000;
@@ -43,7 +42,7 @@ const ORDER = ["you", "review", "running", "queued", "done"];
 export function Board(props: { embedded?: boolean } = {}) {
   const roots = createMemo(() =>
     state.tasks
-      .filter((t) => !t.parentId && !t.answer && !t.archived && (allSpaces() || t.space === state.space))
+      .filter((t) => !t.parentId && !t.answer && !t.archived && t.space === state.space)
       .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
   );
   const old = (t: Task) => stateOf(t) === "done" && (t.finishedAt ?? t.createdAt) < now() - DAY;
@@ -94,10 +93,6 @@ export function Board(props: { embedded?: boolean } = {}) {
           <button classList={{ on: groupBy() === "state" }} onClick={() => setGroupBy("state")}>상태별</button>
           <button classList={{ on: groupBy() === "project" }} onClick={() => setGroupBy("project")}>프로젝트별</button>
         </div>
-        <div class="seg sm">
-          <button classList={{ on: !allSpaces() }} onClick={() => setAllSpaces(false)}>{spaceById(state.space).label}</button>
-          <button classList={{ on: allSpaces() }} onClick={() => setAllSpaces(true)}>모든 공간</button>
-        </div>
       </header>
       </Show>
       <Show when={props.embedded}>
@@ -105,10 +100,6 @@ export function Board(props: { embedded?: boolean } = {}) {
           <div class="seg sm">
             <button classList={{ on: groupBy() === "state" }} onClick={() => setGroupBy("state")}>상태별</button>
             <button classList={{ on: groupBy() === "project" }} onClick={() => setGroupBy("project")}>프로젝트별</button>
-          </div>
-          <div class="seg sm">
-            <button classList={{ on: !allSpaces() }} onClick={() => setAllSpaces(false)}>{spaceById(state.space).label}</button>
-            <button classList={{ on: allSpaces() }} onClick={() => setAllSpaces(true)}>모든 공간</button>
           </div>
         </div>
       </Show>
@@ -143,7 +134,7 @@ export function Board(props: { embedded?: boolean } = {}) {
                 </Show>
               </div>
               <div class="bcol-list">
-                <For each={c.tasks} fallback={<div class="bcol-empty">{c.hint}</div>}>{(t) => <Card t={t} showSpace={allSpaces()} byProject={groupBy() === "project"} />}</For>
+                <For each={c.tasks} fallback={<div class="bcol-empty">{c.hint}</div>}>{(t) => <Card t={t} byProject={groupBy() === "project"} />}</For>
               </div>
             </section>
           )}
@@ -153,7 +144,7 @@ export function Board(props: { embedded?: boolean } = {}) {
   );
 }
 
-function Card(props: { t: Task; showSpace: boolean; byProject: boolean }) {
+function Card(props: { t: Task; byProject: boolean }) {
   const t = () => props.t;
   const st = () => stateOf(t());
   const kids = () => state.tasks.filter((k) => k.parentId === t().id);
@@ -209,7 +200,6 @@ function Card(props: { t: Task; showSpace: boolean; byProject: boolean }) {
       </div>
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
       <div class="bc-meta">
-        <Show when={props.showSpace}><span class="bc-chip">{spaceById(t().space).label}</span></Show>
         <Show when={!props.byProject && t().topic}><span class="bc-chip">{t().topic}</span></Show>
         <Show when={kids().length}>
           <span class="bc-kids" title="서브에이전트">

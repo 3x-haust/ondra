@@ -2,7 +2,7 @@
 // Saved as JSON in the app's data folder; extensions/hooks.ts reads it in every job.
 import { createSignal, For, onMount, Show } from "solid-js";
 import { hooksLoad, hooksSave } from "../lib/native";
-import { uid } from "../state/store";
+import { state, uid } from "../state/store";
 import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 
@@ -14,6 +14,8 @@ export interface Hook {
   matcher: string;
   command: string;
   enabled: boolean;
+  /** only for jobs of this space; unset = every space */
+  space?: string;
 }
 
 const EVENTS: { id: HookEvent; label: string; help: string }[] = [
@@ -43,7 +45,7 @@ export function HooksTab() {
   };
   const patch = (id: string, p: Partial<Hook>) => save(list().map((h) => (h.id === id ? { ...h, ...p } : h)));
   const add = () => {
-    save([...list(), { id: uid("hk"), event: "before_tool", matcher: "bash", command: "", enabled: true }]);
+    save([...list(), { id: uid("hk"), event: "before_tool", matcher: "bash", command: "", enabled: true, space: state.space }]);
     requestAnimationFrame(() => [...document.querySelectorAll<HTMLTextAreaElement>(".hk-cmd")].pop()?.focus());
   };
 
@@ -62,6 +64,10 @@ export function HooksTab() {
               <div class="hk-line">
                 <select class="select" value={h.event} onChange={(e) => patch(h.id, { event: e.currentTarget.value as HookEvent })} aria-label="언제">
                   <For each={EVENTS}>{(ev) => <option value={ev.id}>{ev.label}</option>}</For>
+                </select>
+                <select class="select" value={h.space ?? ""} onChange={(e) => patch(h.id, { space: e.currentTarget.value || undefined })} aria-label="공간">
+                  <option value="">모든 공간</option>
+                  <For each={state.spaces}>{(sp) => <option value={sp.id}>{sp.label}</option>}</For>
                 </select>
                 <Show when={forTools(h.event)}>
                   <input

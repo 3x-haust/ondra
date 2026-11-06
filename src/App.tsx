@@ -5,7 +5,7 @@ import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, dropToast, togglePanel, view } from "./state/ui";
-import { taskById } from "./state/store";
+import { spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
 import { startRpc } from "./engine/rpc";
@@ -170,9 +170,11 @@ export default function App() {
       const was = seen.get(t.id);
       seen.set(t.id, t.status);
       if (!was || was === t.status || document.hasFocus()) continue;
-      if (t.status === "waiting") void notify(t.title, "답이 필요해요");
-      else if (t.status === "done" && !t.parentId) void notify(t.title, t.answer ? "답했어요" : ["끝났어요", costShort(jobCost(t))].filter(Boolean).join(" · "));
-      else if (t.status === "failed") void notify(t.title, "멈췄어요");
+      // which space it is in, so a company job never reads as a personal one
+      const title = `${spaceById(t.space)?.label ?? t.space} · ${t.title}`;
+      if (t.status === "waiting") void notify(title, "답이 필요해요");
+      else if (t.status === "done" && !t.parentId) void notify(title, t.answer ? "답했어요" : ["끝났어요", costShort(jobCost(t))].filter(Boolean).join(" · "));
+      else if (t.status === "failed") void notify(title, "멈췄어요");
     }
   });
   createEffect(() => {
