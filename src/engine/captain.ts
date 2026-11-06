@@ -12,7 +12,8 @@ import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId,
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
-import { addMemory, applying, inSpace, isLive, skillsIn, KINDS, memoryLines, namedSpaces, recall } from "./memory";
+import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
+import { skillScope } from "./skillPick";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
@@ -46,7 +47,7 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-type SentHeader = { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean };
+type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean };
 const sentOf = new Map<string, SentHeader>();
 /** the git repos in each space's folder, looked up again after a few minutes */
 const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
@@ -76,7 +77,7 @@ const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const clearWanted = new Set<string>();
 
 /**
- * What the session was last sent (rules, projects, repos, skills, forks), kept
+ * What the session was last sent (rules, projects, repos, forks), kept
  * with it, so a restart that resumes the session sends only what changed.
  */
 const SENT_KEY = (space: string) => `ondra.mainSent.${space}`;
@@ -419,15 +420,14 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** The main chat's tools: tool_search and web_search, with read / bash / web_fetch behind it (extensions/lazy-core.ts, extensions/web.ts). */
+/** Main searches skills directly; read / bash / web_fetch load through tool_search. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  // main looks things up on the web itself (web_search / web_fetch)
-  const web = all.filter((e) => e.endsWith("/web.ts")).flatMap((e) => ["--extension", e]);
+  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
-  if (!lazy) return ["--exclude-tools", "edit,write", ...web];
-  return ["--no-builtin-tools", "--extension", lazy, ...web, ...WORKER_TOOLS];
+  if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
+  return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
 }
 async function instructionSig(dir: string): Promise<string> {
   const dirs: string[] = [];
@@ -448,11 +448,15 @@ const promptSig = () => {
   for (let i = 0; i < CAPTAIN_SYSTEM.length; i++) h = (h * 31 + CAPTAIN_SYSTEM.charCodeAt(i)) | 0;
   return h.toString(36);
 };
-const startSig = async (dir: string) => `${await instructionSig(dir)}\n${(await mainTools()).join(" ")}\n${promptSig()}`;
+const startSig = async (dir: string, skills: string) => `${await instructionSig(dir)}\n${(await mainTools()).join(" ")}\n${promptSig()}\n${skills}`;
 export async function restartIfStale(space: string): Promise<boolean> {
+  if (busy.has(space)) return false;
+  return restartStale(space, (await skillScope(sp(space))).signature);
+}
+async function restartStale(space: string, skills: string): Promise<boolean> {
   const agent = agentOf(space);
-  if (!isAlive(agent) || !attached.has(space) || busy.has(space) || !sigOf.has(space)) return false;
-  if ((await startSig(folderOf(space))) === sigOf.get(space)) return false;
+  if (!isAlive(agent) || !attached.has(space) || !sigOf.has(space)) return false;
+  if ((await startSig(folderOf(space), skills)) === sigOf.get(space)) return false;
   const gone = new Promise<void>((done) => {
     listen(agent, { event() {}, exit: () => done() });
     setTimeout(done, 3000);
@@ -468,7 +472,9 @@ export async function restartIfStale(space: string): Promise<boolean> {
 
 async function ensureCaptain(space: string) {
   const agent = agentOf(space);
-  if (isAlive(agent) && attached.has(space) && !(await restartIfStale(space))) return;
+  const skills = await skillScope(sp(space));
+  // Called before the next request; pump already owns the busy flag here.
+  if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
   const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "");
   if (!acc) throw new Error(NO_ACCOUNT);
@@ -522,12 +528,12 @@ async function ensureCaptain(space: string) {
     "--session-dir",
     sessionDir(space),
     ...(resume ? ["--continue"] : []),
-    // only tool_search is declared; read and bash load through it when needed
+    // Search tools are declared; read and bash load when needed.
     ...(await mainTools()),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote
     "--shared-prompt-cache",
-    // main delegates; the skills (≈8K tokens of descriptions) are for jobs
+    // The search extension owns discovery, not Pi's prompt catalog.
     "--no-skills",
     "--thinking",
     "low",
@@ -539,8 +545,9 @@ async function ensureCaptain(space: string) {
   ];
   // a simulated project's folder is made up: main runs in the space's folder then
   const cwd = expand((isSim(space) ? "" : proj?.folder) || space0.folder || "~");
-  void startSig(cwd).then((x) => sigOf.set(space, x));
-  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"]]);
+  const signature = await startSig(cwd, skills.signature);
+  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)]]);
+  sigOf.set(space, signature);
   markAlive(agent);
   attached.add(space);
   statsOf.delete(space);
@@ -700,8 +707,6 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     if (projs.length) out.push("Its projects:", ...projs);
     if (jobs.length) out.push("Its recent jobs:", ...jobs);
   }
-  const skills = skillsIn(sp(space)).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
-  if (skills !== sent.skills) out.push("", `# Skills jobs can use${sent.skills ? " (updated)" : ""}\n${skills}`);
   if (sent.recap) {
     const recent = (w ? w.chat : state.captain)
       .filter((m) => inChat(m, space) && !m.pending)
@@ -727,7 +732,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "Tell the user what came out, short and visual (blocks), as an \"answer\": the result first, then what fits the work (the cause, what changed, how it was checked; what went out and its status; links). Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first. Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", skills, rules, projects, repos, spaces: spacesLine, recap: false });
+  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
 }

@@ -7,6 +7,14 @@ import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { engine, expand } from "./rpc";
 
+const SKILL_DISCOVERY = `# Skills
+Before starting work, use skill_search with the task's keywords (or a named
+skill), then read and follow the matching SKILL.md before acting. Search
+again when the work changes or needs another workflow. No catalog in context
+does not mean no skill applies; try alternate keywords when a search misses.
+Read only selected skills, not every result. Resolve their reference files
+relative to the returned baseDir. If read is not loaded, find it with tool_search.`;
+
 const CODING_WORK = `# Coding work
 Apply these defaults to coding tasks without a skill or command. Scale the
 work to its risk and size: a small change needs a short plan and focused
@@ -16,8 +24,8 @@ repository delivery rules; these defaults never authorize publishing,
 pushing, opening a PR or merging.
 
 When implementing a supplied design (a Figma link, "피그마 그대로", "디자인
-그대로"), read and follow the bundled mimikyu skill without waiting for a
-skill command. Use web-design for new design directions, not to redesign a
+그대로"), search for, read and follow the bundled mimikyu skill without
+waiting for a skill command. Use web-design for new design directions, not to redesign a
 supplied reference. Keep these coding checks alongside the design's measured
 verification gates.
 
@@ -76,6 +84,8 @@ export const TASK_SYSTEM = `# Role
 You are one agent inside Ondra, the user's agent workspace. You own one task
 end to end. The user watches Ondra's UI, not your raw text: Ondra draws your
 tool calls live and renders the \`blocks\` you send.
+
+${SKILL_DISCOVERY}
 
 ${CODING_WORK}
 
@@ -393,6 +403,8 @@ You are a subagent inside Ondra. Another agent (a fork working on a bigger
 task) handed you one sub-task. Do exactly that, nothing more, and report back.
 The user can watch you in Ondra's UI.
 
+${SKILL_DISCOVERY}
+
 ${CODING_WORK}
 
 # Reporting
@@ -644,11 +656,13 @@ title; "say" is the one-sentence takeaway shown under the picture ("결제
 in the user's language. Before/after: two pictures with the same boxes in the
 same order; only what changed differs. Never invent numbers, timings or trends.
 
-# Skills
-Jobs come with skills (listed in the message when they change). When a
-request fits one, start "task" with: "Use the <name> skill: read its SKILL.md
-and follow it." Implementing a design (a Figma link, "디자인 구현", "피그마
-그대로", "이 화면 만들어 줘" with a design) always uses the mimikyu skill.
+${SKILL_DISCOVERY}
+Before routing a work request, search for its relevant skills too. Read the
+selected skill's routing guidance, then tell the owning job which skill to
+search for, read and follow; do not copy its body or a catalog into the task.
+The job must still search for workflows needed during its own work.
+Implementing a design (a Figma link, "디자인 구현", "피그마 그대로", "이 화면
+만들어 줘" with a design) always uses the mimikyu skill.
 
 # Output
 Reply with exactly one fence and nothing else:

@@ -17,6 +17,7 @@ const resources = join(contents, "Resources");
 const bundled = join(resources, "app-skills");
 const engine = join(contents, "MacOS", "ondra-engine");
 const mimikyu = join(bundled, "mimikyu", "SKILL.md");
+const search = join(resources, "app-extensions", "skills.ts");
 
 // Check every supporting file too, preserving paths and bytes.
 function checkFiles(source, target) {
@@ -31,6 +32,7 @@ function checkFiles(source, target) {
 }
 checkFiles(join(root, "skills", "mimikyu"), join(bundled, "mimikyu"));
 assert.ok(existsSync(engine), `Missing bundled engine: ${engine}`);
+assert.ok(readFileSync(search).equals(readFileSync(join(root, "extensions", "skills.ts"))), "Bundled skill search differs");
 
 // Match worker_skills' immediate child SKILL.md paths, not Pi's auto-discovery.
 const paths = readdirSync(bundled).sort().map((name) => join(bundled, name, "SKILL.md")).filter(existsSync);
@@ -41,7 +43,7 @@ try {
   const result = spawnSync(engine, [
     "--mode", "rpc", "--no-session", "--offline", "--no-approve", "--no-context-files",
     "--no-extensions", "--no-prompt-templates", "--no-themes", "--no-skills",
-    ...paths.flatMap((path) => ["--skill", path]),
+    "--extension", search,
   ], {
     cwd: home,
     env: {
@@ -51,8 +53,9 @@ try {
       PI_PACKAGE_DIR: join(resources, "engine"),
       PI_OFFLINE: "1",
       PI_TELEMETRY: "0",
+      ONDRA_SKILL_PATHS: JSON.stringify(paths),
     },
-    input: '{"id":"skills","type":"get_commands"}\n',
+    input: '{"id":"context","type":"get_context"}\n',
     encoding: "utf8",
     timeout: 60_000,
     maxBuffer: 4 * 1024 * 1024,
@@ -60,15 +63,12 @@ try {
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   const records = result.stdout.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
-  const response = records.find((record) => record.type === "response" && record.id === "skills");
-  assert.equal(response?.success, true, JSON.stringify(response ?? result.stderr));
-  const matches = response.data.commands.filter((command) => command.name === "skill:mimikyu");
-  assert.equal(matches.length, 1, "Expected exactly one loaded mimikyu skill");
-  const skill = matches[0];
-  assert.equal(skill.source, "skill");
-  assert.equal(skill.sourceInfo.path, mimikyu);
-  for (const trigger of ["figma.com", "피그마 링크", "디자인 그대로"]) assert.ok(skill.description.includes(trigger));
-  console.log(JSON.stringify({ bundle: resolve(process.argv[2]), filesMatch: true, personalSkills: false, modelCalls: 0, skill }, null, 2));
+  const context = records.find((record) => record.type === "response" && record.id === "context");
+  assert.equal(context?.success, true);
+  assert.deepEqual(context.data.skills, []);
+  assert.ok(!context.data.systemPrompt.includes("<available_skills>"));
+  assert.ok(context.data.tools.some((tool) => tool.name === "skill_search" && tool.active));
+  console.log(JSON.stringify({ bundle: resolve(process.argv[2]), filesMatch: true, personalSkills: false, modelCalls: 0, searchablePaths: paths.length }, null, 2));
 } finally {
   rmSync(home, { recursive: true, force: true });
 }
