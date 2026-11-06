@@ -1,6 +1,7 @@
 // btw card (above the input) and the side chat (a panel tab).
 import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
+import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
 import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { ago } from "./bits";
@@ -160,7 +161,7 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
       },
     });
   }
-  for (const sk of state.skills.filter((x) => x.enabled && x.menu))
+  for (const sk of skillsIn(state.space).filter((x) => x.menu))
     out.push({ section: "스킬", icon: "skill", label: sk.name, desc: sk.description.split(/[.。]/)[0], run: ({ insert }) => insert(`/${sk.name} `) });
   out.push({ section: "옆에서", icon: "spark", label: "btw", desc: "하던 일은 두고 바로 묻기", run: ({ insert }) => insert("/btw ") });
   out.push({ section: "옆에서", icon: "message", label: "사이드챗", desc: "따로 하는 대화 (⌘J)", run: () => openPanel("side") });

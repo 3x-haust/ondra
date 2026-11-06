@@ -11,7 +11,7 @@ import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId,
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
-import { addMemory, applying, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
+import { addMemory, applying, inSpace, isLive, skillsIn, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
@@ -523,7 +523,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   // no always-on memory: a few pieces recalled for this message alone
   const folder = projectOf(space)?.folder;
   const here = applying(sp(space), folder ? expand(folder) : "", expand);
-  const others = (w?.memory ?? state.memory).filter((m) => isLive(m) && (m.scope !== "space" || m.space === sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
+  // this space's pieces only (a project piece of another space never comes up here)
+  const others = (w?.memory ?? state.memory).filter((m) => isLive(m) && inSpace(m, sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
   const related = recall(others, text, { max: 6, budget: 1200, folder: (m) => m.scope === "project" && here.includes(m) });
   const out: string[] = [];
   if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
@@ -546,7 +547,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     if (projs.length) out.push("Its projects:", ...projs);
     if (jobs.length) out.push("Its recent jobs:", ...jobs);
   }
-  const skills = state.skills.filter((s) => s.enabled).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
+  const skills = skillsIn(sp(space)).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
   if (skills !== sent.skills) out.push("", `# Skills jobs can use${sent.skills ? " (updated)" : ""}\n${skills}`);
   if (sent.recap) {
     const recent = (w ? w.chat : state.captain)

@@ -81,7 +81,7 @@ export default function (pi: any) {
       paths: Type.Optional(Type.Array(Type.String(), { description: "globs relative to the project (e.g. src-tauri/**) when it only matters for those files; shown to jobs that touch them" })),
       cites: Type.Optional(Type.Array(Type.String(), { description: "code files this fact is about (must exist); it is retired when they are gone" })),
       kind: Type.Optional(KIND),
-      scope: Type.Optional(Type.Union([Type.Literal("project"), Type.Literal("space"), Type.Literal("global")], { description: "project (default): this folder; space: all work in this space; global: everywhere" })),
+      scope: Type.Optional(Type.Union([Type.Literal("project"), Type.Literal("space")], { description: "project (default): this folder; space: all work in this space. Spaces are separate: nothing you save reaches the other space" })),
       importance: Type.Optional(Type.Number({ description: "1-5; 5 when the user said it must always hold" })),
       replaces: Type.Optional(Type.String({ description: "id of a memory this corrects (it is retired)" })),
       about: Type.Optional(Type.Array(Type.String(), { description: "0-3 named things it's about (tools, services, projects)" })),

@@ -34,9 +34,9 @@ const view = (m: Memory) => ({
   date: new Date(m.updatedAt ?? m.createdAt).toISOString().slice(0, 10),
 });
 
+/** A job's memory; a caller that isn't a known job gets none (never the space on screen). */
 function pool(t: Task | undefined): Memory[] {
-  if (t) return memoriesFor(t.space, homeDir(t), t.reach);
-  return state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === state.space));
+  return t ? memoriesFor(t.space, homeDir(t), t.reach) : [];
 }
 
 /** pieces whose cited files are all gone are stale: retired, not handed out */
@@ -60,6 +60,8 @@ const shown = new Map<string, Set<string>>();
 async function handle(c: Call): Promise<unknown> {
   const t = c.worker ? taskById(c.worker) : undefined;
   const a = c.args ?? {};
+  // memory belongs to a space: only a job (whose space is known) reads or writes it
+  if (!t && c.op?.startsWith("memory_")) return c.op === "memory_search" ? { results: [], total: 0 } : c.op === "memory_paths" ? { rules: [] } : { error: "only a job can change memory" };
   switch (c.op) {
     case "memory_search": {
       const query = String(a.query ?? "").trim();
@@ -69,7 +71,7 @@ async function handle(c: Call): Promise<unknown> {
       const list = pool(t);
       const hits = await dropStale(recall(list, query, { max: limit, budget: 6000, links: true }));
       markUsed(hits.map((m) => m.id));
-      const journal = (state.journal ?? []).filter((j) => (t ? j.space === t.space : true) && j.taskId !== t?.id);
+      const journal = (state.journal ?? []).filter((j) => j.space === t!.space && j.taskId !== t!.id);
       const jobs = searchJournal(journal, query, 3).map((j) => ({
         job: j.title,
         date: new Date(j.at).toISOString().slice(0, 10),
@@ -81,7 +83,8 @@ async function handle(c: Call): Promise<unknown> {
     case "memory_save": {
       const text = String(a.text ?? "").trim();
       if (!text || text.length > 600) return { error: "text must be 1–600 characters" };
-      const scope = a.scope === "global" || a.scope === "space" ? a.scope : "project";
+      // a job never writes for every space: "global" (an older tool list) is kept in its space
+      const scope = a.scope === "global" || a.scope === "space" ? "space" : "project";
       let refused = "";
       const root = t ? expand(homeDir(t)) : "";
       const cites = words(a.cites, 6, 400)?.map((p) => (p.startsWith("/") || p.startsWith("~") || !root ? p : `${root}/${p.replace(/^\.\//, "")}`));
@@ -90,8 +93,8 @@ async function handle(c: Call): Promise<unknown> {
         if (!ok.some(Boolean)) return { error: "none of the cited files exist — check the code first" };
       }
       const id = addMemory(text, scope, {
-        space: t?.space ?? state.space,
-        project: scope === "project" && t ? homeDir(t) : undefined,
+        space: t!.space,
+        project: scope === "project" ? homeDir(t!) : undefined,
         kind: KIND_IDS.has(String(a.kind)) ? (a.kind as MemoryKind) : undefined,
         importance: typeof a.importance === "number" ? Math.min(5, Math.max(1, Math.round(a.importance))) : undefined,
         replaces: typeof a.replaces === "string" ? a.replaces : undefined,
@@ -112,7 +115,7 @@ async function handle(c: Call): Promise<unknown> {
       const id = String(a.id ?? "");
       const m = state.memory.find((x) => x.id === id && isLive(x));
       if (!m) return { error: "no such memory" };
-      if (t && !pool(t).includes(m)) return { error: "not this job's memory" };
+      if (!pool(t).includes(m)) return { error: "not this job's memory" };
       if (userOwned(m)) return { error: "that is the user's own memory; tell the user instead" };
       retireMemory(id, undefined, String(a.why ?? "일하다 틀린 걸 알았어요").slice(0, 200));
       return { retired: id };

@@ -371,6 +371,7 @@ export interface Memory {
   from?: string;
   /** global = everywhere; space = one space; project = tasks whose folder is under `project` */
   scope: "global" | "space" | "project";
+  /** the space it belongs to: every space and project piece has one (spaces never share pieces) */
   space?: SpaceId;
   project?: string;
   source: "ondra" | SourceId;
@@ -422,6 +423,8 @@ export interface Skill {
   enabled: boolean;
   /** In the + menu and as a /command. Off = jobs still get it and use it when it fits. */
   menu?: boolean;
+  /** Grown from one space's memory or imported into one space: only that space's jobs get it. None = every space. */
+  space?: SpaceId;
 }
 
 export interface Settings {
