@@ -359,6 +359,15 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         const review = b.review === true || /code-review|리뷰/i.test(String(b.title ?? ""));
         // one review per job: after it, the job fixes the findings and re-runs its checks
         const had = review ? state.tasks.find((x) => x.parentId === t.id && x.review && x.status !== "failed") : undefined;
+        // the job this carries on was reviewed and this one changed no code since: that review still holds
+        const before = review && !had && !editedCode(t) ? reviewedBefore(t) : undefined;
+        if (before) {
+          push(t, { kind: "note", text: "앞의 일에서 받은 리뷰가 그대로 유효해요" });
+          const jobId = t.id;
+          const message = `(Ondra) The job this carries on was already reviewed ("${before.title}") and its findings were fixed there; you haven't changed code since. That review covers this: don't start another one, go on with the next step.`;
+          queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
+          break;
+        }
         if (had) {
           const going = had.status !== "done";
           push(t, { kind: "note", text: going ? "리뷰가 아직 진행 중이에요" : "리뷰는 이미 한 번 받았어요" });
@@ -430,7 +439,7 @@ async function deliver(child: Task) {
   const body =
     child.status === "done"
       ? child.review
-        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
+        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
         : `서브에이전트 "${child.title}" 완료: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
       : `서브에이전트 "${child.title}" 실패: ${child.error ?? "알 수 없는 오류"}`;
   const left = activeKids(parent.id).length;
@@ -1208,6 +1217,24 @@ export function shipped(t: Task): boolean {
       e.kind === "tool" &&
       /\bgit push\b|\bgh pr merge\b|\bgh release create\b|\beas submit\b|\bfastlane\b|\basc\b[^\n]*\b(submit|review)|검토를 위해 변경사항 전송|심사.{0,6}제출/.test(`${e.tool.target} ${e.tool.detail ?? ""}`),
   );
+}
+
+/** the job edited code files itself (not notes, data or its artifacts) */
+function editedCode(t: Task): boolean {
+  return t.entries.some((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && isCodeFile((e.tool.detail ?? "").split("\n")[0], t) && !/\.html?$/i.test(e.tool.detail ?? ""));
+}
+
+/** a finished review of the job this carries on (or the one before it) */
+function reviewedBefore(t: Task): Task | undefined {
+  let prev = t.follows ? taskById(t.follows) : undefined;
+  for (let i = 0; prev && i < 3; i++) {
+    const r = state.tasks.find((x) => x.parentId === prev!.id && x.review && x.status === "done");
+    if (r) return r;
+    // an earlier job's review only counts when the jobs in between didn't change code either
+    if (editedCode(prev)) return undefined;
+    prev = prev.follows ? taskById(prev.follows) : undefined;
+  }
+  return undefined;
 }
 
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
