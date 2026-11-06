@@ -2805,6 +2805,7 @@ checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.13.2",
  "block2",
+ "libc",
  "objc2",
  "objc2-core-foundation",
  "objc2-foundation",
@@ -3005,8 +3006,13 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 name = "ondra"
 version = "0.4.0"
 dependencies = [
+ "block2",
  "fastembed",
+ "libc",
  "mac-notification-sys",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "portable-pty",
  "serde",
  "serde_json",

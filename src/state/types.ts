@@ -446,6 +446,8 @@ export interface Settings {
   learn: boolean;
   /** Give each task in a git repo its own worktree. */
   isolate: boolean;
+  /** Send apps a job starts back behind the user's window when they come forward. */
+  focusGuard: boolean;
   /** Model / effort for new forks ("" = automatic). */
   forkModel: string;
   forkThinking: string;

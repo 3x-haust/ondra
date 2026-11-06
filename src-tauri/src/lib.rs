@@ -14,6 +14,7 @@ mod browser;
 mod inbrowser;
 mod devices;
 mod engine;
+pub mod focus;
 mod keychain;
 mod git;
 mod import;
@@ -163,6 +164,10 @@ pub fn run() {
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
+            {
+                let handle = app.handle().clone();
+                focus::install(move || handle.state::<engine::Engine>().pids());
+            }
             // ⌘W closes the right panel, not the window (the window hides with ⌘H or its button)
             #[cfg(target_os = "macos")]
             {
@@ -259,6 +264,7 @@ pub fn run() {
             hide_capture,
             submit_capture,
             set_tray_count,
+            focus::focus_guard,
             engine::engine_info,
             engine::agent_spawn,
             engine::agent_send,
