@@ -172,18 +172,19 @@ export function btwPrompt(scope: string, q: string, logs: string): string {
 }
 
 /** Ask a btw question. The answer streams into btw(); nothing is added anywhere. */
-export async function askBtw(scope: string, question: string) {
-  const q = question.trim();
+export async function askBtw(scope: string, question: string, files: string[] = []) {
+  const q = question.trim() || (files.length ? "이거 봐줘" : "");
   if (!q) return;
+  const att = files.length ? { files } : {};
   if (!engine.checked || !engine.ready) {
-    setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, answer: "", pending: false, error: "엔진을 찾을 수 없어요" }]);
+    setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, ...att, answer: "", pending: false, error: "엔진을 찾을 수 없어요" }]);
     return void setBtwAt(btwList().length - 1);
   }
   const space = (scope.startsWith("main:") ? scope.slice(5).split("~")[0] : taskById(scope.slice(5))?.space ?? state.space) as SpaceId;
   const acc = accountFor(space);
   const agent = `btw:${uid("b")}`;
   const id = uid("q");
-  setState("btws", (l) => [...(l ?? []).slice(-49), { id, at: Date.now(), scope, question: q, answer: "", pending: true }]);
+  setState("btws", (l) => [...(l ?? []).slice(-49), { id, at: Date.now(), scope, question: q, ...att, answer: "", pending: true }]);
   setBtwAt(btwList().length - 1);
   let text = "";
   let err = "";
@@ -214,7 +215,10 @@ export async function askBtw(scope: string, question: string) {
       await accountEnv(acc.id),
     );
     markAlive(agent);
-    await request(agent, { type: "prompt", message: btwPrompt(scope, q, logs) });
+    const shown = files.length
+      ? `${q}\n\nThe user attached these; open each picture with the read tool and look at it before answering:\n${files.map((f) => `- ${f}`).join("\n")}`
+      : q;
+    await request(agent, { type: "prompt", message: btwPrompt(scope, shown, logs) });
     await done;
     patch(id, { answer: prose(text) || text, pending: false, error: !text.trim() ? explain(err || "답이 비어 있어요") : undefined });
   } catch (e) {
