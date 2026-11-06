@@ -40,6 +40,8 @@ interface Run {
   edits?: number;
   nudges?: number;
   modelTries: number;
+  /** a turn has ended since this run started listening */
+  ended?: boolean;
   /** done/evidence handed in; checked once before finishing */
   evidence?: Evidence[];
   unverified?: string[];
@@ -327,6 +329,7 @@ function spawnChild(parent: Task, title: string, ask: string, review = false): T
   const child: Task = {
     id: uid("t"),
     space: parent.space,
+    ...(parent.reach?.length ? { reach: parent.reach } : {}),
     topic: parent.topic,
     title: title.trim().slice(0, 40) || "서브에이전트",
     ask,
@@ -773,6 +776,7 @@ function handlers(id: string, run: Run) {
           break;
         case "agent_settled":
           run.streaming = false;
+          run.ended = true;
           if (run.turnStart) {
             const ms = Date.now() - run.turnStart;
             run.turnStart = 0;
@@ -832,20 +836,31 @@ export async function reattachJobs() {
     const id = t.id;
     const agent = agentOf(id);
     if (!isAlive(agent)) continue;
-    const run: Run = { text: "", cursor: 0, streaming: true, asked: t.status === "waiting", turnStart: 0, stats: zero(), tools: new Map(), modelTries: 0 };
+    const run: Run = { text: "", cursor: 0, streaming: false, asked: false, turnStart: 0, stats: zero(), tools: new Map(), modelTries: 0 };
     runs.set(id, run);
     const h = handlers(id, run);
     listen(agent, h);
-    // usage so far isn't this turn's
-    run.stats = await collectStats(agent, t.accountId, zero());
-    if (t.status !== "running") continue;
     const st = await request(agent, { type: "get_state" }, 8000).catch(() => null);
-    if (!st || st.isStreaming || st.isCompacting) continue;
+    // usage so far was counted already
+    run.stats = await rawStats(agent);
+    if (!st) continue;
+    // mid-turn (a question on screen is mid-turn too): its own events carry on from here
+    if (st.isStreaming || st.isCompacting) {
+      run.streaming = true;
+      run.turnStart = Date.now();
+      continue;
+    }
+    const now = taskById(id);
+    if (!now || now.status !== "running" || runs.get(id) !== run || run.streaming || run.ended || waitsOnKids(now)) continue;
+    // idle while "running": the turn ended unheard. Its last answer, unless it was heard before the reload.
     const msgs: any[] = (await request(agent, { type: "get_messages" }, 15000).catch(() => null))?.messages ?? [];
+    if (runs.get(id) !== run || run.streaming || run.ended) continue;
     const last = [...msgs].reverse().find((m) => m?.role === "assistant");
+    const at = Number(last?.timestamp ?? 0);
     const text = Array.isArray(last?.content) ? last.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("") : "";
-    const heard = !text || taskById(id)?.entries.some((e) => e.kind === "text" && e.text === prose(text).slice(0, 20000));
-    if (!heard) {
+    const entries = taskById(id)?.entries ?? [];
+    const heard = !last || (at ? entries.some((e) => (e.at ?? 0) >= at) : entries.some((e) => e.kind === "text" && e.text === prose(text).slice(0, 20000)));
+    if (!heard && text) {
       h.event({ type: "message_start", message: { role: "assistant" } });
       h.event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
       h.event({ type: "message_end", message: last });
@@ -1454,7 +1469,8 @@ const waitsOnKids = (t: Task) =>
 export function startScheduler() {
   if (!inTauri) return;
   // After a restart nothing runs any more: put live work back in line.
-  for (const t of state.tasks) if (t.status === "running") updateTask(t.id, (x) => requeue(x));
+  // (jobs whose engine still runs, after a page reload, were picked up again by reattachJobs)
+  for (const t of state.tasks) if (t.status === "running" && !runs.get(t.id)) updateTask(t.id, (x) => requeue(x));
   createRoot(() => {
     createEffect(
       on(

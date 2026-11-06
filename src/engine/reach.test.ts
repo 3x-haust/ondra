@@ -23,3 +23,15 @@ describe("namedSpaces", () => {
     expect(from("오늘 날씨 어때")).toEqual([]);
   });
 });
+
+describe("namedSpaces, words that only look like a space", () => {
+  it("doesn't open a space for compound words or loose nouns", () => {
+    expect(from("Ondra workspace 설정 바꿔줘")).toEqual([]);
+    expect(from("network 폴더 정리")).toEqual([]);
+    expect(from("framework 작업")).toEqual([]);
+    expect(from("개인 프로젝트로 빼자", "work")).toEqual([]);
+    expect(from("개인 메모 앱 만들어줘", "work")).toEqual([]);
+    expect(from("회사의 프로젝트 목록 봐줘")).toEqual(["work"]);
+    expect(from("work 기억 참고해")).toEqual(["work"]);
+  });
+});

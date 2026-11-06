@@ -31,14 +31,21 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * doesn't count.
  */
 export function namedSpaces(text: string, here: SpaceId, spaces: { id: SpaceId; label: string }[]): SpaceId[] {
-  // a whole word, or a one-syllable one with only a particle after it ("회사 일을", not "회사 일정")
-  const thing = "(?:(?:공간|스페이스|space|기억|메모리|메모|채팅|대화|세션|자료|레포|폴더|프로젝트|작업)|(?:쪽|일|거|것|꺼|건)(?:[은는이가을를도만에들로좀]|(?![가-힣])))";
-  const how = "(?:의|에서\\s*(?:한|했던|하던|쓴|쓰던|만든|본)|에\\s*있는|에서)?";
+  // its things: whole words, a one-syllable one only with a particle ("회사 일을", not
+  // "회사 일정"), and loose words (프로젝트, 작업, 메모) only after "의/에서/에 있는"
+  // ("개인 프로젝트로 빼자" is about a project, not the space)
+  const own = "(?:공간|쪽|기억|메모리|채팅|대화|세션|자료|레포|폴더|(?:일|거|것|꺼|건)(?:[은는이가을를도만에들로좀]|(?![가-힣])))";
+  const loose = "(?:프로젝트|작업|메모)";
+  const how = "(?:의|에서\\s*(?:한|했던|하던|쓴|쓰던|만든|본)?|에\\s*있는)";
   return spaces
     .filter((s) => s.id !== here)
     .filter((s) => {
       const names = [...new Set([s.label, ...(SPACE_ALIASES[s.id] ?? [])].filter(Boolean))];
-      return names.some((n) => new RegExp(`${esc(n)}\\s*${how}\\s*${thing}`, "i").test(text));
+      return names.some((n) => {
+        // a Latin name is a whole word ("work", not "network" or "workspace")
+        const at = /^[a-z]/i.test(n) ? `(?<![\\p{L}\\p{N}])${esc(n)}(?![\\p{L}\\p{N}])` : esc(n);
+        return new RegExp(`${at}\\s*${how}?\\s*${own}`, "iu").test(text) || new RegExp(`${at}\\s*${how}\\s*${loose}`, "iu").test(text);
+      });
     })
     .map((s) => s.id);
 }
@@ -59,12 +66,13 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/[.。!
 export function tokens(t: string): string[] {
   return t
     .toLowerCase()
+    // times and dates ("오후 12:19", "2026. 11. 6.") say when, not what about
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, " ")
+    .replace(/\b\d{4}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*[.일]?/g, " ")
     .replace(/[^\p{L}\p{N}\s._/-]/gu, " ")
     .split(/\s+/)
     .map((w) => w.replace(/(은|는|이|가|을|를|의|에|에서|으로|로|와|과|도|만|요|해요|했어요|돼요|하기|하고|해서)$/u, ""))
     // one-syllable Korean nouns that name things ("레비오사 웹", "요메이츠 앱") count too
-    // short bare numbers are times and dates ("12:19", "11. 6."), not what a piece is about
-    .filter((w) => !/^\d{1,3}\.?$/.test(w))
     .filter((w) => (w.length >= 2 || /^(웹|앱|폰|봇|맥|탭|창|키)$/.test(w)) && !/^(그리고|있어요|이에요|그냥|이거|그거|the|and|for|with|that|this)$/.test(w));
 }
 const overlap = (a: Set<string>, b: Set<string>) => {
