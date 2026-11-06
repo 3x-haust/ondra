@@ -157,7 +157,7 @@ export function Flow() {
 
   return (
     <div class="graph" classList={{ "has-jobs": !!roots().length }} style={{ "--gutter": `${gutter()}px` }}>
-      <button class="g-main" onClick={() => goMain()} title="메인에게 말하기 (⌘0)" style={{ "--trunk": `${TRUNK}px` }}>
+      <button class="g-main" data-shortcut="main" onClick={() => goMain()} title="메인에게 말하기 (⌘0)" style={{ "--trunk": `${TRUNK}px` }}>
         <span class="g-main-node" style={{ left: `${TRUNK - 5}px` }} />
         <span class="g-name">메인</span>
         <Show when={state.captain.some((m) => m.space === state.space && m.pending)} fallback={<kbd class="g-kbd">⌘0</kbd>}>

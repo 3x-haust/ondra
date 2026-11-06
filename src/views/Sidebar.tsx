@@ -281,13 +281,13 @@ export function Sidebar() {
     <aside class="sidebar">
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" title="새로 맡기기 (⌘N)" onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
+        <button class="icon-btn" data-shortcut="new" title="새로 맡기기 (⌘N)" onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
           <Icon name="compose" size={16} />
         </button>
-        <button class="icon-btn" title="찾기 (⌘K)" onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
+        <button class="icon-btn" data-shortcut="search" title="찾기 (⌘K)" onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
           <Icon name="search" size={16} />
         </button>
-        <button class="icon-btn" title="접기 (⌘B)" onClick={() => setSidebarHidden(true)}>
+        <button class="icon-btn" data-shortcut="sidebar" title="접기 (⌘B)" onClick={() => setSidebarHidden(true)}>
           <Icon name="panelLeft" size={16} />
         </button>
       </div>
@@ -295,7 +295,7 @@ export function Sidebar() {
       <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
         <For each={state.spaces}>
           {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
               <span class="space-name">{s.label}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>
@@ -305,21 +305,21 @@ export function Sidebar() {
       </Show>
 
       <div class="sb-scroll">
-        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} title="메인에게 말하기 (⌘0)">
+        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} data-shortcut="main" title="메인에게 말하기 (⌘0)">
           <Icon name="message" size={15} class="sb-main-ic" />
           <span class="sb-title">메인</span>
           <Show when={mainBusy()} fallback={<kbd class="sb-kbd">⌘0</kbd>}>
             <span class="spin sm" />
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "board" }} onClick={() => setView({ name: "board" })} title="모든 일을 한 장에서 (⌘⇧B)">
+        <button class="sb-row sb-main" classList={{ on: view().name === "board" }} onClick={() => setView({ name: "board" })} data-shortcut="board" title="모든 일을 한 장에서 (⌘⇧B)">
           <Icon name="canvas" size={15} class="sb-main-ic" />
           <span class="sb-title">캔버스</span>
           <Show when={boardLive()} fallback={<kbd class="sb-kbd">⌘⇧B</kbd>}>
             <span class="sb-live" title={`지금 일하는 중 ${boardLive()}개`}><i />{boardLive()}</span>
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} title={`에이전트가 기억하는 것: 그래프와 파일 (${shortcutHint("memory")})`}>
+        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} data-shortcut="memory" title={`에이전트가 기억하는 것: 그래프와 파일 (${shortcutHint("memory")})`}>
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
@@ -329,7 +329,7 @@ export function Sidebar() {
         </button>
         {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
         <Show when={needs()}>
-          <button class="sb-row sb-main sb-todo" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }} title="답하거나 확인할 다음 일로 (⌘.)">
+          <button class="sb-row sb-main sb-todo" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }} data-shortcut="waiting" title="답하거나 확인할 다음 일로 (⌘.)">
             <Icon name="alert" size={15} class="sb-main-ic" />
             <span class="sb-title">확인할 일</span>
             <span class="sb-need">{needs()}</span>
@@ -397,7 +397,7 @@ export function Sidebar() {
         </Fold>
 
         <Head id="devices" label="디바이스" count={bootedDevices().length}>
-          <button class="icon-btn xs" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
+          <button class="icon-btn xs" data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
             <Icon name="arrow" size={13} />
           </button>
         </Head>
@@ -460,10 +460,11 @@ export function Sidebar() {
       <ProjectMenu />
 
       <div class="sb-foot">
-        <button class="row" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
+        <button class="row" data-shortcut="commands" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
           <Icon name="list" size={16} /><span class="row-title">단축키</span><kbd>{shortcutHint("commands")}</kbd>
         </button>
-        <button class="row" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
+        <small class="shortcut-hold-tip">⌘를 꾹 누르면 버튼에 단축키가 보여요</small>
+        <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">설정</span>
         </button>
@@ -477,7 +478,7 @@ export function SidebarToggle() {
   const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you").length;
   return (
     <Show when={sidebarAway()}>
-      <button class="icon-btn sb-show" title="펴기 (⌘B)" onClick={showSidebar}>
+      <button class="icon-btn sb-show" data-shortcut="sidebar" title="펴기 (⌘B)" onClick={showSidebar}>
         <Icon name="panelLeft" size={16} />
         <Show when={waiting()}><i class="sb-show-dot" /></Show>
       </button>

@@ -490,6 +490,7 @@ export function Composer(props: {
           rows={1}
           value={text()}
           placeholder={props.placeholder}
+          data-shortcut={props.id === "main-input" || props.id === "task-input" ? "focusInput" : undefined}
           title={`대화 입력창으로 (${shortcutHint("focusInput")})`}
           onInput={(e) => {
             setText(e.currentTarget.value);

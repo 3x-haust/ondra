@@ -320,7 +320,7 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <MoreMenu id={task().id} openPanel={openPanel} />
-              <button class="icon-btn" classList={{ on: panelOpen() }} title="패널 (⌘\)" onClick={togglePanel}>
+              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title="패널 (⌘\)" onClick={togglePanel}>
                 <Icon name="panel" size={16} />
               </button>
             </div>

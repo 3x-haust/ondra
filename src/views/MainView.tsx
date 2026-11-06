@@ -338,7 +338,7 @@ export function MainView() {
           </Show>
         </h1>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: panelOpen() }} title="패널 (⌘\)" onClick={togglePanel}>
+        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title="패널 (⌘\)" onClick={togglePanel}>
           <Icon name="panel" size={16} />
         </button>
       </header>
