@@ -568,6 +568,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       if (last && !last.endedAt) last.endedAt = Date.now();
     });
   }
+  const carries = taskById(id)?.follows;
+  if (!resume && carries && !taskById(id)?.worktree && finished(taskById(carries))) takeBranch(id, carries);
   if (!resume && !taskById(id)?.answer && !(await isolate(id))) return;
   const t0 = taskById(id);
   if (!t0) return;
@@ -972,7 +974,7 @@ async function settle(id: string, run: Run) {
     return;
   }
   if (run.done !== undefined) {
-    const missing = (run.gates ?? 0) >= 2 || t.parentId ? null : await proofMissing(t, run);
+    const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run);
     if (missing) {
       run.gates = (run.gates ?? 0) + 1;
       const summary = run.done;
@@ -1208,6 +1210,8 @@ export function createTask(f: {
 }): string {
   const id = uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
+  // its branch moves over now when it has finished; a job still wrapping up hands it over when this one starts
+  const takes = !!prev && finished(prev) && prev.worktree?.state === "open";
   const topic = f.topic.trim() || "기타";
   const task: Task = {
     id,
@@ -1219,10 +1223,10 @@ export function createTask(f: {
     ...(f.after?.length ? { after: f.after } : {}),
     ...(f.reach?.length ? { reach: f.reach } : {}),
     ...(prev ? { follows: prev.id } : {}),
-    cwd: (prev?.worktree?.state === "open" ? prev.cwd : f.cwd?.trim()) || prev?.cwd || spaceById(f.space).folder || "~",
+    cwd: (takes ? prev!.cwd : f.cwd?.trim()) || (prev?.worktree ? `${prev.worktree.repo}${prev.worktree.sub ? `/${prev.worktree.sub}` : ""}` : prev?.cwd) || spaceById(f.space).folder || "~",
     project: f.project ?? prev?.project ?? projectFor(f.space, f.cwd),
     // the branch it carries on moves with it: merge and discard act on the new card
-    ...(prev?.worktree?.state === "open" ? { worktree: prev.worktree } : {}),
+    ...(takes ? { worktree: prev!.worktree } : {}),
     status: "queued",
     priority: f.priority ?? 2,
     weight: f.weight ?? "light",
@@ -1245,14 +1249,52 @@ export function createTask(f: {
     permission: state.settings.permission ?? "edits",
   };
   setState("tasks", (list) => [...list, task]);
-  if (prev?.worktree?.state === "open") {
-    const branch = prev.worktree.branch;
-    updateTask(prev.id, (x) => {
-      x.worktree = undefined;
-      push(x, { kind: "note", text: `브랜치 ${branch}는 "${task.title}" 일로 넘어갔어요` });
-    });
-  }
+  if (takes) takeBranch(id, prev!.id);
   return id;
+}
+
+/** The job it carries on gives it its branch and worktree. */
+function takeBranch(id: string, prevId: string) {
+  const prev = taskById(prevId);
+  const w = prev?.worktree;
+  if (!w || w.state !== "open") return;
+  updateTask(id, (x) => {
+    x.worktree = w;
+    x.cwd = prev!.cwd;
+  });
+  updateTask(prevId, (x) => {
+    x.worktree = undefined;
+    push(x, { kind: "note", text: `브랜치 ${w.branch}는 "${taskById(id)?.title ?? ""}" 일로 넘어갔어요` });
+  });
+}
+
+/**
+ * The user turned a job in a new direction ("확인만" → "고쳐서 배포까지"): it wraps up
+ * what it has so far and ends; the new job waits for it, then starts with a fresh
+ * context on its result and branch.
+ */
+export function handOn(prevId: string, nextId: string) {
+  const prev = taskById(prevId);
+  if (!prev || finished(prev)) return;
+  updateTask(prevId, (x) => {
+    x.handedOn = nextId;
+    push(x, { kind: "note", text: `"${taskById(nextId)?.title ?? ""}" 일로 넘어가요` });
+  });
+  if ((prev.status === "running" || prev.status === "waiting") && isAlive(agentOf(prevId))) {
+    void tell(
+      prevId,
+      "The user turned this work in a new direction; a new job takes it from here with a fresh context. Stop where you are: don't start anything new. End now with done: what you found and changed so far (with its evidence), and what you didn't get to in \"unverified\".",
+      { now: true },
+    );
+    return;
+  }
+  // not running (queued, paused, waiting with no session): it ends here as it is
+  updateTask(prevId, (x) => {
+    x.status = "done";
+    x.finishedAt = Date.now();
+    x.summary ||= "새 일로 넘어갔어요";
+    x.now = x.summary;
+  });
 }
 
 /**

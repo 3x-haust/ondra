@@ -15,7 +15,7 @@ import { addMemory, applying, inSpace, isLive, skillsIn, KINDS, memoryLines, nam
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -757,6 +757,9 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       // work in a folder of this space with no project yet ("ondra 에 넣어줘"): that folder is the project
       if (!proj && !projectOf(space)) proj = projectForFolder(sp(space), typeof r.cwd === "string" && r.cwd ? r.cwd : cwd);
       const dir = proj && !projectOf(space) ? proj.folder : typeof r.cwd === "string" && r.cwd ? r.cwd : cwd || proj?.folder;
+      // carrying on a job: a finished one hands over now; one still going wraps up first and this waits for it
+      const from = job(r.from) && !job(r.from)!.parentId ? job(r.from) : undefined;
+      const still = from && !finished(from) ? from.id : undefined;
       const id = createTask({
         space: sp(space),
         title: String(r.title ?? "작업"),
@@ -774,11 +777,15 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...(fromUser ? namedSpaces(original, sp(space), state.spaces) : [])])]
           .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
           .filter((x): x is SpaceId => !!x && x !== sp(space)),
-        after: (Array.isArray(r.after) ? r.after : [])
-          .map((k: unknown) => byKey.get(String(k)) ?? job(k)?.id ?? "")
-          .filter(Boolean),
-        follows: finished(job(r.from)) ? job(r.from)!.id : undefined,
+        after: [
+          ...new Set([
+            ...(Array.isArray(r.after) ? r.after : []).map((k: unknown) => byKey.get(String(k)) ?? job(k)?.id ?? "").filter(Boolean),
+            ...(still ? [still] : []),
+          ]),
+        ],
+        follows: from?.id,
       });
+      if (still) handOn(still, id);
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });
       if (proj && !projectOf(space)) handed.set(proj.id, [...(handed.get(proj.id) ?? []), id]);
