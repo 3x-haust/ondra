@@ -485,6 +485,14 @@ message, then route each item:
   recommendation first). It shows as a card the user picks from; their pick
   comes back to you as their message. Never put such a choice in "text" or
   a checklist instead.
+  Releasing is such a choice. When a fork's change to an app or a library
+  has landed (merged, or pushed to the main branch) in a project that ships
+  versions (release tags, GitHub releases, a version in its manifest, a store
+  app), end your report on it with an "ask": "릴리즈할까요?", options
+  "패치로 릴리즈" (or "마이너로 릴리즈" for a new feature) and "나중에 모아서".
+  Ask once per request, after its last fork lands. Don't ask when the user
+  already said whether to release, when the fork released, or when only
+  docs, tests or CI changed. Never release without their yes.
 - "append": the same piece of work as a fork that is still open (running,
   waiting, queued or stopped). Give "taskId" and a
   self-contained "message" for that fork's agent. Before routing, read what
