@@ -2,7 +2,7 @@
 import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { SpaceId } from "../state/types";
-import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
+import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { ago } from "./bits";
 import { throwThought } from "../engine/captain";
 import { tell } from "../engine/tasks";
@@ -36,6 +36,16 @@ export function BtwCard(props: { scope: string }) {
       throwThought(x.question, space as SpaceId, { project });
     }
     closeBtw();
+  };
+  // go on talking about it in the side chat, with the question and answer carried over
+  const toSide = () => {
+    const x = btw();
+    if (!x) return;
+    const space = (x.scope.startsWith("task:") ? taskById(x.scope.slice(5))?.space : x.scope.slice(5).split("~")[0]) ?? state.space;
+    continueInSide(space as SpaceId, x.question, x.answer);
+    closeBtw();
+    openPanel("side");
+    setTimeout(() => document.getElementById("side-input")?.focus(), 60);
   };
   const where = (scope: string) => {
     if (scope.startsWith("task:")) return taskById(scope.slice(5))?.title ?? "일";
@@ -74,6 +84,7 @@ export function BtwCard(props: { scope: string }) {
               <span class="btw-note">{where(x().scope)} · {ago(x().at)} · 대화에는 안 남아요</span>
               <span class="spacer" />
               <button class="link-btn" onClick={() => (void navigator.clipboard.writeText(x().answer), toast("복사했어요"))}>복사</button>
+              <button class="link-btn" title="사이드챗에서 이어서 묻기 (⌘J)" onClick={toSide}>사이드챗에서 이어서</button>
               <button class="link-btn" onClick={forward}>{props.scope.startsWith("task:") ? "이 일에게 시키기" : "그대로 시키기"}</button>
             </div>
           </Show>
