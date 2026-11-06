@@ -1128,8 +1128,11 @@ export function createTask(f: {
   project?: string;
   after?: string[];
   reach?: Task["reach"];
+  /** a finished job this carries on: its branch is handed over */
+  follows?: string;
 }): string {
   const id = uid("t");
+  const prev = f.follows ? taskById(f.follows) : undefined;
   const topic = f.topic.trim() || "기타";
   const task: Task = {
     id,
@@ -1140,8 +1143,11 @@ export function createTask(f: {
     ...(f.branch ? { branch: f.branch } : {}),
     ...(f.after?.length ? { after: f.after } : {}),
     ...(f.reach?.length ? { reach: f.reach } : {}),
-    cwd: f.cwd?.trim() || spaceById(f.space).folder || "~",
-    project: f.project ?? projectFor(f.space, f.cwd),
+    ...(prev ? { follows: prev.id } : {}),
+    cwd: (prev?.worktree?.state === "open" ? prev.cwd : f.cwd?.trim()) || prev?.cwd || spaceById(f.space).folder || "~",
+    project: f.project ?? prev?.project ?? projectFor(f.space, f.cwd),
+    // the branch it carries on moves with it: merge and discard act on the new card
+    ...(prev?.worktree?.state === "open" ? { worktree: prev.worktree } : {}),
     status: "queued",
     priority: f.priority ?? 2,
     weight: f.weight ?? "light",
@@ -1150,7 +1156,10 @@ export function createTask(f: {
     now: "대기 중",
     plan: [],
     legs: [],
-    entries: [{ id: uid("e"), at: Date.now(), kind: "user", text: f.display ?? f.ask }],
+    entries: [
+      { id: uid("e"), at: Date.now(), kind: "user", text: f.display ?? f.ask },
+      ...(prev ? [{ id: uid("e"), at: Date.now(), kind: "note" as const, text: `"${prev.title}" 일의 결과${prev.worktree?.state === "open" ? "와 브랜치" : ""}를 이어받아 새로 시작해요` }] : []),
+    ],
     shells: [],
     inbox: [],
     origin: f.origin,
@@ -1161,8 +1170,18 @@ export function createTask(f: {
     permission: state.settings.permission ?? "edits",
   };
   setState("tasks", (list) => [...list, task]);
+  if (prev?.worktree?.state === "open") {
+    const branch = prev.worktree.branch;
+    updateTask(prev.id, (x) => {
+      x.worktree = undefined;
+      push(x, { kind: "note", text: `브랜치 ${branch}는 "${task.title}" 일로 넘어갔어요` });
+    });
+  }
   return id;
 }
+
+/** A finished job (not a quick answer): more work on it starts as a new job that follows it. */
+export const finished = (t: Task | undefined) => !!t && !t.parentId && !t.answer && (t.status === "done" || t.status === "failed");
 
 /** A question answered on the spot: a finished thread the user can keep talking in. */
 export function createAnswer(f: { space: Task["space"]; question: string; text: string; blocks: Block[]; title?: string; topic?: string }): string {

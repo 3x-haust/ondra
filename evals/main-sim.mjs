@@ -99,6 +99,8 @@ function check(step, x) {
   for (const k of x.has ?? []) need(kinds.includes(k), `expected a "${k}" route, got ${kinds.join(", ") || "none"}`);
   for (const k of x.hasNot ?? []) need(!kinds.includes(k), `expected no "${k}" route`);
   if (x.stopCount !== undefined) need(routes.filter((r) => r?.kind === "stop").length === x.stopCount, `stops: ${routes.filter((r) => r?.kind === "stop").length}, expected ${x.stopCount}`);
+  // a finished job is carried on by a new job with "from" (an append to it is turned into one, but main should say so)
+  if (x.follows) need(news.some((r) => r.from === x.follows), routes.some((r) => r?.kind === "append" && r.taskId === x.follows) ? `appended to finished ${x.follows}, expected a new job with "from"` : `expected a new job following ${x.follows}`);
   if (x.appendAny) need(routes.some((r) => r?.kind === "append" && x.appendAny.includes(r.taskId)), `expected append to one of ${x.appendAny.join(", ")}`);
   if (x.cwdEmpty) need(news.every((r) => !r.cwd && !r.project), `expected no cwd/project, got ${news.map((r) => r.cwd || JSON.stringify(r.project)).join(", ")}`);
   if (x.appendOrAfter) need(routes.some((r) => r?.kind === "append" && r.taskId === x.appendOrAfter) || news.some((r) => Array.isArray(r.after) && r.after.includes(x.appendOrAfter)), `expected an append to ${x.appendOrAfter} or a job after it`);

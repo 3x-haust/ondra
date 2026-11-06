@@ -1,4 +1,4 @@
 { "space": "home",
   "tasks": [{ "id": "t-a", "title": "설정 화면 다크모드", "topic": "웹앱", "status": "done", "summary": "설정 화면에 다크모드를 적용했어요" }],
   "messages": ["설정 화면 이거 글자 안 보이는데\n\n첨부한 파일:\n- /tmp/settings-dark.png"],
-  "expect": [{ "append": "t-a", "new": 0 }] }
+  "expect": [{ "follows": "t-a", "new": 1 }] }

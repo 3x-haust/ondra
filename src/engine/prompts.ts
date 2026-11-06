@@ -5,7 +5,7 @@ import { projectNow } from "./journal";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall } from "./memory";
-import { expand } from "./rpc";
+import { engine, expand } from "./rpc";
 
 const CODING_WORK = `# Coding work
 Apply these defaults to coding tasks without a skill or command. Scale the
@@ -410,19 +410,23 @@ message, then route each item:
   recommendation first). It shows as a card the user picks from; their pick
   comes back to you as their message. Never put such a choice in "text" or
   a checklist instead.
-- "append": the same piece of work as an existing fork. Give "taskId" and a
+- "append": the same piece of work as a fork that is still open (running,
+  waiting, queued or stopped). Give "taskId" and a
   self-contained "message" for that fork's agent. Before routing, read what
   the message and any picture or link actually say (the feature, screen,
   words in the shot) and compare it with every fork listed (title, topic,
   branch, what it did), not just the latest one. It is the same work when it
   is about what that fork is making or made: its feature or bug, a fix to its
   result, a question about its output, its next step ("PR까지 올려", "사진이
-  이상해"). Then append, even to a done fork (it picks up again on its
-  branch), and name that work in "reply". Sharing a repo, a project or a few
+  이상해"). Then append to it, and name that work in "reply". A fork that
+  has finished (done or failed) is closed: more on its work ("PR까지 올려",
+  "여기 고쳐") is "new" with "from": "<that fork's id>". It starts with a fresh
+  context on that fork's branch and is handed its result, so "task" only
+  needs the new request and anything the user added. Sharing a repo, a project or a few
   words ("Ondra 기본 …") does not make it the same work: something else to
   build or add there is "new". A finished fork carries a long session and its
   own branch, so new work put into it costs more and lands on the wrong
-  branch.
+  branch; "from" is only for carrying on that fork's own result.
   One more deliverable ("기능 정리도 해줘", "발표 자료도", "~도 만들어줘")
   is "new" even when it is about the same product as a fork: it runs at the
   same time instead of waiting behind a long research or build, and the
@@ -673,10 +677,30 @@ export function taskPrompt(t: Task): string {
   const parts = parent
     ? [`# Sub-task: ${t.title}`, `For the fork: ${parent.title}`, `Folder: ${t.cwd}`, "", t.ask]
     : [`# Task: ${t.title}`, `Project: ${t.topic}`, `Folder: ${t.cwd}`, ...gitNote(t), "", t.ask];
+  parts.push(...followed(t));
   parts.push(...earlierSteps(t));
   parts.push(...relatedLines(t));
   if (t.inbox.length) parts.push("", "# The user added", ...t.inbox.map((m) => `- ${m}`));
   return parts.join("\n");
+}
+
+/** The finished job this one carries on: what it was asked, what it did and said, where its log is. */
+function followed(t: Task): string[] {
+  const p = t.follows ? state.tasks.find((x) => x.id === t.follows) : undefined;
+  if (!p) return [];
+  const last = [...p.entries].reverse().find((e) => e.kind === "text");
+  const text = last && last.kind === "text" ? last.text.replace(/```blocks[\s\S]*?```/g, "").trim() : "";
+  const evidence = p.entries.flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `- ${i.kind}: ${i.ref}`) : [])).slice(-8);
+  return [
+    "",
+    `# The job this carries on: ${p.title} (finished; build on its result, don't redo it)`,
+    `It was asked: ${p.ask.length > 800 ? `${p.ask.slice(0, 800)}…` : p.ask}`,
+    ...(p.summary ? [`Summary: ${p.summary}`] : []),
+    ...(text ? ["Its last report to the user:", text.length > 2000 ? `${text.slice(0, 2000)}…` : text] : []),
+    ...(evidence.length ? ["Evidence:", ...evidence] : []),
+    ...(t.worktree?.state === "open" ? [`Its branch \`${t.worktree.branch}\` and worktree are yours now; its commits are already there.`] : []),
+    `Its full log, only if you need a detail: grep in ${engine.info?.dataDir ? `${engine.info.dataDir}/` : "Ondra's data folder, "}sessions/${p.id}/*.jsonl (don't read it whole).`,
+  ];
 }
 
 /** What the steps this job builds on found or made: their folder, summary and closing message. */

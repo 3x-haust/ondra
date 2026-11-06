@@ -1,4 +1,4 @@
 { "note": "'그거' with one obvious candidate: just go", "space": "home",
   "tasks": [{ "id": "t-a", "title": "검색창 자동완성", "topic": "웹앱", "status": "done", "summary": "자동완성을 붙였는데 한글 입력 중 두 번 입력되는 문제가 남았어요" }],
   "chat": [{ "from": "me", "text": "검색창에 자동완성 붙여줘" }, { "from": "captain", "text": "붙일게요 [fork t-a]" }],
-  "messages": ["그거 한글 두번 입력되는 거 고쳐줘"], "expect": [{ "append": "t-a", "ask": false }] }
+  "messages": ["그거 한글 두번 입력되는 거 고쳐줘"], "expect": [{ "follows": "t-a", "ask": false }] }
