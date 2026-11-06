@@ -143,6 +143,8 @@ export interface Task {
   finishedAt?: number;
   /** One line: what it is doing right now. */
   now: string;
+  /** what the job itself last said it is doing (its "now" block); tool calls don't replace it */
+  intent?: string;
   plan: PlanStep[];
   legs: Leg[];
   entries: Entry[];

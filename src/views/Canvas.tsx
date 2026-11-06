@@ -11,6 +11,7 @@ import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openTask, setView } from "../state/ui";
 import { tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
+import { describeCommand } from "../engine/describe";
 import { compact, now } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
@@ -224,6 +225,72 @@ function BrowserThumb(props: { t: Task }) {
   );
 }
 
+/** One past or running step of a job, in plain words. */
+function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?: string; note?: boolean; add?: number; del?: number } }): { icon: string; label: string; target: string } {
+  const x = e.tool;
+  const icon = ACT[x.kind]?.icon ?? "tools";
+  if (x.kind === "bash") {
+    const d = describeCommand(x.detail ?? x.target);
+    return { icon, label: d.label, target: d.target && !d.label.includes(d.target) ? d.target : "" };
+  }
+  if (x.note) return { icon: "write", label: "기록", target: x.target };
+  const L: Partial<Record<ToolKind, string>> = { read: x.name === "web_fetch" ? "웹 읽기" : "읽기", edit: "수정", write: "만들기", search: x.name === "web_search" ? "웹 검색" : "찾기", test: "테스트", desktop: "화면 조작" };
+  if (x.kind === "browser") return { icon, label: "브라우저", target: x.target.match(/https?:\/\/(?:www\.)?([^/\s"']+)/)?.[1] ?? x.target.split(/\s+/)[0] ?? "" };
+  if (x.kind === "other") return { icon, label: ({ memory_search: "기억 찾기", subagent: "서브 일 맡기기" } as Record<string, string>)[x.name] ?? x.name, target: "" };
+  return { icon, label: L[x.kind] ?? x.name, target: x.target };
+}
+
+/**
+ * What a working job is on, drawn from what it already reports (no extra model
+ * calls): its plan as a rail, its own sentence for now, and its last few steps
+ * in plain words, the running one with its latest output line.
+ */
+function Activity(props: { t: Task }) {
+  const t = () => props.t;
+  const cur = () => t().plan.findIndex((s) => s.state === "now");
+  const head = () => t().intent || t().plan[cur()]?.text || t().now;
+  const sub = () => (t().intent && cur() >= 0 && t().plan[cur()].text !== t().intent ? t().plan[cur()].text : "");
+  const toolIds = createMemo(() => {
+    const ids: string[] = [];
+    for (let i = t().entries.length - 1; i >= 0 && ids.length < 3; i--) if (t().entries[i].kind === "tool") ids.unshift(t().entries[i].id);
+    return ids;
+  }, undefined, { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) });
+  const entry = (id: string) => t().entries.find((e) => e.id === id) as Extract<Task["entries"][number], { kind: "tool" }> | undefined;
+  const tail = (id: string) => {
+    const e = entry(id);
+    const sh = e?.tool.shellId ? t().shells.find((s) => s.id === e.tool.shellId) : undefined;
+    return sh?.tail ? (lastLines(sh.tail, 1)[0] ?? "").trim().slice(-120) : "";
+  };
+  return (
+    <div class="cv-act">
+      <Show when={t().plan.length > 1}>
+        <div class="cv-act-rail" title={t().plan.map((s, i) => `${i + 1}. ${s.text}`).join("\n")}>
+          <For each={t().plan}>{(s) => <i class={s.state} />}</For>
+        </div>
+      </Show>
+      <Show when={sub()}><span class="cv-act-step">{cur() + 1}/{t().plan.length} · {sub()}</span></Show>
+      <p class="cv-act-head">{head()}</p>
+      <div class="cv-act-feed">
+        <For each={toolIds()}>
+          {(id) => {
+            const e = () => entry(id);
+            const s = () => (e() ? said(e()!) : { icon: "tools", label: "", target: "" });
+            const open = () => !!e() && !e()!.tool.endedAt;
+            return (
+              <div class="cv-act-row" classList={{ open: open(), bad: e()?.tool.ok === false }}>
+                <Icon name={s().icon} size={11} />
+                <span class="lb">{s().label}</span>
+                <Show when={s().target}><span class="tg">{s().target}</span></Show>
+                <Show when={open() && tail(id)}><span class="tl">{tail(id)}</span></Show>
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The bottom of what the job is doing right now: the browser it drives, the
  * last lines of the command it runs, or the end of what it is writing.
@@ -241,14 +308,13 @@ function Live(props: { t: Task }) {
     const open = t().shells.filter((s) => !s.endedAt && !s.background);
     return open[open.length - 1] ?? (lastTool()?.kind === "bash" || lastTool()?.kind === "test" ? t().shells[t().shells.length - 1] : undefined);
   };
-  const what = (): "browser" | "shell" | "text" | "tool" | "question" | "summary" | "none" => {
+  const what = (): "browser" | "shell" | "text" | "tool" | "act" | "question" | "summary" | "none" => {
     if (t().status === "waiting" && decisionFor(t().id)) return "question";
     if (t().status === "running") {
       // the browser only while it's what the job is using now (not after it moved on to the desktop or a shell)
       if (lastTool()?.kind === "browser") return "browser";
-      if (live[t().id]) return "text";
-      if (shell()?.tail) return "shell";
-      if (lastTool()) return "tool";
+      if (live[t().id] && !t().intent && !t().plan.length) return "text";
+      if (lastTool() || t().intent || t().plan.length) return "act";
       return "none";
     }
     if (t().shot && lastTool()?.kind === "browser") return "browser";
@@ -267,6 +333,7 @@ function Live(props: { t: Task }) {
         <Match when={what() === "tool"}>
           <pre class="cv-term"><span class="cv-cmd">{ACT[lastTool()!.kind]?.label ?? "도구"}</span>{"  "}{lastTool()!.target}</pre>
         </Match>
+        <Match when={what() === "act"}><Activity t={t()} /></Match>
         <Match when={what() === "question"}>
           <p class="cv-text ask">{decisionFor(t().id)!.question}</p>
         </Match>
