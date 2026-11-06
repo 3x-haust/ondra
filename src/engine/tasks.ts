@@ -822,6 +822,38 @@ function uiDecision(id: string, ev: any) {
   });
 }
 
+/**
+ * After the page reloads (⌘R, a dev hot reload) jobs keep running in the engine,
+ * but nothing here listens to them: their answers and their end are lost and the
+ * job looks stuck. Listen again, and catch up on a turn that ended unheard.
+ */
+export async function reattachJobs() {
+  for (const t of state.tasks.filter((t) => (t.status === "running" || t.status === "waiting") && !runs.get(t.id))) {
+    const id = t.id;
+    const agent = agentOf(id);
+    if (!isAlive(agent)) continue;
+    const run: Run = { text: "", cursor: 0, streaming: true, asked: t.status === "waiting", turnStart: 0, stats: zero(), tools: new Map(), modelTries: 0 };
+    runs.set(id, run);
+    const h = handlers(id, run);
+    listen(agent, h);
+    // usage so far isn't this turn's
+    run.stats = await collectStats(agent, t.accountId, zero());
+    if (t.status !== "running") continue;
+    const st = await request(agent, { type: "get_state" }, 8000).catch(() => null);
+    if (!st || st.isStreaming || st.isCompacting) continue;
+    const msgs: any[] = (await request(agent, { type: "get_messages" }, 15000).catch(() => null))?.messages ?? [];
+    const last = [...msgs].reverse().find((m) => m?.role === "assistant");
+    const text = Array.isArray(last?.content) ? last.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("") : "";
+    const heard = !text || taskById(id)?.entries.some((e) => e.kind === "text" && e.text === prose(text).slice(0, 20000));
+    if (!heard) {
+      h.event({ type: "message_start", message: { role: "assistant" } });
+      h.event({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
+      h.event({ type: "message_end", message: last });
+    }
+    h.event({ type: "agent_settled" });
+  }
+}
+
 async function settle(id: string, run: Run) {
   const agent = agentOf(id);
   const t = taskById(id);

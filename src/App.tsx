@@ -70,6 +70,8 @@ export default function App() {
     if (!location.search.includes("fixture")) seedProjects();
     migrateMemory();
     await startRpc();
+    // jobs still running in the engine from before a reload: hear them again
+    if (!location.search.includes("fixture")) void import("./engine/tasks").then((m) => m.reattachJobs());
     startScheduler();
     warmModels();
     startBridge();
