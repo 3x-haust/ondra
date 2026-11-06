@@ -1,0 +1,15 @@
+{ "note": "Two requests handed to one project; the earlier one finishes last and main reports that one, not the later request", "space": "work",
+  "projects": [{ "name": "요메이츠", "folder": "/Users/lyu/Work/projects/yomates-mobile" }],
+  "tasks": [
+    { "id": "t-rel", "title": "요메이츠 심사 리젝 확인", "topic": "요메이츠", "project": "요메이츠", "status": "done", "summary": "1.14.0을 다시 냈어요" },
+    { "id": "t-ci", "title": "앱샷 PR CI 수정", "topic": "요메이츠", "project": "요메이츠", "status": "done", "summary": "CI를 고쳤어요" }
+  ],
+  "chat": [
+    { "from": "me", "text": "그거 심사 고치고 새버전 메인으로 머지해서 심사 제출 해줘 배포해줘 안드로이드까지" },
+    { "from": "captain", "text": "요메이츠에 맡길게요" },
+    { "from": "me", "text": "ci 실패한 것 같은데" },
+    { "from": "captain", "text": "요메이츠에 맡길게요" },
+    { "from": "captain", "text": "CI를 고쳤어요: lint 오류 두 개를 고쳐서 이제 통과해요." }
+  ],
+  "messages": [{ "event": "project", "text": "Project \"요메이츠\" finished the request you handed it: \"그거 심사 고치고 새버전 메인으로 머지해서 심사 제출 해줘 배포해줘 안드로이드까지\".\nJobs: t-rel \"요메이츠 심사 리젝 확인\" done — 1.14.0을 다시 냈어요\nWhat the project reported:\n리젝 원인(OpenRouter 400)을 고쳐 1.14.0으로 다시 냈어요. 안드로이드는 Play에 게시됐고, iOS는 아직 심사 대기예요." }],
+  "expect": [{ "answerIncludes": ["1.14.0"], "answerIncludesAny": ["심사", "Play", "플레이"], "new": 0 }] }

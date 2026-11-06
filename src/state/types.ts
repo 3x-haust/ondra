@@ -317,7 +317,7 @@ export type Route =
   | { kind: "answer"; text: string; blocks: Block[]; taskId?: string }
   | { kind: "append"; taskId: string; message: string }
   | { kind: "stop"; taskId: string }
-  | { kind: "ask"; decisionId: string }
+  | { kind: "ask"; decisionId: string; question?: string }
   | { kind: "new"; taskId: string }
   | { kind: "remember"; memoryId: string };
 
@@ -336,6 +336,8 @@ export interface CaptainMessage {
   reported?: boolean;
   /** in main's chat: this reply is a project reporting back (project id) */
   up?: string;
+  /** written by Ondra itself (a request handed down), not by this chat's engine */
+  relay?: boolean;
   text?: string;
   /** Main's short reply line (above the forks it started). */
   reply?: string;
