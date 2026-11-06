@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Memory } from "../state/types";
-import { recall } from "./memory";
+import { recall, siteWords } from "./memory";
 
 let n = 0;
 const piece = (text: string): Memory => ({ id: `m${++n}`, text, scope: "space", space: "work", createdAt: Date.now(), uses: 0 } as Memory);
@@ -30,5 +30,21 @@ describe("numbers in recall", () => {
     const { tokens } = await import("./memory");
     expect(tokens("PR 64 리뷰, 404 에러, node 18")).toEqual(expect.arrayContaining(["64", "404", "18"]));
     expect(tokens("[2026. 11. 6. 오후 12:19] 배포")).not.toEqual(expect.arrayContaining(["12", "19", "2026", "11"]));
+  });
+});
+
+describe("siteWords", () => {
+  it("names the sites a task links to the way memory does", () => {
+    expect(siteWords("요구사항: https://www.notion.so/leviosa/abc 보고 만들어줘")).toEqual(["notion"]);
+    expect(siteWords("https://play.google.com/console/u/0 and https://github.com/x/y")).toEqual(["google", "github"]);
+    expect(siteWords("http://localhost:3000 끝")).toEqual([]);
+  });
+});
+
+describe("recall without repeats", () => {
+  it("gives one slot to a fact saved twice", () => {
+    const pool = [piece("Orbit 릴리스는 PR 병합 후 main에서 빌드"), { ...piece("Orbit 릴리스는 PR 병합 후 main에서 빌드."), scope: "project" } as Memory, piece("Orbit 서명은 팀 계정으로 해요"), ...Array.from({ length: 20 }, (_, i) => piece(`다른 규칙 ${i}: 테스트를 먼저 돌려요.`))];
+    const out = recall(pool, "Orbit 릴리스 빌드");
+    expect(out.filter((x) => x.text.startsWith("Orbit 릴리스는")).length).toBe(1);
   });
 });

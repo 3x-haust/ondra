@@ -4,7 +4,7 @@
 import { projectNow } from "./journal";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Space, SpaceId, Task } from "../state/types";
-import { applying, core, memoryLines, recall } from "./memory";
+import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { engine, expand } from "./rpc";
 
 const CODING_WORK = `# Coding work
@@ -677,9 +677,16 @@ export function memoryPrompt(list: Memory[]): string {
 }
 
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
-export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}`;
+export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}\n${siteWords(t.ask).join(" ")}`;
 export function relatedMemory(t: Task): Memory[] {
-  return recall(memoriesFor(t.space, homeDir(t), t.reach), relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic}`, folder: (m) => m.scope === "project" });
+  const pool = memoriesFor(t.space, homeDir(t), t.reach);
+  const sites = siteWords(t.ask);
+  const found = recall(pool, relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic} ${sites.join(" ")}`, folder: (m) => m.scope === "project" });
+  // a site the work links to (Notion, Figma …): how this user reads it, even when the task's words don't match
+  const how = sites.length
+    ? pool.filter((m) => !found.includes(m) && sites.some((s) => m.text.toLowerCase().includes(s))).sort((a, b) => (b.importance ?? 3) - (a.importance ?? 3) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, 2)
+    : [];
+  return [...found, ...how];
 }
 
 function relatedLines(t: Task): string[] {
