@@ -53,6 +53,39 @@ export function foreignData(text: string, data: string, allowed: string[], space
   return undefined;
 }
 
+/**
+ * A command that would bring an app or window in front of the user, take the
+ * keyboard or move the mouse: AppleScript activate / frontmost / System Events
+ * keystrokes and clicks, `open` without -g, and agent-desktop's headed and
+ * focus commands (or `press` without --app). Returns what it is and the
+ * background way to do it instead, or undefined.
+ */
+export function focusSteal(command: string): { what: string; how: string } | undefined {
+  if (/\bosascript\b/.test(command)) {
+    if (/\bSystem Events\b[^]*\b(keystroke|key code|click)\b/i.test(command))
+      return { what: "System Events 키 입력·클릭", how: "agent-desktop의 `click @ref`, `set-value @ref`, `type @ref`, `press <키> --app <앱>`" };
+    if (/\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(command))
+      return { what: "앱을 앞으로 가져오는 AppleScript", how: "`agent-desktop launch <앱>` 또는 `open -g -a <앱> <파일>` (뒤에서 열려요)" };
+  }
+  for (const part of command.split(/;|&&|\|\||\||\n/)) {
+    const c = part.trim().replace(/^(?:\w+=\S*\s+)*(?:sudo\s+|command\s+|exec\s+)?/, "");
+    const open = c.match(/^open(\s+.*)?$/);
+    if (open) {
+      const flags = (open[1] ?? "").trim().split(/\s+/).filter((w) => /^-[a-zA-Z]+$/.test(w)).join("");
+      if (!/g/.test(flags) && !/--background\b/.test(c))
+        return { what: "`open` (앱이 앞으로 와요)", how: "`open -g` (뒤에서 열어요; 앱은 `open -g -a <앱> <파일>`), 웹 페이지는 browser-use 스킬" };
+      continue;
+    }
+    if (!/\bagent-desktop\b/.test(c)) continue;
+    const sub = c.match(/\bagent-desktop\s+(?:--?[\w-]+(?:\s+(?!-)\S+)?\s+)*?([\w-]+)/)?.[1] ?? "";
+    if (/^(focus|focus-window|maximize|hover|drag|cursor-overlay)$|^mouse-/.test(sub) || /--activate\b|--headed\b|--xy\b|--cursor\b/.test(c))
+      return { what: `agent-desktop ${sub || "앞으로 가져오는 옵션"}`, how: "ref로 하는 `click`, `set-value`, `toggle`, `press --app <앱>` (포커스와 마우스를 건드리지 않아요)" };
+    if (sub === "press" && !/--app\b/.test(c))
+      return { what: "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)", how: "`agent-desktop press <키> --app <앱>`" };
+  }
+  return undefined;
+}
+
 const UDID = /\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\b/gi;
 
 /**
@@ -95,7 +128,12 @@ function jobDevices(): string[] | undefined {
   return out;
 }
 
+const ONCE = "이번만 허용";
+const ALWAYS = "이 일에서는 계속 허용";
+
 export default function (pi: any) {
+  /** the user let this job bring windows forward for the rest of the job */
+  let focusOk = false;
   let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
 
   pi.registerCommand("ondra-permission", {
@@ -130,6 +168,15 @@ export default function (pi: any) {
           block: true,
           reason: `\`${broad}\` 는 이름이 같은 사용자의 다른 앱까지 꺼요. 이 일이 띄운 것만 끄세요: \`pgrep -f '<이 작업 폴더 경로>'\`로 PID를 찾아 \`kill <PID>\`, 또는 \`lsof -ti :<포트> | xargs kill\`.`,
         };
+      // in every mode: the user keeps their screen, keyboard and mouse; taking them needs a yes
+      const steal = !focusOk && focusSteal(String(event.input?.command ?? ""));
+      if (steal) {
+        const reason = `${steal.what}는 사용자가 보던 창을 가로채요. 뒤에서 하세요: ${steal.how}. 정말 앞에 띄워야만 확인되는 일이면 그 이유와 함께 ask로 먼저 물어보세요.`;
+        if (!ctx.hasUI) return { block: true, reason };
+        const choice = await ctx.ui.select(`사용자 화면을 가로채는 명령이에요 (${steal.what}). 실행할까요?\n\n${String(event.input?.command ?? "").slice(0, 400)}`, [DENY, ONCE, ALWAYS]);
+        if (choice === ALWAYS) focusOk = true;
+        else if (choice !== ONCE) return { block: true, reason };
+      }
       // in every mode: another space's (or the user's, or another job's) device is off-limits
       const mine = jobDevices();
       const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);

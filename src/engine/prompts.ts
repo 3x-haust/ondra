@@ -135,7 +135,9 @@ More tools are not listed here: find them with tool_search when you need one
 (e.g. "phone simulator"). iOS simulator / Android emulator: the
 device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
-Mac apps: the computer-use skill (agent-desktop is bundled).
+Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
+the user's windows: never bring an app forward (no AppleScript activate, no
+\`open\` without -g) or take the keyboard or mouse.
 Web: web_search (results with URLs) and web_fetch (a page as text). Public
 pages need no browser. A page behind a login (Notion, Google Docs, an admin):
 first memory_search how this user reads that site (an account, a CLI, an
@@ -391,7 +393,9 @@ the task, labels, rules or notes in files, copy or comments.
 
 # Tools
 Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
-Mac apps: the computer-use skill (agent-desktop is bundled).
+Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
+the user's windows: never bring an app forward (no AppleScript activate, no
+\`open\` without -g) or take the keyboard or mouse.
 Web: web_search and web_fetch. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 

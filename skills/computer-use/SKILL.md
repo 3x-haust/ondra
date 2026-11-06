@@ -39,15 +39,36 @@ don't redo a sequence that already worked. Act straight from the snapshot. Read
 `agent-desktop skills get desktop` or `<command> --help` only after a command
 fails in a way this page doesn't cover.
 
-## Never take the user's focus
+## Everything runs behind the user's windows
 
 The user keeps working while you do. Nothing you run may bring a window to
-the front or move the mouse:
-- no `launch --activate`, `focus-window`, `focus`, `maximize`, `--headed`,
-  `mouse-*`, `hover`, `drag`
-- `press` always with `--app`
-- start apps with `agent-desktop launch` or `open -g -j`, never plain `open -a`
-- If a step really can't work without focus, ask first.
+the front, take the keyboard or move the mouse. Ondra stops those commands and
+asks the user first, so they cost you a question:
+- AppleScript `activate`, `set frontmost`, System Events `keystroke` / `click`
+- `open` without `-g` (apps, files and URLs all come to the front)
+- agent-desktop `launch --activate`, `focus`, `focus-window`, `maximize`,
+  `--headed`, `mouse-*`, `hover`, `drag`, `--xy`, `cursor-overlay`, and
+  `press` without `--app`
+
+The background way does the same work:
+- Start an app: `agent-desktop launch "<App>"` (it doesn't come forward).
+- Open a document in an app: `open -g -a TextEdit "$APP_ARTIFACTS_DIR/note.txt"`.
+  The window opens behind the others, so you can snapshot and screenshot it.
+  Don't add `-j` when you need pictures: a hidden app's windows can't be
+  captured.
+- Clicks, text and keys: `click @ref`, `set-value @ref "…"`, `type @ref "…"`,
+  `press <key> --app "<App>"`. These go to that app only, by accessibility or
+  straight to its process.
+- Pictures: `screenshot --app "<App>"` captures the window even when it's
+  behind other windows (not when it's minimized or hidden).
+- An app you start yourself from a terminal (`pnpm dev` of an Electron app,
+  `electron .`, a debug build) may bring itself forward when it opens its
+  window. Run the built app with `open -g` when you can. If it still comes
+  forward, that is the app itself: say so in the report instead of fighting it.
+- Work that only happens in the frontmost app (keyboard and input-method
+  behaviour, e.g. a typing-correction app): test the logic with unit or
+  integration tests, or feed it input through a scripted path. Driving it in
+  front of the user needs an `ask` first, with the reason.
 
 ## Rules here
 
@@ -56,8 +77,8 @@ the front or move the mouse:
    apps the way you found them.
 2. **Headless only.** Act on refs (`click @s…:e…`, `set-value`, `toggle`). These
    go through accessibility calls and never move the user's mouse or steal focus.
-   Never pass `--headed`, `mouse-*` or `--xy` unless an `ask` block was answered
-   yes. Never switch to headed to recover from a headless failure.
+   Never switch to headed, AppleScript or `open -a` to recover from a headless
+   failure: snapshot again, try another ref or action, or report what didn't work.
 3. **Refs are per snapshot.** Snapshot, act, re-snapshot the same region to
    verify. On `STALE_REF` take a new snapshot; retry an action only when
    `error.disposition.retry` is `safe`.
