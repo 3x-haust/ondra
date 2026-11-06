@@ -126,7 +126,9 @@ async function androidMake(avd: string | undefined, signal?: AbortSignal): Promi
   if (busy.has(pick)) return `${pick} is already running (someone else's). Pick another or ask the user.`;
   const before = new Set(running.out.split("\n").map((l) => l.split(/\s+/)[0]));
   const { spawn } = await import("node:child_process");
-  spawn(EMULATOR, ["-avd", pick, "-no-snapshot-save", "-no-boot-anim", "-no-window"], { detached: true, stdio: "ignore" }).unref();
+  // headless with plain -gpu auto, the emulator draws in software on the CPU (several
+  // cores at all times); auto-no-window draws on the Mac's GPU
+  spawn(EMULATOR, ["-avd", pick, "-no-snapshot-save", "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 90; i++) {
     if (signal?.aborted) return "cancelled";
     await new Promise((r) => setTimeout(r, 2000));

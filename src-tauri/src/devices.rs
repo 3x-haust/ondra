@@ -33,10 +33,16 @@ fn sdk() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| dirs_home().join("Library/Android/sdk"))
 }
+/// What makes an emulator light for testing: drawn on the Mac's GPU (headless,
+/// plain `-gpu auto` falls back to drawing in software on the CPU), no sound, no
+/// boot animation. Its window is the device hub, so it has none of its own.
+pub const LEAN: [&str; 5] = ["-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"];
+
 /// The Android SDK jobs see: the real one, except that an emulator a job starts
-/// (by its own script or a repo's test runner) gets no window of its own. Its
-/// screen shows in the device hub instead of a separate app on the user's desktop.
-/// Everything else links to the real SDK, so builds and adb work as before.
+/// (by its own script or a repo's test runner) boots lean (`LEAN`) unless it
+/// asked otherwise. Its screen shows in the device hub instead of a separate app
+/// on the user's desktop. Everything else links to the real SDK, so builds and
+/// adb work as before.
 pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
     let real = sdk();
     let real_emu = real.join("emulator/emulator");
@@ -59,7 +65,7 @@ pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
     link_all(&real.join("emulator"), &emu, "emulator");
     let real_emu = real_emu.display().to_string().replace('\'', "'\\''");
     let script = format!(
-        "#!/bin/sh\n# Ondra: an emulator a job boots runs without a window; the device hub shows it\nreal='{real_emu}'\nfor a in \"$@\"; do case \"$a\" in -no-window|-qt-hide-window) exec \"$real\" \"$@\";; esac; done\nfor a in \"$@\"; do case \"$a\" in -avd|@*) exec \"$real\" -no-window \"$@\";; esac; done\nexec \"$real\" \"$@\"\n"
+        "#!/bin/sh\n# Ondra: an emulator a job boots runs lean (no window, GPU drawing, no sound or boot animation); the device hub shows it\nreal='{real_emu}'\nboot=; win=; gpu=; audio=; anim=\nfor a in \"$@\"; do case \"$a\" in -avd|@*) boot=1;; -no-window|-qt-hide-window) win=1;; -gpu) gpu=1;; -no-audio|-audio) audio=1;; -no-boot-anim) anim=1;; esac; done\n[ -z \"$boot\" ] && exec \"$real\" \"$@\"\nextra=\n[ -z \"$win\" ] && extra=\"$extra -no-window\"\n[ -z \"$gpu\" ] && extra=\"$extra -gpu auto-no-window\"\n[ -z \"$audio\" ] && extra=\"$extra -no-audio\"\n[ -z \"$anim\" ] && extra=\"$extra -no-boot-anim\"\nexec \"$real\" $extra \"$@\"\n"
     );
     let path = emu.join("emulator");
     if std::fs::read_to_string(&path).ok().as_deref() != Some(script.as_str()) {
@@ -204,13 +210,16 @@ fn run(cmd: &mut Command) -> Result<(), String> {
 pub async fn device_boot(platform: String, id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         if platform == "ios" {
-            // already booted is fine
-            let _ = run(Command::new("xcrun").args(["simctl", "boot", &id]));
-            // in the background: the hub shows the screen, the user keeps their focus
-            run(Command::new("open").args(["-g", "-j", "-a", "Simulator", "--args", "-CurrentDeviceUDID", &id]))
+            // no Simulator.app: the hub shows the screen and takes touches itself, and the
+            // app would draw a second copy of it (hundreds of MB and GPU time) for nobody
+            match run(Command::new("xcrun").args(["simctl", "boot", &id])) {
+                Err(e) if !e.contains("current state: Booted") => Err(e),
+                _ => Ok(()),
+            }
         } else {
             Command::new(emulator())
-                .args(["-avd", &id, "-no-window"])
+                .args(["-avd", &id])
+                .args(LEAN)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -366,9 +375,11 @@ mod tests {
         let sdk = job_sdk(&root.join("data")).unwrap();
         let run = |args: &[&str]| String::from_utf8(Command::new(sdk.join("emulator/emulator")).args(args).output().unwrap().stdout).unwrap();
 
-        assert_eq!(run(&["-avd", "pixel", "-port", "5600"]).trim(), "-no-window -avd pixel -port 5600");
-        assert_eq!(run(&["@pixel"]).trim(), "-no-window @pixel");
-        assert_eq!(run(&["-avd", "pixel", "-no-window"]).trim(), "-avd pixel -no-window");
+        let lean = "-no-window -gpu auto-no-window -no-audio -no-boot-anim";
+        assert_eq!(run(&["-avd", "pixel", "-port", "5600"]).trim(), format!("{lean} -avd pixel -port 5600"));
+        assert_eq!(run(&["@pixel"]).trim(), format!("{lean} @pixel"));
+        // what the job asked for wins
+        assert_eq!(run(&["-avd", "pixel", "-no-window", "-gpu", "swiftshader_indirect"]).trim(), "-no-audio -no-boot-anim -avd pixel -no-window -gpu swiftshader_indirect");
         assert_eq!(run(&["-list-avds"]).trim(), "-list-avds");
         assert!(sdk.join("platform-tools").exists());
         let _ = std::fs::remove_dir_all(&root);
