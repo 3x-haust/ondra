@@ -401,6 +401,19 @@ export interface Memory {
 }
 
 /** 일 기록: what one finished job did, kept as written (searched, never sent whole). */
+/** What main reported when a job finished, kept apart from the chat so it can be found again later. */
+export interface ResultEntry {
+  /** the main message it came from */
+  id: string;
+  taskId: string;
+  space: SpaceId;
+  project?: string;
+  title: string;
+  reply?: string;
+  answers: { text: string; blocks: Block[] }[];
+  at: number;
+}
+
 export interface JournalEntry {
   id: string;
   taskId: string;
@@ -495,6 +508,8 @@ export interface AppState {
   side?: SideMessage[];
   /** pull requests jobs opened, watched for reviews, failed checks and conflicts (by PR url) */
   prWatch?: Record<string, PrWatch>;
+  /** finished jobs' results as main reported them, newest last (capped) */
+  results?: ResultEntry[];
 }
 
 export interface PrWatch {

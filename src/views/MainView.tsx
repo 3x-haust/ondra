@@ -9,7 +9,7 @@ import { accountById, accountsIn, projectById, repoHome, setState, spaceById, st
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
-import { hoverTask, openPanel, openTask, panelOpen, setHoverTask, setView, toast, togglePanel, view } from "../state/ui";
+import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
 import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
@@ -52,7 +52,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
   const routes = () => props.m.routes ?? [];
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
   return (
-    <div class="reply" classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
+    <div class="reply" data-mid={props.m.id} classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
       <Show when={props.m.up ? projectById(props.m.up) : undefined}>
         {(p) => (
           <button class="reply-from" onClick={() => setView({ name: "main", project: p().id })}>
@@ -238,6 +238,19 @@ export function MainView() {
     const p = v.name === "main" ? projectById(v.project) : undefined;
     return p && p.space === state.space ? p : undefined;
   };
+  // a report opened from the results view: scroll to it once it is drawn
+  createEffect(() => {
+    const id = jumpMsg();
+    if (!id) return;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = box?.querySelector(`[data-mid="${id}"]`);
+        if (!el) return;
+        el.scrollIntoView({ block: "start" });
+        setJumpMsg(undefined);
+      }),
+    );
+  });
   const key = () => chatKey(state.space, project()?.id);
   const msgs = () => state.captain.filter((m) => inChat(m, key()));
   // the account main runs on: the space's pick, or the routed one (same rule as new jobs)
@@ -436,6 +449,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   };
   const working = () => reqs().flatMap((r) => (r.state === "done" ? [] : r.tasks.filter((t) => t.status === "running")));
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
+  /** main's last report on one of the request's jobs */
+  const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
@@ -467,7 +482,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
             <For each={reqs()}>
               {(r) => (
                 <li>
-                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(r.id) : openTask(focus(r).id))} title={r.text}>
+                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
                     <i class={`req-dot ${r.state}`} />
                     <span class="req-text">{r.text}</span>
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>

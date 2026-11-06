@@ -14,6 +14,8 @@ export type View =
   /** the one browser every job shares (sign in here once) */
   /** what the agents remember: graph + file tree */
   | { name: "memory" }
+  /** what finished jobs came back with */
+  | { name: "results"; id?: string }
   | { name: "settings"; tab?: SettingsTab };
 
 export type SettingsTab = "general" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
@@ -170,3 +172,6 @@ export function openFlow() {
   setPanelTab("flow");
   setPanelOpen(true);
 }
+
+/** A main message to scroll to once the main view shows it (set before switching to it). */
+export const [jumpMsg, setJumpMsg] = createSignal<string>();
