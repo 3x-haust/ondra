@@ -343,7 +343,8 @@ export function Sidebar() {
               const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = () => shown().filter((t) => t.project === p.id);
-              const all = () => roots().filter((t) => t.project === p.id).length;
+              // the number and the fold go by what the row shows when opened (older finished jobs live under 끝난 일)
+              const all = () => jobs().length;
               const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t) || t.id === openRoot()));
               return (
                 <>
