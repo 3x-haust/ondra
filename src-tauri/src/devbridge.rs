@@ -70,7 +70,8 @@ pub fn start(app: AppHandle) {
                     let wrapped = format!(
                         "(async()=>{{let v;try{{v=await (async()=>{{ {js} }})();v=JSON.stringify(v===undefined?null:v)}}catch(e){{v=JSON.stringify('ERR '+(e&&e.stack||e))}}window.__TAURI_INTERNALS__.invoke('dev_report',{{id:{id},value:v}})}})()"
                     );
-                    match app.get_webview_window("main") {
+                    // the app's page (the window also holds the in-app browser, so it is no plain webview window)
+                    match app.get_webview("main") {
                         Some(w) if w.eval(&wrapped).is_ok() => rx.recv_timeout(Duration::from_secs(120)).unwrap_or_else(|_| "\"timeout\"".into()),
                         _ => "\"no window\"".into(),
                     }

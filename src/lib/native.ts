@@ -351,6 +351,8 @@ export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", 
 /** Show the in-app browser (a real webview) over this area of the window; `url` opens a page. */
 export const inBrowserShow = (r: { x: number; y: number; w: number; h: number }, url?: string) => call<void>("inbrowser_show", { ...r, url: url ?? null });
 export const inBrowserHide = () => call<void>("inbrowser_hide");
+/** Copy the in-app browser's cookies for `url` (or all) into the jobs' browser, and wait. */
+export const inBrowserShare = (url?: string) => call<void>("inbrowser_share", { url: url ?? null });
 export const inBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) => call<void>("inbrowser_go", { action, url: url ?? null });
 /** Each page it starts or finishes loading. */
 export const onInBrowserPage = (f: (p: { url: string; loading: boolean }) => void): Promise<UnlistenFn> =>
