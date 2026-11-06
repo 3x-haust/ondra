@@ -363,19 +363,22 @@ type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "d
  * chat scrolls, this stays. Closed it is a single line; only requests still
  * going, waiting on the user, or finished in the last few minutes are listed.
  */
-// the request board stays open or closed as the user left it (across views and restarts)
+// the request board stays open or closed as the user left it, in each space (across views and restarts)
 const BOARD_KEY = "ondra.reqBoardOpen";
-const [boardOpen, setBoardOpenRaw] = createSignal((() => {
+const [boards, setBoards] = createSignal<Record<string, boolean>>((() => {
   try {
-    return localStorage.getItem(BOARD_KEY) === "1";
+    const v = JSON.parse(localStorage.getItem(BOARD_KEY) ?? "{}");
+    return typeof v === "object" && v ? v : {};
   } catch {
-    return false;
+    return {};
   }
 })());
+const boardOpen = () => !!boards()[state.space];
 const setBoardOpen = (v: boolean) => {
-  setBoardOpenRaw(v);
+  const next = { ...boards(), [state.space]: v };
+  setBoards(next);
   try {
-    localStorage.setItem(BOARD_KEY, v ? "1" : "0");
+    localStorage.setItem(BOARD_KEY, JSON.stringify(next));
   } catch {
     /* private mode */
   }
