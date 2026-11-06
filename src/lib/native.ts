@@ -425,6 +425,8 @@ export const deviceStream = (d: Device, o: { max: number; fps: number }, onFrame
   return invoke<number>("device_stream", { platform: d.platform, id: d.id, serial: d.serial ?? null, max: Math.round(o.max), fps: Math.round(o.fps), onFrame: ch });
 };
 export const deviceStreamStop = (token: number) => call<void>("device_stream_stop", { token });
+/** The user touched the device: a stream that slowed down on a still screen speeds up. */
+export const deviceStreamPoke = (token: number) => call<void>("device_stream_poke", { token });
 /** iOS: start the input helper before the first touch. */
 export const deviceInputWarm = (d: Device) => call<void>("device_input_warm", { id: d.id });
 /** iOS: one step of a live touch, x/y as 0..1. Send them one after another. */

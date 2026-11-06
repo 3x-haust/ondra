@@ -55,7 +55,7 @@ export default function App() {
     if (v.name !== "settings") lastView = v;
   });
   const back = () => setView(lastView);
-  onMount(() => watchDevices());
+  onMount(() => watchDevices(() => view().name === "devices"));
   // ⌘W (menu): close the right panel; the window stays
   onMount(() => {
     let un: (() => void) | undefined;

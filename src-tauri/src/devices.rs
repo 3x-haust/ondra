@@ -135,11 +135,32 @@ fn ios() -> Vec<Device> {
     list
 }
 
+/// An emulator's AVD name: asked once per connection (serial + adb's transport id,
+/// which changes when another emulator takes the port), not on every listing.
+fn avd_of(serial: &str, key: &str, model: &str, live: &[String]) -> String {
+    static NAMES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+    let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    names.retain(|(k, _)| live.iter().any(|l| l == k));
+    if let Some((_, n)) = names.iter().find(|(k, _)| k == key) {
+        return n.clone();
+    }
+    let asked = out(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"])).and_then(|s| s.lines().next().map(|l| l.trim().to_string())).filter(|s| !s.is_empty());
+    match asked {
+        Some(n) => {
+            names.push((key.to_string(), n.clone()));
+            n
+        }
+        None => model.to_string(),
+    }
+}
+
 fn android() -> Vec<Device> {
     let mut list: Vec<Device> = vec![];
     // what runs now: emulators (with their AVD name) and phones
     let mut running: Vec<(String, String, String)> = vec![]; // (serial, avd or model, kind)
     if let Some(txt) = out(Command::new(adb()).args(["devices", "-l"])) {
+        let key = |l: &str| format!("{} {}", l.split_whitespace().next().unwrap_or(""), l.split_whitespace().find(|p| p.starts_with("transport_id:")).unwrap_or(""));
+        let live: Vec<String> = txt.lines().skip(1).map(key).collect();
         for line in txt.lines().skip(1) {
             let mut parts = line.split_whitespace();
             let (Some(serial), Some(state)) = (parts.next(), parts.next()) else { continue };
@@ -148,11 +169,7 @@ fn android() -> Vec<Device> {
             }
             let model = line.split_whitespace().find_map(|p| p.strip_prefix("model:")).unwrap_or(serial).to_string();
             if serial.starts_with("emulator-") {
-                let avd = out(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"]))
-                    .and_then(|s| s.lines().next().map(|l| l.trim().to_string()))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(model.clone());
-                running.push((serial.into(), avd, "emulator".into()));
+                running.push((serial.into(), avd_of(serial, &key(line), &model, &live), "emulator".into()));
             } else {
                 running.push((serial.into(), model, "phone".into()));
             }

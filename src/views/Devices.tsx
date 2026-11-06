@@ -6,7 +6,7 @@ import { Camera, Keyboard, RotateCw } from "lucide-solid";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type Component } from "solid-js";
 import {
   deviceBoot, deviceDelete, deviceInput, deviceInputWarm, deviceKey, deviceKeyboard, deviceLandscape, deviceRecord, deviceRecording, deviceRelease,
-  deviceRotate, deviceScreenshot, deviceShot, deviceShutdown, deviceStream, deviceStreamStop, deviceTouch, fileSrc, revealPath,
+  deviceRotate, deviceScreenshot, deviceShot, deviceShutdown, deviceStream, deviceStreamPoke, deviceStreamStop, deviceTouch, fileSrc, revealPath,
   type Device, type DeviceAction,
 } from "../lib/native";
 import { devices, refreshDevices, usedBy } from "../state/devices";
@@ -99,9 +99,12 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   const [src, setSrc] = createSignal("");
   let alive = true;
   let pending = false;
+  // each picture costs the device a full-screen capture: only for cards on screen
+  let seen = true;
+  let el!: HTMLButtonElement;
   const grab = async () => {
-    // hidden (another device is open) or the window is in the back: skip
-    if (pending || document.hidden || props.hidden) return;
+    // hidden (another device is open), scrolled away or the window is in the back: skip
+    if (pending || document.hidden || props.hidden || !seen) return;
     pending = true;
     const p = await deviceShot(props.d).catch(() => "");
     pending = false;
@@ -113,13 +116,19 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   };
   onMount(() => {
     void grab();
-    const id = setInterval(() => void grab(), 3000);
-    onCleanup(() => ((alive = false), clearInterval(id)));
+    const id = setInterval(() => void grab(), 5000);
+    const io = new IntersectionObserver(([e]) => {
+      const was = seen;
+      seen = e.isIntersecting;
+      if (seen && !was) void grab();
+    });
+    io.observe(el);
+    onCleanup(() => ((alive = false), clearInterval(id), io.disconnect()));
   });
   // shown again (the open device closed): fresh at once
   createEffect(on(() => props.hidden, (h) => !h && void grab(), { defer: true }));
   return (
-    <button class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title="열어서 조작하기">
+    <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title="열어서 조작하기">
       <Show when={src()} fallback={<span class="dev-wait">화면 가져오는 중</span>}>
         <img src={src()} alt={`${props.d.name} 화면`} draggable={false} />
       </Show>
@@ -131,6 +140,8 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
 // simulator's framebuffer stays portrait when turned, so its picture is turned here.
 const [turned, setTurned] = createSignal<Record<string, boolean>>({});
 const [recording, setRecording] = createSignal<string[]>([]);
+/** per device: speed its live screen up again (an Android one slows down while still) */
+const pokes = new Map<string, () => void>();
 
 /**
  * The open device's screen, live. iOS: frames as the screen changes, up to 30 a
@@ -203,11 +214,15 @@ function LiveScreen(props: { d: Device }) {
     void grab();
     pollTimer = setInterval(() => void grab(), 1200);
   };
+  // the window in the back: no frames (they cost the device and the Mac); back in front, again
+  let paused = false;
   const start = async () => {
-    const max = Math.min(2400, Math.round(Math.max(window.innerHeight, 800) * (window.devicePixelRatio || 1)));
+    // frames as big as the stage shows them, not bigger
+    const tall = stage?.clientHeight || window.innerHeight;
+    const max = Math.min(2400, Math.round(Math.max(tall, 480) * (window.devicePixelRatio || 1)));
     let got = false;
     const t = await deviceStream(props.d, { max, fps: ios ? 30 : 6 }, (buf) => {
-      if (!alive) return;
+      if (!alive || paused) return;
       if (buf.byteLength === 0) {
         // ended: try again a couple of times, then settle for screenshots
         token = null;
@@ -220,18 +235,35 @@ function LiveScreen(props: { d: Device }) {
       latest = buf;
       if (!decoding) void pump();
     }).catch(() => null);
-    if (!alive) return void (t != null && deviceStreamStop(t));
+    if (!alive || paused) return void (t != null && deviceStreamStop(t));
     if (t == null) poll();
     else token = t;
   };
+  const visibility = () => {
+    if (document.hidden && !paused && !pollTimer) {
+      paused = true;
+      if (token != null) void deviceStreamStop(token);
+      token = null;
+    } else if (!document.hidden && paused) {
+      paused = false;
+      tries = 0;
+      void start();
+    }
+  };
+  /** an Android stream slows down on a still screen; a touch brings it back at once */
+  const poke = () => !ios && token != null && void deviceStreamPoke(token);
+  pokes.set(props.d.id, poke);
+  onCleanup(() => pokes.get(props.d.id) === poke && pokes.delete(props.d.id));
   onMount(() => {
     void start();
     if (ios) void deviceInputWarm(props.d).catch(() => {});
     void deviceLandscape(props.d).then((land) => alive && setTurned((t) => ({ ...t, [props.d.id]: land })));
     const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
     ro.observe(stage);
+    document.addEventListener("visibilitychange", visibility);
     onCleanup(() => {
       alive = false;
+      document.removeEventListener("visibilitychange", visibility);
       ro.disconnect();
       clearInterval(pollTimer);
       if (token != null) void deviceStreamStop(token);
@@ -271,6 +303,7 @@ function LiveScreen(props: { d: Device }) {
       });
   };
   const send = async (action: DeviceAction, o: Parameters<typeof deviceInput>[2] = {}) => {
+    poke();
     setBusy(true);
     await deviceInput(props.d, action, o).catch(fail);
     setBusy(false);
@@ -324,6 +357,7 @@ function LiveScreen(props: { d: Device }) {
     if (!physical && (e.isComposing || (e.key.length !== 1 && !keys.has(e.key)))) return;
     e.preventDefault();
     const k = { key: e.key, code: e.code, shift: e.shiftKey };
+    poke();
     queue(() => deviceKey(props.d, k));
   };
   const paste = (e: ClipboardEvent) => {
@@ -373,6 +407,7 @@ function Tools(props: { d: Device }) {
   const [kb, setKb] = createSignal(false);
   const rec = () => recording().includes(props.d.id);
   const run = async (f: () => Promise<unknown>) => {
+    pokes.get(props.d.id)?.();
     try {
       await f();
     } catch (e) {

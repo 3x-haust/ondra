@@ -348,6 +348,7 @@ pub fn run() {
             devices::device_input,
             devices::live::device_stream,
             devices::live::device_stream_stop,
+            devices::live::device_stream_poke,
             devices::live::device_input_warm,
             devices::live::device_touch,
             devices::live::device_release,
