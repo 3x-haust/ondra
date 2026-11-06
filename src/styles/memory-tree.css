@@ -395,6 +395,8 @@
 .mem-count {
   display: inline-flex;
   align-items: baseline;
+  flex: none;
+  white-space: nowrap;
   gap: 4px;
   margin-left: var(--s-10);
   font-size: var(--fs-xs);
@@ -707,8 +709,11 @@
   background: var(--card);
   overflow: hidden;
 }
+.mst {
+  flex-wrap: wrap;
+}
 .mst-c {
-  flex: 1 1 auto;
+  flex: 1 1 64px;
   display: grid;
   gap: 2px;
   padding: 10px 8px 9px 10px;
@@ -1549,4 +1554,27 @@ button.md-kinds .chip:hover,
 .mt-row.t-index .mt-name,
 .mt-row.t-topic .mt-name {
   color: var(--ink-2);
+}
+
+/* ───────── narrow (a panel open beside it, a small window): the view sizes by its own width */
+.mem-view { container-type: inline-size; }
+.mst-c b,
+.mst-c span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (max-width: 900px) {
+  .mem-body {
+    grid-template-columns: minmax(170px, 40%) minmax(0, 1fr);
+  }
+  .mem-body > :nth-child(2),
+  .mem-body .mem-resize { display: none; }
+}
+@container (max-width: 720px) {
+  .mem-count { display: none; }
+}
+@container (max-width: 560px) {
+  .mem-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 45%) minmax(0, 1fr); }
+  .mem-body > :first-child { border-right: 0; border-bottom: 1px solid var(--line-soft); }
 }
