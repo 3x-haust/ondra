@@ -4,7 +4,7 @@
 //   full  — nothing asks
 // Starts from ONDRA_PERMISSION and can be changed mid-run with `/ondra-permission <mode>`.
 // Questions go out as ui.select, which Ondra shows as a decision card.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 type Mode = "ask" | "edits" | "full";
@@ -62,8 +62,6 @@ export function foreignData(text: string, data: string, allowed: string[], space
  */
 export function focusSteal(command: string): { what: string; how: string } | undefined {
   if (/\bosascript\b/.test(command)) {
-    if (/\bSystem Events\b[^]*\b(keystroke|key code|click)\b/i.test(command))
-      return { what: "System Events 키 입력·클릭", how: "agent-desktop의 `click @ref`, `set-value @ref`, `type @ref`, `press <키> --app <앱>`" };
     if (/\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(command))
       return { what: "앱을 앞으로 가져오는 AppleScript", how: "`agent-desktop launch <앱>` 또는 `open -g -a <앱> <파일>` (뒤에서 열려요)" };
   }
@@ -82,6 +80,45 @@ export function focusSteal(command: string): { what: string; how: string } | und
       return { what: `agent-desktop ${sub || "앞으로 가져오는 옵션"}`, how: "ref로 하는 `click`, `set-value`, `toggle`, `press --app <앱>` (포커스와 마우스를 건드리지 않아요)" };
     if (sub === "press" && !/--app\b/.test(c))
       return { what: "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)", how: "`agent-desktop press <키> --app <앱>`" };
+  }
+  return undefined;
+}
+
+/** Calls that post a key or mouse event to the whole system (the HID or session tap), in source or a binary. */
+const SYSTEM_EVENT =
+  /CGEventPost\s*\(|\.post\s*\(\s*tap\s*:|CGEvent\s*\(\s*(keyboardEventSource|mouseEventSource)|CGEvent\s*\(\s*keyboardEvent|CGEventCreateKeyboardEvent|CGEventCreateMouseEvent|Quartz\.CGEventPost|\.cghidEventTap|\.cgSessionEventTap|kCGHIDEventTap|kCGSessionEventTap|CGEventTapLocation\.(HID|Session)/;
+/** The same calls as a binary imports them (CGEventPostToPid alone is fine). */
+const SYSTEM_EVENT_SYMBOL = /_CGEventPost(?!ToPid)\b|CGEventPost\x00|_CGEventCreateKeyboardEvent|_CGEventCreateMouseEvent/;
+
+/**
+ * A command that types or clicks for the whole system rather than into one app
+ * the job launched: code posting CGEvents to the HID or session tap (in the
+ * command itself, a heredoc, a source file it compiles or runs, or a binary it
+ * runs), cliclick, and AppleScript keystrokes / key codes / clicks. Those land
+ * in whatever the user has in front (their terminal, their editor). Posting to
+ * one process (CGEventPostToPid, agent-desktop press --app) is not this.
+ */
+export function systemInput(command: string, cwd = ""): string | undefined {
+  if (/(^|[\s;&|(])cliclick\b/.test(command)) return "cliclick";
+  if (/\bosascript\b/.test(command) && /\b(keystroke|key code|click at)\b/i.test(command)) return "AppleScript 키 입력·클릭";
+  if (SYSTEM_EVENT.test(command)) return "시스템 전체 키·마우스 이벤트 코드";
+  // files the command compiles, runs or reads: their source, or the binary's imports
+  for (const m of command.matchAll(/(?:^|[\s'"=])((?:\/|~\/|\.{1,2}\/)?[\w.\/~-]+)/g)) {
+    const raw = m[1];
+    if (!/\//.test(raw) && !/\.(swift|py|js|mjs|ts|m|c|scpt|applescript)$/.test(raw)) continue;
+    const path = raw.startsWith("~/") ? `${process.env.HOME ?? ""}${raw.slice(1)}` : raw.startsWith("/") ? raw : join(cwd, raw);
+    try {
+      if (!existsSync(path)) continue;
+      const st = statSync(path);
+      const source = /\.(swift|py|js|mjs|ts|m|c|scpt|applescript)$/.test(path);
+      // a binary only when it can be run (an executable the job built), never logs or data
+      if (!st.isFile() || st.size > 30_000_000 || (!source && !(st.mode & 0o111))) continue;
+      const body = readFileSync(path);
+      if (source ? SYSTEM_EVENT.test(body.toString("utf8")) : SYSTEM_EVENT_SYMBOL.test(body.toString("latin1")))
+        return `시스템 전체 키·마우스 이벤트 (${raw})`;
+    } catch {
+      /* unreadable: not ours to judge */
+    }
   }
   return undefined;
 }
@@ -167,6 +204,13 @@ export default function (pi: any) {
         return {
           block: true,
           reason: `\`${broad}\` 는 이름이 같은 사용자의 다른 앱까지 꺼요. 이 일이 띄운 것만 끄세요: \`pgrep -f '<이 작업 폴더 경로>'\`로 PID를 찾아 \`kill <PID>\`, 또는 \`lsof -ti :<포트> | xargs kill\`.`,
+        };
+      // in every mode: keys and clicks made for the whole system land in the user's own apps
+      const typed = systemInput(String(event.input?.command ?? ""), ctx.cwd);
+      if (typed)
+        return {
+          block: true,
+          reason: `${typed}는 시스템 전체에 키·마우스를 보내서, 사용자가 쓰고 있는 앱(터미널, 편집기)에 들어가요. 단축키와 입력은 단위 테스트나 앱 자체의 테스트 훅으로 확인하고, 실제 키 입력은 unverified에 적으세요. 이 일이 띄운 앱 하나에만 보내야 하면 \`agent-desktop press <키> --app <앱>\`이나 CGEventPostToPid(그 앱의 pid)로 하세요.`,
         };
       // in every mode: the user keeps their screen, keyboard and mouse; taking them needs a yes
       const steal = !focusOk && focusSteal(String(event.input?.command ?? ""));

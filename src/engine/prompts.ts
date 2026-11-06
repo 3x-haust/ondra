@@ -137,7 +137,10 @@ device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
 Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
 the user's windows: never bring an app forward (no AppleScript activate, no
-\`open\` without -g) or take the keyboard or mouse.
+\`open\` without -g) or take the keyboard or mouse. Never make keys or clicks for
+the whole system (CGEventPost to the HID/session tap, cliclick, AppleScript
+keystroke): test shortcuts with unit tests or the app's own test hooks and put
+the real key press in "unverified".
 Web: web_search (results with URLs) and web_fetch (a page as text). Public
 pages need no browser. A page behind a login (Notion, Google Docs, an admin):
 first memory_search how this user reads that site (an account, a CLI, an
@@ -399,7 +402,10 @@ the task, labels, rules or notes in files, copy or comments.
 Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
 Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
 the user's windows: never bring an app forward (no AppleScript activate, no
-\`open\` without -g) or take the keyboard or mouse.
+\`open\` without -g) or take the keyboard or mouse. Never make keys or clicks for
+the whole system (CGEventPost to the HID/session tap, cliclick, AppleScript
+keystroke): test shortcuts with unit tests or the app's own test hooks and put
+the real key press in "unverified".
 Web: web_search and web_fetch. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 
