@@ -37,7 +37,7 @@ research, Claude Research, Tongyi DeepResearch) and what the papers found:
 | `plan.md` | the question verbatim, the sub-questions with their "done when", fields to collect, status per round |
 | `notes.jsonl` | one fact per line: `{"q":1,"claim":"…","url":"…","title":"…","published":"2026-04-21","quote":"≤ 2 lines, verbatim","source":"primary\|secondary"}` |
 | `report.html` | the report, from `report.html` in this skill's folder |
-| `report.pdf` | printed with `pdf.sh` in this skill's folder |
+| `<보고서 이름>.pdf` | printed with `pdf.sh` in this skill's folder, named for what it is about (e.g. `CUA와 agent-desktop 비교.pdf`), never `report.pdf` |
 | `summary.html` | the chat card: a one-screen summary of the PDF, from `summary.html` in this skill's folder |
 
 ## 1. Scope and plan
@@ -136,10 +136,10 @@ fact, number and source number; change the wording, not the claims.
 Then print it:
 
 ```bash
-"<this skill's folder>/pdf.sh" "$R/report.html"   # prints $R/report.pdf
+"<this skill's folder>/pdf.sh" "$R/report.html" "$R/<보고서 이름>.pdf"
 ```
 
-Keep the template's `@page` rule as it is: it puts page numbers ("3 / 13") at the bottom of every page.
+The report's name is a short noun phrase for what it covers ("CUA와 agent-desktop 비교"), not the answer sentence. Fill the template's `@page` footer with it and the topic in a few words: the name and topic sit on the left of every page, the page number ("3 / 13") on the right. Keep the rest of the rule as it is.
 
 Open the PDF's first page once (screenshot it, or read the file size and
 page count) to make sure it isn't blank or cut off.
@@ -164,8 +164,8 @@ charts again as loose blocks.
 ```blocks
 {"type":"text","text":"**<답 한 문장>**"}
 {"type":"page","path":"<R>/summary.html","label":"리서치 요약","height":460}
-{"type":"link","kind":"file","title":"보고서 PDF","ref":"<R>/report.pdf"}
-{"type":"done","summary":"…","evidence":[{"kind":"file","ref":"<R>/report.pdf","ok":true},{"kind":"link","ref":"<main source URL>","ok":true}],"unverified":["…"]}
+{"type":"link","kind":"file","title":"<보고서 이름> PDF","ref":"<R>/<보고서 이름>.pdf"}
+{"type":"done","summary":"…","evidence":[{"kind":"file","ref":"<R>/<보고서 이름>.pdf","ok":true},{"kind":"link","ref":"<main source URL>","ok":true}],"unverified":["…"]}
 ```
 
 - `height`: about 460 for numbers + takeaways + one picture; less when a part
