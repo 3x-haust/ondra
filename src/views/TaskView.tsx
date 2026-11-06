@@ -8,7 +8,7 @@ import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { closePanel, goMain, newTask, openPanel as showTool, setEditing, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
+import { closePanel, goMain, newTask, openPanel as showTool, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, openUrl, revealPath } from "../lib/native";
 import { rawStats, archiveTask, closeWorktree, compactAgent, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
@@ -370,10 +370,6 @@ export function TaskView(props: { id: string }) {
                   shells={task().shells.filter((s) => !s.endedAt).length}
                   branch={task().worktree?.state === "open" ? task().worktree!.branch : undefined}
                 />}
-                  onEditLast={() => {
-                    const u = [...task().entries].reverse().find((e) => e.kind === "user");
-                    if (u) setEditing(u.id);
-                  }}
                   files={() => fsFiles(expand(task().cwd))}
                   commands={[
                     btwCommand(() => `task:${task().id}`),

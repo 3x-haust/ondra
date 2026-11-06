@@ -466,6 +466,8 @@ export interface AppState {
   memoryNow?: Record<string, ProjectNow>;
   /** btw questions asked so far (newest last) */
   btws?: BtwEntry[];
+  /** what was typed into any input and sent, commands too (newest last); ↑ brings it back */
+  sent?: string[];
   /** side chat: a separate conversation per space, kept as text */
   side?: SideMessage[];
 }

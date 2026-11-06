@@ -5,6 +5,7 @@
 // Enter sends (never mid-IME), Shift+Enter is a new line.
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
+import { setState, state } from "../state/store";
 import { usePop } from "./ModelPicker";
 import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
@@ -75,8 +76,6 @@ export function Composer(props: {
   commands?: Command[];
   /** "@" menu: files you can point at (relative paths) */
   files?: () => Promise<string[]>;
-  /** ↑ in an empty input: edit what you sent last */
-  onEditLast?: () => void;
   /** quiet info inside the bar: account, plan windows, context */
   status?: JSX.Element;
   /** more entries for the + menu (after "파일 및 폴더") */
@@ -155,6 +154,7 @@ export function Composer(props: {
     if (p.kind === "cmd") {
       const c = p.items[i];
       const arg = el.value.replace(/^\/\S*\s*/, "");
+      keep(`/${c.name}${arg.trim() ? ` ${arg.trim()}` : ""}`);
       setText("");
       el.value = "";
       setPick(null);
@@ -195,6 +195,23 @@ export function Composer(props: {
     grow();
   };
 
+  // ↑ / ↓ go through what was sent before (from any input, /btw and other commands too)
+  const sent = () => state.sent ?? [];
+  const [back, setBack] = createSignal<number | null>(null);
+  const keep = (t: string) => {
+    const v = t.trim();
+    setBack(null);
+    if (v) setState("sent", (l) => [...(l ?? []).filter((x) => x !== v).slice(-199), v]);
+  };
+  const recall = (i: number | null) => {
+    setBack(i);
+    const v = i === null ? "" : sent()[i];
+    setText(v);
+    el.value = v;
+    el.setSelectionRange(v.length, v.length);
+    grow();
+  };
+
   // a picture or file alone is enough to send
   const ready = () => (!!text().trim() || files().length > 0) && !props.disabled;
   const send = () => {
@@ -203,6 +220,7 @@ export function Composer(props: {
     const m = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text().trim());
     const cmd = m && props.commands?.find((c) => c.name === m[1]);
     if (cmd) {
+      keep(text());
       setText("");
       el.value = "";
       queueMicrotask(grow);
@@ -210,6 +228,7 @@ export function Composer(props: {
       return;
     }
     const f = files();
+    keep(text());
     setEngaged(false);
     const list = `첨부한 파일:\n${f.map((p) => `- ${p}`).join("\n")}`;
     props.onSend(f.length ? (text().trim() ? `${text().trim()}\n\n${list}` : list) : text().trim());
@@ -442,10 +461,20 @@ export function Composer(props: {
                 return;
               }
             }
-            if (e.key === "ArrowUp" && !text() && props.onEditLast) {
-              e.preventDefault();
-              props.onEditLast();
-              return;
+            if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.isComposing && !e.shiftKey && !e.altKey && !e.metaKey) {
+              const i = back();
+              // only while the input is empty or still shows an earlier message untouched
+              const browsing = i !== null && text() === sent()[i];
+              if (e.key === "ArrowUp" && sent().length && (!text() || browsing)) {
+                e.preventDefault();
+                recall(i === null ? sent().length - 1 : Math.max(0, i - 1));
+                return;
+              }
+              if (e.key === "ArrowDown" && browsing) {
+                e.preventDefault();
+                recall(i < sent().length - 1 ? i + 1 : null);
+                return;
+              }
             }
             if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
               e.preventDefault();
