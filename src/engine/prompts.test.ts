@@ -6,6 +6,7 @@ import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
 import { CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
+import { chineseOnly } from "./tasks";
 import { pauseTask, startTask } from "./tasks";
 
 const task = (parentId?: string): Task => ({
@@ -168,4 +169,13 @@ describe("worker prompt delivery", () => {
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
     });
   }
+});
+
+describe("chineseOnly", () => {
+  it("drops Chinese status lines, keeps Korean (with or without hanja)", () => {
+    expect(chineseOnly("正在制作一页功能定义书")).toBe(true);
+    expect(chineseOnly("기능 정의서를 만드는 중이에요")).toBe(false);
+    expect(chineseOnly("修正 전 검증기 회귀 검사")).toBe(false);
+    expect(chineseOnly("Running tests")).toBe(false);
+  });
 });

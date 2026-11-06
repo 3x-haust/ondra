@@ -188,6 +188,9 @@ export function pushNote(id: string, text: string) {
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 /** Files that hold what was decided or where things stand, not code. */
+/** Chinese characters and no Korean: a line the user can't read. */
+export const chineseOnly = (s: string) => /[\u4e00-\u9fff]/.test(s) && !/[\uac00-\ud7a3]/.test(s);
+
 export const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
 const lines = (s: unknown) => (typeof s === "string" && s ? s.split("\n").length : 0);
 
@@ -247,7 +250,8 @@ function applyBlocks(t: Task, items: any[], run: Run) {
     if (!b || typeof b !== "object" || typeof b.type !== "string") continue;
     switch (b.type) {
       case "now":
-        if (b.text) t.now = t.intent = String(b.text).slice(0, 140);
+        // a status line in Chinese (a model slipping language) is dropped, not shown
+        if (b.text && !chineseOnly(String(b.text))) t.now = t.intent = String(b.text).slice(0, 140);
         if (typeof b.step === "number" && t.plan.length) {
           t.plan.forEach((s, i) => (s.state = i < b.step ? "done" : i === b.step ? "now" : "todo"));
         }
