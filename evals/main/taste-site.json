@@ -1,0 +1,6 @@
+{
+  "note": "Taste-dependent work: references and concepts first, the build waits for the user's pick",
+  "space": "home",
+  "messages": ["내 소개 한 페이지짜리 웹사이트 만들어줘"],
+  "expect": [{ "new": { "min": 1 }, "project": true }]
+}

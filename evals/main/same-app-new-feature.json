@@ -1,0 +1,8 @@
+{
+  "note": "Another feature in the same app while a fix runs: new, not an append",
+  "space": "home",
+  "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "tasks": [{ "id": "t-bug", "title": "결제 버그 수정", "topic": "웹앱", "status": "running", "project": "웹앱", "branch": "fix/payment" }],
+  "messages": ["웹앱에 다크모드 토글도 추가해줘"],
+  "expect": [{ "new": 1, "append": false }]
+}

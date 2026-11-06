@@ -1,0 +1,6 @@
+{
+  "note": "The user asks to use the other space's memory: reach it",
+  "space": "home",
+  "messages": ["회사 기억 참고해서 내 포트폴리오에 넣을 프로젝트들 정리해줘"],
+  "expect": [{ "new": 1, "reach": ["work"] }]
+}

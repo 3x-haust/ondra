@@ -1,0 +1,6 @@
+{
+  "note": "Research from outside the folder uses the deep-research skill",
+  "space": "home",
+  "messages": ["요즘 AI 브라우저 에이전트들 속도랑 방식 비교해서 정리해줘"],
+  "expect": [{ "new": 1, "taskIncludes": ["deep-research"], "project": false }]
+}

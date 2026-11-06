@@ -1,0 +1,7 @@
+{
+  "note": "Stop means stop, not an append asking to wind down",
+  "space": "home",
+  "tasks": [{ "id": "t-price", "title": "경쟁사 가격 조사", "topic": "조사", "status": "running" }],
+  "messages": ["가격 조사 그만해 나중에 하자"],
+  "expect": [{ "stop": "t-price", "new": 0, "append": false }]
+}

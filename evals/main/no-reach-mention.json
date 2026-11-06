@@ -1,0 +1,6 @@
+{
+  "note": "Mentioning the company is not asking for its memory",
+  "space": "home",
+  "messages": ["회사에 낼 휴가 신청서 양식 만들어줘"],
+  "expect": [{ "new": 1, "reach": [] }]
+}

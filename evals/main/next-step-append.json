@@ -1,0 +1,8 @@
+{
+  "note": "The next step of a job's own work ('PR까지 올려') is an append",
+  "space": "home",
+  "tasks": [{ "id": "t-pay", "title": "결제 버튼 수정", "topic": "웹앱", "status": "done", "branch": "fix/pay-button" }],
+  "chat": [{ "from": "me", "text": "결제 버튼 안 눌리는 거 고쳐줘" }, { "from": "captain", "text": "결제 버튼 고칠게요 [fork t-pay]" }],
+  "messages": ["PR까지 올려"],
+  "expect": [{ "append": "t-pay", "new": 0 }]
+}
