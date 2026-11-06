@@ -30,6 +30,7 @@ import { TaskView } from "./views/TaskView";
 import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
+import { ShortcutHints } from "./ui/ShortcutHints";
 import { startUpdates } from "./engine/update";
 import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
@@ -166,6 +167,7 @@ export default function App() {
       </div>
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette commands={appCommands()} /></Show>
+      <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
       <VisualViewer />
       <div class="toasts" aria-live="polite">

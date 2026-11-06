@@ -483,7 +483,7 @@ function NewTab(props: { t?: Task }) {
       <div class="nt-head">도구</div>
       <For each={TOOLS}>
         {(x) => (
-          <button class="nt-row" disabled={x.job && !props.t} onClick={() => setPanelTab(x.kind)}>
+          <button class="nt-row" data-shortcut={x.kind} disabled={x.job && !props.t} onClick={() => setPanelTab(x.kind)}>
             <Icon name={x.icon} size={16} />
             <span class="nt-label">{x.label}</span>
             <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">열림</span></Show>
@@ -590,6 +590,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   role="tab"
                   tabindex="0"
                   aria-selected={activeTab() === x.id}
+                  data-shortcut={x.kind}
                   title={`${tool().label}${tool().keys ? ` (${tool().keys})` : ""} · 이전/다음 탭 ${shortcutHint("previousTab")} / ${shortcutHint("nextTab")}`}
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget || ignoredKey(e) || !noModifiers(e) || (e.key !== "Enter" && e.key !== " ")) return;
@@ -605,6 +606,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   <Show when={x.kind === "browser" && props.t?.browser && props.t?.status === "running"}><span class="screen-live" /></Show>
                   <button
                     class="ptab-x"
+                    data-shortcut={activeTab() === x.id ? "closeTab" : undefined}
                     title={`탭 닫기${activeTab() === x.id ? ` (${shortcutHint("closeTab")})` : ""}`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -618,7 +620,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
             }}
           </For>
         </div>
-        <button class="icon-btn sm ptab-add" title={`새 탭 (${shortcutHint("newTab")})`} onClick={newPanelTab}>
+        <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`새 탭 (${shortcutHint("newTab")})`} onClick={newPanelTab}>
           <Icon name="plus" size={14} />
         </button>
         <span class="spacer" data-tauri-drag-region />
