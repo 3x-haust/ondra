@@ -122,7 +122,9 @@ createRoot(() => {
 export const spaceById = (id: SpaceId) => state.spaces.find((s) => s.id === id)!;
 export const tasksIn = (space: SpaceId) => state.tasks.filter((t) => t.space === space);
 export const projectsIn = (space: SpaceId) => (state.projects ?? []).filter((p) => p.space === space);
-export const projectById = (id?: string) => (id ? (state.projects ?? []).find((p) => p.id === id) : undefined);
+/** A project by id; with `space`, only that space's (ids are unique, but older state may share one). */
+export const projectById = (id?: string, space?: SpaceId) =>
+  id ? (state.projects ?? []).find((p) => p.id === id && (!space || p.space === space)) : undefined;
 /** compare folders in "~/…" form (macOS home) */
 const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */
@@ -155,7 +157,8 @@ export function addProject(space: SpaceId, folder: string, name?: string): strin
   const have = projectsIn(space).find((p) => norm(p.folder) === norm(folder));
   if (have) return have.id;
   const id = (name || folder.split("/").filter(Boolean).pop() || "project").toLowerCase().replace(/[^a-z0-9가-힣._-]+/g, "-").slice(0, 32) || uid("p");
-  const unique = projectsIn(space).some((p) => p.id === id) ? `${id}-${uid("").slice(-4)}` : id;
+  // unique across every space: the same folder name in both spaces gets two ids
+  const unique = (state.projects ?? []).some((p) => p.id === id) ? `${id}-${uid("").slice(-4)}` : id;
   setState("projects", (l) => [...(l ?? []), { id: unique, space, name: name || folder.split("/").filter(Boolean).pop() || unique, folder }]);
   // jobs already in that folder join it
   for (const t of state.tasks) if (t.space === space && !t.project && projectFor(space, t.cwd) === unique) setState("tasks", (x) => x.id === t.id, "project", unique);

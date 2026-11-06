@@ -111,7 +111,7 @@ function apply(plan: Plan, list: Memory[], jobs: Task[]) {
     const job = jobs.find((t) => t.id === l.job);
     const text = typeof l.text === "string" ? l.text.trim() : "";
     if (!job || !text || text.length > 300) continue;
-    const folder = projectById(job.project)?.folder;
+    const folder = projectById(job.project, job.space)?.folder;
     const before = state.memory.length;
     const id = addMemory(text, l.project && folder ? "project" : "space", {
       space: job.space,

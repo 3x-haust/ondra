@@ -425,7 +425,7 @@ function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
   const jobs = () => state.tasks.filter((t) => t.space === props.space && !t.parentId && !t.answer && !t.archived && (p().id === "_" ? !t.project : t.project === p().id));
   const count = (k: string) => jobs().filter((t) => tone(t) === k).length;
-  const busy = () => p().id !== "_" && state.captain.some((m) => m.project === p().id && m.pending);
+  const busy = () => p().id !== "_" && state.captain.some((m) => m.space === props.space && m.project === p().id && m.pending);
   return (
     <>
       <div class="cv-head">

@@ -144,7 +144,7 @@ export function projectForFolder(space: SpaceId, dir?: string) {
   const top = `${base}/${full.slice(base.length + 1).split("/")[0]}`;
   if (/^\./.test(top.split("/").pop() ?? "")) return undefined;
   const have = projectsIn(space).find((p) => expand(p.folder).replace(/\/+$/, "") === top);
-  return have ?? projectById(addProject(space, top));
+  return have ?? projectById(addProject(space, top), space);
 }
 
 /** The request main handed down that a project-chat message belongs to (the last one before it). */
@@ -671,13 +671,22 @@ function existingProject(space: SpaceId, r: any, original: string) {
   return hits.length === 1 ? hits[0] : undefined;
 }
 
-async function applyRoutes(space: string, raw: any[], original: string, cwd?: string, fromUser = true): Promise<Route[]> {
+export async function applyRoutes(space: string, raw: any[], original: string, cwd?: string, fromUser = true): Promise<Route[]> {
   const out: Route[] = [];
   const work = raw.filter((r) => r?.kind === "new" || r?.kind === "answer").length;
   // steps of one request name each other by "key"; "after" may also name a running job's id
   const byKey = new Map<string, string>();
   // work main gives a project goes through that project's chat
   const handed = new Map<string, string[]>();
+  // main only acts on this space's jobs and memory: an id from the other space is ignored
+  const job = (id: unknown) => {
+    const t = id == null ? undefined : taskById(String(id));
+    return t?.space === sp(space) ? t : undefined;
+  };
+  const piece = (id: unknown) => {
+    const m = typeof id === "string" ? state.memory.find((x) => x.id === id) : undefined;
+    return m && (m.space ? m.space === sp(space) : m.scope === "global") ? m.id : undefined;
+  };
   for (const r of raw) {
     if (r?.kind === "answer") {
       const text = String(r.text ?? "");
@@ -695,13 +704,13 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id });
       }
-    } else if (r?.kind === "stop" && taskById(r.taskId)) {
+    } else if (r?.kind === "stop" && job(r.taskId)) {
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
       pauseTask(r.taskId);
       out.push({ kind: "stop", taskId: r.taskId });
-    } else if (r?.kind === "append" && finished(taskById(r.taskId ?? r.workerId)) && String(r.message ?? "").trim()) {
+    } else if (r?.kind === "append" && finished(job(r.taskId ?? r.workerId)) && String(r.message ?? "").trim()) {
       // a finished job is closed: more on it is a new job with a fresh context, on its branch
-      const prev = taskById(r.taskId ?? r.workerId)!;
+      const prev = job(r.taskId ?? r.workerId)!;
       const id = createTask({
         space: prev.space,
         title: prev.title,
@@ -716,8 +725,8 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         follows: prev.id,
       });
       out.push({ kind: "new", taskId: id });
-    } else if (r?.kind === "append" && taskById(r.taskId ?? r.workerId)) {
-      const id = r.taskId ?? r.workerId;
+    } else if (r?.kind === "append" && job(r.taskId ?? r.workerId)) {
+      const id = job(r.taskId ?? r.workerId)!.id;
       const message = String(r.message ?? "").trim();
       // main's word is for now, not for after the fork's current turn
       if (message) void tell(id, message, { now: true });
@@ -730,7 +739,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         const wt = r.project.folder.match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
         if (wt) r.project = { name: wt[2], folder: `${wt[1]}/projects/${wt[2]}` };
         const folder = await ensureDir(r.project.folder).catch(() => "");
-        if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined));
+        if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined), sp(space));
       }
       // work in a folder of this space with no project yet ("ondra 에 넣어줘"): that folder is the project
       if (!proj && !projectOf(space)) proj = projectForFolder(sp(space), typeof r.cwd === "string" && r.cwd ? r.cwd : cwd);
@@ -753,9 +762,9 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
           .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
           .filter((x): x is SpaceId => !!x && x !== sp(space)),
         after: (Array.isArray(r.after) ? r.after : [])
-          .map((k: unknown) => byKey.get(String(k)) ?? (taskById(String(k)) ? String(k) : ""))
+          .map((k: unknown) => byKey.get(String(k)) ?? job(k)?.id ?? "")
           .filter(Boolean),
-        follows: typeof r.from === "string" && finished(taskById(r.from)) ? r.from : undefined,
+        follows: finished(job(r.from)) ? job(r.from)!.id : undefined,
       });
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });
@@ -770,7 +779,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         kind: KINDS.some((k) => k.id === r.type) ? r.type : undefined,
         importance: r.pin === false ? undefined : 4,
         by: "user",
-        replaces: typeof r.replaces === "string" ? r.replaces : undefined,
+        replaces: piece(r.replaces),
       });
       if (id) out.push({ kind: "remember", memoryId: id });
     }
