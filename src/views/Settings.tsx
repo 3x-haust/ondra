@@ -73,7 +73,7 @@ function General() {
           <button class="switch" classList={{ on: state.settings.isolate }} role="switch" aria-checked={state.settings.isolate} onClick={() => setState("settings", "isolate", !state.settings.isolate)}><i /></button>
         </Row>
         <Row title="PR 지켜보기" desc="일이 연 PR에 리뷰가 달리거나 검사가 실패하거나 충돌이 나면 그 일이 이어서 처리해요">
-          <button class="switch" classList={{ on: state.settings.watchPrs !== false }} role="switch" aria-checked={state.settings.watchPrs !== false} onClick={() => setState("settings", "watchPrs", state.settings.watchPrs === false)}><i /></button>
+          <button class="switch" classList={{ on: !!state.settings.watchPullRequests }} role="switch" aria-checked={!!state.settings.watchPullRequests} onClick={() => setState("settings", "watchPullRequests", !state.settings.watchPullRequests)}><i /></button>
         </Row>
         <Row title="자동으로 기억" desc="자주 하는 요청과 선호를 알아서 기억해요">
           <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
