@@ -399,7 +399,12 @@ function ArtifactsPane(props: { t: Task }) {
               <div class="agrid">
                 <For each={list()}>
                   {(a) => (
-                    <button class="acell" onClick={() => setPick(a.path)} title={a.name}>
+                    <button
+                      class="acell"
+                      // a picture opens full size at once; other files open in the panel
+                      onClick={() => (kindOf(a.name) === "image" ? openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path)) : setPick(a.path))}
+                      title={a.name}
+                    >
                       <span class="athumb">
                         <Switch fallback={<Icon name={icon(a.name)} size={20} />}>
                           <Match when={kindOf(a.name) === "image"}><img src={fileSrc(a.path)} alt="" loading="lazy" /></Match>
