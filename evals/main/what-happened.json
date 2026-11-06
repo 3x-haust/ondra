@@ -1,0 +1,3 @@
+{ "space": "home",
+  "tasks": [{ "id": "t-f", "title": "iOS 빌드", "topic": "앱", "status": "failed", "error": "xcodebuild: signing certificate expired" }],
+  "messages": ["빌드 왜 실패했어?"], "expect": [{ "answerOnly": true, "answerIncludes": ["인증서"] }] }

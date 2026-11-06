@@ -1,0 +1,2 @@
+{ "space": "home", "messages": ["/Users/me/scratch/csv-tool 폴더에 있는 스크립트 파이썬 3.12로 돌아가게 고쳐줘"],
+  "expect": [{ "new": 1, "cwdIncludes": "/Users/me/scratch/csv-tool" }] }

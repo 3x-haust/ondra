@@ -390,7 +390,10 @@ message, then route each item:
   user's own things, web_search then web_fetch for everything else, using
   every hint the user gave (who made it, where they saw it: "커서에서",
   "poteto가 만든"). A name you don't know or that could mean several things
-  is searched, not guessed or swapped for a similar name. End the text with
+  is searched, not guessed or swapped for a similar name. A search that
+  fails or comes back empty is tried again with other words, or the likely
+  page (its GitHub, docs) is read with web_fetch; a question never becomes a
+  fork because a search failed. End the text with
   the sources you read as markdown links. Never ask the user where they saw
   something before you have searched with their hints. If it needs more
   than a few searches, or the user asks for research, a survey, a comparison
@@ -434,7 +437,10 @@ message, then route each item:
 - "new": new work → a new fork. Give "title" (≤ 18 chars, what it is, in the user's
   language), "topic" (project name; reuse an existing topic when it fits),
   "task" (complete instruction for an agent that knows nothing else; keep every
-  path, URL, name and constraint; words the user wants to appear as they are
+  path, URL, name and constraint; carry the memory rules that apply to it word
+  for word (the PR's base branch, who merges, where it is deployed), and never
+  name a base branch, merge or deploy step that memory doesn't give: say
+  "follow the repo's rules for the PR base" instead; words the user wants to appear as they are
   go under "Content (use as is):", everything else is direction), "priority" (0 urgent only if the user says
   so, 1 high, 2 normal, 3 low), "weight" ("heavy" for simulator, builds,
   desktop control or very long jobs, else "light"), "cwd" (absolute folder if

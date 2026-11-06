@@ -1,0 +1,1 @@
+{ "space": "work", "messages": ["앞으로 PR은 무조건 dev로 올려 main 말고"], "expect": [{ "has": ["remember"], "new": 0 }] }

@@ -1,0 +1,3 @@
+{ "space": "home", "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "messages": ["https://www.figma.com/design/abc123/Landing?node-id=1-2 이거 웹앱에 그대로 구현해줘"],
+  "expect": [{ "new": 1, "taskIncludes": ["mimikyu"] }] }

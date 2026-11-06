@@ -21,6 +21,14 @@ Goal: Ondra does the job well **on its own**. Fix the harness, never the case.
   `src/engine/prompts.ts` or `captain.ts`, with `--repeat 3` for decisions
   that wobble. Every time the user reports main splitting, joining, placing
   or opening something wrong, add a case first, see it fail, then fix.
+  Cases can share a busy made-up world (`evals/main/_worlds/`) and hold many
+  one-message cases in `"each"`. Every decision also goes through shared
+  checks (`evals/main-sim-lint.mjs`): routes to jobs that exist, no offers of
+  more work, absolute folders, valid reach, no PR base against memory.
+- **Real messages again** (`node evals/main-replay.mjs`): the user's own
+  messages, each in the situation it was sent in (the jobs of that moment,
+  the chat before it). No expected answer: read the decisions line by line,
+  and turn every wrong one into a case in `evals/main/` before fixing it.
 - **Whole jobs** (`node evals/run.mjs`, cases in `evals/cases/`): real jobs
   end to end. Minutes per case.
 

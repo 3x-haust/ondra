@@ -1,0 +1,4 @@
+{ "note": "A constraint for running work goes to it", "space": "home",
+  "tasks": [{ "id": "t-r", "title": "모의투자 데이터 조사", "topic": "펀딩픽", "status": "running" }],
+  "messages": ["참고로 예산은 월 10만원 이하야"],
+  "expect": [{ "append": "t-r", "new": 0 }] }

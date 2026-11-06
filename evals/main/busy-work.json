@@ -1,0 +1,132 @@
+{
+  "world": "busy-work",
+  "each": [
+    {
+      "id": "review-fix",
+      "text": "통신판매업 PR 리뷰 왔는데 푸터 말고 회사정보 페이지에도 넣으래",
+      "expect": {
+        "append": "t-tong",
+        "new": 0
+      }
+    },
+    {
+      "id": "demo-after",
+      "text": "Computer use 다 되면 데모 영상 찍어서 PR에 넣어줘",
+      "expect": {
+        "appendOrAfter": "t-cu"
+      }
+    },
+    {
+      "id": "admin-login",
+      "text": "아크메 관리자 로그인 안 된대 봐줘",
+      "expect": {
+        "new": 1,
+        "cwdIncludes": "acme-admin"
+      }
+    },
+    {
+      "id": "icon",
+      "text": "요메이츠 앱 아이콘 바꿔줘\n\n첨부한 파일:\n- /tmp/new-icon.png",
+      "expect": {
+        "new": 1,
+        "append": false,
+        "project": "요메이츠"
+      }
+    },
+    {
+      "id": "reach-home",
+      "text": "개인 쪽 스토픽 자료 참고해서 회사 청소년 금융교육 제안서 써줘",
+      "expect": {
+        "new": 1,
+        "reach": [
+          "home"
+        ]
+      }
+    },
+    {
+      "id": "merged-info",
+      "text": "통신판매업 그거 머지됐대",
+      "expect": {
+        "hasNot": [
+          "new"
+        ]
+      }
+    },
+    {
+      "id": "rebuild",
+      "text": "Play 빌드 다시 돌려",
+      "expect": {
+        "append": "t-build",
+        "new": 0
+      }
+    },
+    {
+      "id": "drop-qa",
+      "text": "검증은 내가 직접 할게 그건 빼",
+      "expect": {
+        "stop": "t-qa",
+        "new": 0
+      }
+    },
+    {
+      "id": "ios-review",
+      "text": "요메이츠 리젝 사유 뭐였어?",
+      "expect": {
+        "answerOnly": true
+      }
+    },
+    {
+      "id": "correction",
+      "chat": [
+        {
+          "from": "me",
+          "text": "요메이츠 빌드 어떻게 됐어?"
+        },
+        {
+          "from": "captain",
+          "text": "Play 빌드는 성공해서 v1.4.2 릴리즈에 AAB가 붙었어요."
+        }
+      ],
+      "text": "아니 iOS 말이야",
+      "expect": {
+        "hasNot": [
+          "new",
+          "append"
+        ]
+      }
+    },
+    {
+      "id": "pr-dev",
+      "text": "아크메 웹 헤더 로고 링크 홈으로 가게 고쳐서 PR 올려",
+      "expect": {
+        "new": 1,
+        "project": "아크메 웹"
+      }
+    },
+    {
+      "id": "notes-bot",
+      "text": "notes-bot 슬랙 채널 바뀐 거 반영해줘 #dev-notes 로",
+      "expect": {
+        "new": 1,
+        "cwdIncludes": "notes-bot"
+      }
+    },
+    {
+      "id": "cu-change",
+      "text": "Computer use 권한 다이얼로그는 시스템 설정 열기 버튼도 있어야 돼",
+      "expect": {
+        "append": "t-cu",
+        "new": 0
+      }
+    },
+    {
+      "id": "pc-other",
+      "text": "요메이츠 PC 자동 업데이트도 붙여줘",
+      "expect": {
+        "new": 1,
+        "append": false,
+        "project": "요메이츠 PC"
+      }
+    }
+  ]
+}

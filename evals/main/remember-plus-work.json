@@ -1,0 +1,3 @@
+{ "space": "home", "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "messages": ["커밋 메시지는 항상 한국어로 써. 그리고 웹앱 README 오타 좀 고쳐줘"],
+  "expect": [{ "has": ["remember"], "new": 1 }] }

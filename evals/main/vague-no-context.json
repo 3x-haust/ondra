@@ -1,0 +1,2 @@
+{ "note": "No way to tell what '그거' is: ask (or answer asking), don't invent work", "space": "home",
+  "messages": ["그거 고쳐줘"], "expect": [{ "new": 0 }] }

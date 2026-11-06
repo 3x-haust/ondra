@@ -1,0 +1,1 @@
+{ "space": "home", "messages": ["가계부 앱 하나 새로 만들어보자. 웹으로"], "expect": [{ "new": { "min": 1 }, "project": true }] }

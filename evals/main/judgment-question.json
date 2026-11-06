@@ -1,0 +1,3 @@
+{ "note": "A verdict question about a finished job's result gets an answer", "space": "home",
+  "tasks": [{ "id": "t-a", "title": "캐시 도입 검토", "topic": "웹앱", "status": "done", "summary": "Redis 캐시로 응답 420ms→90ms, 메모리 +120MB" }],
+  "messages": ["그거 넣는 게 맞을까?"], "expect": [{ "answerOnly": true }] }

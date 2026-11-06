@@ -3,6 +3,7 @@
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
@@ -499,7 +500,16 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
-    tasks.length ? tasks.map((t) => `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.worktree?.state === "open" ? `branch ${t.worktree.branch}` : t.cwd} | ${t.now}`).join("\n") : "(none)",
+    tasks.length
+      ? tasks
+          .map((t) => {
+            // what it is on (running), what it asks (waiting), what it did (done), why it stopped (failed)
+            const q = (w?.decisions ?? state.decisions).find((d) => d.taskId === t.id)?.question;
+            const said = t.status === "waiting" && q ? `asks: ${q}` : t.status === "done" && t.summary ? `did: ${t.summary}` : t.status === "failed" && t.error ? `failed: ${t.error}` : t.now;
+            return `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.worktree?.state === "open" ? `branch ${t.worktree.branch}` : t.cwd} | ${String(said ?? "").replace(/\s+/g, " ").slice(0, 200)}`;
+          })
+          .join("\n")
+      : "(none)",
     `Topics: ${topics.join(", ") || "(none)"}`,
   ].join("\n");
   const space0 = spaceById(sp(space));
@@ -588,11 +598,12 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   if (!isSim(space)) void tidy(space, Date.now() - t0);
 
   const objs = readFences(raw, "route").items;
-  const reply = String(objs.find((x: any) => typeof x?.reply === "string")?.reply ?? "").trim();
+  const reply = dropOffers(String(objs.find((x: any) => typeof x?.reply === "string")?.reply ?? "").trim());
   // models sometimes write "type" for "kind"
   const parsed = objs
     .flatMap((x: any) => (Array.isArray(x?.routes) ? x.routes : x?.kind || x?.type ? [x] : []))
-    .map((r: any) => (r && !r.kind && typeof r.type === "string" ? { ...r, kind: r.type } : r));
+    .map((r: any) => (r && !r.kind && typeof r.type === "string" ? { ...r, kind: r.type } : r))
+    .map((r: any) => (r?.kind === "answer" && typeof r.text === "string" ? { ...r, text: dropOffers(r.text) } : r));
   // a simulation only shows what main decided; nothing is started
   if (isSim(space)) return { reply, routes: parsed as Route[] };
   const routes = await applyRoutes(space, parsed, text, cwd, !event);
@@ -804,6 +815,7 @@ interface World {
   repos?: string[];
   memory?: Memory[];
   chat: CaptainMessage[];
+  decisions?: { taskId: string; question: string }[];
 }
 const worlds = new Map<string, World>();
 let simSeq = 0;
@@ -812,7 +824,8 @@ export interface SimCase {
   space: SpaceId;
   /** the project chat it happens in (a project's name), else the space's main chat */
   project?: string;
-  tasks?: (Partial<Task> & { id: string; title: string; status: Task["status"]; project?: string })[];
+  /** a waiting job's question goes in "question" */
+  tasks?: (Partial<Task> & { id: string; title: string; status: Task["status"]; project?: string; question?: string })[];
   projects?: { name: string; folder: string }[];
   repos?: string[];
   /** pieces of memory (space scope); leave out to use the space's real memory */
@@ -845,6 +858,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     memory: c.memory?.map((text, i) => ({ id: `m${i}`, text, scope: "space", space: c.space, createdAt: now, updatedAt: now, by: "user" }) as unknown as Memory),
     tasks: [],
     chat: [],
+    decisions: (c.tasks ?? []).filter((t) => t.question).map((t) => ({ taskId: t.id, question: t.question! })),
   };
   const key = `sim${++simSeq}:${c.space}${c.project ? `~${pid(c.project)}` : ""}`;
   const projectId = c.project ? pid(c.project) : undefined;
@@ -913,4 +927,36 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     for (const m of [texts, errors, settled, accountOf, statsOf, genOf, idleTimers, sigOf]) m.delete(key);
   }
   return steps;
+}
+
+/**
+ * A real message again, in the situation it was sent in: the jobs that existed then
+ * (finished or still going at that moment), this space's projects and memory, and the
+ * chat before it. Main decides again; nothing starts.
+ */
+export async function replayMain(messageId: string): Promise<SimStep[]> {
+  const m = state.captain.find((x) => x.id === messageId);
+  if (!m || m.from !== "me" || !m.text) return [];
+  const space = (m.space ?? state.space) as SpaceId;
+  const at = m.at;
+  const projName = (id?: string) => (id ? projectById(id)?.name : undefined);
+  const tasks = tasksIn(space)
+    .filter((t) => !t.parentId && !t.answer && t.createdAt < at)
+    .slice(-12)
+    .map((t) => {
+      const over = (t.finishedAt ?? Infinity) < at;
+      return { ...JSON.parse(JSON.stringify(t)), entries: [], legs: [], shells: [], status: over ? (t.status === "failed" ? "failed" : "done") : "running", summary: over ? t.summary : undefined, now: over ? "" : t.now, project: projName(t.project) };
+    });
+  const chat = state.captain
+    .filter((x) => x.space === space && (x.project ?? undefined) === (m.project ?? undefined) && x.at < at && !x.pending)
+    .slice(-10)
+    .map((x) => ({ from: x.from === "me" ? ("me" as const) : ("captain" as const), text: x.from === "me" ? String(x.text ?? "") : [x.reply, ...(x.routes ?? []).map((r: any) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId ?? r.title}]` : ""))].filter(Boolean).join(" ") }));
+  return simulateMain({
+    space,
+    project: projName(m.project),
+    projects: projectsIn(space).map((p) => ({ name: p.name, folder: p.folder })),
+    tasks,
+    chat,
+    messages: [m.text],
+  });
 }

@@ -1,0 +1,28 @@
+{
+  "space": "home",
+  "projects": [
+    { "name": "스토픽", "folder": "/Users/me/projects/stopic" },
+    { "name": "ondra", "folder": "/Users/me/projects/ondra" },
+    { "name": "포트폴리오", "folder": "/Users/me/projects/portfolio" }
+  ],
+  "memory": [
+    "스토픽은 청소년 모의투자 앱이에요. 창업 지원 사업에 선정됐어요.",
+    "ondra는 Tauri + SolidJS 데스크톱 앱이에요. PR은 main으로 올리고 바로 머지해요.",
+    "커밋 메시지는 Conventional Commits로 써요."
+  ],
+  "tasks": [
+    { "id": "t-mock", "title": "스토픽 모의투자 조사", "topic": "스토픽", "project": "스토픽", "status": "running", "now": "보고서 PDF 검증 중" },
+    { "id": "t-feat", "title": "스토픽 기능 정리", "topic": "스토픽", "project": "스토픽", "status": "done", "summary": "기능 명세서 원문 기준으로 기능 정의서(features.md)와 우선순위표를 갱신했어요" },
+    { "id": "t-check", "title": "조사 근거 점검", "topic": "스토픽", "project": "스토픽", "status": "running", "now": "비용 계산 다시 하는 중" },
+    { "id": "t-canvas", "title": "캔버스 카드 개선", "topic": "ondra", "project": "ondra", "status": "done", "branch": "feat/canvas-activity", "summary": "캔버스 카드에 단계 막대와 최근 동작 3줄을 넣고 PR #74를 머지했어요" },
+    { "id": "t-port", "title": "포트폴리오 시안", "topic": "포트폴리오", "project": "포트폴리오", "status": "waiting", "question": "시안 A(미니멀), B(그리드), C(타이포) 중 어느 쪽으로 만들까요?" },
+    { "id": "t-disk", "title": "디스크 정리", "topic": "맥", "status": "failed", "error": "~/Library 일부 폴더 권한이 없어 멈췄어요" },
+    { "id": "t-blog", "title": "블로그 글 초안", "topic": "블로그", "status": "queued" }
+  ],
+  "chat": [
+    { "from": "me", "text": "스토픽 모의투자 실제 주가로 할지 가상으로 할지 조사해줘" },
+    { "from": "captain", "text": "조사할게요 [fork t-mock]" },
+    { "from": "me", "text": "기능정리도 해줘" },
+    { "from": "captain", "text": "기능 정리는 따로 시작할게요 [fork t-feat]" }
+  ]
+}
