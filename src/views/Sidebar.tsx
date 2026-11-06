@@ -463,7 +463,6 @@ export function Sidebar() {
         <button class="row" data-shortcut="commands" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
           <Icon name="list" size={16} /><span class="row-title">단축키</span><kbd>{shortcutHint("commands")}</kbd>
         </button>
-        <small class="shortcut-hold-tip">⌘를 꾹 누르면 버튼에 단축키가 보여요</small>
         <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">설정</span>
