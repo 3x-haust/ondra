@@ -15,8 +15,9 @@ import { addMemory, applying, inSpace, isLive, skillsIn, KINDS, memoryLines, nam
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, prOf, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
+import { workedIn } from "./workedIn";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
 export const chatKey = (space: SpaceId, project?: string) => (project ? `${space}~${project}` : space);
@@ -44,7 +45,8 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean }>();
+type SentHeader = { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean };
+const sentOf = new Map<string, SentHeader>();
 /** the git repos in each space's folder, looked up again after a few minutes */
 const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
 async function refreshRepos(space: SpaceId) {
@@ -69,6 +71,31 @@ const IDLE_CLEAR_MS = 60 * 60_000;
 /** ...and a session never grows past this many context tokens */
 const MAX_SESSION_TOKENS = 24_000;
 const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** chats past the size limit while busy: cleared as soon as they are idle */
+const clearWanted = new Set<string>();
+
+/**
+ * What the session was last sent (rules, projects, repos, skills, forks), kept
+ * with it, so a restart that resumes the session sends only what changed.
+ */
+const SENT_KEY = (space: string) => `ondra.mainSent.${space}`;
+function keepSent(space: string, s: SentHeader | undefined) {
+  if (isSim(space)) return;
+  try {
+    if (s && !s.recap) localStorage.setItem(SENT_KEY(space), JSON.stringify(s));
+    else localStorage.removeItem(SENT_KEY(space));
+  } catch {
+    /* storage is a convenience */
+  }
+}
+function keptSent(space: string): SentHeader | undefined {
+  try {
+    const raw = localStorage.getItem(SENT_KEY(space));
+    return raw ? { ...(JSON.parse(raw) as SentHeader), recap: false } : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const captainAgent = agentOf;
 
@@ -97,27 +124,26 @@ export function jobEnded(t: Task) {
   const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
   const from = owners.find((m) => m.project) ?? owners[0];
   if (!from) return;
-  const handed = from.project ? handedRequest(from) : undefined;
   const space = chatKey(t.space, from.project);
+  const handed = from.project ? requestsOf(space).find((q) => q.jobs.has(t.id))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
   followUps.set(space, n);
-  // what it reported since it was last given work; a card it asked and got answered is part of that work
-  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
-  let lastUser = -1;
-  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
-  const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n").slice(-3500);
-  const evidence = t.entries.slice(lastUser + 1).flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
+  const { said, blocks } = reportOf(t);
+  const evidence = t.entries.slice(sinceAsked(t)).flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
+  const asked = userFollowUps(t.space, [t.id]);
   // main already sent this fork back since the user last spoke: once is enough
   const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
   const text = [
-    handed ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, your answer goes back to main.` : "",
+    handed?.via === "main" ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, your answer goes back to main.` : "",
     `Fork ${t.id} "${t.title}" ${t.status === "done" ? "finished" : "failed"}.`,
     t.status === "done" ? `Summary: ${t.summary ?? ""}` : `Error: ${t.error ?? ""}`,
     t.unverified?.length ? `Not verified: ${t.unverified.join("; ")}` : "",
     evidence.length ? `Evidence: ${evidence.join(" | ")}` : "",
-    said ? `What it reported:\n${said}` : "",
+    said ? `What it reported:\n${said.slice(-3500)}` : "",
+    blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
+    asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
     sentBack ? "You already sent this fork back once since the user last spoke. Report what came out and stop: no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
@@ -128,6 +154,41 @@ export function jobEnded(t: Task) {
   setState("captain", (list) => [...list.slice(-300), reply]);
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
+}
+
+/** Where a job's latest report starts: after the last thing it was given (a card it asked and got answered is part of that work). */
+function sinceAsked(t: Task): number {
+  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
+  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) return i + 1;
+  return 0;
+}
+
+/** What a job reported since it was last given work: its words and its result blocks in lines. */
+function reportOf(t: Task): { said: string; blocks: string[] } {
+  const since = t.entries.slice(sinceAsked(t));
+  const said = since
+    .filter((e) => e.kind === "text")
+    .map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const blocks = since.flatMap((e) => (e.kind === "block" ? [blockLine(e.block)] : [])).filter(Boolean).slice(-10);
+  return { said, blocks };
+}
+
+/**
+ * What the user said to these jobs after they started (main passed it on as an
+ * append): their own words, so a "왜 …?" asked on the way gets its answer.
+ */
+function userFollowUps(spaceId: SpaceId, jobIds: string[]): string[] {
+  const out: string[] = [];
+  for (const chatMsgs of [...new Set(state.captain.filter((m) => m.space === spaceId).map((m) => m.project ?? ""))].map((p) => state.captain.filter((m) => m.space === spaceId && (m.project ?? "") === p))) {
+    chatMsgs.forEach((m, i) => {
+      if (m.from !== "captain" || m.after || !(m.routes ?? []).some((r) => r.kind === "append" && jobIds.includes(r.taskId))) return;
+      const me = chatMsgs.slice(0, i).reverse().find((x) => x.from === "me");
+      if (me?.text && !out.includes(me.text.trim())) out.push(me.text.trim().slice(0, 400));
+    });
+  }
+  return out.slice(-5);
 }
 
 /**
@@ -147,24 +208,66 @@ export function projectForFolder(space: SpaceId, dir?: string) {
   return have ?? projectById(addProject(space, top), space);
 }
 
-/** A result block in a line main can retell (checklists, links, tables keep their content). */
+/** A result block in a line main can retell (checklists, links, tables, numbers keep their content). */
 function blockLine(b: Block): string {
-  const x = b as unknown as { type: string; [k: string]: any };
-  const label = x.title ?? x.label ?? "";
-  if (x.type === "checklist") return `[${label || "checklist"}] ${(x.items ?? []).map((i: any) => `${i.done ? "✓" : "○"} ${i.text ?? i.label ?? ""}`).join(" · ")}`.slice(0, 800);
-  if (x.type === "evidence") return `[evidence] ${(x.items ?? []).map((i: any) => `${i.kind}: ${i.ref}`).join(" · ")}`.slice(0, 600);
-  if (x.type === "link") return `[link] ${x.title ?? ""} ${x.url ?? x.href ?? ""}`.trim();
-  if (x.type === "table") return `[table ${label}] ${JSON.stringify({ columns: x.columns, rows: (x.rows ?? []).slice(0, 8) })}`.slice(0, 800);
-  if (x.type === "shot") return `[picture] ${x.path ?? x.src ?? ""}`;
-  return "";
+  const x = b as unknown as { type: string; say?: string; [k: string]: any };
+  const label = x.label ?? x.title ?? "";
+  const say = x.say ? ` — ${x.say}` : "";
+  const line = (() => {
+    switch (x.type) {
+      case "checklist":
+        return `[${label || "checklist"}] ${(x.items ?? []).map((i: any) => `${i.done ? "✓" : "○"} ${i.label ?? i.text ?? ""}`).join(" · ")}`;
+      case "evidence":
+        return `[evidence] ${(x.items ?? []).map((i: any) => `${i.kind}: ${i.ref}${i.ok === false ? " (failed)" : ""}`).join(" · ")}`;
+      case "link":
+        return `[link] ${x.title ?? ""} ${x.ref ?? x.url ?? ""}`.trim();
+      case "table":
+        return `[table${label ? ` ${label}` : ""}] ${JSON.stringify({ columns: x.columns, rows: (x.rows ?? []).slice(0, 10) })}`;
+      case "metric":
+        return `[${label}] ${x.value}${x.delta ? ` (${x.delta})` : ""}`;
+      case "compare":
+        return `[${label}] ${x.before} → ${x.after}${x.unit ? ` ${x.unit}` : ""}`;
+      case "tests":
+        return `[tests] ${(x.suites ?? []).map((s: any) => `${s.name}: ${s.pass} pass${s.fail ? `, ${s.fail} fail` : ""}`).join(" · ")}${(x.failures ?? []).length ? ` · failures: ${(x.failures ?? []).map((f: any) => f.name).join(", ")}` : ""}`;
+      case "options":
+        return `[options${label ? ` ${label}` : ""}] ${(x.options ?? []).map((o: any) => `${o.chosen ? "★ " : ""}${o.name}${o.note ? ` (${o.note})` : ""}`).join(" · ")}${x.why ? ` — ${x.why}` : ""}`;
+      case "timeline":
+        return `[${label || "timeline"}] ${(x.items ?? []).map((i: any) => `${i.state === "done" ? "✓" : i.state === "now" ? "▶" : "○"} ${i.label}`).join(" · ")}`;
+      case "text":
+        return `[text] ${x.text ?? ""}`;
+      case "shot":
+        return `[picture] ${x.path ?? ""}${x.caption ? ` ${x.caption}` : ""}`;
+      case "page":
+        return `[page${label ? ` ${label}` : ""}] ${x.path ?? ""}`;
+      default:
+        return x.say ? `[${x.type}${label ? ` ${label}` : ""}]` : "";
+    }
+  })();
+  return line ? `${line}${say}`.slice(0, 900) : "";
 }
 
-/** The request main handed down that a project-chat message belongs to (the last one before it). */
-function handedRequest(m: CaptainMessage): CaptainMessage | undefined {
-  const chat = state.captain.filter((x) => x.space === m.space && x.project === m.project);
-  const at = chat.findIndex((x) => x.id === m.id);
-  const ask = chat.slice(0, at + 1).reverse().find((x) => x.from === "me");
-  return ask?.via === "main" ? ask : undefined;
+/**
+ * A project chat's requests, each with what belongs to it: the replies made for
+ * it (in order, or about one of its jobs ending) and the jobs those started.
+ * A request handed down earlier keeps its own jobs, so a later one never hides it.
+ */
+export function requestsOf(space: string): { ask: CaptainMessage; msgs: CaptainMessage[]; jobs: Set<string> }[] {
+  const reqs: { ask: CaptainMessage; msgs: CaptainMessage[]; jobs: Set<string> }[] = [];
+  const owner = new Map<string, number>();
+  for (const m of state.captain.filter((x) => inChat(x, space))) {
+    if (m.from === "me") {
+      reqs.push({ ask: m, msgs: [], jobs: new Set() });
+      continue;
+    }
+    const at = m.after && owner.has(m.after) ? owner.get(m.after)! : reqs.length - 1;
+    if (at < 0) continue;
+    reqs[at].msgs.push(m);
+    for (const r of m.routes ?? []) if (r.kind === "new") {
+      reqs[at].jobs.add(r.taskId);
+      owner.set(r.taskId, at);
+    }
+  }
+  return reqs;
 }
 
 /**
@@ -175,51 +278,50 @@ function handedRequest(m: CaptainMessage): CaptainMessage | undefined {
  */
 function handDown(spaceId: SpaceId, projectId: string, request: string, taskIds: string[]) {
   const ask: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "me", via: "main", text: request };
-  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "captain", routes: taskIds.map((taskId) => ({ kind: "new" as const, taskId })) };
+  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "captain", relay: true, routes: taskIds.map((taskId) => ({ kind: "new" as const, taskId })) };
   setState("captain", (list) => [...list.slice(-300), ask, reply]);
 }
 
 export function reportUp(space: string) {
   const projectId = pj(space);
   if (!projectId) return;
-  const chat = state.captain.filter((m) => inChat(m, space));
-  const last = [...chat].reverse().find((m) => m.from === "me");
-  if (!last || last.via !== "main" || last.reported) return;
-  const after = chat.slice(chat.indexOf(last) + 1);
-  if (after.some((m) => m.pending)) return;
-  const jobs = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : [])));
-  if (jobs.some((t) => t.status !== "done" && t.status !== "failed")) return;
-  // a question waiting on the user stays in the project; it goes up once answered
-  if (state.decisions.some((d) => d.taskId === `main:${space}` || jobs.some((t) => t.id === d.taskId))) return;
-  setState("captain", (m) => m.id === last.id, "reported", true);
-  const answers = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
-  // what each job itself reported (its words and its result blocks), so main can tell the details itself
-  const reported = jobs
-    .map((t) => {
-      // what it reported since it was last given work; a card it asked and got answered is part of that work
-      const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
-      let lastUser = -1;
-      for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
-      const since = t.entries.slice(lastUser + 1);
-      const said = since.filter((e) => e.kind === "text").map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim()).join("\n\n");
-      const blocks = since.flatMap((e) => (e.kind === "block" ? [blockLine(e.block)] : [])).filter(Boolean);
-      const body = [said.slice(-2500), ...blocks].filter(Boolean).join("\n");
-      return body ? `${t.title}:\n${body}` : "";
-    })
-    .filter(Boolean)
-    .join("\n\n");
-  const proj = projectById(projectId);
-  const text = [
-    `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
-    jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
-    answers ? `What the project reported:\n${answers}` : "",
-    reported ? `What the jobs reported:\n${reported}` : "",
-  ].filter(Boolean).join("\n");
-  const main = chatKey(sp(space));
-  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
-  setState("captain", (list) => [...list.slice(-300), reply]);
-  queues.set(main, [...(queues.get(main) ?? []), { text, replyId: reply.id, event: "project" }]);
-  void pump(main);
+  const reqs = requestsOf(space);
+  const latest = reqs[reqs.length - 1];
+  for (const q of reqs) {
+    const last = q.ask;
+    // a request main handed down, not reported yet (one from long ago stays as it is)
+    if (last.via !== "main" || last.reported || Date.now() - last.at > 86_400_000) continue;
+    if (!q.msgs.length || q.msgs.some((m) => m.pending)) continue;
+    const jobs = [...q.jobs].map((id) => taskById(id)).filter((t): t is Task => !!t);
+    if (jobs.some((t) => t.status !== "done" && t.status !== "failed")) continue;
+    // a question waiting on the user stays in the project; it goes up once answered
+    if (state.decisions.some((d) => (q === latest && d.taskId === `main:${space}`) || jobs.some((t) => t.id === d.taskId))) continue;
+    setState("captain", (m) => m.id === last.id, "reported", true);
+    const answers = q.msgs.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
+    // what each job itself reported (its words and its result blocks), so main can tell the details itself
+    const reported = jobs
+      .map((t) => {
+        const { said, blocks } = reportOf(t);
+        const body = [said.slice(-2500), ...blocks].filter(Boolean).join("\n");
+        return body ? `${t.title}:\n${body}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+    const asked = userFollowUps(sp(space), jobs.map((t) => t.id));
+    const proj = projectById(projectId);
+    const text = [
+      `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
+      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
+      answers ? `What the project reported:\n${answers}` : "",
+      reported ? `What the jobs reported:\n${reported}` : "",
+      asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((x) => `- ${x}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n");
+    const main = chatKey(sp(space));
+    const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
+    setState("captain", (list) => [...list.slice(-300), reply]);
+    queues.set(main, [...(queues.get(main) ?? []), { text, replyId: reply.id, event: "project" }]);
+    void pump(main);
+  }
 }
 
 async function pump(space: string) {
@@ -240,6 +342,7 @@ async function pump(space: string) {
     }
   } finally {
     busy.delete(space);
+    if (clearWanted.delete(space)) void clearSession(space);
   }
 }
 
@@ -393,7 +496,7 @@ async function ensureCaptain(space: string) {
   // A reload or restart soon after the last reply keeps the session: its prefix
   // is still in the provider cache. After a quiet spell it would be cold anyway,
   // so a fresh session with a text recap is cheaper.
-  const lastAt = Math.max(0, ...state.captain.filter((m) => inChat(m, space) && m.from === "captain" && !m.pending && !m.error).map((m) => m.at));
+  const lastAt = Math.max(0, ...state.captain.filter((m) => inChat(m, space) && m.from === "captain" && !m.pending && !m.error && !m.relay).map((m) => m.at));
   const resume = !isSim(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
   const args = [
     "--session-dir",
@@ -424,10 +527,11 @@ async function ensureCaptain(space: string) {
   if (resume) {
     // the session still holds the conversation; job list and memory are re-sent once
     statsOf.set(space, await rawStats(agent).catch(() => undefined));
-    sentOf.set(space, { recap: false });
+    sentOf.set(space, keptSent(space) ?? { recap: false });
     armIdleClear(space);
   } else {
     sentOf.set(space, { recap: true });
+    keepSent(space, undefined);
     if (!isSim(space)) void sessionsPrune(sessionDir(space)).catch(() => {});
   }
 }
@@ -435,11 +539,16 @@ async function ensureCaptain(space: string) {
 /** Throw the engine session away (the chat itself stays as text). Next message starts small. */
 async function clearSession(space: string) {
   const agent = agentOf(space);
-  if (busy.has(space) || !isAlive(agent)) return;
+  if (!isAlive(agent)) return;
+  if (busy.has(space)) {
+    clearWanted.add(space);
+    return;
+  }
   try {
     await request(agent, { type: "new_session" }, 8000);
     statsOf.delete(space);
     sentOf.set(space, { recap: true });
+    keepSent(space, undefined);
     void sessionsPrune(sessionDir(space)).catch(() => {});
   } catch {
     /* next message will try again */
@@ -470,6 +579,7 @@ export async function resetMain(spaceId: SpaceId, project?: string) {
   followUps.delete(space);
   statsOf.delete(space);
   sentOf.delete(space);
+  keepSent(space, undefined);
   warmedAt.delete(space);
   clearTimeout(idleTimers.get(space));
   setState("captain", (l) => l.filter((m) => !inChat(m, space)));
@@ -507,6 +617,16 @@ function forksBlock(now: string, before?: string): string {
   ].join("\n");
 }
 
+/** Where a job works: the repo and branch it really committed or pushed in, its PR. */
+function placeOf(t: Task): string {
+  const w = workedIn(t);
+  const own = t.worktree?.state === "open" ? t.worktree : undefined;
+  const inOwn = !!own && (!w.repo || expand(w.repo).startsWith(own.path));
+  const where = inOwn ? `branch ${w.branch ?? own!.branch}` : w.repo ? `worked in ${w.repo}${w.branch ? ` on ${w.branch}` : ""}` : w.branch ? `${t.cwd} on ${w.branch}` : t.cwd;
+  const pr = prOf(t);
+  return pr ? `${where} · PR ${pr.url}` : where;
+}
+
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
@@ -520,7 +640,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
             // what it is on (running), what it asks (waiting), what it did (done), why it stopped (failed)
             const q = (w?.decisions ?? state.decisions).find((d) => d.taskId === t.id)?.question;
             const said = t.status === "waiting" && q ? `asks: ${q}` : t.status === "done" && t.summary ? `did: ${t.summary}` : t.status === "failed" && t.error ? `failed: ${t.error}` : t.now;
-            return `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${t.worktree?.state === "open" ? `branch ${t.worktree.branch}` : t.cwd} | ${String(said ?? "").replace(/\s+/g, " ").slice(0, 200)}`;
+            return `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${placeOf(t)} | ${String(said ?? "").replace(/\s+/g, " ").slice(0, 200)}`;
           })
           .join("\n")
       : "(none)",
@@ -566,7 +686,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     const recent = (w ? w.chat : state.captain)
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : ""))].filter(Boolean).join(" ")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
@@ -576,7 +696,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "# A project you handed work to has finished (not a user message)",
       text,
       "",
-      "Tell the user here what came out, with the details they need from it: the result first, then what fits the work (the cause, what changed, how it was checked; what went out and its status; links, PR numbers, what is still open), short and visual (blocks are fine), as an \"answer\". Never point them to the project's chat for details: this answer is where they read it. Don't redo it. Route a next step only if what the user asked still needs one.",
+      "Tell the user here what came out, with the details they need from it: the result first, then what fits the work (the cause, what changed, how it was checked; what went out and its status; links, PR numbers, what is still open), short and visual (blocks are fine), as an \"answer\". Never point them to the project's chat for details: this answer is where they read it. Keep the jobs' own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first. Don't redo it. Route a next step only if what the user asked still needs one.",
     );
   else if (event)
     out.push(
@@ -584,10 +704,11 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "# A fork you started has ended (not a user message)",
       text,
       "",
-      "Tell the user what came out, short and visual (blocks), as an \"answer\". Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
+      "Tell the user what came out, short and visual (blocks), as an \"answer\": the result first, then what fits the work (the cause, what changed, how it was checked; what went out and its status; links). Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first. Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
   sentOf.set(space, { forks, memory: "", skills, rules, projects, repos, spaces: spacesLine, recap: false });
+  keepSent(space, sentOf.get(space));
   return out.join("\n");
 }
 
@@ -715,7 +836,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       if (options.length) {
         const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask" };
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
-        out.push({ kind: "ask", decisionId: d.id });
+        out.push({ kind: "ask", decisionId: d.id, question: d.question });
       }
     } else if (r?.kind === "stop" && job(r.taskId)) {
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
@@ -756,7 +877,9 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       }
       // work in a folder of this space with no project yet ("ondra 에 넣어줘"): that folder is the project
       if (!proj && !projectOf(space)) proj = projectForFolder(sp(space), typeof r.cwd === "string" && r.cwd ? r.cwd : cwd);
-      const dir = proj && !projectOf(space) ? proj.folder : typeof r.cwd === "string" && r.cwd ? r.cwd : cwd || proj?.folder;
+      // the repo the user or the task names comes first; the project's folder is the fallback
+      const named = typeof r.cwd === "string" && /^[/~]/.test(r.cwd) ? r.cwd : undefined;
+      const dir = named ?? (proj && !projectOf(space) ? proj.folder : cwd || proj?.folder);
       // carrying on a job: a finished one hands over now; one still going wraps up first and this waits for it
       const from = job(r.from) && !job(r.from)!.parentId ? job(r.from) : undefined;
       const still = from && !finished(from) ? from.id : undefined;
@@ -837,6 +960,7 @@ export async function editMain(messageId: string, text: string) {
     if (!ok) await request(agent, { type: "new_session" }, 8000).catch(() => {});
     // forks and memory are re-sent, since the branch may predate them
     sentOf.set(space, { recap: !ok });
+    keepSent(space, undefined);
     statsOf.set(space, await rawStats(agent));
   }
   throwThought(text, m.space, { project: m.project });
@@ -881,7 +1005,8 @@ export interface SimCase {
   memory?: string[];
   /** what was said before, oldest first */
   chat?: { from: "me" | "captain"; text: string }[];
-  messages: string[];
+  /** the user's messages, or what main is told when a fork or a handed-down project ends */
+  messages: (string | { event: Event; text: string })[];
 }
 export interface SimStep {
   text: string;
@@ -933,13 +1058,15 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
   const steps: SimStep[] = [];
   let n = 0;
   try {
-    for (const text of c.messages) {
+    for (const m of c.messages) {
+      const text = typeof m === "string" ? m : m.text;
+      const event = typeof m === "string" ? undefined : m.event;
       const t0 = Date.now();
       const ctx = (() => {
         try {
           // the same text main gets (computed before sentOf moves on)
           const saved = sentOf.get(key);
-          const s = context(key, text);
+          const s = context(key, text, undefined, event);
           if (saved) sentOf.set(key, saved);
           else sentOf.delete(key);
           return s;
@@ -948,7 +1075,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
         }
       })();
       try {
-        const r = await route(key, text);
+        const r = await route(key, text, undefined, event);
         steps.push({ text, reply: r.reply, routes: r.routes, context: ctx, ms: Date.now() - t0 });
         // what main started becomes part of the world for the next message
         for (const x of r.routes as any[]) {
@@ -961,7 +1088,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
             w.tasks.push({ id: `sim-t${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
           }
         }
-        w.chat.push({ id: `c-me-${steps.length}`, at: Date.now(), space: c.space, project: projectId, from: "me", text } as unknown as CaptainMessage);
+        if (!event) w.chat.push({ id: `c-me-${steps.length}`, at: Date.now(), space: c.space, project: projectId, from: "me", text } as unknown as CaptainMessage);
       } catch (e) {
         steps.push({ text, reply: "", routes: [], context: ctx, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) });
       }

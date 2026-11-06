@@ -154,7 +154,10 @@ charts again as loose blocks.
    telling picture (smaller, same data and colors), and the footer (page
    count, source count, one line of what's uncertain). Nothing that isn't in
    the report.
-2. Send one message: a one-line answer, the card, the PDF, `done`.
+2. Send one message: a short answer, the card, the PDF, `done`. The answer
+   itself carries the numbers and key facts the user asked for (prices,
+   counts, dates, the pick and its cost), not only the recommendation: the
+   card is a picture, and main retells your words.
 
 ```blocks
 {"type":"text","text":"**<답 한 문장>**"}

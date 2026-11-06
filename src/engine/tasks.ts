@@ -456,6 +456,21 @@ async function worktreeGone(t: Task): Promise<boolean> {
 /** What Ondra's own git commands for a job run with: its space's git identity and logins. */
 export const gitEnv = (t: Task) => spaceEnv(spaceById(t.space)).catch((): Env => []);
 
+/** The folder is inside a git worktree (its .git is a file pointing elsewhere), not a main checkout. */
+async function inWorktree(dir: string): Promise<boolean> {
+  const parts = dir.replace(/\/+$/, "").split("/");
+  for (let n = parts.length; n > 1 && parts.length - n < 6; n--) {
+    // no .git here: look one folder up; a .git folder (can't be read as a file): a main checkout
+    const f = await fsRead(`${parts.slice(0, n).join("/")}/.git`).then(
+      (x) => x,
+      (e) => (/파일이 없어요/.test(String(e)) ? null : "checkout"),
+    );
+    if (f === null) continue;
+    return f !== "checkout" && typeof f.text === "string" && /^gitdir:/.test(f.text);
+  }
+  return false;
+}
+
 async function isolate(id: string): Promise<boolean> {
   const t = taskById(id);
   if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return true;
@@ -464,6 +479,8 @@ async function isolate(id: string): Promise<boolean> {
   // merged, discarded or cleaned up: more work on it starts on a fresh worktree
   // from where the repo is now, never in the user's own checkout
   const cwd = old ? `${old.repo}${old.sub ? `/${old.sub}` : ""}` : expand(t.cwd || spaceById(t.space).folder || "~");
+  // already a worktree (one the user or the space's own rules made for this work): work there, no worktree of a worktree
+  if (!old && (await inWorktree(cwd))) return true;
   const name = cwd.split("/").filter(Boolean).pop() ?? "repo";
   const again = old ? `-${Date.now().toString(36).slice(-4)}` : "";
   const dest = `${engine.info.dataDir}/worktrees/${slug(name)}-${id}${again}`;

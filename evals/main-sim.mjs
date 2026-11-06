@@ -109,6 +109,10 @@ function check(step, x) {
     const t = routes.filter((r) => r?.kind === "answer").map((r) => r.text ?? "").join(" ");
     for (const w of x.answerIncludes) need(t.includes(w), `answer doesn't mention "${w}"`);
   }
+  if (x.answerIncludesAny) {
+    const t = routes.filter((r) => r?.kind === "answer").map((r) => r.text ?? "").join(" ");
+    need(x.answerIncludesAny.some((w) => t.includes(w)), `answer mentions none of ${x.answerIncludesAny.join(", ")}`);
+  }
   if (x.after) need(news.some((r) => Array.isArray(r.after) && r.after.length), "expected a job that waits (after)");
   if (x.noAfter) need(!news.some((r) => Array.isArray(r.after) && r.after.length), "a job waits (after) that should start now");
   return out;
