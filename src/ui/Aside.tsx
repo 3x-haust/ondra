@@ -9,6 +9,7 @@ import { tell } from "../engine/tasks";
 import { goMain, openPanel, paletteOpen, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
 import { pickFolder } from "../lib/native";
+import { menuSkills } from "../engine/skillMenu";
 import { tilde } from "../engine/rpc";
 import type { PlusItem } from "./Composer";
 import { Icon } from "./Icon";
@@ -95,18 +96,18 @@ export const btwCommand = (scope: () => string) => ({
 
 /** Menu skills as "/name" commands. In a job it runs there; in main it becomes a job that uses it. */
 export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }) =>
-  state.skills
-    .filter((sk) => sk.enabled && sk.menu)
-    .map((sk) => ({
-      name: sk.name,
-      desc: `스킬 · ${sk.description.split(/[.。]/)[0].slice(0, 60)}`,
-      icon: "skill",
-      run: (arg: string) => {
-        const t = target();
-        if (t.task) void tell(t.task, `/skill:${sk.name} ${arg}`.trim());
-        else throwThought(`\`${sk.name}\` 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘)${arg.trim() ? `: ${arg.trim()}` : ""}`, t.space, { project: t.project });
-      },
-    }));
+  menuSkills().map((sk) => ({
+    name: `skill:${sk.name}`,
+    desc: `${sk.from === "bundled" ? "기본 스킬" : "스킬"} · ${sk.description.split(/(?<=[.。])\s/)[0].slice(0, 70)}`,
+    icon: "skill",
+    skill: true,
+    run: (arg: string, also: string[] = []) => {
+      const t = target();
+      const names = [sk.name, ...also];
+      if (t.task) void tell(t.task, `/skill:${sk.name} ${also.length ? `(also use the ${also.join(", ")} skill${also.length > 1 ? "s" : ""}) ` : ""}${arg}`.trim());
+      else throwThought(`${names.map((n) => `\`${n}\``).join(", ")} 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘)${arg.trim() ? `: ${arg.trim()}` : ""}`, t.space, { project: t.project });
+    },
+  }));
 
 /** After Whiteboard: ask a job to draw what it did, each part pointing at the code. */
 export const DRAW_ASK =
