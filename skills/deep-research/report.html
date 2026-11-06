@@ -86,11 +86,12 @@
   ol.sources { font-size: 12.5px; color: var(--soft); padding-left: 22px; }
   ol.sources li { margin: 4px 0; }
   ol.sources a { color: var(--ink); }
-  /* page numbers at the bottom of every printed page */
+  /* every printed page: the report's name and topic on the left, the page number on the right */
   @page {
     size: A4;
     margin: 16mm 14mm;
-    @bottom-center { content: counter(page) " / " counter(pages); font: 8.5pt -apple-system, "Apple SD Gothic Neo", sans-serif; color: #8a8f98; }
+    @bottom-left { content: "{{보고서 이름}} · {{주제}}"; font: 8.5pt -apple-system, "Apple SD Gothic Neo", sans-serif; color: #8a8f98; }
+    @bottom-right { content: counter(page) " / " counter(pages); font: 8.5pt -apple-system, "Apple SD Gothic Neo", sans-serif; color: #8a8f98; }
   }
   @media print {
     body { padding: 0; max-width: none; }
