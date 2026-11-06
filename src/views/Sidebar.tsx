@@ -264,12 +264,6 @@ export function Sidebar() {
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = () => shown().filter((t) => !t.project || !projectsIn(state.space).some((p) => p.id === t.project));
   const needs = () => roots().filter((t) => bucket(t) === "you" || bucket(t) === "review").length;
-  /** a job in this space is waiting for the user to sign in somewhere */
-  const loginAsked = () =>
-    state.decisions.some((d) => {
-      const t = state.tasks.find((x) => x.id === d.taskId);
-      return t?.space === state.space && /로그인|login|sign.?in|인증/i.test(`${d.question} ${d.options.map((o) => o.label).join(" ")}`);
-    });
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -333,15 +327,6 @@ export function Sidebar() {
             <span class="sb-need">{needs()}</span>
           </button>
         </Show>
-        {/* the browser is the jobs' tool: it shows here only while a job asks you to sign in (or you're on it) */}
-        <Show when={view().name === "browser" || loginAsked()}>
-          <button class="sb-row sb-main" classList={{ on: view().name === "browser" }} onClick={() => setView({ name: "browser" })} title="일이 로그인을 기다려요. 여기서 로그인하면 모든 일이 로그인돼요">
-            <Icon name="globe" size={15} class="sb-main-ic" />
-            <span class="sb-title">브라우저</span>
-            <Show when={loginAsked()}><span class="sb-live sb-ask" title="로그인 필요"><i /></span></Show>
-          </button>
-        </Show>
-
         <Head id="projects" label="프로젝트" count={projectsIn(state.space).length}>
           <button class="icon-btn xs" title="프로젝트 폴더 추가" onClick={() => void addFolder()}>
             <Icon name="plus" size={13} />

@@ -11,6 +11,7 @@
 
 mod update;
 mod browser;
+mod inbrowser;
 mod devices;
 mod engine;
 mod keychain;
@@ -329,6 +330,9 @@ pub fn run() {
             browser::shared_browser_open,
             browser::browser_check,
             browser::shared_browser_go,
+            inbrowser::inbrowser_show,
+            inbrowser::inbrowser_hide,
+            inbrowser::inbrowser_go,
             browser::browser_release,
             devices::devices_list,
             devices::device_boot,
