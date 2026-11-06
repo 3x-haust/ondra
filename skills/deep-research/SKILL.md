@@ -1,0 +1,154 @@
+---
+name: deep-research
+description: >-
+  Deep research with sources: plan the questions, search and read many primary
+  sources in rounds until each question is answered, check every claim, and
+  deliver a visual report in the chat plus a PDF. Use when the user asks to
+  research, investigate, survey, compare or "정리" something from outside the
+  folder: 리서치, 딥리서치, 조사해줘, 찾아서 정리해줘, 논문 찾아줘, 비교해줘,
+  시장/경쟁사/기술 동향, "다 검색해서", "출처 달아서".
+---
+
+# Deep research
+
+How the strong research agents work (Gemini Deep Research, OpenAI deep
+research, Claude Research, Tongyi DeepResearch) and what the papers found:
+
+- Plan first, and let the plan change: search, read, find what is still
+  missing, search again. One pass of searching is not research.
+- Completeness is the bar (DeepSearchQA): a list question needs the whole
+  list, not the first three hits.
+- Keep the working context short and the findings on disk (frequent
+  compaction loses almost nothing; long piles of pages make agents worse).
+  Every fact goes to a notes file the moment you find it.
+- Parallel workers help on broad questions (an orchestrator with 3–5
+  workers, each with a clear objective, output format and boundary).
+- The known failure is made-up or misattributed citations. Every claim in the
+  report points to a page you opened in this session.
+
+## Where things go
+
+`R="$APP_ARTIFACTS_DIR/research-<short-slug>"` and `mkdir -p "$R"`. In it:
+
+| file | what |
+|---|---|
+| `plan.md` | the question verbatim, the sub-questions with their "done when", fields to collect, status per round |
+| `notes.jsonl` | one fact per line: `{"q":1,"claim":"…","url":"…","title":"…","published":"2026-04-21","quote":"≤ 2 lines, verbatim","source":"primary\|secondary"}` |
+| `report.html` | the report, from `report.html` in this skill's folder |
+| `report.pdf` | printed with `pdf.sh` in this skill's folder |
+
+## 1. Scope and plan
+
+1. Write the user's question verbatim at the top of `plan.md`.
+2. Split it into 3–6 sub-questions. For each, write **done when**: what a
+   complete answer looks like ("every vendor with a public API, with price
+   and launch date", "the mechanism, from the vendor's own docs").
+3. For comparisons, list the items and the fields to collect for each item
+   (they become the table columns).
+4. Size it: **quick** (one question, ~10 sources, you alone) or **deep**
+   (several sub-questions, 20+ sources, subagents).
+5. Send the `plan` block with the sub-questions and go. Ask first (one `ask`
+   block) only when the question splits into reports that differ in kind
+   (which market, which time range, for what decision) and the request or
+   memory doesn't settle it.
+
+## 2. Gather in rounds
+
+For each sub-question, repeat until its "done when" holds:
+
+1. `web_search` 2–4 queries from different angles: the user's language and
+   English, the official name, the year ("2026"), "paper", "docs",
+   "release notes", "pricing", "benchmark". Prefer recent results unless the
+   question is historical.
+2. `web_fetch` the primary sources: the vendor's docs, blog or changelog,
+   the paper (arXiv abs/html), the repository, the standard, the filing.
+   Aggregators, SEO guides and resellers only lead you to primary sources.
+   A search snippet is not reading.
+3. Append each fact to `notes.jsonl` right away, with the verbatim quote and
+   the date. Don't keep whole pages in your head.
+4. Gap check in `plan.md`: what is answered (with note count), what is
+   missing, what conflicts. Missing → new, narrower queries. Conflict → find
+   the primary source or the newer date.
+5. Stop a sub-question when "done when" holds with at least two independent
+   sources, or one primary source for a fact only its owner can state. After
+   three rounds with nothing new, mark it "찾지 못함" and move on.
+
+Budget: quick ~15 searches, deep ~40–80. Spend searches where the gaps are,
+not on re-confirming what two sources already agree on.
+
+**Deep mode, in parallel**: with 3+ independent sub-questions, hand them to
+subagents (at most 4 at a time), one sub-question each:
+
+```
+{"type":"subagent","title":"리서치: <짧게>","task":"Research ONE question for a report: <sub-question>. Done when: <done when>. Fields per item: <fields>. Use web_search, then web_fetch the primary sources (official docs, papers, repos, changelogs); aggregators only lead to them. Write every fact as one JSON line to <R>/notes-<n>.jsonl: {\"q\":<n>,\"claim\",\"url\",\"title\",\"published\",\"quote\" (verbatim, ≤2 lines),\"source\":\"primary|secondary\"}. Don't conclude beyond the sources. Report back: what is answered, what is missing, what conflicts."}
+```
+
+Merge their notes into `notes.jsonl`, then run your own gap check on the
+whole.
+
+## 3. Check before writing
+
+- Every claim you will write has a note with a URL you fetched in this
+  session. No note, no claim.
+- Numbers: the unit, the date and what was measured (a benchmark subset, a
+  vendor's own eval, an estimate) come with them. Recompute what can be
+  recomputed.
+- Seen only in secondary sources → tag `확인 안 됨`. Sources disagree →
+  show both with their dates and tag `출처 엇갈림`.
+- Dates are absolute (2026-04-21, not "지난달").
+- Vendor claims are claims ("구글은 … 라고 밝혔어요"), not facts.
+
+## 4. Write the report
+
+Copy this skill's `report.html` to `$R/report.html` and fill it:
+
+- Title = the answer in one sentence. Then 3 numbered takeaways with
+  source numbers.
+- One section per sub-question: the answer first, then evidence.
+- A table for any comparison (items × fields, numbers right-aligned).
+- 1–3 pictures, each answering one question: inline SVG bars (one scale from
+  zero, the answer's bar in the accent color), a timeline for dated events.
+  Copy the template's SVG markup; no scripts, no CDN, no web fonts, so the
+  same file shows in the chat and prints to PDF.
+- "확실하지 않은 것": what wasn't found, conflicts, unverified items.
+- Numbered sources: title, publisher, published date, the date you read it.
+- The user's language (Korean unless they wrote otherwise), plain words.
+
+Then print it:
+
+```bash
+"<this skill's folder>/pdf.sh" "$R/report.html"   # prints $R/report.pdf
+```
+
+Open the PDF's first page once (screenshot it, or read the file size and
+page count) to make sure it isn't blank or cut off.
+
+## 5. Show it in the chat
+
+One message, short prose plus blocks:
+
+```blocks
+{"type":"text","text":"**<답 한 문장>**\n\n1. …\n2. …\n3. …"}
+{"type":"table","columns":["항목","…","출처"],"rows":[["…","…","[1]"]]}
+{"type":"bars","label":"…","unit":"%","items":[{"label":"…","value":84,"highlight":true}]}
+{"type":"page","path":"<R>/report.html","label":"리서치 보고서","height":640}
+{"type":"link","kind":"file","title":"보고서 PDF","ref":"<R>/report.pdf"}
+{"type":"done","summary":"…","evidence":[{"kind":"file","ref":"<R>/report.pdf","ok":true},{"kind":"link","ref":"<main source URL>","ok":true}],"unverified":["…"]}
+```
+
+- `page` draws the HTML report inside the chat; `link` opens the PDF beside it.
+- Use `timeline` instead of `bars` when the story is dates.
+- `evidence` links are pages fetched in this session; list the 3–8 that carry
+  the answer, and `web_fetch` any a subagent found before you list it.
+- Keep the chat text to the answer and the takeaways; the detail lives in
+  the report.
+
+## Don'ts
+
+- Don't answer from memory when a source can be fetched; say what you
+  couldn't open.
+- Don't pad: no background the user didn't ask for, no "향후 전망" filler.
+- Don't cite a page you didn't open, and don't put a URL in the report that
+  isn't in `notes.jsonl`.
+- Don't rerun the whole search when the user asks a follow-up: read
+  `notes.jsonl` and `plan.md` first, search only for what is new.

@@ -11,6 +11,7 @@ The app passes them to every pi worker with `--skill`.
 | `mimikyu` | Implementing supplied designs (Figma links, 피그마 그대로, 디자인 그대로): save the design contract, build, measure pixels and DOM, then fix until the gates pass. Available to every job without a personal skill install; Figma access and project measurement dependencies are checked when used. |
 | `goal-loop` | A goal to finish completely ("루프", "될 때까지", "100%"): the user's intent written as checks, then fix → re-check until all pass. |
 | `test-ci` | Tests and CI the way large open-source projects do them: behaviour tests that fail for real, local scripts first, a locked-down GitHub Actions workflow checked locally. |
+| `deep-research` | Research with sources (리서치, 조사해서 정리, 논문 찾아): plan sub-questions, search and read primary sources in rounds with findings on disk, check every claim, then a visual HTML report shown in the chat and printed to PDF (`pdf.sh`). |
 | `computer-use` | Computer use with the bundled agent-desktop: one worker at a time, headless input only, traces and screenshots as proof. |
 
 The official agent-browser and agent-desktop skills ship with their binaries
