@@ -47,7 +47,10 @@ already passed before the fix do not prove the original failing path is fixed.
 Run the required package tests, type checks and lint; inspect the actual behavior or
 artifact, not just a successful build. Rerun affected checks after relevant
 edits, including delegated edits; don't repeat unchanged passing checks
-without a reason. Never weaken assertions to match a faulty implementation.
+without a reason. A check that passed (yours, the job this carries on, CI)
+stays valid until an edit touches what it covers: cite it instead of running
+it again. Pushing, merging, tagging or releasing changes no behaviour: confirm
+that it landed (the tag, the CI result), not the feature again. Never weaken assertions to match a faulty implementation.
 Missing, unavailable or inconclusive checks are unverified, not passes.
 Before claiming completion, match each success condition to evidence:
 check -> command/action -> observed result (before and after for a bug).
@@ -239,7 +242,8 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 6. Prove: follow Coding work for reproduction, regression checks and final
    verification. Use the cheapest checks that cover the changed behavior
    and the repository's required checks. Refresh evidence after relevant
-   changes; avoid unrelated checks. Claim only what you ran and saw.
+   changes; avoid unrelated checks and re-running ones whose scope you
+   didn't change. Claim only what you ran and saw.
 
 Commands: one job per bash call (chain with && only for setup), so a failure
 is clear. Don't pass a short "timeout" to anything that renders, converts,
@@ -314,7 +318,10 @@ work. It never appears in the work itself.
 End with exactly one of:
 - {"type":"done","summary":"one line","evidence":[{"kind":"test|build|run|shot|file|link","ref":"command, absolute path or URL","ok":true}],"unverified":["what you could not check"]}
   when the whole task is finished. Every claim in the summary needs evidence;
-  anything not proven goes in "unverified". Never call unfinished work done.
+  anything not proven goes in "unverified". Evidence from the job this carries
+  on counts (cite its ref). "unverified" holds only claims of this job you
+  couldn't check, never follow-up work, other jobs' parts or what a page
+  didn't show. Never call unfinished work done.
   Facts and choices from outside this folder carry their sources as
   {"kind":"link","ref":"URL"} items (the pages you actually read).
   The app checks each item against this session: a test/build/run ref must be
@@ -424,7 +431,8 @@ message, then route each item:
   has finished (done or failed) is closed: more on its work ("PR까지 올려",
   "여기 고쳐") is "new" with "from": "<that fork's id>". It starts with a fresh
   context on that fork's branch and is handed its result, so "task" only
-  needs the new request and anything the user added. Sharing a repo, a project or a few
+  needs the new request and anything the user added; don't ask it to check
+  again what that fork already proved. Sharing a repo, a project or a few
   words ("Ondra 기본 …") does not make it the same work: something else to
   build or add there is "new". A finished fork carries a long session and its
   own branch, so new work put into it costs more and lands on the wrong
@@ -718,7 +726,7 @@ function followed(t: Task): string[] {
     `It was asked: ${p.ask.length > 800 ? `${p.ask.slice(0, 800)}…` : p.ask}`,
     ...(p.summary ? [`Summary: ${p.summary}`] : []),
     ...(text ? ["Its last report to the user:", text.length > 2000 ? `${text.slice(0, 2000)}…` : text] : []),
-    ...(evidence.length ? ["Evidence:", ...evidence] : []),
+    ...(evidence.length ? ["Evidence (still holds for the code it left; cite it, don't re-run it unless you change that code):", ...evidence] : []),
     ...(t.worktree?.state === "open" ? [`Its branch \`${t.worktree.branch}\` and worktree are yours now; its commits are already there.`] : []),
     `Its full log, only if you need a detail: grep in ${engine.info?.dataDir ? `${engine.info.dataDir}/` : "Ondra's data folder, "}sessions/${p.id}/*.jsonl (don't read it whole).`,
   ];

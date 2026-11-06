@@ -302,6 +302,7 @@ pub fn run() {
             fs::space_logs,
             worktree::worktree_merge,
             worktree::worktree_remove,
+            worktree::worktree_landed,
             store::pick_files,
             #[cfg(debug_assertions)]
             devbridge::dev_report,
