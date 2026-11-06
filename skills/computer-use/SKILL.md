@@ -62,9 +62,12 @@ The background way does the same work:
 - Pictures: `screenshot --app "<App>"` captures the window even when it's
   behind other windows (not when it's minimized or hidden).
 - An app you start yourself from a terminal (`pnpm dev` of an Electron app,
-  `electron .`, a debug build) may bring itself forward when it opens its
-  window. Run the built app with `open -g` when you can. If it still comes
-  forward, that is the app itself: say so in the report instead of fighting it.
+  `electron .`, a debug build, a booting simulator) may bring itself forward
+  when it opens its window. Ondra sends it straight back behind the user's
+  window, so you don't need to do anything about it. Don't bring it forward
+  again to work around that: snapshot, screenshot and `press --app` all work
+  on a window that's behind. Still run the built app with `open -g` when you
+  can.
 - Never make keys or clicks for the whole system: no code posting CGEvents to
   the HID or session tap (a Swift/Python/JS script with `CGEventPost`,
   `.post(tap:)`, `CGEvent(keyboardEventSource:…)`, `Quartz.CGEventPost`), no
@@ -78,6 +81,30 @@ The background way does the same work:
   behaviour, e.g. a typing-correction app): test the logic with unit or
   integration tests, or feed it input through a scripted path. Driving it in
   front of the user needs an `ask` first, with the reason.
+
+## Stage Manager
+
+When Stage Manager is on, a window that sits behind shrinks into the side
+strip, and a screen capture of it (`screenshot --app`, `screencapture -l`)
+comes back as that small, perspective-warped thumbnail. Check once per job:
+`"<this skill's folder>/shot-check.sh"` prints `stage-manager on|off`. With a
+picture and the app (`shot-check.sh <png> "<App>"`) it compares the picture
+with the window's real size and exits 3 for a thumbnail.
+
+Stage Manager is the user's setting: never turn it off, and never bring the
+window forward to get a better picture. When it is on, take pictures from
+inside the app instead of from the screen:
+- Electron or web: CDP `Page.captureScreenshot` on the app's remote debugging
+  port (`launch --cdp`, or start it with `--remote-debugging-port=<port>`), or
+  `webContents.capturePage()` through the app's test hook.
+- iOS simulator: `xcrun simctl io <udid> screenshot "$APP_ARTIFACTS_DIR/<name>.png"`.
+- Android: `adb -s <serial> exec-out screencap -p > "$APP_ARTIFACTS_DIR/<name>.png"`.
+- A native app with none of these: read what's on screen from the
+  accessibility tree (`snapshot`), report that, and put the picture under
+  "unverified" as not taken.
+
+An app a job launches may land in the strip. That's expected: it stays behind
+the user's window.
 
 ## Rules here
 
@@ -109,7 +136,10 @@ The background way does the same work:
 5. **Proof is a picture.** `agent-desktop screenshot --app "<App>"
    "$APP_ARTIFACTS_DIR/<name>.png"` before and after the change, then a
    `beforeAfter` block. Screenshots can contain private data: keep them inside
-   `$APP_ARTIFACTS_DIR` only.
+   `$APP_ARTIFACTS_DIR` only. Look at every picture before you use it, and run
+   `"<this skill's folder>/shot-check.sh" <png> "<App>"` on it (see below). A
+   tiny, skewed or blank picture counts as not taken. Never put one in a report
+   or a PR as proof.
 6. **Outward or destructive actions need a decision.** Sending, deleting,
    purchasing, changing system settings or signing in goes through `ask` first.
 
