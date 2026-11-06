@@ -302,10 +302,16 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (live >= 6) break;
         const review = b.review === true || /code-review|리뷰/i.test(String(b.title ?? ""));
         // one review per job: after it, the job fixes the findings and re-runs its checks
-        if (review && state.tasks.some((x) => x.parentId === t.id && x.review && x.status !== "failed")) {
-          push(t, { kind: "note", text: "리뷰는 이미 한 번 받았어요" });
+        const had = review ? state.tasks.find((x) => x.parentId === t.id && x.review && x.status !== "failed") : undefined;
+        if (had) {
+          const going = had.status !== "done";
+          push(t, { kind: "note", text: going ? "리뷰가 아직 진행 중이에요" : "리뷰는 이미 한 번 받았어요" });
           const jobId = t.id;
-          queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message: "(Ondra) This job was already reviewed once. Don't start another review: fix what it found and re-run your checks." }).catch(() => {}));
+          // a new session may not know about it: say where it is, and what it found
+          const message = going
+            ? `(Ondra) A review is already running ("${had.title}"). Its findings come to you by themselves when it ends. Don't start another one and never ask the user for them: go on with what doesn't depend on it, or end your turn and wait.`
+            : `(Ondra) This job was already reviewed once ("${had.title}"). Don't start another review. What it found:\n\n${had.result ?? had.summary ?? "(nothing written)"}\n\nFix P1·P2 only, re-run the tests that cover them, and finish.`;
+          queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
         const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), review);
