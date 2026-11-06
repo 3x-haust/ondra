@@ -418,7 +418,7 @@ function EntryView(props: { e: Entry; task: Task }) {
   );
 }
 
-export function Transcript(props: { task: Task; agentId: string }) {
+export function Transcript(props: { task: Task; agentId: string; footer?: JSX.Element }) {
   let scroller!: HTMLDivElement;
   const list = createMemo(() => turns(props.task.entries));
   const liveText = () => live[props.agentId] ?? "";
@@ -476,6 +476,8 @@ export function Transcript(props: { task: Task; agentId: string }) {
             <span class="shimmer">{props.task.now || "작업 중"}</span>
           </div>
         </Show>
+        {/* a question waiting on the user: last in the conversation, so it scrolls with it */}
+        {props.footer}
       </div>
     </div>
   );

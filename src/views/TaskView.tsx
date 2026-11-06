@@ -343,10 +343,13 @@ export function TaskView(props: { id: string }) {
         );
         const chat = (
           <>
-            <Transcript task={task()} agentId={task().id} />
+            <Transcript
+              task={task()}
+              agentId={task().id}
+              footer={<Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>}
+            />
             <div class="dock">
               <div class="dock-inner">
-                <Show when={decision()}>{(d) => <DecisionCard d={d()} showTask={false} />}</Show>
                 <Show when={task().status === "failed" && task().error}>
                   <div class="notice bad">
                     <Icon name="alert" size={16} />
