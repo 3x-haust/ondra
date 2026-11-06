@@ -169,6 +169,8 @@ export interface Task {
   parentId?: string;
   /** Steps that must finish first; their results go into this job's first prompt. */
   after?: string[];
+  /** Other spaces the user let this job use (their memory, folder and past jobs). Spaces are separate otherwise. */
+  reach?: SpaceId[];
   /** A review subagent: its findings go back to the fork to fix. */
   review?: boolean;
   /** Finished, but some of it was never proven (or no proof at all). */

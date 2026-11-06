@@ -10,7 +10,7 @@ import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } 
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
-import { addMemory, applying, isLive, KINDS, memoryLines, recall } from "./memory";
+import { addMemory, applying, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
@@ -40,7 +40,7 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; recap: boolean }>();
+const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean }>();
 /** the git repos in each space's folder, looked up again after a few minutes */
 const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
 async function refreshRepos(space: SpaceId) {
@@ -511,6 +511,21 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (repos && repos !== sent.repos) out.push(`# Repos in this space without a project${sent.repos ? " (updated)" : ""}\n${repos}`, "");
   out.push(forksBlock(forks, sent.forks));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
+  // spaces are separate; the user pointing at another one opens it for this message
+  const others0 = state.spaces.filter((s) => s.id !== sp(space));
+  const spacesLine = others0.map((s) => `- ${s.id}: ${s.label} (${s.folder})`).join("\n");
+  if (spacesLine && spacesLine !== sent.spaces) out.push("", "# Other spaces (separate; open one only when the user asks, with \"reach\")", spacesLine);
+  for (const id of event ? [] : namedSpaces(text, sp(space), state.spaces)) {
+    const s = spaceById(id);
+    const theirs = state.memory.filter((m) => isLive(m) && m.scope === "space" && m.space === id);
+    const found = recall(theirs, text, { max: 4, budget: 700 });
+    const jobs = tasksIn(id).filter((t) => !t.parentId && !t.answer).slice(-8).map((t) => `- ${t.title} [${t.status}]${t.project ? ` · ${projectById(t.project)?.name ?? ""}` : ""}`);
+    const projs = projectsIn(id).map((p) => `- ${p.name}: ${p.folder}`);
+    out.push("", `# The user pointed at the ${s.label} space (reach "${id}")`);
+    if (found.length) out.push("Its memory that may matter:", ...memoryLines(found));
+    if (projs.length) out.push("Its projects:", ...projs);
+    if (jobs.length) out.push("Its recent jobs:", ...jobs);
+  }
   const skills = state.skills.filter((s) => s.enabled).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
   if (skills !== sent.skills) out.push("", `# Skills jobs can use${sent.skills ? " (updated)" : ""}\n${skills}`);
   if (sent.recap) {
@@ -538,7 +553,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "Tell the user what came out, short and visual (blocks), as an \"answer\". Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", skills, rules, projects, repos, recap: false });
+  sentOf.set(space, { forks, memory: "", skills, rules, projects, repos, spaces: spacesLine, recap: false });
   return out.join("\n");
 }
 
@@ -692,6 +707,10 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         // one request → one task: show what the user typed, not the rewrite
         display: work === 1 ? original : undefined,
         isolate: isolateOf.get(space),
+        // another space only when the user asked: main's "reach", or the message pointing at it
+        reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...namedSpaces(original, sp(space), state.spaces)])]
+          .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
+          .filter((x): x is SpaceId => !!x && x !== sp(space)),
         after: (Array.isArray(r.after) ? r.after : [])
           .map((k: unknown) => byKey.get(String(k)) ?? (taskById(String(k)) ? String(k) : ""))
           .filter(Boolean),
