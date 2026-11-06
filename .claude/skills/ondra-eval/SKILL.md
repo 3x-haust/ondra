@@ -11,6 +11,19 @@ description: >
 
 Goal: Ondra does the job well **on its own**. Fix the harness, never the case.
 
+## Two kinds of eval
+
+- **Main's decisions** (`node evals/main-sim.mjs`, cases in `evals/main/`):
+  made-up situations (jobs, projects, repos, memory, chat) and the user's
+  messages; main decides with the real prompt and model, nothing starts, and
+  each decision is checked (new / append / stop / answer, project, folder,
+  reach, skill, after). Seconds per case. Run it after any change to
+  `src/engine/prompts.ts` or `captain.ts`, with `--repeat 3` for decisions
+  that wobble. Every time the user reports main splitting, joining, placing
+  or opening something wrong, add a case first, see it fail, then fix.
+- **Whole jobs** (`node evals/run.mjs`, cases in `evals/cases/`): real jobs
+  end to end. Minutes per case.
+
 ## One iteration
 
 1. **Run.** Dev app must be up (`pnpm tauri dev`). Then:

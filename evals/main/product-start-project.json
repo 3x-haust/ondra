@@ -1,0 +1,6 @@
+{
+  "note": "Research for a product the user is starting gets a project, and the research skill",
+  "space": "home",
+  "messages": ["`deep-research` 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘): 창업 지원에 선정돼서 펀딩픽이란 걸 만들어야 하는데 모의투자를 실제 회사 주가 기반으로 할까 가상 회사랑 뉴스로 할까? 실제로 하면 비용은 얼마나 들까"],
+  "expect": [{ "new": 1, "project": true, "taskIncludes": ["deep-research"] }]
+}

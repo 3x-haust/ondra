@@ -1,0 +1,8 @@
+{
+  "note": "One bug is one job: no research/build/test split",
+  "space": "home",
+  "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "project": "웹앱",
+  "messages": ["로그인하면 가끔 메인 화면으로 튕기는 버그 고쳐줘"],
+  "expect": [{ "new": 1 }]
+}

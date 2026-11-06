@@ -6,7 +6,7 @@
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
-import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
+import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
@@ -19,12 +19,15 @@ import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
 export const chatKey = (space: SpaceId, project?: string) => (project ? `${space}~${project}` : space);
-const sp = (key: string) => key.split("~")[0] as SpaceId;
-const pj = (key: string) => key.split("~")[1] as string | undefined;
-const projectOf = (key: string) => (pj(key) ? (state.projects ?? []).find((p) => p.id === pj(key) && p.space === sp(key)) : undefined);
+// "sim3:home~proj" is a simulated chat (simulateMain): same space and project, its own agent and world
+const base = (key: string) => key.replace(/^sim\d*:/, "");
+const isSim = (key: string) => /^sim\d*:/.test(key);
+const sp = (key: string) => base(key).split("~")[0] as SpaceId;
+const pj = (key: string) => base(key).split("~")[1] as string | undefined;
+const projectOf = (key: string) => (pj(key) ? (worlds.get(key)?.projects ?? state.projects ?? []).find((p) => p.id === pj(key) && p.space === sp(key)) : undefined);
 /** this message belongs to this chat */
 export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) && (m.project ?? undefined) === pj(key);
-const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace("~", "-")}`;
+const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace("~", "-").replace(":", "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
 const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
 /** what main is told about when no user spoke: a fork it started ended, or a project it handed work to finished */
@@ -376,7 +379,7 @@ async function ensureCaptain(space: string) {
   // is still in the provider cache. After a quiet spell it would be cold anyway,
   // so a fresh session with a text recap is cheaper.
   const lastAt = Math.max(0, ...state.captain.filter((m) => inChat(m, space) && m.from === "captain" && !m.pending && !m.error).map((m) => m.at));
-  const resume = Date.now() - lastAt < IDLE_CLEAR_MS;
+  const resume = !isSim(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
   const args = [
     "--session-dir",
     sessionDir(space),
@@ -396,7 +399,8 @@ async function ensureCaptain(space: string) {
     ...[CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
-  const cwd = expand(proj?.folder || space0.folder || "~");
+  // a simulated project's folder is made up: main runs in the space's folder then
+  const cwd = expand((isSim(space) ? "" : proj?.folder) || space0.folder || "~");
   void startSig(cwd).then((x) => sigOf.set(space, x));
   await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"]]);
   markAlive(agent);
@@ -409,7 +413,7 @@ async function ensureCaptain(space: string) {
     armIdleClear(space);
   } else {
     sentOf.set(space, { recap: true });
-    void sessionsPrune(sessionDir(space)).catch(() => {});
+    if (!isSim(space)) void sessionsPrune(sessionDir(space)).catch(() => {});
   }
 }
 
@@ -490,7 +494,8 @@ function forksBlock(now: string, before?: string): string {
 
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
-  const mine = tasksIn(sp(space)).filter((t) => !pj(space) || t.project === pj(space));
+  const w = worlds.get(space);
+  const mine = (w ? w.tasks : tasksIn(sp(space))).filter((t) => !pj(space) || t.project === pj(space));
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
@@ -500,13 +505,14 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const space0 = spaceById(sp(space));
   const proj = projectOf(space);
   const rules = [spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).join("\n\n");
-  const projects = projectsIn(sp(space)).map((p) => `- ${p.name}: ${p.folder}`).join("\n") || "(none)";
-  const taken = new Set(projectsIn(sp(space)).map((p) => expand(p.folder).replace(/\/+$/, "")));
-  const repos = (reposOf.get(sp(space))?.list ?? []).filter((r) => !taken.has(r)).map((r) => `- ${r}`).join("\n");
+  const projs = w ? w.projects : projectsIn(sp(space));
+  const projects = projs.map((p) => `- ${p.name}: ${p.folder}`).join("\n") || "(none)";
+  const taken = new Set(projs.map((p) => expand(p.folder).replace(/\/+$/, "")));
+  const repos = ((w?.repos ?? reposOf.get(sp(space))?.list) ?? []).filter((r) => !taken.has(r)).map((r) => `- ${r}`).join("\n");
   // no always-on memory: a few pieces recalled for this message alone
   const folder = projectOf(space)?.folder;
   const here = applying(sp(space), folder ? expand(folder) : "", expand);
-  const others = state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
+  const others = (w?.memory ?? state.memory).filter((m) => isLive(m) && (m.scope !== "space" || m.space === sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
   const related = recall(others, text, { max: 6, budget: 1200, folder: (m) => m.scope === "project" && here.includes(m) });
   const out: string[] = [];
   if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
@@ -532,7 +538,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const skills = state.skills.filter((s) => s.enabled).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
   if (skills !== sent.skills) out.push("", `# Skills jobs can use${sent.skills ? " (updated)" : ""}\n${skills}`);
   if (sent.recap) {
-    const recent = state.captain
+    const recent = (w ? w.chat : state.captain)
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
       .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : "[remembered]"))].filter(Boolean).join(" ")}`));
@@ -579,7 +585,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const raw = texts.get(space) ?? "";
   const err = errors.get(space);
   if (err && !raw.trim()) throw new Error(err);
-  void tidy(space, Date.now() - t0);
+  if (!isSim(space)) void tidy(space, Date.now() - t0);
 
   const objs = readFences(raw, "route").items;
   const reply = String(objs.find((x: any) => typeof x?.reply === "string")?.reply ?? "").trim();
@@ -587,6 +593,8 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const parsed = objs
     .flatMap((x: any) => (Array.isArray(x?.routes) ? x.routes : x?.kind || x?.type ? [x] : []))
     .map((r: any) => (r && !r.kind && typeof r.type === "string" ? { ...r, kind: r.type } : r));
+  // a simulation only shows what main decided; nothing is started
+  if (isSim(space)) return { reply, routes: parsed as Route[] };
   const routes = await applyRoutes(space, parsed, text, cwd, !event);
   if (!routes.length) {
     // nothing usable came back: whatever it said is the answer
@@ -786,3 +794,123 @@ export async function stopMain(space: string) {
 }
 
 onJobEnded(jobEnded);
+
+// ───────────────────────────── simulation (evals/main-sim.mjs)
+
+/** A made-up world main decides in: its jobs, projects, repos, memory and chat. */
+interface World {
+  tasks: Task[];
+  projects: { id: string; space: SpaceId; name: string; folder: string }[];
+  repos?: string[];
+  memory?: Memory[];
+  chat: CaptainMessage[];
+}
+const worlds = new Map<string, World>();
+let simSeq = 0;
+
+export interface SimCase {
+  space: SpaceId;
+  /** the project chat it happens in (a project's name), else the space's main chat */
+  project?: string;
+  tasks?: (Partial<Task> & { id: string; title: string; status: Task["status"]; project?: string })[];
+  projects?: { name: string; folder: string }[];
+  repos?: string[];
+  /** pieces of memory (space scope); leave out to use the space's real memory */
+  memory?: string[];
+  /** what was said before, oldest first */
+  chat?: { from: "me" | "captain"; text: string }[];
+  messages: string[];
+}
+export interface SimStep {
+  text: string;
+  reply: string;
+  routes: any[];
+  /** what main's message was sent with (for finding why it decided so) */
+  context: string;
+  ms: number;
+  error?: string;
+}
+
+/**
+ * Run main on made-up situations with the real prompt and model, without starting
+ * anything: each message's routes come back, and new jobs / projects join the world
+ * so later messages see them.
+ */
+export async function simulateMain(c: SimCase): Promise<SimStep[]> {
+  const pid = (name: string) => `p-${name.toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-")}`;
+  const now = Date.now();
+  const w: World = {
+    projects: (c.projects ?? []).map((p) => ({ id: pid(p.name), space: c.space, name: p.name, folder: p.folder })),
+    repos: c.repos,
+    memory: c.memory?.map((text, i) => ({ id: `m${i}`, text, scope: "space", space: c.space, createdAt: now, updatedAt: now, by: "user" }) as unknown as Memory),
+    tasks: [],
+    chat: [],
+  };
+  const key = `sim${++simSeq}:${c.space}${c.project ? `~${pid(c.project)}` : ""}`;
+  const projectId = c.project ? pid(c.project) : undefined;
+  w.tasks = (c.tasks ?? []).map(
+    (t) =>
+      ({
+        topic: t.project ?? "기타",
+        cwd: spaceById(c.space).folder,
+        now: t.status === "running" ? "작업 중" : "",
+        createdAt: now - 3_600_000,
+        finishedAt: t.status === "done" ? now - 600_000 : undefined,
+        entries: [],
+        legs: [],
+        inbox: [],
+        shells: [],
+        ...t,
+        space: c.space,
+        project: t.project ? pid(t.project) : undefined,
+      }) as unknown as Task,
+  );
+  w.chat = (c.chat ?? []).map((m, i) => ({ id: `c${i}`, at: now - 60_000 * (100 - i), space: c.space, project: projectId, from: m.from, text: m.from === "me" ? m.text : undefined, reply: m.from === "captain" ? m.text : undefined }) as unknown as CaptainMessage);
+  worlds.set(key, w);
+  const steps: SimStep[] = [];
+  let n = 0;
+  try {
+    for (const text of c.messages) {
+      const t0 = Date.now();
+      const ctx = (() => {
+        try {
+          // the same text main gets (computed before sentOf moves on)
+          const saved = sentOf.get(key);
+          const s = context(key, text);
+          if (saved) sentOf.set(key, saved);
+          else sentOf.delete(key);
+          return s;
+        } catch {
+          return "";
+        }
+      })();
+      try {
+        const r = await route(key, text);
+        steps.push({ text, reply: r.reply, routes: r.routes, context: ctx, ms: Date.now() - t0 });
+        // what main started becomes part of the world for the next message
+        for (const x of r.routes as any[]) {
+          if (x?.kind === "new") {
+            let proj = typeof x.project === "string" ? w.projects.find((p) => p.name === x.project)?.id : undefined;
+            if (x.project && typeof x.project === "object" && x.project.name) {
+              proj = pid(String(x.project.name));
+              if (!w.projects.some((p) => p.id === proj)) w.projects.push({ id: proj, space: c.space, name: String(x.project.name), folder: String(x.project.folder ?? "") });
+            }
+            w.tasks.push({ id: `sim-t${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
+          }
+        }
+        w.chat.push({ id: `c-me-${steps.length}`, at: Date.now(), space: c.space, project: projectId, from: "me", text } as unknown as CaptainMessage);
+      } catch (e) {
+        steps.push({ text, reply: "", routes: [], context: ctx, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  } finally {
+    const agent = agentOf(key);
+    agentKill(agent);
+    markDead(agent);
+    attached.delete(key);
+    worlds.delete(key);
+    sentOf.delete(key);
+    for (const m of [texts, errors, settled, accountOf, statsOf, genOf, idleTimers, sigOf]) m.delete(key);
+  }
+  return steps;
+}

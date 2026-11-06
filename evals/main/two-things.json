@@ -1,0 +1,18 @@
+{
+  "note": "Two unrelated pieces of work in one message: two jobs",
+  "space": "home",
+  "messages": [
+    "웹앱 로그인 버튼 색 좀 진하게 바꾸고, 4월 회고 초안도 써줘"
+  ],
+  "expect": [
+    {
+      "new": 2
+    }
+  ],
+  "projects": [
+    {
+      "name": "웹앱",
+      "folder": "/Users/me/projects/webapp"
+    }
+  ]
+}

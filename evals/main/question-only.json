@@ -1,0 +1,7 @@
+{
+  "note": "A question gets an answer, no new work",
+  "space": "home",
+  "tasks": [{ "id": "t-build", "title": "iOS 빌드 확인", "topic": "앱", "status": "running", "now": "xcodebuild 실행 중" }],
+  "messages": ["빌드 어떻게 됐어?"],
+  "expect": [{ "answerOnly": true }]
+}

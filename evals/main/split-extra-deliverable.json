@@ -1,0 +1,11 @@
+{
+  "note": "One more deliverable while a long research job runs: a new job alongside, not an append",
+  "space": "home",
+  "tasks": [{ "id": "t-research", "title": "모의투자 데이터 조사", "topic": "펀딩픽", "status": "running", "now": "웹 검색 중" }],
+  "chat": [
+    { "from": "me", "text": "펀딩픽 모의투자를 실제 주가로 할지 가상 회사로 할지 조사해줘. 비용도. `deep-research` 스킬로 해 줘" },
+    { "from": "captain", "text": "실제 주가와 가상 회사 중 어떤 방식이 맞을지 비용까지 조사할게요. [fork t-research]" }
+  ],
+  "messages": ["그 기능정리도 해줘\n\n첨부한 파일:\n- /tmp/funding-screens.png"],
+  "expect": [{ "new": { "min": 1 }, "append": false }]
+}
