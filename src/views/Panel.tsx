@@ -34,7 +34,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
       <div class="branch-line">
         <span class="branch-title">{w().state !== "open" ? "이 일의 변경" : props.t.status === "running" || props.t.status === "queued" ? "일이 끝나면 합칠 수 있어요" : "확인하고 합치면 원래 폴더에 들어가요"}</span>
         <span class="spacer" />
-        <Show when={w().state === "merged"}><span class="branch-state ok"><Icon name="merge" size={12} />{w().into}에 합침</span></Show>
+        <Show when={w().state === "merged"}><span class="branch-state ok"><Icon name="merge" size={12} />{w().into?.startsWith("PR ") ? `${w().into} 합쳐짐` : `${w().into}에 합침`}</span></Show>
         <Show when={w().state === "discarded"}><span class="branch-state">버림</span></Show>
       </div>
       <Show when={w().state === "open" && props.t.status !== "running" && props.t.status !== "queued"}>
