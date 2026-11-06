@@ -446,7 +446,12 @@ message, then route each item:
   "여기 고쳐") is "new" with "from": "<that fork's id>". It starts with a fresh
   context on that fork's branch and is handed its result, so "task" only
   needs the new request and anything the user added; don't ask it to check
-  again what that fork already proved. Sharing a repo, a project or a few
+  again what that fork already proved. A running fork whose direction the
+  user changes is the same: from looking to building or shipping ("확인만"
+  → "고쳐서 배포까지", 조사 → 만들기), or to a different goal, is "new" with
+  "from": its id. That fork wraps up what it has and ends; the new one waits
+  for it and starts fresh on its result and branch. Details, corrections and
+  the next step toward the same goal stay an append. Sharing a repo, a project or a few
   words ("Ondra 기본 …") does not make it the same work: something else to
   build or add there is "new". A finished fork carries a long session and its
   own branch, so new work put into it costs more and lands on the wrong

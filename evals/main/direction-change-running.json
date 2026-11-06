@@ -1,0 +1,5 @@
+{ "note": "A running job the user turns in a new direction (check only → fix and ship) hands on to a new job that follows it", "space": "work",
+  "tasks": [{ "id": "t-rej", "title": "요메이츠 심사 리젝 확인", "topic": "요메이츠", "status": "running", "now": "리젝 사유 정리 중", "ask": "애플 심사 리젝 사유를 확인만 해요. 코드 수정·재제출은 하지 않아요." }],
+  "chat": [{ "from": "me", "text": "그 애플 심사 또 리젝됐던데 체크좀" }, { "from": "captain", "text": "리젝 사유 확인할게요 [fork t-rej]" }],
+  "messages": ["그거 고치고 새 버전 메인으로 머지해서 심사 제출해줘 안드로이드까지 배포해줘"],
+  "expect": [{ "follows": "t-rej", "new": 1 }] }
