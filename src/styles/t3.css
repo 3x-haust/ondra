@@ -8099,7 +8099,7 @@ textarea { resize: none !important; field-sizing: content; }
   list-style: none;
   margin: var(--s-2) 0 0;
   padding: var(--s-4);
-  max-height: 168px;
+  max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -8126,6 +8126,30 @@ textarea { resize: none !important; field-sizing: content; }
 .req-state { flex: none; font-size: var(--fs-xs); color: var(--ink-3); min-width: 48px; text-align: right; }
 .req-state.ask { color: var(--warn, #e5a50a); }
 .req-state.live { color: var(--accent); }
+.req-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2, var(--ink));
+  font-size: var(--fs-xs);
+}
+.req-job {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  width: 100%;
+  padding: 2px var(--s-8) var(--s-4) calc(var(--s-8) + 7px + var(--s-10));
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  text-align: left;
+}
+.req-job:hover { background: var(--hover); }
+.req-job-title { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2, var(--ink)); }
+.req-job-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-job-time { flex: none; margin-left: auto; color: var(--ink-4); font-variant-numeric: tabular-nums; }
 
 /* main: a project reporting back */
 .reply-from {
