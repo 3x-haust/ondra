@@ -26,6 +26,20 @@ function core(cmd: string): string {
   return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
 }
 
+/**
+ * The command that does the work in a chain, for a row's name: setup, cleanup and
+ * wait loops (cd, pkill, sleep, for … do … done, pgrep) are skipped, so
+ * `pkill -f x; … (nohup npm run dev &); until … sleep` reads "npm run dev".
+ */
+export function mainCommand(cmd: string): string {
+  const parts = cmd
+    .split(/\s*(?:&&|\|\||;|\n|\|)\s*/)
+    .map((p) => p.trim().replace(/^[({]\s*/, "").replace(/^(?:do|then|else|nohup|exec|command|time|sudo)\s+/, "").replace(/\s*&?\s*[)}]?\s*&?$/, "").trim())
+    .filter(Boolean);
+  const skip = /^(cd|export|set|source|\.|echo|printf|date|true|false|:|mkdir|unset|local|pkill|killall|kill|sleep|wait|for|while|until|if|fi|done|break|continue|pgrep|lsof|test|\[|[A-Z_][A-Z0-9_]*=\S*$)(\s|$)/;
+  return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
+}
+
 export function describeCommand(cmd: string): Said {
   const c = cmd.trim();
   const waits = /\b(until|while)\b[\s\S]*\bsleep\b|\bfor\b[\s\S]*\bseq\b[\s\S]*\bsleep\b/.test(c);
