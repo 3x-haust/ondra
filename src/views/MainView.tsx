@@ -398,24 +398,32 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const reqs = createMemo<Req[]>(() => {
     const out: Req[] = [];
     let ask: CaptainMessage | undefined;
+    // a job that carries on one of the request's jobs (a follow-up the project started, a new direction) is part of it
+    const carried = (t: Task, seen = new Set<string>()): Task[] => {
+      if (seen.has(t.id)) return [];
+      seen.add(t.id);
+      return [t, ...state.tasks.filter((x) => x.follows === t.id).flatMap((x) => carried(x, seen))];
+    };
     for (const m of props.msgs) {
       if (m.from === "me") {
         ask = m;
         continue;
       }
-      const tasks = props.started(m);
+      const tasks = props.started(m).flatMap((t) => carried(t));
       if (!ask || !tasks.length) continue;
+      const prev = out.find((r) => r.id === ask!.id);
+      if (prev) prev.tasks.push(...tasks.filter((t) => !prev.tasks.includes(t)));
+      else out.push({ id: ask.id, text: (ask.text ?? "").split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? ask.text ?? "", tasks: [...tasks], state: "done", at: 0 });
+    }
+    for (const r of out) {
       // a finished job is finished: subagents it left stopped don't keep the request open
-      const all = tasks.flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
-      const st: Req["state"] = all.some((t) => t.status === "waiting" || t.status === "failed")
+      const all = r.tasks.flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
+      r.state = all.some((t) => t.status === "waiting" || t.status === "failed")
         ? "ask"
         : all.some((t) => t.status === "running" || t.status === "queued" || t.status === "paused")
           ? "live"
           : "done";
-      const at = Math.max(...tasks.map((t) => t.finishedAt ?? t.startedAt ?? t.createdAt));
-      const prev = out.find((r) => r.id === ask!.id);
-      if (prev) prev.tasks.push(...tasks);
-      else out.push({ id: ask.id, text: (ask.text ?? "").split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? ask.text ?? "", tasks: [...tasks], state: st, at });
+      r.at = Math.max(...r.tasks.map((t) => t.finishedAt ?? t.startedAt ?? t.createdAt));
     }
     const fresh = Date.now() - 10 * 60_000;
     return out.filter((r) => r.state !== "done" || r.at > fresh).reverse();

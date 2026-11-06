@@ -324,6 +324,24 @@ export function reportUp(space: string) {
   }
 }
 
+/**
+ * Every minute, every project chat: a request whose work is all done goes up to
+ * main now, even when the moment that should have sent it was missed (a reload
+ * in between, a reply that failed). Requests already reported are skipped.
+ */
+let sweeping: ReturnType<typeof setInterval> | undefined;
+export function startRelaySweep() {
+  if (sweeping) return;
+  const sweep = () => {
+    for (const p of state.projects ?? []) {
+      const key = chatKey(p.space, p.id);
+      if (!busy.has(key)) reportUp(key);
+    }
+  };
+  setTimeout(sweep, 15_000);
+  sweeping = setInterval(sweep, 60_000);
+}
+
 async function pump(space: string) {
   if (busy.has(space)) return;
   busy.add(space);
