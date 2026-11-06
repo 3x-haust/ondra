@@ -296,6 +296,7 @@ pub fn run() {
             fs::fs_repos,
             fs::fs_read,
             fs::save_paste,
+            fs::clipboard_files,
             fs::save_download,
             fs::ensure_dir,
             worktree::worktree_merge,

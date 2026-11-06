@@ -4,7 +4,7 @@
 // row sits under the card. Files can be attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line.
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
-import { fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
+import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
 import { usePop } from "./ModelPicker";
 import { openImage } from "./Lightbox";
@@ -484,6 +484,30 @@ export function Composer(props: {
           }}
           onBlur={() => setTimeout(() => setPick(null), 120)}
           onPaste={async (e) => {
+            // files copied as files (Finder, a screenshot tool): the web view only gets their names
+            const plain = e.clipboardData?.getData("text/plain") ?? "";
+            const names = plain.split("\n").map((l) => l.trim()).filter(Boolean);
+            const fileish = names.length > 0 && names.length <= 20 && names.every((n) => /^[^/\\:*?"<>|]+\.[A-Za-z0-9]{1,6}$/.test(n) || n.startsWith("/"));
+            if (fileish || e.clipboardData?.types.includes("Files")) {
+              e.preventDefault();
+              const at = el.selectionStart ?? el.value.length;
+              const end = el.selectionEnd ?? at;
+              const paths = await clipboardFiles().catch(() => [] as string[]);
+              if (paths.length) return add(paths);
+              const blobs = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+              for (const f of blobs) {
+                const path = await savePaste([...new Uint8Array(await f.arrayBuffer())], f.type.split("/")[1] ?? "png");
+                if (path) add([path]);
+              }
+              if (blobs.length || !plain) return;
+              // not files after all: paste the text as usual
+              const next = `${el.value.slice(0, at)}${plain}${el.value.slice(end)}`;
+              el.value = next;
+              setText(next);
+              el.setSelectionRange(at + plain.length, at + plain.length);
+              grow();
+              return;
+            }
             const imgs = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
             if (!imgs.length) return;
             e.preventDefault();

@@ -376,6 +376,8 @@ export function onEvent<T>(name: string, fn: (payload: T) => void): Promise<Unli
 }
 /** Save a pasted image into the app's folder; returns its path. */
 export const savePaste = (bytes: number[], ext: string) => call<string | null>("save_paste", { bytes, ext }, null);
+/** Paths of the files on the clipboard (copied in Finder or by a screenshot tool), none if it holds no files. */
+export const clipboardFiles = () => call<string[]>("clipboard_files", undefined, []);
 export interface ArtifactFile {
   path: string;
   name: string;
