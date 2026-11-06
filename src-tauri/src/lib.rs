@@ -36,8 +36,11 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 
 const TRAY_ID: &str = "main";
 
+// The main window also holds the in-app browser's webview, so it is found as a
+// window (show, focus, title) and its page as a webview (events), never as a
+// single "webview window", which a window with two webviews isn't.
 fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
@@ -178,7 +181,7 @@ pub fn run() {
                 app.set_menu(menu)?;
                 app.on_menu_event(|app, event| {
                     if event.id.as_ref() == "close-panel" {
-                        if let Some(w) = app.get_webview_window("main") {
+                        if let Some(w) = app.get_webview("main") {
                             let _ = w.emit("panel:close", ());
                         }
                     }
@@ -208,7 +211,7 @@ pub fn run() {
             // The display name comes only from `productName` in tauri.conf.json.
             let name = app.package_info().name.clone();
             for (label, title) in [("main", name.clone()), ("capture", format!("{name} 빠른 입력"))] {
-                if let Some(w) = app.get_webview_window(label) {
+                if let Some(w) = app.get_window(label) {
                     let _ = w.set_title(&title);
                 }
             }
@@ -333,6 +336,7 @@ pub fn run() {
             inbrowser::inbrowser_show,
             inbrowser::inbrowser_hide,
             inbrowser::inbrowser_go,
+            inbrowser::inbrowser_share,
             browser::browser_release,
             devices::devices_list,
             devices::device_boot,

@@ -2,6 +2,7 @@
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import { taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
+import { inBrowserShare } from "../lib/native";
 import { openBrowser, openTask } from "../state/ui";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
@@ -52,7 +53,9 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     else list.focus();
   };
   const ready = () => sel() < props.d.options.length || !!typed().trim();
-  const submit = () => {
+  const submit = async () => {
+    // a sign-in card: what was signed in to in the app's browser reaches the jobs' browser first
+    if (loginUrl() !== undefined) await inBrowserShare(loginUrl() || undefined).catch(() => {});
     if (sel() < props.d.options.length) void decide(props.d.id, props.d.options[sel()].id);
     else if (typed().trim()) void decide(props.d.id, typed().trim());
     else own?.focus();

@@ -7,7 +7,7 @@
 use std::process::Stdio;
 
 use serde::Serialize;
-use tauri::webview::{PageLoadEvent, WebviewBuilder};
+use tauri::webview::{Cookie, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url, Webview, WebviewUrl};
 
 const LABEL: &str = "inbrowser";
@@ -31,36 +31,60 @@ fn bounds(x: f64, y: f64, w: f64, h: f64) -> Rect {
     Rect { position: LogicalPosition::new(x, y).into(), size: LogicalSize::new(w.max(1.0), h.max(1.0)).into() }
 }
 
-/// Copy this site's cookies into the shared browser (logins carry over to jobs).
+/// Copy cookies into the shared browser (logins carry over to jobs). Cookies
+/// belong to the whole browser, so the command is not tied to any tab.
+fn push_cookies(app: &AppHandle, cookies: Vec<Cookie<'static>>) {
+    let Some(port) = crate::browser::port(app) else { return };
+    for c in cookies {
+        let domain = c.domain().unwrap_or_default().to_string();
+        if domain.is_empty() {
+            continue;
+        }
+        let Some(mut cmd) = crate::tools::agent_browser(app) else { return };
+        for (k, v) in crate::browser::attach_env(port, &format!("ondra-cookies-{port}")) {
+            cmd.env(k, v);
+        }
+        cmd.args(["--no-pin-tab", "cookies", "set", c.name(), c.value(), "--domain", &domain, "--path", c.path().unwrap_or("/")]);
+        if c.secure() == Some(true) {
+            cmd.arg("--secure");
+        }
+        if c.http_only() == Some(true) {
+            cmd.arg("--http-only");
+        }
+        if let Some(s) = c.same_site() {
+            cmd.args(["--same-site", &s.to_string()]);
+        }
+        if let Some(t) = c.expires_datetime() {
+            cmd.args(["--expires", &t.unix_timestamp().to_string()]);
+        }
+        let _ = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+}
+
 fn share_cookies(app: AppHandle, wv: Webview, url: Url) {
     std::thread::spawn(move || {
-        let Ok(cookies) = wv.cookies_for_url(url) else { return };
-        let Some(port) = crate::browser::port(&app) else { return };
-        for c in cookies {
-            let Some(mut cmd) = crate::tools::agent_browser(&app) else { return };
-            for (k, v) in crate::browser::attach_env(port, &format!("ondra-cookies-{port}")) {
-                cmd.env(k, v);
-            }
-            let domain = c.domain().unwrap_or_default().to_string();
-            if domain.is_empty() {
-                continue;
-            }
-            cmd.args(["cookies", "set", c.name(), c.value(), "--domain", &domain, "--path", c.path().unwrap_or("/")]);
-            if c.secure() == Some(true) {
-                cmd.arg("--secure");
-            }
-            if c.http_only() == Some(true) {
-                cmd.arg("--http-only");
-            }
-            if let Some(s) = c.same_site() {
-                cmd.args(["--same-site", &s.to_string()]);
-            }
-            if let Some(t) = c.expires_datetime() {
-                cmd.args(["--expires", &t.unix_timestamp().to_string()]);
-            }
-            let _ = cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        if let Ok(cookies) = wv.cookies_for_url(url) {
+            push_cookies(&app, cookies);
         }
     });
+}
+
+/// Copy the cookies for `url` (or all of them) now and wait until they are in:
+/// the user says they signed in, and the job goes on right after.
+#[tauri::command]
+pub async fn inbrowser_share(app: AppHandle, url: Option<String>) -> Result<(), String> {
+    let Some(wv) = webview(&app) else { return Ok(()) };
+    tauri::async_runtime::spawn_blocking(move || {
+        let cookies = match url.as_deref().and_then(parse) {
+            Some(u) => wv.cookies_for_url(u),
+            None => wv.cookies(),
+        };
+        if let Ok(c) = cookies {
+            push_cookies(&app, c);
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Show the browser over the given area (logical px from the window's top left),
