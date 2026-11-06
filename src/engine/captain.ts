@@ -15,7 +15,7 @@ import { addMemory, applying, isLive, KINDS, memoryLines, namedSpaces, recall } 
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, chooseAccount, collectStats, createTask, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, chooseAccount, collectStats, createTask, finished, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -697,6 +697,23 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
       pauseTask(r.taskId);
       out.push({ kind: "stop", taskId: r.taskId });
+    } else if (r?.kind === "append" && finished(taskById(r.taskId ?? r.workerId)) && String(r.message ?? "").trim()) {
+      // a finished job is closed: more on it is a new job with a fresh context, on its branch
+      const prev = taskById(r.taskId ?? r.workerId)!;
+      const id = createTask({
+        space: prev.space,
+        title: prev.title,
+        topic: prev.topic,
+        ask: String(r.message).trim(),
+        project: prev.project,
+        priority: prev.priority,
+        weight: prev.weight,
+        display: raw.filter((x) => x?.kind !== "remember").length === 1 && fromUser ? original : undefined,
+        isolate: isolateOf.get(space),
+        reach: prev.reach,
+        follows: prev.id,
+      });
+      out.push({ kind: "new", taskId: id });
     } else if (r?.kind === "append" && taskById(r.taskId ?? r.workerId)) {
       const id = r.taskId ?? r.workerId;
       const message = String(r.message ?? "").trim();
@@ -736,6 +753,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         after: (Array.isArray(r.after) ? r.after : [])
           .map((k: unknown) => byKey.get(String(k)) ?? (taskById(String(k)) ? String(k) : ""))
           .filter(Boolean),
+        follows: typeof r.from === "string" && finished(taskById(r.from)) ? r.from : undefined,
       });
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });

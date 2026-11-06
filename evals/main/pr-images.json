@@ -1,3 +1,3 @@
 { "space": "work",
   "tasks": [{ "id": "t-p", "title": "결제 버튼 수정", "topic": "아크메", "status": "done", "summary": "PR #212를 열었어요, 스크린샷 2장 저장" }],
-  "messages": ["PR에 스샷 넣어줘"], "expect": [{ "append": "t-p", "new": 0 }] }
+  "messages": ["PR에 스샷 넣어줘"], "expect": [{ "follows": "t-p", "new": 1 }] }

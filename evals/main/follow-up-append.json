@@ -4,5 +4,5 @@
   "tasks": [{ "id": "t-login", "title": "로그인 튕김 수정", "topic": "웹앱", "status": "done", "branch": "fix/login-bounce", "now": "스크린샷 2장과 함께 끝냈어요" }],
   "chat": [{ "from": "me", "text": "로그인하면 가끔 튕기는 거 고쳐줘" }, { "from": "captain", "text": "로그인 튕김 고칠게요 [fork t-login]" }],
   "messages": ["사진이 이상해 다시 찍어줘"],
-  "expect": [{ "append": "t-login", "new": 0 }]
+  "expect": [{ "follows": "t-login", "new": 1 }]
 }

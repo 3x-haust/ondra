@@ -2,4 +2,4 @@
   "tasks": [{ "id": "t-f", "title": "iOS 빌드", "topic": "앱", "status": "failed", "error": "xcodebuild: signing certificate expired" }],
   "chat": [{ "from": "me", "text": "iOS 빌드 돌려줘" }, { "from": "captain", "text": "빌드할게요 [fork t-f]" }],
   "messages": ["인증서 갱신했어 다시 해봐"],
-  "expect": [{ "append": "t-f", "new": 0 }] }
+  "expect": [{ "follows": "t-f", "new": 1 }] }

@@ -173,6 +173,8 @@ export interface Task {
   parentId?: string;
   /** Steps that must finish first; their results go into this job's first prompt. */
   after?: string[];
+  /** The finished job this one carries on: a new job (fresh context) on that job's branch, given its result. */
+  follows?: string;
   /** Other spaces the user let this job use (their memory, folder and past jobs). Spaces are separate otherwise. */
   reach?: SpaceId[];
   /** A review subagent: its findings go back to the fork to fix. */

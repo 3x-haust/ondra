@@ -5,8 +5,8 @@
       "id": "review-fix",
       "text": "통신판매업 PR 리뷰 왔는데 푸터 말고 회사정보 페이지에도 넣으래",
       "expect": {
-        "append": "t-tong",
-        "new": 0
+        "follows": "t-tong",
+        "new": 1
       }
     },
     {
@@ -56,8 +56,8 @@
       "id": "rebuild",
       "text": "Play 빌드 다시 돌려",
       "expect": {
-        "append": "t-build",
-        "new": 0
+        "follows": "t-build",
+        "new": 1
       }
     },
     {

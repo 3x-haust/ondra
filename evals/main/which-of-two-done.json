@@ -4,4 +4,4 @@
     { "id": "t-b", "title": "4월 회고 초안", "topic": "회고", "status": "done", "summary": "4월 회고 초안을 retro-04.md로 썼어요" }
   ],
   "messages": ["로그인 고친 거 PR 올려줘"],
-  "expect": [{ "append": "t-a", "new": 0 }] }
+  "expect": [{ "follows": "t-a", "new": 1 }] }
