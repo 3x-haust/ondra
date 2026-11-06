@@ -11,7 +11,7 @@ import { noteCall, noteCtx } from "../state/ctx";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -1145,12 +1145,30 @@ async function dropEmptyBranch(id: string) {
   const w = t?.worktree;
   if (!t || !w || w.state !== "open" || t.status !== "done") return;
   const c = await gitChanges(w.path, w.base).catch(() => null);
-  if (!c?.isRepo || c.files.length) return;
-  await worktreeRemove(w.repo, w.path, w.branch, false, await gitEnv(t)).catch(() => {});
+  if (!c?.isRepo) return;
+  const env = await gitEnv(t);
+  if (c.files.length) {
+    // the job pushed and its PR was merged: there is nothing left to merge here
+    const into = await worktreeLanded(w.path, env).catch(() => null);
+    if (!into) return;
+    await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
+    updateTask(id, (x) => {
+      x.cwd = homeDir(x);
+      x.worktree = { ...w, state: "merged", into };
+      push(x, { kind: "note", text: `${into}에 이미 들어가서 작업 폴더를 정리했어요` });
+    });
+    return;
+  }
+  await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
   updateTask(id, (x) => {
     x.cwd = homeDir(x);
     x.worktree = undefined;
   });
+}
+
+/** Finished jobs whose branch has landed since (merged on GitHub later, or before this check existed). */
+export async function sweepLanded() {
+  for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) await dropEmptyBranch(t.id);
 }
 
 // ─────────────────────────────── creating
@@ -1562,6 +1580,9 @@ export function startScheduler() {
   // After a restart nothing runs any more: put live work back in line.
   // (jobs whose engine still runs, after a page reload, were picked up again by reattachJobs)
   for (const t of state.tasks) if (t.status === "running" && !runs.get(t.id)) updateTask(t.id, (x) => requeue(x));
+  // branches merged on GitHub since: their merge bar goes; checked again every half hour
+  setTimeout(() => void sweepLanded(), 20_000);
+  setInterval(() => void sweepLanded(), 30 * 60_000);
   createRoot(() => {
     createEffect(
       on(

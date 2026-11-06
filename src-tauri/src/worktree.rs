@@ -148,6 +148,27 @@ fn merge(repo: &str, path: &str, branch: &str, message: &str) -> Result<String, 
     Ok(target)
 }
 
+/// Whether the job's work is already on the remote's main line (the job pushed
+/// and its PR was merged): nothing uncommitted, and HEAD is in the remote's
+/// default branch. Returns that branch ("origin/main"), or None.
+fn landed(path: &str) -> Option<String> {
+    if !Path::new(path).is_dir() || !run(path, &["status", "--porcelain"]).ok()?.is_empty() {
+        return None;
+    }
+    let remote = "origin";
+    let _ = fetch(path, 20);
+    let main = run(path, &["symbolic-ref", "--short", &format!("refs/remotes/{remote}/HEAD")])
+        .ok()
+        .or_else(|| ["main", "master"].iter().map(|b| format!("{remote}/{b}")).find(|b| run(path, &["rev-parse", "--verify", "-q", b]).is_ok()))?;
+    run(path, &["merge-base", "--is-ancestor", "HEAD", &main]).ok().map(|_| main)
+}
+
+/// The job's branch is already merged on the remote: Some("origin/main").
+#[tauri::command]
+pub async fn worktree_landed(path: String, env: Option<Vec<(String, String)>>) -> Result<Option<String>, String> {
+    blocking(move || Ok(with_env(env.unwrap_or_default(), || landed(&path)))).await
+}
+
 fn remove(repo: &str, path: &str, branch: &str, keep_branch: bool) -> Result<(), String> {
     if keep_branch && Path::new(path).is_dir() {
         let _ = commit_all(path, "작업 중 저장");
@@ -284,5 +305,30 @@ mod tests {
         let w2 = create(&a, &format!("{t}/w2"), "task/y").unwrap();
         assert_eq!(w2.base, mine);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn knows_when_the_work_is_merged_on_the_remote() {
+        let root = std::env::temp_dir().join(format!("wt-landed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (up, repo) = (root.join("up.git"), root.join("repo"));
+        std::fs::create_dir_all(&repo).unwrap();
+        let (u, r) = (up.display().to_string(), repo.display().to_string());
+        sh(&root.display().to_string(), &["init", "-q", "--bare", "-b", "main", &u]);
+        sh(&r, &["init", "-q", "-b", "main"]);
+        sh(&r, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "a"]);
+        sh(&r, &["remote", "add", "origin", &u]);
+        sh(&r, &["push", "-q", "-u", "origin", "main"]);
+        sh(&r, &["remote", "set-head", "origin", "main"]);
+        let wt = root.join("wt").display().to_string();
+        sh(&r, &["worktree", "add", "-q", "-b", "job", &wt]);
+        std::fs::write(root.join("wt/f.txt"), "x").unwrap();
+        assert_eq!(landed(&wt), None, "uncommitted work");
+        sh(&wt, &["add", "-A"]);
+        sh(&wt, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "b"]);
+        assert_eq!(landed(&wt), None, "not on the remote yet");
+        sh(&wt, &["push", "-q", "origin", "job:main"]);
+        assert_eq!(landed(&wt).as_deref(), Some("origin/main"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

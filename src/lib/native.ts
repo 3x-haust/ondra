@@ -196,6 +196,9 @@ export const worktreeCreate = (cwd: string, dest: string, branch: string, env: E
 /** Commit what is left and merge into the repo's current branch; resolves to that branch's name. */
 export const worktreeMerge = (repo: string, path: string, branch: string, message: string, env: Env = []) =>
   inTauri ? invoke<string>("worktree_merge", { repo, path, branch, message, env }) : Promise.reject(new Error("앱에서만 돼요"));
+/** The job's branch is already in the remote's main line: its name ("origin/main"), else null. */
+export const worktreeLanded = (path: string, env: Env = []) =>
+  inTauri ? invoke<string | null>("worktree_landed", { path, env }) : Promise.resolve(null);
 export const worktreeRemove = (repo: string, path: string, branch: string, keepBranch: boolean, env: Env = []) =>
   inTauri ? invoke<void>("worktree_remove", { repo, path, branch, keepBranch, env }) : Promise.resolve();
 /** Every file in a folder, relative paths (git-tracked + new, or a capped walk). */
