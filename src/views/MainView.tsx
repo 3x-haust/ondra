@@ -16,7 +16,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago } from "../ui/bits";
+import { ago, now, short } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -431,6 +431,13 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     return out.filter((r) => r.state !== "done" || r.at > fresh).reverse();
   });
   const count = (k: Req["state"]) => reqs().filter((r) => r.state === k).length;
+  const active = (t: Task) => t.status === "running" || t.status === "waiting" || t.status === "queued";
+  // what the job says it is doing now (its status line), not its title again
+  const doing = (t: Task) => {
+    const s = (t.status === "waiting" ? t.now : t.intent || t.now || "").trim();
+    return s && s !== t.title ? s : "";
+  };
+  const working = () => reqs().flatMap((r) => (r.state === "done" ? [] : r.tasks.filter((t) => t.status === "running")));
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
@@ -454,6 +461,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
             <Show when={count("live")}><span class="req-tag live">진행 중 {count("live")}</span></Show>
             <Show when={count("done")}><span class="req-tag done">끝남 {count("done")}</span></Show>
           </span>
+          {/* closed: what is being worked on right now, in one line */}
+          <Show when={!open() && working()[0]}>{(t) => <span class="req-now">{t().title}<Show when={doing(t())}> · {doing(t())}</Show></span>}</Show>
           <Icon name="chevron" size={12} class="req-chev" />
         </button>
         <Show when={open()}>
@@ -467,6 +476,16 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
                     <span class={`req-state ${r.state}`}>{label[r.state]}</span>
                   </button>
+                  {/* the jobs working on it now: which one, what it is doing, for how long */}
+                  <For each={r.state === "done" ? [] : r.tasks.filter(active)}>
+                    {(t) => (
+                      <button class="req-job" onClick={() => openTask(t.id)} title={t.title}>
+                        <span class="req-job-title">{t.title}</span>
+                        <Show when={doing(t)}><span class="req-job-now">{doing(t)}</span></Show>
+                        <span class="req-job-time">{t.status === "waiting" ? "답 필요" : t.status === "running" && t.startedAt ? `${short(now() - t.startedAt)}째` : "대기"}</span>
+                      </button>
+                    )}
+                  </For>
                 </li>
               )}
             </For>
