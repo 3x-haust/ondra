@@ -476,8 +476,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
                     <span class={`req-state ${r.state}`}>{label[r.state]}</span>
                   </button>
-                  {/* the jobs working on it now: which one, what it is doing, for how long */}
-                  <For each={r.state === "done" ? [] : r.tasks.filter(active)}>
+                  {/* several jobs working on it: one line each (one job opens from the row itself) */}
+                  <For each={r.state === "done" || r.tasks.filter(active).length < 2 ? [] : r.tasks.filter(active)}>
                     {(t) => (
                       <button class="req-job" onClick={() => openTask(t.id)} title={t.title}>
                         <span class="req-job-title">{t.title}</span>
