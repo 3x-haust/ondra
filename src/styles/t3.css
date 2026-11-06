@@ -8484,3 +8484,30 @@ textarea { resize: none !important; field-sizing: content; }
   font-size: var(--fs-sm);
   vertical-align: 1px;
 }
+
+/* request board: the step under way and the to-do progress */
+.req-step-now {
+  flex: 0 1 auto;
+  max-width: 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.req-steps { display: inline-flex; align-items: center; gap: 6px; }
+.req-bar {
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.req-bar b {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--dur) var(--ease);
+}
