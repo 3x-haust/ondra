@@ -113,11 +113,13 @@ Copy this skill's `report.html` to `$R/report.html` and fill it:
 - Options to choose between → the decision grid (●◐○, the pick marked), not a
   table of sentences. A table only for short facts (cells of a few words or a
   number, numbers right-aligned).
-- 1–3 pictures, each answering one question its title asks in plain words:
-  inline SVG bars (one scale from zero, the answer's bar in the accent
-  color, labels on the bars), a timeline for dated events. Copy the
-  template's markup; no scripts, no CDN, no web fonts, so the same file
-  shows in the chat and prints to PDF.
+- 1–4 pictures drawn the way a good paper draws them (`writing/figures.md`):
+  how something works → the method diagram (numbered stages, boxes colored by
+  role, arrows, a loop when something comes back); how much → bars on one
+  scale from zero; when → a timeline; a cited paper's own figure (embedded,
+  credited) when it answers the question exactly. Each has a "그림 N." caption.
+  Copy the template's markup; no scripts, no CDN, no web fonts, so the same
+  file shows in the chat and prints to PDF.
 - "말 풀이" when a term the user didn't use can't be avoided: a few words each.
 - "확실하지 않은 것": what wasn't found, conflicts, unverified items. Caveats
   live here, not at the end of every paragraph.

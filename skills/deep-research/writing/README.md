@@ -39,14 +39,12 @@ right it is. Write for them, then take the AI out of it.
   ~25 characters mean it should be sentences or a picture, not a table.
 - Every picture answers one question, and its title is that question in plain
   words ("사용자 수별 한 달 비용"). Labels sit on the bars; no legend to decode.
-- Pick the picture by the question:
-  - which option fits → the decision grid (options × 3–4 criteria, ●◐○, the
-    pick marked) from `report.html`;
-  - how much / which is biggest → bars on one scale from zero, the answer's
-    bar in the accent color, ≤ 6 bars;
-  - how it changes with size → a few bars per size, or a small line;
-  - in what order → the timeline.
-- 1–3 pictures in the whole report. No picture that only restates a sentence.
+- Draw them the way a good paper does: read `figures.md` before the first
+  picture. How something works → a method diagram with numbered stages; which
+  option → the decision grid; how much → bars; when → the timeline; a cited
+  paper's own figure when it answers the question exactly.
+- 1–4 pictures in the whole report, each with a "그림 N." caption. No picture
+  that only restates a sentence.
 
 ## Take the AI out (after the draft)
 

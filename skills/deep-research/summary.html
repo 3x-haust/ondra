@@ -36,6 +36,32 @@
   figure { margin: 6px 0 10px; }
   figcaption { font-size: 12px; color: var(--soft); margin-top: 4px; }
   svg text { font-family: inherit; }
+  figcaption b { color: var(--ink, #1d1d1f); margin-right: 4px; }
+  /* "How it works" figure, the way papers draw a method: numbered stages left to
+     right, parts as boxes colored by role, arrows for what flows, a dashed loop
+     for what comes back. Stacks top to bottom when narrow. */
+  .flow { display: flex; align-items: stretch; gap: 0; border: 1px solid var(--line); border-radius: 12px; padding: 16px 12px 14px; }
+  .stage { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 0 6px; }
+  .stage > header { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; line-height: 1.3; min-height: 34px; }
+  .stage > header .no { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #23408e; color: #fff; display: grid; place-items: center; font-size: 12.5px; }
+  .node { border: 1.5px solid var(--c, #8a8a90); background: var(--cb, #f5f5f7); border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.3; }
+  .node b { display: block; font-weight: 600; }
+  .node small { display: block; color: var(--soft); font-size: 12px; }
+  .node.dash { border-style: dashed; background: var(--paper); }
+  .node .state { float: right; font-style: normal; font-size: 11px; color: var(--c, #5b5b60); margin-left: 6px; }
+  .node.c1 { --c: #4a6fc1; --cb: #e9effb; }   /* input, data */
+  .node.c2 { --c: #3c9a7a; --cb: #e6f4ee; }   /* stored, memory */
+  .node.c3 { --c: #d07a3c; --cb: #fbeee3; }   /* the step that changes things */
+  .node.c4 { --c: #b2506a; --cb: #f8e6eb; }   /* what is trained, learned, decided */
+  .row { display: flex; gap: 6px; } .row > .node { flex: 1 1 0; min-width: 0; }
+  .down { text-align: center; color: var(--faint); font-size: 13px; line-height: 1; }
+  .go { flex: none; align-self: center; width: 22px; text-align: center; color: var(--faint); font-size: 18px; }
+  .loop { margin: 10px 4px 0; padding: 6px 10px; border: 1.5px dashed #9aa0aa; border-radius: 99px; text-align: center; font-size: 12.5px; color: var(--soft); }
+  @media (max-width: 600px) {
+    .flow { flex-direction: column; gap: 6px; }
+    .go { transform: rotate(90deg); align-self: center; }
+  }
+
   footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 9px; font-size: 11.5px; color: var(--faint); }
 </style>
 </head>
@@ -59,7 +85,7 @@
   <li>{{세 번째}} <sup>[3]</sup></li>
 </ol>
 
-<!-- The report's one most telling picture, smaller. Same data, same colors. -->
+<!-- The report's one most telling picture, smaller: its method diagram (.flow, copy its markup) or a chart. Same data, same colors. -->
 <figure>
   <svg viewBox="0 0 640 112" width="100%" role="img" aria-label="{{차트 설명}}">
     <g font-size="12" fill="#5b5b60">
