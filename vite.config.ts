@@ -20,6 +20,16 @@ const reloadOnCore = {
 
 export default defineConfig(() => ({
   plugins: [solid(), reloadOnCore],
+  build: {
+    rollupOptions: {
+      input: { main: "index.html", pdf: "pdf.html" },
+      output: {
+        assetFileNames: (asset) => asset.originalFileNames.some((name) => /pdfjs-dist\/(cmaps|standard_fonts|wasm)\//.test(name))
+          ? "assets/pdf/[name][extname]" : "assets/[name]-[hash][extname]",
+      },
+    },
+    assetsInlineLimit: (path) => /pdfjs-dist\/(cmaps|standard_fonts|wasm)\//.test(path) ? false : undefined,
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

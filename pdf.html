@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF</title>
+  </head>
+  <body>
+    <nav aria-label="문서 탐색">
+      <button id="previous" title="이전 페이지" aria-label="이전 페이지" disabled>‹</button>
+      <input id="page" type="number" min="1" value="1" aria-label="페이지" disabled />
+      <span id="pages">/ 0</span>
+      <button id="next" title="다음 페이지" aria-label="다음 페이지" disabled>›</button>
+      <button id="minus" title="축소" aria-label="축소" disabled>−</button>
+      <output id="scale" aria-label="확대 비율">100%</output>
+      <button id="plus" title="확대" aria-label="확대" disabled>+</button>
+      <select id="fit" aria-label="맞춤 보기" disabled>
+        <option value="custom">직접 조절</option>
+        <option value="page-width" selected>너비 맞춤</option>
+        <option value="page-fit">페이지 맞춤</option>
+        <option value="1">실제 크기</option>
+      </select>
+    </nav>
+    <dialog id="password-dialog" aria-labelledby="password-message">
+      <form id="password-form">
+        <p id="password-message">PDF 비밀번호를 입력해 주세요.</p>
+        <input id="password" type="password" aria-label="PDF 비밀번호" autocomplete="off" required autofocus />
+        <button type="submit">열기</button>
+        <button id="password-cancel" type="button">취소</button>
+      </form>
+    </dialog>
+    <p id="status" role="status">PDF를 불러오는 중이에요</p>
+    <div id="container" tabindex="0" aria-label="PDF 문서"><div id="viewer" class="pdfViewer"></div></div>
+    <script type="module" src="/src/pdf.ts"></script>
+  </body>
+</html>

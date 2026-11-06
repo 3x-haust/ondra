@@ -1,0 +1,17 @@
+:root { font: 12px -apple-system, BlinkMacSystemFont, sans-serif; color-scheme: light dark; }
+nav, nav * { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+body { background: light-dark(#e8e8e8, #252525); color: light-dark(#252525, #ddd); }
+nav { height: 44px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; overflow-x: auto; white-space: nowrap; }
+button, input, select { font: inherit; color: inherit; background: light-dark(#fff, #333); border: 1px solid light-dark(#ccc, #555); border-radius: 4px; height: 28px; }
+button { min-width: 28px; cursor: pointer; font-size: 18px; }
+button:disabled { opacity: .4; cursor: default; }
+input { width: 48px; text-align: center; }
+output { min-width: 40px; text-align: center; }
+select { max-width: 104px; }
+a { color: inherit; margin-left: auto; }
+#container { position: absolute; inset: 44px 0 0; overflow: auto; overscroll-behavior: none; overflow-anchor: none; }
+#password { width: 180px; text-align: start; }
+#password-dialog button { font-size: inherit; }
+#status { position: absolute; top: 55px; left: 16px; right: 16px; z-index: 1; }
+.pdfViewer { min-width: 100%; width: max-content; }
