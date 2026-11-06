@@ -40,6 +40,45 @@ const TRAY_ID: &str = "main";
 // The main window also holds the in-app browser's webview, so it is found as a
 // window (show, focus, title) and its page as a webview (events), never as a
 // single "webview window", which a window with two webviews isn't.
+/// ⌘Q quits only when held, like Chrome: a tap shows a hint and does nothing.
+/// Choosing Quit from the menu with the mouse quits at once.
+#[cfg(target_os = "macos")]
+fn hold_to_quit(app: &AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+    static HOLDING: AtomicBool = AtomicBool::new(false);
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
+        fn CGEventSourceSecondsSinceLastEventType(state: i32, kind: u32) -> f64;
+    }
+    // combined session state; kVK_ANSI_Q; key down and left mouse down events
+    let held = || unsafe { CGEventSourceKeyState(0, 12) };
+    let by_key = unsafe { CGEventSourceSecondsSinceLastEventType(0, 10) < CGEventSourceSecondsSinceLastEventType(0, 1) };
+    if !by_key {
+        app.exit(0);
+        return;
+    }
+    if HOLDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Some(w) = app.get_webview("main") {
+        let _ = w.emit("quit:hold", ());
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_millis(800) {
+            if !held() {
+                HOLDING.store(false, Ordering::SeqCst);
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        app.exit(0);
+    });
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_window("main") {
         let _ = w.show();
@@ -175,8 +214,13 @@ pub fn run() {
                 for kind in menu.items()? {
                     let Some(sub) = kind.as_submenu() else { continue };
                     for (i, item) in sub.items()?.into_iter().enumerate() {
-                        let close = item.as_predefined_menuitem().is_some_and(|p| p.text().is_ok_and(|t| t.contains("Close")));
-                        if close {
+                        let text = item.as_predefined_menuitem().and_then(|p| p.text().ok()).unwrap_or_default();
+                        if text.starts_with("Quit") {
+                            sub.remove(&item)?;
+                            let quit = MenuItem::with_id(app, "quit-hold", &text, true, Some("CmdOrCtrl+Q"))?;
+                            sub.insert(&quit, i)?;
+                        }
+                        if text.contains("Close") {
                             sub.remove(&item)?;
                             let panel = MenuItem::with_id(app, "close-panel", "패널 닫기", true, Some("CmdOrCtrl+W"))?;
                             sub.insert(&panel, i)?;
@@ -185,6 +229,9 @@ pub fn run() {
                 }
                 app.set_menu(menu)?;
                 app.on_menu_event(|app, event| {
+                    if event.id.as_ref() == "quit-hold" {
+                        hold_to_quit(app);
+                    }
                     if event.id.as_ref() == "close-panel" {
                         if let Some(w) = app.get_webview("main") {
                             let _ = w.emit("panel:close", ());
