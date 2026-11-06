@@ -452,6 +452,18 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
   /** main's last report on one of the request's jobs */
   const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
+  /** the request's to-do lists together (skipped steps left out) */
+  const steps = (r: Req) => {
+    const ps = r.tasks.flatMap((t) => t.plan.filter((p) => p.state !== "skip"));
+    return ps.length ? { done: ps.filter((p) => p.state === "done").length, all: ps.length } : undefined;
+  };
+  /** what it is on now: the question it waits on, else the to-do step under way, else its status line */
+  const stepNow = (r: Req) => {
+    const t = focus(r);
+    if (!t) return "";
+    const s = (t.status === "waiting" ? t.now : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
+    return s.trim();
+  };
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
@@ -486,7 +498,18 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                   <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
                     <i class={`req-dot ${r.state}`} />
                     <span class="req-text">{r.text}</span>
-                    <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
+                    {/* where it is: the step being done now and the to-do list's progress (several jobs show their own lines below) */}
+                    <Show when={r.state !== "done" && r.tasks.filter(active).length < 2 && stepNow(r)}>
+                      {(n) => <span class="req-step-now">{n()}</span>}
+                    </Show>
+                    <Show when={r.state !== "done" && steps(r)} fallback={<span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>}>
+                      {(st) => (
+                        <span class="req-steps" title={`할 일 ${st().all}개 중 ${st().done}개 끝남`}>
+                          <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
+                          {st().done}/{st().all}
+                        </span>
+                      )}
+                    </Show>
                     <span class={`req-state ${r.state}`}>{label[r.state]}</span>
                   </button>
                   {/* several jobs working on it: one line each (one job opens from the row itself) */}
