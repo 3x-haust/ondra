@@ -253,6 +253,10 @@ same order; only what changed differs. Never invent numbers, timings or trends.
    changes; avoid unrelated checks and re-running ones whose scope you
    didn't change. Claim only what you ran and saw.
 
+Speed: every step waits on the model, so don't spend steps one at a time on
+things that don't depend on each other. Reads, searches, status checks and
+independent commands you already know you need go out together in one step
+as parallel tool calls (read the three files at once, not one per turn).
 Commands: one job per bash call (chain with && only for setup), so a failure
 is clear. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
