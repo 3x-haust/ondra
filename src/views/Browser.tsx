@@ -3,6 +3,7 @@
 // sign-ins made in it are copied to the shared browser the jobs use.
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { inBrowserGo, inBrowserHide, inBrowserShow, onInBrowserPage } from "../lib/native";
+import { state } from "../state/store";
 import { browserTarget, paletteOpen, setBrowserTarget } from "../state/ui";
 import { Icon } from "../ui/Icon";
 
@@ -30,13 +31,13 @@ export function BrowserView(_props: { embedded?: boolean }) {
     if (!alive || !area) return;
     const r = area.getBoundingClientRect();
     const hidden = paletteOpen() || r.width < 20 || r.height < 20 || !area.isConnected;
-    const key = hidden ? "hidden" : `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+    const key = hidden ? "hidden" : `${state.space}:${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
     const target = browserTarget();
     if (key === placed && !target) return;
     placed = key;
     if (hidden) return void inBrowserHide();
     if (target) setBrowserTarget(null);
-    inBrowserShow({ x: r.left, y: r.top, w: r.width, h: r.height }, target ?? undefined)
+    inBrowserShow({ x: r.left, y: r.top, w: r.width, h: r.height }, state.space, target ?? undefined)
       .then(() => setFailed(false))
       .catch(() => {
         placed = "";
@@ -51,6 +52,8 @@ export function BrowserView(_props: { embedded?: boolean }) {
   onMount(() => {
     frame = requestAnimationFrame(tick);
     const off = onInBrowserPage((p) => {
+      // each space has its own page; another space's loads aren't this toolbar's
+      if (p.space && p.space !== state.space) return;
       setLoading(p.loading);
       if (p.url && p.url !== "about:blank") setUrl(p.url);
     });
@@ -67,20 +70,20 @@ export function BrowserView(_props: { embedded?: boolean }) {
     setDraft(null);
     if (!target) return;
     setUrl(target);
-    void inBrowserGo("open", target).catch(() => {});
+    void inBrowserGo("open", state.space, target).catch(() => {});
   };
 
   return (
     <div class="browser-view embedded">
       <div class="bpane">
         <div class="bbar">
-          <button class="icon-btn sm" title="뒤로" onClick={() => void inBrowserGo("back").catch(() => {})}>
+          <button class="icon-btn sm" title="뒤로" onClick={() => void inBrowserGo("back", state.space).catch(() => {})}>
             <Icon name="back" size={14} />
           </button>
-          <button class="icon-btn sm" title="앞으로" onClick={() => void inBrowserGo("forward").catch(() => {})}>
+          <button class="icon-btn sm" title="앞으로" onClick={() => void inBrowserGo("forward", state.space).catch(() => {})}>
             <Icon name="arrow" size={14} />
           </button>
-          <button class="icon-btn sm" title="새로고침" onClick={() => void inBrowserGo("reload").catch(() => {})}>
+          <button class="icon-btn sm" title="새로고침" onClick={() => void inBrowserGo("reload", state.space).catch(() => {})}>
             <Icon name="refresh" size={14} />
           </button>
           <label class="burl">

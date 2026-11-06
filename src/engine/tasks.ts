@@ -108,11 +108,11 @@ export async function accountEnv(accountId: string): Promise<Env> {
 }
 
 /** What one turn used (null if nothing moved). */
-let browserCheckAt = 0;
-function recheckBrowser() {
-  if (Date.now() - browserCheckAt < 30_000) return;
-  browserCheckAt = Date.now();
-  void browserCheck().catch(() => {});
+const browserCheckAt = new Map<string, number>();
+function recheckBrowser(space: string) {
+  if (Date.now() - (browserCheckAt.get(space) ?? 0) < 30_000) return;
+  browserCheckAt.set(space, Date.now());
+  void browserCheck(space).catch(() => {});
 }
 
 export function turnUsage(a: TokenStats, b: TokenStats, accountId: string, genMs?: number, ms?: number): Usage | null {
@@ -571,7 +571,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   try {
     const t0 = taskById(id)!;
     const t = t0;
-    const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
+    const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
     const skills = await jobSkills(t0);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
@@ -635,7 +635,8 @@ export function unread(t: Task): string[] {
 
 /** The job is over: its tab in the shared browser goes (the logins stay). */
 const releaseBrowser = (id: string) => {
-  if (taskById(id)?.browser) void browserRelease(id);
+  const t = taskById(id);
+  if (t?.browser) void browserRelease(id, t.space);
 };
 
 function fail(id: string, message: string) {
@@ -749,7 +750,7 @@ function handlers(id: string, run: Run) {
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
           // the shared browser stopped answering: check it now and restart it if it hangs
-          if (ev.isError && done?.kind === "tool" && done.tool.kind === "browser" && typeof out === "string" && /Failed to read|os error 35|no response came back|daemon.*(not|no) respon/i.test(out)) recheckBrowser();
+          if (ev.isError && done?.kind === "tool" && done.tool.kind === "browser" && typeof out === "string" && /Failed to read|os error 35|no response came back|daemon.*(not|no) respon/i.test(out)) recheckBrowser(taskById(id)?.space ?? state.space);
           updateTask(id, (t) => {
             const e = t.entries.find((x) => x.id === entryId);
             if (e?.kind === "tool") {

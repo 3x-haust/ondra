@@ -273,7 +273,7 @@ function BrowserPane(props: { t: Task }) {
 
   const connect = async () => {
     if (!alive) return;
-    const port = await browserStreamPort(props.t.id);
+    const port = await browserStreamPort(props.t.id, props.t.space);
     if (!alive) return;
     if (!port) {
       timer = setTimeout(connect, 2500);

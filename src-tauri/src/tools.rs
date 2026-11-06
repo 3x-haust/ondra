@@ -210,10 +210,15 @@ pub async fn tool_status(app: AppHandle) -> ToolStatus {
 /// `browser.rs`), keychain sign-in, and its own folder for screenshots and recordings.
 /// Async: the first job may have to start the shared browser.
 #[tauri::command]
-pub async fn worker_env(app: AppHandle, worker_id: String) -> Vec<(String, String)> {
-    let shared = {
+pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>) -> Vec<(String, String)> {
+    let space = space.unwrap_or_default();
+    // the app's own tool probe never opens a browser
+    let shared = if worker_id == "tools" {
+        None
+    } else {
         let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || crate::browser::ensure(&app).ok()).await.ok().flatten()
+        let space = space.clone();
+        tauri::async_runtime::spawn_blocking(move || crate::browser::ensure(&app, &space).ok()).await.ok().flatten()
     };
     let mut env = Vec::new();
     if let Some(dir) = sidecar_dir() {
@@ -272,8 +277,8 @@ fn output_within(mut cmd: Command, limit: std::time::Duration) -> Option<Vec<u8>
 
 /// Port of a worker's live browser stream, if its browser is open.
 #[tauri::command]
-pub async fn browser_stream_port(app: AppHandle, worker_id: String) -> Option<u16> {
-    let shared = crate::browser::port(&app);
+pub async fn browser_stream_port(app: AppHandle, worker_id: String, space: Option<String>) -> Option<u16> {
+    let shared = crate::browser::port(&app, &space.unwrap_or_default());
     let mut cmd = agent_browser(&app)?;
     let session = crate::browser::session_for(&worker_id, shared);
     // asking a session that is not running would start it (and open a tab)

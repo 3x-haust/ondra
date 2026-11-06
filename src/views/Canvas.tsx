@@ -205,7 +205,7 @@ function BrowserThumb(props: { t: Task }) {
   let alive = true;
   const connect = async () => {
     if (!alive || props.t.status !== "running") return;
-    const port = await browserStreamPort(props.t.id);
+    const port = await browserStreamPort(props.t.id, props.t.space);
     if (!alive) return;
     if (!port) return void (timer = setTimeout(connect, 4000));
     ws = new WebSocket(`ws://127.0.0.1:${port}/?maxFps=3`);
