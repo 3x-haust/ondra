@@ -19,15 +19,23 @@ import { accountEnv, chooseAccount } from "./tasks";
 
 // ───────────── btw
 
-/** which btw the card shows (index into state.btws), or none */
-const [btwAt, setBtwAt] = createSignal<number | null>(null);
-export const btwList = () => state.btws ?? [];
-export const btwIndex = btwAt;
-export const btw = () => {
-  const i = btwAt();
-  return i === null ? null : (btwList()[i] ?? null);
+/** The space a btw / side scope belongs to: "main:<space>[~project]", "task:<id>", "side:<space>". */
+export function spaceOfScope(scope: string): SpaceId {
+  const [kind, id = ""] = scope.split(/:(.*)/s);
+  if (kind === "task") return (taskById(id)?.space ?? state.space) as SpaceId;
+  return (id.split("~")[0] || state.space) as SpaceId;
+}
+
+/** which btw the card shows (by id), or none; each space has its own btws */
+const [btwId, setBtwId] = createSignal<string | null>(null);
+export const btwList = () => (state.btws ?? []).filter((b) => spaceOfScope(b.scope) === state.space);
+export const btwIndex = () => {
+  const i = btwList().findIndex((b) => b.id === btwId());
+  return i < 0 ? null : i;
 };
-export const closeBtw = () => setBtwAt(null);
+export const btw = () => btwList().find((b) => b.id === btwId()) ?? null;
+const setBtwAt = (i: number) => setBtwId(btwList()[i]?.id ?? null);
+export const closeBtw = () => setBtwId(null);
 /** "/btw" with nothing after it: the latest one */
 export function showBtw(i = btwList().length - 1) {
   if (!btwList().length) return false;
@@ -111,12 +119,14 @@ function chatLines(key: string, n: number): string[] {
 }
 
 /**
- * Everything else in Ondra, newest first, cut to a budget: every chat with main,
- * every job and sub-job (title, ask, what the user added, how it ended), side chats.
+ * Everything else in this space, newest first, cut to a budget: every chat with
+ * main, every job and sub-job (title, ask, what the user added, how it ended), its
+ * side chat. Spaces are separate workspaces: the other one is never in here.
  */
 function everything(scope: string): string {
+  const space = spaceOfScope(scope);
   const here = scope.startsWith("task:") ? scope.slice(5) : "";
-  const chats = [...new Set(state.captain.map((m) => (m.project ? `${m.space}~${m.project}` : m.space)))].filter((k) => `main:${k}` !== scope);
+  const chats = [...new Set(state.captain.filter((m) => m.space === space).map((m) => (m.project ? `${m.space}~${m.project}` : m.space)))].filter((k) => `main:${k}` !== scope);
   const out: string[] = [];
   let size = 0;
   const add = (block: string) => {
@@ -129,15 +139,13 @@ function everything(scope: string): string {
     const [sp, pj] = k.split("~");
     add([`# Main chat: ${spaceById(sp as SpaceId)?.label ?? sp}${pj ? ` / ${projectById(pj)?.name ?? pj}` : ""}`, ...chatLines(k, 10)].join("\n"));
   }
-  const jobs = state.tasks.filter((t) => t.id !== here).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt));
+  const jobs = state.tasks.filter((t) => t.id !== here && t.space === space).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt));
   const rest: string[] = [];
   out.push("# Jobs (newest first)");
   for (const t of jobs) if (!add(jobBlock(t, false))) rest.push(`- ${t.title} [${t.status}] · id ${t.id}`);
   if (rest.length) out.push("# Older jobs (titles only)", ...rest.slice(0, 200));
-  for (const sp of state.spaces) {
-    const side = sideOf(sp.id).filter((m) => !m.pending).slice(-8);
-    if (side.length) add([`# Side chat: ${sp.label}`, ...side.map((m) => `${m.from === "me" ? "user" : "side"}: ${clip(m.text, 400)}`)].join("\n"));
-  }
+  const side = scope.startsWith("side:") ? [] : sideOf(space).filter((m) => !m.pending).slice(-8);
+  if (side.length) add(["# Side chat", ...side.map((m) => `${m.from === "me" ? "user" : "side"}: ${clip(m.text, 400)}`)].join("\n"));
   return out.join("\n\n");
 }
 
@@ -149,7 +157,7 @@ function accountFor(space: SpaceId) {
 export function btwPrompt(scope: string, q: string, logs: string): string {
   return [
     "Answer a BTW question. It is a side question: keep it separate from the conversations below and change nothing.",
-    "You know everything that happened in Ondra: the conversation the user is looking at, every chat with main, every job and sub-job, and side chats.",
+    "You know everything that happened in this space of Ondra: the conversation the user is looking at, every chat with main, every job and sub-job, and its side chat. The user's other space is a separate workspace you don't see; if asked about it, say it's in the other space.",
     `When the picture below isn't enough, read the full logs in this folder (${logs}): one folder per job named by its id, main chats in captain-<space>[-<project>], each a set of .jsonl files. Use grep to find things; don't read whole files.`,
     "Answer in Korean, short and plain (a few lines). Name the job when the answer comes from one.",
     "",
@@ -281,7 +289,7 @@ async function ensureSide(space: SpaceId) {
       "--thinking",
       "low",
       "--append-system-prompt",
-      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in Ondra (every main chat, job and sub-job, side chat, in every space); each job's full log is in ${engine.info.dataDir}/sessions/<job id>/*.jsonl, read it when the overview isn't enough. Answer in Korean, short and plain.`,
+      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in this space (every main chat, job and sub-job); the user's other space is a separate workspace you don't see. Each job's full log is in ${engine.info.dataDir}/sessions/<job id>/*.jsonl, read it when the overview isn't enough. Answer in Korean, short and plain.`,
       ...(model ? ["--model", model] : []),
     ],
     await accountEnv(acc.id),
