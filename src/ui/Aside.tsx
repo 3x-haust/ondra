@@ -7,9 +7,10 @@ import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, se
 import { ago } from "./bits";
 import { throwThought } from "../engine/captain";
 import { tell } from "../engine/tasks";
-import { goMain, openPanel, paletteOpen, toast } from "../state/ui";
+import { goMain, openPanel, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
 import { fileSrc, pickFolder } from "../lib/native";
+import { ignoredKey, noModifiers, shortcutOverlay } from "../lib/shortcuts";
 import { menuSkills } from "../engine/skillMenu";
 import { tilde } from "../engine/rpc";
 import { isImage, withFiles, type PlusItem } from "./Composer";
@@ -22,7 +23,7 @@ export function BtwCard(props: { scope: string }) {
   // Esc closes the card first, before it blurs the input or closes the panel
   // (an open "/" or "@" list in the input still closes before it)
   const esc = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || e.isComposing || !btw() || paletteOpen() || document.querySelector(".cpick")) return;
+    if (e.key !== "Escape" || ignoredKey(e) || !noModifiers(e) || !btw() || shortcutOverlay()) return;
     e.preventDefault();
     e.stopPropagation();
     closeBtw();
@@ -240,9 +241,13 @@ export function SideChat() {
             e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 160)}px`;
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+            if (ignoredKey(e) || !noModifiers(e) || shortcutOverlay()) return;
+            if (e.key === "Enter") {
               e.preventDefault();
               send();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.currentTarget.blur();
             }
           }}
         />

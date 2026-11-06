@@ -2,13 +2,13 @@
 import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
-import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js";
 import { decisionFor, homeDir, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { closePanel, goMain, newTask, openPanel as showTool, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
 import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
@@ -186,21 +186,6 @@ export function TaskView(props: { id: string }) {
           if (x.status === "done" && x.worktree?.state === "open" && panelTab() === "flow") showTool("changes");
           else if (x.browser && x.shot && x.status === "running" && panelTab() === "flow") showTool("browser");
         });
-        // Esc closes the panel
-        const onKey = (e: KeyboardEvent) => {
-          if (e.key === "Escape" && !paletteOpen()) {
-            const el = document.activeElement as HTMLElement | null;
-            const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT");
-            if (!typing || !(el as HTMLTextAreaElement).value) {
-              e.preventDefault();
-              if (panelOpen()) void closePanel();
-            }
-            return;
-          }
-          // 1–9 for a question's choices: DecisionCard (selects; Enter answers)
-        };
-        window.addEventListener("keydown", onKey);
-        onCleanup(() => window.removeEventListener("keydown", onKey));
         void loadArtifacts(task().id);
         const strips = () => {
           const out: JSX.Element[] = [];

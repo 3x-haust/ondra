@@ -102,6 +102,7 @@ export function previewFile(path: string) {
   openPanel("preview");
 }
 export const [paletteOpen, setPaletteOpen] = createSignal(false);
+export const [paletteMode, setPaletteMode] = createSignal<"all" | "commands">("all");
 /** The user message being edited in place (entry or message id). */
 export const [editing, setEditing] = createSignal<string | null>(null);
 /** The left list folded away (⌘B). */
@@ -117,6 +118,11 @@ export const [hoverTask, setHoverTask] = createSignal<string | null>(null);
 export function showSidebar() {
   setSidebarHidden(false);
   if (!roomy()) closePanel();
+}
+
+export function toggleSidebar() {
+  if (sidebarAway()) showSidebar();
+  else setSidebarHidden(true);
 }
 
 export const openTask = (id: string) => setView({ name: "task", id });

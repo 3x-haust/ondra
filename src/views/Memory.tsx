@@ -18,6 +18,7 @@ import { tidying, tidyMemory } from "../engine/tidy";
 import { absorbing, absorbNotes, findNotes, notesPending } from "../engine/absorb";
 import { expand } from "../engine/rpc";
 import { fsRead, memoryFolder, revealPath } from "../lib/native";
+import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
 import { state } from "../state/store";
 import type { Memory, MemoryKind, ProjectNow } from "../state/types";
 import { memoryFocus, setMemoryFocus } from "../state/ui";
@@ -137,12 +138,12 @@ export function MemoryView() {
     void findNotes();
     // Esc goes back from a local graph to the whole structure
     const key = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (e.key !== "Escape" || e.defaultPrevented || !sel() || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
+      if (e.key !== "Escape" || !sel() || !viewKey(e) || !noModifiers(e)) return;
+      e.preventDefault();
       setSel("");
     };
-    window.addEventListener("keydown", key);
-    onCleanup(() => window.removeEventListener("keydown", key));
+    window.addEventListener("keydown", key, true);
+    onCleanup(() => window.removeEventListener("keydown", key, true));
   });
   const [hover, setHover] = createSignal<string>();
   const [q, setQ] = createSignal("");
@@ -222,7 +223,11 @@ export function MemoryView() {
         <button class="btn sm ghost" onClick={() => void openFolder()} title="Obsidian 폴더"><Icon name="folder" size={13} />파일로 보기</button>
         <div class="mem-search">
           <Icon name="search" size={13} />
-          <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
+          <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => {
+            if (e.key !== "Escape" || ignoredKey(e) || !noModifiers(e) || shortcutOverlay()) return;
+            e.preventDefault();
+            setQ("");
+          }} />
         </div>
       </header>
       <div class="mem-body" style={{ "--mt-w": `${widths().tree}px`, "--md-w": `${widths().detail}px` }}>
@@ -661,7 +666,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
   );
 
   const onKey = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement).tagName === "INPUT") return;
+    if (!viewKey(e) || !noModifiers(e)) return;
     const rows = visibleRows(props.model.roots, isOpen, shown);
     if (!rows.length) return;
     const i = rows.findIndex((r) => r.key === cursor());

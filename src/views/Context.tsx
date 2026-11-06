@@ -2,6 +2,7 @@
 // context window fills up, then each part to open and read.
 import { createMemo, createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { tilde } from "../engine/rpc";
 import { kindLabel, kindOf } from "../engine/memory";
 import { setMemoryFocus, setView } from "../state/ui";
@@ -298,7 +299,8 @@ export function ContextSheet(props: { agent: string; accountId: string; known?: 
     props.agent.startsWith("t:") ? loadJob(props.agent.slice(2)) : loadChat(props.agent.replace(/^captain:/, ""), props.accountId),
   );
   const key = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !ignoredKey(e) && noModifiers(e)) {
+      e.preventDefault();
       e.stopPropagation();
       props.onClose();
     }

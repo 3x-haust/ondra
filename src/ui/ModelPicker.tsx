@@ -2,6 +2,7 @@
 // login can actually use (asked from the engine once per account).
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { accountById } from "../state/store";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import type { Permission } from "../state/types";
 import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
@@ -32,7 +33,7 @@ export function prettyModel(m: string): string {
 const [openPop, setOpenPop] = createSignal<symbol | null>(null);
 if (typeof window !== "undefined") {
   window.addEventListener("click", () => setOpenPop(null));
-  window.addEventListener("keydown", (e) => e.key === "Escape" && openPop() && (e.stopPropagation(), setOpenPop(null)), true);
+  window.addEventListener("keydown", (e) => e.key === "Escape" && !ignoredKey(e) && noModifiers(e) && openPop() && (e.preventDefault(), e.stopPropagation(), setOpenPop(null)), true);
 }
 export const anyPop = () => openPop() !== null;
 export const closePops = () => setOpenPop(null);
@@ -173,6 +174,7 @@ function EffortSlider(props: { value: string; onChange: (id: string) => void }) 
     el.addEventListener("pointerup", up);
   };
   const key = (e: KeyboardEvent) => {
+    if (ignoredKey(e) || !noModifiers(e)) return;
     const d = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
     if (e.key === "Home") return e.preventDefault(), set(0);
     if (e.key === "End") return e.preventDefault(), set(n - 1);

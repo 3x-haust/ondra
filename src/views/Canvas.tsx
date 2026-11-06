@@ -19,6 +19,7 @@ import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, SidebarToggle } from "./Sidebar";
 import { Board } from "./Board";
+import { viewKey } from "../lib/shortcuts";
 
 // ───────────── geometry
 
@@ -817,12 +818,15 @@ export function Canvas() {
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement).closest("input, textarea") || mode() !== "canvas") return;
+    const target = e.target;
+    if (!(target instanceof Element) || (target !== document.body && !target.closest(".canvas-view"))) return;
+    if (target.closest('button, a[href], [tabindex], [role="button"], [role="tab"]')) return;
+    if (!viewKey(e) || e.metaKey || e.ctrlKey || e.altKey || mode() !== "canvas") return;
     if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), fit(true, true));
     else if (!e.metaKey && (e.key === "=" || e.key === "+")) zoomAt(1.2);
     else if (!e.metaKey && e.key === "-") zoomAt(1 / 1.2);
-    else if (e.key === "Enter" && sel()) openTask(sel()!);
-    else if (e.key === "Escape" && (sel() || adding())) (e.stopPropagation(), setSel(undefined), setAdding(false));
+    else if (!e.shiftKey && e.key === "Enter" && sel()) (e.preventDefault(), openTask(sel()!));
+    else if (!e.shiftKey && e.key === "Escape" && (sel() || adding())) (e.preventDefault(), e.stopPropagation(), setSel(undefined), setAdding(false));
   };
   window.addEventListener("keydown", onKey, true);
   onCleanup(() => window.removeEventListener("keydown", onKey, true));

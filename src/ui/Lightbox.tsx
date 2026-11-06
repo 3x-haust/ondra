@@ -1,6 +1,7 @@
 // A picture, big. ← → moves between the pictures it was opened with, Esc closes.
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { fileSrc, revealPath } from "../lib/native";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 
 const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(null);
@@ -13,10 +14,10 @@ export function openImage(path: string, list: string[] = [path]) {
 export function Lightbox() {
   const step = (d: number) => setShown((s) => s && { ...s, i: (s.i + d + s.list.length) % s.list.length });
   const onKey = (e: KeyboardEvent) => {
-    if (!shown()) return;
+    if (!shown() || ignoredKey(e) || !noModifiers(e)) return;
     if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setShown(null));
-    else if (e.key === "ArrowRight") step(1);
-    else if (e.key === "ArrowLeft") step(-1);
+    else if (e.key === "ArrowRight") (e.preventDefault(), e.stopPropagation(), step(1));
+    else if (e.key === "ArrowLeft") (e.preventDefault(), e.stopPropagation(), step(-1));
   };
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));

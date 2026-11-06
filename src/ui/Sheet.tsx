@@ -2,10 +2,12 @@
 import { onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Icon } from "./Icon";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 
 export function Sheet(props: { title: string; onClose: () => void; children: any; foot?: any; class?: string }) {
   const key = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !ignoredKey(e) && noModifiers(e)) {
+      e.preventDefault();
       e.stopPropagation();
       props.onClose();
     }

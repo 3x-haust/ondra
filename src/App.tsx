@@ -4,7 +4,10 @@ import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, dropToast, togglePanel, view } from "./state/ui";
+import { closePanel, paletteOpen, panelOpen, setView, sidebarAway, toast, toasts, dropToast, view } from "./state/ui";
+import { appCommands } from "./state/commands";
+import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
+import { anyPop } from "./ui/ModelPicker";
 import { spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
@@ -21,7 +24,7 @@ import { Onboarding } from "./views/Onboarding";
 import { Palette } from "./views/Palette";
 import { Lightbox } from "./ui/Lightbox";
 import { SettingsNav, SettingsPage } from "./views/Settings";
-import { nextWaiting, Sidebar, stepFork } from "./views/Sidebar";
+import { Sidebar } from "./views/Sidebar";
 import { Panel } from "./views/Panel";
 import { TaskView } from "./views/TaskView";
 import { migrateMemory } from "./engine/memory";
@@ -60,7 +63,7 @@ export default function App() {
   // ⌘W (menu): close the right panel; the window stays
   onMount(() => {
     let un: (() => void) | undefined;
-    void onEvent("panel:close", () => panelOpen() && closePanel()).then((u) => (un = u));
+    void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && view().name !== "settings" && panelOpen() && closePanel()).then((u) => (un = u));
     // ⌘Q tapped, not held (Rust quits once it has been held)
     let hint = 0;
     let unq: (() => void) | undefined;
@@ -105,69 +108,12 @@ export default function App() {
   });
 
   const onKey = (e: KeyboardEvent) => {
-    // panel tools, as in Codex: ⌃⇧G changes, ⌃` terminal
-    if (e.ctrlKey && !e.metaKey && e.shiftKey && e.code === "KeyG") {
+    if (!loaded() || !state.onboarded || anyPop()) return;
+    if (dispatchShortcut(e, appCommands(), shortcutContext(e))) return;
+    // Local views handle Escape first; only an unclaimed Escape closes the panel.
+    if (e.key === "Escape" && noModifiers(e) && viewKey(e) && panelOpen() && view().name !== "settings") {
       e.preventDefault();
-      return openPanel("changes");
-    }
-    if (e.ctrlKey && !e.metaKey && e.code === "Backquote") {
-      e.preventDefault();
-      return openPanel("terminal");
-    }
-    if (e.key === "Escape" && panelOpen() && view().name !== "task" && !paletteOpen()) {
-      const el = document.activeElement as HTMLElement | null;
-      if (!el || !["TEXTAREA", "INPUT"].includes(el.tagName) || !(el as HTMLTextAreaElement).value) void closePanel();
-      return;
-    }
-    if (!e.metaKey) return;
-    const k = e.key.toLowerCase();
-    if (k === "k") {
-      e.preventDefault();
-      setPaletteOpen(!paletteOpen());
-    } else if (k === "n") {
-      e.preventDefault();
-      newTask();
-    } else if (k === ",") {
-      e.preventDefault();
-      setView({ name: "settings" });
-    } else if (k === "0") {
-      e.preventDefault();
-      goMain();
-    } else if (/^[1-9]$/.test(k) && !e.shiftKey && !e.altKey && state.spaces[Number(k) - 1]) {
-      // ⌘1, ⌘2 …: the spaces in the order the sidebar shows them (회사, 개인)
-      e.preventDefault();
-      switchSpace(state.spaces[Number(k) - 1].id);
-    } else if (k === "j") {
-      e.preventDefault();
-      if (panelOpen() && panelTab() === "side") void closePanel();
-      else {
-        openPanel("side");
-        setTimeout(() => document.getElementById("side-input")?.focus(), 80);
-      }
-    } else if (k === "b" && e.shiftKey) {
-      e.preventDefault();
-      setView(view().name === "board" ? { name: "main" } : { name: "board" });
-    } else if (k === "b") {
-      e.preventDefault();
-      if (sidebarAway()) showSidebar();
-      else setSidebarHidden(true);
-    } else if (e.shiftKey && (e.code === "BracketLeft" || e.code === "BracketRight")) {
-      e.preventDefault();
-      const t = stepFork(state.space, e.code === "BracketRight" ? 1 : -1);
-      if (t) openTask(t.id);
-    } else if (k === ".") {
-      e.preventDefault();
-      const t = nextWaiting(state.space);
-      if (t) openTask(t.id);
-    } else if (k === "\\") {
-      e.preventDefault();
-      togglePanel();
-    } else if (k === "p" && !e.shiftKey) {
-      e.preventDefault();
-      openPanel("files");
-    } else if (k === "t" && panelOpen()) {
-      e.preventDefault();
-      newPanelTab();
+      void closePanel();
     }
   };
   window.addEventListener("keydown", onKey);
@@ -219,7 +165,7 @@ export default function App() {
         </Show>
       </div>
       <Show when={!state.onboarded}><Onboarding /></Show>
-      <Show when={paletteOpen()}><Palette /></Show>
+      <Show when={paletteOpen()}><Palette commands={appCommands()} /></Show>
       <Lightbox />
       <VisualViewer />
       <div class="toasts" aria-live="polite">

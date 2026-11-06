@@ -1,5 +1,6 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { modelsOf } from "../engine/modelList";
+import { ignoredKey, noModifiers, viewKey } from "../lib/shortcuts";
 import { createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { SpaceId } from "../state/types";
@@ -136,7 +137,6 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
   onCleanup(() => window.removeEventListener("focus", loadTools));
   let name!: HTMLInputElement;
   onMount(() => requestAnimationFrame(() => (name.focus(), name.select())));
-  let saveAfterIme = false;
   let saved = false;
   const save = () => {
     if (saved) return;
@@ -172,17 +172,12 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
             class="input"
             value={label()}
             onInput={(e) => setLabel(e.currentTarget.value)}
-            // Enter while a Korean syllable is still being composed: save once it's committed,
-            // so one press is enough
             onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.keyCode !== 229) return;
-              if (e.isComposing || e.keyCode === 229) saveAfterIme = e.key === "Enter" || saveAfterIme;
-              else save();
+              if (e.key !== "Enter" || ignoredKey(e) || !noModifiers(e)) return;
+              e.preventDefault();
+              save();
             }}
-            onCompositionEnd={(e) => {
-              setLabel(e.currentTarget.value);
-              if (saveAfterIme) (saveAfterIme = false), queueMicrotask(save);
-            }}
+            onCompositionEnd={(e) => setLabel(e.currentTarget.value)}
           />
         </label>
         <div class="sp-field">
@@ -566,9 +561,13 @@ export function SettingsNav(props: { onBack: () => void }) {
 }
 
 export function SettingsPage(props: { onBack: () => void }) {
-  const key = (e: KeyboardEvent) => e.key === "Escape" && !(document.activeElement instanceof HTMLTextAreaElement || document.activeElement instanceof HTMLInputElement) && props.onBack();
-  onMount(() => window.addEventListener("keydown", key));
-  onCleanup(() => window.removeEventListener("keydown", key));
+  const key = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || !viewKey(e) || !noModifiers(e)) return;
+    e.preventDefault();
+    props.onBack();
+  };
+  onMount(() => window.addEventListener("keydown", key, true));
+  onCleanup(() => window.removeEventListener("keydown", key, true));
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />

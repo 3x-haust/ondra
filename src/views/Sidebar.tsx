@@ -7,7 +7,8 @@ import { anyPop, closePops } from "../ui/ModelPicker";
 import { addProject, decisionsIn, projectsIn, removeProject, state, taskById, tasksIn } from "../state/store";
 import { pickFolder } from "../lib/native";
 import type { Task } from "../state/types";
-import { toast, goMain, hoverTask, openTask, setHoverTask, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { toast, goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { ago, compact, now } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
@@ -142,7 +143,7 @@ const [projMenu, setProjMenu] = createSignal<{ id: string; x: number; y: number;
 /** right-click on a project: delete it (the folder and its jobs stay) */
 function ProjectMenu() {
   const close = () => setProjMenu(null);
-  const esc = (e: KeyboardEvent) => e.key === "Escape" && projMenu() && (e.stopPropagation(), close());
+  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && projMenu() && (e.preventDefault(), e.stopPropagation(), close());
   window.addEventListener("click", close);
   window.addEventListener("blur", close);
   window.addEventListener("keydown", esc, true);
@@ -181,7 +182,7 @@ export { renaming, setRenaming };
 
 function RowMenu() {
   const close = () => setMenu(null);
-  const esc = (e: KeyboardEvent) => e.key === "Escape" && menu() && (e.stopPropagation(), close());
+  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && menu() && (e.preventDefault(), e.stopPropagation(), close());
   window.addEventListener("click", close);
   window.addEventListener("blur", close);
   window.addEventListener("keydown", esc, true);
@@ -283,7 +284,7 @@ export function Sidebar() {
         <button class="icon-btn" title="새로 맡기기 (⌘N)" onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
           <Icon name="compose" size={16} />
         </button>
-        <button class="icon-btn" title="찾기 (⌘K)" onClick={() => setPaletteOpen(true)}>
+        <button class="icon-btn" title="찾기 (⌘K)" onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
           <Icon name="search" size={16} />
         </button>
         <button class="icon-btn" title="접기 (⌘B)" onClick={() => setSidebarHidden(true)}>
@@ -318,7 +319,7 @@ export function Sidebar() {
             <span class="sb-live" title={`지금 일하는 중 ${boardLive()}개`}><i />{boardLive()}</span>
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} title="에이전트가 기억하는 것: 그래프와 파일">
+        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} title={`에이전트가 기억하는 것: 그래프와 파일 (${shortcutHint("memory")})`}>
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
@@ -396,7 +397,7 @@ export function Sidebar() {
         </Fold>
 
         <Head id="devices" label="디바이스" count={bootedDevices().length}>
-          <button class="icon-btn xs" title="디바이스 허브 열기" onClick={() => setView({ name: "devices" })}>
+          <button class="icon-btn xs" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
             <Icon name="arrow" size={13} />
           </button>
         </Head>
@@ -459,7 +460,10 @@ export function Sidebar() {
       <ProjectMenu />
 
       <div class="sb-foot">
-        <button class="row" onClick={() => setView({ name: "settings" })}>
+        <button class="row" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
+          <Icon name="list" size={16} /><span class="row-title">단축키</span><kbd>{shortcutHint("commands")}</kbd>
+        </button>
+        <button class="row" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">설정</span>
         </button>
