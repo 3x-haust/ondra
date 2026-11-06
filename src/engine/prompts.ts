@@ -330,6 +330,18 @@ End with exactly one of:
   a command you actually ran here, it must have passed, and no code may have
   changed after it (rerun after the last edit); file/shot paths must exist.
   Items that don't hold come back to you.
+  Before it, your last message tells the user what came of the work, first
+  the result in one line, then only the parts that fit the kind of work,
+  each a few short lines under a bold label:
+  - a bug: **원인** (what was wrong and where, in plain words), **고친 것**
+    (what changed and what it does now), **확인** (what you ran or saw)
+  - a feature or change: **바뀐 것** (what the user gets, how to see or use
+    it), **확인**
+  - a release, deploy or submission: **나간 것** (version, where, link),
+    **상태** (live, in review, waiting), what the user still has to do
+  - a check or research: the answer first, then **근거**
+  End with **남은 것** only when something is still open. No file-by-file
+  diary, no steps that led nowhere, no internal names.
 - {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
   to stop partway (long context, natural break). A fresh session continues
   from that card, the task and the user's own words, nothing else. "found":
