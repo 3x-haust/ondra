@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { focusSteal, foreignData } from "./permissions";
+import { focusSteal, foreignData, systemInput } from "./permissions";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const D = "/Users/me/Library/Application Support/ondra";
 describe("foreignData", () => {
@@ -26,7 +29,6 @@ describe("foreignData", () => {
 describe("focusSteal", () => {
   it("catches what brings a window in front of the user", () => {
     expect(focusSteal(`osascript -e 'tell application "TextEdit" to activate'`)?.what).toMatch(/AppleScript/);
-    expect(focusSteal(`osascript -e 'tell application "System Events" to keystroke "a"'`)?.what).toMatch(/System Events/);
     expect(focusSteal("open -a TextEdit note.txt")).toBeDefined();
     expect(focusSteal("cd x && open https://example.com")).toBeDefined();
     expect(focusSteal("agent-desktop launch Calculator --activate")).toBeDefined();
@@ -45,5 +47,32 @@ describe("focusSteal", () => {
     expect(focusSteal("agent-desktop launch Calculator")).toBeUndefined();
     expect(focusSteal("git log --oneline | head")).toBeUndefined();
     expect(focusSteal("pnpm openapi:gen")).toBeUndefined();
+  });
+});
+
+describe("systemInput", () => {
+  const dir = mkdtempSync(join(tmpdir(), "si-"));
+  writeFileSync(join(dir, "keys.swift"), "let s = CGEventSource(stateID: .hidSystemState)\nlet e = CGEvent(keyboardEventSource: s, virtualKey: 0, keyDown: true)\ne?.post(tap: .cghidEventTap)\n");
+  writeFileSync(join(dir, "pid.swift"), "let e = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)\ne?.postToPid(pid)\n".replace("CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)", "makeKey()"));
+  writeFileSync(join(dir, "keys"), Buffer.from("\x00\x00_CGEventPost\x00_CGEventSourceCreate\x00", "latin1"), { mode: 0o755 });
+  writeFileSync(join(dir, "pidbin"), Buffer.from("\x00_CGEventPostToPid\x00", "latin1"), { mode: 0o755 });
+  writeFileSync(join(dir, "notes.log"), "_CGEventPost seen in a crash log\n");
+  it("blocks keys and clicks made for the whole system", () => {
+    expect(systemInput(`swiftc ${dir}/keys.swift -o /tmp/k && /tmp/k`)).toMatch(/keys\.swift/);
+    expect(systemInput(`swift ${dir}/keys.swift`)).toBeDefined();
+    expect(systemInput(`${dir}/keys`)).toBeDefined();
+    expect(systemInput("cat > /tmp/k.swift <<'EOF'\nlet e = CGEvent(keyboardEventSource: nil, virtualKey: 1, keyDown: true)\ne?.post(tap: .cghidEventTap)\nEOF\nswift /tmp/k.swift")).toBeDefined();
+    expect(systemInput(`python3 -c "import Quartz; Quartz.CGEventPost(Quartz.kCGHIDEventTap, e)"`)).toBeDefined();
+    expect(systemInput("cliclick c:100,200")).toBe("cliclick");
+    expect(systemInput(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`)).toBeDefined();
+    expect(systemInput(`osascript -e 'tell application "System Events" to key code 36'`)).toBeDefined();
+  });
+  it("lets input to one launched app and ordinary commands through", () => {
+    expect(systemInput(`swift ${dir}/pid.swift`)).toBeUndefined();
+    expect(systemInput(`${dir}/pidbin`)).toBeUndefined();
+    expect(systemInput(`tail -20 ${dir}/notes.log`)).toBeUndefined();
+    expect(systemInput('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
+    expect(systemInput("swift test && git status")).toBeUndefined();
+    expect(systemInput(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
   });
 });

@@ -65,6 +65,15 @@ The background way does the same work:
   `electron .`, a debug build) may bring itself forward when it opens its
   window. Run the built app with `open -g` when you can. If it still comes
   forward, that is the app itself: say so in the report instead of fighting it.
+- Never make keys or clicks for the whole system: no code posting CGEvents to
+  the HID or session tap (a Swift/Python/JS script with `CGEventPost`,
+  `.post(tap:)`, `CGEvent(keyboardEventSource:…)`, `Quartz.CGEventPost`), no
+  `cliclick`, no AppleScript `keystroke` / `key code` / `click at`. They land in
+  whatever the user has in front (their terminal, their editor), and Ondra
+  refuses them. Keys for one app you launched go to that app only:
+  `agent-desktop press <key> --app "<App>"`, or `CGEventPostToPid` with its pid.
+  Shortcuts and typing are tested with unit tests or the app's own test hooks;
+  the real key press goes in "unverified".
 - Work that only happens in the frontmost app (keyboard and input-method
   behaviour, e.g. a typing-correction app): test the logic with unit or
   integration tests, or feed it input through a scripted path. Driving it in
