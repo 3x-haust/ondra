@@ -602,7 +602,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       return;
     }
     const message = resume
-      ? ["(Ondra가 다시 시작됐어요. 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 말고, 돌던 명령이 끊겼으면 그 로그부터 확인하세요.)", ...fresh.inbox.map((m) => `- ${m}`)].join("\n")
+      ? ["(Ondra가 다시 시작됐어요. 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 말고, 돌던 명령이 끊겼으면 그 로그부터 확인하세요.)", ...[...unread(fresh), ...fresh.inbox].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`)].join("\n")
       : fresh.legs.length > 1
         ? handoffPrompt(fresh)
         : taskPrompt(fresh);
@@ -613,6 +613,17 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   } catch (e) {
     fail(id, e instanceof Error ? e.message : String(e));
   }
+}
+
+/**
+ * Messages the job was sent that it never got to: the user's words after its last
+ * output. A message steered in while it worked dies with the process when Ondra
+ * restarts, so a resumed session is given them again.
+ */
+export function unread(t: Task): string[] {
+  let i = t.entries.length - 1;
+  while (i >= 0 && t.entries[i].kind !== "text" && t.entries[i].kind !== "tool" && t.entries[i].kind !== "block") i--;
+  return t.entries.slice(i + 1).flatMap((e) => (e.kind === "user" ? [e.text] : []));
 }
 
 /** The job is over: its tab in the shared browser goes (the logins stay). */

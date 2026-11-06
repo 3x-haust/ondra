@@ -643,6 +643,24 @@ function earlierSteps(t: Task): string[] {
   return out;
 }
 
+/**
+ * The job finished and was given more to do: what it found and told the user
+ * last time, so the new session builds on it instead of looking it all up again.
+ */
+function lastReport(t: Task): string[] {
+  const text = [...t.entries].reverse().find((e) => e.kind === "text");
+  const said = text && text.kind === "text" ? text.text.replace(/```blocks[\s\S]*?```/g, "").trim() : "";
+  const evidence = t.entries.flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `- ${i.kind}: ${i.ref}`) : [])).slice(-10);
+  if (!t.summary && !said) return [];
+  return [
+    "",
+    "# What you already did (the previous session finished; build on it, don't look it up again)",
+    ...(t.summary ? [`Summary: ${t.summary}`] : []),
+    ...(said ? ["Your last report to the user:", said.length > 3000 ? `${said.slice(0, 3000)}…` : said] : []),
+    ...(evidence.length ? ["Evidence:", ...evidence] : []),
+  ];
+}
+
 export function handoffPrompt(t: Task): string {
   const card = t.legs[t.legs.length - 2]?.handoff;
   return [
@@ -662,7 +680,7 @@ export function handoffPrompt(t: Task): string {
           `Next: ${card.next}`,
           ...(card.evidence.length ? ["Evidence:", ...card.evidence.map((e) => `- ${e.kind}: ${e.ref}`)] : []),
         ]
-      : []),
+      : lastReport(t)),
     ...relatedLines(t),
     ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
     "",
