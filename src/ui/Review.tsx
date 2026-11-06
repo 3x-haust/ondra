@@ -7,7 +7,7 @@ import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { fileSrc, fsFiles, fsRead, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
+import { fileSrc, pdfSrc, fsFiles, fsRead, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
@@ -363,9 +363,8 @@ export function PreviewPane() {
         <div class="pv-body">
           <Switch>
             <Match when={kind() === "page"}>
-              {/* a PDF needs the web view's own viewer, which a sandboxed frame turns off (a PDF runs no scripts here) */}
               <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={fileSrc(full())} />}>
-                <iframe class="aframe" src={fileSrc(full())} />
+                <iframe class="aframe" src={pdfSrc(full())} title={name()} />
               </Show>
             </Match>
             <Match when={kind() === "image"}><div class="fv-img"><img src={fileSrc(full())} alt={name()} /></div></Match>

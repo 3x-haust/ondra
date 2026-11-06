@@ -14,7 +14,7 @@ function written(taskId: string): ArtifactFile[] {
   for (const e of t.entries) {
     if (e.kind !== "tool" || (e.tool.kind !== "write" && e.tool.kind !== "edit") || e.tool.ok === false) continue;
     const path = (e.tool.detail ?? "").split("\n")[0].trim();
-    if (!path.startsWith("/") || !/\.(html?|svg|png|jpe?g|gif|webp)$/i.test(path)) continue;
+    if (!path.startsWith("/") || !/\.(html?|pdf|svg|png|jpe?g|gif|webp)$/i.test(path)) continue;
     seen.set(path, { path, name: path.split("/").pop()!, size: 0, modified: e.tool.endedAt ?? e.at });
   }
   return [...seen.values()];
@@ -28,4 +28,4 @@ export async function loadArtifacts(taskId: string) {
 }
 
 export const kindOf = (name: string) =>
-  /\.(html?|svg)$/i.test(name) ? "page" : /\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm)$/i.test(name) ? "video" : /\.(md|txt|json|csv|log)$/i.test(name) ? "text" : "file";
+  /\.(html?|pdf|svg)$/i.test(name) ? "page" : /\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm)$/i.test(name) ? "video" : /\.(md|txt|json|csv|log)$/i.test(name) ? "text" : "file";

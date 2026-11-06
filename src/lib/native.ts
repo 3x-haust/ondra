@@ -379,6 +379,7 @@ export const setTrayCount = (running: number, waiting: number) => call<void>("se
 
 /** A local file (screenshot, recording) as something an <img> can show. */
 export const fileSrc = (path: string) => (inTauri && path.startsWith("/") ? convertFileSrc(path) : path);
+export const pdfSrc = (path: string, modified?: number) => `/pdf.html?${new URLSearchParams({ file: fileSrc(path) + (modified === undefined ? "" : `?v=${modified}`) })}`;
 
 export function onEvent<T>(name: string, fn: (payload: T) => void): Promise<UnlistenFn> {
   if (!inTauri) return Promise.resolve(() => {});
