@@ -89,6 +89,11 @@ for (const item of ["package.json", "theme", "assets", "export-html", "photon_rs
   const src = join(engineDist, item);
   if (existsSync(src)) cpSync(src, join(engineRes, item), { recursive: true });
 }
+// the engine's prompt points jobs at its README, docs and examples next to it
+for (const item of ["README.md", "docs", "examples"]) {
+  const src = join(dirname(engineDist), item);
+  if (existsSync(src)) cpSync(src, join(engineRes, item), { recursive: true, filter: (f) => !/node_modules|\.git/.test(f) });
+}
 log("engine assets");
 
 // ── Chrome for Testing (headless shell), cached so it downloads once ──
