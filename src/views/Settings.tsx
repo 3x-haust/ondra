@@ -222,6 +222,15 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
               <button class="btn ghost sm" onClick={() => void spaceGhLogin(state.spaces.find((x) => x.id === cur!.id) ?? cur!)}>{tools()?.gh_user ? "다시 로그인" : "로그인"}</button>
             </div>
           </div>
+          <label class="sp-field">
+            <span>Aside 계정</span>
+            <input
+              class="input"
+              placeholder="u0"
+              value={state.spaces.find((x) => x.id === cur!.id)?.aside ?? ""}
+              onChange={(e) => setState("spaces", (x) => x.id === cur!.id, { aside: e.currentTarget.value.trim() || undefined })}
+            />
+          </label>
           <div class="sp-field sp-git">
             <span>커밋 작성자</span>
             <div class="sp-git-row">

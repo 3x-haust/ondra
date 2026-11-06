@@ -9,14 +9,14 @@
 #   pr-media.sh <PR number|URL> file...       # inside the repo folder a number is enough
 #   pr-media.sh <PR> --dir <folder>           # every png/jpg/gif/webp/mp4/mov in the folder
 #   pr-media.sh --print <PR> file...          # upload, print the block, leave the description
-#   --account <id>                            # Aside account (default: Aside's active one)
+#   --account <id>                            # Aside account (default: this space's, $ONDRA_ASIDE_ACCOUNT)
 #   --via aside|browser                       # force one browser
 #
 # Running it again replaces only the block it put in (<!-- pr-media --> … <!-- /pr-media -->).
 # Pictures sit side by side at 300px; each video gets its own player.
 set -euo pipefail
 
-PRINT=0; PR=""; FILES=(); ACCOUNT=""; VIA=""
+PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""
 while (($#)); do
   case $1 in
     --print) PRINT=1 ;;
@@ -56,6 +56,7 @@ LINK_RE='https:\/\/github\.com\/user-attachments\/[^\s"<>)]+'
 via_aside() {
   local acct=() tmp port srv i=0 spec=() out line
   [[ -n $ACCOUNT ]] && acct=(--account "$ACCOUNT")
+  [[ -n $ACCOUNT ]] || { echo "no Aside account for this space" >&2; return 1; }
   tmp=$(mktemp -d)
   PM_TMP=$tmp
   for f in "${ABS[@]}"; do ln -s "$f" "$tmp/$i.$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')"; i=$((i + 1)); done
@@ -150,14 +151,13 @@ via_browser() {
   js "(() => { const b = document.querySelector('[data-ondra-box]'); b.value = ''; b.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()" >/dev/null
 }
 
-# the account asked for (else the active one, marked *) is signed in
+# this space's account is signed in; no account for the space means no Aside
+# (Aside's active account may belong to the other space)
 aside_ready() {
-  command -v aside >/dev/null 2>&1 || return 1
+  [[ -n $ACCOUNT ]] && command -v aside >/dev/null 2>&1 || return 1
   local rows
-  rows=$(aside account status 2>/dev/null) || return 1
-  if [[ -n $ACCOUNT ]]; then rows=$(printf '%s\n' "$rows" | grep -E "^[* ] *$ACCOUNT[[:space:]]" || true)
-  else rows=$(printf '%s\n' "$rows" | grep -E '^\*' || true); fi
-  printf '%s\n' "$rows" | grep -v "not signed in" | grep -q "signed in"
+  rows=$(aside account list 2>/dev/null) || return 1
+  printf '%s\n' "$rows" | grep -E "^[* ] *$ACCOUNT[[:space:]]" | grep -v "signed out" | grep -q "signed in"
 }
 LINKS=""
 if [[ $VIA == aside ]] || { [[ -z $VIA ]] && aside_ready; }; then

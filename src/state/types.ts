@@ -20,6 +20,8 @@ export interface Space {
   /** Home folder for this space's command-line logins (gh, git, aws, vercel …).
    * Empty: 개인 uses the Mac's own, every other space a folder of its own. */
   cliHome?: string;
+  /** The Aside account (u0, u4 …) this space's jobs browse with. Empty: they use the built-in browser. */
+  aside?: string;
 }
 
 /** One turn's tokens plus the plan limits right after it. */

@@ -13,13 +13,16 @@ description: >
 
 ## Which browser
 
-1. **Aside, when it is there.** Check once per job:
+1. **Aside, when this space has an account in it.** `$ONDRA_ASIDE_ACCOUNT`
+   is the Aside account of the space this job belongs to (company and
+   personal each have their own). Check once per job:
    ```bash
-   command -v aside >/dev/null && aside account status
+   [ -n "$ONDRA_ASIDE_ACCOUNT" ] && command -v aside >/dev/null && aside account list | grep -E "^[* ] *$ONDRA_ASIDE_ACCOUNT[[:space:]]"
    ```
-   A row with `signed in` means use Aside: it is the user's own browser with
-   their real logins. Pick the account the memory or the space's rules name
-   for this work, else the active one (`*`); pass it as `--account <id>`.
+   `signed in` on that row: use Aside, always with
+   `--account "$ONDRA_ASIDE_ACCOUNT"`. Never another account, and never
+   Aside's active one: it may belong to the other space. No variable, or the
+   account isn't signed in: the built-in browser.
 2. **Otherwise the built-in browser** (`agent-browser`, the rest of this
    file). Also switch to it when Aside fails twice in a row on the same step,
    or when the user should watch the work live in Ondra's browser panel.
@@ -28,7 +31,7 @@ description: >
 
 ### Working in Aside
 
-- `aside repl --account <id> "<js>"`: Playwright-style JavaScript in the
+- `aside repl --account "$ONDRA_ASIDE_ACCOUNT" "<js>"`: Playwright-style JavaScript in the
   user's browser, 120 s per run, `console.log` to get values back. Read
   `aside guide repl` once before the first run. No AI runs here; never use
   `aside exec` or a bare `aside "<task>"` (Aside's own agent, it spends the
@@ -167,8 +170,8 @@ What makes a browser agent slow is the number of turns, not the commands
      per step and say so with a `checklist` item `{"label":"녹화 대신 사진","done":true}`.
    Never screenshot a page while a password is visible in it.
 6. **Pictures and videos into a PR.** Use `pr-media.sh` in this skill's folder
-   (Aside when it is signed in, else your tab here; `--account <id>` picks the
-   Aside account); don't drive the comment box yourself:
+   (Aside with this space's account when it is signed in, else your tab
+   here); don't drive the comment box yourself:
    ```bash
    "<this skill's folder>/pr-media.sh" <PR number|URL> shot1.png flow.mp4   # or --dir <folder>
    ```
