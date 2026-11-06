@@ -5,7 +5,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, projectById, setState, spaceById, state, taskById, updateAccount } from "../state/store";
+import { accountById, projectById, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
@@ -152,7 +152,18 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
   createEffect(on(key, () => void refreshSuggestions(state.space, props.project)));
   const picks = () => suggestionsFor(key());
   const imported = () => new Set(state.tasks.map((t) => t.origin?.path).filter(Boolean));
-  const sessions = () => allSessions().filter((s) => !imported().has(s.path)).slice(0, 3);
+  // only work from this chat's folder: the project's repo (and its worktrees), or the space's folder
+  const root = () => {
+    const f = props.project ? projectById(props.project)?.folder : spaceById(state.space).folder;
+    return f ? expand(f).replace(/\/+$/, "") : "";
+  };
+  const inHere = (cwd: string) => {
+    const r = root();
+    if (!r || r === expand("~").replace(/\/+$/, "")) return !props.project;
+    const c = repoHome(expand(cwd || "")).replace(/\/+$/, "");
+    return c === r || c.startsWith(`${r}/`);
+  };
+  const sessions = () => allSessions().filter((s) => !imported().has(s.path) && inHere(s.cwd)).slice(0, 3);
   return (
     <div class="page hero-page">
       <div class="hero">
