@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as native from "../lib/native";
 import type { Entry, Task } from "../state/types";
 import { checkEvidence } from "./proof";
+import { shipped } from "./tasks";
 
 let n = 0;
 const bash = (command: string, at = ++n): Entry => ({ id: `e${at}`, at, kind: "tool", tool: { name: "bash", kind: "bash", target: command, detail: command, ok: true } });
@@ -50,5 +51,18 @@ describe("screenshot evidence", () => {
 
     expect(after.check).toBe("exists");
     expect(before.check).toBe("exists");
+  });
+});
+
+describe("shipped", () => {
+  const job = (target: string) => ({ entries: [{ kind: "tool", tool: { target } }] }) as never;
+  it("sees work that already went out", () => {
+    expect(shipped(job("git push -u origin feat/x"))).toBe(true);
+    expect(shipped(job("gh pr merge 12 --merge"))).toBe(true);
+    expect(shipped(job("asc submit --app 1 --version 1.14.0"))).toBe(true);
+  });
+  it("not for local work", () => {
+    expect(shipped(job("git commit -m x && bun test"))).toBe(false);
+    expect(shipped(job("asc status --app 1"))).toBe(false);
   });
 });
