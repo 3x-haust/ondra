@@ -46,11 +46,14 @@ export interface Command {
   name: string;
   desc: string;
   icon?: string;
-  /** keep the text after the command as an argument */
-  run: (arg: string) => void;
+  /** keep the text after the command as an argument; `also`: more skills named in the same message */
+  run: (arg: string, also?: string[]) => void;
+  /** a skill: picking it writes "/skill:name" into the text (anywhere in it), sending runs it */
+  skill?: boolean;
 }
 
-type Pick = { kind: "cmd"; items: Command[]; q: string } | { kind: "file"; items: string[]; q: string; at: number };
+type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "file"; items: string[]; q: string; at: number };
+
 
 export function Composer(props: {
   placeholder: string;
@@ -117,15 +120,26 @@ export function Composer(props: {
   // ── "/" commands and "@" files
   const [pick, setPick] = createSignal<Pick | null>(null);
   const [sel, setSel] = createSignal(0);
+  // the chosen row stays in view while the arrows walk a long list
+  createEffect(on(sel, () => queueMicrotask(() => el?.closest("form")?.querySelector(".cpick-row.on")?.scrollIntoView({ block: "nearest" }))));
   let fileList: string[] | null = null;
   const refresh = async () => {
     const v = el.value;
     const caret = el.selectionStart ?? v.length;
-    const cmd = /^\/(\S*)$/.exec(v.slice(0, caret));
+    // "/" at the start: every command; after a space in the middle: skills only
+    const cmd = /(^|\s)\/(\S*)$/.exec(v.slice(0, caret));
     if (cmd && props.commands?.length) {
-      const q = cmd[1].toLowerCase();
-      const items = props.commands.filter((c) => c.name.toLowerCase().startsWith(q) || c.desc.includes(q));
-      setPick(items.length ? { kind: "cmd", items, q } : null);
+      const q = cmd[2].toLowerCase();
+      const at = caret - cmd[2].length - 1;
+      const bare = (c: Command) => c.name.toLowerCase().replace(/^skill:/, "");
+      // the name's start, then a word in it ("/review" → code-review), then the description (3+ letters)
+      const rank = (c: Command) =>
+        c.name.toLowerCase().startsWith(q) || bare(c).startsWith(q) ? 0 : bare(c).split(/[-_:.]/).some((w) => w.startsWith(q)) ? 1 : q.length >= 3 && c.desc.toLowerCase().includes(q) ? 2 : 9;
+      const items = props.commands
+        .filter((c) => (at === 0 || c.skill) && rank(c) < 9)
+        .sort((a, b) => rank(a) - rank(b))
+        .slice(0, 40);
+      setPick(items.length ? { kind: "cmd", items, q, at } : null);
       setSel(0);
       return;
     }
@@ -153,6 +167,7 @@ export function Composer(props: {
     if (!p) return;
     if (p.kind === "cmd") {
       const c = p.items[i];
+      if (c.skill || p.at > 0) return complete(i);
       const arg = el.value.replace(/^\/\S*\s*/, "");
       keep(`/${c.name}${arg.trim() ? ` ${arg.trim()}` : ""}`);
       setText("");
@@ -178,10 +193,15 @@ export function Composer(props: {
   const complete = (i: number) => {
     const p = pick();
     if (!p || p.kind !== "cmd") return;
-    const next = `/${p.items[i].name} `;
+    const v = el.value;
+    const caret = el.selectionStart ?? v.length;
+    const word = `/${p.items[i].name} `;
+    const rest = v.slice(caret).replace(/^\S*\s?/, "");
+    const next = `${v.slice(0, p.at)}${word}${rest}`;
     setText(next);
     el.value = next;
-    el.setSelectionRange(next.length, next.length);
+    const pos = p.at + word.length;
+    el.setSelectionRange(pos, pos);
     setPick(null);
     grow();
   };
@@ -216,6 +236,18 @@ export function Composer(props: {
   const ready = () => (!!text().trim() || files().length > 0) && !props.disabled;
   const send = () => {
     if (!ready()) return;
+    // skills named anywhere ("이거 /skill:deep-research 로 조사해줘"): the first runs, with the rest of the text
+    const skills = props.commands?.filter((c) => c.skill) ?? [];
+    const named = [...text().matchAll(/(^|\s)\/(skill:\S+)/g)].map((x) => skills.find((c) => c.name === x[2])).filter((c): c is Command => !!c);
+    if (named.length && !files().length) {
+      const rest = text().replace(/(^|\s)\/skill:\S+/g, (_m, sp: string) => sp).replace(/\s{2,}/g, " ").trim();
+      keep(text());
+      setText("");
+      el.value = "";
+      queueMicrotask(grow);
+      named[0].run(rest, [...new Set(named.slice(1).map((c) => c.name.replace(/^skill:/, "")))]);
+      return;
+    }
     // "/name what" typed out in full runs the command
     const m = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text().trim());
     const cmd = m && props.commands?.find((c) => c.name === m[1]);
