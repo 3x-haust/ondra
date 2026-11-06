@@ -1,4 +1,5 @@
 // ⌘K: jump to any task or place, or send what you typed to the captain.
+import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { setState, spaceById, state, taskById } from "../state/store";
@@ -37,6 +38,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     ...props.commands.map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
     { id: "s-accounts", label: "계정", icon: "key", section: "앱", run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-import", label: "가져오기", icon: "download", section: "앱", run: () => setView({ name: "settings", tab: "import" }) },
+    { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
     { id: "s-tools", label: "도구 · 권한", icon: "shield", section: "앱", run: () => setView({ name: "settings", tab: "tools" }) },
     { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "spark", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
@@ -59,12 +61,19 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           openTask(t.id);
         },
       }));
+    // finished jobs' reports: found by what they said, not only their title
+    const results: Item[] = needle && !commandsOnly()
+      ? resultsIn(state.space)
+          .filter((r) => resultText(r).toLowerCase().includes(needle))
+          .slice(0, 5)
+          .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: "결과", run: () => setView({ name: "results", id: r.id }) }))
+      : [];
     const all = commandsOnly() ? places : [...tasks, ...places];
     const hits = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
     const send: Item[] = text && !commandsOnly()
       ? [{ id: "send", label: text, hint: "메인에게 보내기", icon: "send", section: "보내기", run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
       : [];
-    return [...(commandsOnly() ? hits : hits.slice(0, needle ? 13 : 10)), ...send];
+    return [...(commandsOnly() ? hits : hits.slice(0, needle ? 13 : 10)), ...results, ...send];
   });
 
   createEffect(() => {

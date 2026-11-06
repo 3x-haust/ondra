@@ -9,8 +9,8 @@ import { accountById, accountsIn, projectById, repoHome, setState, spaceById, st
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
-import { hoverTask, openPanel, openTask, panelOpen, setHoverTask, setView, toast, togglePanel, view } from "../state/ui";
-import { chatKey, editMain, inChat, stopMain, resetMain, throwThought, warmMain } from "../engine/captain";
+import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
+import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -25,7 +25,6 @@ import { ModelPicker, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { compactAgent } from "../engine/tasks";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
@@ -53,7 +52,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
   const routes = () => props.m.routes ?? [];
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
   return (
-    <div class="reply" classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
+    <div class="reply" data-mid={props.m.id} classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
       <Show when={props.m.up ? projectById(props.m.up) : undefined}>
         {(p) => (
           <button class="reply-from" onClick={() => setView({ name: "main", project: p().id })}>
@@ -239,6 +238,19 @@ export function MainView() {
     const p = v.name === "main" ? projectById(v.project) : undefined;
     return p && p.space === state.space ? p : undefined;
   };
+  // a report opened from the results view: scroll to it once it is drawn
+  createEffect(() => {
+    const id = jumpMsg();
+    if (!id) return;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = box?.querySelector(`[data-mid="${id}"]`);
+        if (!el) return;
+        el.scrollIntoView({ block: "start" });
+        setJumpMsg(undefined);
+      }),
+    );
+  });
   const key = () => chatKey(state.space, project()?.id);
   const msgs = () => state.captain.filter((m) => inChat(m, key()));
   // the account main runs on: the space's pick, or the routed one (same rule as new jobs)
@@ -274,7 +286,6 @@ export function MainView() {
       commands={[
         btwCommand(() => `main:${key()}`),
         { name: "side", desc: "사이드챗 열기 (⌘J)", icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
-        { name: "compact", desc: "이 대화를 요약해서 정리", icon: "compact", run: () => void compactAgent(`captain:${key()}`) },
         { name: "flow", desc: "흐름 열기", icon: "branch", run: () => openPanel("flow") },
         { name: "ask", desc: "매번 묻도록 바꾸기", icon: "lock", run: () => setState("settings", "permission", "ask") },
         { name: "edits", desc: "편집 허용으로 바꾸기", icon: "pencil", run: () => setState("settings", "permission", "edits") },
@@ -282,7 +293,6 @@ export function MainView() {
         { name: "remember", desc: "기억하기 · 뒤에 적은 내용을 앞으로 지켜요", icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
         { name: "memory", desc: "기억한 것 보기 (그래프)", icon: "memory", run: () => setView({ name: "memory" }) },
         { name: "settings", desc: "설정", icon: "gear", run: () => setView({ name: "settings" }) },
-        { name: "clear", desc: "이 대화 지우고 새로 시작", icon: "refresh", run: () => void resetMain(state.space, project()?.id) },
         ...skillCommands(() => ({ space: state.space, project: project()?.id })),
       ]}
       placeholder={big ? "무엇이든 말해 주세요" : project() ? `${project()!.name}에 대해 말하기 · 일은 이 폴더에서 해요` : "메인에게 말하기 · 여러 일을 한 번에 적어도 돼요"}
@@ -439,6 +449,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   };
   const working = () => reqs().flatMap((r) => (r.state === "done" ? [] : r.tasks.filter((t) => t.status === "running")));
   const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
+  /** main's last report on one of the request's jobs */
+  const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
   const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
@@ -470,14 +482,14 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
             <For each={reqs()}>
               {(r) => (
                 <li>
-                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(r.id) : openTask(focus(r).id))} title={r.text}>
+                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
                     <i class={`req-dot ${r.state}`} />
                     <span class="req-text">{r.text}</span>
                     <span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>
                     <span class={`req-state ${r.state}`}>{label[r.state]}</span>
                   </button>
-                  {/* the jobs working on it now: which one, what it is doing, for how long */}
-                  <For each={r.state === "done" ? [] : r.tasks.filter(active)}>
+                  {/* several jobs working on it: one line each (one job opens from the row itself) */}
+                  <For each={r.state === "done" || r.tasks.filter(active).length < 2 ? [] : r.tasks.filter(active)}>
                     {(t) => (
                       <button class="req-job" onClick={() => openTask(t.id)} title={t.title}>
                         <span class="req-job-title">{t.title}</span>

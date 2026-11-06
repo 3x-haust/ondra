@@ -3,6 +3,7 @@
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
@@ -351,6 +352,7 @@ async function pump(space: string) {
         isolateOf.set(space, next.isolate);
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, { pending: false, routes, reply, at: Date.now() });
+        keepResult(next.replyId);
         if (pj(space)) reportUp(space);
       } catch (e) {
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });

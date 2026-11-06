@@ -1336,13 +1336,17 @@ async function dropEmptyBranch(id: string) {
   const env = await gitEnv(t);
   if (c.files.length) {
     // the job pushed and its PR was merged: there is nothing left to merge here
-    const into = await worktreeLanded(w.path, env).catch(() => null);
+    let into = await worktreeLanded(w.path, env).catch(() => null);
+    // a rebase or squash merge leaves the branch's own commits off main: ask GitHub instead
+    const pr = into ? undefined : prOf(t);
+    if (pr && prMerged(await ghPrState(pr.url, env).catch(() => ""))) into = `PR #${pr.n}`;
     if (!into) return;
-    await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
+    // through a PR the branch stays, and anything left in the folder is saved on it
+    await worktreeRemove(w.repo, w.path, w.branch, !!pr, env).catch(() => {});
     updateTask(id, (x) => {
       x.cwd = homeDir(x);
       x.worktree = { ...w, state: "merged", into };
-      push(x, { kind: "note", text: `${into}에 이미 들어가서 작업 폴더를 정리했어요` });
+      push(x, { kind: "note", text: pr ? `${into}이 합쳐져서 작업 폴더를 정리했어요` : `${into}에 이미 들어가서 작업 폴더를 정리했어요` });
     });
     return;
   }
@@ -1352,6 +1356,14 @@ async function dropEmptyBranch(id: string) {
     x.worktree = undefined;
   });
 }
+
+const prMerged = (raw: string) => {
+  try {
+    return JSON.parse(raw).pr?.state === "MERGED";
+  } catch {
+    return false;
+  }
+};
 
 /** Finished jobs whose branch has landed since (merged on GitHub later, or before this check existed). */
 export async function sweepLanded() {
