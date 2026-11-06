@@ -1,14 +1,55 @@
 ---
 name: browser-use
 description: >
-  Browser use inside the app with the bundled agent-browser. Use when a worker
-  must open a site, check a web app, fill a form, read a page, take screenshots, or
-  record proof of a change. Covers the shared browser (your own tab, shared logins),
+  Browser use: Aside when the user has it, otherwise the app's bundled
+  agent-browser. Use when a worker must open a site, check a web app, fill a
+  form, read a page, take screenshots, or record proof of a change. Covers
+  choosing the browser, the shared browser (your own tab, shared logins),
   signing in from the macOS keychain, live streaming to the app window, recordings
   as evidence, and how to report with visual-report blocks.
 ---
 
 # Browser use
+
+## Which browser
+
+1. **Aside, when it is there.** Check once per job:
+   ```bash
+   command -v aside >/dev/null && aside account status
+   ```
+   A row with `signed in` means use Aside: it is the user's own browser with
+   their real logins. Pick the account the memory or the space's rules name
+   for this work, else the active one (`*`); pass it as `--account <id>`.
+2. **Otherwise the built-in browser** (`agent-browser`, the rest of this
+   file). Also switch to it when Aside fails twice in a row on the same step,
+   or when the user should watch the work live in Ondra's browser panel.
+
+`pr-media.sh` (rule 6) picks between them by itself.
+
+### Working in Aside
+
+- `aside repl --account <id> "<js>"`: Playwright-style JavaScript in the
+  user's browser, 120 s per run, `console.log` to get values back. Read
+  `aside guide repl` once before the first run. No AI runs here; never use
+  `aside exec` or a bare `aside "<task>"` (Aside's own agent, it spends the
+  user's credits) unless the user asks for it.
+- Fast loop, Aside style: one run does a whole stretch: `openTab`, the
+  actions, the wait for the end state, then print only `snapshot(page).diff`
+  (not the whole tree) for the next run. `openTab` and `click` already wait.
+- Your tabs only: open them with `openTab(url)` and close them with
+  `closeTab(page)` in a `finally`. Never attach to, read or close a tab you
+  didn't open (`getTabs`, `listBrowserTabs`, `attachActiveBrowserTab` are the
+  user's tabs).
+- Its `fs` can't reach outside Aside's folder. To get a file out, print it:
+  `console.log("IMG " + (await page.screenshot()).toString("base64"))`, then
+  `| sed -n 's/^IMG //p' | base64 -d > "$APP_ARTIFACTS_DIR/after.png"`. To put
+  a file in, serve it for a moment on 127.0.0.1 and `fetch` it from the run.
+- Signed out of a site in Aside: never type a password. `ask` the user to
+  sign in there (name the site and the account), or use the built-in
+  browser's keychain sign-in (rule 4) instead.
+- Recipes (fast loop 6) can be Aside scripts too: same folder, `.aside.js`.
+
+## The built-in browser
 
 `agent-browser` and the browser it drives both ship inside the app:
 `agent-browser` is already on your `PATH` and its environment is already set.
@@ -125,8 +166,9 @@ What makes a browser agent slow is the number of turns, not the commands
      Recording needs ffmpeg; if `record start` fails, fall back to one screenshot
      per step and say so with a `checklist` item `{"label":"녹화 대신 사진","done":true}`.
    Never screenshot a page while a password is visible in it.
-6. **Pictures and videos into a PR.** Use `pr-media.sh` in this skill's folder;
-   don't drive the comment box yourself and don't use another browser app:
+6. **Pictures and videos into a PR.** Use `pr-media.sh` in this skill's folder
+   (Aside when it is signed in, else your tab here; `--account <id>` picks the
+   Aside account); don't drive the comment box yourself:
    ```bash
    "<this skill's folder>/pr-media.sh" <PR number|URL> shot1.png flow.mp4   # or --dir <folder>
    ```
@@ -134,12 +176,12 @@ What makes a browser agent slow is the number of turns, not the commands
    links into the description's `## 화면` section, and replaces its own block
    on a rerun. Look at the pictures yourself first, then check the result with
    `gh pr view <PR> --json body`. Exit code 3 means GitHub isn't signed in in
-   the shared browser: `ask` the user to sign in to GitHub in the browser panel
+   the built-in browser (and Aside wasn't there or failed): `ask` the user to sign in to GitHub in the browser panel
    (name the account that opens the PR), then run it again.
 7. **Close when the leg ends.** `agent-browser close` before your `handoff`. It
    only ends your connection: your tab, and every login, stay for the next leg.
    The app closes your tab when the job ends.
-7. **Outward actions need a decision.** Submitting, purchasing, posting or
+8. **Outward actions need a decision.** Submitting, purchasing, posting or
    sending anything visible to other people goes through an `ask` block first.
 
 ## Report
