@@ -36,6 +36,7 @@ research, Claude Research, Tongyi DeepResearch) and what the papers found:
 | `notes.jsonl` | one fact per line: `{"q":1,"claim":"…","url":"…","title":"…","published":"2026-04-21","quote":"≤ 2 lines, verbatim","source":"primary\|secondary"}` |
 | `report.html` | the report, from `report.html` in this skill's folder |
 | `report.pdf` | printed with `pdf.sh` in this skill's folder |
+| `summary.html` | the chat card: a one-screen summary of the PDF, from `summary.html` in this skill's folder |
 
 ## 1. Scope and plan
 
@@ -125,23 +126,32 @@ page count) to make sure it isn't blank or cut off.
 
 ## 5. Show it in the chat
 
-One message, short prose plus blocks:
+The chat shows the PDF in short: one card that looks like the report's cover
+page, then the PDF itself. Not the whole report, and not the same tables and
+charts again as loose blocks.
+
+1. Copy this skill's `summary.html` to `$R/summary.html` and fill it from the
+   report only: the same title, 2–4 numbers that carry the answer (each with
+   what it is and its source number), the 3 takeaways, the report's one most
+   telling picture (smaller, same data and colors), and the footer (page
+   count, source count, one line of what's uncertain). Nothing that isn't in
+   the report.
+2. Send one message: a one-line answer, the card, the PDF, `done`.
 
 ```blocks
-{"type":"text","text":"**<답 한 문장>**\n\n1. …\n2. …\n3. …"}
-{"type":"table","columns":["항목","…","출처"],"rows":[["…","…","[1]"]]}
-{"type":"bars","label":"…","unit":"%","items":[{"label":"…","value":84,"highlight":true}]}
-{"type":"page","path":"<R>/report.html","label":"리서치 보고서","height":640}
+{"type":"text","text":"**<답 한 문장>**"}
+{"type":"page","path":"<R>/summary.html","label":"리서치 요약","height":460}
 {"type":"link","kind":"file","title":"보고서 PDF","ref":"<R>/report.pdf"}
 {"type":"done","summary":"…","evidence":[{"kind":"file","ref":"<R>/report.pdf","ok":true},{"kind":"link","ref":"<main source URL>","ok":true}],"unverified":["…"]}
 ```
 
-- `page` draws the HTML report inside the chat; `link` opens the PDF beside it.
-- Use `timeline` instead of `bars` when the story is dates.
+- `height`: about 460 for numbers + takeaways + one picture; less when a part
+  was dropped. The card never scrolls: cut it down rather than raise it past 560.
+- `link` opens the full PDF beside the chat.
 - `evidence` links are pages fetched in this session; list the 3–8 that carry
   the answer, and `web_fetch` any a subagent found before you list it.
-- Keep the chat text to the answer and the takeaways; the detail lives in
-  the report.
+- When the user asks about one part afterwards, answer from `notes.jsonl`
+  and the report, with a `table` or `bars` block for that part only.
 
 ## Don'ts
 
