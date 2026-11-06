@@ -139,6 +139,8 @@ Then print it:
 "<this skill's folder>/pdf.sh" "$R/report.html"   # prints $R/report.pdf
 ```
 
+Keep the template's `@page` rule as it is: it puts page numbers ("3 / 13") at the bottom of every page.
+
 Open the PDF's first page once (screenshot it, or read the file size and
 page count) to make sure it isn't blank or cut off.
 

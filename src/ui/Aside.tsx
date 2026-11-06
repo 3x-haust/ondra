@@ -121,6 +121,14 @@ export const btwCommand = (scope: () => string) => ({
   },
 });
 
+const SKILL_ASK = " 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘)";
+/** A main request made with /skill:…: the skills it names and the user's own words (the instruction to main is not theirs to read). */
+export function skillAsk(text: string): { skills: string[]; rest: string } {
+  const m = text.match(/^((?:`[^`\n]+`(?:, )?)+) 스킬로 해 줘 \(일을 맡길 때 이 스킬을 쓰라고 적어 줘\)(?:: )?/);
+  if (!m) return { skills: [], rest: text };
+  return { skills: [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]), rest: text.slice(m[0].length) };
+}
+
 /** Menu skills as "/name" commands. In a job it runs there; in main it becomes a job that uses it. */
 export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }) =>
   menuSkills().map((sk) => ({
@@ -132,7 +140,7 @@ export const skillCommands = (target: () => { task?: string; space: SpaceId; pro
       const t = target();
       const names = [sk.name, ...also];
       if (t.task) void tell(t.task, `/skill:${sk.name} ${also.length ? `(also use the ${also.join(", ")} skill${also.length > 1 ? "s" : ""}) ` : ""}${arg}`.trim());
-      else throwThought(`${names.map((n) => `\`${n}\``).join(", ")} 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘)${arg.trim() ? `: ${arg.trim()}` : ""}`, t.space, { project: t.project });
+      else throwThought(`${names.map((n) => `\`${n}\``).join(", ")}${SKILL_ASK}${arg.trim() ? `: ${arg.trim()}` : ""}`, t.space, { project: t.project });
     },
   }));
 
