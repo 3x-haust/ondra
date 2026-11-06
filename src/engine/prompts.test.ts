@@ -97,6 +97,16 @@ describe("bundled design workflow", () => {
   });
 });
 
+describe("skill discovery instructions", () => {
+  it.each([
+    ["captain", CAPTAIN_SYSTEM], ["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM],
+  ])("tells the %s role to search before reading a selected skill", (_role, prompt) => {
+    expect(prompt).toContain("skill_search");
+    expect(prompt).toMatch(/skill_search[\s\S]*read[\s\S]*SKILL\.md/i);
+    expect(prompt).not.toContain("Jobs come with skills (listed in the message when they change)");
+  });
+});
+
 describe("worker prompt delivery", () => {
   // Only the native process/event boundary is replaced; prompt assembly, state,
   // task startup and RPC response handling all run their real implementations.
@@ -128,11 +138,13 @@ describe("worker prompt delivery", () => {
       await startTask(t.id, mode === "resume");
 
       expect(native.agentSpawn).toHaveBeenCalledTimes(1);
-      const [id, cwd, args] = vi.mocked(native.agentSpawn).mock.calls[0];
+      const [id, cwd, args, env] = vi.mocked(native.agentSpawn).mock.calls[0];
       expect(id).toBe(`t:${t.id}`);
       expect(cwd).toBe(t.cwd);
       expect(args.includes("--continue")).toBe(mode === "resume");
       expect(args).not.toContain("--skill");
+      expect(args).toContain("--no-skills");
+      expect(env.filter(([key]) => key === "ONDRA_SKILL_PATHS")).toEqual([["ONDRA_SKILL_PATHS", "[]"]]);
       const prompts = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
       expect(prompts).toHaveLength(3);
       expect(prompts[0]).toBe(role === "subagent" ? SUB_SYSTEM : TASK_SYSTEM);
@@ -144,10 +156,18 @@ describe("worker prompt delivery", () => {
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
     });
 
-    it.each(["fresh", "resume", "handoff"])(`delivers bundled mimikyu to ${role} on %s without user-installed skills`, async (mode) => {
+    it.each(["fresh", "resume", "handoff"])(`makes skills searchable by ${role} on %s without loading the catalog`, async (mode) => {
       expect(bundledSkills).toHaveProperty(mimikyuFile);
       vi.spyOn(native, "workerSkills").mockResolvedValue([mimikyuPath]);
-      vi.spyOn(native, "globalSkills").mockResolvedValue([]);
+      const pack = Array.from({ length: 6 }, (_, i) => ({
+        name: `aws-${i}`, path: `/global/aws-${i}/SKILL.md`, description: `Amazon procedure ${i}`,
+      }));
+      vi.spyOn(native, "globalSkills").mockResolvedValue(pack);
+      setState("skills", [
+        { name: "home", path: "/home/SKILL.md", description: "Home procedure", source: "ondra", enabled: true, space: "home" },
+        { name: "work", path: "/work/SKILL.md", description: "Work procedure", source: "ondra", enabled: true, space: "work" },
+        { name: "off", path: "/off/SKILL.md", description: "Disabled procedure", source: "ondra", enabled: false, space: "home" },
+      ]);
       const t = task(role === "subagent" ? "parent-task" : undefined);
       // Availability must not depend on a design keyword or a personal skill.
       if (t.parentId) setState("tasks", [{ ...task(), id: t.parentId }]);
@@ -160,9 +180,16 @@ describe("worker prompt delivery", () => {
       await startTask(t.id, mode === "resume");
 
       expect(native.agentSpawn).toHaveBeenCalledTimes(1);
-      const args = vi.mocked(native.agentSpawn).mock.calls[0][2];
+      const [, , args, env] = vi.mocked(native.agentSpawn).mock.calls[0];
       expect(args).toContain("--no-skills");
-      expect(args.flatMap((arg, i) => arg === "--skill" ? [args[i + 1]] : [])).toEqual([mimikyuPath]);
+      expect(args).not.toContain("--skill");
+      expect(env.filter(([key]) => key === "ONDRA_SKILL_PATHS")).toEqual([
+        ["ONDRA_SKILL_PATHS", JSON.stringify([mimikyuPath, "/home/SKILL.md", ...pack.map((s) => s.path)])],
+      ]);
+      const sent = vi.mocked(native.agentSend).mock.calls.find(([, command]) => command.type === "prompt")?.[1];
+      const context = `${args.join("\n")}\n${sent?.message}`;
+      for (const description of ["Home procedure", "Work procedure", "Disabled procedure", ...pack.map((s) => s.description)])
+        expect(context).not.toContain(description);
       expect(args.includes("--continue")).toBe(mode === "resume");
       const prompts = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
       expect(prompts[0]).toContain("mimikyu skill");

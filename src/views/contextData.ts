@@ -1,13 +1,13 @@
 // What an agent's model receives, asked from the engine (`get_context`).
 // A live agent answers itself; a stopped job or chat is rebuilt in a short-lived
 // engine started with the same arguments (no session, so no conversation).
-import { jobSkills } from "../engine/skillPick";
+import { skillPaths } from "../engine/skillPick";
 import { mainTools, restartIfStale } from "../engine/captain";
-import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions, workerSkills } from "../lib/native";
+import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
 import { accountEnv, WORKER_TOOLS } from "../engine/tasks";
 import { CAPTAIN_SYSTEM, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
-import { applying, inSpace, isLive, recall, skillsIn } from "../engine/memory";
+import { applying, inSpace, isLive, recall } from "../engine/memory";
 import { modelFor } from "../engine/models";
 import { homeDir, spaceById, state, taskById } from "../state/store";
 import type { Memory, SpaceId } from "../state/types";
@@ -115,19 +115,17 @@ function label(texts: string[], known: Part[]): Part[] {
 
 async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: Env }> {
   const t = taskById(id)!;
-  const skills = await jobSkills(t);
   const model = t.model || modelFor(t.accountId);
   const args = [
     ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
     "--no-skills",
-    ...skills.flatMap((s) => ["--skill", s]),
     ...(model ? ["--model", model] : []),
     "--thinking",
     t.thinking || "high",
     ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
     ...WORKER_TOOLS,
   ];
-  const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"]];
+  const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t.space))]];
   return { cwd: expand(t.cwd || homeDir(t) || "~"), args, env };
 }
 
@@ -188,12 +186,13 @@ export async function loadChat(key: string, accountId: string): Promise<Loaded> 
     const model = state.settings.captainModel || modelFor(accountId);
     const args = [
       ...(await mainTools()),
+      "--no-skills",
       "--thinking",
       "low",
       ...chatParts(key).flatMap((p) => ["--append-system-prompt", p.text]),
       ...(model ? ["--model", model] : []),
     ];
-    return probe(expand(proj?.folder || space.folder || "~"), args, [...(await accountEnv(accountId)), ["ONDRA_MAIN", "1"]]);
+    return probe(expand(proj?.folder || space.folder || "~"), args, [...(await accountEnv(accountId)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(space.id))]]);
   });
   // the chat sends its memory inside each message: the always-on pieces once,
   // and pieces recalled for that message alone
@@ -217,11 +216,11 @@ let toolsCache: EngineContext | null = null;
 /** A fresh engine with what every job gets: extensions, skills, the first account. */
 export async function loadWorkerTools(force = false): Promise<EngineContext> {
   if (toolsCache && !force) return toolsCache;
-  const skills = [...(await workerSkills()), ...skillsIn(state.spaces[0]?.id ?? state.space).map((s) => s.path)];
-  const args = [...skills.flatMap((s) => ["--skill", s]), ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...WORKER_TOOLS];
+  const paths = await skillPaths(state.spaces[0]?.id ?? state.space);
+  const args = ["--no-skills", ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...WORKER_TOOLS];
   const acc = state.accounts[0];
   // the app's door too, so the memory tools register as they do in a job
-  const env = [...(await workerEnv("tools", state.spaces[0]?.id)), ...(acc ? await accountEnv(acc.id) : [])];
+  const env: Env = [...(await workerEnv("tools", state.spaces[0]?.id)), ...(acc ? await accountEnv(acc.id) : []), ["ONDRA_SKILL_PATHS", JSON.stringify(paths)]];
   toolsCache = await probe(expand(state.spaces[0]?.folder || "~"), args, env);
   return toolsCache;
 }
@@ -239,14 +238,12 @@ function sample(args: string[]): EngineContext {
     sec("docs", "Pi documentation (read only when the user asks about the harness itself)...".repeat(8)),
     sec("addendum", appended.join("\n\n")),
     sec("project_context", agents),
-    sec("skills", "<available_skills>...</available_skills>".repeat(30)),
     sec("cwd", "/Users/me/app"),
   ].filter((s) => s.tokens);
   const tool = (name: string, description: string, path: string, schemaTokens: number, active = true, namespace?: string): CtxTool => ({
     name, description, active, exposure: "direct", namespace, schemaTokens,
     sourceInfo: { path, source: path.startsWith("builtin:") ? "builtin" : "cli", scope: "temporary", origin: "top-level" },
   });
-  const skill = (name: string, description: string, path: string) => ({ name, description, path, modelInvocable: true, sourceInfo: { path, source: "cli", scope: "temporary", origin: "top-level" } });
   const msgs: CtxMessage[] = [
     { role: "user", tokens: 412, preview: "# Task: 로그인 리다이렉트 고치기 Project: app Folder: ~/app 로그인 후 원래 보던 페이지로 돌아가게 해 주세요." },
     { role: "assistant", tokens: 96, preview: "라우터부터 볼게요. [read] [bash]", toolCalls: ["read", "bash"] },
@@ -265,13 +262,7 @@ function sample(args: string[]): EngineContext {
     sections,
     appendSystemPrompt: appended.map((text) => ({ text, tokens: estimate(text) })),
     contextFiles: [{ path: "/Users/me/app/AGENTS.md", content: agents, tokens: estimate(agents) }],
-    skills: [
-      skill("browser-use", "Drive a real browser to open pages, click, type and take screenshots.", "/ondra/skills/browser-use/SKILL.md"),
-      skill("code-review", "변경된 파일을 리뷰해요. 규칙과 요구사항을 따로 검토해요.", "/ondra/skills/code-review/SKILL.md"),
-      skill("device-use", "Operate iOS simulators and Android emulators: boot, install, tap, screenshot.", "/ondra/skills/device-use/SKILL.md"),
-      skill("visual-report", "Turn results into a short visual report with charts and screenshots.", "/ondra/skills/visual-report/SKILL.md"),
-      skill("aws-cdk", "Authors, deploys, and troubleshoots AWS infrastructure using CDK.", "/Users/me/.agents/skills/aws-cdk/SKILL.md"),
-    ],
+    skills: [],
     tools: [
       tool("read", "Read the contents of a file. Supports text files and images.", "builtin:read", 164),
       tool("bash", "Execute a bash command in the current working directory.", "builtin:bash", 128),

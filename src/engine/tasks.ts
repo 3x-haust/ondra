@@ -2,7 +2,7 @@
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
 import { describeCommand } from "./describe";
-import { jobSkills } from "./skillPick";
+import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
@@ -686,7 +686,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const t0 = taskById(id)!;
     const t = t0;
     const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ["ONDRA_SPACE", t0.space] as [string, string], ["ONDRA_DEVICES_ALLOWED", allowedDevices(t0.space, id).join(",")] as [string, string], ...dataEnv(t0), ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
-    const skills = await jobSkills(t0);
+    env.push(["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t0.space))]);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
     // the memory given at the first start is kept for every later session (Hermes / Letta:
@@ -700,9 +700,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--session-dir",
       `${engine.info.dataDir}/sessions/${id}`,
       ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
-      // only the skills picked for this job, not every one found on the machine
+      // The search extension owns discovery; Pi must not advertise a catalog.
       "--no-skills",
-      ...skills.flatMap((s) => ["--skill", s]),
       ...(model ? ["--model", model] : []),
       "--thinking",
       t.thinking || effortFor(account.id) || "high",
