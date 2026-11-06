@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeCommand as d } from "./describe";
+import { mainCommand, describeCommand as d } from "./describe";
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
@@ -16,5 +16,14 @@ describe("describeCommand", () => {
     expect(d(`sed -n 1,80p src/views/Canvas.tsx`)).toMatchObject({ label: "살펴보기", target: "Canvas.tsx" });
     expect(d(`export FOO=1; jq . data.json`).label).toBe("살펴보기");
     expect(d(`weird-tool --flag`).label).toBe("weird-tool 실행");
+  });
+});
+
+describe("mainCommand", () => {
+  it("skips setup, cleanup and wait loops", () => {
+    const c = `pkill -f "scripts/dev.mjs" ; for i in $(seq 1 20); do pgrep -f "x" >/dev/null || break; sleep 1; done; pgrep -fl yomates-appshot; cd /a/app && (nohup npm run dev -- --port 9333 > /tmp/l 2>&1 &); for i in $(seq 1 90); do curl -s localhost:9333/json >/dev/null && break; sleep 2; done`;
+    expect(mainCommand(c).startsWith("npm run dev")).toBe(true);
+    expect(mainCommand("cd /x && pnpm test")).toBe("pnpm test");
+    expect(mainCommand("git status")).toBe("git status");
   });
 });

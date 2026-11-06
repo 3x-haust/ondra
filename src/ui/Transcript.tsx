@@ -8,6 +8,7 @@ import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types"
 import { live, previewFile } from "../state/ui";
 import { state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
+import { describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView } from "./Blocks";
 import { long, now, short } from "./bits";
@@ -309,7 +310,8 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
 function shortName(t: ToolCall) {
   const x = (t.target ?? "").trim();
   if (["bash", "test", "browser", "desktop"].includes(t.kind)) {
-    const head = x.split(/;|&&|\|\||\||\n/)[0].trim().split(/\s+/).slice(0, 2).join(" ");
+    // the command doing the work, not the setup in front of it ("pkill -f …; npm run dev")
+    const head = (t.kind === "bash" || t.kind === "test" ? mainCommand(x) : x.split(/;|&&|\|\||\||\n/)[0].trim()).split(/\s+/).slice(0, 3).join(" ");
     return head.length > 36 ? `${head.slice(0, 35)}…` : head;
   }
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
@@ -334,7 +336,9 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
         <Show when={running()} fallback={<Icon name={t().note ? "memory" : ICON[t().kind]} size={14} />}>
           <span class="spin" />
         </Show>
-        <span class="tool-verb" classList={{ shimmer: running() }}>{t().note ? (running() ? "적는 중" : "기록했어요") : VERB[t().kind][running() ? 0 : 1]}</span>
+        <span class="tool-verb" classList={{ shimmer: running() }}>
+          {t().note ? (running() ? "적는 중" : "기록했어요") : t().kind === "bash" ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? "")) : VERB[t().kind][running() ? 0 : 1]}
+        </span>
         <span class="tool-target">{what()}</span>
         <Show when={t().add || t().del}>
           <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
