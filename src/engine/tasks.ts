@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { isNetError, waitOnline } from "./net";
 import { describeCommand } from "./describe";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
@@ -49,6 +50,8 @@ interface Run {
   edits?: number;
   nudges?: number;
   modelTries: number;
+  /** turns cut by a dropped connection in a row (picked up again once it is back) */
+  netTries?: number;
   /** a turn has ended since this run started listening */
   ended?: boolean;
   /** done/evidence handed in; checked once before finishing */
@@ -1033,6 +1036,21 @@ export async function reattachJobs() {
   }
 }
 
+async function carryOnWhenOnline(id: string, run: Run, agent: string, err: string) {
+  run.netTries = (run.netTries ?? 0) + 1;
+  updateTask(id, (x) => {
+    x.now = "연결 기다리는 중";
+    if (run.netTries === 1) push(x, { kind: "note", text: "연결이 끊겼어요. 다시 연결되면 이어서 해요" });
+  });
+  await waitOnline(run.netTries);
+  // stopped, removed or restarted while it waited
+  if (runs.get(id) !== run || taskById(id)?.status !== "running") return;
+  run.turnStart = Date.now();
+  await request(agent, { type: "prompt", message: "(Ondra) The connection dropped in the middle of your turn and is back now. Carry on from where you stopped; redo the last step only if it didn't finish." }).catch((e) =>
+    fail(id, `${err} · ${e instanceof Error ? e.message : String(e)}`),
+  );
+}
+
 async function settle(id: string, run: Run) {
   const agent = agentOf(id);
   const t = taskById(id);
@@ -1068,11 +1086,19 @@ async function settle(id: string, run: Run) {
       return;
     }
   }
+  // the connection dropped (lid closed, Wi-Fi gone): wait for it and carry on in the same session
+  if (run.error && isNetError(run.error) && !run.done && !run.handoff && !run.asked && (run.netTries ?? 0) < 40) {
+    const err = run.error;
+    run.error = undefined;
+    void carryOnWhenOnline(id, run, agent, err);
+    return;
+  }
   if (run.error && !run.done && !run.handoff && !run.asked) {
     fail(id, run.error);
     return;
   }
   run.error = undefined;
+  run.netTries = 0;
 
   if (run.asked) {
     run.asked = false;

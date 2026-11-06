@@ -3,6 +3,7 @@
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { isNetError, waitOnline } from "./net";
 import { keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
@@ -373,6 +374,11 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
       return await route(space, text, cwd, event);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // the connection dropped: wait for it to come back and send again
+      if (attempt < 8 && isNetError(msg)) {
+        await waitOnline(attempt + 1);
+        continue;
+      }
       if (attempt < 3 && isModelError(msg) && !state.settings.captainModel) {
         const acc = accountOf.get(space)!;
         const next = await nextModel(acc, failedModelIn(msg) ?? modelFor(acc));
