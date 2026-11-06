@@ -72,6 +72,9 @@ function General() {
         <Row title="일마다 따로 복사해서 일하기" desc="프로젝트 폴더라면 일마다 복사본을 만들어 서로 덮어쓰지 않아요. 끝나면 확인하고 합쳐요">
           <button class="switch" classList={{ on: state.settings.isolate }} role="switch" aria-checked={state.settings.isolate} onClick={() => setState("settings", "isolate", !state.settings.isolate)}><i /></button>
         </Row>
+        <Row title="PR 지켜보기" desc="일이 연 PR에 리뷰가 달리거나 검사가 실패하거나 충돌이 나면 그 일이 이어서 처리해요">
+          <button class="switch" classList={{ on: state.settings.watchPrs !== false }} role="switch" aria-checked={state.settings.watchPrs !== false} onClick={() => setState("settings", "watchPrs", state.settings.watchPrs === false)}><i /></button>
+        </Row>
         <Row title="자동으로 기억" desc="자주 하는 요청과 선호를 알아서 기억해요">
           <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
         </Row>
