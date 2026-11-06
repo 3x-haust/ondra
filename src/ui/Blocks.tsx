@@ -1,5 +1,5 @@
 // Result blocks the agents send (see skills/visual-report): drawn, not read.
-import { For, Match, Show, Switch } from "solid-js";
+import { ErrorBoundary, For, Match, Show, Switch } from "solid-js";
 import type { Block, Evidence } from "../state/types";
 import { fileSrc, openUrl } from "../lib/native";
 import { previewFile } from "../state/ui";
@@ -139,13 +139,16 @@ export function BlockView(props: { block: Block }) {
     const t = typeof b.say === "string" ? b.say : b.type === "diff" ? b.note : b.type === "options" ? b.why : "";
     return typeof t === "string" ? t.trim() : "";
   };
+  // a block an agent got wrong is left out; it never takes the rest of the app down with it
   return (
-    <Show when={say()} fallback={<BlockBody block={props.block} />}>
-      <figure class="blk-fig">
-        <BlockBody block={props.block} />
-        <p class="blk-say">{say()}</p>
-      </figure>
-    </Show>
+    <ErrorBoundary fallback={() => null}>
+      <Show when={say()} fallback={<BlockBody block={props.block} />}>
+        <figure class="blk-fig">
+          <BlockBody block={props.block} />
+          <p class="blk-say">{say()}</p>
+        </figure>
+      </Show>
+    </ErrorBoundary>
   );
 }
 
@@ -223,19 +226,30 @@ function BlockBody(props: { block: Block }) {
       </Match>
       <Match when={as("files")}>
         {(f) => {
-          const max = () => Math.max(...f().files.map((x) => x.add + x.del), 1);
+          // agents also send { items: [{ path, note }] } instead of counted lines
+          const list = () => {
+            const b = f() as Of<"files"> & { items?: { path?: string; note?: string; add?: number; del?: number }[] };
+            const raw = Array.isArray(b.files) ? b.files : Array.isArray(b.items) ? b.items : [];
+            return raw.filter((x) => x && typeof x.path === "string").map((x) => ({ path: x.path as string, add: Number(x.add) || 0, del: Number(x.del) || 0, note: (x as { note?: string }).note }));
+          };
+          const max = () => Math.max(...list().map((x) => x.add + x.del), 1);
           return (
             <div class="blk">
-              <div class="blk-label">변경한 파일 {f().files.length}개</div>
-              <For each={f().files}>
+              <div class="blk-label">변경한 파일 {list().length}개</div>
+              <For each={list()}>
                 {(x) => (
                   <div class="file-row">
                     <span class="name" title={x.path}>{x.path}</span>
-                    <span class="file-bar">
-                      <i class="a" style={{ width: `${(x.add / max()) * 100}%` }} />
-                      <i class="d" style={{ width: `${(x.del / max()) * 100}%` }} />
-                    </span>
-                    <span class="file-num"><span class="add">+{x.add}</span><Show when={x.del}> <span class="del">−{x.del}</span></Show></span>
+                    <Show
+                      when={x.add || x.del}
+                      fallback={<Show when={x.note}><span class="file-note">{x.note}</span></Show>}
+                    >
+                      <span class="file-bar">
+                        <i class="a" style={{ width: `${(x.add / max()) * 100}%` }} />
+                        <i class="d" style={{ width: `${(x.del / max()) * 100}%` }} />
+                      </span>
+                      <span class="file-num"><span class="add">+{x.add}</span><Show when={x.del}> <span class="del">−{x.del}</span></Show></span>
+                    </Show>
                   </div>
                 )}
               </For>
