@@ -24,7 +24,9 @@ research, Claude Research, Tongyi DeepResearch) and what the papers found:
 - Parallel workers help on broad questions (an orchestrator with 3–5
   workers, each with a clear objective, output format and boundary).
 - The known failure is made-up or misattributed citations. Every claim in the
-  report points to a page you opened in this session.
+  report points to a page this job opened (in any of its sessions: a page read
+  before a handoff still counts; check a quote with `web_fetch` and `find`
+  instead of reading the page again).
 
 ## Where things go
 
@@ -78,10 +80,11 @@ Budget: quick ~15 searches, deep ~40–80. Spend searches where the gaps are,
 not on re-confirming what two sources already agree on.
 
 **Deep mode, in parallel**: with 3+ independent sub-questions, hand them to
-subagents (at most 4 at a time), one sub-question each:
+subagents (at most 3 at a time; every job shares one search engine, so more
+in parallel only wait for each other), one sub-question each:
 
 ```
-{"type":"subagent","title":"리서치: <짧게>","task":"Research ONE question for a report: <sub-question>. Done when: <done when>. Fields per item: <fields>. Use web_search, then web_fetch the primary sources (official docs, papers, repos, changelogs); aggregators only lead to them. Write every fact as one JSON line to <R>/notes-<n>.jsonl: {\"q\":<n>,\"claim\",\"url\",\"title\",\"published\",\"quote\" (verbatim, ≤2 lines),\"source\":\"primary|secondary\"}. Don't conclude beyond the sources. Report back: what is answered, what is missing, what conflicts."}
+{"type":"subagent","title":"리서치: <짧게>","task":"Research ONE question for a report: <sub-question>. Done when: <done when>. Fields per item: <fields>. Use web_search (when it says the engine is busy, search through Aside: aside skills show google-search), then web_fetch the primary sources (official docs, papers, repos, changelogs); aggregators only lead to them. Write every fact as one JSON line to <R>/notes-<n>.jsonl: {\"q\":<n>,\"claim\",\"url\",\"title\",\"published\",\"quote\" (verbatim, ≤2 lines),\"source\":\"primary|secondary\"}. Don't conclude beyond the sources. Report back: what is answered, what is missing, what conflicts."}
 ```
 
 Merge their notes into `notes.jsonl`, then run your own gap check on the
@@ -163,8 +166,9 @@ charts again as loose blocks.
 - `height`: about 460 for numbers + takeaways + one picture; less when a part
   was dropped. The card never scrolls: cut it down rather than raise it past 560.
 - `link` opens the full PDF beside the chat.
-- `evidence` links are pages fetched in this session; list the 3–8 that carry
-  the answer, and `web_fetch` any a subagent found before you list it.
+- `evidence` links are pages this job opened (earlier sessions count); list
+  the 3–8 that carry the answer, and check any a subagent found with
+  `web_fetch` and `find` (just the quoted passage) before you list it.
 - When the user asks about one part afterwards, answer from `notes.jsonl`
   and the report, with a `table` or `bars` block for that part only.
 

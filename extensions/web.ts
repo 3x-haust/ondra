@@ -4,6 +4,10 @@
 //   web_search {query}  → top results: title, url, snippet (Brave's HTML results)
 //   web_fetch  {url}    → the page as plain text, trimmed
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Type } from "typebox";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36";
@@ -38,24 +42,131 @@ function get(url: string, signal?: AbortSignal): Promise<{ ok: boolean; status: 
 
 export type Hit = { title: string; url: string; snippet: string };
 
-// one search engine, shared by every job on this machine: space the calls and
-// back off when it says "too many", instead of failing the first time
-let lastAt = 0;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function search(query: string, signal?: AbortSignal): Promise<{ hits: Hit[]; status: number }> {
+
+/**
+ * One search engine for every job and chat on this machine, each its own
+ * process: the pace is kept in a shared folder, not in memory. A lock folder
+ * (mkdir is atomic) guards "last" (when the last search went out) and "until"
+ * (the engine said too many: nobody searches before then).
+ */
+export class Pace {
+  constructor(
+    private dir: string,
+    private gapMs = 2000,
+    private now = () => Date.now(),
+    private sleep = wait,
+  ) {
+    mkdirSync(dir, { recursive: true });
+  }
+  private read(name: string) {
+    try {
+      return Number(readFileSync(join(this.dir, name), "utf8")) || 0;
+    } catch {
+      return 0;
+    }
+  }
+  private write(name: string, v: number) {
+    const tmp = join(this.dir, `${name}.${process.pid}`);
+    writeFileSync(tmp, String(v));
+    renameSync(tmp, join(this.dir, name));
+  }
+  private async lock(signal?: AbortSignal) {
+    const at = join(this.dir, "lock");
+    for (;;) {
+      if (signal?.aborted) throw new Error("aborted");
+      try {
+        mkdirSync(at);
+        return () => rmdirSync(at);
+      } catch {
+        // a lock left by a process that died
+        try {
+          if (this.now() - statSync(at).mtimeMs > 10_000) rmdirSync(at);
+        } catch {}
+        await this.sleep(100);
+      }
+    }
+  }
+  /** Wait for this process's turn (gap after the last search, and any cool-down), then take it. */
+  async turn(signal?: AbortSignal, maxWaitMs = 90_000): Promise<boolean> {
+    const start = this.now();
+    for (;;) {
+      const free = this.read("until");
+      const due = Math.max(free, this.read("last") + this.gapMs);
+      if (due - this.now() > maxWaitMs - (this.now() - start)) return false;
+      if (due > this.now()) await this.sleep(Math.min(due - this.now(), 5000));
+      const unlock = await this.lock(signal);
+      try {
+        if (Math.max(this.read("until"), this.read("last") + this.gapMs) <= this.now()) {
+          this.write("last", this.now());
+          return true;
+        }
+      } finally {
+        unlock();
+      }
+    }
+  }
+  /** The engine said too many: everyone holds off for a while. */
+  coolDown(ms: number) {
+    this.write("until", Math.max(this.read("until"), this.now() + ms));
+  }
+  /** When searches are allowed again (0 = now). */
+  pausedUntil() {
+    const u = this.read("until");
+    return u > this.now() ? u : 0;
+  }
+}
+
+/** Results of the same search in the last ten minutes, kept on disk for every job. */
+export class Cache {
+  constructor(
+    private dir: string,
+    private ttlMs = 10 * 60_000,
+    private now = () => Date.now(),
+  ) {
+    mkdirSync(dir, { recursive: true });
+  }
+  private file(q: string) {
+    return join(this.dir, `${createHash("sha1").update(q.trim().toLowerCase().replace(/\s+/g, " ")).digest("hex")}.json`);
+  }
+  get(q: string): Hit[] | undefined {
+    try {
+      const v = JSON.parse(readFileSync(this.file(q), "utf8"));
+      return this.now() - v.at < this.ttlMs ? v.hits : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  set(q: string, hits: Hit[]) {
+    const f = this.file(q);
+    writeFileSync(`${f}.${process.pid}`, JSON.stringify({ at: this.now(), hits }));
+    renameSync(`${f}.${process.pid}`, f);
+  }
+}
+
+// the user's own temp folder: the same for every job, main chat and side chat
+const webDir = join(tmpdir(), "ondra-web");
+let pace: Pace | undefined;
+let cache: Cache | undefined;
+const shared = () => ((pace ??= new Pace(join(webDir, "pace"))), (cache ??= new Cache(join(webDir, "cache"))), { pace, cache });
+
+async function search(query: string, signal?: AbortSignal): Promise<{ hits: Hit[]; status: number; cached?: boolean; busyUntil?: number }> {
+  const { pace, cache } = shared();
+  const had = cache.get(query);
+  if (had) return { hits: had, status: 200, cached: true };
   let status = 0;
-  for (const backoff of [0, 3000, 8000]) {
-    if (backoff) await wait(backoff);
-    const gap = lastAt + 1500 - Date.now();
-    if (gap > 0) await wait(gap);
-    lastAt = Date.now();
+  // one retry after the engine's cool-down; the wait is for the shared turn, not a guess
+  for (let i = 0; i < 2; i++) {
+    if (!(await pace.turn(signal))) return { hits: [], status: 429, busyUntil: pace.pausedUntil() };
     const r = await get(`https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`, signal);
     status = r.status;
     const hits = r.ok ? parseBrave(r.body) : [];
+    if (hits.length) cache.set(query, hits);
     if (hits.length || (r.ok && r.status !== 202)) return { hits, status };
     if (r.status !== 429 && r.status !== 202 && r.status < 500) break;
+    pace.coolDown(20_000);
   }
-  return { hits: [], status };
+  return { hits: [], status, busyUntil: pace.pausedUntil() };
 }
 
 /** Brave's server-rendered results page: one `div.snippet[data-type=web]` per result. */
@@ -81,6 +192,24 @@ export function pageText(html: string): { title: string; text: string } {
   return { title, text: lines.join("\n") };
 }
 
+/** The lines around each place a phrase appears (case and spacing ignored), at most 8 passages. */
+export function passages(text: string, phrase: string, around = 2): string[] {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const want = norm(phrase);
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let until = -1;
+  for (let i = 0; i < lines.length && out.length < 8; i++) {
+    // on this line, or broken across it and the next
+    const here = norm(lines[i]).includes(want) || (!norm(lines[i + 1] ?? "").includes(want) && norm(`${lines[i]} ${lines[i + 1] ?? ""}`).includes(want));
+    if (i <= until || !here) continue;
+    const from = Math.max(0, i - around);
+    until = Math.min(lines.length - 1, i + around + 1);
+    out.push(lines.slice(from, until + 1).join("\n"));
+  }
+  return out;
+}
+
 export default function (pi: any) {
   pi.registerTool({
     name: "web_search",
@@ -102,10 +231,12 @@ export default function (pi: any) {
         const hits = r.hits.slice(0, n);
         if (!hits.length)
           return text(
-            r.status === 429 ? "The search engine is busy (too many searches). Wait a little and search again, or search in the browser." : `No results (HTTP ${r.status}). Try other words, or search in the browser.`,
+            r.status === 429 || r.status === 202 || r.busyUntil
+              ? "The search engine is refusing searches for now (every job shares it). Don't retry in a loop: search through Aside instead (`aside skills show google-search`, then `aside repl` with googleSearch.search), or work on with what you have and search later."
+              : `No results (HTTP ${r.status}). Try other words, or search through Aside.`,
             { query: p.query, hits: [] },
           );
-        return text(hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"), { query: p.query, hits });
+        return text(hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"), { query: p.query, hits, cached: !!r.cached });
       } catch (e) {
         return text(`Search failed: ${(e as Error).message}. Try again, or use the browser.`, { query: p.query, hits: [] });
       }
@@ -120,14 +251,22 @@ export default function (pi: any) {
     parameters: Type.Object({
       url: Type.String({ description: "http(s) URL" }),
       max: Type.Optional(Type.Number({ description: "max characters (default 12000)" })),
+      find: Type.Optional(Type.String({ description: "only the passages containing this phrase (checking a source's quote or number): a few lines around each match instead of the whole page" })),
     }),
-    async execute(_id: string, p: { url: string; max?: number }, signal?: AbortSignal) {
+    async execute(_id: string, p: { url: string; max?: number; find?: string }, signal?: AbortSignal) {
       if (!/^https?:\/\//.test(p.url)) return text("Only http(s) URLs.");
       const max = Math.max(1000, Math.min(60000, p.max ?? 12000));
       try {
         const r = await get(p.url, signal);
         if (!r.ok) return text(`HTTP ${r.status} for ${p.url}.`, { url: p.url, status: r.status });
         const raw = /html/i.test(r.type) || /^\s*</.test(r.body) ? pageText(r.body) : { title: "", text: r.body };
+        if (p.find?.trim()) {
+          const hits = passages(raw.text, p.find);
+          return text(
+            `${raw.title ? `# ${raw.title}\n` : ""}${p.url}\n\n${hits.length ? hits.join("\n…\n") : `"${p.find}" is not on this page.`}`,
+            { url: p.url, title: raw.title, found: hits.length },
+          );
+        }
         const body = raw.text.length > max ? `${raw.text.slice(0, max)}\n… (${raw.text.length - max} more characters; ask with a larger max)` : raw.text;
         return text(`${raw.title ? `# ${raw.title}\n` : ""}${p.url}\n\n${body}`, { url: p.url, title: raw.title });
       } catch (e) {

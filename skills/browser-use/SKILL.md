@@ -67,15 +67,22 @@ panel there, and they stay across restarts: if the user or another job in this
 space already signed in to a site, you are signed in too. The other space's
 logins are not here; sign in again rather than looking for them.
 
-## Before the first command
+## Commands
 
-```bash
-agent-browser skills get core      # the official loop: snapshot → act on @ref → re-snapshot
-```
+`snapshot -i` lists the page's interactive elements as `@e1`, `@e2`…; act on
+them with `click @e3`, `fill @e4 "text"`, `select`, `press Enter`, `scroll`,
+`wait`, `screenshot`, `eval "<js>"`; `open <url>` navigates. For one command's
+options: `agent-browser <command> --help`. Don't print the full official skill
+(`skills get core`, ~40k characters): everything you need is here. Its loop
+(snapshot → one action → snapshot) is the slow way; work in the fast loop below.
 
-Use that skill for the commands. Its loop (snapshot → one action → snapshot)
-is the slow way: every step costs a whole turn. Here, work in the fast loop
-below; the app's rules after it still hold.
+When agent-browser answers "Resource temporarily unavailable" (os error 35),
+another job is using the browser this moment: wait a few seconds and retry
+once, then switch to Aside rather than retrying in a loop.
+
+Searching: when web_search says the engine is busy, search through Aside
+(`aside skills show google-search`, then `googleSearch.search(q, { limit: 8 })`
+in `aside repl`).
 
 ## Fast loop: fewer turns, smaller pages
 
