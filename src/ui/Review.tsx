@@ -355,7 +355,12 @@ export function PreviewPane() {
         </Show>
         <div class="pv-body">
           <Switch>
-            <Match when={kind() === "page"}><iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={fileSrc(full())} /></Match>
+            <Match when={kind() === "page"}>
+              {/* a PDF needs the web view's own viewer, which a sandboxed frame turns off (a PDF runs no scripts here) */}
+              <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={fileSrc(full())} />}>
+                <iframe class="aframe" src={fileSrc(full())} />
+              </Show>
+            </Match>
             <Match when={kind() === "image"}><div class="fv-img"><img src={fileSrc(full())} alt={name()} /></div></Match>
             <Match when={kind() === "video"}><video class="pv-video" src={fileSrc(full())} controls /></Match>
             <Match when={kind() === "md"}><div class="pv-md"><Markdown text={md() ?? ""} /></div></Match>
