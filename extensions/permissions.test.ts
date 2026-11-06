@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foreignData } from "./permissions";
+import { focusSteal, foreignData } from "./permissions";
 
 const D = "/Users/me/Library/Application Support/ondra";
 describe("foreignData", () => {
@@ -20,5 +20,30 @@ describe("foreignData", () => {
   });
   it("leaves paths outside the data folder alone", () => {
     expect(foreignData("cat ~/projects/app/README.md", D, ok, "home")).toBeUndefined();
+  });
+});
+
+describe("focusSteal", () => {
+  it("catches what brings a window in front of the user", () => {
+    expect(focusSteal(`osascript -e 'tell application "TextEdit" to activate'`)?.what).toMatch(/AppleScript/);
+    expect(focusSteal(`osascript -e 'tell application "System Events" to keystroke "a"'`)?.what).toMatch(/System Events/);
+    expect(focusSteal("open -a TextEdit note.txt")).toBeDefined();
+    expect(focusSteal("cd x && open https://example.com")).toBeDefined();
+    expect(focusSteal("agent-desktop launch Calculator --activate")).toBeDefined();
+    expect(focusSteal("agent-desktop focus-window --app Notes")).toBeDefined();
+    expect(focusSteal("agent-desktop mouse-click --xy 10,10")).toBeDefined();
+    expect(focusSteal('agent-desktop click @s1:e2 --headed --session "$SID"')).toBeDefined();
+    expect(focusSteal('agent-desktop press cmd+k --session "$SID"')?.what).toMatch(/press/);
+  });
+  it("lets background work through", () => {
+    expect(focusSteal("open -g -a TextEdit note.txt")).toBeUndefined();
+    expect(focusSteal("open -gj -a Calculator")).toBeUndefined();
+    expect(focusSteal(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
+    expect(focusSteal('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
+    expect(focusSteal('agent-desktop --session "$SID" snapshot --app Orbit -i')).toBeUndefined();
+    expect(focusSteal('agent-desktop click @s1:e2 --session "$SID"')).toBeUndefined();
+    expect(focusSteal("agent-desktop launch Calculator")).toBeUndefined();
+    expect(focusSteal("git log --oneline | head")).toBeUndefined();
+    expect(focusSteal("pnpm openapi:gen")).toBeUndefined();
   });
 });
