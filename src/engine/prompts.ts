@@ -243,7 +243,9 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 5. Review: only for a large or risky change (many files, auth, payments,
    data, deleting things), and before anything goes out (push, merge,
    release, store submission): a review after shipping changes nothing that
-   shipped. Start one review subagent
+   shipped. A review the job you carry on already got still holds when you
+   haven't changed code since (a version bump or a release is not a change
+   to review): go straight to shipping. Start one review subagent
    {"type":"subagent","review":true,"title":"코드 리뷰","task":"Use the
    code-review skill. Review the changes in <folder> against: <the full
    requirement>"} and end your turn. Give it the requirement and where the
