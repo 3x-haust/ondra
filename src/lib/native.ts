@@ -372,6 +372,7 @@ export const openCapture = () => call<void>("open_capture");
 export const hideCapture = () => call<void>("hide_capture");
 /** From the capture window: emits `capture:submitted` {text, space} to main. */
 export const submitCapture = (text: string, space: string) => call<void>("submit_capture", { text, space });
+export const setFocusGuard = (on: boolean) => call<void>("focus_guard", { on });
 export const setTrayCount = (running: number, waiting: number) => call<void>("set_tray_count", { running, waiting });
 
 /** A local file (screenshot, recording) as something an <img> can show. */

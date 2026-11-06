@@ -10,7 +10,7 @@ import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
 import { startRpc } from "./engine/rpc";
 import { startScheduler } from "./engine/tasks";
-import { notify, onEvent, setTrayCount } from "./lib/native";
+import { notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
 import { MainView } from "./views/MainView";
 import { Canvas } from "./views/Canvas";
 import { MemoryView } from "./views/Memory";
@@ -179,6 +179,9 @@ export default function App() {
   });
   createEffect(() => {
     setTrayCount(state.tasks.filter((t) => t.status === "running").length, state.decisions.length);
+  });
+  createEffect(() => {
+    void setFocusGuard(state.settings.focusGuard);
   });
   createEffect(() => {
     const t = state.settings.theme;

@@ -35,6 +35,11 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// The jobs' engine processes, for telling apps they start apart from the user's.
+    pub fn pids(&self) -> Vec<i32> {
+        self.procs.lock().map(|p| p.values().map(|p| p.child.id() as i32).collect()).unwrap_or_default()
+    }
+
     pub fn kill_all(&self) {
         if let Ok(mut procs) = self.procs.lock() {
             for (_, mut p) in procs.drain() {
@@ -265,6 +270,7 @@ pub fn agent_spawn(
                             continue;
                         }
                         if let Ok(ev) = serde_json::from_str::<Value>(line) {
+                            crate::focus::on_event(&id, &ev);
                             let _ = app.emit("agent:event", json!({ "id": id, "ev": slim(ev) }));
                         }
                     }
@@ -289,6 +295,7 @@ pub fn agent_spawn(
                 }
             };
             let Some(mine) = mine else { return };
+            crate::focus::job_gone(&id);
             let code = mine.and_then(|mut p| p.child.wait().ok()).and_then(|s| s.code());
             let _ = app.emit("agent:exit", json!({ "id": id, "code": code }));
         });

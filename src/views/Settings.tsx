@@ -78,6 +78,9 @@ function General() {
         <Row title="자동으로 기억" desc="자주 하는 요청과 선호를 알아서 기억해요">
           <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
         </Row>
+        <Row title="일이 띄운 앱은 뒤에" desc="일이 연 앱이 앞으로 나오면 쓰던 창으로 돌아가요">
+          <button class="switch" classList={{ on: state.settings.focusGuard }} role="switch" aria-checked={state.settings.focusGuard} onClick={() => setState("settings", "focusGuard", !state.settings.focusGuard)}><i /></button>
+        </Row>
       </div>
 
       <div class="set-group-title">공통 지시</div>
