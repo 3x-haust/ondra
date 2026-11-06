@@ -1,9 +1,10 @@
 // The left side, after T3 Code: main on top, then one quiet row per job with a
 // status dot (working sky, needs-you amber/indigo, ready emerald, failed red).
 // The git-style flow lives in the right panel's 흐름 tab.
+import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { anyPop, closePops } from "../ui/ModelPicker";
-import { addProject, decisionsIn, projectsIn, removeProject, setSpace, state, taskById, tasksIn } from "../state/store";
+import { addProject, decisionsIn, projectsIn, removeProject, state, taskById, tasksIn } from "../state/store";
 import { pickFolder } from "../lib/native";
 import type { Task } from "../state/types";
 import { toast, goMain, hoverTask, openTask, setHoverTask, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
@@ -224,8 +225,10 @@ const [folds, setFolds] = createSignal<Record<string, boolean>>((() => {
     return {};
   }
 })());
+// per space: each space's sidebar stays folded the way it was left
+const fold = (k: string): boolean | undefined => folds()[`${state.space}:${k}`] ?? folds()[k];
 const setFold = (k: string, v: boolean) => {
-  const next = { ...folds(), [k]: v };
+  const next = { ...folds(), [`${state.space}:${k}`]: v };
   setFolds(next);
   try {
     localStorage.setItem(FOLD_KEY, JSON.stringify(next));
@@ -234,7 +237,7 @@ const setFold = (k: string, v: boolean) => {
 
 /** A section title you can click to fold what's under it. */
 function Head(props: { id: string; label: string; count?: number; children?: any }) {
-  const shut = () => !!folds()[props.id];
+  const shut = () => !!fold(props.id);
   return (
     <div class="sb-head">
       <button class="sb-head-btn" classList={{ shut: shut() }} onClick={() => setFold(props.id, !shut())} aria-expanded={!shut()}>
@@ -291,7 +294,7 @@ export function Sidebar() {
       <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
         <For each={state.spaces}>
           {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => (setSpace(s.id), goMain())} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
               <span class="space-name">{s.label}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>
@@ -332,7 +335,7 @@ export function Sidebar() {
             <Icon name="plus" size={13} />
           </button>
         </Head>
-        <Fold open={!folds().projects}>
+        <Fold open={!fold("projects")}>
         <div class="sb-projects">
           <For each={projectsIn(state.space)} >
             {(p) => {
@@ -341,7 +344,7 @@ export function Sidebar() {
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = () => shown().filter((t) => t.project === p.id);
               const all = () => roots().filter((t) => t.project === p.id).length;
-              const open = () => folds()[`p:${p.id}`] ?? (curProject() === p.id || jobs().some((t) => !ended(t) || t.id === openRoot()));
+              const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t) || t.id === openRoot()));
               return (
                 <>
                   <button
@@ -392,7 +395,7 @@ export function Sidebar() {
             <Icon name="arrow" size={13} />
           </button>
         </Head>
-        <Fold open={!folds().devices}>
+        <Fold open={!fold("devices")}>
         <div class="sb-projects">
           <For
             each={bootedDevices()}
@@ -420,7 +423,7 @@ export function Sidebar() {
         </Fold>
 
         <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
-        <Fold open={!folds().jobs}>
+        <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()} fallback={<p class="sb-empty">{projectsIn(state.space).length ? "프로젝트 밖에서 맡긴 일이 여기에 생겨요" : "메인에게 일을 맡기면 여기에 생겨요"}</p>}>
             {(t, i) => <Row t={t} index={i()} />}
