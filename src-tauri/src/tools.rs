@@ -238,6 +238,11 @@ pub async fn worker_env(app: AppHandle, worker_id: String) -> Vec<(String, Strin
     if let Some(plugins) = crate::browser::plugins_env() {
         env.push(("AGENT_BROWSER_PLUGINS".into(), plugins));
     }
+    if let Some(sdk) = crate::devices::job_sdk(&crate::engine::data_dir(&app)) {
+        let sdk = sdk.display().to_string();
+        env.push(("ANDROID_HOME".into(), sdk.clone()));
+        env.push(("ANDROID_SDK_ROOT".into(), sdk));
+    }
     env.push(("APP_WORKER_ID".into(), worker_id.clone()));
     env.extend(crate::bridge::env());
     env.push(("ONDRA_HOOKS_FILE".into(), hooks_file(&app).display().to_string()));

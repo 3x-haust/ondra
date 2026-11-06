@@ -33,6 +33,44 @@ fn sdk() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|_| dirs_home().join("Library/Android/sdk"))
 }
+/// The Android SDK jobs see: the real one, except that an emulator a job starts
+/// (by its own script or a repo's test runner) gets no window of its own. Its
+/// screen shows in the device hub instead of a separate app on the user's desktop.
+/// Everything else links to the real SDK, so builds and adb work as before.
+pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
+    let real = sdk();
+    let real_emu = real.join("emulator/emulator");
+    if !real_emu.exists() {
+        return None;
+    }
+    let dir = data.join("android-sdk");
+    let emu = dir.join("emulator");
+    std::fs::create_dir_all(&emu).ok()?;
+    let link_all = |from: &std::path::Path, to: &std::path::Path, skip: &str| {
+        for e in std::fs::read_dir(from).into_iter().flatten().flatten() {
+            let name = e.file_name();
+            let at = to.join(&name);
+            if name != skip && std::fs::symlink_metadata(&at).is_err() {
+                let _ = std::os::unix::fs::symlink(e.path(), at);
+            }
+        }
+    };
+    link_all(&real, &dir, "emulator");
+    link_all(&real.join("emulator"), &emu, "emulator");
+    let real_emu = real_emu.display().to_string().replace('\'', "'\\''");
+    let script = format!(
+        "#!/bin/sh\n# Ondra: an emulator a job boots runs without a window; the device hub shows it\nreal='{real_emu}'\nfor a in \"$@\"; do case \"$a\" in -no-window|-qt-hide-window) exec \"$real\" \"$@\";; esac; done\nfor a in \"$@\"; do case \"$a\" in -avd|@*) exec \"$real\" -no-window \"$@\";; esac; done\nexec \"$real\" \"$@\"\n"
+    );
+    let path = emu.join("emulator");
+    if std::fs::read_to_string(&path).ok().as_deref() != Some(script.as_str()) {
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, script).ok()?;
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).ok()?;
+    }
+    Some(dir)
+}
+
 fn dirs_home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_default())
 }
@@ -306,4 +344,33 @@ pub async fn device_input(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_job_emulator_boots_without_a_window() {
+        let root = std::env::temp_dir().join(format!("ondra-sdk-test-{}", std::process::id()));
+        let real = root.join("real");
+        std::fs::create_dir_all(real.join("emulator")).unwrap();
+        std::fs::create_dir_all(real.join("platform-tools")).unwrap();
+        let fake = real.join("emulator/emulator");
+        std::fs::write(&fake, "#!/bin/sh\necho \"$@\"\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // only this test reads ANDROID_HOME
+        unsafe { std::env::set_var("ANDROID_HOME", &real) };
+
+        let sdk = job_sdk(&root.join("data")).unwrap();
+        let run = |args: &[&str]| String::from_utf8(Command::new(sdk.join("emulator/emulator")).args(args).output().unwrap().stdout).unwrap();
+
+        assert_eq!(run(&["-avd", "pixel", "-port", "5600"]).trim(), "-no-window -avd pixel -port 5600");
+        assert_eq!(run(&["@pixel"]).trim(), "-no-window @pixel");
+        assert_eq!(run(&["-avd", "pixel", "-no-window"]).trim(), "-avd pixel -no-window");
+        assert_eq!(run(&["-list-avds"]).trim(), "-list-avds");
+        assert!(sdk.join("platform-tools").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
