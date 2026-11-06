@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { describeCommand } from "./describe";
 import { jobSkills } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
@@ -208,7 +209,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
       if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: "브라우저 사용 중" };
       if (/\bagent-desktop\b/.test(cmd)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
       if (/\b(test|vitest|jest|pytest|cargo test|xcodebuild test|go test)\b/.test(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
-      return { name, kind: "bash", target: cmd, detail: cmd, now: "명령 실행 중" };
+      return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).now };
     }
     default:
       return { name, kind: "other", target: name, detail: JSON.stringify(args ?? {}), now: name };
@@ -233,7 +234,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
     if (!b || typeof b !== "object" || typeof b.type !== "string") continue;
     switch (b.type) {
       case "now":
-        if (b.text) t.now = String(b.text).slice(0, 140);
+        if (b.text) t.now = t.intent = String(b.text).slice(0, 140);
         if (typeof b.step === "number" && t.plan.length) {
           t.plan.forEach((s, i) => (s.state = i < b.step ? "done" : i === b.step ? "now" : "todo"));
         }
@@ -559,6 +560,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     t.finishedAt = undefined;
     if (!t.legs.length || t.legs[t.legs.length - 1].endedAt) t.legs.push({ startedAt: Date.now() });
     t.now = resume ? "이어서 작업 중" : "시작 중";
+    t.intent = undefined;
   });
 
   const run: Run = { text: "", cursor: 0, streaming: false, asked: false, turnStart: 0, stats: zero(), tools: new Map(), modelTries: prev?.modelTries ?? 0 };

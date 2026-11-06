@@ -3148,6 +3148,93 @@ input[type="checkbox"] {
 .cv-text.ask {
   color: var(--ink);
 }
+.cv-live.w-act {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.cv-act {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+}
+.cv-act-rail {
+  display: flex;
+  gap: 3px;
+  flex: none;
+}
+.cv-act-rail i {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  transition: background-color 0.3s ease;
+}
+.cv-act-rail i.done { background: color-mix(in srgb, var(--ink) 32%, transparent); }
+.cv-act-rail i.now { background: var(--c-live); }
+.cv-act-step {
+  font-size: 11px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: none;
+}
+.cv-act-head {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: none;
+}
+.cv-act-feed {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  /* short on room: the oldest step goes, never the running one */
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+.cv-act-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--ink-4);
+  animation: cv-act-in 0.22s ease-out;
+}
+.cv-act-row svg { flex: none; }
+.cv-act-row.open { color: var(--ink-2); }
+.cv-act-row.bad .lb { color: var(--red); }
+.cv-act-row .lb { flex: none; white-space: nowrap; }
+.cv-act-row .tg,
+.cv-act-row .tl {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-4);
+}
+.cv-act-row .tl {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.cv-act-row .tg { flex: 0 1 auto; }
+.cv-act-row:has(.tl) .tg { max-width: 40%; }
+@keyframes cv-act-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
 .cv-live-empty {
   display: grid;
   place-items: center;
