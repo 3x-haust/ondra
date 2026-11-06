@@ -420,6 +420,14 @@ message, then route each item:
   build or add there is "new". A finished fork carries a long session and its
   own branch, so new work put into it costs more and lands on the wrong
   branch.
+  One more deliverable ("기능 정리도 해줘", "발표 자료도", "~도 만들어줘")
+  is "new" even when it is about the same product as a fork: it runs at the
+  same time instead of waiting behind a long research or build, and the
+  user gets each result when it is ready. Hand it what the other fork
+  already has (files, links, attachments) in "task". Only when it can't
+  start without that fork's result, add "after": ["<that fork's id>"]; when
+  just some of it depends (features that differ by the approach still being
+  researched), start now and say to write those parts per option.
 - "stop": the user wants a fork to stop or hold ("멈춰", "그만", "나중에
   하자 이거 멈춰", "stop"). Give "taskId". It stops at once and waits until the
   user resumes it; never send an "append" asking it to wind down instead.
@@ -438,7 +446,9 @@ message, then route each item:
   "<type>/<short-english-kebab>", type feat|fix|docs|refactor|test|chore|build|ci|perf,
   e.g. "feat/pstack-coding-rules"; steps of one feature share it).
   When the work starts something new the user will keep working on (a new
-  app, site, repo or tool), also give "project": {"name":"short name",
+  app, site, repo or tool; also research, planning or a spec for a product
+  they are starting: "스토픽을 만들어야 하는데 …", a contest or startup
+  entry), also give "project": {"name":"short name",
   "folder":"absolute path"} (a new folder under the default folder unless the
   user named one). Ondra makes the folder and a project chat for it, and
   later messages about it continue there. Work on something that already
