@@ -76,7 +76,18 @@ Follow that skill for commands. This file only adds the app's rules on top.
      Recording needs ffmpeg; if `record start` fails, fall back to one screenshot
      per step and say so with a `checklist` item `{"label":"녹화 대신 사진","done":true}`.
    Never screenshot a page while a password is visible in it.
-6. **Close when the leg ends.** `agent-browser close` before your `handoff`. It
+6. **Pictures and videos into a PR.** Use `pr-media.sh` in this skill's folder;
+   don't drive the comment box yourself and don't use another browser app:
+   ```bash
+   "<this skill's folder>/pr-media.sh" <PR number|URL> shot1.png flow.mp4   # or --dir <folder>
+   ```
+   It uploads through the PR page in your tab (nothing gets posted), writes the
+   links into the description's `## 화면` section, and replaces its own block
+   on a rerun. Look at the pictures yourself first, then check the result with
+   `gh pr view <PR> --json body`. Exit code 3 means GitHub isn't signed in in
+   the shared browser: `ask` the user to sign in to GitHub in the browser panel
+   (name the account that opens the PR), then run it again.
+7. **Close when the leg ends.** `agent-browser close` before your `handoff`. It
    only ends your connection: your tab, and every login, stay for the next leg.
    The app closes your tab when the job ends.
 7. **Outward actions need a decision.** Submitting, purchasing, posting or
