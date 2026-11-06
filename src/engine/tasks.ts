@@ -1058,6 +1058,15 @@ export const onJobEnded = (f: (t: Task) => void) => (endedHook = f);
  * evidence must hold up against the session (ran here, passed, nothing changed after,
  * files exist). Otherwise the job is sent back with exactly what's wrong (twice at most).
  */
+/** The job already sent its work out (pushed, merged, released, submitted to a store). */
+export function shipped(t: Task): boolean {
+  return t.entries.some(
+    (e) =>
+      e.kind === "tool" &&
+      /\bgit push\b|\bgh pr merge\b|\bgh release create\b|\beas submit\b|\bfastlane\b|\basc\b[^\n]*\b(submit|review)|검토를 위해 변경사항 전송|심사.{0,6}제출/.test(`${e.tool.target} ${e.tool.detail ?? ""}`),
+  );
+}
+
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   if (!wrote.length) return null; // looked things up, answered: nothing to prove
@@ -1065,10 +1074,14 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   // a review is required only for a large or risky change (as the prompt says)
   const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && !/\.(md|txt|html?)$/i.test(p)));
   const risky = [...codeFiles].some((p) => /auth|login|session|token|secret|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
-  const needsReview = changed && (codeFiles.size >= 5 || risky);
+  // once it went out, a review can't change what shipped: say so instead of sending the job back
+  const out = shipped(t);
+  const needsReview = changed && (codeFiles.size >= 5 || risky) && !out;
+  if (changed && (codeFiles.size >= 5 || risky) && out && !state.tasks.some((x) => x.parentId === t.id && x.review && x.status === "done"))
+    run.unverified = [...(run.unverified ?? []), "리뷰 없이 내보냈어요"];
   const kids = state.tasks.filter((x) => x.parentId === t.id);
   const reviewed = !needsReview || kids.some((x) => x.review && x.status === "done");
-  const unresolved = changed && reviewed && reviewUnresolved(t, kids);
+  const unresolved = changed && reviewed && !out && reviewUnresolved(t, kids);
   // check the evidence of this done against the session, and show the result on its block
   const checked = await checkEvidence(t, run.evidence ?? []);
   run.evidence = checked;

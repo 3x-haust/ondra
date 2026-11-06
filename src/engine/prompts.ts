@@ -232,7 +232,9 @@ same order; only what changed differs. Never invent numbers, timings or trends.
    options, config, extra files or features nobody asked for. Match the
    project's style. Don't over-design: no "for later" structure.
 5. Review: only for a large or risky change (many files, auth, payments,
-   data, deleting things), start one review subagent
+   data, deleting things), and before anything goes out (push, merge,
+   release, store submission): a review after shipping changes nothing that
+   shipped. Start one review subagent
    {"type":"subagent","review":true,"title":"코드 리뷰","task":"Use the
    code-review skill. Review the changes in <folder> against: <the full
    requirement>"} and end your turn. Give it the requirement and where the
