@@ -293,6 +293,7 @@ pub fn run() {
             git::git_changes,
             worktree::worktree_create,
             fs::fs_files,
+            fs::fs_repos,
             fs::fs_read,
             fs::save_paste,
             fs::save_download,

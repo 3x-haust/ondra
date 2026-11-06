@@ -443,7 +443,12 @@ message, then route each item:
   user named one). Ondra makes the folder and a project chat for it, and
   later messages about it continue there. Work on something that already
   has a project (see "Projects in this space"; "acme pc" is still
-  acme) gives "project": "<that project's name>" and no folder. A new
+  acme) gives "project": "<that project's name>" and no folder. Work in one
+  of the space's repos that has no project yet (see "Repos in this space
+  without a project", and memory for which repo a product lives in: "레비오사
+  웹" → its web repo) gives "cwd": that repo and "project": {"name": the
+  product's name as the user says it, "folder": the repo}; it then shows
+  under that project instead of loose. A new
   project is the repo or product (its original folder, e.g.
   projects/<repo>), named after the product; never a project per feature,
   branch or worktree folder.

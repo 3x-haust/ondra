@@ -8,7 +8,7 @@ import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, ensureDir, fsRead, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { addMemory, applying, isLive, KINDS, memoryLines, recall } from "./memory";
 import { failedModelIn, modelFor, nextModel } from "./models";
@@ -40,7 +40,16 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; recap: boolean }>();
+const sentOf = new Map<string, { forks?: string; memory?: string; skills?: string; rules?: string; projects?: string; repos?: string; recap: boolean }>();
+/** the git repos in each space's folder, looked up again after a few minutes */
+const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
+async function refreshRepos(space: SpaceId) {
+  const had = reposOf.get(space);
+  if (had && Date.now() - had.at < 5 * 60_000) return;
+  const root = spaceById(space).folder;
+  const list = root ? await fsRepos(expand(root)).catch(() => had?.list ?? []) : [];
+  reposOf.set(space, { at: Date.now(), list });
+}
 /** "own branch per task" choice of the request being routed, per space */
 const isolateOf = new Map<string, boolean | undefined>();
 /** Captains this page started and listens to. One left over from before a reload
@@ -489,6 +498,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const proj = projectOf(space);
   const rules = [spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).join("\n\n");
   const projects = projectsIn(sp(space)).map((p) => `- ${p.name}: ${p.folder}`).join("\n") || "(none)";
+  const taken = new Set(projectsIn(sp(space)).map((p) => expand(p.folder).replace(/\/+$/, "")));
+  const repos = (reposOf.get(sp(space))?.list ?? []).filter((r) => !taken.has(r)).map((r) => `- ${r}`).join("\n");
   // no always-on memory: a few pieces recalled for this message alone
   const folder = projectOf(space)?.folder;
   const here = applying(sp(space), folder ? expand(folder) : "", expand);
@@ -497,6 +508,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const out: string[] = [];
   if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
   if (projects !== sent.projects) out.push(`# Projects in this space${sent.projects ? " (updated)" : ""} (name: folder)\n${projects}`, "");
+  if (repos && repos !== sent.repos) out.push(`# Repos in this space without a project${sent.repos ? " (updated)" : ""}\n${repos}`, "");
   out.push(forksBlock(forks, sent.forks));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   const skills = state.skills.filter((s) => s.enabled).map((s) => `- ${s.name}: ${s.description.slice(0, 140)}`).join("\n") || "(none)";
@@ -526,7 +538,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "Tell the user what came out, short and visual (blocks), as an \"answer\". Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
     );
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", skills, rules, projects, recap: false });
+  sentOf.set(space, { forks, memory: "", skills, rules, projects, repos, recap: false });
   return out.join("\n");
 }
 
@@ -540,7 +552,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   genOf.set(space, { ms: 0 });
   const t0 = Date.now();
   try {
-    await prepareQuery(text);
+    await Promise.all([prepareQuery(text), refreshRepos(sp(space))]);
     await request(agent, { type: "prompt", message: context(space, text, cwd, event) });
     await done;
   } finally {
