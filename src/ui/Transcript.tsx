@@ -112,7 +112,7 @@ const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence"
  * is over, the work folds into "N분 동안 작업 ›" and only the closing summary stays
  * (the answer text and result blocks it ended with). Errors never fold.
  */
-function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Element }) {
+function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; tail?: JSX.Element }) {
   const [shown, setShown] = createSignal(false);
   const [mounted, setMounted] = createSignal(false);
   const body = () => props.turn.body;
@@ -135,6 +135,9 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Ele
     }
     return "";
   };
+  // a subagent (a review above all) often ends with only a done block: its findings
+  // went to the job that asked, so show them here too
+  const report = () => (props.last && !answer() && props.task.status === "done" && props.task.result?.trim()) || "";
   const took = () => {
     if (props.turn.ms) return props.turn.ms;
     const from = props.turn.user?.at ?? body()[0]?.at ?? 0;
@@ -181,12 +184,15 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; tail?: JSX.Ele
           </div>
         </Show>
         <Items entries={rest()} task={props.task} live={false} />
+        <Show when={report()}>
+          <Markdown class="msg-text" text={report()} />
+        </Show>
         {props.tail}
-        <Show when={answer() || props.turn.usage}>
+        <Show when={answer() || report() || props.turn.usage}>
           <div class="reply-foot">
-            <Show when={answer()}>
+            <Show when={answer() || report()}>
               <MsgActions
-                text={answer()}
+                text={answer() || report()}
                 onRetry={props.turn.user ? () => void editTurn(props.task.id, props.turn.user!.id, props.turn.user!.text) : undefined}
               />
             </Show>
@@ -452,6 +458,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
               turn={t}
               task={props.task}
               open={working() && i() === list().length - 1}
+              last={i() === list().length - 1}
             />
           )}
         </For>
