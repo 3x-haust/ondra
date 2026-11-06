@@ -3,7 +3,7 @@
 // send ↔ stop. Strips (paused, plan, background…) dock on top, an optional
 // row sits under the card. Files can be attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line.
-import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
 import { usePop } from "./ModelPicker";
@@ -54,6 +54,8 @@ export interface Command {
 
 type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "file"; items: string[]; q: string; at: number };
 
+/** what was typed in each chat, so switching chats (company / personal, projects, jobs) keeps each its own */
+const drafts = new Map<string, { text: string; files: string[] }>();
 
 export function Composer(props: {
   placeholder: string;
@@ -83,6 +85,8 @@ export function Composer(props: {
   status?: JSX.Element;
   /** more entries for the + menu (after "파일 및 폴더") */
   plus?: PlusItem[];
+  /** the chat this input belongs to: each keeps its own unsent text */
+  draftKey?: string;
 }) {
   const [text, setText] = createSignal("");
   const [plusOpen, setPlusOpen] = usePop();
@@ -100,6 +104,31 @@ export function Composer(props: {
   ];
   const [files, setFiles] = createSignal<string[]>([]);
   let el!: HTMLTextAreaElement;
+  // each chat keeps its own unsent text: saved as it is typed, brought back when the
+  // chat (or a new input for it) shows up
+  createEffect(
+    on(
+      () => props.draftKey,
+      (key) => {
+        const d = (key !== undefined && drafts.get(key)) || { text: "", files: [] };
+        setText(d.text);
+        setFiles(d.files);
+        if (el) {
+          el.value = d.text;
+          queueMicrotask(grow);
+        }
+        setPick(null);
+      },
+    ),
+  );
+  createEffect(() => {
+    const t = text();
+    const f = files();
+    const key = untrack(() => props.draftKey);
+    if (key === undefined) return;
+    if (t || f.length) drafts.set(key, { text: t, files: f });
+    else drafts.delete(key);
+  });
 
   const add = (paths: string[]) => {
     setFiles((f) => [...f, ...paths.filter((p) => !f.includes(p))]);
