@@ -190,6 +190,27 @@ pub async fn save_paste(app: tauri::AppHandle, bytes: Vec<u8>, ext: String) -> R
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Files copied in Finder (or by a screenshot tool) as files, not as pictures: the web
+/// view only gets their names, so read their paths from the macOS pasteboard.
+#[tauri::command]
+pub async fn clipboard_files() -> Vec<String> {
+    const JS: &str = r#"ObjC.import("AppKit");
+const urls = $.NSPasteboard.generalPasteboard.readObjectsForClassesOptions($([$.NSURL]), $({ NSPasteboardURLReadingFileURLsOnlyKey: true }));
+const out = [];
+if (urls) for (let i = 0; i < urls.count; i++) out.push(ObjC.unwrap(urls.objectAtIndex(i).path));
+JSON.stringify(out)"#;
+    let out = tauri::async_runtime::spawn_blocking(|| std::process::Command::new("/usr/bin/osascript").args(["-l", "JavaScript", "-e", JS]).output())
+        .await
+        .ok()
+        .and_then(|r| r.ok());
+    let Some(out) = out.filter(|o| o.status.success()) else { return vec![] };
+    serde_json::from_slice::<Vec<String>>(&out.stdout)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| std::path::Path::new(p).is_file())
+        .collect()
+}
+
 /// Make a new project folder (main can start a project somewhere new). Only inside home.
 #[tauri::command]
 pub fn ensure_dir(path: String) -> Result<String, String> {
