@@ -405,11 +405,58 @@ pub fn open_in_editor(path: String) -> Result<(), String> {
     Command::new("/usr/bin/open").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// Opens a terminal window in a folder: Ghostty, iTerm, Warp, else Terminal.
+/// A script that opens a shell in `path` with the space's environment (its git
+/// identity, GitHub login, ssh keys, CLI shims first on PATH).
+fn shell_script(path: &str, env: &[(String, String)]) -> String {
+    let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
+    let mut lines = vec!["#!/bin/zsh".to_string(), format!("cd {} || exit 1", q(path))];
+    let mut shims = String::new();
+    for (k, v) in env {
+        if k == "PATH" {
+            shims = v.clone();
+        } else if k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            lines.push(format!("export {k}={}", q(v)));
+        }
+    }
+    // a login shell rebuilds PATH, so the space's commands go back in front after it
+    lines.push(format!(
+        "exec \"${{SHELL:-/bin/zsh}}\" -l -c {}",
+        q(&format!("export PATH={}:\"$PATH\"; exec \"${{SHELL:-/bin/zsh}}\" -i", q(&shims)))
+    ));
+    lines.join("\n") + "\n"
+}
+
+fn space_shell_script(app: &AppHandle, path: &str, env: &[(String, String)]) -> Result<String, String> {
+    let dir = data_dir(app).join("terminal");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join(format!("open-{}.command", std::process::id()));
+    std::fs::write(&file, shell_script(path, env)).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
+    }
+    Ok(file.display().to_string())
+}
+
+/// Opens a terminal window in a folder: Ghostty, iTerm, Warp, else Terminal. With
+/// `env` (the space's `space_env`) the shell runs as that space.
 #[tauri::command]
-pub fn open_in_terminal(path: String) -> Result<(), String> {
+pub fn open_in_terminal(app: AppHandle, path: String, env: Option<Vec<(String, String)>>) -> Result<(), String> {
     let has = |app: &str| Path::new(&format!("/Applications/{app}.app")).exists();
     let mut cmd = Command::new("/usr/bin/open");
+    if let Some(env) = env.filter(|e| !e.is_empty()) {
+        let script = space_shell_script(&app, &path, &env)?;
+        if has("Ghostty") {
+            cmd.args(["-na", "Ghostty", "--args", "-e", &script]);
+        } else if has("iTerm") {
+            cmd.args(["-a", "iTerm", &script]);
+        } else {
+            // Warp doesn't run scripts it's handed: Terminal does
+            cmd.args(["-a", "Terminal", &script]);
+        }
+        return cmd.spawn().map(|_| ()).map_err(|e| e.to_string());
+    }
     if has("Ghostty") {
         cmd.args(["-na", "Ghostty", "--args", &format!("--working-directory={path}")]);
     } else if has("iTerm") {
@@ -646,4 +693,45 @@ pub fn artifacts_list(app: AppHandle, worker_id: String) -> Vec<ArtifactFile> {
         .unwrap_or_default();
     out.sort_by(|a, b| b.modified.cmp(&a.modified));
     out
+}
+
+#[cfg(test)]
+mod terminal_tests {
+    use super::shell_script;
+
+    #[test]
+    fn space_shell_starts_in_the_folder_with_the_space_env() {
+        let dir = std::env::temp_dir().join(format!("ondra-term-{}", std::process::id()));
+        let odd = dir.join("it's here");
+        std::fs::create_dir_all(&odd).unwrap();
+        let env = vec![
+            ("GH_CONFIG_DIR".to_string(), "/x/it's gh".to_string()),
+            ("PATH".to_string(), "/x/shims".to_string()),
+            ("BAD KEY".to_string(), "no".to_string()),
+        ];
+        let script = shell_script(&odd.display().to_string(), &env);
+        assert!(!script.contains("BAD KEY"));
+        // run it with a stand-in SHELL that prints what the user's shell would see
+        let file = dir.join("t.command");
+        std::fs::write(&file, &script).unwrap();
+        let out = std::process::Command::new("/bin/zsh")
+            .arg(&file)
+            .env("SHELL", "/bin/sh")
+            .env("ENV", "/dev/null")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut c| {
+                use std::io::Write;
+                c.stdin.take().unwrap().write_all(b"pwd; echo \"$GH_CONFIG_DIR\"; echo \"$PATH\" | cut -d: -f1\n")?;
+                c.wait_with_output()
+            })
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[0].ends_with("it's here"), "{text}");
+        assert_eq!(lines[1], "/x/it's gh");
+        assert_eq!(lines[2], "/x/shims");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
