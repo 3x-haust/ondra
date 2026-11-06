@@ -44,7 +44,8 @@ fn kill(mut c: Child) {
 
 enum Stream {
     Proc(Child),
-    Flag(Arc<AtomicBool>),
+    /// Android: stop flag, and "the user just touched it" (back to full speed)
+    Flag(Arc<AtomicBool>, Arc<AtomicBool>),
 }
 fn streams() -> &'static Mutex<HashMap<u64, Stream>> {
     static S: OnceLock<Mutex<HashMap<u64, Stream>>> = OnceLock::new();
@@ -56,7 +57,7 @@ fn end_stream(token: u64) {
     let s = streams().lock().ok().and_then(|mut m| m.remove(&token));
     match s {
         Some(Stream::Proc(c)) => kill(c),
-        Some(Stream::Flag(f)) => f.store(true, Ordering::Relaxed),
+        Some(Stream::Flag(f, _)) => f.store(true, Ordering::Relaxed),
         None => {}
     }
 }
@@ -97,12 +98,18 @@ pub async fn device_stream(platform: String, id: String, serial: Option<String>,
     } else {
         let serial = serial.ok_or("실행 중이 아니에요")?;
         let stop = Arc::new(AtomicBool::new(false));
+        let poke = Arc::new(AtomicBool::new(false));
         if let Ok(mut m) = streams().lock() {
-            m.insert(token, Stream::Flag(stop.clone()));
+            m.insert(token, Stream::Flag(stop.clone(), poke.clone()));
         }
         let every = Duration::from_millis(1000 / fps as u64);
         std::thread::spawn(move || {
             let mut fails = 0;
+            // every screencap costs the emulator a PNG encode of the whole screen: when
+            // the picture stops changing, look once a second; a change or a touch from
+            // the page brings it back to full speed
+            let mut last: Vec<u8> = vec![];
+            let mut same = 0u32;
             while !stop.load(Ordering::Relaxed) {
                 let t = Instant::now();
                 // PNG straight from the device: no temp file, no extra copy
@@ -110,8 +117,15 @@ pub async fn device_stream(platform: String, id: String, serial: Option<String>,
                 match o {
                     Ok(o) if o.status.success() && o.stdout.len() > 8 => {
                         fails = 0;
-                        if stop.load(Ordering::Relaxed) || on_frame.send(InvokeResponseBody::Raw(o.stdout)).is_err() {
-                            break;
+                        if o.stdout == last {
+                            same += 1;
+                        } else {
+                            same = 0;
+                            last = o.stdout.clone();
+                            // unchanged frames aren't sent: the page would decode the same picture again
+                            if stop.load(Ordering::Relaxed) || on_frame.send(InvokeResponseBody::Raw(o.stdout)).is_err() {
+                                break;
+                            }
                         }
                     }
                     _ => {
@@ -121,8 +135,15 @@ pub async fn device_stream(platform: String, id: String, serial: Option<String>,
                         }
                     }
                 }
-                if let Some(rest) = every.checked_sub(t.elapsed()) {
-                    std::thread::sleep(rest);
+                let mut wait = if same >= 3 { Duration::from_secs(1) } else { every };
+                // sleep in short steps so a touch or a stop is noticed at once
+                while t.elapsed() < wait && !stop.load(Ordering::Relaxed) {
+                    if poke.swap(false, Ordering::Relaxed) {
+                        same = 0;
+                        wait = every;
+                        continue;
+                    }
+                    std::thread::sleep(Duration::from_millis(25).min(wait.saturating_sub(t.elapsed())));
                 }
             }
             if !stop.load(Ordering::Relaxed) {
@@ -137,6 +158,15 @@ pub async fn device_stream(platform: String, id: String, serial: Option<String>,
 #[tauri::command]
 pub fn device_stream_stop(token: u64) {
     end_stream(token);
+}
+
+/// The user touched the device: an Android stream that slowed down on a still
+/// screen goes back to full speed.
+#[tauri::command]
+pub fn device_stream_poke(token: u64) {
+    if let Some(Stream::Flag(_, poke)) = streams().lock().ok().as_ref().and_then(|m| m.get(&token)) {
+        poke.store(true, Ordering::Relaxed);
+    }
 }
 
 // ───────────── iOS input: one touch helper per simulator, kept open
