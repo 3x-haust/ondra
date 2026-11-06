@@ -1,5 +1,5 @@
 import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
-import { switchSpace } from "./state/workspace";
+import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
@@ -47,6 +47,7 @@ function Slide(props: { from: 1 | -1; children: JSX.Element }) {
 }
 
 export default function App() {
+  keepSpaces();
   // settings fill the window; "back" returns to wherever you were
   let lastView: View = { name: "main" };
   createEffect(() => {

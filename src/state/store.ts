@@ -6,6 +6,39 @@ import { inTauri, stateLoad, stateSave } from "../lib/native";
 import { fixture } from "./fixture";
 import type { Account, AppState, SpaceId, Task } from "./types";
 
+/**
+ * ↑ history per space. It used to be one list for every space: each old line goes
+ * to the space it was said in (found in the main chats, jobs, btws and side chats),
+ * and a line found nowhere is dropped rather than shown in the wrong space.
+ */
+function sentBySpace(p: AppState): Record<string, string[]> {
+  const old = p.sent as unknown;
+  if (!Array.isArray(old)) return (old as Record<string, string[]>) ?? {};
+  const where = new Map<string, SpaceId>();
+  const put = (text: string | undefined, space: SpaceId | undefined) => {
+    const v = text?.trim();
+    if (v && space && !where.has(v)) where.set(v, space);
+  };
+  for (const m of p.captain ?? []) if (m.from === "me") put(m.text, m.space);
+  for (const t of p.tasks ?? []) {
+    put(t.ask, t.space);
+    for (const e of t.entries) if (e.kind === "user") put(e.text, t.space);
+  }
+  for (const m of p.side ?? []) if (m.from === "me") put(m.text, m.space);
+  for (const b of p.btws ?? []) {
+    const [kind, id = ""] = b.scope.split(/:(.*)/s);
+    const sp = kind === "task" ? p.tasks.find((t) => t.id === id)?.space : (id.split("~")[0] as SpaceId);
+    put(b.question, sp);
+    put(`/btw ${b.question}`, sp);
+  }
+  const out: Record<string, string[]> = {};
+  for (const line of old as string[]) {
+    const sp = where.get(line.trim());
+    if (sp) (out[sp] ??= []).push(line);
+  }
+  return out;
+}
+
 export const freshState = (): AppState => ({
   version: 3,
   onboarded: false,
@@ -64,6 +97,7 @@ export async function loadState() {
             captain: (parsed.captain ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀서 답이 끊겼어요" } : m)),
             btws: (parsed.btws ?? []).map((b) => (b.pending ? { ...b, pending: false, error: b.answer ? undefined : "앱이 닫혀서 답이 끊겼어요" } : b)),
             side: (parsed.side ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀서 답이 끊겼어요" } : m)),
+            sent: sentBySpace(parsed),
           }),
         );
       }

@@ -244,13 +244,15 @@ export function Composer(props: {
     grow();
   };
 
-  // ↑ / ↓ go through what was sent before (from any input, /btw and other commands too)
-  const sent = () => state.sent ?? [];
+  // ↑ / ↓ go through what was sent before in this space (any input, /btw and other commands too)
+  const sent = () => state.sent?.[state.space] ?? [];
   const [back, setBack] = createSignal<number | null>(null);
+  // a space switch starts browsing from the newest again
+  createEffect(on(() => state.space, () => setBack(null), { defer: true }));
   const keep = (t: string) => {
     const v = t.trim();
     setBack(null);
-    if (v) setState("sent", (l) => [...(l ?? []).filter((x) => x !== v).slice(-199), v]);
+    if (v) setState("sent", (all) => ({ ...(all ?? {}), [state.space]: [...(all?.[state.space] ?? []).filter((x) => x !== v).slice(-199), v] }));
   };
   const recall = (i: number | null) => {
     setBack(i);
