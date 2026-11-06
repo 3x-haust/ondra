@@ -60,7 +60,14 @@ export default function App() {
   onMount(() => {
     let un: (() => void) | undefined;
     void onEvent("panel:close", () => panelOpen() && closePanel()).then((u) => (un = u));
-    onCleanup(() => un?.());
+    // ⌘Q tapped, not held (Rust quits once it has been held)
+    let hint = 0;
+    let unq: (() => void) | undefined;
+    void onEvent("quit:hold", () => {
+      if (Date.now() - hint > 4000) toast("⌘Q를 길게 누르면 종료돼요");
+      hint = Date.now();
+    }).then((u) => (unq = u));
+    onCleanup(() => (un?.(), unq?.()));
   });
   if (import.meta.env.DEV)
     void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy")]).then(
