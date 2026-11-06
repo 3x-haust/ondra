@@ -556,6 +556,14 @@
   background: var(--bad);
   border-radius: var(--r-bar);
 }
+.file-note {
+  grid-column: 2 / -1;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .file-num {
   font: var(--fs-xs) var(--mono);
   white-space: nowrap;
