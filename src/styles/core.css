@@ -1047,6 +1047,14 @@ button.strip:hover {
   font-weight: var(--fw-medium);
   font-size: var(--fs-lg);
 }
+/* a question can carry a command or a list: keep its lines */
+.decision-q > span {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+}
 .decision-q .icon {
   color: var(--warn);
   margin-top: var(--s-4);

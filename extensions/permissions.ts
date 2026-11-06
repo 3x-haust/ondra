@@ -60,12 +60,27 @@ export function foreignData(text: string, data: string, allowed: string[], space
  * focus commands (or `press` without --app). Returns what it is and the
  * background way to do it instead, or undefined.
  */
+/** The command as the shell reads it: heredoc bodies and quoted text are data, not commands, and are left out. */
+export function shellWords(command: string): string {
+  const out: string[] = [];
+  let end: string | undefined;
+  for (const line of command.split("\n")) {
+    if (end !== undefined) {
+      if (line.replace(/^\t+/, "").trim() === end) end = undefined;
+      continue;
+    }
+    out.push(line);
+    end = line.match(/<<-?\s*(['"]?)([\w.-]+)\1/)?.[2];
+  }
+  return out.join("\n").replace(/'[^']*'/g, "''").replace(/"(?:[^"\\]|\\.)*"/g, '""');
+}
+
 export function focusSteal(command: string): { what: string; how: string } | undefined {
   if (/\bosascript\b/.test(command)) {
     if (/\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(command))
       return { what: "앱을 앞으로 가져오는 AppleScript", how: "`agent-desktop launch <앱>` 또는 `open -g -a <앱> <파일>` (뒤에서 열려요)" };
   }
-  for (const part of command.split(/;|&&|\|\||\||\n/)) {
+  for (const part of shellWords(command).split(/;|&&|\|\||\||\n/)) {
     const c = part.trim().replace(/^(?:\w+=\S*\s+)*(?:sudo\s+|command\s+|exec\s+)?/, "");
     const open = c.match(/^open(\s+.*)?$/);
     if (open) {
