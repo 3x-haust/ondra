@@ -8,14 +8,14 @@
 //    never change them, and knows nothing of the main conversation unless told.
 //    Its messages are kept as text; the engine session under it is disposable.
 import { createSignal } from "solid-js";
-import { accountById, projectById, setState, spaceById, state, taskById, uid } from "../state/store";
+import { projectById, setState, spaceById, state, taskById, uid } from "../state/store";
 import { inChat } from "./captain";
 import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
 import { agentKill, agentSpawn, spaceLogs } from "../lib/native";
 import { prose } from "./fences";
 import { modelFor } from "./models";
 import { engine, expand, explain, isAlive, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, chooseAccount } from "./tasks";
+import { accountEnv, NO_ACCOUNT, spaceAccount } from "./tasks";
 
 // ───────────── btw
 
@@ -154,8 +154,11 @@ async function logsOf(space: SpaceId): Promise<string> {
   return spaceLogs(space, state.tasks.filter((t) => t.space === space).map((t) => t.id)).catch(() => "");
 }
 
+/** This space's account; never another space's (none: NO_ACCOUNT). */
 function accountFor(space: SpaceId) {
-  return accountById(chooseAccount(space, "")) ?? state.accounts[0];
+  const a = spaceAccount(space);
+  if (!a) throw new Error(NO_ACCOUNT);
+  return a;
 }
 
 /** What a btw question is sent with: the conversation on screen, everything else, where the full logs are. */
@@ -183,11 +186,12 @@ export async function askBtw(scope: string, question: string, files: string[] = 
   const q = question.trim() || (files.length ? "이거 봐줘" : "");
   if (!q) return;
   const att = files.length ? { files } : {};
-  if (!engine.checked || !engine.ready) {
-    setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, ...att, answer: "", pending: false, error: "엔진을 찾을 수 없어요" }]);
+  const space = (scope.startsWith("main:") ? scope.slice(5).split("~")[0] : taskById(scope.slice(5))?.space ?? state.space) as SpaceId;
+  const cant = !engine.checked || !engine.ready ? "엔진을 찾을 수 없어요" : !spaceAccount(space) ? NO_ACCOUNT : "";
+  if (cant) {
+    setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, ...att, answer: "", pending: false, error: cant }]);
     return void setBtwAt(btwList().length - 1);
   }
-  const space = (scope.startsWith("main:") ? scope.slice(5).split("~")[0] : taskById(scope.slice(5))?.space ?? state.space) as SpaceId;
   const acc = accountFor(space);
   const agent = `btw:${uid("b")}`;
   const id = uid("q");

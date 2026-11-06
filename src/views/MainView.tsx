@@ -5,7 +5,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, projectById, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, projectById, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
@@ -147,7 +147,8 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
 
 /** Empty chat: a question, the box to answer it, and a few starts under it (like Codex). */
 function Hero(props: { project?: string; composer: JSX.Element }) {
-  const loggedIn = () => state.accounts.some((a) => a.providers.length);
+  // this space's accounts only: jobs here never run on the other space's
+  const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
   const key = () => chatKey(state.space, props.project);
   createEffect(on(key, () => void refreshSuggestions(state.space, props.project)));
   const picks = () => suggestionsFor(key());
