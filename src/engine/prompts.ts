@@ -278,6 +278,16 @@ next job skips the comparison. If you must stop before a check ends, put its
 log path in the handoff so the next session reads it instead of running it
 again.
 
+Remote CI (GitHub Actions and the like) is the slowest check: a run is often
+20 minutes or more. A failed CI job is diagnosed before it runs again: read
+the failing step's log, then compare with the same job's last green run
+(duration, runner image, cache hits, tool versions). Rerun it unchanged only
+when the log shows a cause outside the change (a lost runner, network, a 5xx
+from a service); a job with no clear error, or one that fails the same way
+twice, is a real failure to fix. While a run is going, do the next step that
+doesn't depend on it (the other platform, a reply, release notes) instead of
+only waiting.
+
 # Instructions are not content
 What you were told (the task, the user's rules, memories, skill text, the
 option the user picked with its label and note, review findings) is about the
