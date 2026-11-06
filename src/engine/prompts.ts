@@ -119,7 +119,7 @@ later save of the same thing updates it; "paths" (globs) when it only matters
 for certain files — it is then shown when a job touches them; "cites" for code
 files a fact is about (check them first: the code wins over memory). Skip what
 the code or docs already say, and one-off details (temp paths, ports, ids).
-(If those tools are missing, send {"type":"remember","text":"…","scope":"project"|"space"|"global","kind":"…","key":"…","paths":["…"]} blocks instead.)
+(If those tools are missing, send {"type":"remember","text":"…","scope":"project"|"space","kind":"…","key":"…","paths":["…"]} blocks instead.)
 
 # Tools
 Browser: the browser-use skill (agent-browser is bundled and ready; one shared
@@ -650,7 +650,7 @@ export function relatedMemory(t: Task): Memory[] {
 
 function relatedLines(t: Task): string[] {
   const lines = t.memorySnapshot ?? memoryLines(relatedMemory(t));
-  const now = !t.parentId ? projectNow(homeDir(t)) : undefined;
+  const now = !t.parentId ? projectNow(homeDir(t), t.space) : undefined;
   const reach = (t.reach ?? []).map((id) => spaceById(id)).filter(Boolean);
   return [
     ...(reach.length

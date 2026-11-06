@@ -18,7 +18,7 @@ import { createEffect, createRoot } from "solid-js";
 import { memoryMirror } from "../lib/native";
 import { expand } from "./rpc";
 import { loaded, setState, state, uid } from "../state/store";
-import type { Memory, MemoryKind, SpaceId } from "../state/types";
+import type { Memory, MemoryKind, Skill, SpaceId } from "../state/types";
 import { toast } from "../state/ui";
 
 /** Other names people use for a space, by id. */
@@ -197,8 +197,53 @@ export function pathMatches(m: Memory, file: string, root: string): boolean {
   });
 }
 
+/**
+ * The space a piece belongs to; undefined for a global piece (every space). A
+ * project piece saved before pieces carried their space is placed by the job that
+ * wrote it, then by its project, then by the space folder it is under.
+ */
+export function placeOf(m: Memory): SpaceId | undefined {
+  if (m.scope === "global") return undefined;
+  if (m.space) return m.space;
+  const t = m.taskId ? state.tasks.find((x) => x.id === m.taskId) : undefined;
+  if (t) return t.space;
+  if (m.scope === "project" && m.project) {
+    const dir = expand(m.project);
+    const p = (state.projects ?? []).find((x) => expand(x.folder) === dir);
+    if (p) return p.space;
+    return [...state.spaces].filter((x) => x.folder && x.folder !== "~").sort((a, b) => b.folder.length - a.folder.length).find((x) => dir.startsWith(expand(x.folder)))?.id;
+  }
+  return undefined;
+}
+
+/** A piece this space may see: global ones, and its own (plus spaces the user opened to the work). */
+export const inSpace = (m: Memory, space: SpaceId, reach: SpaceId[] = []) => {
+  if (m.scope === "global") return true;
+  const at = placeOf(m);
+  return !!at && (at === space || reach.includes(at));
+};
+
+/** The space a skill belongs to: its own, or (a skill grown before skills carried one) the space of the memory it grew from. */
+export const skillSpace = (s: Skill): SpaceId | undefined => {
+  if (s.space) return s.space;
+  if (s.source !== "ondra") return undefined;
+  const m = state.memory.find((x) => x.skill === s.name);
+  return m ? placeOf(m) : undefined;
+};
+/** Skills this space's jobs and chats get. */
+export const skillsIn = (space: SpaceId) => state.skills.filter((s) => s.enabled && (skillSpace(s) ?? space) === space);
+
+/** Older pieces get their space written in once (a piece nothing places stays where it is, seen nowhere). */
+export function placeAll() {
+  const todo = state.memory.filter((m) => m.scope !== "global" && !m.space).map((m) => [m.id, placeOf(m)] as const).filter((x): x is readonly [string, SpaceId] => !!x[1]);
+  if (!todo.length) return 0;
+  const at = new Map(todo);
+  setState("memory", (m) => at.has(m.id), (m) => ({ space: at.get(m.id) }));
+  return todo.length;
+}
+
 const sameHome = (m: Memory, scope: Memory["scope"], o: AddOpts) =>
-  m.scope === scope && (scope !== "space" || m.space === o.space) && (scope !== "project" || (m.project ?? "") === (o.project ?? ""));
+  m.scope === scope && (scope === "global" || placeOf(m) === o.space) && (scope !== "project" || (m.project ?? "") === (o.project ?? ""));
 
 /**
  * Save what was said as small pieces. Each piece is checked against what is
@@ -207,6 +252,13 @@ const sameHome = (m: Memory, scope: Memory["scope"], o: AddOpts) =>
  */
 export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = {}): string | null {
   const by = opts.by ?? (opts.taskId ? "agent" : "user");
+  // only the user writes for every space: what a job learned stays in its space
+  if (scope === "global" && by === "agent" && opts.space) scope = "space";
+  // every piece but a global one belongs to a space
+  if (scope !== "global" && !opts.space) {
+    const t = opts.taskId ? state.tasks.find((x) => x.id === opts.taskId) : undefined;
+    opts = { ...opts, space: t?.space ?? (scope === "project" && opts.project ? placeOf({ scope, project: opts.project } as Memory) : undefined) ?? state.space };
+  }
   // a key names one piece: keep its text whole
   const parts = opts.key ? [text.trim().slice(0, 600)].filter(Boolean) : atoms(text.trim());
   if (!parts.length) return null;
@@ -246,9 +298,9 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
       }
       replaced = same;
     }
-    // neighbours: pieces that talk about the same things (2+ shared words)
+    // neighbours: pieces that talk about the same things (2+ shared words), in the same space only
     const links = state.memory
-      .filter(isLive)
+      .filter((x) => isLive(x) && (scope === "global" ? x.scope === "global" : x.scope !== "global" && placeOf(x) === opts.space))
       .map((m) => ({ id: m.id, o: overlap(tk, new Set(tokens(m.text))) }))
       .filter((x) => x.o.n >= 2 && x.o.j >= 0.2)
       .sort((a, b) => b.o.j - a.o.j)
@@ -259,7 +311,7 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
       text: t,
       kind: opts.kind && parts.length === 1 ? opts.kind : guessKind(t),
       scope,
-      space: scope === "space" ? opts.space : undefined,
+      space: scope === "global" ? undefined : opts.space,
       project: scope === "project" ? opts.project : undefined,
       source: opts.source ?? "ondra",
       taskId: opts.taskId,
@@ -356,9 +408,8 @@ export function applying(space: SpaceId, dir: string, expand: (p: string) => str
   return state.memory.filter(
     (m) =>
       isLive(m) &&
-      (m.scope === "global" ||
-        (m.scope === "space" && (m.space === space || (!!m.space && reach.includes(m.space)))) ||
-        (m.scope === "project" && !!dir && !!m.project && (under(dir, expand(m.project)) || sameRepo(dir, expand(m.project))))),
+      inSpace(m, space, reach) &&
+      (m.scope !== "project" || (!!dir && !!m.project && (under(dir, expand(m.project)) || sameRepo(dir, expand(m.project))))),
   );
 }
 
@@ -650,8 +701,11 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
     });
   }
   // 지금: what was last going on in each project
-  for (const [folder, n] of Object.entries(state.memoryNow ?? {}))
-    files.push({ path: `${folderHome(folder)}/지금.md`, text: [`# 지금 · ${base(folder)}`, "", n.text, "", `${new Date(n.at).toISOString().slice(0, 16).replace("T", " ")} · 일 ${n.taskId}`, ""].join("\n") });
+  for (const [k, n] of Object.entries(state.memoryNow ?? {})) {
+    const at = /^([^:/~]+):(.*)$/s.exec(k);
+    const folder = at ? at[2] : k;
+    files.push({ path: `${folderHome(folder, at?.[1])}/지금.md`, text: [`# 지금 · ${base(folder)}`, "", n.text, "", `${new Date(n.at).toISOString().slice(0, 16).replace("T", " ")} · 일 ${n.taskId}`, ""].join("\n") });
+  }
   return files;
 }
 
@@ -683,8 +737,13 @@ export function mirrorPlan(): { space?: string; files: { path: string; text: str
 
 createRoot(() => {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let placed = false;
   createEffect(() => {
     if (!loaded() || location.search.includes("fixture")) return;
+    if (!placed) {
+      placed = true;
+      placeAll();
+    }
     const plan = mirrorPlan();
     clearTimeout(timer);
     timer = setTimeout(() => {

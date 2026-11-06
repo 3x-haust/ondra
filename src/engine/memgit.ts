@@ -5,7 +5,8 @@
 import { createEffect, createRoot, createSignal, on } from "solid-js";
 import { inTauri, memoryGitCommit, memoryGitLog, memoryGitShow } from "../lib/native";
 import { loaded, setState, state } from "../state/store";
-import type { Memory } from "../state/types";
+import type { Memory, SpaceId } from "../state/types";
+import { placeOf } from "./memory";
 import { toast } from "../state/ui";
 
 const QUIET_MS = 20_000;
@@ -39,8 +40,12 @@ async function save() {
 
 export const memoryHistory = (limit = 60) => memoryGitLog(limit);
 
-/** Bring the pieces back as they were in a version (the current ones are saved first, so this can be undone). */
-export async function restoreMemoryAt(sha: string): Promise<number> {
+/**
+ * Bring one space's pieces back as they were in a version (the current ones are
+ * saved first, so this can be undone). The other space and the pieces every space
+ * shares stay as they are now.
+ */
+export async function restoreMemoryAt(sha: string, space: SpaceId = state.space): Promise<number> {
   const raw = await memoryGitShow(sha);
   let list: Memory[];
   try {
@@ -51,11 +56,14 @@ export async function restoreMemoryAt(sha: string): Promise<number> {
     return 0;
   }
   await save();
-  setState("memory", list);
-  await memoryGitCommit(`되돌림 · ${sha}`, JSON.stringify(list, null, 1)).catch(() => null);
-  last = new Map(list.map((m) => [m.id, sig(m)]));
+  const ours = (m: Memory) => m.scope !== "global" && placeOf(m) === space;
+  const back = list.filter(ours);
+  const next = [...state.memory.filter((m) => !ours(m)), ...back];
+  setState("memory", next);
+  await memoryGitCommit(`되돌림 · ${sha}`, JSON.stringify(next, null, 1)).catch(() => null);
+  last = new Map(next.map((m) => [m.id, sig(m)]));
   setVersion((n) => n + 1);
-  return list.filter((m) => !m.invalidAt).length;
+  return back.filter((m) => !m.invalidAt).length;
 }
 
 createRoot(() => {

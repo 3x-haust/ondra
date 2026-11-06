@@ -7,7 +7,7 @@ import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions, 
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
 import { accountEnv, WORKER_TOOLS } from "../engine/tasks";
 import { CAPTAIN_SYSTEM, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
-import { applying, isLive, recall } from "../engine/memory";
+import { applying, inSpace, isLive, recall, skillsIn } from "../engine/memory";
 import { modelFor } from "../engine/models";
 import { homeDir, spaceById, state, taskById } from "../state/store";
 import type { Memory, SpaceId } from "../state/types";
@@ -199,7 +199,7 @@ export async function loadChat(key: string, accountId: string): Promise<Loaded> 
   // and pieces recalled for that message alone
   const folder = proj?.folder;
   const here = applying(space.id, folder ? expand(folder) : "", expand);
-  const others = state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === space.id) && (m.scope !== "project" || !folder || here.includes(m)));
+  const others = state.memory.filter((m) => isLive(m) && inSpace(m, space.id) && (m.scope !== "project" || !folder || here.includes(m)));
   const last = [...state.captain].reverse().find((m) => m.from === "me" && m.space === space.id && (m.project ?? undefined) === pjOf(key));
   return {
     ctx,
@@ -217,7 +217,7 @@ let toolsCache: EngineContext | null = null;
 /** A fresh engine with what every job gets: extensions, skills, the first account. */
 export async function loadWorkerTools(force = false): Promise<EngineContext> {
   if (toolsCache && !force) return toolsCache;
-  const skills = [...(await workerSkills()), ...state.skills.filter((s) => s.enabled).map((s) => s.path)];
+  const skills = [...(await workerSkills()), ...skillsIn(state.spaces[0]?.id ?? state.space).map((s) => s.path)];
   const args = [...skills.flatMap((s) => ["--skill", s]), ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...WORKER_TOOLS];
   const acc = state.accounts[0];
   // the app's door too, so the memory tools register as they do in a job

@@ -54,12 +54,23 @@ export function writeJournal(t: Task) {
   if ((state.journal ?? []).some((j) => j.taskId === t.id && j.at === t.finishedAt)) return;
   const e = entryOf(t);
   setState("journal", (l) => [...(l ?? []).filter((j) => j.taskId !== t.id), e].slice(-MAX));
-  if (e.project) setState("memoryNow", (n) => ({ ...(n ?? {}), [e.project!]: nowOf(t) }));
+  if (e.project) setState("memoryNow", (n) => ({ ...(n ?? {}), [nowKey(t.space, e.project!)]: nowOf(t) }));
 }
 
-/** What was last going on in this folder, if it is still fresh. */
-export function projectNow(folder: string): ProjectNow | undefined {
-  const n = folder ? state.memoryNow?.[folder] : undefined;
+/** 지금 notes are kept per space and folder: the same folder used from both spaces has two. */
+export const nowKey = (space: string, folder: string) => `${space}:${folder}`;
+/** "<space>:<folder>" → its parts; an older key is the folder alone (its space comes from the job that wrote it). */
+export function parseNowKey(k: string): { space?: string; folder: string } {
+  const m = /^([^:/~]+):(.*)$/s.exec(k);
+  if (m) return { space: m[1], folder: m[2] };
+  const n = state.memoryNow?.[k];
+  return { space: n ? state.tasks.find((t) => t.id === n.taskId)?.space : undefined, folder: k };
+}
+
+/** What was last going on in this folder in this space, if it is still fresh. */
+export function projectNow(folder: string, space: string): ProjectNow | undefined {
+  if (!folder) return undefined;
+  const n = state.memoryNow?.[nowKey(space, folder)] ?? (parseNowKey(folder).space === space ? state.memoryNow?.[folder] : undefined);
   return n && Date.now() - n.at < FRESH_MS ? n : undefined;
 }
 
