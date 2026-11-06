@@ -27,7 +27,56 @@ signed in to a site, you are signed in too.
 agent-browser skills get core      # the official loop: snapshot → act on @ref → re-snapshot
 ```
 
-Follow that skill for commands. This file only adds the app's rules on top.
+Use that skill for the commands. Its loop (snapshot → one action → snapshot)
+is the slow way: every step costs a whole turn. Here, work in the fast loop
+below; the app's rules after it still hold.
+
+## Fast loop: fewer turns, smaller pages
+
+What makes a browser agent slow is the number of turns, not the commands
+(a command takes ~15 ms). Each turn should move as far as it can.
+
+1. **Plan several steps from one look.** When a snapshot already shows every
+   target you need, send the actions, a wait for the end state and the next
+   look in one call:
+   ```bash
+   agent-browser batch --bail "fill @e3 김철수" "fill @e4 a@b.c" "click @e5" "wait --url **/done" "snapshot -i --delta"
+   ```
+   Refs stay valid on the same page; a navigation ends them, so stop the batch
+   there, or use `find` locators that need no snapshot and survive navigation:
+   `find role button click --name 저장`, `find label 이메일 fill a@b.c`.
+2. **Look small.** `snapshot -i --delta` after the first full look: it prints
+   only what changed (or `unchanged`). Narrow it with `-s <css>` (one region)
+   or `-d <n>` (depth); add `--urls` only when you need links. For an article's
+   text, `read`. A screenshot only when the picture is the question (layout,
+   proof), never together with a snapshot for the same step.
+3. **Wait for a condition, never a time.** `wait --url <glob>`,
+   `wait --text <t>`, `wait --fn "<js>"`, `wait <sel> --state hidden`,
+   `wait --download <path>`. No `wait <ms>`, no polling with snapshots;
+   `open` and `click` already wait for the page.
+4. **Read and loop in the page.** Lists, tables, pagination, checks: one
+   `eval --stdin` instead of many clicks. No top-level `await`: wrap it,
+   ```bash
+   agent-browser eval --stdin <<'JS'
+   (async () => { const rows = [...document.querySelectorAll("tr")].map(r => r.innerText); return rows.slice(0, 50); })()
+   JS
+   ```
+   Typing and clicking that a page reacts to stay on `fill`/`click` (React
+   ignores values set from a script).
+5. **Use the site's own API for reading.** Many items or pages: find the call
+   the page makes (`network requests --type xhr,fetch --method GET`, then
+   `network request <id>`) and call it from the page, where the login already
+   is: `eval` with `fetch(url, { credentials: "include" })`, several at once
+   with `Promise.all`. GET only; anything that changes data goes through the
+   page (and an `ask` when it leaves this machine). Never export cookies or
+   tokens to a file for it (no `derive-client`, no `cookies get`).
+6. **Reuse what worked.** Recipes for a site live in
+   `"$APP_ARTIFACTS_DIR/../../browser-recipes/<domain>/"`. Before exploring a
+   site, `ls` that folder; a recipe is a `batch` JSON or an `eval` script with
+   one comment line on what it does and its inputs. Run it; if it fails, explore
+   as usual and fix the recipe. After a flow you'll likely repeat (a dashboard
+   query, an upload, a form) worked, save it there. No passwords, tokens or
+   personal data in a recipe.
 
 ## Rules here
 
