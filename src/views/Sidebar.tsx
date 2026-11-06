@@ -340,7 +340,7 @@ export function Sidebar() {
           <For each={projectsIn(state.space)} >
             {(p) => {
               const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
-              const live = () => state.tasks.filter((t) => t.project === p.id && t.status === "running").length;
+              const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = () => shown().filter((t) => t.project === p.id);
               const all = () => roots().filter((t) => t.project === p.id).length;

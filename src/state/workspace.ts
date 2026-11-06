@@ -25,7 +25,7 @@ const places: Record<string, Place> = (() => {
 function valid(v: View | undefined, space: SpaceId): View {
   if (!v || v.name === "settings") return { name: "main" };
   if (v.name === "task") return taskById(v.id)?.space === space ? v : { name: "main" };
-  if (v.name === "main" && v.project) return projectById(v.project)?.space === space ? v : { name: "main" };
+  if (v.name === "main" && v.project) return projectById(v.project, space) ? v : { name: "main" };
   return v;
 }
 
