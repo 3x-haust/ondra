@@ -426,6 +426,22 @@ export const core = (list: Memory[]): Memory[] =>
  * local embeddings when the query was prepared + importance + recency), cut to a budget so the prompt stays small. Pieces with no word in
  * common are left out unless they are filed under this very folder.
  */
+/**
+ * The sites a text links to, as the words memory names them by
+ * ("https://www.notion.so/…" → "notion", "play.google.com" → "google", "github.com" → "github").
+ */
+export function siteWords(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)) {
+    const parts = m[1].toLowerCase().split(".").filter(Boolean);
+    // drop the country/second-level ending (co.kr, com.au) and the top-level one
+    while (parts.length > 1 && /^(com|net|org|co|so|io|ai|app|dev|site|kr|jp|uk|au|me|page|xyz)$/.test(parts[parts.length - 1])) parts.pop();
+    const name = parts[parts.length - 1];
+    if (name && name.length >= 3 && !/^(www|localhost)$/.test(name)) out.add(name);
+  }
+  return [...out];
+}
+
 export function recall(
   list: Memory[],
   query: string,
@@ -479,6 +495,8 @@ export function recall(
   const floor = opts.strict && ranked.length ? ranked[0].score * 0.4 : 0;
   for (const { m } of ranked.filter((s) => s.score >= floor)) {
     if (out.length >= (opts.max ?? 8) || used + m.text.length > (opts.budget ?? 1800)) break;
+    // the same fact saved twice (in two scopes, or before saving checked) takes one slot
+    if (out.some((o) => norm(o.text) === norm(m.text))) continue;
     out.push(m);
     used += m.text.length;
   }
