@@ -48,6 +48,7 @@ user is mid-conversation with you and simply asked a question.
 | `table` | `columns: string[]`, `rows: string[][]` (≤ 20 rows) |
 | `beforeAfter` | `label`, `before`, `after`, `beforeImage?`, `afterImage?` (absolute paths) |
 | `shot` | `path` (absolute PNG/JPG), `caption` |
+| `page` | `path` (absolute .html), `label?`, `height?` (200–900) — a self-contained HTML page drawn inside the chat (a report, a prototype); no external scripts |
 | `link` | `kind: "pr" \| "doc" \| "video" \| "file" \| "url"`, `title`, `ref` (URL or absolute path) |
 | `text` | `text` (markdown, short) |
 
