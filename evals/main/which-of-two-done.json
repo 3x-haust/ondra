@@ -1,0 +1,7 @@
+{ "note": "A follow-up picks the job it is about, not the latest", "space": "home",
+  "tasks": [
+    { "id": "t-a", "title": "로그인 튕김 수정", "topic": "웹앱", "status": "done", "summary": "세션 만료 시 리다이렉트 루프를 고치고 스크린샷 2장을 남겼어요" },
+    { "id": "t-b", "title": "4월 회고 초안", "topic": "회고", "status": "done", "summary": "4월 회고 초안을 retro-04.md로 썼어요" }
+  ],
+  "messages": ["로그인 고친 거 PR 올려줘"],
+  "expect": [{ "append": "t-a", "new": 0 }] }

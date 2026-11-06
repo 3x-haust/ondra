@@ -1,0 +1,23 @@
+{
+  "world": "busy-home",
+  "each": [
+    { "id": "deck", "text": "스토픽 발표자료도 만들어줘", "expect": { "new": 1, "append": false, "project": "스토픽" } },
+    { "id": "eta", "text": "모의투자 조사 언제 끝나?", "expect": { "answerOnly": true } },
+    { "id": "feat-notion", "text": "기능 정리한 거 표로 다시 정리해서 PDF로도 줘", "expect": { "append": "t-feat", "new": 0 } },
+    { "id": "pick-b", "text": "포트폴리오 B안으로", "expect": { "append": "t-port", "new": 0 } },
+    { "id": "disk-retry", "text": "디스크 정리 권한 없는 데는 빼고 되는 데까지만 해", "expect": { "append": "t-disk", "new": 0 } },
+    { "id": "cancel-blog", "text": "블로그 글은 취소해", "expect": { "stop": "t-blog", "new": 0 } },
+    { "id": "canvas-zoom", "text": "ondra 캔버스에 줌 버튼 추가해줘", "expect": { "new": 1, "append": false, "project": "ondra" } },
+    { "id": "canvas-fix", "text": "캔버스 카드 글자 너무 작아 키워줘", "expect": { "append": "t-canvas", "new": 0 } },
+    { "id": "report-after", "text": "근거 점검 끝나면 그 결과로 모의투자 보고서 고쳐줘", "expect": { "new": 0 } },
+    { "id": "status", "text": "지금 뭐뭐 돌아가?", "expect": { "answerOnly": true } },
+    { "id": "competitor", "text": "스토픽 경쟁 앱 3개 UX 비교 리서치해줘", "expect": { "new": 1, "taskIncludes": ["deep-research"], "project": "스토픽" } },
+    { "id": "fee", "text": "아 그리고 모의투자 조사에 증권사 수수료도 넣어줘", "expect": { "append": "t-mock", "new": 0 } },
+    { "id": "other-space-q", "text": "회사 쪽 요메이츠 심사 어떻게 됐어?", "expect": { "hasNot": ["new"] } },
+    { "id": "typo", "text": "스토픽 기능정리 다시 핸ㄴ데 우선순위 원문대로 맞춰져잇는지 봐봐", "expect": { "appendAny": ["t-feat"], "new": 0 } },
+    { "id": "two-mixed", "text": "포트폴리오는 C로 하고 블로그 글 주제는 'Tauri로 데스크톱 앱 만들기'로 해", "expect": { "new": 0, "has": ["append"] } },
+    { "id": "new-thing", "text": "맥 메뉴바에 뽀모도로 타이머 앱 하나 만들어줘", "expect": { "new": { "min": 1 }, "append": false, "project": true } },
+    { "id": "verdict", "text": "캔버스 개선 한 거 괜찮은 거 같아?", "expect": { "answerOnly": true } },
+    { "id": "remember", "text": "스토픽 자료는 앞으로 다 PDF로도 같이 줘", "expect": { "has": ["remember"] } }
+  ]
+}

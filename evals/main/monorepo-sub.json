@@ -1,0 +1,4 @@
+{ "note": "A subfolder of a project's repo is that project, not a new one", "space": "work",
+  "projects": [{ "name": "아크메", "folder": "/Users/me/Work/projects/acme" }],
+  "messages": ["아크메 apps/admin 쪽 대시보드 차트 깨지는 거 고쳐줘"],
+  "expect": [{ "new": 1, "project": "아크메" }] }

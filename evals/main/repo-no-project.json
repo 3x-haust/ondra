@@ -1,0 +1,3 @@
+{ "space": "work", "repos": ["/Users/me/Work/projects/notes-bot", "/Users/me/Work/projects/acme-frontend"],
+  "messages": ["notes-bot 슬랙 알림 메시지 포맷 바꿔줘"],
+  "expect": [{ "new": 1, "cwdIncludes": "notes-bot", "project": true }] }

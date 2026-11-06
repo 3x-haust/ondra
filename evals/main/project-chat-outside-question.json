@@ -1,0 +1,3 @@
+{ "note": "A question about a tool, asked in a project chat, has no project", "space": "home",
+  "projects": [{ "name": "펀딩픽", "folder": "/Users/me/projects/fundingpick" }], "project": "펀딩픽",
+  "messages": ["Supabase랑 Firebase 요금 비교 리서치해서 정리해줘"], "expect": [{ "new": 1, "taskIncludes": ["deep-research"] }] }

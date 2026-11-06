@@ -1,0 +1,21 @@
+{
+  "note": "Work that needs another job's result waits for it",
+  "space": "home",
+  "tasks": [
+    {
+      "id": "t-b",
+      "title": "안드로이드 빌드",
+      "topic": "앱",
+      "status": "running",
+      "now": "gradle 빌드 중"
+    }
+  ],
+  "messages": [
+    "빌드 끝나면 그 APK로 내 폰에 설치해서 로그인 되는지 확인해줘"
+  ],
+  "expect": [
+    {
+      "appendOrAfter": "t-b"
+    }
+  ]
+}

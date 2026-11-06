@@ -1,0 +1,7 @@
+{ "note": "Research, a correction to it, then a new deliverable", "space": "home",
+  "messages": [
+    "청소년 대상 모의투자 앱 시장 조사해줘",
+    "아 해외 사례도 꼭 넣어",
+    "그리고 그걸로 사업계획서 초안도 써줘"
+  ],
+  "expect": [{ "new": 1 }, { "appendAny": ["sim-t1"], "new": 0 }, { "new": { "min": 1 }, "append": false }] }

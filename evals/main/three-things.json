@@ -1,0 +1,20 @@
+{
+  "note": "Three unrelated pieces: each its own job (the slides may ask for a topic first)",
+  "space": "home",
+  "projects": [
+    {
+      "name": "웹앱",
+      "folder": "/Users/me/projects/webapp"
+    }
+  ],
+  "messages": [
+    "1. 웹앱 푸터 연도 2026으로 바꾸기\n2. 다음주 발표 슬라이드 초안\n3. 맥북 디스크 뭐가 많이 먹는지 확인"
+  ],
+  "expect": [
+    {
+      "new": {
+        "min": 2
+      }
+    }
+  ]
+}

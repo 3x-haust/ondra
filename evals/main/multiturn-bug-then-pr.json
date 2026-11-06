@@ -1,0 +1,3 @@
+{ "space": "home", "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "messages": ["웹앱 장바구니 수량 음수 되는 버그 고쳐줘", "고치면 PR까지 올려줘", "근데 그거 말고 쿠폰 적용도 이상하던데 그것도 봐줘"],
+  "expect": [{ "new": 1 }, { "appendAny": ["sim-t1"], "new": 0 }, { "new": 1, "append": false }] }

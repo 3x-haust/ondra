@@ -1,0 +1,2 @@
+{ "note": "A quick general question is answered, not forked", "space": "home",
+  "messages": ["리액트 useEffect 클린업은 언제 실행돼?"], "expect": [{ "answerOnly": true }] }

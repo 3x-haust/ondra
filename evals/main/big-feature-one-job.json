@@ -1,0 +1,4 @@
+{ "note": "One feature with several parts is one job, not ceremonial forks", "space": "home",
+  "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }], "project": "웹앱",
+  "messages": ["회원가입에 이메일 인증 붙여줘. 인증 메일 보내고, 링크 누르면 인증되고, 인증 안 되면 로그인 막아줘"],
+  "expect": [{ "new": 1 }] }

@@ -1,0 +1,3 @@
+{ "space": "home", "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "messages": ["웹앱 라이트하우스 성능 점수 95 넘을 때까지 계속 반복해서 고쳐"],
+  "expect": [{ "new": 1, "taskIncludes": ["goal-loop"] }] }

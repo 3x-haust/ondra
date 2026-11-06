@@ -1,0 +1,3 @@
+{ "space": "home",
+  "messages": ["`deep-research` 스킬로 해 줘 (일을 맡길 때 이 스킬을 쓰라고 적어 줘): 2026 국내 핀테크 청소년 금융교육 시장"],
+  "expect": [{ "new": 1, "taskIncludes": ["deep-research"] }] }

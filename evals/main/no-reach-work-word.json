@@ -1,0 +1,1 @@
+{ "space": "home", "messages": ["작업 폴더 정리해서 안 쓰는 node_modules 지워줘"], "expect": [{ "reach": [] }] }

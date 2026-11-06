@@ -14,6 +14,7 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } f
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lint } from "./main-sim-lint.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(homedir(), "Library/Application Support/dev.3xhaust.ondra");
@@ -23,10 +24,19 @@ const repeat = Number(argv[argv.indexOf("--repeat") + 1]) || 1;
 const at = argv.indexOf("--parallel");
 const parallel = Number(at >= 0 ? argv[at + 1] : 3) || 3;
 const names = argv.filter((a, i) => !a.startsWith("--") && !["--repeat", "--parallel"].includes(argv[i - 1]));
+// a case file can build on a shared world (evals/main/_worlds/<name>.json) and hold
+// many one-message cases in "each": [{ "text", "expect" }]
+const world = (n) => JSON.parse(readFileSync(join(HERE, "main", "_worlds", `${n}.json`), "utf8"));
 const cases = readdirSync(join(HERE, "main"))
   .filter((f) => f.endsWith(".json"))
-  .map((f) => ({ name: f.replace(/\.json$/, ""), ...JSON.parse(readFileSync(join(HERE, "main", f), "utf8")) }))
-  .filter((c) => !names.length || names.includes(c.name));
+  .flatMap((f) => {
+    const name = f.replace(/\.json$/, "");
+    const raw = JSON.parse(readFileSync(join(HERE, "main", f), "utf8"));
+    const c = { ...(raw.world ? world(raw.world) : {}), ...raw, world: undefined };
+    if (!c.each) return [{ name, ...c }];
+    return c.each.map((x, i) => ({ ...c, each: undefined, name: `${name}:${x.id ?? i + 1}`, note: x.note, chat: x.chat ?? c.chat, messages: x.messages ?? [x.text], expect: x.expect ? (Array.isArray(x.expect) ? x.expect : [x.expect]) : [] }));
+  })
+  .filter((c) => !names.length || names.some((n) => c.name === n || c.name.startsWith(`${n}:`)));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function app(js) {
@@ -86,6 +96,17 @@ function check(step, x) {
   }
   for (const w of x.taskIncludes ?? []) need(news.some((r) => text(r).toLowerCase().includes(w.toLowerCase())), `no new job's task mentions "${w}"`);
   for (const w of x.taskExcludes ?? []) need(!news.some((r) => text(r).toLowerCase().includes(w.toLowerCase())), `a new job's task mentions "${w}"`);
+  for (const k of x.has ?? []) need(kinds.includes(k), `expected a "${k}" route, got ${kinds.join(", ") || "none"}`);
+  for (const k of x.hasNot ?? []) need(!kinds.includes(k), `expected no "${k}" route`);
+  if (x.stopCount !== undefined) need(routes.filter((r) => r?.kind === "stop").length === x.stopCount, `stops: ${routes.filter((r) => r?.kind === "stop").length}, expected ${x.stopCount}`);
+  if (x.appendAny) need(routes.some((r) => r?.kind === "append" && x.appendAny.includes(r.taskId)), `expected append to one of ${x.appendAny.join(", ")}`);
+  if (x.cwdEmpty) need(news.every((r) => !r.cwd && !r.project), `expected no cwd/project, got ${news.map((r) => r.cwd || JSON.stringify(r.project)).join(", ")}`);
+  if (x.appendOrAfter) need(routes.some((r) => r?.kind === "append" && r.taskId === x.appendOrAfter) || news.some((r) => Array.isArray(r.after) && r.after.includes(x.appendOrAfter)), `expected an append to ${x.appendOrAfter} or a job after it`);
+  if (x.afterTask) need(news.some((r) => Array.isArray(r.after) && r.after.includes(x.afterTask)), `expected a job after ${x.afterTask}`);
+  if (x.answerIncludes) {
+    const t = routes.filter((r) => r?.kind === "answer").map((r) => r.text ?? "").join(" ");
+    for (const w of x.answerIncludes) need(t.includes(w), `answer doesn't mention "${w}"`);
+  }
   if (x.after) need(news.some((r) => Array.isArray(r.after) && r.after.length), "expected a job that waits (after)");
   if (x.noAfter) need(!news.some((r) => Array.isArray(r.after) && r.after.length), "a job waits (after) that should start now");
   return out;
@@ -93,8 +114,8 @@ function check(step, x) {
 
 async function runCase(c, i) {
   const t0 = Date.now();
-  const steps = await app(`return await __ui.captain.simulateMain(${JSON.stringify({ ...c, name: undefined, note: undefined, expect: undefined })})`);
-  const problems = steps.map((s, k) => check(s, (c.expect ?? [])[k] ?? {}));
+  const steps = await app(`return await __ui.captain.simulateMain(${JSON.stringify({ ...c, name: undefined, note: undefined, expect: undefined, each: undefined })})`);
+  const problems = steps.map((s, k) => [...check(s, (c.expect ?? [])[k] ?? {}), ...lint(s, c)]);
   const ok = problems.every((p) => !p.length);
   return { name: c.name, run: i, ok, secs: Math.round((Date.now() - t0) / 1000), problems, steps };
 }

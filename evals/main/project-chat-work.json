@@ -1,0 +1,2 @@
+{ "space": "home", "projects": [{ "name": "펀딩픽", "folder": "/Users/me/projects/fundingpick" }], "project": "펀딩픽",
+  "messages": ["온보딩 화면 만들어줘"], "expect": [{ "new": 1, "project": "펀딩픽" }] }

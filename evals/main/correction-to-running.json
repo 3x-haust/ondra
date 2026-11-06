@@ -1,0 +1,5 @@
+{ "note": "A correction to a running job's direction goes to it", "space": "home",
+  "tasks": [{ "id": "t-r", "title": "모의투자 데이터 조사", "topic": "펀딩픽", "status": "running", "now": "실제 주가 API 가격 비교 중" }],
+  "chat": [{ "from": "me", "text": "펀딩픽 모의투자 데이터를 실제 주가로 할지 가상으로 할지 조사해줘" }, { "from": "captain", "text": "조사할게요 [fork t-r]" }],
+  "messages": ["아 실제 주가는 빼고 가상 회사 쪽만 깊게 봐줘"],
+  "expect": [{ "append": "t-r", "new": 0 }] }

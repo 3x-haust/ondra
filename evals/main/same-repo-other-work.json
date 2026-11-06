@@ -1,0 +1,5 @@
+{ "note": "Same repo, different work: new, not append to the done job", "space": "home",
+  "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "tasks": [{ "id": "t-a", "title": "로그인 튕김 수정", "topic": "웹앱", "status": "done", "project": "웹앱", "summary": "세션 만료 리다이렉트 루프 수정" }],
+  "messages": ["웹앱 설정 페이지에 알림 끄기 스위치 만들어줘"],
+  "expect": [{ "new": 1, "append": false, "project": "웹앱" }] }

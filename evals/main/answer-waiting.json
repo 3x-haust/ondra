@@ -1,0 +1,7 @@
+{ "note": "Answering a waiting job's question in chat goes to that job", "space": "home",
+  "tasks": [
+    { "id": "t-w", "title": "랜딩 시안", "topic": "랜딩", "status": "waiting", "question": "시안 A(미니멀)와 B(일러스트) 중 어느 쪽으로 만들까요?" },
+    { "id": "t-x", "title": "결제 버그", "topic": "웹앱", "status": "running" }
+  ],
+  "messages": ["B로 가자"],
+  "expect": [{ "append": "t-w", "new": 0 }] }

@@ -1,0 +1,3 @@
+{ "space": "home", "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "messages": ["이거 왜 이래\n\nTypeError: Cannot read properties of undefined (reading 'map')\n    at ProductList (src/components/ProductList.tsx:42:18)\n    at renderWithHooks (react-dom.development.js:14985:18)"],
+  "expect": [{ "new": { "max": 1 } }] }
