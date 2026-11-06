@@ -8469,3 +8469,17 @@ textarea { resize: none !important; field-sizing: content; }
 .res-sub .spacer {
   flex: 1;
 }
+
+/* a skill named with /skill: in a request */
+.msg-skill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  padding: 0 7px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft, var(--active));
+  color: var(--accent, var(--ink));
+  font-size: var(--fs-sm);
+  vertical-align: 1px;
+}

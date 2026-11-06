@@ -1,4 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
+import { skillAsk } from "../ui/Aside";
 import { keepBottom } from "../ui/stick";
 import { DecisionCard } from "../ui/DecisionCard";
 // Every reply carries chips for the jobs it started; the jobs themselves live
@@ -425,7 +426,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       if (!ask || !tasks.length) continue;
       const prev = out.find((r) => r.id === ask!.id);
       if (prev) prev.tasks.push(...tasks.filter((t) => !prev.tasks.includes(t)));
-      else out.push({ id: ask.id, text: (ask.text ?? "").split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? ask.text ?? "", tasks: [...tasks], state: "done", at: 0 });
+      else out.push({ id: ask.id, text: ((t) => t.split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? t)(((a) => a.rest.trim() || a.skills.join(", "))(skillAsk(ask.text ?? ""))), tasks: [...tasks], state: "done", at: 0 });
     }
     for (const r of out) {
       // a finished job is finished: subagents it left stopped don't keep the request open
