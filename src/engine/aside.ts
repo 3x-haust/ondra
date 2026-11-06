@@ -1,14 +1,16 @@
 // Two ways to talk without disturbing the work (after 3xhaustPi's /btw and Side Chat):
-//  • btw: a quick question about what is on screen (main, or one job). It sees a
-//    short text picture of that conversation, has no tools, answers once, and
-//    leaves no trace in the conversation. One engine process per question.
+//  • btw: a quick question about anything in Ondra. It sees a text picture of
+//    every conversation (main chats, every job and sub-job, side chats; the one
+//    on screen in most detail) and may read the full session logs, nothing else.
+//    It answers once and leaves no trace in the conversation. One engine process
+//    per question.
 //  • side chat: a second, separate conversation per space. It can read files but
 //    never change them, and knows nothing of the main conversation unless told.
 //    Its messages are kept as text; the engine session under it is disposable.
 import { createSignal } from "solid-js";
 import { accountById, projectById, setState, spaceById, state, taskById, uid } from "../state/store";
 import { inChat } from "./captain";
-import type { BtwEntry, SideMessage, SpaceId } from "../state/types";
+import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
 import { agentKill, agentSpawn } from "../lib/native";
 import { prose } from "./fences";
 import { modelFor } from "./models";
@@ -75,8 +77,90 @@ function observation(scope: string): string {
     .join("\n");
 }
 
+const BUDGET = 60_000;
+
+const userWords = (t: Task) =>
+  t.entries.flatMap((e) => (e.kind === "user" && !e.text.startsWith("(Ondra") && e.text.trim() !== t.ask.trim() ? [clip(e.text.trim(), 300)] : []));
+
+function jobBlock(t: Task, full: boolean): string {
+  const last = [...t.entries].reverse().find((e) => e.kind === "text");
+  const parent = t.parentId ? taskById(t.parentId) : undefined;
+  const said = userWords(t).slice(full ? -8 : -3);
+  return [
+    `## ${t.title} [${t.status}] · id ${t.id} · ${spaceById(t.space)?.label ?? t.space}${t.topic ? ` / ${t.topic}` : ""}${parent ? ` · sub-job of "${parent.title}"` : ""}`,
+    `when: ${new Date(t.createdAt).toLocaleString("ko-KR")}${t.finishedAt ? ` → ${new Date(t.finishedAt).toLocaleString("ko-KR")}` : ""}`,
+    `asked: ${clip(t.ask, full ? 800 : 300)}`,
+    ...said.map((m) => `user later: ${m}`),
+    t.now && t.status === "running" ? `now: ${clip(t.now, 160)}` : "",
+    t.summary ? `summary: ${clip(t.summary, 300)}` : "",
+    last && last.kind === "text" ? `last said: ${clip(last.text, full ? 1500 : 500)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function chatLines(key: string, n: number): string[] {
+  return state.captain
+    .filter((m) => inChat(m, key) && !m.pending)
+    .slice(-n)
+    .map((m) =>
+      m.from === "me"
+        ? `user: ${clip(m.text ?? "", 500)}`
+        : `main: ${clip([m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[새 일 ${taskById(r.taskId ?? "")?.title ?? ""}]` : ""))].filter(Boolean).join(" "), 700)}`,
+    );
+}
+
+/**
+ * Everything else in Ondra, newest first, cut to a budget: every chat with main,
+ * every job and sub-job (title, ask, what the user added, how it ended), side chats.
+ */
+function everything(scope: string): string {
+  const here = scope.startsWith("task:") ? scope.slice(5) : "";
+  const chats = [...new Set(state.captain.map((m) => (m.project ? `${m.space}~${m.project}` : m.space)))].filter((k) => `main:${k}` !== scope);
+  const out: string[] = [];
+  let size = 0;
+  const add = (block: string) => {
+    if (size + block.length > BUDGET) return false;
+    out.push(block);
+    size += block.length;
+    return true;
+  };
+  for (const k of chats) {
+    const [sp, pj] = k.split("~");
+    add([`# Main chat: ${spaceById(sp as SpaceId)?.label ?? sp}${pj ? ` / ${projectById(pj)?.name ?? pj}` : ""}`, ...chatLines(k, 10)].join("\n"));
+  }
+  const jobs = state.tasks.filter((t) => t.id !== here).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt));
+  const rest: string[] = [];
+  out.push("# Jobs (newest first)");
+  for (const t of jobs) if (!add(jobBlock(t, false))) rest.push(`- ${t.title} [${t.status}] · id ${t.id}`);
+  if (rest.length) out.push("# Older jobs (titles only)", ...rest.slice(0, 200));
+  for (const sp of state.spaces) {
+    const side = sideOf(sp.id).filter((m) => !m.pending).slice(-8);
+    if (side.length) add([`# Side chat: ${sp.label}`, ...side.map((m) => `${m.from === "me" ? "user" : "side"}: ${clip(m.text, 400)}`)].join("\n"));
+  }
+  return out.join("\n\n");
+}
+
 function accountFor(space: SpaceId) {
   return accountById(chooseAccount(space, "")) ?? state.accounts[0];
+}
+
+/** What a btw question is sent with: the conversation on screen, everything else, where the full logs are. */
+export function btwPrompt(scope: string, q: string, logs: string): string {
+  return [
+    "Answer a BTW question. It is a side question: keep it separate from the conversations below and change nothing.",
+    "You know everything that happened in Ondra: the conversation the user is looking at, every chat with main, every job and sub-job, and side chats.",
+    `When the picture below isn't enough, read the full logs in this folder (${logs}): one folder per job named by its id, main chats in captain-<space>[-<project>], each a set of .jsonl files. Use grep to find things; don't read whole files.`,
+    "Answer in Korean, short and plain (a few lines). Name the job when the answer comes from one.",
+    "",
+    "# What the user is looking at",
+    observation(scope),
+    "",
+    "# Everything else",
+    everything(scope),
+    "",
+    `# Question\n${q}`,
+  ].join("\n");
 }
 
 /** Ask a btw question. The answer streams into btw(); nothing is added anywhere. */
@@ -114,25 +198,15 @@ export async function askBtw(scope: string, question: string) {
   );
   try {
     const model = modelFor(acc.id);
-    const cwd = scope.startsWith("task:") ? taskById(scope.slice(5))?.cwd : projectById(scope.slice(5).split("~")[1])?.folder ?? spaceById(space).folder;
+    const logs = `${engine.info.dataDir}/sessions`;
     await agentSpawn(
       agent,
-      expand(cwd || "~"),
-      ["--no-session", "--no-tools", "--no-skills", "--thinking", "low", ...(model ? ["--model", model] : [])],
+      logs,
+      ["--no-session", "--tools", "read,grep,find,ls", "--no-skills", "--thinking", "low", ...(model ? ["--model", model] : [])],
       await accountEnv(acc.id),
     );
     markAlive(agent);
-    await request(agent, {
-      type: "prompt",
-      message: [
-        "Answer a BTW question about the conversation below. It is a side question: keep it separate from that conversation.",
-        "Do not propose or perform file changes. Answer in Korean, short and plain (a few lines).",
-        "",
-        observation(scope),
-        "",
-        `# Question\n${q}`,
-      ].join("\n"),
-    });
+    await request(agent, { type: "prompt", message: btwPrompt(scope, q, logs) });
     await done;
     patch(id, { answer: prose(text) || text, pending: false, error: !text.trim() ? explain(err || "답이 비어 있어요") : undefined });
   } catch (e) {
