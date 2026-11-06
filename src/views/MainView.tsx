@@ -398,11 +398,13 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const reqs = createMemo<Req[]>(() => {
     const out: Req[] = [];
     let ask: CaptainMessage | undefined;
-    // a job that carries on one of the request's jobs (a follow-up the project started, a new direction) is part of it
+    // jobs a later request started belong to that request, even when they carry on this one's
+    const own = new Set(props.msgs.filter((m) => m.from !== "me").flatMap((m) => props.started(m).map((t) => t.id)));
+    // a job that carries on one of the request's jobs without a request of its own (a follow-up the project started) is part of it
     const carried = (t: Task, seen = new Set<string>()): Task[] => {
       if (seen.has(t.id)) return [];
       seen.add(t.id);
-      return [t, ...state.tasks.filter((x) => x.follows === t.id).flatMap((x) => carried(x, seen))];
+      return [t, ...state.tasks.filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
     };
     for (const m of props.msgs) {
       if (m.from === "me") {
