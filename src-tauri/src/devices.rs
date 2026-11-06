@@ -310,6 +310,91 @@ pub async fn device_shot(app: AppHandle, platform: String, id: String, serial: O
     .map_err(|e| e.to_string())?
 }
 
+// ───────────── devices jobs leave behind
+//
+// The `device` tool (extensions/device.ts) writes the device a job made to
+// `<artifacts>/<job>/.device.json` and is told to shut it down before it answers.
+// A job that fails, is stopped or forgets would leave a simulator or emulator
+// holding gigabytes of memory and several cores, so the app cleans up after it.
+
+#[derive(serde::Deserialize)]
+struct Owned {
+    platform: String,
+    udid: Option<String>,
+    serial: Option<String>,
+    name: String,
+    made: bool,
+}
+
+/// Run a command, giving up after `secs` (agent-device can hang on a dead device).
+fn within(cmd: &mut Command, secs: u64) -> Option<String> {
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < end => std::thread::sleep(std::time::Duration::from_millis(100)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+    let mut s = String::new();
+    std::io::Read::read_to_string(child.stdout.as_mut()?, &mut s).ok()?;
+    Some(s)
+}
+
+/// Close the job's agent-device session and shut down (iOS: also delete) the device
+/// it made. A device the user lent the job is only let go of, never shut down.
+fn release_owned(worker: &str, m: &Owned) {
+    let session: String = format!("ondra-{worker}").chars().take(60).collect();
+    let _ = within(Command::new("agent-device").args(["close", "--session", &session]).env("PATH", crate::engine::user_path()), 20);
+    if !m.made {
+        return;
+    }
+    if m.platform == "ios" {
+        if let Some(udid) = m.udid.as_deref() {
+            let _ = within(Command::new("xcrun").args(["simctl", "shutdown", udid]), 60);
+            let _ = within(Command::new("xcrun").args(["simctl", "delete", udid]), 60);
+        }
+    } else if let Some(serial) = m.serial.as_deref() {
+        // the port may belong to another emulator by now: only the one this job booted
+        let avd = within(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
+        if avd.lines().next().map(str::trim) == Some(m.name.as_str()) {
+            let _ = within(Command::new(adb()).args(["-s", serial, "emu", "kill"]), 15);
+        }
+    }
+}
+
+/// Clean up the devices of every job except `keep` (the ones still running, queued
+/// or waiting). Returns the names of the devices let go of.
+#[tauri::command]
+pub async fn job_devices_release(app: AppHandle, keep: Vec<String>) -> Vec<String> {
+    let root = crate::engine::data_dir(&app).join("artifacts");
+    tauri::async_runtime::spawn_blocking(move || release_in(&root, &keep)).await.unwrap_or_default()
+}
+
+fn release_in(root: &std::path::Path, keep: &[String]) -> Vec<String> {
+    let mut done = vec![];
+    for e in std::fs::read_dir(root).into_iter().flatten().flatten() {
+        let worker = e.file_name().to_string_lossy().to_string();
+        let file = e.path().join(".device.json");
+        if keep.contains(&worker) || !file.is_file() {
+            continue;
+        }
+        let Some(m) = std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str::<Owned>(&t).ok()) else {
+            let _ = std::fs::remove_file(&file);
+            continue;
+        };
+        release_owned(&worker, &m);
+        let _ = std::fs::remove_file(&file);
+        done.push(m.name);
+    }
+    done
+}
+
 // ───────────── driving a device from the app (tap, swipe, type, home, back)
 //
 // The page sends positions as fractions of the screen (0..1), so it doesn't need
@@ -399,6 +484,27 @@ mod tests {
         assert_eq!(run(&["-avd", "pixel", "-no-window", "-gpu", "swiftshader_indirect"]).trim(), "-no-audio -no-boot-anim -avd pixel -no-window -gpu swiftshader_indirect");
         assert_eq!(run(&["-list-avds"]).trim(), "-list-avds");
         assert!(sdk.join("platform-tools").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn devices_of_ended_jobs_are_let_go() {
+        let root = std::env::temp_dir().join(format!("ondra-jobdev-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let put = |job: &str, body: &str| {
+            std::fs::create_dir_all(root.join(job)).unwrap();
+            std::fs::write(root.join(job).join(".device.json"), body).unwrap();
+        };
+        // a device the user lent the job: only let go of, never shut down
+        put("ended", r#"{"platform":"ios","udid":"00000000-0000-0000-0000-000000000000","name":"lent","made":false}"#);
+        put("running", r#"{"platform":"android","serial":"emulator-5554","name":"busy","made":true}"#);
+        put("broken", "not json");
+        std::fs::create_dir_all(root.join("nothing")).unwrap();
+        let gone = release_in(&root, &["running".to_string()]);
+        assert_eq!(gone, vec!["lent".to_string()]);
+        assert!(!root.join("ended/.device.json").exists());
+        assert!(!root.join("broken/.device.json").exists());
+        assert!(root.join("running/.device.json").exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -405,6 +405,8 @@ export const devicesList = () =>
     { id: "Pixel_9", name: "Pixel 9", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: true, serial: "emulator-5554" },
     { id: "pixel_test", name: "pixel test", platform: "android", kind: "emulator", runtime: "Android 에뮬레이터", booted: false },
   ]);
+/** Shut down the devices jobs made and left behind, except those of the jobs in `keep`. */
+export const jobDevicesRelease = (keep: string[]) => call<string[]>("job_devices_release", { keep }, []);
 export const deviceBoot = (d: Device) => call<void>("device_boot", { platform: d.platform, id: d.id });
 export const deviceShutdown = (d: Device) => call<void>("device_shutdown", { platform: d.platform, id: d.id, serial: d.serial ?? null });
 export const deviceDelete = (d: Device) => call<void>("device_delete", { platform: d.platform, id: d.id });
