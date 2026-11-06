@@ -12,6 +12,7 @@ import { goMain, live, openTask, setView } from "../state/ui";
 import { tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
 import { describeCommand } from "../engine/describe";
+import { costDetail, costShort, jobCost } from "../ui/cost";
 import { compact, now } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
@@ -386,6 +387,9 @@ function StatusRow(props: { t: Task }) {
       <span class="spacer" />
       <Diff t={props.t} />
       <Show when={when()}><span class="cv-when">{when()}</span></Show>
+      <Show when={props.t.status === "done" && jobCost(props.t)} keyed>
+        {(c) => <Show when={costShort(c)}><span class="cv-when" title={costDetail(c)}>{costShort(c)}</span></Show>}
+      </Show>
     </div>
   );
 }

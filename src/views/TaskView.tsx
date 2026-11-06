@@ -14,6 +14,7 @@ import { fsFiles, gitChanges, openInEditor, openUrl, revealPath } from "../lib/n
 import { rawStats, archiveTask, closeWorktree, compactAgent, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
+import { costDetail, jobCost } from "../ui/cost";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
@@ -346,7 +347,12 @@ export function TaskView(props: { id: string }) {
             <Transcript
               task={task()}
               agentId={task().id}
-              footer={<Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>}
+              footer={
+                <>
+                  <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
+                  <Show when={task().status === "done" && costDetail(jobCost(task()))}>{(s) => <div class="job-cost">끝 · {s()}</div>}</Show>
+                </>
+              }
             />
             <div class="dock">
               <div class="dock-inner">

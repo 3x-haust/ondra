@@ -6,6 +6,7 @@ import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { compact, now, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
+import { costDetail, costShort, jobCost } from "./cost";
 
 export function StatusIcon(props: { t: Task; size?: "sm" | "md" }) {
   return (
@@ -77,6 +78,9 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
                 <Icon name="branch" size={12} />
                 {live() ? `${live()}/${kids().length}` : kids().length}
               </span>
+            </Show>
+            <Show when={x().status === "done" && !x().answer && jobCost(x())} keyed>
+              {(c) => <Show when={costShort(c)}><span class="fork-cost" title={costDetail(c)}>{costShort(c)}</span></Show>}
             </Show>
             <span class="fork-time">{time()}</span>
             <Icon name="chevron" size={14} class="fork-go" />
