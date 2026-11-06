@@ -41,6 +41,9 @@ interface Run {
   tools: Map<string, string>;
   /** told once this session to write the lines between tool calls in the user's language */
   langNudged?: boolean;
+  /** tool calls since the job last said where it is in its plan, and how often it was reminded */
+  quietTools?: number;
+  planNudges?: number;
   /** loop guard: each command's last result and how many file edits had happened by then */
   ran?: Map<string, { ok: boolean; edits: number }>;
   edits?: number;
@@ -199,6 +202,22 @@ export function pushNote(id: string, text: string) {
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 /** Files that hold what was decided or where things stand, not code. */
 /** Chinese characters and no Korean: a line the user can't read. */
+const stepKey = (s: string) => s.replace(/[\s·.,()]/g, "").toLowerCase();
+
+/** A new plan keeps the steps already finished (same text) as done; the first open one is current. */
+export function nextPlan(old: { text: string; state: string }[], steps: string[]): Task["plan"] {
+  const finished = new Set(old.filter((s) => s.state === "done").map((s) => stepKey(s.text)));
+  const plan: Task["plan"] = steps.map((text) => ({ text, state: finished.has(stepKey(text)) ? "done" : "todo" }));
+  const cur = plan.find((s) => s.state !== "done");
+  if (cur) cur.state = "now";
+  return plan;
+}
+
+/** A finished job's plan: the step it was on is done, steps it never reached are skipped (not left open). */
+export function closePlan(plan: Task["plan"]): Task["plan"] {
+  return plan.map((s) => ({ ...s, state: s.state === "now" ? "done" : s.state === "todo" ? "skip" : s.state }));
+}
+
 /** a sentence of English prose shown to a user who writes Korean */
 export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
   const said = t?.entries.find((e) => e.kind === "user");
@@ -267,12 +286,16 @@ function applyBlocks(t: Task, items: any[], run: Run) {
       case "now":
         // a status line in Chinese (a model slipping language) is dropped, not shown
         if (b.text && !chineseOnly(String(b.text))) t.now = t.intent = String(b.text).slice(0, 140);
+        run.quietTools = 0;
         if (typeof b.step === "number" && t.plan.length) {
           t.plan.forEach((s, i) => (s.state = i < b.step ? "done" : i === b.step ? "now" : "todo"));
         }
         break;
       case "plan":
-        if (Array.isArray(b.steps)) t.plan = b.steps.slice(0, 10).map((s: unknown, i: number) => ({ text: String(s), state: i === 0 ? "now" : "todo" }));
+        if (Array.isArray(b.steps)) {
+          t.plan = nextPlan(t.plan, b.steps.slice(0, 10).map(String));
+          run.quietTools = 0;
+        }
         break;
       case "ask": {
         const d: Decision = {
@@ -541,6 +564,7 @@ export async function mergeTask(id: string): Promise<boolean> {
       push(x, { kind: "note", text: `${into}에 합쳤어요` });
       if (x.status !== "done") {
         x.status = "done";
+        x.plan = closePlan(x.plan);
         x.finishedAt = Date.now();
         x.summary ||= `${into}에 합침`;
       }
@@ -861,6 +885,14 @@ function handlers(id: string, run: Run) {
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
+          // a plan that stopped moving: ask where it is (at most three times a session)
+          run.quietTools = (run.quietTools ?? 0) + 1;
+          const plan = taskById(id)?.plan ?? [];
+          if (run.streaming && run.quietTools >= 12 && (run.planNudges ?? 0) < 3 && plan.some((s) => s.state !== "done")) {
+            run.quietTools = 0;
+            run.planNudges = (run.planNudges ?? 0) + 1;
+            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${plan.map((s, i) => `${i}. [${s.state}] ${s.text}`).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
+          }
           // a job booted or shut down a phone: the hub and the sidebar show it now
           if (done?.kind === "tool" && done.tool.name === "device") void refreshDevices();
           // the shared browser stopped answering: check it now and restart it if it hangs
@@ -1236,6 +1268,7 @@ function finish(id: string, summary: string, run?: Run) {
   setState("decisions", (list) => list.filter((d) => d.taskId !== id));
   updateTask(id, (t) => {
     t.status = "done";
+    t.plan = closePlan(t.plan);
     t.unread = true;
     t.saidDone = undefined;
     t.summary = summary;
@@ -1482,6 +1515,7 @@ export function handOn(prevId: string, nextId: string) {
   // not running (queued, paused, waiting with no session): it ends here as it is
   updateTask(prevId, (x) => {
     x.status = "done";
+    x.plan = closePlan(x.plan);
     x.finishedAt = Date.now();
     x.summary ||= "새 일로 넘어갔어요";
     x.now = x.summary;
@@ -1620,8 +1654,10 @@ export async function tell(id: string, message: string, opts: { now?: boolean } 
     updateTask(id, (x) => {
       x.status = "running";
     });
+    // the user's words may change the plan: the model is asked to update it (the user sees only their words)
+    const sent = t.plan.some((s) => s.state !== "done") ? `${message}\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step.` : message;
     try {
-      await request(agent, run?.streaming ? { type: "steer", message } : { type: "prompt", message });
+      await request(agent, run?.streaming ? { type: "steer", message: sent } : { type: "prompt", message: sent });
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), "bad");
     }
@@ -1854,6 +1890,8 @@ export function startScheduler() {
   // After a restart nothing runs any more: put live work back in line.
   // (jobs whose engine still runs, after a page reload, were picked up again by reattachJobs)
   for (const t of state.tasks) if (t.status === "running" && !runs.get(t.id)) updateTask(t.id, (x) => requeue(x));
+  // finished jobs from before plans were closed on finish
+  for (const t of state.tasks) if (t.status === "done" && t.plan.some((s) => s.state === "now" || s.state === "todo")) updateTask(t.id, (x) => (x.plan = closePlan(x.plan)));
   // branches merged on GitHub since: their merge bar goes; checked again every half hour
   setTimeout(() => void sweepLanded(), 20_000);
   setInterval(() => void sweepLanded(), 30 * 60_000);
