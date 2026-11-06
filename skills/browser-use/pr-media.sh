@@ -35,6 +35,10 @@ done
 ABS=()
 for f in "${FILES[@]}"; do
   [[ -f $f ]] || { echo "no such file: $f" >&2; exit 1; }
+  case "$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')" in
+    png|jpg|jpeg|gif|webp|mp4|mov) ;;
+    *) echo "not a picture or video (png, jpg, gif, webp, mp4, mov): $f" >&2; exit 1 ;;
+  esac
   ABS+=("$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
   (($(stat -f %z "$f") <= 10485760)) || echo "warning: over 10MB, GitHub may refuse it: $(basename "$f")" >&2
 done
@@ -42,6 +46,9 @@ done
 URL=$(gh pr view "$PR" --json url -q .url)
 echo "PR: $URL / ${#ABS[@]} file(s)"
 
+# whatever happens (a timeout, Ctrl-C), the file server stops and its folder goes
+PM_SRV=""; PM_TMP=""
+trap '[[ -n $PM_SRV ]] && kill "$PM_SRV" 2>/dev/null; [[ -n $PM_TMP ]] && rm -rf "$PM_TMP"' EXIT
 LINK_RE='https:\/\/github\.com\/user-attachments\/[^\s"<>)]+'
 
 # Aside: its scripts can't read files outside their folder, so the files are
@@ -50,10 +57,12 @@ via_aside() {
   local acct=() tmp port srv i=0 spec=() out line
   [[ -n $ACCOUNT ]] && acct=(--account "$ACCOUNT")
   tmp=$(mktemp -d)
+  PM_TMP=$tmp
   for f in "${ABS[@]}"; do ln -s "$f" "$tmp/$i.$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')"; i=$((i + 1)); done
   port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
   python3 -m http.server "$port" --bind 127.0.0.1 --directory "$tmp" >/dev/null 2>&1 &
   srv=$!
+  PM_SRV=$srv
   for _ in $(seq 20); do curl -s -o /dev/null "http://127.0.0.1:$port/" && break; sleep 0.2; done
   local all=() k e m
   for ((s0 = 0; s0 < ${#ABS[@]}; s0 += 4)); do # four per run: one Aside run has 120 s
@@ -95,7 +104,8 @@ try {
 
 ab() { agent-browser "$@"; }
 # eval prints its result as JSON: a string comes back as plain text, anything else as JSON
-js() { ab eval "$1" 2>/dev/null | tail -1 | python3 -c 'import json,sys
+# a failed eval prints nothing instead of ending the script
+js() { local o; o=$(ab eval "$1" 2>/dev/null) || o=""; printf '%s\n' "$o" | tail -1 | python3 -c 'import json,sys
 t = sys.stdin.read().strip()
 try: v = json.loads(t)
 except Exception: v = t
@@ -140,7 +150,15 @@ via_browser() {
   js "(() => { const b = document.querySelector('[data-ondra-box]'); b.value = ''; b.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()" >/dev/null
 }
 
-aside_ready() { command -v aside >/dev/null 2>&1 && aside account status 2>/dev/null | grep -q "signed in"; }
+# the account asked for (else the active one, marked *) is signed in
+aside_ready() {
+  command -v aside >/dev/null 2>&1 || return 1
+  local rows
+  rows=$(aside account status 2>/dev/null) || return 1
+  if [[ -n $ACCOUNT ]]; then rows=$(printf '%s\n' "$rows" | grep -E "^[* ] *$ACCOUNT[[:space:]]" || true)
+  else rows=$(printf '%s\n' "$rows" | grep -E '^\*' || true); fi
+  printf '%s\n' "$rows" | grep -v "not signed in" | grep -q "signed in"
+}
 LINKS=""
 if [[ $VIA == aside ]] || { [[ -z $VIA ]] && aside_ready; }; then
   echo "via Aside${ACCOUNT:+ ($ACCOUNT)}"

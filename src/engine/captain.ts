@@ -47,7 +47,10 @@ async function refreshRepos(space: SpaceId) {
   const had = reposOf.get(space);
   if (had && Date.now() - had.at < 5 * 60_000) return;
   const root = spaceById(space).folder;
-  const list = root ? await fsRepos(expand(root)).catch(() => had?.list ?? []) : [];
+  // a space on the whole home folder: scanning it would walk ~/Library and the
+  // folders macOS guards (and ask the user for access), so no list there
+  const home = expand("~").replace(/\/+$/, "");
+  const list = root && expand(root).replace(/\/+$/, "") !== home ? await fsRepos(expand(root)).catch(() => had?.list ?? []) : [];
   reposOf.set(space, { at: Date.now(), list });
 }
 /** "own branch per task" choice of the request being routed, per space */
@@ -584,7 +587,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const parsed = objs
     .flatMap((x: any) => (Array.isArray(x?.routes) ? x.routes : x?.kind || x?.type ? [x] : []))
     .map((r: any) => (r && !r.kind && typeof r.type === "string" ? { ...r, kind: r.type } : r));
-  const routes = await applyRoutes(space, parsed, text, cwd);
+  const routes = await applyRoutes(space, parsed, text, cwd, !event);
   if (!routes.length) {
     // nothing usable came back: whatever it said is the answer
     const loose = parsed.map((r: any) => (typeof r?.text === "string" ? r.text : "")).filter(Boolean).join("\n\n");
@@ -647,7 +650,7 @@ function existingProject(space: SpaceId, r: any, original: string) {
   return hits.length === 1 ? hits[0] : undefined;
 }
 
-async function applyRoutes(space: string, raw: any[], original: string, cwd?: string): Promise<Route[]> {
+async function applyRoutes(space: string, raw: any[], original: string, cwd?: string, fromUser = true): Promise<Route[]> {
   const out: Route[] = [];
   const work = raw.filter((r) => r?.kind === "new" || r?.kind === "answer").length;
   // steps of one request name each other by "key"; "after" may also name a running job's id
@@ -708,7 +711,7 @@ async function applyRoutes(space: string, raw: any[], original: string, cwd?: st
         display: work === 1 ? original : undefined,
         isolate: isolateOf.get(space),
         // another space only when the user asked: main's "reach", or the message pointing at it
-        reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...namedSpaces(original, sp(space), state.spaces)])]
+        reach: [...new Set([...(Array.isArray(r.reach) ? r.reach.map(String) : []), ...(fromUser ? namedSpaces(original, sp(space), state.spaces) : [])])]
           .map((x) => state.spaces.find((s) => s.id === x || s.label === x)?.id)
           .filter((x): x is SpaceId => !!x && x !== sp(space)),
         after: (Array.isArray(r.after) ? r.after : [])

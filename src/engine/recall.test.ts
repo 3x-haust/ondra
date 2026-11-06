@@ -24,3 +24,11 @@ describe("recall", () => {
     expect(got.map((m) => m.text)).not.toContain(pool[4].text);
   });
 });
+
+describe("numbers in recall", () => {
+  it("keeps short numbers that are the subject, drops times and dates", async () => {
+    const { tokens } = await import("./memory");
+    expect(tokens("PR 64 리뷰, 404 에러, node 18")).toEqual(expect.arrayContaining(["64", "404", "18"]));
+    expect(tokens("[2026. 11. 6. 오후 12:19] 배포")).not.toEqual(expect.arrayContaining(["12", "19", "2026", "11"]));
+  });
+});

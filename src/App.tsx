@@ -71,7 +71,7 @@ export default function App() {
     migrateMemory();
     await startRpc();
     // jobs still running in the engine from before a reload: hear them again
-    if (!location.search.includes("fixture")) void import("./engine/tasks").then((m) => m.reattachJobs());
+    if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
     startScheduler();
     warmModels();
     startBridge();
