@@ -187,7 +187,17 @@ What makes a browser agent slow is the number of turns, not the commands
    It uploads through the PR page in your tab (nothing gets posted), writes the
    links into the description's `## 화면` section, and replaces its own block
    on a rerun. Look at the pictures yourself first, then check the result with
-   `gh pr view <PR> --json body`. Exit code 3 means GitHub isn't signed in in
+   `gh pr view <PR> --json body`. The same script posts pictures with words
+   where a reviewer reads them, instead of in the description:
+   ```bash
+   pr-media.sh --comment "고친 뒤 화면이에요" <PR> after.png            # a PR comment
+   pr-media.sh --reply <review comment id> "이렇게 바꿨어요" <PR> a.png  # answer in that review thread
+   pr-media.sh --at src/App.tsx:42 "이 줄이 이 화면을 만들어요" <PR> a.png  # on one line of the change
+   ```
+   Review comment ids come from `gh api repos/<o>/<r>/pulls/<n>/comments --jq '.[]|{id,path,line,body}'`.
+   A comment notifies people: post one only when the user asked, or when the
+   job is answering that PR's review (each fixed point gets its reply, with
+   the before/after picture when the change shows on screen). Exit code 3 means GitHub isn't signed in in
    the built-in browser (and Aside wasn't there or failed): `ask` the user to sign in to GitHub in the browser panel
    (name the account that opens the PR), then run it again.
 7. **Close when the leg ends.** `agent-browser close` before your `handoff`. It
