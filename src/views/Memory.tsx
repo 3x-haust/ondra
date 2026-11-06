@@ -109,11 +109,18 @@ const setOpen = (key: string, v: boolean) => {
 };
 
 export function MemoryView() {
+  // each space is its own workspace: only what belongs to this one (and what every job shares)
+  const mySpaces = () => state.spaces.filter((s) => s.id === state.space);
+  const myProjects = () => (state.projects ?? []).filter((p) => p.space === state.space);
+  const under = (path: string | undefined, root: string | undefined) => !!path && !!root && `${expand(path).replace(/\/+$/, "")}/`.startsWith(`${expand(root).replace(/\/+$/, "")}/`);
+  const mine = (path?: string, space?: string) => (space ? space === state.space : myProjects().some((p) => under(path, p.folder)) || mySpaces().some((s) => s.folder !== "~" && under(path, s.folder)));
+  const myMemory = createMemo(() => state.memory.filter((m) => m.scope === "global" || (m.scope === "space" ? m.space === state.space : mine(m.project, m.space))));
+  const myJournal = createMemo(() => (state.journal ?? []).filter((e) => !e.space || e.space === state.space));
   const [files] = createResource(
-    () => [state.spaces.map((s) => s.folder).join("|"), (state.projects ?? []).map((p) => p.folder).join("|")],
+    () => [state.space, mySpaces().map((s) => s.folder).join("|"), myProjects().map((p) => p.folder).join("|")],
     async () => {
-      const bySpace = await Promise.all(state.spaces.map(async (s) => ({ space: s.id, files: await filesOf(s.folder) })));
-      const byProject = await Promise.all((state.projects ?? []).map(async (p) => ({ project: p.folder, files: await filesOf(p.folder) })));
+      const bySpace = await Promise.all(mySpaces().map(async (s) => ({ space: s.id, files: await filesOf(s.folder) })));
+      const byProject = await Promise.all(myProjects().map(async (p) => ({ project: p.folder, files: await filesOf(p.folder) })));
       return { bySpace, byProject };
     },
   );
@@ -148,6 +155,7 @@ export function MemoryView() {
   const nows = createMemo(() => {
     const out: Record<string, ProjectNow> = {};
     for (const k of Object.keys(state.memoryNow ?? {})) {
+      if (!mine(k)) continue;
       const n = projectNow(k);
       if (n) out[k] = n;
     }
@@ -155,7 +163,7 @@ export function MemoryView() {
   });
   // the same file names as the memory folder on disk
   const names = createMemo(() => memoryFileNames(state.memory));
-  const input = () => ({ spaces: state.spaces, projects: state.projects ?? [], memory: state.memory, files: files(), journal: state.journal ?? [], now: nows(), expand, names: names(), journalName: journalFileName });
+  const input = () => ({ spaces: mySpaces(), projects: myProjects(), memory: myMemory(), files: files(), journal: myJournal(), now: nows(), expand, names: names(), journalName: journalFileName });
   const model = createMemo(() => buildModel(input()));
   const tree = createMemo(() => (match() ? buildModel(input(), match(), q()) : model()));
   // 지금 lights its project in the graph; versions leave the graph as it is
@@ -167,7 +175,7 @@ export function MemoryView() {
   const graph = createMemo(() => buildGraph(model(), graphSel(), match(), q()));
 
   const counts = () => ({
-    facts: state.memory.filter(isLive).length,
+    facts: myMemory().filter(isLive).length,
     files: [...model().homes.values()].reduce((n, h) => n + h.files.length, 0),
   });
   const tidyTitle = () => {
@@ -194,7 +202,7 @@ export function MemoryView() {
         <span class="mem-count">
           <b>{counts().facts}</b>기억
           <Show when={counts().files}><span class="mem-sep" /><b>{counts().files}</b>파일</Show>
-          <Show when={state.journal?.length}><span class="mem-sep" /><b>{state.journal!.length}</b>일 기록</Show>
+          <Show when={myJournal().length}><span class="mem-sep" /><b>{myJournal().length}</b>일 기록</Show>
         </span>
         <span class="spacer" data-tauri-drag-region />
         <Show when={notesPending().length}>

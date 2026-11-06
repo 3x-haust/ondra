@@ -89,7 +89,13 @@ export function openBrowser(url?: string) {
 /** Any file, opened inside the app (panel "미리보기"); VS Code and Finder are a click away. */
 export const [previewPath, setPreviewPath] = createSignal<string | null>(null);
 export function previewFile(path: string) {
-  const p = path.replace(/:\d+(:\d+)?$/, "");
+  // links come URL-encoded ("Application%20Support"): open the real file
+  let p = path.replace(/^file:\/\//, "").replace(/:\d+(:\d+)?$/, "");
+  if (/%[0-9a-f]{2}/i.test(p)) {
+    try {
+      p = decodeURIComponent(p);
+    } catch {}
+  }
   setPreviewPath(p.startsWith("~/") ? p : p);
   openPanel("preview");
 }
