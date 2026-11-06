@@ -39,6 +39,8 @@ interface Run {
   stats: TokenStats;
   /** toolCallId → entry id */
   tools: Map<string, string>;
+  /** told once this session to write the lines between tool calls in the user's language */
+  langNudged?: boolean;
   /** loop guard: each command's last result and how many file edits had happened by then */
   ran?: Map<string, { ok: boolean; edits: number }>;
   edits?: number;
@@ -197,6 +199,15 @@ export function pushNote(id: string, text: string) {
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 /** Files that hold what was decided or where things stand, not code. */
 /** Chinese characters and no Korean: a line the user can't read. */
+/** a sentence of English prose shown to a user who writes Korean */
+export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
+  const said = t?.entries.find((e) => e.kind === "user");
+  if (!said || !("text" in said) || !/[\uac00-\ud7a3]/.test(String(said.text))) return false;
+  const prose = text.replace(/```[\s\S]*?```/g, "").replace(/`[^`]*`/g, "").trim();
+  if (prose.length < 20 || /[\uac00-\ud7a3]/.test(prose)) return false;
+  return (prose.match(/[A-Za-z]+/g) ?? []).length >= 4;
+}
+
 export const chineseOnly = (s: string) => /[\u4e00-\u9fff]/.test(s) && !/[\uac00-\ud7a3]/.test(s);
 
 export const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
@@ -396,7 +407,7 @@ async function deliver(child: Task) {
   const body =
     child.status === "done"
       ? child.review
-        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌리고(전체 검사·리뷰를 다시 돌리지 말고) 끝내 줘. 고칠 게 없으면 그대로 끝내.`
+        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
         : `서브에이전트 "${child.title}" 완료: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
       : `서브에이전트 "${child.title}" 실패: ${child.error ?? "알 수 없는 오류"}`;
   const left = activeKids(parent.id).length;
@@ -796,6 +807,11 @@ function handlers(id: string, run: Run) {
             });
           });
           run.cursor = run.text.length;
+          // narration slipping into English for a Korean user: one reminder per session
+          if (run.streaming && !run.langNudged && text && notTheirLanguage(text, taskById(id))) {
+            run.langNudged = true;
+            void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls are read by the user: write them in Korean (\"이제 사진을 올려요\"), not English." }).catch(() => {});
+          }
           const u = ev.message?.usage;
           noteCall(agentOf(id), u);
           const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);

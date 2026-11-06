@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
 import { commandKind } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound } from "./proof";
-import { lastReport, onlyWaits } from "./tasks";
+import { lastReport, notTheirLanguage, onlyWaits } from "./tasks";
 
 describe("commandKind", () => {
   it("status looks are polls", () => {
@@ -79,5 +79,15 @@ describe("handoff and reports", () => {
   it("the last report line, not what it was doing", () => {
     const t = { entries: [{ kind: "text", text: "## 결과\n앱샷 PR을 올렸어요.\n자세히…" }, { kind: "tool", tool: {} }] } as never;
     expect(lastReport(t)).toBe("앱샷 PR을 올렸어요.");
+  });
+});
+
+describe("narration language", () => {
+  const korean = { entries: [{ id: "e", at: 0, kind: "user", text: "검증 그만하고 사진 올려" }] } as never;
+  it("flags English lines for a Korean user, not code or Korean", () => {
+    expect(notTheirLanguage("Now upload the photos to the PR body.", korean)).toBe(true);
+    expect(notTheirLanguage("이제 사진을 PR 본문에 올려요.", korean)).toBe(false);
+    expect(notTheirLanguage("```bash\ngh pr view 79\n```", korean)).toBe(false);
+    expect(notTheirLanguage("Now upload the photos.", { entries: [{ id: "e", at: 0, kind: "user", text: "upload the photos" }] } as never)).toBe(false);
   });
 });
