@@ -664,6 +664,25 @@ function relatedLines(t: Task): string[] {
   ];
 }
 
+/**
+ * The sub-agents an earlier session started: still running ones report back by
+ * themselves; a finished review's findings are here, since that session's
+ * context is gone.
+ */
+function kidLines(t: Task): string[] {
+  const kids = state.tasks.filter((k) => k.parentId === t.id);
+  if (!kids.length) return [];
+  const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  const out = ["", "# Sub-agents started earlier"];
+  for (const k of kids) {
+    const what = k.review ? "review" : "sub-agent";
+    if (k.status === "done") out.push(`- ${what} "${k.title}": done. ${clip(k.review ? (k.result ?? k.summary ?? "") : (k.summary ?? ""), k.review ? 3000 : 300)}`);
+    else if (k.status === "failed") out.push(`- ${what} "${k.title}": failed (${clip(k.error ?? "", 160)})`);
+    else out.push(`- ${what} "${k.title}": still ${k.status}. Its result comes to you by itself; don't start it again and never ask the user for it.`);
+  }
+  return out;
+}
+
 function gitNote(t: Task): string[] {
   const w = t.worktree;
   if (!w || w.state !== "open") return [];
@@ -781,6 +800,7 @@ export function handoffPrompt(t: Task): string {
         ]
       : lastReport(t)),
     ...planLines(t),
+    ...kidLines(t),
     ...relatedLines(t),
     ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
     "",
