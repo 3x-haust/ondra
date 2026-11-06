@@ -13,7 +13,8 @@ import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
 import { prose, readFences } from "./fences";
-import { checkEvidence, reviewUnresolved } from "./proof";
+import { commandKind } from "./commandKind";
+import { checkEvidence, isCodeFile, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
@@ -57,11 +58,17 @@ interface Run {
   polls?: number;
   /** how many times it was told its context is long (handoff) */
   longNudges?: number;
+  /** prompt size when this session started (the long-context nudge measures growth above it) */
+  base?: number;
+  /** a handoff sent while subagents still worked: the new session starts once they are done */
+  pendingHandoff?: Handoff;
 }
 
-// A session past this many prompt tokens is told to hand off: every later call
-// re-sends the whole context, so long sessions cost the most and think worst.
-const HANDOFF_AT = [120_000, 180_000];
+// A session that grew this many prompt tokens past where it started is told to
+// hand off: every later call re-sends the whole context, so long sessions cost the
+// most and think worst. (Measured from the start: the system prompt and tools
+// alone take ~30k, a resumed session starts bigger.)
+const HANDOFF_AT = [90_000, 150_000];
 
 const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
@@ -232,10 +239,6 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
   }
 }
 
-/** a look at something already running: every part is a wait or a read-only status command */
-const isPoll = (cmd: string) =>
-  /\b(sleep|tail|pgrep|ps|date)\b/.test(cmd) &&
-  cmd.split(/;|&&|\|\||\|/).every((p) => !p.trim() || /^\s*(sleep|tail|head|cat|ls|ps|pgrep|date|grep|wc|cut|echo|test|\[|cd|for|do|done|if|then|fi|break)\b/.test(p.trim()));
 const keepsRunning = (cmd: string) =>
   /(&\s*$|&\s*disown|\bnohup\b|--watch\b|\bwatch\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd);
 
@@ -304,6 +307,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         break;
       case "done": {
         run.done = String(b.summary ?? "완료");
+        t.saidDone = run.done;
         if (b.result) t.result = String(b.result).slice(0, 8000);
         const items: Evidence[] = Array.isArray(b.evidence) ? b.evidence.filter((e: any) => e && e.ref).map((e: any) => ({ kind: String(e.kind ?? "file"), ref: String(e.ref), ok: e.ok !== false, note: e.note ? String(e.note) : undefined })) : [];
         const unverified = Array.isArray(b.unverified) ? b.unverified.map(String).filter(Boolean) : [];
@@ -400,6 +404,16 @@ async function deliver(child: Task) {
   const agent = agentOf(parent.id);
   if (!run || !isAlive(agent) || parent.status === "paused" || parent.status === "done" || parent.status === "failed") {
     updateTask(parent.id, (x) => x.inbox.push(message));
+    return;
+  }
+  // it is handing off: the result goes to the next session, which starts once all are in
+  if (run.handoff || run.pendingHandoff) {
+    updateTask(parent.id, (x) => x.inbox.push(message));
+    if (run.pendingHandoff && !left) {
+      const card = run.pendingHandoff;
+      run.pendingHandoff = undefined;
+      await newSession(parent.id, run, card);
+    }
     return;
   }
   try {
@@ -574,6 +588,12 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   }
   const carries = taskById(id)?.follows;
   if (!resume && carries && !taskById(id)?.worktree && finished(taskById(carries))) takeBranch(id, carries);
+  // it had already said done when Ondra went down: it is over, don't prompt it again
+  const said = taskById(id);
+  if (resume && said?.saidDone && !unread(said).length) {
+    finish(id, said.saidDone);
+    return;
+  }
   if (!resume && !taskById(id)?.answer && !(await isolate(id))) return;
   const t0 = taskById(id);
   if (!t0) return;
@@ -640,8 +660,18 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       await request(agent, { type: "prompt", message: rewind.message });
       return;
     }
+    // the command the restart cut off (not a time limit: commands have none unless given one)
+    const cut = fresh.shells.filter((s) => !s.endedAt && !s.background).pop()?.command.replace(/\s+/g, " ").slice(0, 160);
+    if (resume) updateTask(id, (x) => closeShells(x));
+    // answers it already acted on before the restart aren't news
+    const handled = new Set(fresh.entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text));
+    const fresh2 = unread(fresh);
+    for (const m of fresh2) handled.delete(m);
     const message = resume
-      ? ["(Ondra가 다시 시작됐어요. 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 말고, 돌던 명령이 끊겼으면 그 로그부터 확인하세요.)", ...[...unread(fresh), ...fresh.inbox].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`)].join("\n")
+      ? [
+          `(Ondra가 다시 시작됐어요. ${cut ? `그때 돌던 명령 \`${cut}\`은 재시작 때문에 끊겼어요. 시간 제한 때문이 아니니 제한이 있다고 여기지 말고, 필요하면 그 로그부터 보고 다시 돌리세요.` : "돌던 명령이 끊겼으면 그 로그부터 확인하세요."} 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 마세요.)`,
+          ...[...fresh2, ...fresh.inbox.filter((m) => !handled.has(m))].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`),
+        ].join("\n")
       : fresh.legs.length > 1
         ? handoffPrompt(fresh)
         : taskPrompt(fresh);
@@ -751,16 +781,18 @@ function handlers(id: string, run: Run) {
           const u = ev.message?.usage;
           noteCall(agentOf(id), u);
           const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
+          // where this session started (a resumed one counts from a fresh session's size)
+          if (prompt) run.base ??= Math.min(prompt, 40_000);
           const level = run.longNudges ?? 0;
-          if (run.streaming && level < HANDOFF_AT.length && prompt > HANDOFF_AT[level] && !run.done && !run.handoff) {
+          if (run.streaming && level < HANDOFF_AT.length && prompt - (run.base ?? 30_000) > HANDOFF_AT[level] && !run.done && !run.handoff) {
             run.longNudges = level + 1;
             const k = Math.round(prompt / 1000);
             void request(agentOf(id), {
               type: "steer",
               message:
                 level === 0
-                  ? `(Ondra) This session is at ${k}k tokens. Finish the step you are on, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) so a fresh session continues. Don't start anything new here.`
-                  : `(Ondra) This session is at ${k}k tokens. Send the {"type":"handoff"} block now.`,
+                  ? `(Ondra) This session is at ${k}k tokens. If only the wrap-up is left (the report, a last check), send done here instead. Otherwise finish the step you are on, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) so a fresh session continues. Don't start anything new here.`
+                  : `(Ondra) This session is at ${k}k tokens. Send done if only the wrap-up is left, otherwise the {"type":"handoff"} block now.`,
             }).catch(() => {});
           }
           break;
@@ -985,6 +1017,7 @@ async function settle(id: string, run: Run) {
       run.firstDone ??= summary;
       run.done = undefined;
       updateTask(id, (x) => {
+        x.saidDone = undefined;
         x.now = "증거를 채우는 중";
         push(x, { kind: "note", text: `끝내기 전에 확인 · ${missing.label}` });
       });
@@ -1003,26 +1036,25 @@ async function settle(id: string, run: Run) {
   if (run.handoff) {
     const card = run.handoff;
     run.handoff = undefined;
-    run.longNudges = 0;
-    updateTask(id, (x) => {
-      const leg = x.legs[x.legs.length - 1];
-      if (leg) {
-        leg.endedAt = Date.now();
-        leg.handoff = card;
-      }
-      x.legs.push({ startedAt: Date.now() });
-      x.now = "새 세션으로 이어가는 중";
-      push(x, { kind: "handoff", leg: x.legs.length, handoff: card });
-    });
-    try {
-      await request(agent, { type: "new_session" });
-      await request(agent, { type: "prompt", message: handoffPrompt(taskById(id)!) });
+    // subagents still at work: the new session starts once their results are in
+    if (activeKids(id).length) {
+      run.pendingHandoff = card;
       updateTask(id, (x) => {
-        x.inbox = [];
+        x.status = "running";
+        x.now = `서브에이전트 ${activeKids(id).length}개 기다리는 중`;
       });
-    } catch (e) {
-      fail(id, e instanceof Error ? e.message : String(e));
+      return;
     }
+    // a "handoff" that only waits on the user: no new session, the job waits for the answer
+    if (onlyWaits(card)) {
+      updateTask(id, (x) => {
+        x.status = "waiting";
+        x.unread = true;
+        x.now = card.next.slice(0, 80);
+      });
+      return;
+    }
+    await newSession(id, run, card);
     return;
   }
   // Subagents still working: wait for them; their results wake it up.
@@ -1055,6 +1087,45 @@ async function settle(id: string, run: Run) {
   });
 }
 
+/** A handoff card whose only next step is waiting (for the user, a result, a review). */
+export function onlyWaits(card: Handoff): boolean {
+  const next = (card.next ?? "").trim();
+  return (
+    !!next &&
+    next.length <= 160 &&
+    /(wait|기다|(답|응답|결과|리뷰)[이가을를]? (오면|받으면))/i.test(next) &&
+    !/(고치|고쳐|만들|돌리|돌려|올리|올려|배포|수정|추가|작성|머지|푸시|\b(fix|build|run|push|deploy|write|implement|merge)\b)/i.test(next)
+  );
+}
+
+/** Start a fresh session on the handoff card (and the results that came in meanwhile). */
+async function newSession(id: string, run: Run, card: Handoff) {
+  const agent = agentOf(id);
+  run.longNudges = 0;
+  run.base = undefined;
+  updateTask(id, (x) => {
+    const leg = x.legs[x.legs.length - 1];
+    if (leg) {
+      leg.endedAt = Date.now();
+      leg.handoff = card;
+    }
+    x.legs.push({ startedAt: Date.now() });
+    x.status = "running";
+    x.now = "새 세션으로 이어가는 중";
+    push(x, { kind: "handoff", leg: x.legs.length, handoff: card });
+  });
+  try {
+    run.turnStart = Date.now();
+    await request(agent, { type: "new_session" });
+    await request(agent, { type: "prompt", message: handoffPrompt(taskById(id)!) });
+    updateTask(id, (x) => {
+      x.inbox = [];
+    });
+  } catch (e) {
+    fail(id, e instanceof Error ? e.message : String(e));
+  }
+}
+
 let endedHook: ((t: Task) => void) | undefined;
 /** Main listens here: a job it started has ended (done or failed). */
 export const onJobEnded = (f: (t: Task) => void) => (endedHook = f);
@@ -1076,9 +1147,11 @@ export function shipped(t: Task): boolean {
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   if (!wrote.length) return null; // looked things up, answered: nothing to prove
-  const changed = wrote.some((e) => e.kind === "tool" && !/\.(md|txt|html?)$/i.test(e.tool.detail ?? ""));
+  // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)
+  const code = (p: string) => isCodeFile(p, t) && !/\.html?$/i.test(p);
+  const changed = wrote.some((e) => e.kind === "tool" && code((e.tool.detail ?? "").split("\n")[0]));
   // a review is required only for a large or risky change (as the prompt says)
-  const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && !/\.(md|txt|html?)$/i.test(p)));
+  const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && code(p)));
   const risky = [...codeFiles].some((p) => /auth|login|session|token|secret|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
   // once it went out, a review can't change what shipped: say so instead of sending the job back
   const out = shipped(t);
@@ -1130,6 +1203,7 @@ function finish(id: string, summary: string, run?: Run) {
   updateTask(id, (t) => {
     t.status = "done";
     t.unread = true;
+    t.saidDone = undefined;
     t.summary = summary;
     t.now = summary;
     const proven = (run?.evidence ?? []).filter((e) => e.ok !== false && !e.why).length;
@@ -1378,12 +1452,15 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
     return;
   }
   if (call.kind !== "bash" && call.kind !== "test") return;
+  // it already said done or handed off: a nudge now only drags it into more turns
+  if (run.done !== undefined || run.handoff || run.pendingHandoff) return;
   const cmd = (call.detail ?? call.target ?? "").replace(/\s+/g, " ").trim();
   if (!cmd || keepsRunning(cmd)) return;
+  const kind = commandKind(cmd);
   // looking in on something still running (sleep, tail, ps, pgrep) is waiting, not
   // re-running a check: telling it "that passed, finish" made a job stop its own
   // check halfway. Repeated looks get a nudge to wait in one call instead.
-  if (isPoll(cmd)) {
+  if (kind === "poll") {
     run.polls = (run.polls ?? 0) + 1;
     if (run.polls % 4 === 0 && (run.nudges ?? 0) < 3) {
       run.nudges = (run.nudges ?? 0) + 1;
@@ -1404,8 +1481,8 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   let msg = "";
   if (!ok && !before.ok)
     msg = "That exact command just failed the same way again and no file changed in between. Don't run it again as is: read the error, find the cause, and change the approach.";
-  else if (ok && before.ok)
-    msg = "That command already passed and nothing changed since. Don't re-run checks that passed; continue with the task or finish.";
+  else if (ok && before.ok && kind === "check")
+    msg = "That check already passed and nothing changed since. Don't re-run it; go on with the next step.";
   if (!msg) return;
   run.nudges = (run.nudges ?? 0) + 1;
   updateTask(id, (t) => push(t, { kind: "note", text: ok ? "같은 검사 반복" : "같은 실패 반복" }));
@@ -1420,7 +1497,10 @@ export async function tell(id: string, message: string, opts: { now?: boolean } 
     updateTask(id, (x) => (x.queue = [...(x.queue ?? []), { id: uid("q"), text: message, at: Date.now() }]));
     return;
   }
-  updateTask(id, (x) => push(x, { kind: "user", text: message }));
+  updateTask(id, (x) => {
+    x.saidDone = undefined;
+    push(x, { kind: "user", text: message });
+  });
   if (isAlive(agent) && (t.status === "running" || t.status === "waiting")) {
     const run = runs.get(id);
     setState("decisions", (list) => list.filter((d) => !(d.taskId === id && !d.ui)));
@@ -1497,7 +1577,8 @@ export async function decide(decisionId: string, optionId: string) {
     return;
   }
   if (d.kind === "stalled" && optionId === "finish") {
-    finish(t.id, t.now && t.now !== "대기 중" ? t.now : "완료");
+    // its last report, not "now" (that is what it was doing, e.g. "명령 실행 중")
+    finish(t.id, lastReport(t) ?? "완료");
     return;
   }
   // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself
@@ -1508,9 +1589,25 @@ export async function decide(decisionId: string, optionId: string) {
   }
   const message =
     d.kind === "stalled"
-      ? "이어서 진행하세요. 모두 끝났으면 done, 중간에 멈추면 handoff 블록을 보내세요."
+      ? "이어서 진행하세요. 모두 끝났으면 done을 보내세요. 사용자나 서브에이전트를 기다려야 하면 그냥 턴을 끝내세요."
       : `"${d.question}" → ${label}`;
   await tell(t.id, message);
+}
+
+/** The first line of the job's last report to the user, if it wrote one. */
+export function lastReport(t: Task): string | undefined {
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind !== "text") continue;
+    const line = e.text
+      .replace(/```[\s\S]*?```/g, "")
+      .split("\n")
+      .filter((l) => !/^\s*#/.test(l))
+      .map((l) => l.replace(/^[>*\-\s]+/, "").replace(/\*\*/g, "").trim())
+      .find(Boolean);
+    if (line) return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+  }
+  return undefined;
 }
 
 /** The user's words ask to stop or hold the work (not "don't stop"). */
@@ -1607,6 +1704,11 @@ export function schedule() {
   for (const k of state.tasks.filter((k) => k.parentId && k.status === "queued" && k.legs.length > 0)) {
     const p = taskById(k.parentId!);
     if (p && (p.status === "running" || p.status === "waiting")) continue;
+    // a review of a job that has ended has no one to report to
+    if (k.review && (!p || p.status === "done" || p.status === "failed")) {
+      pauseTask(k.id);
+      continue;
+    }
     void startTask(k.id, !k.legs[k.legs.length - 1].endedAt);
   }
   const busy = state.tasks.filter((t) => !t.parentId && (t.status === "running" || (t.status === "waiting" && isAlive(agentOf(t.id)))));

@@ -8,17 +8,38 @@
 //                        or it is a PR / issue this job made or acted on with gh
 import { fsRead } from "../lib/native";
 import type { Entry, Evidence, Task } from "../state/types";
-import { expand } from "./rpc";
+import { commandKind } from "./commandKind";
+import { engine, expand } from "./rpc";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-const isCode = (p: string) => !/\.(md|txt)$/i.test(p) && !/(^|\/)(now|handoff|log|memory|notes|todo)\.md$/i.test(p);
 const toolAt = (e: Entry) => (e.kind === "tool" ? e.tool : undefined);
+const trim = (p: string) => p.replace(/\/+$/, "");
+
+/**
+ * A file that is the job's code: inside its folder or worktree, not in the
+ * artifacts folder (reports, pages, scripts that build them), and not notes or
+ * data (.md, .txt, .jsonl, .csv, a .json that isn't config).
+ */
+export function isCodeFile(path: string, t?: Pick<Task, "cwd" | "worktree">): boolean {
+  const p = path.trim();
+  if (!p) return false;
+  if (/\.(md|txt|jsonl|ndjson|csv|tsv|log)$/i.test(p)) return false;
+  const name = p.split("/").pop() ?? "";
+  if (/\.json$/i.test(name) && !/^(package|tsconfig[\w.-]*|[\w.-]*config[\w.-]*|app|eas|manifest|deno|turbo|composer|project)\.json$/i.test(name)) return false;
+  if (!p.startsWith("/") && !p.startsWith("~")) return true;
+  const full = expand(p);
+  const data = engine.info?.dataDir ? trim(engine.info.dataDir) : "";
+  if (/\$APP_ARTIFACTS_DIR|\/artifacts\//.test(p) && (!data || full.startsWith(`${data}/artifacts/`) || /\$APP_ARTIFACTS_DIR/.test(p))) return false;
+  const homes = [t?.worktree?.state === "open" ? t.worktree.path : "", t?.cwd ? expand(t.cwd) : ""].filter(Boolean).map(trim);
+  if (homes.length && !homes.some((h) => full === h || full.startsWith(`${h}/`))) return false;
+  return true;
+}
 
 /** index of the last code edit in the transcript (-1 if none) */
 export function lastCodeEdit(t: Task): number {
   for (let i = t.entries.length - 1; i >= 0; i--) {
     const x = toolAt(t.entries[i]);
-    if (x && (x.kind === "edit" || x.kind === "write") && x.ok !== false && !x.note && isCode((x.detail ?? "").split("\n")[0])) return i;
+    if (x && (x.kind === "edit" || x.kind === "write") && x.ok !== false && !x.note && isCodeFile((x.detail ?? "").split("\n")[0], t)) return i;
   }
   return -1;
 }
@@ -49,17 +70,50 @@ function openedUrl(t: Task, ref: string): boolean {
   });
 }
 
-/** a GitHub PR or issue this job created, merged, viewed or commented on with gh */
-function ghTouched(t: Task, ref: string): boolean {
-  const m = ref.match(/github\.com\/[^/]+\/[^/]+\/(?:pull|issues)\/(\d+)/i);
-  if (!m) return false;
-  const num = new RegExp(`(\\s|#|/)${m[1]}(\\b|$)`);
-  return t.entries.some((e) => {
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * A GitHub page this job made or looked at with gh: a PR or issue it created,
+ * merged, viewed or commented on; a release it created or viewed; a CI run it viewed.
+ */
+export function ghTouched(t: Pick<Task, "entries">, ref: string): boolean {
+  const cmds = t.entries.flatMap((e) => {
     const x = toolAt(e);
-    if (!x || x.ok === false || x.kind !== "bash") return false;
-    const cmd = `${x.target ?? ""}\n${x.detail ?? ""}`;
-    return /\bgh\s+(pr|issue)\s+create\b/.test(cmd) || (/\bgh\s+(pr|issue|api)\b/.test(cmd) && num.test(cmd));
+    return x && x.ok !== false && x.kind === "bash" ? [`${x.target ?? ""}\n${x.detail ?? ""}`] : [];
   });
+  const pr = ref.match(/github\.com\/[^/]+\/[^/]+\/(?:pull|issues)\/(\d+)/i);
+  if (pr) {
+    const num = new RegExp(`(\\s|#|/)${pr[1]}(\\b|$)`);
+    return cmds.some((cmd) => /\bgh\s+(pr|issue)\s+create\b/.test(cmd) || (/\bgh\s+(pr|issue|api)\b/.test(cmd) && num.test(cmd)));
+  }
+  const tag = ref.match(/github\.com\/[^/]+\/[^/]+\/releases\/tag\/([^/?#\s]+)/i);
+  if (tag) {
+    const re = new RegExp(`\\bgh\\s+release\\s+(create|view|edit|upload)\\s+['"]?${esc(decodeURIComponent(tag[1]))}(['"\\s]|$)`);
+    return cmds.some((cmd) => re.test(cmd));
+  }
+  const run = ref.match(/github\.com\/[^/]+\/[^/]+\/actions\/runs\/(\d+)/i);
+  if (run) {
+    const re = new RegExp(`\\bgh\\s+(run\\s+(view|watch|rerun)\\s+${run[1]}\\b|api\\s+\\S*/runs/${run[1]}\\b)`);
+    return cmds.some((cmd) => re.test(cmd));
+  }
+  return false;
+}
+
+/** a screenshot of a page out on the web (a store console, a GitHub page), not of what this code renders */
+function externalShot(t: Task, e: Evidence): boolean {
+  const external = (s: string) => [...s.matchAll(/https?:\/\/([^/\s'"]+)/g)].some((m) => !/^(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.)/.test(m[1]));
+  if (external(`${e.ref} ${e.note ?? ""}`)) return true;
+  const name = e.ref.split("/").pop() ?? "";
+  if (name.length < 3) return false;
+  let at = -1;
+  for (let i = t.entries.length - 1; i >= 0 && at < 0; i--) {
+    const y = toolAt(t.entries[i]);
+    if (y && `${y.target ?? ""}\n${y.detail ?? ""}`.includes(name)) at = i;
+  }
+  if (at < 0) return false;
+  // the page open when it was taken: what the last few calls before it pointed at
+  const near = t.entries.slice(Math.max(0, at - 6), at + 1).map((x) => { const y = toolAt(x); return y ? `${y.target ?? ""}\n${y.detail ?? ""}` : ""; }).join("\n");
+  return external(near) && !/https?:\/\/(localhost|127\.|0\.0\.0\.0)/.test(near);
 }
 
 /** Each item gets `check`; anything not backed by the session gets ok:false and a reason. */
@@ -71,7 +125,8 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
         const r = ranCommand(t, e.ref);
         if (!r) return { ...e, ok: false, check: "no-run", why: "돌린 기록이 없어요" };
         if (!r.ok) return { ...e, ok: false, check: "failed", why: "마지막 실행이 실패했어요" };
-        if (edited > r.at) return { ...e, ok: false, check: "stale", why: "돌린 뒤에 코드가 바뀌었어요" };
+        // a status look (a CI run, a store review, a URL) says nothing about the code: it doesn't go stale
+        if (edited > r.at && commandKind(e.ref) !== "poll") return { ...e, ok: false, check: "stale", why: "돌린 뒤에 코드가 바뀌었어요" };
         return { ...e, ok: true, check: "ran" };
       }
       if (e.kind === "file" || e.kind === "shot" || /^[/~]/.test(e.ref)) {
@@ -82,7 +137,7 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
         if (e.kind === "shot" && f.size < 4096) return { ...e, ok: false, check: "missing", why: "빈 스크린샷 같아요" };
         // a result shot from before the last code change shows the old code
         const changedAt = edited >= 0 ? (t.entries[edited]?.at ?? 0) : 0;
-        if (e.kind === "shot" && f.modified && f.modified < changedAt && !/before|전/i.test(`${e.ref} ${e.note ?? ""}`))
+        if (e.kind === "shot" && f.modified && f.modified < changedAt && !/before|전/i.test(`${e.ref} ${e.note ?? ""}`) && !externalShot(t, e))
           return { ...e, ok: false, check: "stale", why: "코드를 바꾸기 전에 찍은 사진이에요" };
         return { ...e, check: "exists" };
       }
@@ -99,9 +154,22 @@ export function reviewUnresolved(t: Task, kids: Task[]): boolean {
   const reviews = kids.filter((k) => k.review && k.status === "done").sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0));
   const last = reviews[reviews.length - 1];
   if (!last) return false;
-  const text = `${last.summary ?? ""}\n${last.result ?? ""}`;
-  const found = /\bP[12]\b/.test(text) && !/(P1|P2)[^\n]{0,12}(없|0개|none)/i.test(text) && !/문제\s*없|발견\s*없|no (p1|p2|issues)/i.test(text);
-  if (!found) return false;
+  if (!reviewFound(`${last.summary ?? ""}\n${last.result ?? ""}`)) return false;
   const editAt = lastCodeEdit(t);
   return editAt < 0 || (t.entries[editAt]?.at ?? 0) < (last.finishedAt ?? 0);
+}
+
+/**
+ * A review's text reports a P1 or P2: some mention of either that isn't "none"
+ * ("P1 없음, P2 2건" reports one; "P1·P2 없음" and "no P1, no P2" don't).
+ */
+export function reviewFound(text: string): boolean {
+  for (const m of text.matchAll(/\bP([12])(?!\d)/g)) {
+    const at = m.index ?? 0;
+    const after = text.slice(at + 2, at + 2 + 16).split(/[,\n;.]/)[0];
+    const before = text.slice(Math.max(0, at - 4), at);
+    if (/(없|0\s*(개|건)|none|\bno\b|nothing)/i.test(after) || /\bno\s+$/i.test(before)) continue;
+    return true;
+  }
+  return false;
 }

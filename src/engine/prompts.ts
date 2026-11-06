@@ -254,7 +254,10 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 Commands: one job per bash call (chain with && only for setup), so a failure
 is clear. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
-leave half-written files that break the next steps). Never guess a CLI's
+leave half-written files that break the next steps). A bash call has no time
+limit unless you pass one; a command that stopped early was cut off by its own
+timeout or by an Ondra restart. Never write a limit into a handoff or a
+subagent's task that no tool reported. Never guess a CLI's
 subcommands or flags: before calling one with flags you don't know, check
 \`<tool> --help </dev/null\` with the bash "timeout" set to 10 (\`git <sub> -h\`
 exits non-zero: use \`--help\` or add \`|| true\`). Never run --help on an app's own binary (inside a
@@ -350,7 +353,8 @@ End with exactly one of:
   End with **남은 것** only when something is still open. No file-by-file
   diary, no steps that led nowhere, no internal names.
 - {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
-  to stop partway (long context, natural break). A fresh session continues
+  only when the context is long. Waiting on a subagent or the user is not a
+  handoff: just end your turn; their results and answers wake you. A fresh session continues
   from that card, the task and the user's own words, nothing else. "found":
   the facts it would otherwise look up again (causes, IDs, paths, commands
   that worked, log files). "next": every step still owed to the user's
