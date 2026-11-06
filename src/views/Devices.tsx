@@ -10,6 +10,7 @@ import {
   type Device, type DeviceAction,
 } from "../lib/native";
 import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "../state/devices";
+import { noModifiers, viewKey } from "../lib/shortcuts";
 import { spaceById, state } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { openTask, setView, toast, view } from "../state/ui";
@@ -527,9 +528,13 @@ function LiveCard(props: { d: Device; hidden: boolean; onOpen: () => void }) {
 function Control(props: { d: Device; onClose: () => void }) {
   onMount(() => {
     void deviceRecording().then(setRecording);
-    const k = (e: KeyboardEvent) => e.key === "Escape" && !(e.target as HTMLElement).closest("input, .dev-frame") && props.onClose();
-    window.addEventListener("keydown", k);
-    onCleanup(() => window.removeEventListener("keydown", k));
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !viewKey(e) || !noModifiers(e)) return;
+      e.preventDefault();
+      props.onClose();
+    };
+    window.addEventListener("keydown", k, true);
+    onCleanup(() => window.removeEventListener("keydown", k, true));
   });
   return (
     <div class="dev-control">

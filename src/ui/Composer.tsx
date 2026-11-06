@@ -10,6 +10,7 @@ import { usePop } from "./ModelPicker";
 import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
+import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 
 /** The composer on screen receives dropped files (there is one per view). */
 let dropInto: ((paths: string[]) => void) | null = null;
@@ -489,6 +490,7 @@ export function Composer(props: {
           rows={1}
           value={text()}
           placeholder={props.placeholder}
+          title={`대화 입력창으로 (${shortcutHint("focusInput")})`}
           onInput={(e) => {
             setText(e.currentTarget.value);
             grow();
@@ -530,9 +532,13 @@ export function Composer(props: {
             }
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape" && !pick() && !e.isComposing) {
+            if (ignoredKey(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+            if (e.key === "Escape" && !pick() && noModifiers(e)) {
+              e.preventDefault();
+              e.stopPropagation();
               setEngaged(false);
               el.blur();
+              return;
             }
             const p = pick();
             if (p && !e.isComposing) {

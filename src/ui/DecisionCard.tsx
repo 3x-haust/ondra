@@ -3,6 +3,7 @@ import { createSignal, For, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
 import { inBrowserShare } from "../lib/native";
+import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
 import { openBrowser, openTask } from "../state/ui";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
@@ -63,23 +64,20 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   // a number pressed anywhere (not while typing) selects that choice and
   // brings the keyboard here, so Enter then answers
   const anywhere = (e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
-    const el = document.activeElement as HTMLTextAreaElement | null;
+    if (!viewKey(e) || !noModifiers(e) || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
+    const el = document.activeElement;
     if (el && list.contains(el)) return; // handled by `keys`
-    const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
-    if (typing && !(el!.id === "task-input" && !el!.value)) return;
-    if (document.querySelector('[role="dialog"]')) return;
     e.preventDefault();
     select(Number(e.key) - 1);
   };
   window.addEventListener("keydown", anywhere);
   onCleanup(() => window.removeEventListener("keydown", anywhere));
   const keys = (e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement) return;
+    if (!viewKey(e) || !noModifiers(e)) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       select((sel() + (e.key === "ArrowDown" ? 1 : -1) + count()) % count());
-    } else if (e.key === "Enter" && !e.isComposing) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       submit();
     } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= count()) {
@@ -147,6 +145,14 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
               onFocus={() => setSel(props.d.options.length)}
               onInput={(e) => setTyped(e.currentTarget.value)}
               onKeyDown={(e) => {
+                if (e.isComposing || e.keyCode === 229) return;
+                if (e.key === "Enter") {
+                  const allowed = !ignoredKey(e) && noModifiers(e) && !shortcutOverlay();
+                  e.preventDefault();
+                  if (allowed) void submit();
+                  return;
+                }
+                if (ignoredKey(e) || !noModifiers(e) || shortcutOverlay()) return;
                 if (e.key === "ArrowUp") {
                   e.preventDefault();
                   setSel(props.d.options.length - 1);

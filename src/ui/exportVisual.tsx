@@ -2,6 +2,7 @@
 // at 2x onto a canvas. Used to see it full size, save it to Downloads, or copy it.
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { revealPath, saveDownload } from "../lib/native";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 import { toast } from "../state/ui";
 
@@ -80,7 +81,7 @@ export function viewVisual(svg: SVGSVGElement, label?: string) {
 
 export function VisualViewer() {
   const onKey = (e: KeyboardEvent) => {
-    if (viewing() && e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setViewing(null));
+    if (viewing() && e.key === "Escape" && !ignoredKey(e) && noModifiers(e)) (e.preventDefault(), e.stopPropagation(), setViewing(null));
   };
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
