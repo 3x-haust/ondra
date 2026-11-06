@@ -21,6 +21,28 @@ import { loaded, setState, state, uid } from "../state/store";
 import type { Memory, MemoryKind, SpaceId } from "../state/types";
 import { toast } from "../state/ui";
 
+/** Other names people use for a space, by id. */
+const SPACE_ALIASES: Record<string, string[]> = { work: ["회사", "업무", "work"], home: ["개인", "personal"] };
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Spaces are separate; a message opens another one only by pointing at it:
+ * "회사 기억 참고해서", "개인 쪽에서 한 거", "회사 레포에 있는". A bare mention ("회사에 낼 서류")
+ * doesn't count.
+ */
+export function namedSpaces(text: string, here: SpaceId, spaces: { id: SpaceId; label: string }[]): SpaceId[] {
+  // a whole word, or a one-syllable one with only a particle after it ("회사 일을", not "회사 일정")
+  const thing = "(?:(?:공간|스페이스|space|기억|메모리|메모|채팅|대화|세션|자료|레포|폴더|프로젝트|작업)|(?:쪽|일|거|것|꺼|건)(?:[은는이가을를도만에들로좀]|(?![가-힣])))";
+  const how = "(?:의|에서\\s*(?:한|했던|하던|쓴|쓰던|만든|본)|에\\s*있는|에서)?";
+  return spaces
+    .filter((s) => s.id !== here)
+    .filter((s) => {
+      const names = [...new Set([s.label, ...(SPACE_ALIASES[s.id] ?? [])].filter(Boolean))];
+      return names.some((n) => new RegExp(`${esc(n)}\\s*${how}\\s*${thing}`, "i").test(text));
+    })
+    .map((s) => s.id);
+}
+
 export const KINDS: { id: MemoryKind; label: string }[] = [
   { id: "rule", label: "규칙" },
   { id: "preference", label: "취향" },
@@ -320,13 +342,14 @@ const sameRepo = (dir: string, folder: string) => {
   return !!repo && folder.replace(/\/+$/, "").split("/").pop() === repo;
 };
 
-/** Live pieces that apply here. `expand` turns "~/…" into an absolute path. */
-export function applying(space: SpaceId, dir: string, expand: (p: string) => string): Memory[] {
+/** Live pieces that apply here. `expand` turns "~/…" into an absolute path.
+ *  `reach`: other spaces the user opened to this work; their space pieces come too. */
+export function applying(space: SpaceId, dir: string, expand: (p: string) => string, reach: SpaceId[] = []): Memory[] {
   return state.memory.filter(
     (m) =>
       isLive(m) &&
       (m.scope === "global" ||
-        (m.scope === "space" && m.space === space) ||
+        (m.scope === "space" && (m.space === space || (!!m.space && reach.includes(m.space)))) ||
         (m.scope === "project" && !!dir && !!m.project && (under(dir, expand(m.project)) || sameRepo(dir, expand(m.project))))),
   );
 }

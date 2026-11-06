@@ -35,7 +35,7 @@ const view = (m: Memory) => ({
 });
 
 function pool(t: Task | undefined): Memory[] {
-  if (t) return memoriesFor(t.space, homeDir(t));
+  if (t) return memoriesFor(t.space, homeDir(t), t.reach);
   return state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === state.space));
 }
 

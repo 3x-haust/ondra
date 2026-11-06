@@ -452,6 +452,10 @@ message, then route each item:
   project is the repo or product (its original folder, e.g.
   projects/<repo>), named after the product; never a project per feature,
   branch or worktree folder.
+  Spaces are separate: a job sees only this space's memory, folders and
+  past work. When the user asks to use another space's things ("회사에서 한
+  거 참고해서", "개인 메모리 봐줘"), add "reach": ["<that space's id>"] (see
+  "Other spaces"); never on your own.
   For coding requests, pass the observable success condition and constraints
   to the worker; the coding workflow is already in its default instructions,
   not something the user must activate. Keep reproduction, fix and verification with one owning fork
@@ -605,8 +609,8 @@ export function spaceRules(space: Space): string {
 }
 
 /** Live memory pieces that apply to a space and, optionally, a folder. */
-export function memoriesFor(space: SpaceId, cwd?: string): Memory[] {
-  return applying(space, cwd ? expand(cwd) : "", expand);
+export function memoriesFor(space: SpaceId, cwd?: string, reach?: SpaceId[]): Memory[] {
+  return applying(space, cwd ? expand(cwd) : "", expand, reach);
 }
 
 /** The always-on pieces (pinned), for the system prompt: oldest first so the cached prefix doesn't move. */
@@ -619,13 +623,22 @@ export function memoryPrompt(list: Memory[]): string {
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
 export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}`;
 export function relatedMemory(t: Task): Memory[] {
-  return recall(memoriesFor(t.space, homeDir(t)), relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic}`, folder: (m) => m.scope === "project" });
+  return recall(memoriesFor(t.space, homeDir(t), t.reach), relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic}`, folder: (m) => m.scope === "project" });
 }
 
 function relatedLines(t: Task): string[] {
   const lines = t.memorySnapshot ?? memoryLines(relatedMemory(t));
   const now = !t.parentId ? projectNow(homeDir(t)) : undefined;
+  const reach = (t.reach ?? []).map((id) => spaceById(id)).filter(Boolean);
   return [
+    ...(reach.length
+      ? [
+          "",
+          `# Also open to this job: ${reach.map((s) => s.label).join(", ")} (the user asked)`,
+          ...reach.map((s) => `- ${s.label}: its memory is in memory_search; its folder is ${s.folder}; its past jobs' logs are under the app's sessions folder.`),
+          "Use it for what the user asked; don't carry it further than that.",
+        ]
+      : []),
     ...(lines.length ? ["", "# Memory that may matter here (more with memory_search)", ...lines] : []),
     ...(now && now.taskId !== t.id ? ["", "# Last time in this folder", now.text] : []),
   ];
@@ -738,5 +751,5 @@ export function handoffPrompt(t: Task): string {
 /** Everything appended to the engine's system prompt for a task, stable parts first. */
 export function taskSystem(t: Task): string[] {
   const space = spaceById(t.space);
-  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t)))].filter(Boolean);
+  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach))].filter(Boolean);
 }

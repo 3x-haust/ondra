@@ -1072,6 +1072,7 @@ export function createTask(f: {
   isolate?: boolean;
   project?: string;
   after?: string[];
+  reach?: Task["reach"];
 }): string {
   const id = uid("t");
   const topic = f.topic.trim() || "기타";
@@ -1083,6 +1084,7 @@ export function createTask(f: {
     ask: f.ask,
     ...(f.branch ? { branch: f.branch } : {}),
     ...(f.after?.length ? { after: f.after } : {}),
+    ...(f.reach?.length ? { reach: f.reach } : {}),
     cwd: f.cwd?.trim() || spaceById(f.space).folder || "~",
     project: f.project ?? projectFor(f.space, f.cwd),
     status: "queued",
