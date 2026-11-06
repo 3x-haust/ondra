@@ -9,7 +9,9 @@ import {
   deviceRotate, deviceScreenshot, deviceShot, deviceShutdown, deviceStream, deviceStreamPoke, deviceStreamStop, deviceTouch, fileSrc, revealPath,
   type Device, type DeviceAction,
 } from "../lib/native";
-import { devices, refreshDevices, usedBy } from "../state/devices";
+import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "../state/devices";
+import { spaceById, state } from "../state/store";
+import type { SpaceId } from "../state/types";
 import { openTask, setView, toast, view } from "../state/ui";
 import { Icon } from "../ui/Icon";
 
@@ -50,10 +52,28 @@ function Status(props: { d: Device }) {
   );
 }
 
+/** Which space the device belongs to; a job's own device goes with its job. */
+function SpacePick(props: { d: Device }) {
+  const own = () => /^ondra-/.test(props.d.name) || /^ondra-/.test(props.d.id);
+  return (
+    <Show when={!own()}>
+      <select
+        class="dev-space"
+        value={deviceSpace(props.d) ?? ""}
+        onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
+      >
+        <option value="">공용</option>
+        <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+      </select>
+    </Show>
+  );
+}
+
 function Actions(props: { d: Device }) {
   const [sure, setSure] = createSignal(false);
   return (
     <div class="dev-acts">
+      <SpacePick d={props.d} />
       <Show
         when={props.d.booted}
         fallback={<button class="btn sm" onClick={() => void act(`${props.d.name} 켜는 중이에요`, () => deviceBoot(props.d))}>켜기</button>}
@@ -441,13 +461,13 @@ function Tools(props: { d: Device }) {
         />
       </div>
       <div class="dev-tools-group">
-        <T icon="camera" label="스크린샷" click={() => run(async () => saved("스크린샷을 데스크톱에 저장했어요", await deviceScreenshot(props.d)))} />
+        <T icon="camera" label="스크린샷" click={() => run(async () => saved("스크린샷을 데스크톱에 저장했어요", await deviceScreenshot(props.d, spaceById(state.space)?.label)))} />
         <T
           icon={rec() ? "stop" : "video"}
           label={rec() ? "녹화 멈추기" : "녹화"}
           class={rec() ? "rec" : ""}
           click={() => run(async () => {
-            const p = await deviceRecord(props.d);
+            const p = await deviceRecord(props.d, spaceById(state.space)?.label);
             setRecording(await deviceRecording());
             if (p) saved("녹화를 데스크톱에 저장했어요", p);
           })}

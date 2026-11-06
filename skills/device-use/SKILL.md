@@ -11,7 +11,8 @@ description: >
 # Device use
 
 Prefer the `device` tool (start → do → look → stop): it does all of this for you
-and keeps the job on its own device. **Call `stop` before your final answer**,
+and keeps the job on its own device (an Android one is a fresh copy of an AVD,
+with no app data or logins from anywhere else). **Call `stop` before your final answer**,
 every time, unless the user asked to keep the device: a device left running
 holds memory and CPU on the user's Mac. Use the commands below only if that tool is missing.
 
@@ -21,14 +22,18 @@ If `agent-device` is missing: `npm i -g agent-device`.
 
 ## 1. Your own device, never someone else's
 
-Booted devices may belong to other jobs or to the user's other work. Don't
-control, shut down or delete a device you didn't make.
+The user's spaces (개인, 회사) are separate workspaces, and each has its own
+devices. Booted devices may belong to the other space, to other jobs or to the
+user. Don't control, shut down or delete a device you didn't make. The devices
+this job's space has are in `$ONDRA_DEVICES_ALLOWED` (ids, names, serials); the
+app refuses commands that name any other device, `booted`, `all`, or `adb`
+without `-s`.
 
 ```bash
 # iOS: a fresh simulator named after this job
 UDID=$(xcrun simctl create "ondra-$APP_WORKER_ID" "iPhone 17")
 xcrun simctl boot "$UDID" && xcrun simctl bootstatus "$UDID" -b
-# Android: boot an AVD you created, or an existing one nobody runs (check adb devices first)
+# Android: boot an AVD of this space ($ONDRA_DEVICES_ALLOWED) that nobody runs
 "$ANDROID_HOME/emulator/emulator" -avd <name> -no-snapshot-save -no-window -gpu auto-no-window -no-audio -no-boot-anim &   # no window: the user sees it in Ondra's device hub; auto-no-window draws on the GPU, not the CPU
 ~/Library/Android/sdk/platform-tools/adb wait-for-device
 ```

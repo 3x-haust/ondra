@@ -4396,6 +4396,15 @@ input[type="checkbox"] {
   display: flex;
   gap: var(--s-6);
 }
+.dev-space {
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s-6);
+}
 .dev-acts .btn.danger {
   color: var(--bad);
 }

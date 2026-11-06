@@ -4,7 +4,8 @@
 //   full  — nothing asks
 // Starts from ONDRA_PERMISSION and can be changed mid-run with `/ondra-permission <mode>`.
 // Questions go out as ui.select, which Ondra shows as a decision card.
-import { isAbsolute, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 type Mode = "ask" | "edits" | "full";
 const MODES: Mode[] = ["ask", "edits", "full"];
@@ -52,6 +53,48 @@ export function foreignData(text: string, data: string, allowed: string[], space
   return undefined;
 }
 
+const UDID = /\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\b/gi;
+
+/**
+ * A simctl / adb / emulator / agent-device command aimed at a device this job may
+ * not drive (the other space's, the user's, another job's): the device named, or
+ * "all" for every one. `mine` holds the ids, names and serials it may use.
+ */
+export function foreignDevice(command: string, mine: string[]): string | undefined {
+  const ok = (x: string) => mine.some((m) => m.toLowerCase() === x.toLowerCase());
+  for (const part of command.split(/;|&&|\|\||\||\n/)) {
+    const c = part.trim();
+    if (!/\b(simctl|adb|emulator|agent-device)\b/.test(c)) continue;
+    if (/\bsimctl\s+(boot|shutdown|erase|delete)\b.*\ball\b/.test(c)) return "all";
+    // "booted" is whichever simulator runs, maybe another space's
+    if (/\bsimctl\b.*\sbooted\b/.test(c)) return "booted";
+    // adb without a device picks the only one running, maybe another space's
+    if (/\badb\s+(?!-s\b|devices\b|wait-for-device\b|version\b|start-server\b|kill-server\b|help\b)\w/.test(c) && !/\bANDROID_SERIAL=/.test(c)) return "adb";
+    for (const m of c.matchAll(UDID)) if (!ok(m[0])) return m[0];
+    const named = [
+      ...c.matchAll(/\badb\b[^]*?\s-s\s+['"]?([\w.:-]+)/g),
+      ...c.matchAll(/\bANDROID_SERIAL=['"]?([\w.:-]+)/g),
+      ...c.matchAll(/--(?:serial|udid|device)[= ]['"]?([^\s'"]+)/g),
+      ...c.matchAll(/\bemulator\b[^]*?\s-avd\s+['"]?([^\s'"]+)/g),
+    ].map((m) => m[1]);
+    for (const n of named) if (!ok(n)) return n;
+  }
+  return undefined;
+}
+
+/** This job's devices: its space's (from the app) and the one it made (from the device tool). */
+function jobDevices(): string[] | undefined {
+  if (process.env.ONDRA_DEVICES_ALLOWED === undefined) return undefined;
+  const out = process.env.ONDRA_DEVICES_ALLOWED.split(",").map((s) => s.trim()).filter(Boolean);
+  try {
+    const m = JSON.parse(readFileSync(join(process.env.APP_ARTIFACTS_DIR || "", ".device.json"), "utf8"));
+    out.push(...[m.udid, m.serial, m.name, m.clone].filter(Boolean));
+  } catch {
+    /* no device made yet */
+  }
+  return out;
+}
+
 export default function (pi: any) {
   let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
 
@@ -86,6 +129,17 @@ export default function (pi: any) {
         return {
           block: true,
           reason: `\`${broad}\` 는 이름이 같은 사용자의 다른 앱까지 꺼요. 이 일이 띄운 것만 끄세요: \`pgrep -f '<이 작업 폴더 경로>'\`로 PID를 찾아 \`kill <PID>\`, 또는 \`lsof -ti :<포트> | xargs kill\`.`,
+        };
+      // in every mode: another space's (or the user's, or another job's) device is off-limits
+      const mine = jobDevices();
+      const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);
+      if (other)
+        return {
+          block: true,
+          reason:
+            other === "adb" || other === "booted"
+              ? "디바이스를 지정하지 않으면 다른 공간의 디바이스를 건드릴 수 있어요. device 도구를 쓰거나 이 일의 디바이스를 -s / UDID로 지정하세요."
+              : `\`${other}\` 는 이 일의 디바이스가 아니에요. device 도구로 이 일의 디바이스를 만들어 쓰세요 (action=start).`,
         };
     }
     if (mode === "full") return undefined;

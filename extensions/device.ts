@@ -5,20 +5,25 @@
 //   do     → one agent-device command on that device ("press @e12 --settle", "fill @e3 hi")
 //   look   → screenshot the model can see (also saved as proof in the job's artifacts)
 //   stop   → close, shut down and delete what this job made
-// Devices the job didn't make are refused unless the user named them in the job
-// (ONDRA_DEVICES_ALLOWED), so the user's own simulators are never touched.
+// Devices the job didn't make are refused unless they belong to the job's space
+// (ONDRA_DEVICES_ALLOWED, set by the app), so the user's own simulators and the
+// other space's are never touched. An Android emulator made for a job is a fresh
+// copy of an AVD (no app data, no logins), deleted again when the job is done.
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
 
 type Platform = "ios" | "android";
-type Mine = { platform: Platform; udid?: string; serial?: string; name: string; made: boolean };
+/** clone: the AVD made for this job (deleted with it) */
+type Mine = { platform: Platform; udid?: string; serial?: string; name: string; made: boolean; clone?: string };
 
 const WORKER = process.env.APP_WORKER_ID || `job${process.pid}`;
 const SESSION = `ondra-${WORKER}`.slice(0, 60);
 const ARTIFACTS = process.env.APP_ARTIFACTS_DIR || join(process.env.TMPDIR || "/tmp", SESSION);
 const ALLOWED = (process.env.ONDRA_DEVICES_ALLOWED || "").split(",").map((s) => s.trim()).filter(Boolean);
+/** set by the app: only this space's devices exist for the job */
+const SCOPED = process.env.ONDRA_DEVICES_ALLOWED !== undefined;
 // devices no job may ever boot or drive (e.g. a team's shared emulators), as a
 // regular expression on the name; set ONDRA_PROTECTED_DEVICES in .env
 const PROTECTED = (() => {
@@ -32,6 +37,7 @@ const isProtected = (name: string) => !!PROTECTED?.test(name);
 const SDK = join(process.env.HOME || "", "Library/Android/sdk");
 const ADB = existsSync(join(SDK, "platform-tools/adb")) ? join(SDK, "platform-tools/adb") : "adb";
 const EMULATOR = join(SDK, "emulator/emulator");
+const AVD_HOME = process.env.ANDROID_AVD_HOME || join(process.env.HOME || "", ".android/avd");
 const MAX_OUT = 14_000;
 
 function run(cmd: string, args: string[], opts: { timeout?: number; signal?: AbortSignal } = {}): Promise<{ ok: boolean; out: string }> {
@@ -110,50 +116,111 @@ async function iosMake(model: string | undefined, signal?: AbortSignal): Promise
   return { platform: "ios", udid, name, made: true };
 }
 
-async function androidMake(avd: string | undefined, signal?: AbortSignal): Promise<Mine | string> {
-  const list = await run(EMULATOR, ["-list-avds"], { signal });
-  const avds = list.out.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("INFO"));
+async function runningAvds(signal?: AbortSignal): Promise<{ lines: string[]; busy: Map<string, string> }> {
   const running = await run(ADB, ["devices"], { signal });
-  const busy = new Set<string>();
-  for (const line of running.out.split("\n")) {
+  const lines = running.out.split("\n");
+  const busy = new Map<string, string>();
+  for (const line of lines) {
     const serial = line.split(/\s+/)[0];
     if (!serial?.startsWith("emulator-")) continue;
     const n = await run(ADB, ["-s", serial, "emu", "avd", "name"], { signal, timeout: 5000 });
-    busy.add(n.out.split("\n")[0].trim());
+    busy.set(n.out.split("\n")[0].trim(), serial);
   }
-  const pick = avd ?? avds.find((a) => !busy.has(a) && !isProtected(a));
-  if (!pick) return `No free Android emulator. AVDs: ${avds.join(", ") || "none"}; running: ${[...busy].join(", ") || "none"}.`;
-  if (busy.has(pick)) return `${pick} is already running (someone else's). Pick another or ask the user.`;
-  const before = new Set(running.out.split("\n").map((l) => l.split(/\s+/)[0]));
+  return { lines, busy };
+}
+
+/** A copy of `base` for this job: same system image and hardware, none of its data. */
+export function cloneAvd(base: string, name: string, home = AVD_HOME): string | undefined {
+  try {
+    const conf = readFileSync(join(home, `${base}.avd`, "config.ini"), "utf8")
+      .split("\n")
+      .map((l) => (l.startsWith("AvdId=") ? `AvdId=${name}` : l.startsWith("avd.ini.displayname=") ? `avd.ini.displayname=${name}` : l))
+      .join("\n");
+    const dir = join(home, `${name}.avd`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "config.ini"), conf);
+    const ini = readFileSync(join(home, `${base}.ini`), "utf8")
+      .split("\n")
+      .map((l) => (l.startsWith("path=") ? `path=${dir}` : l.startsWith("path.rel=") ? `path.rel=avd/${name}.avd` : l))
+      .join("\n");
+    writeFileSync(join(home, `${name}.ini`), ini);
+    return name;
+  } catch {
+    return undefined;
+  }
+}
+
+export function dropAvd(name: string, home = AVD_HOME) {
+  if (!/^ondra-/.test(name) || /[/\\]|\.\./.test(name)) return;
+  rmSync(join(home, `${name}.avd`), { recursive: true, force: true });
+  rmSync(join(home, `${name}.ini`), { force: true });
+}
+
+/** Boot an AVD headless and wait until Android is up. */
+async function androidBoot(avd: string, fresh: boolean, before: Set<string>, signal?: AbortSignal): Promise<string | undefined> {
   const { spawn } = await import("node:child_process");
   // headless with plain -gpu auto, the emulator draws in software on the CPU (several
   // cores at all times); auto-no-window draws on the Mac's GPU
-  spawn(EMULATOR, ["-avd", pick, "-no-snapshot-save", "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
-  for (let i = 0; i < 90; i++) {
-    if (signal?.aborted) return "cancelled";
+  spawn(EMULATOR, ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
+  for (let i = 0; i < 120; i++) {
+    if (signal?.aborted) return undefined;
     await new Promise((r) => setTimeout(r, 2000));
     const now = await run(ADB, ["devices"]);
     const serial = now.out.split("\n").map((l) => l.split(/\s+/)).find(([s, st]) => s?.startsWith("emulator-") && st === "device" && !before.has(s))?.[0];
     if (!serial) continue;
     const booted = await run(ADB, ["-s", serial, "shell", "getprop", "sys.boot_completed"], { timeout: 5000 });
-    if (booted.out.trim() === "1") return { platform: "android", serial, name: pick, made: true };
+    if (booted.out.trim() === "1") return serial;
   }
-  return "Emulator didn't boot in 3 minutes.";
+  return undefined;
 }
 
-/** A device the user explicitly allowed for this job (by name or id). */
-async function allowed(platform: Platform, which: string): Promise<Mine | string> {
-  if (!ALLOWED.some((a) => a === which)) return `"${which}" isn't this job's device. Call start again without device: the tool makes or boots a free one for this job.`;
+/** A fresh emulator for this job, copied from an AVD of its space (or `model` when that one is). */
+async function androidMake(model: string | undefined, signal?: AbortSignal): Promise<Mine | string> {
+  const list = await run(EMULATOR, ["-list-avds"], { signal });
+  const avds = list.out.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("INFO") && !s.startsWith("ondra-"));
+  // a copy carries no app data, so any AVD's system image will do when the space has none
+  const mineToUse = (a: string) => !isProtected(a) && (!SCOPED || ALLOWED.includes(a));
+  const base = (model && avds.includes(model) && !isProtected(model) ? model : undefined) ?? avds.find(mineToUse) ?? avds.find((a) => !isProtected(a));
+  if (!base) return `No Android emulator to copy. AVDs: ${avds.join(", ") || "none"}.`;
+  const name = cloneAvd(base, `ondra-${WORKER}`.replace(/[^\w.-]/g, "-").slice(0, 48));
+  if (!name) return `Couldn't copy ${base} for this job.`;
+  const { lines } = await runningAvds(signal);
+  const serial = await androidBoot(name, true, new Set(lines.map((l) => l.split(/\s+/)[0])), signal);
+  if (!serial) {
+    dropAvd(name);
+    return signal?.aborted ? "cancelled" : "Emulator didn't boot in 4 minutes.";
+  }
+  return { platform: "android", serial, name, made: true, clone: name };
+}
+
+/** A device of this job's space (by name or id): used as it is, booted first when it's an AVD that's off. */
+async function allowed(platform: Platform, which: string, signal?: AbortSignal): Promise<Mine | string> {
+  if (!ALLOWED.includes(which) || isProtected(which))
+    return `"${which}" isn't a device of this job's space. Call start again without device: the tool makes a fresh one for this job.`;
   if (platform === "ios") {
     const l = await run("xcrun", ["simctl", "list", "devices", "-j"]);
     try {
       const all = Object.values(JSON.parse(l.out).devices as Record<string, { name: string; udid: string; state: string }[]>).flat();
       const d = all.find((x) => x.udid === which || x.name === which);
-      if (d) return { platform, udid: d.udid, name: d.name, made: false };
+      if (d) {
+        if (d.state !== "Booted") {
+          await run("xcrun", ["simctl", "boot", d.udid], { signal });
+          await run("xcrun", ["simctl", "bootstatus", d.udid, "-b"], { timeout: 240_000, signal });
+        }
+        return { platform, udid: d.udid, name: d.name, made: false };
+      }
     } catch {
       /* ignore */
     }
     return `iOS device "${which}" not found.`;
+  }
+  const { lines, busy } = await runningAvds(signal);
+  if (busy.has(which)) return { platform, serial: busy.get(which)!, name: which, made: false };
+  const avds = (await run(EMULATOR, ["-list-avds"], { signal })).out.split("\n").map((s) => s.trim());
+  if (avds.includes(which)) {
+    const serial = await androidBoot(which, false, new Set(lines.map((l) => l.split(/\s+/)[0])), signal);
+    // booted for this job: shut down again when it's done (the AVD itself stays)
+    return serial ? { platform, serial, name: which, made: true } : "Emulator didn't boot in 4 minutes.";
   }
   return { platform, serial: which, name: which, made: false };
 }
@@ -180,7 +247,7 @@ export default function (pi: any) {
       platform: Type.Optional(Type.Union([Type.Literal("ios"), Type.Literal("android")], { description: "start: default ios" })),
       app: Type.Optional(Type.String({ description: "start: bundle id, package, app name or URL to open" })),
       model: Type.Optional(Type.String({ description: "start: iOS device type ('iPhone 17') or Android AVD name" })),
-      device: Type.Optional(Type.String({ description: "start: an existing device the user allowed (name or id) instead of a new one" })),
+      device: Type.Optional(Type.String({ description: "start: an existing device of this space (name or id) instead of a new one" })),
       cmd: Type.Optional(Type.String({ description: "do: the agent-device command line" })),
       name: Type.Optional(Type.String({ description: "look: file name for the proof screenshot" })),
     }),
@@ -190,10 +257,8 @@ export default function (pi: any) {
       if (p.action === "start") {
         if (mine) return text(`Already have ${mine.name} (${mine.platform}). Use do / look, or stop first.`);
         const platform: Platform = p.platform === "android" ? "android" : "ios";
-        // an Android AVD nobody is running can simply be booted for this job
-        // (it's what start without a device would pick); running ones stay off-limits
-        const free = p.device && platform === "android" && !ALLOWED.includes(p.device) && !isProtected(p.device);
-        const got = free ? await androidMake(p.device, signal) : p.device ? await allowed(platform, p.device) : platform === "ios" ? await iosMake(p.model, signal) : await androidMake(p.model, signal);
+        // a device of this space when named, otherwise a fresh one made for this job
+        const got = p.device ? await allowed(platform, p.device, signal) : platform === "ios" ? await iosMake(p.model, signal) : await androidMake(p.model, signal);
         if (typeof got === "string") return text(got);
         own(got);
         if (!p.app) return text(`Device ready: ${got.name} (${got.platform} ${got.udid ?? got.serial}). Open an app with do 'open <app> --foreground'.`, { device: got });
@@ -206,8 +271,9 @@ export default function (pi: any) {
         const args = argv(String(p.cmd ?? "")).filter((a, i, all) => !["--session", "--udid", "--serial", "--device", "--platform"].includes(a) && !["--session", "--udid", "--serial", "--device", "--platform"].includes(all[i - 1]));
         if (args[0] === "agent-device") args.shift();
         if (!args.length) return text("cmd is empty.");
-        if (["boot", "shutdown", "proxy", "daemon", "connect"].includes(args[0])) return text(`'${args[0]}' isn't allowed here; the tool manages the device.`);
-        const withTarget = ["open", "devices", "apps", "install", "reinstall", "uninstall", "install-from-source"].includes(args[0]) ? target(mine) : [];
+        // devices lists every device on the Mac, other spaces' too
+        if (["boot", "shutdown", "proxy", "daemon", "connect", "devices"].includes(args[0])) return text(`'${args[0]}' isn't allowed here; the tool manages the device.`);
+        const withTarget = ["open", "apps", "install", "reinstall", "uninstall", "install-from-source"].includes(args[0]) ? target(mine) : [];
         const r = await run("agent-device", [...args, "--session", SESSION, ...withTarget], { signal, timeout: 180_000 });
         return text(cut(r.out) || (r.ok ? "ok" : "failed"), { ok: r.ok });
       }
@@ -230,7 +296,14 @@ export default function (pi: any) {
           if (m.platform === "ios") {
             await run("xcrun", ["simctl", "shutdown", m.udid!]);
             await run("xcrun", ["simctl", "delete", m.udid!]);
-          } else await run(ADB, ["-s", m.serial!, "emu", "kill"]);
+          } else {
+            await run(ADB, ["-s", m.serial!, "emu", "kill"]);
+            if (m.clone) {
+              // the emulator lets go of its files a moment after it's told to quit
+              for (let i = 0; i < 20 && (await run(ADB, ["-s", m.serial!, "get-state"], { timeout: 3000 })).ok; i++) await new Promise((r) => setTimeout(r, 500));
+              dropAvd(m.clone);
+            }
+          }
         }
         own(undefined);
         return text(m.made ? `Closed and removed ${m.name}.` : `Closed the session; ${m.name} is the user's device, left running.`);
