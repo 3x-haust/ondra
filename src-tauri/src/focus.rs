@@ -1,7 +1,9 @@
 //! Focus guard: when an app that a job started comes to the front by itself,
-//! give the front back to the app the user had. The user's own switches
-//! (a click, ⌘-Tab) are left alone, and an app the user brings back right
-//! after a restore is theirs from then on.
+//! give the front back to the app the user had. Only apps a job started count:
+//! ones running under a job's process, or launched just now by a job's command
+//! that names them. Any other app coming forward is the user's doing and is
+//! left alone, whatever the jobs are running. An app the user brings back
+//! right after a restore is theirs from then on.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,10 +40,8 @@ pub struct Signals {
     pub since_key: f64,
     /// The app's process descends from a job's engine process.
     pub from_job: bool,
-    /// The app was launched while a job's tool call ran (or just after).
+    /// The app was launched just now, while a job's command that names it ran.
     pub launched_by_tool: bool,
-    /// A job's tool call is running now or just ended.
-    pub tool_now: bool,
     /// We gave the front back from this app a moment ago.
     pub restored_lately: usize,
     /// The user took this app back after a restore, not long ago.
@@ -73,28 +73,39 @@ pub fn decide(s: &Signals) -> Verdict {
             return Verdict::Leave;
         }
     }
-    if s.from_job || s.launched_by_tool || s.tool_now {
+    if s.from_job || s.launched_by_tool {
         Verdict::Restore
     } else {
         Verdict::Leave
     }
 }
 
-/// Tool calls of jobs, as start/end times, kept for a couple of minutes.
+/// Tool calls of jobs, as start/end times and their arguments (lowercased), kept for a couple of minutes.
 #[derive(Default)]
 struct Tools {
-    running: HashMap<String, Instant>,
-    done: Vec<(Instant, Instant)>,
+    running: HashMap<String, (Instant, String)>,
+    done: Vec<(Instant, Instant, String)>,
 }
 
 impl Tools {
     fn prune(&mut self, now: Instant) {
-        self.done.retain(|(_, end)| now.duration_since(*end) < LAUNCH_WINDOW + TOOL_GRACE);
+        self.done.retain(|(_, end, _)| now.duration_since(*end) < LAUNCH_WINDOW + TOOL_GRACE);
     }
-    fn active_at(&self, at: Instant) -> bool {
-        self.running.values().any(|start| *start <= at + TOOL_GRACE)
-            || self.done.iter().any(|(start, end)| *start <= at + TOOL_GRACE && at <= *end + TOOL_GRACE)
+    /// A call that ran at `at` (or just before) and names one of `names`.
+    fn named_at(&self, at: Instant, names: &[String]) -> bool {
+        let names_it = |cmd: &str| names.iter().any(|n| n.len() >= 3 && cmd.contains(n.as_str()));
+        self.running.values().any(|(start, cmd)| *start <= at + TOOL_GRACE && names_it(cmd))
+            || self.done.iter().any(|(start, end, cmd)| *start <= at + TOOL_GRACE && at <= *end + TOOL_GRACE && names_it(cmd))
     }
+}
+
+/// What a command would call an app: its name, bundle id, executable, and the tool that starts it.
+pub fn app_names(name: &str, bundle: &str, exe: &str) -> Vec<String> {
+    let mut v: Vec<String> = [name, bundle, exe].iter().map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect();
+    if bundle.eq_ignore_ascii_case("com.apple.iphonesimulator") {
+        v.push("simctl".into());
+    }
+    v
 }
 
 static TOOLS: Mutex<Option<Tools>> = Mutex::new(None);
@@ -104,15 +115,15 @@ fn tools<R>(f: impl FnOnce(&mut Tools) -> R) -> R {
     f(g.get_or_insert_with(Tools::default))
 }
 
-/// Called from the engine's event stream: a job's tool call started or ended.
-pub fn tool(job: &str, call: &str, start: bool) {
+/// Called from the engine's event stream: a job's tool call started (with its arguments) or ended.
+pub fn tool(job: &str, call: &str, start: Option<&str>) {
     let key = format!("{job}\u{0}{call}");
     let now = Instant::now();
     tools(|t| {
-        if start {
-            t.running.insert(key, now);
-        } else if let Some(s) = t.running.remove(&key) {
-            t.done.push((s, now));
+        if let Some(args) = start {
+            t.running.insert(key, (now, args.to_lowercase()));
+        } else if let Some((s, cmd)) = t.running.remove(&key) {
+            t.done.push((s, now, cmd));
         }
         t.prune(now);
     });
@@ -125,8 +136,8 @@ pub fn job_gone(job: &str) {
     tools(|t| {
         let ended: Vec<String> = t.running.keys().filter(|k| k.starts_with(&prefix)).cloned().collect();
         for k in ended {
-            if let Some(s) = t.running.remove(&k) {
-                t.done.push((s, now));
+            if let Some((s, cmd)) = t.running.remove(&k) {
+                t.done.push((s, now, cmd));
             }
         }
     });
@@ -140,7 +151,8 @@ pub fn on_event(job: &str, ev: &serde_json::Value) {
         _ => return,
     };
     if let Some(call) = ev.get("toolCallId").and_then(|v| v.as_str()) {
-        tool(job, call, start);
+        let args = ev.get("args").map(|a| a.to_string()).unwrap_or_default();
+        tool(job, call, start.then_some(args.as_str()));
     }
 }
 
@@ -254,12 +266,17 @@ mod imp {
 
         let own = pid as u32 == std::process::id();
         let prev_app = prev.filter(|p| *p != pid).and_then(NSRunningApplication::runningApplicationWithProcessIdentifier).filter(|a| !a.isTerminated());
+        let names = app_names(
+            &name(app),
+            &app.bundleIdentifier().map(|s| s.to_string()).unwrap_or_default(),
+            &app.executableURL().and_then(|u| u.lastPathComponent()).map(|s| s.to_string()).unwrap_or_default(),
+        );
         let launched_by_tool = app
             .launchDate()
             .map(|d| -d.timeIntervalSinceNow())
             .filter(|age| *age >= 0.0 && *age < LAUNCH_WINDOW.as_secs_f64())
             .and_then(|age| now.checked_sub(Duration::from_secs_f64(age)))
-            .is_some_and(|at| tools(|t| t.active_at(at)));
+            .is_some_and(|at| tools(|t| t.named_at(at, &names)));
         let s = Signals {
             enabled: ENABLED.load(Ordering::Relaxed),
             skip: own || prev_app.is_none(),
@@ -268,7 +285,6 @@ mod imp {
             since_key: since(KEY_DOWN),
             from_job: descends(pid, &roots()),
             launched_by_tool,
-            tool_now: tools(|t| t.active_at(now)),
             restored_lately: st.restored.get(&pid).map_or(0, Vec::len),
             user_keeps: st.user_keeps.contains_key(&pid),
         };
@@ -317,14 +333,19 @@ mod tests {
     use super::*;
 
     fn job() -> Signals {
-        Signals { enabled: true, since_click: 30.0, since_flags: 30.0, since_key: 30.0, tool_now: true, ..Default::default() }
+        Signals { enabled: true, since_click: 30.0, since_flags: 30.0, since_key: 30.0, from_job: true, ..Default::default() }
     }
 
     #[test]
     fn job_app_coming_forward_is_sent_back() {
         assert_eq!(decide(&job()), Verdict::Restore);
-        assert_eq!(decide(&Signals { tool_now: false, from_job: true, ..job() }), Verdict::Restore);
-        assert_eq!(decide(&Signals { tool_now: false, launched_by_tool: true, ..job() }), Verdict::Restore);
+        assert_eq!(decide(&Signals { from_job: false, launched_by_tool: true, ..job() }), Verdict::Restore);
+    }
+
+    #[test]
+    fn any_other_app_is_the_users_even_while_jobs_work() {
+        // switched by a gesture, a hotkey, a notification or a slow launch: no click right before
+        assert_eq!(decide(&Signals { from_job: false, ..job() }), Verdict::Leave);
     }
 
     #[test]
@@ -336,7 +357,6 @@ mod tests {
     fn user_switches_are_left_alone() {
         assert_eq!(decide(&Signals { since_click: 0.2, ..job() }), Verdict::Leave);
         assert_eq!(decide(&Signals { since_flags: 0.1, ..job() }), Verdict::Leave);
-        assert_eq!(decide(&Signals { tool_now: false, ..job() }), Verdict::Leave);
         assert_eq!(decide(&Signals { skip: true, ..job() }), Verdict::Leave);
         assert_eq!(decide(&Signals { enabled: false, ..job() }), Verdict::Leave);
     }
@@ -355,14 +375,17 @@ mod tests {
     }
 
     #[test]
-    fn tool_windows_cover_a_late_window() {
+    fn only_a_command_that_names_the_app_counts() {
         let mut t = Tools::default();
         let t0 = Instant::now();
-        t.done.push((t0, t0 + Duration::from_secs(1)));
-        assert!(t.active_at(t0 + Duration::from_secs(3)));
-        assert!(!t.active_at(t0 + Duration::from_secs(5)));
-        t.running.insert("j\u{0}c".into(), t0);
-        assert!(t.active_at(t0 + Duration::from_secs(30)));
+        let calc = app_names("Calculator", "com.apple.calculator", "Calculator");
+        let slack = app_names("Slack", "com.tinyspeck.slackmacgap", "Slack");
+        t.done.push((t0, t0 + Duration::from_secs(1), r#"{"command":"open -g -a calculator"}"#.into()));
+        assert!(t.named_at(t0 + Duration::from_secs(3), &calc));
+        assert!(!t.named_at(t0 + Duration::from_secs(3), &slack));
+        assert!(!t.named_at(t0 + Duration::from_secs(5), &calc));
+        t.running.insert("j\u{0}c".into(), (t0, r#"{"command":"xcrun simctl boot abc"}"#.into()));
+        assert!(t.named_at(t0 + Duration::from_secs(30), &app_names("Simulator", "com.apple.iphonesimulator", "Simulator")));
     }
 
     #[cfg(target_os = "macos")]
