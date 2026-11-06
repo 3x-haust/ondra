@@ -1,12 +1,12 @@
 // btw card (above the input) and the side chat (a panel tab).
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { ago } from "./bits";
 import { throwThought } from "../engine/captain";
 import { tell } from "../engine/tasks";
-import { goMain, openPanel, toast } from "../state/ui";
+import { goMain, openPanel, paletteOpen, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
 import { pickFolder } from "../lib/native";
 import { tilde } from "../engine/rpc";
@@ -16,6 +16,16 @@ import { Markdown } from "./Markdown";
 
 /** The btw card: the one being looked at, with ‹ › through earlier ones. */
 export function BtwCard(props: { scope: string }) {
+  // Esc closes the card first, before it blurs the input or closes the panel
+  // (an open "/" or "@" list in the input still closes before it)
+  const esc = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || e.isComposing || !btw() || paletteOpen() || document.querySelector(".cpick")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeBtw();
+  };
+  window.addEventListener("keydown", esc, true);
+  onCleanup(() => window.removeEventListener("keydown", esc, true));
   const forward = () => {
     const x = btw();
     if (!x) return;
