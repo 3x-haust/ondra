@@ -127,7 +127,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
     ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
     ...WORKER_TOOLS,
   ];
-  const env: Env = [...(await workerEnv(id)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"]];
+  const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"]];
   return { cwd: expand(t.cwd || homeDir(t) || "~"), args, env };
 }
 
@@ -221,7 +221,7 @@ export async function loadWorkerTools(force = false): Promise<EngineContext> {
   const args = [...skills.flatMap((s) => ["--skill", s]), ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...WORKER_TOOLS];
   const acc = state.accounts[0];
   // the app's door too, so the memory tools register as they do in a job
-  const env = [...(await workerEnv("tools")), ...(acc ? await accountEnv(acc.id) : [])];
+  const env = [...(await workerEnv("tools", state.spaces[0]?.id)), ...(acc ? await accountEnv(acc.id) : [])];
   toolsCache = await probe(expand(state.spaces[0]?.folder || "~"), args, env);
   return toolsCache;
 }

@@ -280,7 +280,7 @@ export const toolStatus = () =>
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
 /** Env every worker gets: bundled tools on PATH, its tab in the shared browser, keychain sign-in, artifacts dir. */
-export const workerEnv = (workerId: string) => call<Env>("worker_env", { workerId }, []);
+export const workerEnv = (workerId: string, space?: string) => call<Env>("worker_env", { workerId, space: space ?? null }, []);
 /** SKILL.md paths passed to workers with --skill. */
 export const workerSkills = () => call<string[]>("worker_skills", undefined, []);
 type SpaceRef = { id: string; cliHome?: string };
@@ -338,27 +338,27 @@ export const skillRemove = (name: string, changed: boolean) => call<void>("skill
 export const hooksLoad = () => call<string>("hooks_load", undefined, "[]");
 export const hooksSave = (json: string) => call<void>("hooks_save", { json });
 /** Port of the worker's live browser stream (agent-browser), null if closed. */
-export const browserStreamPort = (workerId: string) => call<number | null>("browser_stream_port", { workerId }, null);
+export const browserStreamPort = (workerId: string, space?: string) => call<number | null>("browser_stream_port", { workerId, space: space ?? null }, null);
 /** A job ended: close its tab in the shared browser (logins stay). */
-export const browserRelease = (workerId: string) => call<void>("browser_release", { workerId });
+export const browserRelease = (workerId: string, space?: string) => call<void>("browser_release", { workerId, space: space ?? null });
 /** Start (or find) the shared browser and the Browser view's own tab; its live stream port. */
-export const sharedBrowserOpen = () => call<number>("shared_browser_open", undefined, 0);
+export const sharedBrowserOpen = (space?: string) => call<number>("shared_browser_open", { space: space ?? null }, 0);
 /** check the shared browser with a fresh connection and restart it if it hangs */
-export const browserCheck = () => call<number>("browser_check", undefined, 0);
+export const browserCheck = (space?: string) => call<number>("browser_check", { space: space ?? null }, 0);
 /** Drive the Browser view's tab. */
-export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) =>
-  call<void>("shared_browser_go", { action, url: url ?? null });
+export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string, space?: string) =>
+  call<void>("shared_browser_go", { action, url: url ?? null, space: space ?? null });
 
 // ───────────────────────── in-app browser ─────────────────────────
-/** Show the in-app browser (a real webview) over this area of the window; `url` opens a page. */
-export const inBrowserShow = (r: { x: number; y: number; w: number; h: number }, url?: string) => call<void>("inbrowser_show", { ...r, url: url ?? null });
+/** Show the space's in-app browser (a real webview, its own cookies) over this area of the window; `url` opens a page. */
+export const inBrowserShow = (r: { x: number; y: number; w: number; h: number }, space: string, url?: string) => call<void>("inbrowser_show", { ...r, url: url ?? null, space });
 export const inBrowserHide = () => call<void>("inbrowser_hide");
 /** Copy the in-app browser's cookies for `url` (or all) into the jobs' browser, and wait. */
-export const inBrowserShare = (url?: string) => call<void>("inbrowser_share", { url: url ?? null });
-export const inBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) => call<void>("inbrowser_go", { action, url: url ?? null });
+export const inBrowserShare = (space: string, url?: string) => call<void>("inbrowser_share", { url: url ?? null, space });
+export const inBrowserGo = (action: "open" | "back" | "forward" | "reload", space: string, url?: string) => call<void>("inbrowser_go", { action, url: url ?? null, space });
 /** Each page it starts or finishes loading. */
-export const onInBrowserPage = (f: (p: { url: string; loading: boolean }) => void): Promise<UnlistenFn> =>
-  inTauri ? listen<{ url: string; loading: boolean }>("inbrowser-page", (e) => f(e.payload)) : Promise.resolve(() => {});
+export const onInBrowserPage = (f: (p: { url: string; loading: boolean; space: string }) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<{ url: string; loading: boolean; space: string }>("inbrowser-page", (e) => f(e.payload)) : Promise.resolve(() => {});
 
 // ───────────────────────── windows ─────────────────────────
 export const openCapture = () => call<void>("open_capture");

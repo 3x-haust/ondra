@@ -59,11 +59,13 @@ description: >
 Never run `agent-browser install`, never use `npx`, never change any
 `AGENT_BROWSER_*` variable, and never ask the user to set anything up.
 
-The app keeps **one shared browser** for every job. You get **your own tab** in
-it (`AGENT_BROWSER_SESSION`, attached through `AGENT_BROWSER_CDP`, pinned with
-`AGENT_BROWSER_PIN_TAB`). Cookies and storage are shared with every other job and
-with the user, and they stay across restarts: if the user or another job already
-signed in to a site, you are signed in too.
+The app keeps **one shared browser per space** for every job in it. You get
+**your own tab** in it (`AGENT_BROWSER_SESSION`, attached through
+`AGENT_BROWSER_CDP`, pinned with `AGENT_BROWSER_PIN_TAB`). Cookies and storage
+are shared with every other job in this space and with the user's browser
+panel there, and they stay across restarts: if the user or another job in this
+space already signed in to a site, you are signed in too. The other space's
+logins are not here; sign in again rather than looking for them.
 
 ## Before the first command
 

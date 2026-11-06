@@ -1,7 +1,9 @@
-//! One shared browser for every job.
+//! One shared browser per space for every job in it.
 //!
-//! Ondra keeps a single headless Chrome (the bundled headless shell) running on
-//! a persistent profile, `<data dir>/browser/profile`. Every job attaches to it
+//! Spaces are separate workspaces, so each keeps its own headless Chrome (the
+//! bundled headless shell) on its own persistent profile,
+//! `<data dir>/browser/<space>/profile`: a login made in one space never reaches
+//! the other. Every job attaches to its space's browser
 //! over CDP with its own agent-browser session pinned to its own tab
 //! (`AGENT_BROWSER_CDP` + `AGENT_BROWSER_PIN_TAB`): a fresh pinned session
 //! opens a new tab instead of taking one that is already there, so jobs never
@@ -9,12 +11,13 @@
 //! are shared. A login made once (by a job or by the user in the Browser view)
 //! holds for every job and survives restarts.
 //!
-//! Only one Chrome may own a profile, so there is exactly one process: it is
+//! Only one Chrome may own a profile, so there is one process per space: it is
 //! started on first use and stopped when Ondra quits. One an earlier run left
 //! running is replaced (it can't open tabs any more), and one that stops
 //! responding to agent-browser is restarted.
 
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     path::PathBuf,
@@ -30,7 +33,7 @@ pub const KEYCHAIN_PLUGIN: &str = "keychain";
 const IDLE_MS: &str = "900000";
 
 #[derive(Default)]
-pub struct Shared(Mutex<Inner>);
+pub struct Shared(Mutex<HashMap<String, Inner>>);
 
 #[derive(Default)]
 struct Inner {
@@ -38,19 +41,47 @@ struct Inner {
     port: Option<u16>,
 }
 
-fn profile_dir(app: &AppHandle) -> PathBuf {
-    crate::engine::data_dir(app).join("browser").join("profile")
+/// A space id safe for a folder name ("" and anything odd → "home").
+pub fn space_key(space: &str) -> String {
+    let s: String = space.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+    if s.is_empty() { "home".into() } else { s }
 }
 
-fn port_file(app: &AppHandle) -> PathBuf {
-    profile_dir(app).join("DevToolsActivePort")
+fn space_dir(app: &AppHandle, space: &str) -> PathBuf {
+    crate::engine::data_dir(app).join("browser").join(space_key(space))
+}
+
+/// The space's profile. The first time, it starts as a copy of the one profile
+/// every space used to share, so nobody is signed out by the split.
+fn profile_dir(app: &AppHandle, space: &str) -> PathBuf {
+    let dir = space_dir(app, space).join("profile");
+    let old = crate::engine::data_dir(app).join("browser").join("profile");
+    if !dir.exists() && old.is_dir() {
+        let _ = std::fs::create_dir_all(space_dir(app, space));
+        let _ = Command::new("/bin/cp").arg("-Rp").arg(&old).arg(&dir).status();
+        for lock in ["SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort"] {
+            let _ = std::fs::remove_file(dir.join(lock));
+        }
+    }
+    dir
+}
+
+fn port_file(app: &AppHandle, space: &str) -> PathBuf {
+    space_dir(app, space).join("profile").join("DevToolsActivePort")
 }
 
 /// The port the shared browser listens on, kept across restarts: jobs got it in
 /// their environment when they started, so a restarted browser must come back on
 /// the same one or every running job loses it.
-fn stable_port(app: &AppHandle) -> u16 {
-    let file = crate::engine::data_dir(app).join("browser").join("port");
+fn stable_port(app: &AppHandle, space: &str) -> u16 {
+    let file = space_dir(app, space).join("port");
+    // the first space to start after the split keeps the old shared port, so jobs
+    // that were already running with it find their browser again
+    let old = crate::engine::data_dir(app).join("browser").join("port");
+    if !file.exists() && old.exists() {
+        let _ = std::fs::create_dir_all(space_dir(app, space));
+        let _ = std::fs::rename(&old, &file);
+    }
     let free = |p: u16| std::net::TcpListener::bind(("127.0.0.1", p)).is_ok();
     if let Some(p) = std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse::<u16>().ok()).filter(|p| *p > 1024 && free(*p)) {
         return p;
@@ -62,8 +93,8 @@ fn stable_port(app: &AppHandle) -> u16 {
     p
 }
 
-fn read_port(app: &AppHandle) -> Option<u16> {
-    std::fs::read_to_string(port_file(app)).ok()?.lines().next()?.trim().parse().ok()
+fn read_port(app: &AppHandle, space: &str) -> Option<u16> {
+    std::fs::read_to_string(port_file(app, space)).ok()?.lines().next()?.trim().parse().ok()
 }
 
 /// A Chrome DevTools endpoint answers on this port.
@@ -93,14 +124,15 @@ fn user_agent(chrome: &std::path::Path) -> Option<String> {
     Some(UA.get_or_init(|| ua).clone())
 }
 
-/// The running browser's DevTools port, without starting one.
-pub fn port(app: &AppHandle) -> Option<u16> {
+/// The space's running browser's DevTools port, without starting one.
+pub fn port(app: &AppHandle, space: &str) -> Option<u16> {
     let shared = app.state::<Shared>();
-    let mut inner = shared.0.lock().ok()?;
+    let mut all = shared.0.lock().ok()?;
+    let inner = all.entry(space_key(space)).or_default();
     if let Some(p) = inner.port.filter(|p| answers(*p)) {
         return Some(p);
     }
-    let p = read_port(app).filter(|p| answers(*p))?;
+    let p = read_port(app, space).filter(|p| answers(*p))?;
     inner.port = Some(p);
     Some(p)
 }
@@ -149,46 +181,52 @@ fn works(app: &AppHandle, port: u16, force: bool) -> bool {
 
 /// Kill whatever Chrome owns the profile (ours or one an earlier run left), so a
 /// fresh one can start on it. The profile, and so the logins, stay.
-fn kill_profile_chrome(app: &AppHandle, inner: &mut Inner) {
+fn kill_profile_chrome(app: &AppHandle, space: &str, inner: &mut Inner) {
     if let Some(mut c) = inner.child.take() {
         let _ = c.kill();
         let _ = c.wait();
     }
-    let flag = format!("--user-data-dir={}", profile_dir(app).display());
-    // `--` first: without it pkill reads the pattern as an option and kills nothing
-    let _ = Command::new("/usr/bin/pkill").args(["-f", "--", &flag]).status();
+    // this space's profile, and the old shared one (a Chrome left from before the split)
+    let old = crate::engine::data_dir(app).join("browser").join("profile");
+    for dir in [profile_dir(app, space), old] {
+        let flag = format!("--user-data-dir={}", dir.display());
+        // `--` first: without it pkill reads the pattern as an option and kills nothing
+        let _ = Command::new("/usr/bin/pkill").args(["-f", "--", &flag]).status();
+    }
     std::thread::sleep(Duration::from_millis(800));
     inner.port = None;
 }
 
-/// The shared browser's DevTools port, starting it if it is not running.
-pub fn ensure(app: &AppHandle) -> Result<u16, String> {
-    ensure_checked(app, false)
+/// The space's browser's DevTools port, starting it if it is not running.
+pub fn ensure(app: &AppHandle, space: &str) -> Result<u16, String> {
+    ensure_checked(app, space, false)
 }
 
 /// A job's browser command just failed to get an answer: check with a fresh
 /// connection now (not the once-a-minute cache) and restart the browser if it hangs.
 #[tauri::command]
-pub async fn browser_check(app: AppHandle) -> Result<u16, String> {
-    tauri::async_runtime::spawn_blocking(move || ensure_checked(&app, true)).await.map_err(|e| e.to_string())?
+pub async fn browser_check(app: AppHandle, space: Option<String>) -> Result<u16, String> {
+    let space = space.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || ensure_checked(&app, &space, true)).await.map_err(|e| e.to_string())?
 }
 
-fn ensure_checked(app: &AppHandle, force: bool) -> Result<u16, String> {
+fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, String> {
     let shared = app.state::<Shared>();
-    let mut inner = shared.0.lock().map_err(|_| "browser lock".to_string())?;
+    let mut all = shared.0.lock().map_err(|_| "browser lock".to_string())?;
+    let inner = all.entry(space_key(space)).or_default();
     // A Chrome left by an earlier run of Ondra still answers but can't start new
     // tabs any more (its renderers fail to launch once the app that started it is
     // gone): only keep a browser this run started, and only while it works.
     let ours = inner.child.as_mut().is_some_and(|c| matches!(c.try_wait(), Ok(None)));
     if !ours {
-        kill_profile_chrome(app, &mut inner);
+        kill_profile_chrome(app, space, inner);
     }
-    if let Some(p) = inner.port.or_else(|| read_port(app)).filter(|p| ours && answers(*p)) {
+    if let Some(p) = inner.port.or_else(|| read_port(app, space)).filter(|p| ours && answers(*p)) {
         if works(app, p, force) {
             inner.port = Some(p);
             return Ok(p);
         }
-        kill_profile_chrome(app, &mut inner);
+        kill_profile_chrome(app, space, inner);
     }
     inner.port = None;
     if let Some(c) = inner.child.as_mut() {
@@ -202,12 +240,12 @@ fn ensure_checked(app: &AppHandle, force: bool) -> Result<u16, String> {
     }
 
     let chrome = crate::tools::chrome_path(app).ok_or("브라우저를 찾을 수 없어요")?;
-    let profile = profile_dir(app);
+    let profile = profile_dir(app, space);
     std::fs::create_dir_all(&profile).map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file(port_file(app));
+    let _ = std::fs::remove_file(port_file(app, space));
     let mut cmd = Command::new(&chrome);
     cmd.arg(format!("--user-data-dir={}", profile.display()))
-        .arg(format!("--remote-debugging-port={}", stable_port(app)))
+        .arg(format!("--remote-debugging-port={}", stable_port(app, space)))
         .args([
             "--remote-debugging-address=127.0.0.1",
             // never touch the user's keychain for Chrome's own cookie key
@@ -236,7 +274,7 @@ fn ensure_checked(app: &AppHandle, force: bool) -> Result<u16, String> {
 
     let started = Instant::now();
     loop {
-        if let Some(p) = read_port(app).filter(|p| answers(*p)) {
+        if let Some(p) = read_port(app, space).filter(|p| answers(*p)) {
             inner.child = Some(child);
             inner.port = Some(p);
             return Ok(p);
@@ -253,22 +291,25 @@ fn ensure_checked(app: &AppHandle, force: bool) -> Result<u16, String> {
     }
 }
 
-/// Quit the browser Ondra started (SIGTERM first, so cookies are flushed to disk).
+/// Quit the browsers Ondra started (SIGTERM first, so cookies are flushed to disk).
 pub fn stop(app: &AppHandle) {
     let shared = app.state::<Shared>();
-    let Ok(mut inner) = shared.0.lock() else { return };
-    inner.port = None;
-    let Some(mut child) = inner.child.take() else { return };
-    let _ = Command::new("/bin/kill").args(["-TERM", &child.id().to_string()]).status();
+    let Ok(mut all) = shared.0.lock() else { return };
+    let mut children: Vec<Child> = all.values_mut().filter_map(|inner| {
+        inner.port = None;
+        inner.child.take()
+    }).collect();
+    for child in &children {
+        let _ = Command::new("/bin/kill").args(["-TERM", &child.id().to_string()]).status();
+    }
     let until = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < until {
-        if !matches!(child.try_wait(), Ok(None)) {
-            return;
-        }
+    while Instant::now() < until && children.iter_mut().any(|c| matches!(c.try_wait(), Ok(None))) {
         std::thread::sleep(Duration::from_millis(50));
     }
-    let _ = child.kill();
-    let _ = child.wait();
+    for mut child in children {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 /// A job's agent-browser session. It carries the browser's port so a session
@@ -340,9 +381,10 @@ fn stream_port(mut cmd: Command) -> Option<u16> {
 
 /// Start (or find) the shared browser and the view's tab; the tab's live stream port.
 #[tauri::command]
-pub async fn shared_browser_open(app: AppHandle) -> Result<u16, String> {
+pub async fn shared_browser_open(app: AppHandle, space: Option<String>) -> Result<u16, String> {
+    let space = space.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        let port = ensure(&app)?;
+        let port = ensure(&app, &space)?;
         let cmd = || view_command(&app, port).ok_or_else(|| "agent-browser를 찾을 수 없어요".to_string());
         // the view's tab can be closed under it (a job closing tabs): then the stream
         // stays up with nothing to show, so bind a new tab first
@@ -363,9 +405,10 @@ pub async fn shared_browser_open(app: AppHandle) -> Result<u16, String> {
 
 /// Drive the view's tab: open a URL, or go back / forward / reload.
 #[tauri::command]
-pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<String>) -> Result<(), String> {
+pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<String>, space: Option<String>) -> Result<(), String> {
+    let space = space.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
-        let port = ensure(&app)?;
+        let port = ensure(&app, &space)?;
         let mut cmd = view_command(&app, port).ok_or("agent-browser를 찾을 수 없어요")?;
         match action.as_str() {
             "open" => {
@@ -387,9 +430,10 @@ pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<Strin
 
 /// A job ended: close its tab and its session (the profile, and so the logins, stay).
 #[tauri::command]
-pub async fn browser_release(app: AppHandle, worker_id: String) {
+pub async fn browser_release(app: AppHandle, worker_id: String, space: Option<String>) {
+    let space = space.unwrap_or_default();
     let _ = tauri::async_runtime::spawn_blocking(move || {
-        let Some(port) = port(&app) else { return };
+        let Some(port) = port(&app, &space) else { return };
         let session = session_for(&worker_id, Some(port));
         // even when its daemon timed out, the pinned session rebinds to the job's own tab
         for args in [&["tab", "close"][..], &["close"][..]] {
