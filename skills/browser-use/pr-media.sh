@@ -9,6 +9,9 @@
 #   pr-media.sh <PR number|URL> file...       # inside the repo folder a number is enough
 #   pr-media.sh <PR> --dir <folder>           # every png/jpg/gif/webp/mp4/mov in the folder
 #   pr-media.sh --print <PR> file...          # upload, print the block, leave the description
+#   --comment "text" <PR> file...             # post them as a PR comment under that text instead
+#   --reply <comment id> "text" <PR> file...  # reply in a review thread (an inline comment's id)
+#   --at <path:line> "text" <PR> file...      # a new review comment on that line of the PR's head
 #   --account <id>                            # Aside account (default: this space's, $ONDRA_ASIDE_ACCOUNT)
 #   --via aside|browser                       # force one browser
 #
@@ -16,22 +19,26 @@
 # Pictures sit side by side at 300px; each video gets its own player.
 set -euo pipefail
 
-PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""
+PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""; MODE=body; TEXT=""; REPLY=""; AT=""
 while (($#)); do
   case $1 in
     --print) PRINT=1 ;;
+    --comment) MODE=comment; shift; TEXT=$1 ;;
+    --reply) MODE=reply; shift; REPLY=$1; shift; TEXT=$1 ;;
+    --at) MODE=at; shift; AT=$1; shift; TEXT=$1 ;;
     --account) shift; ACCOUNT=$1 ;;
     --via) shift; VIA=$1 ;;
     --dir)
       shift
       while IFS= read -r f; do FILES+=("$f"); done < <(find "$1" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' -o -iname '*.mov' \) | sort)
       ;;
-    -h|--help) sed -n 2,16p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
     *) if [[ -z $PR ]]; then PR=$1; else FILES+=("$1"); fi ;;
   esac
   shift
 done
-[[ -n $PR && ${#FILES[@]} -gt 0 ]] || { sed -n 2,16p "$0"; exit 1; }
+[[ -n $PR && ${#FILES[@]} -gt 0 ]] || { sed -n 2,19p "$0"; exit 1; }
+[[ $MODE != at || $AT == *:* ]] || { echo "--at needs <path:line>" >&2; exit 1; }
 ABS=()
 for f in "${FILES[@]}"; do
   [[ -f $f ]] || { echo "no such file: $f" >&2; exit 1; }
@@ -191,6 +198,22 @@ EOF
 )
 
 if ((PRINT)); then printf '%s\n' "$BLOCK"; exit 0; fi
+
+# a comment, a reply in a review thread, or a comment on one line: the text, then the pictures
+if [[ $MODE != body ]]; then
+  MSG=$(printf '%s\n\n%s\n' "$TEXT" "$BLOCK")
+  BASE_REPO=$(sed -E 's#https://github.com/([^/]+/[^/]+)/pull/.*#\1#' <<<"$URL")
+  N=${URL##*/}
+  case $MODE in
+    comment) gh pr comment "$URL" --body "$MSG" >/dev/null ;;
+    reply) gh api "repos/$BASE_REPO/pulls/$N/comments/$REPLY/replies" -f body="$MSG" --jq .html_url ;;
+    at)
+      SHA=$(gh pr view "$URL" --json headRefOid -q .headRefOid)
+      gh api "repos/$BASE_REPO/pulls/$N/comments" -f body="$MSG" -f commit_id="$SHA" -f path="${AT%:*}" -F line="${AT##*:}" -f side=RIGHT --jq .html_url ;;
+  esac
+  echo "posted on $URL (${#ABS[@]} file(s))"
+  exit 0
+fi
 
 BODY=$(gh pr view "$URL" --json body -q .body)
 NEW=$(BLOCK="$BLOCK" python3 -c '
