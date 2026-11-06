@@ -259,6 +259,7 @@ export function MainView() {
   const composer = (big: boolean) => (
     <Composer
       id="main-input"
+      draftKey={`main:${key()}`}
       big={big}
       autofocus
       files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}

@@ -359,6 +359,7 @@ export function TaskView(props: { id: string }) {
                 </Show>
                 <Composer
                   id="task-input"
+                  draftKey={`task:${task().id}`}
                   top={<><BtwCard scope={`task:${task().id}`} />{strips()}</>}
                   plus={plusFor({})}
                   status={<StatusLine
