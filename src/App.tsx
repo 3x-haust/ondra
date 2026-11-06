@@ -1,6 +1,7 @@
 import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
-import { loaded, loadState, seedProjects, setSpace, state } from "./state/store";
+import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, goMain, newPanelTab, newTask, openPanel, openTask, paletteOpen, panelOpen, panelTab, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, toasts, dropToast, togglePanel, view } from "./state/ui";
@@ -86,9 +87,8 @@ export default function App() {
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
-      setSpace(target);
+      switchSpace(target, { name: "main" });
       throwThought(text, target);
-      setView({ name: "main" });
       toast("메인에게 전달했어요");
     });
   });
@@ -125,8 +125,7 @@ export default function App() {
     } else if (/^[1-9]$/.test(k) && !e.shiftKey && !e.altKey && state.spaces[Number(k) - 1]) {
       // ⌘1, ⌘2 …: the spaces in the order the sidebar shows them (회사, 개인)
       e.preventDefault();
-      setSpace(state.spaces[Number(k) - 1].id);
-      goMain();
+      switchSpace(state.spaces[Number(k) - 1].id);
     } else if (k === "j") {
       e.preventDefault();
       if (panelOpen() && panelTab() === "side") void closePanel();
