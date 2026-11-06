@@ -60,7 +60,8 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 export const openUrl = (url: string) => call<void>("open_url", { url });
 export const openInEditor = (path: string) => call<void>("open_in_editor", { path });
-export const openInTerminal = (path: string) => call<void>("open_in_terminal", { path });
+/** `env`: the space's spaceEnv, so the shell runs as that space. */
+export const openInTerminal = (path: string, env: Env = []) => call<void>("open_in_terminal", { path, env });
 
 export interface GitFile {
   path: string;
@@ -189,13 +190,14 @@ export interface WorktreeInfo {
   sub: string;
 }
 /** New worktree + branch for a task. Rejects when the folder is not a git repo with commits. */
-export const worktreeCreate = (cwd: string, dest: string, branch: string) =>
-  inTauri ? invoke<WorktreeInfo>("worktree_create", { cwd, dest, branch }) : Promise.reject(new Error("앱에서만 돼요"));
+// the git commands run as the job's space (`env` = its spaceEnv): its git identity, GitHub login, ssh keys
+export const worktreeCreate = (cwd: string, dest: string, branch: string, env: Env = []) =>
+  inTauri ? invoke<WorktreeInfo>("worktree_create", { cwd, dest, branch, env }) : Promise.reject(new Error("앱에서만 돼요"));
 /** Commit what is left and merge into the repo's current branch; resolves to that branch's name. */
-export const worktreeMerge = (repo: string, path: string, branch: string, message: string) =>
-  inTauri ? invoke<string>("worktree_merge", { repo, path, branch, message }) : Promise.reject(new Error("앱에서만 돼요"));
-export const worktreeRemove = (repo: string, path: string, branch: string, keepBranch: boolean) =>
-  inTauri ? invoke<void>("worktree_remove", { repo, path, branch, keepBranch }) : Promise.resolve();
+export const worktreeMerge = (repo: string, path: string, branch: string, message: string, env: Env = []) =>
+  inTauri ? invoke<string>("worktree_merge", { repo, path, branch, message, env }) : Promise.reject(new Error("앱에서만 돼요"));
+export const worktreeRemove = (repo: string, path: string, branch: string, keepBranch: boolean, env: Env = []) =>
+  inTauri ? invoke<void>("worktree_remove", { repo, path, branch, keepBranch, env }) : Promise.resolve();
 /** Every file in a folder, relative paths (git-tracked + new, or a capped walk). */
 /** Git repos in a folder, one or two levels down (worktrees left out). */
 export const fsRepos = (root: string) => call<string[]>("fs_repos", { root }, ["/Users/me/Work/projects/acme", "/Users/me/Work/projects/acme-web"]);
@@ -304,9 +306,9 @@ export const accountLimits = (accountId: string) =>
     { provider: "openai-codex", window: 10080, used: 32, resetsAt: Date.now() + 5.1 * 86_400_000 },
   ]);
 export const accountEmail = (accountId: string) => call<string | null>("account_email", { accountId }, "me@example.com");
-export const gitCommit = (cwd: string, message: string) => call<string>("git_commit", { cwd, message }, "abc1234");
-export const gitPush = (cwd: string) => call<string>("git_push", { cwd }, "task/demo");
-export const gitPr = (cwd: string, title: string, body: string) => call<string>("git_pr", { cwd, title, body }, "https://github.com/acme/app/pull/42");
+export const gitCommit = (cwd: string, message: string, env: Env = []) => call<string>("git_commit", { cwd, message, env }, "abc1234");
+export const gitPush = (cwd: string, env: Env = []) => call<string>("git_push", { cwd, env }, "task/demo");
+export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
 export const notify = (title: string, body: string) => call<void>("notify", { title, body });
 export const workerExtensions = () => call<string[]>("worker_extensions", undefined, []);

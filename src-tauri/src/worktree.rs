@@ -5,7 +5,7 @@
 //! into whatever branch the repo has checked out; removed when the task is
 //! merged, thrown away or deleted (deleting keeps the branch so nothing is lost).
 
-use crate::engine::{home, user_path};
+use crate::engine::home;
 use serde::Serialize;
 use std::{path::Path, process::Command};
 
@@ -31,15 +31,31 @@ fn expand(p: &str) -> String {
     }
 }
 
+thread_local! {
+    /// The job's space environment for the git commands of one call (see `with_env`).
+    static ENV: std::cell::RefCell<Vec<(String, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Run `f` with every git command in it using the space's environment (its git
+/// identity, GitHub login, ssh keys), so a commit or fetch in a company repo
+/// never goes out as the personal account.
+fn with_env<T>(env: Vec<(String, String)>, f: impl FnOnce() -> T) -> T {
+    ENV.with(|e| *e.borrow_mut() = env);
+    let out = f();
+    ENV.with(|e| e.borrow_mut().clear());
+    out
+}
+
+fn git_cmd(cwd: &str) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0");
+    ENV.with(|e| crate::git::space_env_into(&mut cmd, &e.borrow()));
+    cmd
+}
+
 /// Run git; Ok(stdout) or Err(stderr, trimmed).
 fn run(cwd: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .env("PATH", user_path())
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output()
-        .map_err(|e| e.to_string())?;
+    let out = git_cmd(cwd).args(args).output().map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
@@ -51,11 +67,8 @@ fn run(cwd: &str, args: &[&str]) -> Result<String, String> {
 /// `git fetch` for the checked-out branch's remote, given up after `secs`.
 fn fetch(top: &str, secs: u64) -> bool {
     let remote = run(top, &["config", &format!("branch.{}.remote", run(top, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default())]).unwrap_or_else(|_| "origin".into());
-    let Ok(mut child) = Command::new("git")
+    let Ok(mut child) = git_cmd(top)
         .args(["fetch", "--quiet", "--no-tags", &remote])
-        .current_dir(top)
-        .env("PATH", user_path())
-        .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -155,20 +168,20 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Sen
 }
 
 #[tauri::command]
-pub async fn worktree_create(cwd: String, dest: String, branch: String) -> Result<Worktree, String> {
-    blocking(move || create(&cwd, &dest, &branch)).await
+pub async fn worktree_create(cwd: String, dest: String, branch: String, env: Option<Vec<(String, String)>>) -> Result<Worktree, String> {
+    blocking(move || with_env(env.unwrap_or_default(), || create(&cwd, &dest, &branch))).await
 }
 
 /// Commit what is left in the worktree and merge its branch into the repo's current branch.
 /// Returns that branch's name. On conflict the merge is aborted and the error returned.
 #[tauri::command]
-pub async fn worktree_merge(repo: String, path: String, branch: String, message: String) -> Result<String, String> {
-    blocking(move || merge(&repo, &path, &branch, &message)).await
+pub async fn worktree_merge(repo: String, path: String, branch: String, message: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    blocking(move || with_env(env.unwrap_or_default(), || merge(&repo, &path, &branch, &message))).await
 }
 
 #[tauri::command]
-pub async fn worktree_remove(repo: String, path: String, branch: String, keep_branch: bool) -> Result<(), String> {
-    blocking(move || remove(&repo, &path, &branch, keep_branch)).await
+pub async fn worktree_remove(repo: String, path: String, branch: String, keep_branch: bool, env: Option<Vec<(String, String)>>) -> Result<(), String> {
+    blocking(move || with_env(env.unwrap_or_default(), || remove(&repo, &path, &branch, keep_branch))).await
 }
 
 #[cfg(test)]

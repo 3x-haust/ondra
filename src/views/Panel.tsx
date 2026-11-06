@@ -9,7 +9,7 @@ import { accountById, homeDir, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, type PanelTab } from "../state/ui";
-import { discardTask, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
+import { discardTask, gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
@@ -100,10 +100,10 @@ function ShipMenu(props: { t: Task }) {
       </button>
       <Show when={open()}>
         <div class="menu ship-menu">
-          <button onClick={() => void run("커밋하는 중…", () => gitCommit(cwd(), props.t.title), (h) => `커밋했어요 · ${h}`)}>
+          <button onClick={() => void run("커밋하는 중…", async () => gitCommit(cwd(), props.t.title, await gitEnv(props.t)), (h) => `커밋했어요 · ${h}`)}>
             <Icon name="commit" size={14} class="muted" /><span class="row-title">커밋</span><span class="row-hint">지금 바뀐 것 전부</span>
           </button>
-          <button onClick={() => void run("올리는 중…", () => gitPush(cwd()), (b) => `${b} 브랜치를 올렸어요`)}>
+          <button onClick={() => void run("올리는 중…", async () => gitPush(cwd(), await gitEnv(props.t)), (b) => `${b} 브랜치를 올렸어요`)}>
             <Icon name="push" size={14} class="muted" /><span class="row-title">푸시</span><span class="row-hint">origin</span>
           </button>
           <button
@@ -111,7 +111,7 @@ function ShipMenu(props: { t: Task }) {
               void run(
                 "PR 만드는 중…",
                 async () => {
-                  const url = await gitPr(cwd(), props.t.title, `${props.t.ask}\n\n— Ondra`);
+                  const url = await gitPr(cwd(), props.t.title, `${props.t.ask}\n\n— Ondra`, await gitEnv(props.t));
                   if (url.startsWith("http")) void openUrl(url);
                   return url;
                 },
@@ -242,7 +242,7 @@ function TerminalPane(props: { t: Task }) {
     <div class="term-pane">
       <div class="term-sub">
         <span class="term-count">{running().length ? `실행 중 ${running().length}` : "실행 중인 셸 없음"}</span>
-        <button class="btn sm ghost" onClick={() => void openInTerminal(expand(props.t.cwd))} title={props.t.cwd}>
+        <button class="btn sm ghost" onClick={() => void gitEnv(props.t).then((env) => openInTerminal(expand(props.t.cwd), env))} title={props.t.cwd}>
           <Icon name="shell" size={13} />
           터미널에서 열기
         </button>

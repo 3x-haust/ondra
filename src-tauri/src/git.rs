@@ -25,6 +25,19 @@ pub struct GitChanges {
     patch: String,
 }
 
+/// Put a space's environment (`space_env`: its git identity, GitHub login, ssh
+/// config, CLI shims) on a command Ondra runs for that space. Its PATH goes first.
+pub fn space_env_into(cmd: &mut Command, env: &[(String, String)]) {
+    cmd.env("PATH", user_path());
+    for (k, v) in env {
+        if k == "PATH" {
+            cmd.env("PATH", format!("{v}:{}", user_path()));
+        } else {
+            cmd.env(k, v);
+        }
+    }
+}
+
 fn git(cwd: &str, args: &[&str]) -> Option<String> {
     let out = Command::new("git")
         .args(args)
@@ -196,14 +209,13 @@ mod tests {
     }
 }
 
-/// Run a command in `cwd` and return stdout, or the last lines of stderr as the error.
-fn run(cwd: &str, cmd: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new(cmd)
-        .args(args)
-        .current_dir(cwd)
-        .env("PATH", user_path())
-        .output()
-        .map_err(|e| format!("{cmd}: {e}"))?;
+/// Run a command in `cwd` with the space's environment and return stdout, or the
+/// last lines of stderr as the error.
+fn run(cwd: &str, cmd: &str, args: &[&str], env: &[(String, String)]) -> Result<String, String> {
+    let mut c = Command::new(cmd);
+    c.args(args).current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0");
+    space_env_into(&mut c, env);
+    let out = c.output().map_err(|e| format!("{cmd}: {e}"))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     } else {
@@ -213,35 +225,40 @@ fn run(cwd: &str, cmd: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+// Commit, push and PR run as the job's space: its git name and email, its
+// GitHub login, its ssh keys (`env` = that space's `space_env`).
+
 /// Commit everything in the folder with a message. Returns the short hash.
 #[tauri::command]
-pub async fn git_commit(cwd: String, message: String) -> Result<String, String> {
-    run(&cwd, "git", &["add", "-A"])?;
-    run(&cwd, "git", &["commit", "-m", &message])?;
-    run(&cwd, "git", &["rev-parse", "--short", "HEAD"])
+pub async fn git_commit(cwd: String, message: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    let env = env.unwrap_or_default();
+    run(&cwd, "git", &["add", "-A"], &env)?;
+    run(&cwd, "git", &["commit", "-m", &message], &env)?;
+    run(&cwd, "git", &["rev-parse", "--short", "HEAD"], &env)
 }
 
 /// Push the current branch to origin (sets upstream the first time).
 #[tauri::command]
-pub async fn git_push(cwd: String) -> Result<String, String> {
-    let branch = run(&cwd, "git", &["rev-parse", "--abbrev-ref", "HEAD"])?;
-    run(&cwd, "git", &["push", "-u", "origin", &branch])?;
+pub async fn git_push(cwd: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    let env = env.unwrap_or_default();
+    let branch = run(&cwd, "git", &["rev-parse", "--abbrev-ref", "HEAD"], &env)?;
+    run(&cwd, "git", &["push", "-u", "origin", &branch], &env)?;
     Ok(branch)
 }
 
 /// Open a pull request for the current branch with the GitHub CLI. Returns its URL.
 #[tauri::command]
-pub async fn git_pr(cwd: String, title: String, body: String) -> Result<String, String> {
-    let _ = git_push(cwd.clone()).await?;
-    run(&cwd, "gh", &["pr", "create", "--title", &title, "--body", &body])
+pub async fn git_pr(cwd: String, title: String, body: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    let _ = git_push(cwd.clone(), env.clone()).await?;
+    run(&cwd, "gh", &["pr", "create", "--title", &title, "--body", &body], &env.unwrap_or_default())
         .map(|out| out.lines().last().unwrap_or("").to_string())
 }
 
 /// Throw away uncommitted changes to one file (back to the last commit).
 #[tauri::command]
 pub async fn git_revert_file(cwd: String, path: String) -> Result<(), String> {
-    if run(&cwd, "git", &["ls-files", "--error-unmatch", &path]).is_ok() {
-        run(&cwd, "git", &["checkout", "--", &path]).map(|_| ())
+    if run(&cwd, "git", &["ls-files", "--error-unmatch", &path], &[]).is_ok() {
+        run(&cwd, "git", &["checkout", "--", &path], &[]).map(|_| ())
     } else {
         std::fs::remove_file(std::path::Path::new(&cwd).join(&path)).map_err(|e| e.to_string())
     }

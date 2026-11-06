@@ -423,6 +423,9 @@ async function worktreeGone(t: Task): Promise<boolean> {
 
 /** Gives the job its own worktree. False when it can't and the job must not start
  * (a repo it would otherwise change in place). */
+/** What Ondra's own git commands for a job run with: its space's git identity and logins. */
+export const gitEnv = (t: Task) => spaceEnv(spaceById(t.space)).catch((): Env => []);
+
 async function isolate(id: string): Promise<boolean> {
   const t = taskById(id);
   if (!t || t.parentId || !(t.isolate ?? state.settings.isolate)) return true;
@@ -439,8 +442,9 @@ async function isolate(id: string): Promise<boolean> {
   const branch = branchName(t.branch) ?? `task/${id}`;
   const taken = (e: unknown) => /already exists|이미/.test(String(e instanceof Error ? e.message : e));
   try {
-    const w = await worktreeCreate(cwd, dest, branch).catch((e) =>
-      taken(e) ? worktreeCreate(cwd, dest, `${branch}-${Date.now().toString(36).slice(-5)}`) : Promise.reject(e),
+    const env = await gitEnv(t);
+    const w = await worktreeCreate(cwd, dest, branch, env).catch((e) =>
+      taken(e) ? worktreeCreate(cwd, dest, `${branch}-${Date.now().toString(36).slice(-5)}`, env) : Promise.reject(e),
     );
     updateTask(id, (x) => {
       x.worktree = { ...w, state: "open" };
@@ -469,8 +473,9 @@ export async function mergeTask(id: string): Promise<boolean> {
   if (!t || !w || w.state !== "open") return false;
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
   try {
-    const into = await worktreeMerge(w.repo, w.path, w.branch, t.title);
-    await worktreeRemove(w.repo, w.path, w.branch, false).catch(() => {});
+    const env = await gitEnv(t);
+    const into = await worktreeMerge(w.repo, w.path, w.branch, t.title, env);
+    await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
     updateTask(id, (x) => {
       x.worktree = { ...w, state: "merged", into };
       x.cwd = homeDir(x);
@@ -512,7 +517,7 @@ export async function closeWorktree(id: string) {
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
-  await worktreeRemove(w.repo, w.path, w.branch, true).catch((e) => toast(String(e), "bad"));
+  await worktreeRemove(w.repo, w.path, w.branch, true, await gitEnv(t)).catch((e) => toast(String(e), "bad"));
   updateTask(id, (x) => {
     x.worktree = { ...w, state: "discarded" };
     x.cwd = homeDir(x);
@@ -525,7 +530,7 @@ export async function discardTask(id: string) {
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
-  await worktreeRemove(w.repo, w.path, w.branch, false).catch((e) => toast(String(e), "bad"));
+  await worktreeRemove(w.repo, w.path, w.branch, false, await gitEnv(t)).catch((e) => toast(String(e), "bad"));
   updateTask(id, (x) => {
     x.worktree = { ...w, state: "discarded" };
     x.cwd = homeDir(x);
@@ -1127,7 +1132,7 @@ async function dropEmptyBranch(id: string) {
   if (!t || !w || w.state !== "open" || t.status !== "done") return;
   const c = await gitChanges(w.path, w.base).catch(() => null);
   if (!c?.isRepo || c.files.length) return;
-  await worktreeRemove(w.repo, w.path, w.branch, false).catch(() => {});
+  await worktreeRemove(w.repo, w.path, w.branch, false, await gitEnv(t)).catch(() => {});
   updateTask(id, (x) => {
     x.cwd = homeDir(x);
     x.worktree = undefined;
@@ -1440,9 +1445,10 @@ export const finishTask = (id: string) => finish(id, "직접 완료 처리");
 export function removeTask(id: string) {
   for (const k of childrenOf(id)) removeTask(k.id);
   releaseBrowser(id);
-  const w = taskById(id)?.worktree;
+  const gone = taskById(id);
+  const w = gone?.worktree;
   // keep the branch (with everything committed) so deleting never loses work
-  if (w?.state === "open") void worktreeRemove(w.repo, w.path, w.branch, true).catch(() => {});
+  if (gone && w?.state === "open") void gitEnv(gone).then((env) => worktreeRemove(w.repo, w.path, w.branch, true, env)).catch(() => {});
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
