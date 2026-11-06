@@ -108,9 +108,11 @@ const assigner = (t: Task) => {
 const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence", "steps", "page", "flow", "deps", "classes", "er", "arch", "states", "diff", "tests", "options", "trace", "git"]);
 
 /**
- * Like Codex: while the job works you see everything as it happens. Once the turn
- * is over, the work folds into "N분 동안 작업 ›" and only the closing summary stays
- * (the answer text and result blocks it ended with). Errors never fold.
+ * While the job isn't finished you see everything, with nothing to fold or unfold
+ * (a steer or a question in between doesn't fold the turn before it). Once the
+ * whole job is done, each turn's work folds into "N분 동안 작업 ›" and only its
+ * closing summary stays (the answer text and result blocks it ended with); the
+ * fold can be opened. Errors never fold.
  */
 function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; tail?: JSX.Element }) {
   const [shown, setShown] = createSignal(false);
@@ -155,7 +157,8 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
     on(
       () => props.open,
       (open, was) => {
-        if (open || !was || !work().length) return;
+        // only the turn in view folds visibly; earlier ones just close
+        if (open || !was || !work().length || !props.last) return;
         setMounted(true);
         setShown(true);
         setTimeout(() => setShown(false), 450);
@@ -429,6 +432,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   const list = createMemo(() => turns(props.task.entries));
   const liveText = () => live[props.agentId] ?? "";
   const working = () => props.task.status === "running";
+  /** all its work is over: only then do turns fold */
+  const settled = () => props.task.status === "done" || props.task.status === "failed";
   /** a running tool row already says what is happening */
   const toolRunning = () => {
     const last = props.task.entries[props.task.entries.length - 1];
@@ -457,7 +462,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
             <TurnView
               turn={t}
               task={props.task}
-              open={working() && i() === list().length - 1}
+              open={!settled()}
               last={i() === list().length - 1}
             />
           )}
