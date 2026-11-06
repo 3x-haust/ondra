@@ -197,6 +197,8 @@ export const worktreeMerge = (repo: string, path: string, branch: string, messag
 export const worktreeRemove = (repo: string, path: string, branch: string, keepBranch: boolean) =>
   inTauri ? invoke<void>("worktree_remove", { repo, path, branch, keepBranch }) : Promise.resolve();
 /** Every file in a folder, relative paths (git-tracked + new, or a capped walk). */
+/** Git repos in a folder, one or two levels down (worktrees left out). */
+export const fsRepos = (root: string) => call<string[]>("fs_repos", { root }, ["/Users/me/Work/projects/acme", "/Users/me/Work/projects/acme-web"]);
 export const fsFiles = (cwd: string) => call<string[]>("fs_files", { cwd }, ["src/router.ts", "src/auth/session.ts", "src/auth/oauth.ts", "README.md", "package.json"]);
 export interface FileText {
   text: string | null;

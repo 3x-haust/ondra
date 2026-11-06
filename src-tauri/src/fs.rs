@@ -88,6 +88,63 @@ pub async fn fs_files(cwd: String) -> Vec<String> {
     tauri::async_runtime::spawn_blocking(move || list(&cwd)).await.unwrap_or_default()
 }
 
+/// Git repositories in a space's folder, one or two levels down
+/// (`~/Work/acme`, `~/Work/projects/acme`), so main can tell which repo a
+/// request is about. Worktree folders and hidden folders are left out.
+pub fn repos(root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let subdirs = |dir: &Path| -> Vec<std::path::PathBuf> {
+        let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+        let mut v: Vec<_> = rd
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().to_string();
+                !n.starts_with('.') && !SKIP.contains(&n.as_str()) && n != "worktrees"
+            })
+            .map(|e| e.path())
+            .collect();
+        v.sort();
+        v
+    };
+    for d in subdirs(root) {
+        if d.join(".git").exists() {
+            out.push(d.display().to_string());
+            continue;
+        }
+        for d2 in subdirs(&d) {
+            if d2.join(".git").exists() {
+                out.push(d2.display().to_string());
+            }
+        }
+        if out.len() >= 200 {
+            break;
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn fs_repos(root: String) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || repos(Path::new(&root))).await.unwrap_or_default()
+}
+
+#[cfg(test)]
+mod repo_tests {
+    use super::*;
+
+    #[test]
+    fn finds_repos_one_or_two_levels_down() {
+        let root = std::env::temp_dir().join(format!("ondra-repos-{}", std::process::id()));
+        for d in ["top/.git", "projects/acme/.git", "projects/notes", "worktrees/acme/feat/.git", ".hidden/.git", "projects/acme/sub/.git"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        let found: Vec<String> = repos(&root).into_iter().map(|p| p.trim_start_matches(&root.display().to_string()).to_string()).collect();
+        assert_eq!(found, vec!["/projects/acme", "/top"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
 #[tauri::command]
 pub async fn fs_read(path: String) -> Result<FileText, String> {
     tauri::async_runtime::spawn_blocking(move || read(&path)).await.map_err(|e| e.to_string())?
