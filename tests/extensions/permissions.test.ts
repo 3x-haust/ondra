@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foreignDevice } from "../../extensions/permissions";
+import { focusSteal, foreignDevice } from "../../extensions/permissions";
 
 const mine = ["11111111-2222-3333-4444-555555555555", "ondra-tabc", "emulator-5556", "yomates-test"];
 const other = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
@@ -22,5 +22,19 @@ describe("foreignDevice", () => {
     expect(foreignDevice("adb shell input tap 1 2", mine)).toBe("adb");
     expect(foreignDevice("adb devices", mine)).toBeUndefined();
     expect(foreignDevice("adb wait-for-device", mine)).toBeUndefined();
+  });
+});
+
+describe("focusSteal", () => {
+  it("catches open without -g, not open -g", () => {
+    expect(focusSteal("open report.html")).toBeTruthy();
+    expect(focusSteal("cd out && open -a Preview a.pdf")).toBeTruthy();
+    expect(focusSteal("open -g -a Preview a.pdf")).toBeUndefined();
+  });
+  it("leaves heredoc bodies and quoted text alone", () => {
+    const add = `python3 /tmp/r/add.py <<'EOF'\n[{"claim":"a | open source driver","title":"Docs | Cua"}]\nopen questions\nEOF`;
+    expect(focusSteal(add)).toBeUndefined();
+    expect(focusSteal(`echo "done | open it later"`)).toBeUndefined();
+    expect(focusSteal(`cat <<EOF > a.txt\nopen x\nEOF\nopen b.html`)).toBeTruthy();
   });
 });
