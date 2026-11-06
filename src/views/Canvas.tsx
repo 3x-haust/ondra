@@ -49,9 +49,10 @@ interface Edge {
 const mode = () => "canvas" as "canvas" | "list";
 /** projects whose finished jobs are unfolded on the canvas */
 const [unfolded, setUnfolded] = createSignal<string[]>([]);
-/** how long a finished job stays out on the canvas before it folds into "끝난 일" */
-const DONE_FOR = 10 * 60_000;
-const folded = (t: Task) => tone(t) === "done" && !t.pinned && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR;
+/** a finished job folds into "끝난 일" right away (one waiting on a merge or an answer stays out) */
+const folded = (t: Task) => tone(t) === "done" && !t.pinned;
+/** a finished sub-job folds under its job the same way */
+const subFolded = (k: Task) => k.status === "done" && !k.pinned;
 
 /** live = working now · ask = needs you · review = done, branch not merged · idle · done */
 function tone(t: Task): string {
@@ -90,10 +91,16 @@ function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] }
         nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h: H.job, task: t });
         edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
         let ky = y + H.job + GAP.sub;
-        for (const k of state.tasks.filter((k) => k.parentId === t.id)) {
+        const kids = state.tasks.filter((k) => k.parentId === t.id);
+        const kidsDone = kids.filter(subFolded);
+        for (const k of open.includes(t.id) ? kids : kids.filter((k) => !subFolded(k))) {
           nodes.push({ id: k.id, kind: "sub", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
           edges.push({ from: t.id, to: k.id, tone: tone(k) });
           ky += H.sub + GAP.sub;
+        }
+        if (kidsDone.length) {
+          nodes.push({ id: `more:${t.id}`, kind: "more", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.more, project: { id: t.id, name: t.title, folder: "" }, task: t, count: kidsDone.length });
+          ky += H.more + GAP.sub;
         }
         rowH = Math.max(rowH, ky - GAP.sub - y);
       });
@@ -440,7 +447,7 @@ function MoreCard(props: { n: Node }) {
   return (
     <div class="cv-more-row" classList={{ open: open() }} title={open() ? "끝난 일 접기" : "끝난 일 펼치기"}>
       <Icon name="chevron" size={12} class={`cv-more-chev${open() ? " open" : ""}`} />
-      <span>{open() ? "끝난 일 접기" : "끝난 일"}</span>
+      <span>{props.n.task ? (open() ? "끝난 서브 접기" : "끝난 서브") : open() ? "끝난 일 접기" : "끝난 일"}</span>
       <Show when={!open()}><b class="cv-more-n">{props.n.count}</b></Show>
     </div>
   );
@@ -695,7 +702,7 @@ export function Canvas() {
       // folding: the cards shrink into the stack, then leave
       const to = { ...will };
       for (const n of gone) {
-        const c = card(after, projectOf(n));
+        const c = card(after, n.task?.parentId) ?? card(after, projectOf(n));
         to[n.id] = c ? { x: c.x, y: c.y } : was[n.id];
       }
       animate(was, to, [{}, Object.fromEntries(gone.map((n) => [n.id, 0]))], 260, () => setUnfolded(next));
@@ -704,7 +711,7 @@ export function Canvas() {
       setUnfolded(next);
       const from = { ...was };
       for (const n of born) {
-        const c = card(before, projectOf(n));
+        const c = card(before, n.task?.parentId) ?? card(before, projectOf(n));
         from[n.id] = c ? pos(c) : will[n.id];
       }
       animate(from, will, [Object.fromEntries(born.map((n) => [n.id, 0])), {}], 300);
