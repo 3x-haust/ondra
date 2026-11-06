@@ -19,6 +19,7 @@ import { Icon } from "../ui/Icon";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
+import { PrPane } from "../ui/PrPane";
 
 /** The task's own branch: where it is, and merge / throw away. */
 export function BranchCard(props: { t: Task }) {
@@ -63,7 +64,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
               </button>
             }
           >
-            {(pr) => <button class="btn sm primary" onClick={() => void openUrl(pr().url)}>PR #{pr().n}</button>}
+            {(pr) => <button class="btn sm primary" onClick={() => setPanelTab("pr")}>PR #{pr().n}</button>}
           </Show>
         </div>
       </Show>
@@ -460,6 +461,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "side", label: "사이드챗", icon: "message", keys: "⌘J" },
   { kind: "artifacts", label: "결과물", icon: "spark", job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: "⌃⇧G", job: true },
+  { kind: "pr", label: "PR", icon: "pr", job: true },
   { kind: "terminal", label: "셸", icon: "shell", keys: "⌃`", job: true },
   { kind: "files", label: "파일", icon: "file", keys: "⌘P", job: true },
   { kind: "browser", label: "브라우저", icon: "globe" },
@@ -631,6 +633,11 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               <Switch>
                 <Match when={tab() === "overview"}><Overview t={t()} /></Match>
                 <Match when={tab() === "changes"}><ChangesPane t={t()} top={t().worktree ? <BranchCard t={t()} /> : undefined} /></Match>
+                <Match when={tab() === "pr"}>
+                  <Show when={prOf(t())?.url} keyed fallback={<div class="pane-empty">이 일에는 PR이 없어요</div>}>
+                    {(_url) => <PrPane t={t()} />}
+                  </Show>
+                </Match>
                 <Match when={tab() === "files"}><FilesPane t={t()} /></Match>
                 <Match when={tab() === "terminal"}><TerminalPane t={t()} /></Match>
                 <Match when={tab() === "browser"}><BrowserPane t={t()} /></Match>

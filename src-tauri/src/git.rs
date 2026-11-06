@@ -259,24 +259,64 @@ pub async fn git_pr(cwd: String, title: String, body: String, env: Option<Vec<(S
 /// is on GitHub (`me`). One JSON object; the app works out what is new.
 #[tauri::command]
 pub async fn gh_pr_state(url: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || pr_json(&url, &env.unwrap_or_default(), "state,mergeable,headRefOid,statusCheckRollup,comments,reviews", false))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Everything the PR view shows: the watch fields plus title, branches, files
+/// and the diff (`diff`, cut at PR_DIFF_MAX bytes; `cut` says it was).
+#[tauri::command]
+pub async fn gh_pr_view(url: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let env = env.unwrap_or_default();
-        let tmp = std::env::temp_dir();
-        let cwd = tmp.to_string_lossy();
-        let pr = run(&cwd, "gh", &["pr", "view", &url, "--json", "state,mergeable,headRefOid,statusCheckRollup,comments,reviews"], &env)?;
-        let path = url.trim_start_matches("https://github.com/").replace("/pull/", "/pulls/");
-        let lines = run(
-            &cwd,
-            "gh",
-            &["api", "--paginate", &format!("repos/{path}/comments?per_page=100"), "--jq", ".[] | {id, who: .user.login, bot: (.user.type == \"Bot\"), body, path, line: (.line // .original_line), at: .created_at}"],
-            &env,
-        )?;
-        let me = run(&cwd, "gh", &["api", "user", "--jq", ".login"], &env).unwrap_or_default();
-        let lines: Vec<&str> = lines.lines().filter(|l| !l.trim().is_empty()).collect();
-        Ok(format!("{{\"pr\":{pr},\"lines\":[{}],\"me\":{}}}", lines.join(","), serde_json::to_string(&me).unwrap_or_else(|_| "\"\"".into())))
+        pr_json(
+            &url,
+            &env.unwrap_or_default(),
+            "number,title,url,state,isDraft,mergeable,baseRefName,headRefName,headRefOid,author,reviewDecision,statusCheckRollup,comments,reviews,files,additions,deletions",
+            true,
+        )
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+const PR_DIFF_MAX: usize = 1_500_000;
+
+fn pr_json(url: &str, env: &[(String, String)], fields: &str, with_diff: bool) -> Result<String, String> {
+    let tmp = std::env::temp_dir();
+    let cwd = tmp.to_string_lossy();
+    let pr = run(&cwd, "gh", &["pr", "view", url, "--json", fields], env)?;
+    let path = url.trim_start_matches("https://github.com/").replace("/pull/", "/pulls/");
+    let lines = run(
+        &cwd,
+        "gh",
+        &[
+            "api",
+            "--paginate",
+            &format!("repos/{path}/comments?per_page=100"),
+            "--jq",
+            ".[] | {id, who: .user.login, bot: (.user.type == \"Bot\"), body, path, line: (.line // .original_line), side, reply: .in_reply_to_id, url: .html_url, at: .created_at}",
+        ],
+        env,
+    )?;
+    let me = run(&cwd, "gh", &["api", "user", "--jq", ".login"], env).unwrap_or_default();
+    let lines: Vec<&str> = lines.lines().filter(|l| !l.trim().is_empty()).collect();
+    let quote = |s: &str| serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into());
+    let mut out = format!("{{\"pr\":{pr},\"lines\":[{}],\"me\":{}", lines.join(","), quote(&me));
+    if with_diff {
+        let mut diff = run(&cwd, "gh", &["pr", "diff", url, "--color", "never"], env).unwrap_or_default();
+        let cut = diff.len() > PR_DIFF_MAX;
+        if cut {
+            let mut end = PR_DIFF_MAX;
+            while !diff.is_char_boundary(end) {
+                end -= 1;
+            }
+            diff.truncate(end);
+        }
+        out.push_str(&format!(",\"diff\":{},\"cut\":{cut}", quote(&diff)));
+    }
+    out.push('}');
+    Ok(out)
 }
 
 /// Throw away uncommitted changes to one file (back to the last commit).
