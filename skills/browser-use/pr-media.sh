@@ -15,14 +15,16 @@
 #   --account <id>                            # Aside account (default: this space's, $ONDRA_ASIDE_ACCOUNT)
 #   --via aside|browser                       # force one browser
 #
-# Running it again replaces only the block it put in (<!-- pr-media --> … <!-- /pr-media -->).
+# Running it again adds to the block it put in (<!-- pr-media --> … <!-- /pr-media -->): earlier
+# pictures stay, a file with the same name replaces its old picture. --replace starts the block over.
 # Pictures sit side by side at 300px; each video gets its own player.
 set -euo pipefail
 
-PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""; MODE=body; TEXT=""; REPLY=""; AT=""
+PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""; REPLACE=0; MODE=body; TEXT=""; REPLY=""; AT=""
 while (($#)); do
   case $1 in
     --print) PRINT=1 ;;
+    --replace) REPLACE=1 ;;
     --comment) MODE=comment; shift; TEXT=$1 ;;
     --reply) MODE=reply; shift; REPLY=$1; shift; TEXT=$1 ;;
     --at) MODE=at; shift; AT=$1; shift; TEXT=$1 ;;
@@ -32,12 +34,12 @@ while (($#)); do
       shift
       while IFS= read -r f; do FILES+=("$f"); done < <(find "$1" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' -o -iname '*.mov' \) | sort)
       ;;
-    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,20p "$0"; exit 0 ;;
     *) if [[ -z $PR ]]; then PR=$1; else FILES+=("$1"); fi ;;
   esac
   shift
 done
-[[ -n $PR && ${#FILES[@]} -gt 0 ]] || { sed -n 2,19p "$0"; exit 1; }
+[[ -n $PR && ${#FILES[@]} -gt 0 ]] || { sed -n 2,20p "$0"; exit 1; }
 [[ $MODE != at || $AT == *:* ]] || { echo "--at needs <path:line>" >&2; exit 1; }
 ABS=()
 for f in "${FILES[@]}"; do
@@ -216,10 +218,27 @@ if [[ $MODE != body ]]; then
 fi
 
 BODY=$(gh pr view "$URL" --json body -q .body)
-NEW=$(BLOCK="$BLOCK" python3 -c '
+NEW=$(BLOCK="$BLOCK" REPLACE="$REPLACE" python3 -c '
 import os, re, sys
 body, block = sys.stdin.read(), os.environ["BLOCK"]
-if "<!-- pr-media -->" in body:
+
+def items(b):
+    imgs = re.findall(r"<img[^>]*?alt=\"([^\"]*)\"[^>]*/>", b)
+    tags = re.findall(r"<img[^>]*/>", b)
+    vids = re.findall(r"`([^`]+)`\n\n(https://\S+)", b)
+    return list(zip(imgs, tags)), vids
+
+old = re.search(r"<!-- pr-media -->.*?<!-- /pr-media -->", body, flags=re.S)
+if old and os.environ["REPLACE"] != "1":
+    # keep what was there; a file with the same name takes its old place
+    oi, ov = items(old.group(0))
+    ni, nv = items(block)
+    names = {n for n, _ in ni} | {n for n, _ in nv}
+    imgs = [t for n, t in oi if n not in names] + [t for _, t in ni]
+    vids = [f"`{n}`\n\n{u}" for n, u in ov if n not in names] + [f"`{n}`\n\n{u}" for n, u in nv]
+    parts = (["\n".join(imgs)] if imgs else []) + vids
+    block = "<!-- pr-media -->\n" + "\n\n".join(parts) + "\n<!-- /pr-media -->"
+if old:
     body = re.sub(r"<!-- pr-media -->.*?<!-- /pr-media -->", lambda m: block, body, flags=re.S)
 elif re.search(r"^## 화면[^\n]*$", body, flags=re.M):
     body = re.sub(r"^(## 화면[^\n]*\n)", lambda m: m.group(1) + "\n" + block + "\n\n", body, count=1, flags=re.M)
