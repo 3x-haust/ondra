@@ -756,7 +756,7 @@ export function Canvas() {
   };
 
   const onBgDown = (e: PointerEvent) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest(".cv-node, .cv-ctrl, .cv-add, .cv-drawer, .cv-mini")) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".cv-node, .cv-ctrl, .cv-add, .cv-drawer, .cv-mini, button")) return;
     setSel(undefined);
     setAdding(false);
     const start = { x: e.clientX, y: e.clientY, p: pan() };
@@ -811,8 +811,9 @@ export function Canvas() {
     for (const k of Object.keys(state.canvas ?? {})) if (k.startsWith(prefix)) setState("canvas", k, undefined!);
     const to = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const moved = Object.keys(to).some((id) => from[id] && (from[id].x !== to[id].x || from[id].y !== to[id].y));
-    if (!moved || matchMedia("(prefers-reduced-motion: reduce)").matches) return void queueMicrotask(() => fit());
-    animate(from, to, null, 320, () => queueMicrotask(() => fit()));
+    // put back in line and show all of it, not a zoomed-in corner
+    if (!moved || matchMedia("(prefers-reduced-motion: reduce)").matches) return void queueMicrotask(() => fit(true, true));
+    animate(from, to, null, 320, () => queueMicrotask(() => fit(true, true)));
   };
 
   const onKey = (e: KeyboardEvent) => {
