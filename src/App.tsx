@@ -14,6 +14,7 @@ import { notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
 import { MainView } from "./views/MainView";
 import { Canvas } from "./views/Canvas";
 import { MemoryView } from "./views/Memory";
+import { ResultsView } from "./views/Results";
 import { Devices } from "./views/Devices";
 import { watchDevices } from "./state/devices";
 import { Onboarding } from "./views/Onboarding";
@@ -84,6 +85,7 @@ export default function App() {
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
     startScheduler();
     if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());
+    void import("./engine/results").then((m) => m.backfillResults());
     warmModels();
     startBridge();
     // memory changed → its vectors are refreshed a moment later
@@ -207,7 +209,7 @@ export default function App() {
           <Show when={view().name === "settings"}><SettingsPage onBack={back} /></Show>
           <Show when={view().name !== "settings"}>
           {/* the center is main or the job you picked; it slides over when you switch */}
-          <Show when={view().name === "task" && (view() as { id: string }).id} keyed fallback={<Show when={view().name === "board"} fallback={<Show when={view().name === "devices"} fallback={<Show when={view().name === "memory"} fallback={<Slide from={-1}><MainView /></Slide>}><Slide from={-1}><MemoryView /></Slide></Show>}><Slide from={-1}><Devices /></Slide></Show>}><Slide from={-1}><Canvas /></Slide></Show>}>
+          <Show when={view().name === "task" && (view() as { id: string }).id} keyed fallback={<Show when={view().name === "board"} fallback={<Show when={view().name === "devices"} fallback={<Show when={view().name === "memory"} fallback={<Show when={view().name === "results"} fallback={<Slide from={-1}><MainView /></Slide>}><Slide from={-1}><ResultsView /></Slide></Show>}><Slide from={-1}><MemoryView /></Slide></Show>}><Slide from={-1}><Devices /></Slide></Show>}><Slide from={-1}><Canvas /></Slide></Show>}>
             {(id) => <Slide from={1}><TaskView id={id} /></Slide>}
           </Show>
           </Show>

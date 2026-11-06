@@ -8388,3 +8388,84 @@ textarea { resize: none !important; field-sizing: content; }
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
 }
+
+/* ───────── results: finished jobs' reports, list + reader */
+.res-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border-top: 1px solid var(--line-soft);
+}
+.res-list {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  padding: var(--s-8);
+  border-right: 1px solid var(--line-soft);
+}
+.res-day {
+  padding: var(--s-10) var(--s-8) var(--s-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.res-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px var(--s-8);
+  border-radius: var(--r-md);
+  text-align: left;
+  color: var(--ink-2);
+}
+.res-row:hover:not(.on) {
+  background: var(--hover);
+}
+.res-row.on {
+  background: var(--active);
+  color: var(--ink);
+}
+.res-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+}
+.res-meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.res-empty {
+  padding: var(--s-14) var(--s-8);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.res-read {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+.res-doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--s-20) var(--s-20) 48px;
+}
+.res-head {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--ink);
+}
+.res-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin: var(--s-4) 0 var(--s-14);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.res-sub .spacer {
+  flex: 1;
+}
