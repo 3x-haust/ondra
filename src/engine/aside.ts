@@ -226,6 +226,24 @@ const sideText = new Map<SpaceId, string>();
 const sideErr = new Map<SpaceId, string>();
 const sideSettled = new Map<SpaceId, () => void>();
 const sideRecap = new Map<SpaceId, boolean>();
+/** a btw the user carried over: sent with their next side message */
+const sideCarry = new Map<SpaceId, string>();
+/** when the side chat last got the overview of everything (it changes as work goes on) */
+const sideSeen = new Map<SpaceId, number>();
+const SIDE_FRESH_MS = 3 * 60_000;
+
+/** Carry a btw question and its answer into the side chat, to go on talking about it there. */
+export function continueInSide(space: SpaceId, question: string, answer: string) {
+  const at = Date.now();
+  setState("side", (list) => [
+    ...(list ?? []).slice(-200),
+    { id: uid("s"), space, at, from: "me", text: question },
+    { id: uid("s"), space, at, from: "side", text: answer },
+  ]);
+  sideCarry.set(space, `# A btw the user carried over to this chat
+user: ${clip(question, 1000)}
+answer: ${clip(answer, 4000)}`);
+}
 
 export const sideOf = (space: SpaceId) => (state.side ?? []).filter((m) => m.space === space);
 
@@ -263,7 +281,7 @@ async function ensureSide(space: SpaceId) {
       "--thinking",
       "low",
       "--append-system-prompt",
-      "This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them, and you do not see the main conversation unless the user pastes it. Answer in Korean, short and plain.",
+      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in Ondra (every main chat, job and sub-job, side chat, in every space); each job's full log is in ${engine.info.dataDir}/sessions/<job id>/*.jsonl, read it when the overview isn't enough. Answer in Korean, short and plain.`,
       ...(model ? ["--model", model] : []),
     ],
     await accountEnv(acc.id),
@@ -288,12 +306,19 @@ export async function sendSide(space: SpaceId, text: string) {
     sideText.set(space, "");
     sideErr.delete(space);
     const done = new Promise<void>((r) => sideSettled.set(space, r));
-    let message = t;
+    const parts: string[] = [];
+    // what's going on everywhere, again when it may have moved on
+    if (sideRecap.get(space) || Date.now() - (sideSeen.get(space) ?? 0) > SIDE_FRESH_MS) {
+      parts.push(`# Everything going on (as of ${new Date().toLocaleTimeString("ko-KR")})`, everything(`side:${space}`), "");
+      sideSeen.set(space, Date.now());
+    }
     if (sideRecap.get(space) && before.length) {
       const recap = before.slice(-12).map((m) => `${m.from === "me" ? "user" : "you"}: ${clip(m.text, 500)}`);
-      message = `# Earlier in this side chat (oldest first)\n${recap.join("\n")}\n\n# Message\n${t}`;
-    }
+      parts.push("# Earlier in this side chat (oldest first)", recap.join("\n"), "");
+    } else if (sideCarry.get(space)) parts.push(sideCarry.get(space)!, "");
+    sideCarry.delete(space);
     sideRecap.set(space, false);
+    const message = parts.length ? [...parts, "# Message", t].join("\n") : t;
     await request(agent, { type: "prompt", message });
     await done;
     const out = prose(sideText.get(space) ?? "") || (sideText.get(space) ?? "");
@@ -311,6 +336,8 @@ export const sideRunning = (space: SpaceId) => sideOf(space).some((m) => m.pendi
 /** Start the side chat over (its text goes too). */
 export function clearSide(space: SpaceId) {
   setState("side", (list) => (list ?? []).filter((m) => m.space !== space));
+  sideCarry.delete(space);
+  sideSeen.delete(space);
   agentKill(sideAgent(space));
   markDead(sideAgent(space));
   sideAttached.delete(space);
