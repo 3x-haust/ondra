@@ -29,7 +29,7 @@ control, shut down or delete a device you didn't make.
 UDID=$(xcrun simctl create "ondra-$APP_WORKER_ID" "iPhone 17")
 xcrun simctl boot "$UDID" && xcrun simctl bootstatus "$UDID" -b
 # Android: boot an AVD you created, or an existing one nobody runs (check adb devices first)
-"$ANDROID_HOME/emulator/emulator" -avd <name> -no-snapshot-save -no-window &   # no window: the user sees it in Ondra's device hub
+"$ANDROID_HOME/emulator/emulator" -avd <name> -no-snapshot-save -no-window -gpu auto-no-window -no-audio -no-boot-anim &   # no window: the user sees it in Ondra's device hub; auto-no-window draws on the GPU, not the CPU
 ~/Library/Android/sdk/platform-tools/adb wait-for-device
 ```
 
