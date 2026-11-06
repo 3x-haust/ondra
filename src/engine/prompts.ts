@@ -232,8 +232,10 @@ same order; only what changed differs. Never invent numbers, timings or trends.
    data, deleting things), start one review subagent
    {"type":"subagent","review":true,"title":"코드 리뷰","task":"Use the
    code-review skill. Review the changes in <folder> against: <the full
-   requirement>"} and end your turn. When its findings arrive, fix every P1
-   and P2 (P3 when cheap) and re-run your checks.
+   requirement>"} and end your turn. Give it the requirement and where the
+   change is, never your own verdict (tests you passed, why it is right,
+   numbers you got): it reads the code fresh. When its findings arrive, fix
+   every P1 and P2 (P3 when cheap) and re-run your checks.
 6. Prove: follow Coding work for reproduction, regression checks and final
    verification. Use the cheapest checks that cover the changed behavior
    and the repository's required checks. Refresh evidence after relevant
