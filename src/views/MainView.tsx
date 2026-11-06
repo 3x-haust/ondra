@@ -10,7 +10,7 @@ import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
 import { hoverTask, openPanel, openTask, panelOpen, setHoverTask, setView, toast, togglePanel, view } from "../state/ui";
-import { chatKey, editMain, inChat, stopMain, resetMain, throwThought, warmMain } from "../engine/captain";
+import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -25,7 +25,6 @@ import { ModelPicker, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { compactAgent } from "../engine/tasks";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
@@ -274,7 +273,6 @@ export function MainView() {
       commands={[
         btwCommand(() => `main:${key()}`),
         { name: "side", desc: "사이드챗 열기 (⌘J)", icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
-        { name: "compact", desc: "이 대화를 요약해서 정리", icon: "compact", run: () => void compactAgent(`captain:${key()}`) },
         { name: "flow", desc: "흐름 열기", icon: "branch", run: () => openPanel("flow") },
         { name: "ask", desc: "매번 묻도록 바꾸기", icon: "lock", run: () => setState("settings", "permission", "ask") },
         { name: "edits", desc: "편집 허용으로 바꾸기", icon: "pencil", run: () => setState("settings", "permission", "edits") },
@@ -282,7 +280,6 @@ export function MainView() {
         { name: "remember", desc: "기억하기 · 뒤에 적은 내용을 앞으로 지켜요", icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
         { name: "memory", desc: "기억한 것 보기 (그래프)", icon: "memory", run: () => setView({ name: "memory" }) },
         { name: "settings", desc: "설정", icon: "gear", run: () => setView({ name: "settings" }) },
-        { name: "clear", desc: "이 대화 지우고 새로 시작", icon: "refresh", run: () => void resetMain(state.space, project()?.id) },
         ...skillCommands(() => ({ space: state.space, project: project()?.id })),
       ]}
       placeholder={big ? "무엇이든 말해 주세요" : project() ? `${project()!.name}에 대해 말하기 · 일은 이 폴더에서 해요` : "메인에게 말하기 · 여러 일을 한 번에 적어도 돼요"}
