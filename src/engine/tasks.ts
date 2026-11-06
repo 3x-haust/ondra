@@ -569,7 +569,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   try {
     const t0 = taskById(id)!;
     const t = t0;
-    const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string]];
+    const env = [...(await workerEnv(id)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
     const skills = await jobSkills(t0);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
