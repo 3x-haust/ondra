@@ -9,7 +9,7 @@ import { accountById, projectById, setState, spaceById, state, taskById, updateA
 import { fsFiles } from "../lib/native";
 import { expand } from "../engine/rpc";
 import type { CaptainMessage, Task } from "../state/types";
-import { hoverTask, openPanel, openTask, panelOpen, setEditing, setHoverTask, setView, toast, togglePanel, view } from "../state/ui";
+import { hoverTask, openPanel, openTask, panelOpen, setHoverTask, setView, toast, togglePanel, view } from "../state/ui";
 import { chatKey, editMain, inChat, stopMain, resetMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
@@ -234,10 +234,6 @@ export function MainView() {
     const ask = list.slice(0, i).reverse().find((x) => x.from === "me");
     if (ask?.text) void editMain(ask.id, ask.text);
   };
-  const editLast = () => {
-    const last = [...msgs()].reverse().find((x) => x.from === "me");
-    if (last) setEditing(last.id);
-  };
   const asks = () =>
     state.decisions.filter((d) => {
       if (d.taskId.startsWith("main:")) return d.taskId === `main:${key()}`;
@@ -254,7 +250,6 @@ export function MainView() {
       id="main-input"
       big={big}
       autofocus
-      onEditLast={editLast}
       files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
       commands={[
         btwCommand(() => `main:${key()}`),
