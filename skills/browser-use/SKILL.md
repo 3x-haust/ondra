@@ -185,8 +185,9 @@ What makes a browser agent slow is the number of turns, not the commands
    "<this skill's folder>/pr-media.sh" <PR number|URL> shot1.png flow.mp4   # or --dir <folder>
    ```
    It uploads through the PR page in your tab (nothing gets posted), writes the
-   links into the description's `## 화면` section, and replaces its own block
-   on a rerun. Look at the pictures yourself first, then check the result with
+   links into the description's `## 화면` section. A rerun adds to its block:
+   earlier pictures stay, and a file with the same name replaces its old one
+   (`--replace` only when the user wants the old pictures gone). Look at the pictures yourself first, then check the result with
    `gh pr view <PR> --json body`. The same script posts pictures with words
    where a reviewer reads them, instead of in the description:
    ```bash
