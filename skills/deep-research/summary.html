@@ -24,6 +24,8 @@
   }
   .kicker { font-size: 11.5px; color: var(--faint); }
   h1 { font-size: 19px; line-height: 1.35; margin: 4px 0 14px; letter-spacing: -.01em; }
+  .todo { margin: -6px 0 14px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--tint); border-radius: 0 8px 8px 0; font-size: 13.5px; }
+  .todo b { margin-right: 6px; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 14px; }
   .stat { background: var(--tint); border-radius: 9px; padding: 10px 12px; }
   .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
@@ -40,6 +42,8 @@
 <body>
 <div class="kicker">리서치 요약 · {{YYYY-MM-DD}}</div>
 <h1>{{답 한 문장 (report.html의 제목과 같게)}}</h1>
+<!-- report.html's "지금 할 일", the first one or two, as one short line. -->
+<div class="todo"><b>지금 할 일</b>{{바로 할 일 한 줄}}</div>
 
 <!-- 2–4 numbers that carry the answer, each with what it is and its source. Drop the block if the answer has no numbers. -->
 <div class="stats">
@@ -48,7 +52,7 @@
   <div class="stat"><b>{{2026.04}}</b><span>{{…}} <sup>[3]</sup></span></div>
 </div>
 
-<!-- The report's 3 takeaways, one line each. -->
+<!-- The report's 3 takeaways, one short plain line each (under ~45 characters). -->
 <ol>
   <li>{{가장 중요한 결론}} <sup>[1]</sup></li>
   <li>{{두 번째}} <sup>[2]</sup></li>

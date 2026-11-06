@@ -44,6 +44,18 @@
   .tag.unverified { background: #fbf1df; color: var(--warn); }
   .tag.conflict { background: #f9e2df; color: var(--bad); }
   .gaps li { margin: 4px 0; }
+  .todo { border: 1px solid var(--accent-soft); border-radius: 10px; padding: 14px 20px; margin: 14px 0; }
+  .todo ol { margin: 6px 0 0; padding-left: 20px; }
+  .todo li { margin: 4px 0; font-weight: 500; }
+  table.grid td, table.grid th { text-align: center; }
+  table.grid td:first-child, table.grid th:first-child { text-align: left; }
+  table.grid tr.pick td { background: var(--accent-soft); }
+  table.grid tr.pick td:first-child { font-weight: 600; }
+  .dot { font-size: 15px; letter-spacing: 1px; }
+  .dot.good { color: var(--good); } .dot.mid { color: var(--warn); } .dot.bad { color: var(--bad); }
+  dl.terms { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+  dl.terms dt { font-weight: 600; }
+  dl.terms dd { margin: 0; color: var(--soft); }
   ol.sources { font-size: 12.5px; color: var(--soft); padding-left: 22px; }
   ol.sources li { margin: 4px 0; }
   ol.sources a { color: var(--ink); }
@@ -62,6 +74,15 @@
   <p class="question">질문: {{사용자가 물은 그대로}}</p>
 </header>
 
+<!-- What the user can do with this, first. Verbs they can act on this week. -->
+<section class="todo">
+  <strong>지금 할 일</strong>
+  <ol>
+    <li>{{바로 할 수 있는 일 한 줄}}</li>
+    <li>{{그다음 할 일}}</li>
+  </ol>
+</section>
+
 <section class="tldr">
   <strong>요약</strong>
   <ol>
@@ -71,11 +92,20 @@
   </ol>
 </section>
 
-<!-- One section per sub-question. Lead with the answer, then the evidence. -->
-<h2>{{하위 질문 1}}</h2>
-<p>{{답 두세 문장}}<sup><a href="#s1">1</a></sup></p>
+<!-- One section per sub-question, its heading the question in the user's words. The answer first, short sentences. -->
+<h2>{{사용자 말로 쓴 질문 1?}}</h2>
+<p>{{답 한 문장.}} {{왜 그런지 한두 문장.}}<sup><a href="#s1">1</a></sup></p>
 
-<!-- Comparison table: one row per item, the fields from the plan as columns. -->
+<!-- Decision grid: options × 3–4 criteria the user cares about. ●●● good, ●●○ so-so, ●○○ weak. The pick's row marked. One-line verdict per option, no sentences in cells. -->
+<table class="grid">
+  <thead><tr><th>{{선택지}}</th><th>{{기준 1: 예) 배우기}}</th><th>{{기준 2: 예) 만들기 쉬움}}</th><th>{{기준 3: 예) 비용}}</th><th>한 줄</th></tr></thead>
+  <tbody>
+    <tr class="pick"><td>{{A}} · 추천</td><td><span class="dot good">●●●</span></td><td><span class="dot good">●●●</span></td><td><span class="dot mid">●●○</span></td><td>{{왜 이걸 고르는지 짧게}}</td></tr>
+    <tr><td>{{B}}</td><td><span class="dot mid">●●○</span></td><td><span class="dot bad">●○○</span></td><td><span class="dot bad">●○○</span></td><td>{{짧게}}</td></tr>
+  </tbody>
+</table>
+
+<!-- Fact table: short facts only (a few words or a number per cell). Sentences belong in paragraphs. -->
 <table>
   <thead><tr><th>{{항목}}</th><th>{{특징}}</th><th class="num">{{숫자}}</th><th>출처</th></tr></thead>
   <tbody>
@@ -115,6 +145,12 @@
     </g>
   </svg>
 </figure>
+
+<!-- Only when a term the user didn't use can't be avoided. -->
+<h2>말 풀이</h2>
+<dl class="terms">
+  <dt>{{용어}}</dt><dd>{{몇 단어로 쉬운 설명}}</dd>
+</dl>
 
 <h2>확실하지 않은 것</h2>
 <ul class="gaps">

@@ -101,19 +101,32 @@ whole.
 
 ## 4. Write the report
 
+Read `writing/README.md` in this skill's folder first: the user has to get
+the report in one read, and it must not sound machine-written.
+
 Copy this skill's `report.html` to `$R/report.html` and fill it:
 
-- Title = the answer in one sentence. Then 3 numbered takeaways with
-  source numbers.
-- One section per sub-question: the answer first, then evidence.
-- A table for any comparison (items × fields, numbers right-aligned).
-- 1–3 pictures, each answering one question: inline SVG bars (one scale from
-  zero, the answer's bar in the accent color), a timeline for dated events.
-  Copy the template's SVG markup; no scripts, no CDN, no web fonts, so the
-  same file shows in the chat and prints to PDF.
-- "확실하지 않은 것": what wasn't found, conflicts, unverified items.
+- Title = the answer in one plain sentence. Then "지금 할 일" (1–3 actions the
+  user can take) and 3 takeaways with source numbers.
+- One section per sub-question, its heading the question in the user's
+  words: the answer in the first sentence, then why.
+- Options to choose between → the decision grid (●◐○, the pick marked), not a
+  table of sentences. A table only for short facts (cells of a few words or a
+  number, numbers right-aligned).
+- 1–3 pictures, each answering one question its title asks in plain words:
+  inline SVG bars (one scale from zero, the answer's bar in the accent
+  color, labels on the bars), a timeline for dated events. Copy the
+  template's markup; no scripts, no CDN, no web fonts, so the same file
+  shows in the chat and prints to PDF.
+- "말 풀이" when a term the user didn't use can't be avoided: a few words each.
+- "확실하지 않은 것": what wasn't found, conflicts, unverified items. Caveats
+  live here, not at the end of every paragraph.
 - Numbered sources: title, publisher, published date, the date you read it.
-- The user's language (Korean unless they wrote otherwise), plain words.
+- The user's language (Korean unless they wrote otherwise), 해요체, plain words.
+
+Then take the AI out of it: run `check-writing.py` on the report and fix
+every hit until it passes (exit 0), as `writing/README.md` says. Keep every
+fact, number and source number; change the wording, not the claims.
 
 Then print it:
 
@@ -131,7 +144,7 @@ page, then the PDF itself. Not the whole report, and not the same tables and
 charts again as loose blocks.
 
 1. Copy this skill's `summary.html` to `$R/summary.html` and fill it from the
-   report only: the same title, 2–4 numbers that carry the answer (each with
+   report only (and run `check-writing.py` on it too): the same title, what to do now, 2–4 numbers that carry the answer (each with
    what it is and its source number), the 3 takeaways, the report's one most
    telling picture (smaller, same data and colors), and the footer (page
    count, source count, one line of what's uncertain). Nothing that isn't in
