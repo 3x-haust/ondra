@@ -86,7 +86,12 @@
   ol.sources { font-size: 12.5px; color: var(--soft); padding-left: 22px; }
   ol.sources li { margin: 4px 0; }
   ol.sources a { color: var(--ink); }
-  @page { size: A4; margin: 16mm 14mm; }
+  /* page numbers at the bottom of every printed page */
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+    @bottom-center { content: counter(page) " / " counter(pages); font: 8.5pt -apple-system, "Apple SD Gothic Neo", sans-serif; color: #8a8f98; }
+  }
   @media print {
     body { padding: 0; max-width: none; }
     h2 { break-after: avoid; }
