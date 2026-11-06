@@ -30,7 +30,8 @@ export interface ImportPick {
 }
 
 /** Import everything picked from the given sources. Safe to run again (no duplicates). */
-export function importFrom(list: ImportSource[], pick: ImportPick) {
+/** Imports go into one space (the one on screen), never into every space. */
+export function importFrom(list: ImportSource[], pick: ImportPick, space: SpaceId = state.space) {
   let rules = 0;
   let skills = 0;
   let memories = 0;
@@ -43,7 +44,7 @@ export function importFrom(list: ImportSource[], pick: ImportPick) {
         const h = `${text.length}:${text.slice(0, 64)}`;
         if (!text || state.absorbed?.[r.path] === h) continue;
         const before = state.memory.length;
-        addMemory(text.replace(/^#+ .*$/gm, ""), "global", { source: src.id, pinned: true, kind: "rule", from: r.path, quiet: true });
+        addMemory(text.replace(/^#+ .*$/gm, ""), "space", { space, source: src.id, pinned: true, kind: "rule", from: r.path, quiet: true });
         setState("absorbed", (x) => ({ ...(x ?? {}), [r.path]: h }));
         rules += state.memory.length - before;
       }
@@ -53,7 +54,7 @@ export function importFrom(list: ImportSource[], pick: ImportPick) {
       const names = new Set(state.skills.map((s) => s.name));
       const fresh = src.skills.filter((s) => !have.has(s.path) && !names.has(s.name));
       if (fresh.length) {
-        setState("skills", (cur) => [...cur, ...fresh.map((s) => ({ name: s.name, path: s.path, description: s.description, source: src.id, enabled: true }))]);
+        setState("skills", (cur) => [...cur, ...fresh.map((s) => ({ name: s.name, path: s.path, description: s.description, source: src.id, enabled: true, space }))]);
         skills += fresh.length;
       }
     }
@@ -63,7 +64,7 @@ export function importFrom(list: ImportSource[], pick: ImportPick) {
         const body = stripFront(m.text);
         if (!body) continue;
         const before = state.memory.length;
-        addMemory(body.replace(/^#+ .*$/gm, ""), m.project ? "project" : "global", { project: m.project || undefined, source: src.id, from: m.path, quiet: true });
+        addMemory(body.replace(/^#+ .*$/gm, ""), m.project ? "project" : "space", { space, project: m.project || undefined, source: src.id, from: m.path, quiet: true });
         memories += state.memory.length - before;
       }
     }

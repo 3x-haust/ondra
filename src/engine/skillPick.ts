@@ -4,7 +4,7 @@
 // that product. Single skills are always given.
 
 import { globalSkills, workerSkills } from "../lib/native";
-import { state } from "../state/store";
+import { skillsIn } from "./memory";
 import type { Task } from "../state/types";
 
 export interface GlobalSkill {
@@ -46,7 +46,7 @@ export async function jobSkills(t: Task): Promise<string[]> {
   const text = [t.title, t.ask, t.topic, t.cwd].filter(Boolean).join(" ");
   return [
     ...(await workerSkills()),
-    ...state.skills.filter((s) => s.enabled).map((s) => s.path),
+    ...skillsIn(t.space).map((s) => s.path),
     ...pickSkills(await globalSkills(), text),
   ];
 }

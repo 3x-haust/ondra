@@ -15,8 +15,8 @@ import { createSignal } from "solid-js";
 import { expand } from "./rpc";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
-import { absorbNotes } from "./absorb";
-import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, retireMemory, userOwned } from "./memory";
+import { absorbNotes, findNotes } from "./absorb";
+import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, userOwned } from "./memory";
 import { pathsExist, skillSave } from "../lib/native";
 import { projectById, setState, spaceById, state } from "../state/store";
 import type { Memory, MemoryKind, SpaceId, Task } from "../state/types";
@@ -27,17 +27,6 @@ const KIND_IDS = new Set<MemoryKind>(KINDS.map((k) => k.id));
 const [running, setRunning] = createSignal(false);
 export const tidying = running;
 
-/** the space a piece lives in (global pieces go with the first space) */
-function spaceOf(m: Memory): SpaceId {
-  if (m.scope === "space" && m.space) return m.space;
-  if (m.scope === "project" && m.project) {
-    const p = (state.projects ?? []).find((x) => expand(x.folder) === expand(m.project!));
-    if (p) return p.space;
-    const s = [...state.spaces].filter((x) => x.folder !== "~").sort((a, b) => b.folder.length - a.folder.length).find((x) => expand(m.project!).startsWith(expand(x.folder)));
-    if (s) return s.id;
-  }
-  return state.spaces[0]?.id ?? "home";
-}
 
 const learnable = (t: Task, seen: Set<string>, cursor: number) =>
   t.status === "done" && !t.parentId && !t.answer && (t.finishedAt ?? 0) > cursor && !seen.has(t.id) && !state.memory.some((m) => m.taskId === t.id) && (t.summary ?? "").trim().length > 40;
@@ -141,8 +130,12 @@ function apply(plan: Plan, list: Memory[], jobs: Task[]) {
   return n;
 }
 
-/** One pass over every space. `force` = the user asked (ignores the timer). */
-export async function tidyMemory(force = false) {
+/**
+ * One pass over every space, each on its own (a space's model only sees that
+ * space's pieces). `force` = the user asked (ignores the timer); `only` = just
+ * that space (the 정리 button tidies the space on screen).
+ */
+export async function tidyMemory(force = false, only?: SpaceId) {
   if (running() || !state.settings.learn) return;
   const last = state.memoryTidy;
   if (!force && last && Date.now() - last.at < EVERY_MS) return;
@@ -154,14 +147,16 @@ export async function tidyMemory(force = false) {
   const touched: string[] = [];
   try {
     // 0. notes other tools keep in the folders become pieces too (one structure)
-    await absorbNotes().catch(() => 0);
+    const notes = only ? (await findNotes()).filter((n) => n.space === only) : undefined;
+    if (!notes || notes.length) await absorbNotes(notes).catch(() => 0);
+    const mine = (m: Memory) => !only || placeOf(m) === only;
     // 4. the forgetting curve, no model needed
-    for (const m of state.memory.filter((x) => isLive(x) && forgotten(x))) {
+    for (const m of state.memory.filter((x) => isLive(x) && mine(x) && forgotten(x))) {
       retireMemory(m.id, undefined, "오래 안 써서 흐려졌어요");
       total.retired++;
     }
     // code facts whose files are all gone are stale (Copilot checks citations)
-    const cited = state.memory.filter((x) => isLive(x) && x.cites?.length);
+    const cited = state.memory.filter((x) => isLive(x) && mine(x) && x.cites?.length);
     if (cited.length) {
       const all = [...new Set(cited.flatMap((x) => x.cites!))];
       const ok = await pathsExist(all.map((p) => expand(p)));
@@ -172,8 +167,9 @@ export async function tidyMemory(force = false) {
           total.retired++;
         }
     }
-    for (const sp of state.spaces) {
-      const list = state.memory.filter((m) => isLive(m) && spaceOf(m) === sp.id).slice(-160);
+    for (const sp of state.spaces.filter((s) => !only || s.id === only)) {
+      // this space's own pieces; global ones (the user's, for every space) and pieces no space owns are left alone
+      const list = state.memory.filter((m) => isLive(m) && m.scope !== "global" && placeOf(m) === sp.id).slice(-160);
       const jobs = state.tasks
         .filter((t) => t.space === sp.id && learnable(t, seen, cursor))
         .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
@@ -191,8 +187,9 @@ export async function tidyMemory(force = false) {
         /* this space waits for the next pass */
       }
     }
-    total.skills = await growSkills();
-    setState("memoryTidy", { at: Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: reached });
+    total.skills = await growSkills(only);
+    // one space tidied: the others keep their turn (the timer and the cursor of jobs not yet learned from)
+    setState("memoryTidy", { at: only ? (last?.at ?? 0) : Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: only ? cursor : reached });
     if (force) {
       const parts = [total.skills && `스킬 ${total.skills}`, total.learned && `새로 배움 ${total.learned}`, total.merged && `합침 ${total.merged}`, total.retired && `지난 기억으로 ${total.retired}`, total.keyed && `관련어 ${total.keyed}`].filter(Boolean);
       toast(parts.length ? `기억을 정리했어요 · ${parts.join(" · ")}` : "정리할 게 없었어요");
@@ -214,13 +211,15 @@ export function canGrow(m: Memory, linked: Memory[]): boolean {
   return name.length >= 3 && (m.text.length >= 300 || linked.length >= 2);
 }
 
-async function growSkills(): Promise<number> {
+async function growSkills(only?: SpaceId): Promise<number> {
   let made = 0;
   const taken = new Set(state.skills.map((s) => s.name));
-  for (const m of state.memory.filter((x) => isLive(x) && kindOf(x) === "procedure" && !x.skill && x.uses + (x.seen ?? 1) - 1 >= 3)) {
+  for (const m of state.memory.filter((x) => isLive(x) && x.scope !== "global" && (!only || placeOf(x) === only) && kindOf(x) === "procedure" && !x.skill && x.uses + (x.seen ?? 1) - 1 >= 3)) {
     const name = (m.key ?? "").replace(/[^a-z0-9-]/g, "").slice(0, 48);
     if (taken.has(name)) continue;
-    const linked = (m.links ?? []).map((id) => state.memory.find((x) => x.id === id)).filter((x): x is Memory => !!x && isLive(x) && kindOf(x) === "procedure");
+    const space = placeOf(m);
+    // a skill is grown from one space's procedures and only that space's jobs get it
+    const linked = (m.links ?? []).map((id) => state.memory.find((x) => x.id === id)).filter((x): x is Memory => !!x && isLive(x) && kindOf(x) === "procedure" && placeOf(x) === space);
     if (!canGrow(m, linked)) continue;
     const desc = m.text.split(/(?<=[.!?。]|요\.?)\s/)[0].replace(/\s+/g, " ").slice(0, 160);
     const text = [
@@ -238,7 +237,7 @@ async function growSkills(): Promise<number> {
     ].join("\n");
     try {
       const dir = await skillSave(name, text, false);
-      setState("skills", (l) => [...l, { name, path: dir, description: desc, source: "ondra" as const, enabled: true, menu: false }]);
+      setState("skills", (l) => [...l, { name, path: dir, description: desc, source: "ondra" as const, enabled: true, menu: false, ...(space ? { space } : {}) }]);
       setState("memory", (x) => x.id === m.id, { skill: name });
       taken.add(name);
       made++;

@@ -4,6 +4,7 @@
 import { createSignal } from "solid-js";
 import { fsRead, globalSkills, skillList } from "../lib/native";
 import { state } from "../state/store";
+import { skillsIn } from "./memory";
 
 export interface MenuSkill {
   name: string;
@@ -37,7 +38,7 @@ export function menuSkills(): MenuSkill[] {
     void load();
   }
   const seen = new Set<string>();
-  return [...state.skills.filter((s) => s.enabled).map((s) => ({ name: s.name, description: s.description, from: "mine" as const })), ...found()].filter(
+  return [...skillsIn(state.space).map((s) => ({ name: s.name, description: s.description, from: "mine" as const })), ...found()].filter(
     (s) => s.name && !seen.has(s.name) && !!seen.add(s.name),
   );
 }

@@ -12,8 +12,8 @@
 // structure, or the local neighbourhood of what's selected; the right side shows
 // one thing, editable, or the saved versions of the memory (MemorySide.tsx).
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { addMemory, faded, isLive, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
-import { projectNow } from "../engine/journal";
+import { addMemory, faded, inSpace, isLive, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
+import { parseNowKey, projectNow } from "../engine/journal";
 import { tidying, tidyMemory } from "../engine/tidy";
 import { absorbing, absorbNotes, findNotes, notesPending } from "../engine/absorb";
 import { expand } from "../engine/rpc";
@@ -112,10 +112,10 @@ export function MemoryView() {
   // each space is its own workspace: only what belongs to this one (and what every job shares)
   const mySpaces = () => state.spaces.filter((s) => s.id === state.space);
   const myProjects = () => (state.projects ?? []).filter((p) => p.space === state.space);
-  const under = (path: string | undefined, root: string | undefined) => !!path && !!root && `${expand(path).replace(/\/+$/, "")}/`.startsWith(`${expand(root).replace(/\/+$/, "")}/`);
-  const mine = (path?: string, space?: string) => (space ? space === state.space : myProjects().some((p) => under(path, p.folder)) || mySpaces().some((s) => s.folder !== "~" && under(path, s.folder)));
-  const myMemory = createMemo(() => state.memory.filter((m) => m.scope === "global" || (m.scope === "space" ? m.space === state.space : mine(m.project, m.space))));
+  const myMemory = createMemo(() => state.memory.filter((m) => inSpace(m, state.space)));
   const myJournal = createMemo(() => (state.journal ?? []).filter((e) => !e.space || e.space === state.space));
+  // folder notes of this space only (the other space's notes are brought in there)
+  const myNotes = createMemo(() => notesPending().filter((n) => n.space === state.space));
   const [files] = createResource(
     () => [state.space, mySpaces().map((s) => s.folder).join("|"), myProjects().map((p) => p.folder).join("|")],
     async () => {
@@ -155,9 +155,10 @@ export function MemoryView() {
   const nows = createMemo(() => {
     const out: Record<string, ProjectNow> = {};
     for (const k of Object.keys(state.memoryNow ?? {})) {
-      if (!mine(k)) continue;
-      const n = projectNow(k);
-      if (n) out[k] = n;
+      const { space, folder } = parseNowKey(k);
+      if (space !== state.space) continue;
+      const n = projectNow(folder, space);
+      if (n) out[folder] = n;
     }
     return out;
   });
@@ -205,13 +206,13 @@ export function MemoryView() {
           <Show when={myJournal().length}><span class="mem-sep" /><b>{myJournal().length}</b>일 기록</Show>
         </span>
         <span class="spacer" data-tauri-drag-region />
-        <Show when={notesPending().length}>
-          <button class="btn sm" disabled={absorbing()} onClick={() => void absorbNotes()} title={notesPending().map((x) => tilde(x.path)).join("\n")}>
+        <Show when={myNotes().length}>
+          <button class="btn sm" disabled={absorbing()} onClick={() => void absorbNotes(myNotes())} title={myNotes().map((x) => tilde(x.path)).join("\n")}>
             <Icon name="download" size={13} />
-            {absorbing() ? "가져오는 중" : `폴더 노트 ${notesPending().length}개`}
+            {absorbing() ? "가져오는 중" : `폴더 노트 ${myNotes().length}개`}
           </button>
         </Show>
-        <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true)} title={tidyTitle()}>
+        <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true, state.space)} title={tidyTitle()}>
           <Icon name="refresh" size={13} />
           {tidying() ? "정리하는 중" : "정리"}
         </button>
