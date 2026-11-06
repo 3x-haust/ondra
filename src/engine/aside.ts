@@ -11,7 +11,7 @@ import { createSignal } from "solid-js";
 import { accountById, projectById, setState, spaceById, state, taskById, uid } from "../state/store";
 import { inChat } from "./captain";
 import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
-import { agentKill, agentSpawn } from "../lib/native";
+import { agentKill, agentSpawn, spaceLogs } from "../lib/native";
 import { prose } from "./fences";
 import { modelFor } from "./models";
 import { engine, expand, explain, isAlive, listen, markAlive, markDead, request, stderrOf } from "./rpc";
@@ -149,6 +149,11 @@ function everything(scope: string): string {
   return out.join("\n\n");
 }
 
+/** This space's logs only (a folder of links), refreshed each time; never the whole sessions folder. */
+async function logsOf(space: SpaceId): Promise<string> {
+  return spaceLogs(space, state.tasks.filter((t) => t.space === space).map((t) => t.id)).catch(() => "");
+}
+
 function accountFor(space: SpaceId) {
   return accountById(chooseAccount(space, "")) ?? state.accounts[0];
 }
@@ -158,7 +163,9 @@ export function btwPrompt(scope: string, q: string, logs: string): string {
   return [
     "Answer a BTW question. It is a side question: keep it separate from the conversations below and change nothing.",
     "You know everything that happened in this space of Ondra: the conversation the user is looking at, every chat with main, every job and sub-job, and its side chat. The user's other space is a separate workspace you don't see; if asked about it, say it's in the other space.",
-    `When the picture below isn't enough, read the full logs in this folder (${logs}): one folder per job named by its id, main chats in captain-<space>[-<project>], each a set of .jsonl files. Use grep to find things; don't read whole files.`,
+    logs
+      ? `When the picture below isn't enough, read the full logs in this folder (${logs}): one folder per job named by its id, main chats in captain-<space>[-<project>], each a set of .jsonl files. Use grep to find things; don't read whole files. Read nothing else of Ondra's data.`
+      : "Read nothing of Ondra's data folder.",
     "Answer in Korean, short and plain (a few lines). Name the job when the answer comes from one.",
     "",
     "# What the user is looking at",
@@ -207,10 +214,10 @@ export async function askBtw(scope: string, question: string, files: string[] = 
   );
   try {
     const model = modelFor(acc.id);
-    const logs = `${engine.info.dataDir}/sessions`;
+    const logs = await logsOf(space);
     await agentSpawn(
       agent,
-      logs,
+      logs || expand(spaceById(space).folder || "~"),
       ["--no-session", "--tools", "read,grep,find,ls", "--no-skills", "--thinking", "low", ...(model ? ["--model", model] : [])],
       await accountEnv(acc.id),
     );
@@ -293,7 +300,7 @@ async function ensureSide(space: SpaceId) {
       "--thinking",
       "low",
       "--append-system-prompt",
-      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in this space (every main chat, job and sub-job); the user's other space is a separate workspace you don't see. Each job's full log is in ${engine.info.dataDir}/sessions/<job id>/*.jsonl, read it when the overview isn't enough. Answer in Korean, short and plain.`,
+      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in this space (every main chat, job and sub-job); the user's other space is a separate workspace you don't see. Each job's full log is in ${(await logsOf(space)) || "(not available)"}/<job id>/*.jsonl, read it when the overview isn't enough; read nothing else of Ondra's data. Answer in Korean, short and plain.`,
       ...(model ? ["--model", model] : []),
     ],
     await accountEnv(acc.id),
@@ -313,6 +320,8 @@ export async function sendSide(space: SpaceId, text: string) {
   setState("side", (list) => [...(list ?? []).slice(-200), me, reply]);
   sideBusy.add(space);
   try {
+    // new jobs and sessions since the side chat started show up in its log folder
+    void logsOf(space);
     await ensureSide(space);
     const agent = sideAgent(space);
     sideText.set(space, "");

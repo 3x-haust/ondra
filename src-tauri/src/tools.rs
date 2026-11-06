@@ -310,7 +310,8 @@ pub fn worker_extensions(app: AppHandle) -> Vec<String> {
     let mut out: Vec<String> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "ts"))
+        // tests sit next to the extensions; they are not extensions
+        .filter(|p| p.extension().is_some_and(|x| x == "ts") && !p.to_string_lossy().ends_with(".test.ts"))
         .map(|p| p.display().to_string())
         .collect();
     out.sort();

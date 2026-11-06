@@ -578,7 +578,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   try {
     const t0 = taskById(id)!;
     const t = t0;
-    const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
+    const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ...dataEnv(t0), ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
     const skills = await jobSkills(t0);
     const model = t.model || modelFor(account.id);
     await prepareQuery(relatedQuery(t));
@@ -1203,6 +1203,25 @@ export function createTask(f: {
     });
   }
   return id;
+}
+
+/**
+ * What keeps a job to its own space's data: Ondra's data folder, the jobs whose
+ * logs and folders it may read (itself, what it follows or builds on, its parent
+ * and sub-agents; no list when the user opened another space to it), its space's
+ * own folders (browser recipes).
+ */
+export function dataEnv(t: Task): [string, string][] {
+  const data = engine.info.dataDir;
+  if (!data) return [];
+  const key = t.space.replace(/[^A-Za-z0-9_-]/g, "") || "home";
+  const ids = [t.id, t.follows, t.parentId, ...(t.after ?? []), ...state.tasks.filter((k) => k.parentId === t.id).map((k) => k.id)].filter((x): x is string => !!x);
+  return [
+    ["ONDRA_DATA_DIR", data],
+    ["ONDRA_SPACE_KEY", key],
+    ["ONDRA_RECIPES_DIR", `${data}/browser/${key}/recipes`],
+    ...(t.reach?.length ? [] : [["ONDRA_JOBS_ALLOWED", [...new Set(ids)].join(",")] as [string, string]]),
+  ];
 }
 
 /** A finished job (not a quick answer): more work on it starts as a new job that follows it. */

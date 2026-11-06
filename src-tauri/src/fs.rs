@@ -246,3 +246,54 @@ pub async fn save_download(bytes: Vec<u8>, name: String) -> Result<String, Strin
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
+
+/// One space's own view of the job logs, for btw and the side chat: a folder
+/// holding only that space's job and main-chat logs (hard links, so it costs no
+/// space and grows as the logs do), so they never read the other space's.
+#[tauri::command]
+pub async fn space_logs(app: tauri::AppHandle, space: String, ids: Vec<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = crate::engine::data_dir(&app);
+        let key = crate::browser::space_key(&space);
+        let dest = data.join("spaces").join(&key).join("logs");
+        std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+        let ok = |s: &str| !s.is_empty() && !s.contains('/') && !s.contains("..");
+        let mut keep: std::collections::HashSet<String> = ids.into_iter().filter(|s| ok(s)).collect();
+        // main chats of this space: captain-<space> and captain-<space>-<project>
+        let sessions = data.join("sessions");
+        if let Ok(dir) = std::fs::read_dir(&sessions) {
+            for e in dir.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if name == format!("captain-{key}") || name.starts_with(&format!("captain-{key}-")) {
+                    keep.insert(name);
+                }
+            }
+        }
+        for id in &keep {
+            let src = sessions.join(id);
+            let Ok(files) = std::fs::read_dir(&src) else { continue };
+            let to = dest.join(id);
+            let _ = std::fs::create_dir_all(&to);
+            for f in files.flatten() {
+                let target = to.join(f.file_name());
+                if f.path().is_file() && !target.exists() {
+                    // a copy only if hard links aren't possible
+                    if std::fs::hard_link(f.path(), &target).is_err() {
+                        let _ = std::fs::copy(f.path(), &target);
+                    }
+                }
+            }
+        }
+        // what isn't this space's (any more) goes
+        if let Ok(dir) = std::fs::read_dir(&dest) {
+            for e in dir.flatten() {
+                if !keep.contains(&e.file_name().to_string_lossy().to_string()) {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+        Ok(dest.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

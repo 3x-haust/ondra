@@ -299,6 +299,7 @@ pub fn run() {
             fs::clipboard_files,
             fs::save_download,
             fs::ensure_dir,
+            fs::space_logs,
             worktree::worktree_merge,
             worktree::worktree_remove,
             store::pick_files,

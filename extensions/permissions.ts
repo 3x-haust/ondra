@@ -27,6 +27,31 @@ export function broadKill(command: string, cwd = ""): string | undefined {
   return undefined;
 }
 
+/**
+ * Ondra's own data a job must not read: the app state, and other jobs' logs,
+ * worktrees and results (another space's above all). `allowed` are the job ids
+ * this job may look at (itself, the job it follows, its steps, its sub-agents).
+ * Returns what was touched, or undefined.
+ */
+export function foreignData(text: string, data: string, allowed: string[], space = ""): string | undefined {
+  if (!data || !text.includes(data)) return undefined;
+  if (text.includes(`${data}/state.json`)) return "state.json";
+  for (const dir of ["sessions", "worktrees", "artifacts", "spaces", "browser"]) {
+    const head = `${data}/${dir}/`;
+    for (let at = text.indexOf(head); at >= 0; at = text.indexOf(head, at + 1)) {
+      const name = text.slice(at + head.length).split(/[/\s'"\\]/)[0];
+      // a space's own folders (its browser, its recipes, its log view)
+      if (dir === "browser" || dir === "spaces") {
+        if (space && name === space) continue;
+        return `${dir}/${name}`;
+      }
+      if (name && allowed.some((id) => name === id || name.includes(`-${id}`))) continue;
+      return `${dir}/${name}`;
+    }
+  }
+  return undefined;
+}
+
 export default function (pi: any) {
   let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
 
@@ -44,7 +69,16 @@ export default function (pi: any) {
     return !!rel && !rel.startsWith("..") && !isAbsolute(rel);
   };
 
+  const data = (process.env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
+  // unset (a job the user opened to another space): no list to keep it to
+  const allowed = process.env.ONDRA_JOBS_ALLOWED?.split(",").filter(Boolean);
+
   pi.on("tool_call", async (event: any, ctx: any) => {
+    // in every mode: Ondra's data of other jobs and the other space stays closed
+    if (data && allowed) {
+      const hit = foreignData(JSON.stringify(event.input ?? {}), data, allowed, process.env.ONDRA_SPACE_KEY ?? "");
+      if (hit) return { block: true, reason: `Ondra 데이터(${hit})는 이 일의 것이 아니에요. 필요한 건 일에 주어진 내용과 작업 폴더에서 찾으세요.` };
+    }
     // in every mode: killing by name also kills the user's own apps (Electron → Discord, VS Code)
     if (event.toolName === "bash") {
       const broad = broadKill(String(event.input?.command ?? ""), ctx.cwd);
