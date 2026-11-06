@@ -346,6 +346,7 @@ pub fn run() {
             devices::device_delete,
             devices::device_shot,
             devices::device_input,
+            devices::job_devices_release,
             devices::live::device_stream,
             devices::live::device_stream_stop,
             devices::live::device_stream_poke,

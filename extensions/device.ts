@@ -185,6 +185,8 @@ export default function (pi: any) {
       name: Type.Optional(Type.String({ description: "look: file name for the proof screenshot" })),
     }),
     async execute(_id: string, p: any, signal?: AbortSignal) {
+      // the app shuts down devices of jobs that ended; a later turn starts a new one
+      if (mine && !existsSync(OWNED)) mine = undefined;
       if (p.action === "start") {
         if (mine) return text(`Already have ${mine.name} (${mine.platform}). Use do / look, or stop first.`);
         const platform: Platform = p.platform === "android" ? "android" : "ios";

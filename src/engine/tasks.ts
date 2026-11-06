@@ -10,7 +10,8 @@ import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
 import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
-import { inTauri, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
+import { refreshDevices } from "../state/devices";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { checkEvidence, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -639,11 +640,25 @@ export function unread(t: Task): string[] {
   return t.entries.slice(i + 1).flatMap((e) => (e.kind === "user" ? [e.text] : []));
 }
 
-/** The job is over: its tab in the shared browser goes (the logins stay). */
+/**
+ * The job is over: its tab in the shared browser goes (the logins stay), and a
+ * simulator or emulator it made and didn't shut down goes a few minutes later
+ * (a follow-up message in that time still finds it).
+ */
 const releaseBrowser = (id: string) => {
   const t = taskById(id);
   if (t?.browser) void browserRelease(id, t.space);
+  releaseDevicesSoon();
 };
+const DEVICE_GRACE_MS = 5 * 60_000;
+let deviceSweep: ReturnType<typeof setTimeout> | undefined;
+export function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
+  clearTimeout(deviceSweep);
+  deviceSweep = setTimeout(() => {
+    const keep = state.tasks.filter((t) => t.status === "running" || t.status === "queued" || t.status === "waiting").map((t) => t.id);
+    void jobDevicesRelease(keep).then((gone) => gone.length && void refreshDevices());
+  }, ms);
+}
 
 function fail(id: string, message: string) {
   runs.delete(id);
@@ -755,6 +770,8 @@ function handlers(id: string, run: Run) {
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
+          // a job booted or shut down a phone: the hub and the sidebar show it now
+          if (done?.kind === "tool" && done.tool.name === "device") void refreshDevices();
           // the shared browser stopped answering: check it now and restart it if it hangs
           if (ev.isError && done?.kind === "tool" && done.tool.kind === "browser" && typeof out === "string" && /Failed to read|os error 35|no response came back|daemon.*(not|no) respon/i.test(out)) recheckBrowser(taskById(id)?.space ?? state.space);
           updateTask(id, (t) => {
@@ -841,6 +858,8 @@ function uiDecision(id: string, ev: any) {
  * job looks stuck. Listen again, and catch up on a turn that ended unheard.
  */
 export async function reattachJobs() {
+  // devices left by jobs that ended while the app was closed
+  releaseDevicesSoon(60_000);
   for (const t of state.tasks.filter((t) => (t.status === "running" || t.status === "waiting") && !runs.get(t.id))) {
     const id = t.id;
     const agent = agentOf(id);
