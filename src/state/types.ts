@@ -451,6 +451,8 @@ export interface Settings {
   forkThinking: string;
   /** Permission for new jobs. */
   permission: Permission;
+  /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
+  watchPrs?: boolean;
 }
 
 export interface AppState {
@@ -489,6 +491,26 @@ export interface AppState {
   sent?: Record<string, string[]>;
   /** side chat: a separate conversation per space, kept as text */
   side?: SideMessage[];
+  /** pull requests jobs opened, watched for reviews, failed checks and conflicts (by PR url) */
+  prWatch?: Record<string, PrWatch>;
+}
+
+export interface PrWatch {
+  url: string;
+  /** the job that carries it now (a follow-on job takes it over) */
+  task: string;
+  /** only what came after this counts */
+  since: number;
+  /** comment and review ids already handed to a job */
+  seen: string[];
+  /** "check@head" already reported failing */
+  failed: string[];
+  conflict: boolean;
+  /** when it woke a job (the last day's count is capped) */
+  wakes: number[];
+  /** last time anything happened on it */
+  last: number;
+  done?: boolean;
 }
 
 export interface BtwEntry {

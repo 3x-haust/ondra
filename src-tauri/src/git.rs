@@ -254,6 +254,31 @@ pub async fn git_pr(cwd: String, title: String, body: String, env: Option<Vec<(S
         .map(|out| out.lines().last().unwrap_or("").to_string())
 }
 
+/// A pull request as the job's space sees it, for watching: its state, checks,
+/// comments and reviews (`pr`), its line comments (`lines`) and who this space
+/// is on GitHub (`me`). One JSON object; the app works out what is new.
+#[tauri::command]
+pub async fn gh_pr_state(url: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let env = env.unwrap_or_default();
+        let tmp = std::env::temp_dir();
+        let cwd = tmp.to_string_lossy();
+        let pr = run(&cwd, "gh", &["pr", "view", &url, "--json", "state,mergeable,headRefOid,statusCheckRollup,comments,reviews"], &env)?;
+        let path = url.trim_start_matches("https://github.com/").replace("/pull/", "/pulls/");
+        let lines = run(
+            &cwd,
+            "gh",
+            &["api", "--paginate", &format!("repos/{path}/comments?per_page=100"), "--jq", ".[] | {id, who: .user.login, bot: (.user.type == \"Bot\"), body, path, line: (.line // .original_line), at: .created_at}"],
+            &env,
+        )?;
+        let me = run(&cwd, "gh", &["api", "user", "--jq", ".login"], &env).unwrap_or_default();
+        let lines: Vec<&str> = lines.lines().filter(|l| !l.trim().is_empty()).collect();
+        Ok(format!("{{\"pr\":{pr},\"lines\":[{}],\"me\":{}}}", lines.join(","), serde_json::to_string(&me).unwrap_or_else(|_| "\"\"".into())))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Throw away uncommitted changes to one file (back to the last commit).
 #[tauri::command]
 pub async fn git_revert_file(cwd: String, path: String) -> Result<(), String> {

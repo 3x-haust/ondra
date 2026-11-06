@@ -311,6 +311,8 @@ export const accountLimits = (accountId: string) =>
 export const accountEmail = (accountId: string) => call<string | null>("account_email", { accountId }, "me@example.com");
 export const gitCommit = (cwd: string, message: string, env: Env = []) => call<string>("git_commit", { cwd, message, env }, "abc1234");
 export const gitPush = (cwd: string, env: Env = []) => call<string>("git_push", { cwd, env }, "task/demo");
+/** a pull request's state, checks, comments and reviews as the space sees it (raw JSON, see prWatch.ts) */
+export const ghPrState = (url: string, env: Env = []) => call<string>("gh_pr_state", { url, env }, "");
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
 export const notify = (title: string, body: string) => call<void>("notify", { title, body });

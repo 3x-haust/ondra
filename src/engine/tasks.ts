@@ -8,10 +8,11 @@ import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
-import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
+import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
+import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { commandKind } from "./commandKind";
 import { checkEvidence, isCodeFile, reviewUnresolved } from "./proof";
@@ -1281,6 +1282,85 @@ export async function sweepLanded() {
   for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) await dropEmptyBranch(t.id);
 }
 
+// ─────────────────────────────── watching pull requests
+
+const DAY = 86_400_000;
+const patchWatch = (url: string, p: Partial<PrWatch>) => setState("prWatch", (m) => ({ ...(m ?? {}), [url]: { ...(m ?? {})[url], ...p } as PrWatch }));
+let prPolling = false;
+
+/**
+ * Pull requests jobs opened: new reviews and comments from others, failed
+ * checks and conflicts go back to the job that carries the PR (a finished one
+ * gets a follow-on job on its branch). Merged or closed PRs, and ones quiet for
+ * a week, stop being watched.
+ */
+export async function watchPrs() {
+  if (prPolling || state.settings.watchPrs === false) return;
+  prPolling = true;
+  try {
+    const now = Date.now();
+    for (const t of state.tasks) {
+      if (t.parentId || t.answer) continue;
+      const pr = prOf(t);
+      if (!pr) continue;
+      const live = t.status === "running" || t.status === "waiting" || t.status === "queued";
+      const ended = t.finishedAt ?? t.legs[t.legs.length - 1]?.endedAt;
+      if (!live && (!ended || now - ended > 7 * DAY)) continue;
+      const w = state.prWatch?.[pr.url];
+      if (!w) {
+        // a PR opened just now: what came since it was opened counts; an older one starts from here
+        const fresh = live || (!!ended && now - ended < 15 * 60_000);
+        patchWatch(pr.url, { url: pr.url, task: t.id, since: fresh ? now - 15 * 60_000 : now, seen: [], failed: [], conflict: false, wakes: [], last: now });
+      } else if (!w.done && w.task !== t.id && (taskById(w.task)?.createdAt ?? 0) < t.createdAt) {
+        patchWatch(pr.url, { task: t.id });
+      }
+    }
+    for (const w of Object.values(state.prWatch ?? {})) {
+      if (w.done) continue;
+      const t = taskById(w.task);
+      if (!t || now - w.last > 7 * DAY) {
+        patchWatch(w.url, { done: true });
+        continue;
+      }
+      if (t.status === "paused") continue;
+      const raw = await ghPrState(w.url, await gitEnv(t)).catch(() => "");
+      if (!raw) continue;
+      let snap;
+      try {
+        snap = parseSnap(raw);
+      } catch {
+        continue;
+      }
+      if (snap.state && snap.state !== "OPEN") {
+        patchWatch(w.url, { done: true });
+        continue;
+      }
+      if (w.conflict && snap.mergeable !== "CONFLICTING") patchWatch(w.url, { conflict: false });
+      const news = prNews(state.prWatch![w.url], snap);
+      if (hasNews(news) && canWake(w, now)) wakeForPr(state.prWatch![w.url], t, news, now);
+    }
+  } finally {
+    prPolling = false;
+  }
+}
+
+function wakeForPr(w: PrWatch, t: Task, news: PrNews, now: number) {
+  const text = wakeText(w.url, news);
+  let id = t.id;
+  if (finished(t)) {
+    // a finished job is closed: the PR's news starts a follow-on job on its branch
+    id = createTask({ space: t.space, title: t.title, topic: t.topic, ask: text, project: t.project, priority: t.priority, weight: t.weight, reach: t.reach, follows: t.id });
+  } else void tell(t.id, text);
+  patchWatch(w.url, {
+    task: id,
+    seen: [...w.seen, ...news.notes.map((n) => n.id)],
+    failed: [...w.failed, ...news.failed],
+    conflict: w.conflict || news.conflict,
+    wakes: [...w.wakes.filter((x) => now - x < DAY), now],
+    last: now,
+  });
+}
+
 // ─────────────────────────────── creating
 
 export function createTask(f: {
@@ -1761,6 +1841,9 @@ export function startScheduler() {
   // branches merged on GitHub since: their merge bar goes; checked again every half hour
   setTimeout(() => void sweepLanded(), 20_000);
   setInterval(() => void sweepLanded(), 30 * 60_000);
+  // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
+  setTimeout(() => void watchPrs(), 40_000);
+  setInterval(() => void watchPrs(), 3 * 60_000);
   createRoot(() => {
     createEffect(
       on(
