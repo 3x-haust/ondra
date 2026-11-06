@@ -1311,7 +1311,7 @@ let prPolling = false;
  * a week, stop being watched.
  */
 export async function watchPrs() {
-  if (prPolling || state.settings.watchPrs === false) return;
+  if (prPolling || !state.settings.watchPullRequests) return;
   prPolling = true;
   try {
     const now = Date.now();

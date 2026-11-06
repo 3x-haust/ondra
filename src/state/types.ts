@@ -454,7 +454,7 @@ export interface Settings {
   /** Permission for new jobs. */
   permission: Permission;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
-  watchPrs?: boolean;
+  watchPullRequests?: boolean;
 }
 
 export interface AppState {
