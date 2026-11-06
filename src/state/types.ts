@@ -123,7 +123,7 @@ export interface Shell {
 
 export interface PlanStep {
   text: string;
-  state: "done" | "now" | "todo";
+  state: "done" | "now" | "todo" | "skip";
 }
 
 export interface Task {

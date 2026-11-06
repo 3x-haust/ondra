@@ -5452,6 +5452,12 @@ div.queued {
 .todo.now .todo-box {
   border-color: var(--accent);
 }
+.todo.skip .todo-box {
+  border-style: dashed;
+}
+.todo.skip .todo-text {
+  color: var(--ink-4);
+}
 .todo.now .todo-box i {
   width: 7px;
   height: 7px;

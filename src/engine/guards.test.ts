@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
 import { commandKind } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound } from "./proof";
-import { lastReport, notTheirLanguage, onlyWaits } from "./tasks";
+import { closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
 
 describe("commandKind", () => {
   it("status looks are polls", () => {
@@ -89,5 +89,18 @@ describe("narration language", () => {
     expect(notTheirLanguage("이제 사진을 PR 본문에 올려요.", korean)).toBe(false);
     expect(notTheirLanguage("```bash\ngh pr view 79\n```", korean)).toBe(false);
     expect(notTheirLanguage("Now upload the photos.", { entries: [{ id: "e", at: 0, kind: "user", text: "upload the photos" }] } as never)).toBe(false);
+  });
+});
+
+describe("plan", () => {
+  it("keeps finished steps when a new plan comes, and closes on finish", () => {
+    const old = [
+      { text: "원인 확인", state: "done" as const },
+      { text: "사진 찍기", state: "now" as const },
+      { text: "커밋·푸시", state: "todo" as const },
+    ];
+    const next = nextPlan(old, ["원인 확인", "커밋·푸시", "PR에 사진 넣기"]);
+    expect(next.map((s) => s.state)).toEqual(["done", "now", "todo"]);
+    expect(closePlan(next).map((s) => s.state)).toEqual(["done", "done", "skip"]);
   });
 });

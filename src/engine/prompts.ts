@@ -836,7 +836,7 @@ function userSince(t: Task): string[] {
 /** The plan as it stood, so the new session picks up the right step. */
 function planLines(t: Task): string[] {
   if (!t.plan.length) return [];
-  const mark = { done: "[x]", now: "[>]", todo: "[ ]" } as const;
+  const mark = { done: "[x]", now: "[>]", todo: "[ ]", skip: "[-]" } as const;
   return ["", "# Plan so far", ...t.plan.map((p) => `${mark[p.state]} ${p.text}`)];
 }
 
