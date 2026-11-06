@@ -1,5 +1,7 @@
 //! One git worktree per task, so tasks in the same repo never write over each
-//! other. Created from the repo's current HEAD on a new branch; merged back
+//! other. Created on a new branch from the latest the remote has for the
+//! checked-out branch (the local HEAD when it has commits of its own, or the
+//! remote can't be reached); merged back
 //! into whatever branch the repo has checked out; removed when the task is
 //! merged, thrown away or deleted (deleting keeps the branch so nothing is lost).
 
@@ -46,13 +48,55 @@ fn run(cwd: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// `git fetch` for the checked-out branch's remote, given up after `secs`.
+fn fetch(top: &str, secs: u64) -> bool {
+    let remote = run(top, &["config", &format!("branch.{}.remote", run(top, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default())]).unwrap_or_else(|_| "origin".into());
+    let Ok(mut child) = Command::new("git")
+        .args(["fetch", "--quiet", "--no-tags", &remote])
+        .current_dir(top)
+        .env("PATH", user_path())
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        match child.try_wait() {
+            Ok(Some(s)) => return s.success(),
+            Ok(None) if std::time::Instant::now() < end => std::thread::sleep(std::time::Duration::from_millis(100)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+/// Where a new task starts: the remote's tip of the checked-out branch when the
+/// local branch is only behind it (nothing of its own), else the local HEAD.
+fn start_point(top: &str) -> Result<String, String> {
+    let head = run(top, &["rev-parse", "HEAD"]).map_err(|_| "커밋이 하나도 없어요".to_string())?;
+    if run(top, &["rev-parse", "--abbrev-ref", "@{u}"]).is_err() || !fetch(top, 20) {
+        return Ok(head);
+    }
+    match run(top, &["rev-parse", "@{u}"]) {
+        Ok(up) if run(top, &["merge-base", "--is-ancestor", "HEAD", "@{u}"]).is_ok() => Ok(up),
+        _ => Ok(head),
+    }
+}
+
 fn create(cwd: &str, dest: &str, branch: &str) -> Result<Worktree, String> {
     let cwd = expand(cwd);
     if !Path::new(&cwd).is_dir() {
         return Err("폴더가 없어요".into());
     }
     let top = run(&cwd, &["rev-parse", "--show-toplevel"]).map_err(|_| "git 저장소가 아니에요".to_string())?;
-    let base = run(&top, &["rev-parse", "HEAD"]).map_err(|_| "커밋이 하나도 없어요".to_string())?;
+    let base = start_point(&top)?;
     let sub = Path::new(&cwd)
         .canonicalize()
         .ok()
@@ -191,5 +235,41 @@ mod tests {
 
         assert!(create("/tmp", &root.join("wt/x").display().to_string(), "task/x").is_err());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn starts_from_the_remote_when_behind() {
+        let tmp = std::env::temp_dir().join(format!("ondra-wt-up-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let t = tmp.display().to_string();
+        let git = |dir: &str, args: &[&str]| run(dir, args).unwrap();
+        let origin = format!("{t}/origin.git");
+        git(&t, &["init", "-q", "--bare", "-b", "main", &origin]);
+        let a = format!("{t}/a");
+        git(&t, &["clone", "-q", &origin, &a]);
+        for (k, v) in [("user.email", "t@t"), ("user.name", "t")] { git(&a, &["config", k, v]); }
+        std::fs::write(format!("{a}/f"), "1").unwrap();
+        git(&a, &["add", "-A"]);
+        git(&a, &["commit", "-q", "-m", "one"]);
+        git(&a, &["push", "-q", "-u", "origin", "main"]);
+        // someone else pushes; this clone is now behind
+        let b = format!("{t}/b");
+        git(&t, &["clone", "-q", &origin, &b]);
+        for (k, v) in [("user.email", "t@t"), ("user.name", "t")] { git(&b, &["config", k, v]); }
+        std::fs::write(format!("{b}/f"), "2").unwrap();
+        git(&b, &["commit", "-q", "-am", "two"]);
+        git(&b, &["push", "-q"]);
+        let tip = git(&b, &["rev-parse", "HEAD"]);
+        let w = create(&a, &format!("{t}/w"), "task/x").unwrap();
+        assert_eq!(w.base, tip);
+        // with a commit of its own, the local HEAD is kept
+        std::fs::write(format!("{a}/g"), "3").unwrap();
+        git(&a, &["add", "-A"]);
+        git(&a, &["commit", "-q", "-m", "mine"]);
+        let mine = git(&a, &["rev-parse", "HEAD"]);
+        let w2 = create(&a, &format!("{t}/w2"), "task/y").unwrap();
+        assert_eq!(w2.base, mine);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
