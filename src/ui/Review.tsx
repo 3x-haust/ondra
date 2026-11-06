@@ -2,7 +2,7 @@
 // Diffs are parsed into files → hunks → lines with old/new line numbers, shown
 // as collapsible cards with sticky headers. Files is a searchable tree; a file
 // opens in a numbered viewer and can flip to its diff.
-import { createEffect, createMemo, createResource, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath } from "../state/ui";
 import { Markdown } from "./Markdown";
@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
 
 // ───────────── diff model ─────────────
-type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
+export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
 type Hunk = { head: string; where: string; lines: Line[] };
 export type DiffFile = { path: string; status: "A" | "M" | "D" | "R"; binary: boolean; add: number; del: number; hunks: Hunk[] };
 
@@ -148,7 +148,7 @@ function marks(lines: Hunk["lines"]): ([number, number] | undefined)[] {
   return out;
 }
 
-function HunkView(props: { h: Hunk; toks?: (Tok[] | undefined)[] }) {
+function HunkView(props: { h: Hunk; toks?: (Tok[] | undefined)[]; annot?: (l: Line) => JSX.Element | undefined }) {
   const m = createMemo(() => marks(props.h.lines));
   return (
     <>
@@ -158,19 +158,23 @@ function HunkView(props: { h: Hunk; toks?: (Tok[] | undefined)[] }) {
       </div>
       <For each={props.h.lines}>
         {(l, i) => (
+          <>
           <div class={`dv-row ${l.kind}`}>
             <span class="dv-num">{l.old ?? ""}</span>
             <span class="dv-num">{l.new ?? ""}</span>
             <span class="dv-sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : ""}</span>
             <CodeText text={l.text} toks={props.toks?.[i()]} mark={m()[i()]} />
           </div>
+          {props.annot?.(l)}
+          </>
         )}
       </For>
     </>
   );
 }
 
-export function DiffCard(props: { f: DiffFile; root: string; open: boolean; toggle: () => void; ref?: (el: HTMLElement) => void }) {
+/** `annot`: something to show under a line (a PR's line comments); `remote`: the file isn't in a local folder */
+export function DiffCard(props: { f: DiffFile; root: string; open: boolean; toggle: () => void; ref?: (el: HTMLElement) => void; annot?: (l: Line) => JSX.Element | undefined; remote?: boolean; badge?: JSX.Element }) {
   const [dir, name] = split(props.f.path);
   const big = () => props.f.add + props.f.del > 600;
   const [force, setForce] = createSignal(false);
@@ -198,6 +202,8 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
           <Show when={props.f.add}><span class="add">+{props.f.add}</span></Show>
           <Show when={props.f.del}><span class="del">−{props.f.del}</span></Show>
         </span>
+        {props.badge}
+        <Show when={!props.remote}>
         <button
           class="dv-open"
           title="파일 보기"
@@ -209,6 +215,7 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
         >
           <Icon name="file" size={13} />
         </button>
+        </Show>
       </header>
       <Fold open={props.open}>
         <div class="dv-body">
@@ -224,7 +231,7 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
                 </button>
               }
             >
-              <For each={props.f.hunks}>{(h, i) => <HunkView h={h} toks={toks()?.[i()]} />}</For>
+              <For each={props.f.hunks}>{(h, i) => <HunkView h={h} toks={toks()?.[i()]} annot={props.annot} />}</For>
             </Show>
           </Show>
         </div>

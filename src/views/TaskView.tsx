@@ -10,7 +10,7 @@ import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
 import { closePanel, goMain, newTask, openPanel as showTool, toast, openTask, paletteOpen, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
-import { fsFiles, gitChanges, openInEditor, openUrl, revealPath } from "../lib/native";
+import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
 import { rawStats, archiveTask, closeWorktree, compactAgent, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
@@ -238,7 +238,7 @@ export function TaskView(props: { id: string }) {
             out.push(
               <div class="strip">
                 <Icon name="branch" size={14} />
-                <button class="link-btn" onClick={() => void openUrl(pr.url)}>PR #{pr.n}</button>
+                <button class="link-btn" onClick={() => openPanel("pr")}>PR #{pr.n}</button>
                 <span class="rest" />
                 <button class="btn sm ghost" title="변경은 PR에 남아요" onClick={() => void closeWorktree(task().id)}>작업 폴더 정리</button>
               </div>,

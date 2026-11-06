@@ -1420,13 +1420,27 @@ export async function watchPrs() {
   }
 }
 
+/** PR news for a job: a finished job is closed, so it starts a follow-on job on its branch; a live one hears it. Returns the job that got it. */
+function prToJob(t: Task, text: string): string {
+  if (!finished(t)) {
+    void tell(t.id, text);
+    return t.id;
+  }
+  return createTask({ space: t.space, title: t.title, topic: t.topic, ask: text, project: t.project, priority: t.priority, weight: t.weight, reach: t.reach, follows: t.id });
+}
+
+/** From the PR view: hand one comment or thread to the job (the watch won't send it again). */
+export function passPrNote(id: string, url: string, notes: PrNews["notes"]): string | undefined {
+  const t = taskById(id);
+  if (!t || !notes.length) return;
+  const to = prToJob(t, wakeText(url, { notes, failed: [], conflict: false }));
+  const w = state.prWatch?.[url];
+  if (w) patchWatch(url, { task: to, seen: [...w.seen, ...notes.map((n) => n.id)] });
+  return to;
+}
+
 function wakeForPr(w: PrWatch, t: Task, news: PrNews, now: number) {
-  const text = wakeText(w.url, news);
-  let id = t.id;
-  if (finished(t)) {
-    // a finished job is closed: the PR's news starts a follow-on job on its branch
-    id = createTask({ space: t.space, title: t.title, topic: t.topic, ask: text, project: t.project, priority: t.priority, weight: t.weight, reach: t.reach, follows: t.id });
-  } else void tell(t.id, text);
+  const id = prToJob(t, wakeText(w.url, news));
   patchWatch(w.url, {
     task: id,
     seen: [...w.seen, ...news.notes.map((n) => n.id)],

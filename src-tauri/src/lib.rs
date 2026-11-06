@@ -339,6 +339,7 @@ pub fn run() {
             git::git_push,
             git::git_pr,
             git::gh_pr_state,
+            git::gh_pr_view,
             git::git_revert_file,
             tools::browser_stream_port,
             browser::shared_browser_open,
