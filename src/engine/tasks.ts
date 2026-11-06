@@ -278,6 +278,8 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           did: Array.isArray(b.did) ? b.did.map(String) : [],
           next: String(b.next ?? ""),
           evidence: Array.isArray(b.evidence) ? b.evidence : [],
+          found: Array.isArray(b.found) ? b.found.map(String) : undefined,
+          doneWhen: b.doneWhen ? String(b.doneWhen) : undefined,
         };
         break;
       case "done": {
@@ -705,7 +707,7 @@ function handlers(id: string, run: Run) {
               type: "steer",
               message:
                 level === 0
-                  ? `(Ondra) This session is at ${k}k tokens. Finish the step you are on, then send a {"type":"handoff"} block (did, next, evidence) so a fresh session continues. Don't start anything new here.`
+                  ? `(Ondra) This session is at ${k}k tokens. Finish the step you are on, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) so a fresh session continues. Don't start anything new here.`
                   : `(Ondra) This session is at ${k}k tokens. Send the {"type":"handoff"} block now.`,
             }).catch(() => {});
           }
