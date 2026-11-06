@@ -428,7 +428,9 @@ function ArtifactsPane(props: { t: Task }) {
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">미리 볼 수 없음</div>}>
                   <Match when={kindOf(a.name) === "page"}>
-                    <iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />
+                    <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
+                      <iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} title={a.name} />
+                    </Show>
                   </Match>
                   <Match when={kindOf(a.name) === "image"}>
                     <div class="aimg"><img src={fileSrc(a.path)} alt="" onClick={() => openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path))} /></div>
