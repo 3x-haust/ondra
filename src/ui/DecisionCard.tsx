@@ -2,8 +2,7 @@
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import { taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
-import { openTask, setView } from "../state/ui";
-import { sharedBrowserGo } from "../lib/native";
+import { openBrowser, openTask } from "../state/ui";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
@@ -40,8 +39,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   };
   const openLogin = () => {
     const u = loginUrl();
-    setView({ name: "browser" });
-    if (u) setTimeout(() => void sharedBrowserGo("open", u).catch(() => {}), 600);
+    openBrowser(u || undefined);
   };
   const [sel, setSel] = createSignal(Math.max(0, props.d.options.findIndex((o) => o.primary)));
   const [typed, setTyped] = createSignal("");

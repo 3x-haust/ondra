@@ -347,6 +347,15 @@ export const browserCheck = () => call<number>("browser_check", undefined, 0);
 export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) =>
   call<void>("shared_browser_go", { action, url: url ?? null });
 
+// ───────────────────────── in-app browser ─────────────────────────
+/** Show the in-app browser (a real webview) over this area of the window; `url` opens a page. */
+export const inBrowserShow = (r: { x: number; y: number; w: number; h: number }, url?: string) => call<void>("inbrowser_show", { ...r, url: url ?? null });
+export const inBrowserHide = () => call<void>("inbrowser_hide");
+export const inBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string) => call<void>("inbrowser_go", { action, url: url ?? null });
+/** Each page it starts or finishes loading. */
+export const onInBrowserPage = (f: (p: { url: string; loading: boolean }) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<{ url: string; loading: boolean }>("inbrowser-page", (e) => f(e.payload)) : Promise.resolve(() => {});
+
 // ───────────────────────── windows ─────────────────────────
 export const openCapture = () => call<void>("open_capture");
 export const hideCapture = () => call<void>("hide_capture");

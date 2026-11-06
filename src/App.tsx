@@ -13,7 +13,6 @@ import { MainView } from "./views/MainView";
 import { Canvas } from "./views/Canvas";
 import { MemoryView } from "./views/Memory";
 import { Devices } from "./views/Devices";
-import { BrowserView } from "./views/Browser";
 import { watchDevices } from "./state/devices";
 import { Onboarding } from "./views/Onboarding";
 import { Palette } from "./views/Palette";
@@ -192,7 +191,7 @@ export default function App() {
           <Show when={view().name === "settings"}><SettingsPage onBack={back} /></Show>
           <Show when={view().name !== "settings"}>
           {/* the center is main or the job you picked; it slides over when you switch */}
-          <Show when={view().name === "task" && (view() as { id: string }).id} keyed fallback={<Show when={view().name === "board"} fallback={<Show when={view().name === "devices"} fallback={<Show when={view().name === "memory"} fallback={<Show when={view().name === "browser"} fallback={<Slide from={-1}><MainView /></Slide>}><Slide from={-1}><BrowserView /></Slide></Show>}><Slide from={-1}><MemoryView /></Slide></Show>}><Slide from={-1}><Devices /></Slide></Show>}><Slide from={-1}><Canvas /></Slide></Show>}>
+          <Show when={view().name === "task" && (view() as { id: string }).id} keyed fallback={<Show when={view().name === "board"} fallback={<Show when={view().name === "devices"} fallback={<Show when={view().name === "memory"} fallback={<Slide from={-1}><MainView /></Slide>}><Slide from={-1}><MemoryView /></Slide></Show>}><Slide from={-1}><Devices /></Slide></Show>}><Slide from={-1}><Canvas /></Slide></Show>}>
             {(id) => <Slide from={1}><TaskView id={id} /></Slide>}
           </Show>
           </Show>

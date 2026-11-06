@@ -7,7 +7,8 @@ import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { accountById, homeDir, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
-import { toast, activeTab, closePanelTab, newPanelTab, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelTab, setView, type PanelTab } from "../state/ui";
+import { BrowserView } from "./Browser";
+import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, type PanelTab } from "../state/ui";
 import { discardTask, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
@@ -329,7 +330,7 @@ function BrowserPane(props: { t: Task }) {
         <button class="icon-btn sm" title="내 브라우저에서 열기" disabled={!shown()} onClick={() => void openUrl(shown())}>
           <Icon name="external" size={14} />
         </button>
-        <button class="icon-btn sm" title="공유 브라우저" onClick={() => setView({ name: "browser" })}>
+        <button class="icon-btn sm" title="공유 브라우저에서 로그인·탐색" onClick={() => setPanelShared(true)}>
           <Icon name="key" size={14} />
         </button>
       </div>
@@ -459,7 +460,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "changes", label: "변경 사항", icon: "diff", keys: "⌃⇧G", job: true },
   { kind: "terminal", label: "셸", icon: "shell", keys: "⌃`", job: true },
   { kind: "files", label: "파일", icon: "file", keys: "⌘P", job: true },
-  { kind: "browser", label: "브라우저", icon: "globe", job: true },
+  { kind: "browser", label: "브라우저", icon: "globe" },
   { kind: "overview", label: "정보", icon: "list", job: true },
   { kind: "preview", label: "미리보기", icon: "file" },
 ];
@@ -560,7 +561,9 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
-  const needsJob = () => !props.t && tab() !== "flow" && tab() !== "new" && tab() !== "side";
+  const needsJob = () => !props.t && tab() !== "flow" && tab() !== "new" && tab() !== "side" && tab() !== "browser";
+  /** the browser tab shows the job's own tab while it browses, else the shared browser */
+  const shared = () => tab() === "browser" && (!props.t?.browser || panelShared());
   return (
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-resize" onPointerDown={drag} title="끌어서 너비 바꾸기" />
@@ -610,6 +613,16 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
           <Match when={tab() === "flow"}><div class="flow-pane"><Flow /></div></Match>
           <Match when={tab() === "side"}><SideChat /></Match>
           <Match when={tab() === "preview"}><PreviewPane /></Match>
+          <Match when={shared()}>
+            <div class="pbrowser">
+              <Show when={props.t?.browser}>
+                <button class="pbrowser-back" onClick={() => setPanelShared(false)}>
+                  <Icon name="back" size={12} />이 일의 화면
+                </button>
+              </Show>
+              <BrowserView embedded />
+            </div>
+          </Match>
           <Match when={needsJob()}><div class="pane-empty" /></Match>
           <Match when={props.t}>
             {(t) => (

@@ -344,6 +344,12 @@ pub async fn shared_browser_open(app: AppHandle) -> Result<u16, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let port = ensure(&app)?;
         let cmd = || view_command(&app, port).ok_or_else(|| "agent-browser를 찾을 수 없어요".to_string());
+        // the view's tab can be closed under it (a job closing tabs): then the stream
+        // stays up with nothing to show, so bind a new tab first
+        let has_tab = cmd()?.args(["get", "url"]).stdout(Stdio::null()).status().is_ok_and(|s| s.success());
+        if !has_tab {
+            let _ = cmd()?.args(["tab", "new", "about:blank"]).stdout(Stdio::null()).status();
+        }
         if let Some(p) = stream_port(cmd()?) {
             return Ok(p);
         }
@@ -369,6 +375,7 @@ pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<Strin
             "back" | "forward" | "reload" => {
                 cmd.arg(&action);
             }
+
             _ => return Err("unknown action".into()),
         }
         let ok = cmd.stdout(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);

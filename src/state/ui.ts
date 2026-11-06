@@ -12,7 +12,6 @@ export type View =
   /** simulators, emulators and phones */
   | { name: "devices"; device?: string }
   /** the one browser every job shares (sign in here once) */
-  | { name: "browser" }
   /** what the agents remember: graph + file tree */
   | { name: "memory" }
   | { name: "settings"; tab?: SettingsTab };
@@ -71,10 +70,21 @@ export function closePanelTab(id: number) {
 /** File the panel should show: its diff (Changes) or its contents (Files). Path is relative to the task folder. */
 export const [panelFile, setPanelFile] = createSignal<{ path: string; mode: "diff" | "file"; n: number } | null>(null);
 let fileSeq = 0;
+/** The panel's browser shows the shared browser (sign in, browse) rather than the job's own tab. */
+export const [panelShared, setPanelShared] = createSignal(false);
 export function openPanel(tab: PanelTab, file?: string, mode: "diff" | "file" = tab === "files" ? "file" : "diff") {
+  if (tab === "browser") setPanelShared(false);
   setPanelTab(tab);
   setPanelOpen(true);
   if (file) setPanelFile({ path: file, mode, n: ++fileSeq });
+}
+/** A page the in-app browser should open next (it takes it when shown). */
+export const [browserTarget, setBrowserTarget] = createSignal<string | null>(null);
+/** The in-app browser in the right panel, next to the conversation; opens `url` when given. */
+export function openBrowser(url?: string) {
+  if (url) setBrowserTarget(url);
+  openPanel("browser");
+  setPanelShared(true);
 }
 /** Any file, opened inside the app (panel "미리보기"); VS Code and Finder are a click away. */
 export const [previewPath, setPreviewPath] = createSignal<string | null>(null);
