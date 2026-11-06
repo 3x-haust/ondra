@@ -147,6 +147,18 @@ export function projectForFolder(space: SpaceId, dir?: string) {
   return have ?? projectById(addProject(space, top), space);
 }
 
+/** A result block in a line main can retell (checklists, links, tables keep their content). */
+function blockLine(b: Block): string {
+  const x = b as unknown as { type: string; [k: string]: any };
+  const label = x.title ?? x.label ?? "";
+  if (x.type === "checklist") return `[${label || "checklist"}] ${(x.items ?? []).map((i: any) => `${i.done ? "✓" : "○"} ${i.text ?? i.label ?? ""}`).join(" · ")}`.slice(0, 800);
+  if (x.type === "evidence") return `[evidence] ${(x.items ?? []).map((i: any) => `${i.kind}: ${i.ref}`).join(" · ")}`.slice(0, 600);
+  if (x.type === "link") return `[link] ${x.title ?? ""} ${x.url ?? x.href ?? ""}`.trim();
+  if (x.type === "table") return `[table ${label}] ${JSON.stringify({ columns: x.columns, rows: (x.rows ?? []).slice(0, 8) })}`.slice(0, 800);
+  if (x.type === "shot") return `[picture] ${x.path ?? x.src ?? ""}`;
+  return "";
+}
+
 /** The request main handed down that a project-chat message belongs to (the last one before it). */
 function handedRequest(m: CaptainMessage): CaptainMessage | undefined {
   const chat = state.captain.filter((x) => x.space === m.space && x.project === m.project);
@@ -181,20 +193,21 @@ export function reportUp(space: string) {
   if (state.decisions.some((d) => d.taskId === `main:${space}` || jobs.some((t) => t.id === d.taskId))) return;
   setState("captain", (m) => m.id === last.id, "reported", true);
   const answers = after.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
-  // no answer from the project (it failed or said nothing): what each job itself reported
-  const reported = answers
-    ? ""
-    : jobs
-        .map((t) => {
-          // what it reported since it was last given work; a card it asked and got answered is part of that work
-  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
-  let lastUser = -1;
-  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
-          const said = t.entries.slice(lastUser + 1).filter((e) => e.kind === "text").map((e) => (e as { text: string }).text).join("\n\n");
-          return said.trim() ? `${t.title}:\n${said.trim().slice(-2500)}` : "";
-        })
-        .filter(Boolean)
-        .join("\n\n");
+  // what each job itself reported (its words and its result blocks), so main can tell the details itself
+  const reported = jobs
+    .map((t) => {
+      // what it reported since it was last given work; a card it asked and got answered is part of that work
+      const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
+      let lastUser = -1;
+      for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) { lastUser = i; break; }
+      const since = t.entries.slice(lastUser + 1);
+      const said = since.filter((e) => e.kind === "text").map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim()).join("\n\n");
+      const blocks = since.flatMap((e) => (e.kind === "block" ? [blockLine(e.block)] : [])).filter(Boolean);
+      const body = [said.slice(-2500), ...blocks].filter(Boolean).join("\n");
+      return body ? `${t.title}:\n${body}` : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
   const proj = projectById(projectId);
   const text = [
     `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
@@ -563,7 +576,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       "# A project you handed work to has finished (not a user message)",
       text,
       "",
-      "Tell the user what came out, short (the project's chat has the details), as an \"answer\". Don't redo it. Route a next step only if what the user asked still needs one.",
+      "Tell the user here what came out, with the details they need from it: the result first, then what fits the work (the cause, what changed, how it was checked; what went out and its status; links, PR numbers, what is still open), short and visual (blocks are fine), as an \"answer\". Never point them to the project's chat for details: this answer is where they read it. Don't redo it. Route a next step only if what the user asked still needs one.",
     );
   else if (event)
     out.push(
