@@ -31,6 +31,14 @@ async function listenDrops() {
 }
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+/** A message with its attachments listed the way jobs and main read them. */
+export const withFiles = (text: string, files: string[]) => {
+  const t = text.trim();
+  if (!files.length) return t;
+  const list = `첨부한 파일:\n${files.map((p) => `- ${p}`).join("\n")}`;
+  return t ? `${t}\n\n${list}` : list;
+};
+
 export const isImage = (p: string) => /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(p);
 
 /** An entry of the + menu. */
@@ -46,8 +54,10 @@ export interface Command {
   name: string;
   desc: string;
   icon?: string;
-  /** keep the text after the command as an argument; `also`: more skills named in the same message */
-  run: (arg: string, also?: string[]) => void;
+  /** keep the text after the command as an argument; `also`: more skills named in the same message; `files`: what was attached */
+  run: (arg: string, also?: string[], files?: string[]) => void;
+  /** takes the attached files and pictures along */
+  files?: boolean;
   /** a skill: picking it writes "/skill:name" into the text (anywhere in it), sending runs it */
   skill?: boolean;
 }
@@ -283,18 +293,19 @@ export function Composer(props: {
     const m = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text().trim());
     const cmd = m && props.commands?.find((c) => c.name === m[1]);
     if (cmd) {
+      const f = cmd.files ? files() : [];
       keep(text());
       setText("");
       el.value = "";
+      if (f.length) setFiles([]);
       queueMicrotask(grow);
-      cmd.run(m![2] ?? "");
+      cmd.run(m![2] ?? "", [], f);
       return;
     }
     const f = files();
     keep(text());
     setEngaged(false);
-    const list = `첨부한 파일:\n${f.map((p) => `- ${p}`).join("\n")}`;
-    props.onSend(f.length ? (text().trim() ? `${text().trim()}\n\n${list}` : list) : text().trim());
+    props.onSend(withFiles(text(), f));
     setText("");
     setFiles([]);
     queueMicrotask(grow);

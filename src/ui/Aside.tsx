@@ -8,10 +8,11 @@ import { throwThought } from "../engine/captain";
 import { tell } from "../engine/tasks";
 import { goMain, openPanel, paletteOpen, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
-import { pickFolder } from "../lib/native";
+import { fileSrc, pickFolder } from "../lib/native";
 import { menuSkills } from "../engine/skillMenu";
 import { tilde } from "../engine/rpc";
-import type { PlusItem } from "./Composer";
+import { isImage, withFiles, type PlusItem } from "./Composer";
+import { openImage } from "./Lightbox";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
 
@@ -30,10 +31,11 @@ export function BtwCard(props: { scope: string }) {
   const forward = () => {
     const x = btw();
     if (!x) return;
-    if (props.scope.startsWith("task:")) void tell(props.scope.slice(5), x.question);
+    const said = withFiles(x.question, x.files ?? []);
+    if (props.scope.startsWith("task:")) void tell(props.scope.slice(5), said);
     else {
       const [space, project] = props.scope.slice(5).split("~");
-      throwThought(x.question, space as SpaceId, { project });
+      throwThought(said, space as SpaceId, { project });
     }
     closeBtw();
   };
@@ -42,7 +44,7 @@ export function BtwCard(props: { scope: string }) {
     const x = btw();
     if (!x) return;
     const space = (x.scope.startsWith("task:") ? taskById(x.scope.slice(5))?.space : x.scope.slice(5).split("~")[0]) ?? state.space;
-    continueInSide(space as SpaceId, x.question, x.answer);
+    continueInSide(space as SpaceId, withFiles(x.question, x.files ?? []), x.answer);
     closeBtw();
     openPanel("side");
     setTimeout(() => document.getElementById("side-input")?.focus(), 60);
@@ -75,6 +77,17 @@ export function BtwCard(props: { scope: string }) {
             </button>
           </div>
           <div class="btw-body">
+            <Show when={x().files?.length}>
+              <div class="btw-files">
+                <For each={x().files}>
+                  {(f) => (
+                    <Show when={isImage(f)} fallback={<span class="btw-file" title={f}>{f.split("/").pop()}</span>}>
+                      <img src={fileSrc(f)} alt={f.split("/").pop()} onClick={() => openImage(f, (x().files ?? []).filter(isImage))} />
+                    </Show>
+                  )}
+                </For>
+              </div>
+            </Show>
             <Show when={x().answer} fallback={<Show when={x().pending} fallback={<span class="btw-err">{x().error}</span>}><span class="btw-wait"><span class="spin xs" />보는 중…</span></Show>}>
               <Markdown class="msg-text" text={x().answer} />
             </Show>
@@ -99,8 +112,9 @@ export const btwCommand = (scope: () => string) => ({
   name: "btw",
   desc: "옆에서 바로 묻기 · 그냥 /btw 는 지난 btw 보기",
   icon: "spark",
-  run: (arg: string) => {
-    if (arg.trim()) void askBtw(scope(), arg);
+  files: true,
+  run: (arg: string, _also?: string[], files: string[] = []) => {
+    if (arg.trim() || files.length) void askBtw(scope(), arg, files);
     else if (!showBtw()) toast("아직 btw가 없어요 · /btw 뒤에 물어볼 것을 적어 주세요");
   },
 });

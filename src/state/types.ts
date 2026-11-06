@@ -486,6 +486,8 @@ export interface BtwEntry {
   /** "main:<chat>" or "task:<id>": where it was asked */
   scope: string;
   question: string;
+  /** pictures and files attached to the question */
+  files?: string[];
   answer: string;
   pending: boolean;
   error?: string;
