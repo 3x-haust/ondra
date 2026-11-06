@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{제목}}</title>
+<!--
+  The chat card: a one-screen summary of report.pdf, in the report's own look.
+  Copy it next to the report, replace every {{…}}, delete what you don't need.
+  Same rules as report.html: no scripts, no web fonts, no CDN, inline SVG only.
+  Everything here comes from the report; nothing new, no extra claims.
+-->
+<style>
+  :root {
+    --ink: #1d1d1f; --soft: #5b5b60; --faint: #8a8a90; --line: #e4e4e8;
+    --paper: #ffffff; --tint: #f5f5f7; --accent: #2f6fde;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); }
+  body {
+    padding: 22px 24px 18px;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    color: var(--ink); word-break: keep-all; overflow-wrap: anywhere;
+  }
+  .kicker { font-size: 11.5px; color: var(--faint); }
+  h1 { font-size: 19px; line-height: 1.35; margin: 4px 0 14px; letter-spacing: -.01em; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 14px; }
+  .stat { background: var(--tint); border-radius: 9px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .stat span { font-size: 12px; color: var(--soft); }
+  ol { margin: 0 0 12px; padding-left: 18px; }
+  li { margin: 3px 0; }
+  sup { color: var(--accent); font-size: 10px; }
+  figure { margin: 6px 0 10px; }
+  figcaption { font-size: 12px; color: var(--soft); margin-top: 4px; }
+  svg text { font-family: inherit; }
+  footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 9px; font-size: 11.5px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="kicker">리서치 요약 · {{YYYY-MM-DD}}</div>
+<h1>{{답 한 문장 (report.html의 제목과 같게)}}</h1>
+
+<!-- 2–4 numbers that carry the answer, each with what it is and its source. Drop the block if the answer has no numbers. -->
+<div class="stats">
+  <div class="stat"><b>{{84%}}</b><span>{{무엇의 숫자인지}} <sup>[1]</sup></span></div>
+  <div class="stat"><b>{{3.2배}}</b><span>{{…}} <sup>[2]</sup></span></div>
+  <div class="stat"><b>{{2026.04}}</b><span>{{…}} <sup>[3]</sup></span></div>
+</div>
+
+<!-- The report's 3 takeaways, one line each. -->
+<ol>
+  <li>{{가장 중요한 결론}} <sup>[1]</sup></li>
+  <li>{{두 번째}} <sup>[2]</sup></li>
+  <li>{{세 번째}} <sup>[3]</sup></li>
+</ol>
+
+<!-- The report's one most telling picture, smaller. Same data, same colors. -->
+<figure>
+  <svg viewBox="0 0 640 112" width="100%" role="img" aria-label="{{차트 설명}}">
+    <g font-size="12" fill="#5b5b60">
+      <text x="0" y="20">{{A}}</text>
+      <rect x="140" y="8" width="420" height="16" rx="3" fill="#2f6fde"/>
+      <text x="566" y="21" fill="#1d1d1f">{{84.0}}</text>
+      <text x="0" y="52">{{B}}</text>
+      <rect x="140" y="40" width="300" height="16" rx="3" fill="#c9cdd6"/>
+      <text x="446" y="53" fill="#1d1d1f">{{60.0}}</text>
+      <text x="0" y="84">{{C}}</text>
+      <rect x="140" y="72" width="180" height="16" rx="3" fill="#c9cdd6"/>
+      <text x="326" y="85" fill="#1d1d1f">{{36.0}}</text>
+      <line x1="140" y1="100" x2="560" y2="100" stroke="#e4e4e8"/>
+    </g>
+  </svg>
+  <figcaption>{{그림이 말하는 한 문장}} (단위: {{%}})</figcaption>
+</figure>
+
+<footer>
+  <span>전체 보고서 PDF {{N}}쪽 · 출처 {{N}}곳</span>
+  <span>{{확실하지 않은 것이 있으면 한 줄로, 없으면 지우기}}</span>
+</footer>
+</body>
+</html>
