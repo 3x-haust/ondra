@@ -6,7 +6,7 @@
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
+import { addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -15,7 +15,7 @@ import { addMemory, applying, isLive, KINDS, memoryLines, namedSpaces, recall } 
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, chooseAccount, collectStats, createTask, finished, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, onJobEnded, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -334,7 +334,8 @@ async function ensureCaptain(space: string) {
   const agent = agentOf(space);
   if (isAlive(agent) && attached.has(space) && !(await restartIfStale(space))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
-  const acc = accountById(chooseAccount(sp(space), projectOf(space)?.name ?? "")) ?? state.accounts[0];
+  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "");
+  if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   listen(agent, {
     event(ev) {

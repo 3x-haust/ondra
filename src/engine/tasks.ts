@@ -8,7 +8,7 @@ import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { limits, refreshLimits, snapshot } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
-import type { Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
+import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeMerge, worktreeRemove, fsRead } from "../lib/native";
@@ -82,7 +82,8 @@ const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite:
 export function chooseAccount(space: Task["space"], topic: string): string {
   const all = accountsIn(space);
   const pool = all.filter((a) => a.providers.length).length ? all.filter((a) => a.providers.length) : all;
-  if (!pool.length) return state.accounts[0]?.id ?? "default";
+  // never another space's account: with none here, there is none
+  if (!pool.length) return "";
   const pick = state.accountPick?.[space];
   if (pick && pick !== "auto" && pool.some((a) => a.id === pick)) return pick;
   if (pool.length === 1) return pool[0].id;
@@ -98,6 +99,17 @@ export function chooseAccount(space: Task["space"], topic: string): string {
   if (warm && Date.now() - (warm.lastUsedAt ?? 0) < HOUR) return warm.id;
   // nothing warm: the one with the most room left
   return [...use].sort((a, b) => load(a.id) - load(b.id) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0].id;
+}
+
+export const NO_ACCOUNT = "이 공간에 계정이 없어요";
+
+/** The account work in this space runs on: the one given if it is this space's, else the space's pick. */
+export function spaceAccount(space: Task["space"], topic = "", given?: string): Account | undefined {
+  const own = (id?: string) => {
+    const a = id ? accountById(id) : undefined;
+    return a?.space === space ? a : undefined;
+  };
+  return own(given) ?? own(chooseAccount(space, topic));
 }
 
 export async function accountEnv(accountId: string): Promise<Env> {
@@ -560,7 +572,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   const t0 = taskById(id);
   if (!t0) return;
   const agent = agentOf(id);
-  const account = accountById(t0.accountId) ?? state.accounts[0];
+  const account = spaceAccount(t0.space, t0.topic, t0.accountId);
+  if (!account) return fail(id, NO_ACCOUNT);
+  if (account.id !== t0.accountId) updateTask(id, (x) => (x.accountId = account.id));
   const cwd = expand(t0.cwd || spaceById(t0.space).folder || "~");
   const prev = runs.get(id);
 
