@@ -22,6 +22,8 @@ export interface Space {
   cliHome?: string;
   /** The Aside account (u0, u4 …) this space's jobs browse with. Empty: they use the built-in browser. */
   aside?: string;
+  /** The user's own simulators, emulators and phones that belong to this space (device ids). */
+  devices?: string[];
 }
 
 /** One turn's tokens plus the plan limits right after it. */

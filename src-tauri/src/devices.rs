@@ -324,6 +324,22 @@ struct Owned {
     serial: Option<String>,
     name: String,
     made: bool,
+    /// the AVD copied for this job (Android), deleted with it
+    #[serde(default)]
+    clone: Option<String>,
+}
+
+fn avd_home() -> PathBuf {
+    std::env::var("ANDROID_AVD_HOME").map(PathBuf::from).unwrap_or_else(|_| dirs_home().join(".android/avd"))
+}
+
+/// Delete an AVD a job copied for itself (only those: their names start with ondra-).
+fn drop_clone(home: &std::path::Path, name: &str) {
+    if !name.starts_with("ondra-") || name.contains('/') || name.contains("..") {
+        return;
+    }
+    let _ = std::fs::remove_dir_all(home.join(format!("{name}.avd")));
+    let _ = std::fs::remove_file(home.join(format!("{name}.ini")));
 }
 
 /// Run a command, giving up after `secs` (agent-device can hang on a dead device).
@@ -364,7 +380,17 @@ fn release_owned(worker: &str, m: &Owned) {
         let avd = within(Command::new(adb()).args(["-s", serial, "emu", "avd", "name"]), 5).unwrap_or_default();
         if avd.lines().next().map(str::trim) == Some(m.name.as_str()) {
             let _ = within(Command::new(adb()).args(["-s", serial, "emu", "kill"]), 15);
+            // the emulator lets go of its files a moment after it's told to quit
+            for _ in 0..20 {
+                if within(Command::new(adb()).args(["-s", serial, "get-state"]), 3).is_none_or(|s| !s.contains("device")) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
         }
+    }
+    if let Some(c) = m.clone.as_deref() {
+        drop_clone(&avd_home(), c);
     }
 }
 
@@ -506,5 +532,21 @@ mod tests {
         assert!(!root.join("broken/.device.json").exists());
         assert!(root.join("running/.device.json").exists());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_a_jobs_own_avd_copy_is_deleted() {
+        let home = std::env::temp_dir().join(format!("ondra-avd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        for n in ["ondra-tjob", "yomates-test"] {
+            std::fs::create_dir_all(home.join(format!("{n}.avd"))).unwrap();
+            std::fs::write(home.join(format!("{n}.ini")), "").unwrap();
+        }
+        drop_clone(&home, "yomates-test");
+        drop_clone(&home, "ondra-../yomates-test");
+        drop_clone(&home, "ondra-tjob");
+        assert!(home.join("yomates-test.avd").exists() && home.join("yomates-test.ini").exists());
+        assert!(!home.join("ondra-tjob.avd").exists() && !home.join("ondra-tjob.ini").exists());
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

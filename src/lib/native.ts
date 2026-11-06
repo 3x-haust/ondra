@@ -447,9 +447,10 @@ export const deviceRotate = (d: Device) => call<boolean>("device_rotate", { plat
 /** Whether the device was turned to landscape from here. */
 export const deviceLandscape = (d: Device) => call<boolean>("device_landscape", { id: d.id }, false);
 /** Full-size screenshot on the Desktop; resolves to its path. */
-export const deviceScreenshot = (d: Device) => call<string>("device_screenshot", { platform: d.platform, id: d.id, serial: d.serial ?? null, name: d.name }, "");
+/** `space`: the space's name goes first in the file name, so each space's captures stay apart on the Desktop. */
+export const deviceScreenshot = (d: Device, space = "") => call<string>("device_screenshot", { platform: d.platform, id: d.id, serial: d.serial ?? null, name: `${space ? `${space} ` : ""}${d.name}` }, "");
 /** Start or stop recording; resolves to the saved file when it stops, "" when it starts. */
-export const deviceRecord = (d: Device) => call<string>("device_record", { platform: d.platform, id: d.id, serial: d.serial ?? null, name: d.name }, "");
+export const deviceRecord = (d: Device, space = "") => call<string>("device_record", { platform: d.platform, id: d.id, serial: d.serial ?? null, name: `${space ? `${space} ` : ""}${d.name}` }, "");
 /** Ids of devices being recorded now. */
 export const deviceRecording = () => call<string[]>("device_recording", undefined, []);
 export const ensureDir = (path: string) => call<string>("ensure_dir", { path }, path);
