@@ -44,3 +44,21 @@ describe("a finished job given more work", () => {
     expect(prompt).toContain("- fix it");
   });
 });
+
+describe("a session that ran long", () => {
+  it("hands over the card, the user's later words and the plan", () => {
+    const t = job([user("Check why the app was rejected. Only check."), tool(), user("(Ondra) This session is at 120k tokens."), user("now fix it, merge and resubmit, Android too")], {
+      plan: [{ text: "Read the rejection", state: "done" }, { text: "Fix the chat", state: "now" }],
+      legs: [{ startedAt: 1, endedAt: 2, handoff: { did: ["read the rejection"], found: ["cause: reasoning none sent"], next: "save two memories", doneWhen: "resubmitted on both stores", evidence: [] } }, { startedAt: 3 }],
+    });
+
+    const prompt = handoffPrompt(t);
+
+    expect(prompt).toContain("- now fix it, merge and resubmit, Android too");
+    expect(prompt).not.toContain("120k tokens");
+    expect(prompt).toContain("- cause: reasoning none sent");
+    expect(prompt).toContain("Done when: resubmitted on both stores");
+    expect(prompt).toContain("[>] Fix the chat");
+    expect(prompt.match(/Only check\./g)).toHaveLength(1);
+  });
+});

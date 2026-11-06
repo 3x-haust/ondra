@@ -64,6 +64,10 @@ export interface Handoff {
   did: string[];
   next: string;
   evidence: { kind: string; ref: string }[];
+  /** what was found that the next session would otherwise look up again */
+  found?: string[];
+  /** when the whole task counts as done */
+  doneWhen?: string;
 }
 
 export type ToolKind = "read" | "search" | "edit" | "write" | "bash" | "browser" | "desktop" | "test" | "other";

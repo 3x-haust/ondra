@@ -309,9 +309,13 @@ End with exactly one of:
   a command you actually ran here, it must have passed, and no code may have
   changed after it (rerun after the last edit); file/shot paths must exist.
   Items that don't hold come back to you.
-- {"type":"handoff","did":[…],"next":"…","evidence":[{"kind":"file","ref":"…"}]}
+- {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
   to stop partway (long context, natural break). A fresh session continues
-  from that card alone, so make it complete.
+  from that card, the task and the user's own words, nothing else. "found":
+  the facts it would otherwise look up again (causes, IDs, paths, commands
+  that worked, log files). "next": every step still owed to the user's
+  latest ask, not just the one in front of you. "doneWhen": what has to be
+  true for the whole task to be over.
 
 # How the user sees you
 "now", "summary" and plan steps show up as one-line status in the app.
@@ -661,6 +665,27 @@ function lastReport(t: Task): string[] {
   ];
 }
 
+/**
+ * Everything the user said to this job after the task itself, word for word:
+ * a later "now fix it and ship" changes the task, and a card written in a hurry
+ * may leave it out.
+ */
+function userSince(t: Task): string[] {
+  const said = t.entries
+    .flatMap((e) => (e.kind === "user" ? [e.text.trim()] : []))
+    .filter((m) => m && m !== t.ask.trim() && !m.startsWith("(Ondra") && !t.inbox.includes(m))
+    .slice(-12)
+    .map((m) => `- ${m.length > 2000 ? `${m.slice(0, 2000)}…` : m}`);
+  return said.length ? ["", "# What the user said since (in order; the latest decides what the task is now)", ...said] : [];
+}
+
+/** The plan as it stood, so the new session picks up the right step. */
+function planLines(t: Task): string[] {
+  if (!t.plan.length) return [];
+  const mark = { done: "[x]", now: "[>]", todo: "[ ]" } as const;
+  return ["", "# Plan so far", ...t.plan.map((p) => `${mark[p.state]} ${p.text}`)];
+}
+
 export function handoffPrompt(t: Task): string {
   const card = t.legs[t.legs.length - 2]?.handoff;
   return [
@@ -671,20 +696,24 @@ export function handoffPrompt(t: Task): string {
     "",
     "# Original task",
     t.ask,
+    ...userSince(t),
     ...(card
       ? [
           "",
           "# Handoff card from the previous session",
           "Done:",
           ...card.did.map((d) => `- ${d}`),
+          ...(card.found?.length ? ["Found:", ...card.found.map((f) => `- ${f}`)] : []),
           `Next: ${card.next}`,
+          ...(card.doneWhen ? [`Done when: ${card.doneWhen}`] : []),
           ...(card.evidence.length ? ["Evidence:", ...card.evidence.map((e) => `- ${e.kind}: ${e.ref}`)] : []),
         ]
       : lastReport(t)),
+    ...planLines(t),
     ...relatedLines(t),
     ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
     "",
-    "Continue from the card. Send a plan and a `now` block first.",
+    "Continue from the card. The user's words outrank it: if the card's next step drops something they asked for, do what they asked. Send a plan and a `now` block first.",
   ].join("\n");
 }
 
