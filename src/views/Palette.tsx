@@ -44,7 +44,8 @@ export function Palette() {
   const items = createMemo<Item[]>(() => {
     const text = q().trim();
     const needle = text.toLowerCase();
-    const tasks: Item[] = [...state.tasks]
+    // each space is its own workspace: only this one's jobs
+    const tasks: Item[] = [...state.tasks.filter((t) => t.space === state.space)]
       .sort((a, b) => rank(a) - rank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt))
       .filter((t) => !t.answer && (!t.parentId || needle))
       .map((t) => ({
