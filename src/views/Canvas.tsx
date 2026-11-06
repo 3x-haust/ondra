@@ -278,8 +278,9 @@ function Activity(props: { t: Task }) {
       </Show>
       <Show when={sub()}><span class="cv-act-step">{cur() + 1}/{t().plan.length} · {sub()}</span></Show>
       <p class="cv-act-head">{head()}</p>
+      {/* newest first in the DOM: the feed stacks from the bottom and drops whole rows that don't fit */}
       <div class="cv-act-feed">
-        <For each={toolIds()}>
+        <For each={[...toolIds()].reverse()}>
           {(id) => {
             const e = () => entry(id);
             const s = () => (e() ? said(e()!) : { icon: "tools", label: "", target: "" });

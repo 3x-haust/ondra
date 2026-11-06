@@ -3215,16 +3215,20 @@ input[type="checkbox"] {
   flex: none;
 }
 .cv-act-feed {
-  margin-top: auto;
+  flex: 1 1 0;
   display: flex;
-  flex-direction: column;
-  /* short on room: the oldest step goes, never the running one */
-  justify-content: flex-end;
+  /* short on room: a row that doesn't fit wraps out of sight whole (the oldest
+     first), so no row is ever cut in half and the running one always shows */
+  flex-direction: column-reverse;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 2px;
   min-height: 0;
   overflow: hidden;
 }
 .cv-act-row {
+  flex: none;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
