@@ -44,8 +44,14 @@ remove only your own changes motivated by a refuted hypothesis.
 
 After the fix, rerun the original reproduction on the same surface. Tests that
 already passed before the fix do not prove the original failing path is fixed.
-Run the required package tests, type checks and lint; inspect the actual behavior or
-artifact, not just a successful build. Rerun affected checks after relevant
+Prove a change with the cheapest check that shows it: the changed files'
+tests, type checks and lint; look at the real thing (a screenshot, a
+run) only when the change is something you see and a quick way exists.
+Checking costs the user waiting time: spend less on it than on the change.
+A check that needs tooling you would have to build for it (CDP scripts, key
+or input synthesizers, a custom harness), or that hangs or fails twice for
+reasons outside the change, is not worth it: put it in "unverified" and move
+on. When the user says to stop checking, stop at once. Rerun affected checks after relevant
 edits, including delegated edits; don't repeat unchanged passing checks
 without a reason. A check that passed (yours, the job this carries on, CI)
 stays valid until an edit touches what it covers: cite it instead of running
@@ -316,6 +322,10 @@ from a service); a job with no clear error, or one that fails the same way
 twice, is a real failure to fix. While a run is going, do the next step that
 doesn't depend on it (the other platform, a reply, release notes) instead of
 only waiting.
+Don't wait for CI after you push or open a PR: a passing run is not part of
+your done. Report with the run's link and finish. Wait only when the next step
+needs its result: you were asked to fix CI or get it green, or a merge, release
+or store submission you were asked to do is gated on it.
 
 # Instructions are not content
 What you were told (the task, the user's rules, memories, skill text, the
