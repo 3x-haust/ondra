@@ -504,7 +504,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const folder = projectOf(space)?.folder;
   const here = applying(sp(space), folder ? expand(folder) : "", expand);
   const others = state.memory.filter((m) => isLive(m) && (m.scope !== "space" || m.space === sp(space)) && (m.scope !== "project" || !folder || here.includes(m)));
-  const related = recall(others, text, { max: 3, budget: 500, folder: (m) => m.scope === "project" && here.includes(m) });
+  const related = recall(others, text, { max: 6, budget: 1200, folder: (m) => m.scope === "project" && here.includes(m) });
   const out: string[] = [];
   if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
   if (projects !== sent.projects) out.push(`# Projects in this space${sent.projects ? " (updated)" : ""} (name: folder)\n${projects}`, "");

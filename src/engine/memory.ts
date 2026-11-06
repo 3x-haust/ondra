@@ -40,7 +40,10 @@ export function tokens(t: string): string[] {
     .replace(/[^\p{L}\p{N}\s._/-]/gu, " ")
     .split(/\s+/)
     .map((w) => w.replace(/(은|는|이|가|을|를|의|에|에서|으로|로|와|과|도|만|요|해요|했어요|돼요|하기|하고|해서)$/u, ""))
-    .filter((w) => w.length >= 2 && !/^(그리고|있어요|이에요|그냥|이거|그거|the|and|for|with|that|this)$/.test(w));
+    // one-syllable Korean nouns that name things ("레비오사 웹", "요메이츠 앱") count too
+    // short bare numbers are times and dates ("12:19", "11. 6."), not what a piece is about
+    .filter((w) => !/^\d{1,3}\.?$/.test(w))
+    .filter((w) => (w.length >= 2 || /^(웹|앱|폰|봇|맥|탭|창|키)$/.test(w)) && !/^(그리고|있어요|이에요|그냥|이거|그거|the|and|for|with|that|this)$/.test(w));
 }
 const overlap = (a: Set<string>, b: Set<string>) => {
   let n = 0;
@@ -366,7 +369,9 @@ export function recall(
     let rare = 0; // distinct query words it shares that few pieces have
     let onTopic = !opts.about;
     for (const t of q) {
-      const tf = w.filter((x) => x === t || (t.length >= 3 && (x.startsWith(t) || t.startsWith(x)))).length;
+      // word stems match by prefix ("leviosa" ~ "leviosa-frontend"); numbers and dates only exactly
+      const stem = t.length >= 3 && !/^\d/.test(t);
+      const tf = w.filter((x) => x === t || (stem && !/^\d/.test(x) && x.length >= 3 && (x.startsWith(t) || t.startsWith(x)))).length;
       if (!tf) continue;
       if ((df.get(t) ?? 0) <= Math.max(3, docs.length * 0.04)) rare++;
       if (aboutWords.has(t) && (df.get(t) ?? 0) <= Math.max(3, docs.length * 0.25)) onTopic = true;
