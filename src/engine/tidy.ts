@@ -203,16 +203,25 @@ export async function tidyMemory(force = false) {
 }
 
 /**
- * A procedure that keeps being used (3+ times, counting repeats) becomes a skill
- * every job can load: SKILL.md made from it and its linked procedures.
+ * A procedure that keeps being used (3+ times, counting repeats) and is a real
+ * how-to (several steps, or several procedures linked to it) becomes a skill
+ * every job can load: SKILL.md made from it and its linked procedures. A
+ * one-line rule or fact stays a memory: as a skill it only repeats the memory
+ * and fills the + menu.
  */
+export function canGrow(m: Memory, linked: Memory[]): boolean {
+  const name = (m.key ?? "").replace(/[^a-z0-9-]/g, "");
+  return name.length >= 3 && (m.text.length >= 300 || linked.length >= 2);
+}
+
 async function growSkills(): Promise<number> {
   let made = 0;
   const taken = new Set(state.skills.map((s) => s.name));
   for (const m of state.memory.filter((x) => isLive(x) && kindOf(x) === "procedure" && !x.skill && x.uses + (x.seen ?? 1) - 1 >= 3)) {
-    const name = (m.key ?? "").replace(/[^a-z0-9-]/g, "").slice(0, 48) || `procedure-${m.id.slice(-6).toLowerCase()}`;
+    const name = (m.key ?? "").replace(/[^a-z0-9-]/g, "").slice(0, 48);
     if (taken.has(name)) continue;
     const linked = (m.links ?? []).map((id) => state.memory.find((x) => x.id === id)).filter((x): x is Memory => !!x && isLive(x) && kindOf(x) === "procedure");
+    if (!canGrow(m, linked)) continue;
     const desc = m.text.split(/(?<=[.!?。]|요\.?)\s/)[0].replace(/\s+/g, " ").slice(0, 160);
     const text = [
       "---",
