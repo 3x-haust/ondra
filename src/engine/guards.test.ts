@@ -104,3 +104,12 @@ describe("plan", () => {
     expect(closePlan(next).map((s) => s.state)).toEqual(["done", "done", "skip"]);
   });
 });
+
+describe("waitsOnUser", () => {
+  it("sees a job handing the next step to the user", async () => {
+    const { waitsOnUser } = await import("./tasks");
+    expect(waitsOnUser("`fix/x`를 직접 푸시하고 PR을 병합해 주세요. 기다릴게요.")).toBe(true);
+    expect(waitsOnUser("병합 완료를 알려주시면 이어갈게요.")).toBe(true);
+    expect(waitsOnUser("타입 검사를 돌렸고 통과했어요.")).toBe(false);
+  });
+});

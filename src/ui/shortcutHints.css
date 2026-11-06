@@ -21,12 +21,6 @@
   line-height: var(--lh-tight);
   white-space: nowrap;
 }
-.shortcut-hold-tip {
-  display: block;
-  padding: var(--s-2) var(--s-12) var(--s-6);
-  color: var(--ink-3);
-  font-size: var(--fs-2xs);
-}
 @media (prefers-reduced-motion: reduce) {
   .shortcut-hints { transition: none; }
 }

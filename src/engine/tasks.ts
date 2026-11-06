@@ -1166,6 +1166,17 @@ async function settle(id: string, run: Run) {
     return;
   }
   // Stopped without done / handoff / ask.
+  // its last words wait on the user ("병합해 주세요", "알려주시면 이어갈게요"): it needs an answer, not "finished?"
+  const said = lastWords(t);
+  if (said && waitsOnUser(said)) {
+    if (drainQueue(id)) return;
+    updateTask(id, (x) => {
+      x.status = "waiting";
+      x.unread = true;
+      x.now = lastReport(x) ?? "답을 기다리는 중";
+    });
+    return;
+  }
   const d: Decision = {
     id: uid("d"),
     taskId: id,
@@ -1714,7 +1725,7 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   if (run.streaming) void request(agentOf(id), { type: "steer", message: msg }).catch(() => {});
 }
 
-export async function tell(id: string, message: string, opts: { now?: boolean } = {}) {
+export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string } = {}) {
   const t = taskById(id);
   if (!t) return;
   const agent = agentOf(id);
@@ -1724,7 +1735,8 @@ export async function tell(id: string, message: string, opts: { now?: boolean } 
   }
   updateTask(id, (x) => {
     x.saidDone = undefined;
-    push(x, { kind: "user", text: message });
+    // what the user sees in the bubble (a button's label), when the message is meant for the model
+    push(x, { kind: "user", text: opts.shown ?? message });
   });
   if (isAlive(agent) && (t.status === "running" || t.status === "waiting")) {
     const run = runs.get(id);
@@ -1814,12 +1826,27 @@ export async function decide(decisionId: string, optionId: string) {
     pauseTask(t.id);
     return;
   }
-  const message =
-    d.kind === "stalled"
-      ? "이어서 진행하세요. 모두 끝났으면 done을 보내세요. 사용자나 서브에이전트를 기다려야 하면 그냥 턴을 끝내세요."
-      : `"${d.question}" → ${label}`;
-  await tell(t.id, message);
+  if (d.kind === "stalled") {
+    await tell(t.id, "이어서 진행하세요. 모두 끝났으면 done을 보내세요. 사용자에게 받아야 할 것이 있으면 ask 블록으로 물어보세요.", { shown: label });
+    return;
+  }
+  await tell(t.id, `"${d.question}" → ${label}`);
 }
+
+/** What the job said since the user last spoke. */
+function lastWords(t: Task): string {
+  const out: string[] = [];
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "user") break;
+    if (e.kind === "text") out.unshift(e.text);
+  }
+  return out.join("\n").replace(/```[\s\S]*?```/g, "").trim();
+}
+
+/** Words that hand the next step to the user: asking them to do or tell something, or waiting for them. */
+export const waitsOnUser = (text: string) =>
+  /기다릴게요|기다리고 있어요|기다리겠|알려\s?주시면|알려\s?주세요|해\s?주세요|해\s?주시면|주시면 이어|정해\s?주세요|골라\s?주세요|waiting for (you|your)|let me know|once you('ve| have)?\b/i.test(text.slice(-600));
 
 /** The first line of the job's last report to the user, if it wrote one. */
 export function lastReport(t: Task): string | undefined {
