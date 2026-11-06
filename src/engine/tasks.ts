@@ -843,8 +843,13 @@ export async function reattachJobs() {
     const h = handlers(id, run);
     listen(agent, h);
     const st = await request(agent, { type: "get_state" }, 8000).catch(() => null);
-    // usage so far was counted already
-    run.stats = await rawStats(agent);
+    // count from what this session's finished turns recorded, so the turn that was
+    // going on when the app reloaded is counted in full when it settles
+    const cur = await rawStats(agent);
+    const since = t.legs[t.legs.length - 1]?.startedAt ?? 0;
+    const seen = zero();
+    for (const e of t.entries) if (e.kind === "turn" && e.usage && e.at >= since) for (const k of ["input", "output", "cacheRead", "cacheWrite"] as const) seen[k] += e.usage[k];
+    run.stats = { input: Math.min(seen.input, cur.input), output: Math.min(seen.output, cur.output), cacheRead: Math.min(seen.cacheRead, cur.cacheRead), cacheWrite: Math.min(seen.cacheWrite, cur.cacheWrite) };
     if (!st) continue;
     // mid-turn (a question on screen is mid-turn too): its own events carry on from here
     if (st.isStreaming || st.isCompacting) {

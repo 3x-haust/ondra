@@ -8310,3 +8310,17 @@ textarea { resize: none !important; field-sizing: content; }
   color: var(--ink-1);
   background: var(--muted);
 }
+
+/* what a finished job took */
+.fork-cost {
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.job-cost {
+  margin: var(--s-8) 0 var(--s-16);
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}

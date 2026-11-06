@@ -1,4 +1,5 @@
 import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, setSpace, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
@@ -170,7 +171,7 @@ export default function App() {
       seen.set(t.id, t.status);
       if (!was || was === t.status || document.hasFocus()) continue;
       if (t.status === "waiting") void notify(t.title, "답이 필요해요");
-      else if (t.status === "done" && !t.parentId) void notify(t.title, t.answer ? "답했어요" : "끝났어요");
+      else if (t.status === "done" && !t.parentId) void notify(t.title, t.answer ? "답했어요" : ["끝났어요", costShort(jobCost(t))].filter(Boolean).join(" · "));
       else if (t.status === "failed") void notify(t.title, "멈췄어요");
     }
   });
