@@ -76,6 +76,7 @@ export default function App() {
     // jobs still running in the engine from before a reload: hear them again
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
     startScheduler();
+    if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());
     warmModels();
     startBridge();
     // memory changed → its vectors are refreshed a moment later
