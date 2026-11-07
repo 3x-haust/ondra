@@ -19,6 +19,10 @@ disassemble: function instructions; decompile: Ghidra decompiler pseudocode.
 Disassemble/decompile require a function's virtual address from functions.
 functions accepts --name SUBSTR (case-insensitive) to return only matching
 functions; a real app can have thousands, so filter before reading the JSON.
+Without --name, more than 300 functions returns a compact preview (total, first
+200 name/addr/size entries, hint). disassemble keeps at most 300 instructions and
+decompile at most 400 lines
+(dropping annotations/p-code); both set truncated and totalOps/totalLines.
 Universal Mach-O requires --arch. Supported targets: 64-bit ARM/x86 Mach-O, ELF, PE.
 Outputs JSON; diagnostics go to stderr. Exit 1 means incomplete/failed, 2 invalid arguments.
 No target execution, user plugins, user configuration, network or external runtimes.
@@ -140,6 +144,57 @@ fn open_input(input: &Path) -> Result<fs::File, String> {
     Ok(source)
 }
 
+// Keep default output small enough for a model's context. A full listing is
+// still available through --name or by narrowing to one function.
+const FUNCTION_LIMIT: usize = 300;
+const FUNCTION_PREVIEW: usize = 200;
+const OP_LIMIT: usize = 300;
+const CODE_LINE_LIMIT: usize = 400;
+
+fn bound(operation: &str, named: bool, mut data: Value) -> Value {
+    match operation {
+        "functions" if !named => {
+            let list = data.as_array().cloned().unwrap_or_default();
+            if list.len() <= FUNCTION_LIMIT { return data; }
+            let preview: Vec<Value> = list.iter().take(FUNCTION_PREVIEW)
+                .map(|f| json!({"name": f["name"], "addr": f["addr"], "size": f["size"]})).collect();
+            json!({
+                "total": list.len(), "shown": preview.len(), "truncated": true, "functions": preview,
+                "hint": "Too many functions to list in full. Rerun with --name SUBSTR to get complete entries for matching functions."
+            })
+        }
+        "disassemble" => {
+            let total = data["ops"].as_array().map_or(0, Vec::len);
+            if total > OP_LIMIT {
+                if let Some(ops) = data["ops"].as_array_mut() {
+                    ops.truncate(OP_LIMIT);
+                    for op in ops.iter_mut() {
+                        *op = json!({"addr": op["addr"], "size": op["size"], "bytes": op["bytes"],
+                            "disasm": op["disasm"], "type": op["type"], "xrefs": op["xrefs"]});
+                    }
+                }
+                data["truncated"] = json!(true);
+                data["totalOps"] = json!(total);
+            } else { data["truncated"] = json!(false); }
+            data
+        }
+        "decompile" => {
+            let code = data["code"].as_str().unwrap_or("").to_string();
+            let total = code.lines().count();
+            if total > CODE_LINE_LIMIT {
+                let kept: String = code.split_inclusive('\n').take(CODE_LINE_LIMIT).collect();
+                // Annotations and raw p-code dwarf the code; disassemble gives addresses.
+                if let Some(obj) = data.as_object_mut() { obj.remove("annotations"); obj.remove("pcode_ops"); }
+                data["code"] = json!(kept);
+                data["truncated"] = json!(true);
+                data["totalLines"] = json!(total);
+            } else { data["truncated"] = json!(false); }
+            data
+        }
+        _ => data,
+    }
+}
+
 fn analyze(args: Args) -> Result<Value, String> {
     let root = resources()?;
     let input = fs::canonicalize(&args.input).map_err(|e| format!("Input: {e}"))?;
@@ -198,6 +253,7 @@ fn analyze(args: Args) -> Result<Value, String> {
         _ => false,
     };
     if !complete { return Err(format!("No complete {} result: {data}", args.operation)); }
+    let data = bound(&args.operation, args.name.is_some(), data);
     Ok(json!({
         "engine": {"radare2": "6.2.6", "r2ghidra": "6.2.6"},
         "operation": args.operation, "input": input, "sha256": format!("{:x}", hasher.finalize()),

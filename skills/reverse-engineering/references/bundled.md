@@ -62,8 +62,16 @@ that all exports share the target hash and selected architecture.
 
 - `inspect`: format, CPU, base address and binary metadata in `data`/`target`.
 - `functions`: discovered functions in `data`. Discovery is not guaranteed complete.
+  Over 300 functions without `--name` returns a compact preview instead:
+  `data.total`, the first 200 entries (`name`, `addr`, `size`) in
+  `data.functions`, `data.truncated: true` and a `hint`. Use `--name` for the rest.
 - `disassemble`: instruction addresses, bytes, opcodes and analysis in `data.ops`.
+  At most 300 instructions; past that `data.truncated` is true, `data.totalOps`
+  gives the full count and each kept op is reduced to address, bytes and text.
 - `decompile`: actual Ghidra decompiler output in `data.code`, with annotations.
+  At most 400 lines; past that `data.truncated` is true, `data.totalLines` gives
+  the full count and annotations/p-code are dropped. Never treat a truncated
+  function as fully read: say which part you saw.
   Label it **decompiler pseudocode**. Compare its critical branches to assembly;
   inferred types, names and calling conventions can be wrong.
 
