@@ -92,8 +92,9 @@ function General() {
       <div class="set-group">
         <div class="set-row col">
           <textarea
-            class="textarea"
+            class="textarea plain"
             rows={6}
+            placeholder="모든 일에 적용할 지시"
             value={state.settings.instructions}
             
             onChange={(e) => setState("settings", "instructions", e.currentTarget.value)}
