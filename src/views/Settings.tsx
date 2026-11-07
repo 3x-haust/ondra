@@ -348,7 +348,7 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
             <For each={EFFORTS}>{(x) => <option value={x.id}>{x.label}</option>}</For>
           </select>
           <select class="select" value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
-            <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+            <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}에서 쓰기</option>}</For>
           </select>
           <Show when={used()} fallback={<span class="muted acc-usage">사용 기록 없음</span>}>
             <span class="acc-usage" title="앞부분을 다시 써서 아낀 비율이에요">
@@ -464,7 +464,7 @@ function Import() {
         <button class="btn ghost sm" onClick={scan} disabled={scanning()}><Icon name="refresh" size={13} />{scanning() ? "검색 중" : "다시 검색"}</button>
       </div>
       <div class="src-grid">
-        <For each={sources()} fallback={<div class="muted">{scanning() ? "검색 중…" : "발견한 도구 없음"}</div>}>
+        <For each={sources()} fallback={<div class="set-group src-empty"><div class="empty-line">{scanning() ? "찾는 중" : "발견한 도구 없음"}</div></div>}>
           {(s) => (
             <div class="src" classList={{ off: !s.found }}>
               <div class="src-head">
@@ -494,7 +494,7 @@ function Import() {
       </Show>
 
       <div class="set-group-title">세션 이어받기</div>
-      <input class="input" placeholder="세션 검색 (제목, 폴더, 도구)" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} style={{ "margin-bottom": "var(--s-8)" }} />
+      <input class="input" placeholder="세션 검색 (제목, 폴더, 도구)" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} style={{ width: "100%", "margin-bottom": "var(--s-8)" }} />
       <div class="set-group">
         <For each={sessions()} fallback={<div class="empty-line">세션 없음</div>}>
           {(s) => (

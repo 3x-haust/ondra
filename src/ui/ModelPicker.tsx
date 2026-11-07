@@ -74,7 +74,7 @@ export function ModelPicker(props: {
     <div class="picker" onClick={(e) => e.stopPropagation()}>
       <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title="모델과 생각 깊이">
         <span class="model-name">{label()}</span>
-        <span class="model-effort">{effort()}</span>
+        <Show when={current()}><span class="model-effort">{effort()}</span></Show>
         <Icon name="down" size={12} class="muted" />
       </button>
       <Show when={open()}>
