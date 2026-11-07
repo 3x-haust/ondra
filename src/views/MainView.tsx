@@ -291,7 +291,7 @@ export function MainView() {
         { name: "settings", desc: "설정", icon: "gear", run: () => setView({ name: "settings" }) },
         ...skillCommands(() => ({ space: state.space, project: project()?.id })),
       ]}
-      placeholder={big ? "무엇이든 말해 주세요" : project() ? `${project()!.name}에 대해 말하기 · 일은 이 폴더에서 해요` : "메인에게 말하기 · 여러 일을 한 번에 적어도 돼요"}
+      placeholder={big ? "무엇이든 말해 주세요" : project() ? `${project()!.name}에 대해 말하기` : "메인에게 말하기"}
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}
@@ -401,6 +401,21 @@ const setBoardOpen = (v: boolean) => {
 function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessage) => Task[]; onJump: (id: string) => void }) {
   const open = boardOpen;
   const setOpen = setBoardOpen;
+  let board!: HTMLDivElement;
+  // it opens over the conversation: Escape or a click elsewhere closes it
+  const away = (e: PointerEvent) => open() && board && !board.contains(e.target as Node) && setOpen(false);
+  const esc = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || !open() || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+  };
+  window.addEventListener("pointerdown", away, true);
+  window.addEventListener("keydown", esc, true);
+  onCleanup(() => {
+    window.removeEventListener("pointerdown", away, true);
+    window.removeEventListener("keydown", esc, true);
+  });
   const reqs = createMemo<Req[]>(() => {
     const out: Req[] = [];
     let ask: CaptainMessage | undefined;
@@ -473,7 +488,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   };
   return (
     <Show when={reqs().length}>
-      <div class="req-board" classList={{ open: open() }}>
+      <div class="req-board" ref={board} classList={{ open: open() }}>
         <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
           <span class="req-sum">
             요청 {reqs().length}

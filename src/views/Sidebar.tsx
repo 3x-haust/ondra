@@ -358,7 +358,7 @@ export function Sidebar() {
           <Icon name="memory" size={15} class="sb-main-ic" />
           <span class="sb-title">기억</span>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "results" }} onClick={() => setView({ name: "results" })}>
+        <button class="sb-row sb-main" classList={{ on: view().name === "results" }} onClick={() => setView({ name: "results" })} data-shortcut="results" title={`결과 (${shortcutHint("results")})`}>
           <Icon name="inbox" size={15} class="sb-main-ic" />
           <span class="sb-title">결과</span>
         </button>
