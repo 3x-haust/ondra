@@ -184,6 +184,26 @@ impl ComputerState {
         operation.finish(result)
     }
 
+    /// Adopts the guest an earlier app run prepared. It stays powered off until a
+    /// task starts it; a guest that never finished setup returns to setup.
+    fn resume(&self, load: impl FnOnce() -> Result<ComputerSetup>) -> Result<ComputerStatus> {
+        let mut operation = self.begin("preparing")?;
+        let result = (|| {
+            if operation.owner.is_some() {
+                return Err("COMPUTER_ALREADY_PREPARED");
+            }
+            let setup = load()?;
+            let pending = setup.setup_pending();
+            *operation.owner = Some(setup);
+            self.status
+                .lock()
+                .map_err(|_| "COMPUTER_STATE_FAILED")?
+                .phase = if pending { "setup" } else { "stopped" };
+            Ok(())
+        })();
+        operation.finish(result)
+    }
+
     fn open_viewer(&self) -> Result<ComputerStatus> {
         let operation = self.begin("setup")?;
         let result = operation
@@ -323,6 +343,42 @@ fn fresh_directory(parent: &Path) -> Result<PathBuf> {
         unsafe { CStr::from_ptr(created) }.to_bytes(),
     ));
     std::fs::canonicalize(path).map_err(|_| "COMPUTER_DIRECTORY_FAILED")
+}
+
+/// The newest guest directory whose OS install finished.
+fn newest_prepared(parent: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(parent)
+        .ok()?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name();
+            let kind = entry.file_type().ok()?;
+            if !kind.is_dir() || !name.to_str()?.starts_with("computer-") {
+                return None;
+            }
+            let marker = std::fs::symlink_metadata(entry.path().join("vm/installed")).ok()?;
+            marker.is_file().then_some(())?;
+            Some((marker.modified().ok()?, entry.path()))
+        })
+        .max_by_key(|(modified, _)| *modified)
+        .and_then(|(_, path)| std::fs::canonicalize(path).ok())
+}
+
+/// At app start, adopts the guest a previous run left behind, without booting it.
+pub fn resume_existing(app: &AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Ok(parent) = handle.path().app_data_dir() else {
+            return;
+        };
+        let Some(root) = newest_prepared(&parent) else {
+            return;
+        };
+        let state = handle.state::<ComputerState>();
+        let _ = state.resume(|| {
+            ComputerSetup::resume(sealed_assets(&handle)?, root.join("vm"), root.clone())
+        });
+    });
 }
 
 async fn worker(
