@@ -8,7 +8,7 @@
   --sidebar: #fafafa;
   --card: #ffffff;
   --muted: #fafafa;
-  --hover: #f4f4f5;
+  --hover: #ededf0;
   --active: #ececee;
   --row-selected: #ffffff;
   --row-selected-shadow: inset 0 0 0 1px rgba(228, 228, 231, 0.7);
@@ -35,7 +35,7 @@
   --ok-ink: #047857;
   --warn: #f59e0b;
   --warn-ink: #b45309;
-  --bad: #ef4444;
+  --bad: #dc2626;
   --bad-ink: #b91c1c;
   --ok-soft: rgba(16, 185, 129, 0.08);
   --warn-soft: rgba(245, 158, 11, 0.08);

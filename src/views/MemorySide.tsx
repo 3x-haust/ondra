@@ -322,8 +322,8 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
       <Show when={all()}>
         <TidyLine />
       </Show>
-      <Show when={!list().length && !past().length && !nows().length}>
-        <Empty>비어 있음</Empty>
+      <Show when={!all() && !list().length && !past().length && !nows().length}>
+        <Empty>없음</Empty>
       </Show>
     </div>
   );
@@ -346,7 +346,7 @@ function TidyLine() {
   return (
     <div class="md-tidy">
       <H>정리</H>
-      <Show when={t()} fallback={<Empty>아직 없음</Empty>}>
+      <Show when={t()} fallback={<Empty>없음</Empty>}>
         {(x) => (
           <dl class="mp">
             <dt>마지막</dt>
@@ -398,7 +398,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
           { n: list().reduce((x, e) => x + (e.learned?.length ?? 0), 0), label: "배운 기억" },
         ]}
       />
-      <Show when={list().length} fallback={<Empty>비어 있음</Empty>}>
+      <Show when={list().length} fallback={<Empty>없음</Empty>}>
         <EntryList list={list()} onSel={props.onSel} days={k().length !== 10} limit={60} />
       </Show>
     </div>

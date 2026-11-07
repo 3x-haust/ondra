@@ -8640,3 +8640,21 @@ select.select.dev-space {
 .user-turn:focus-within .msg-actions {
   opacity: 1;
 }
+/* small grey text that carries information reads at full contrast */
+.usage-line,
+.job-cost,
+.tool-target,
+.md-empty {
+  color: var(--ink-3);
+}
+/* a notice with only a title: icon, text and button on one line */
+.notice:not(:has(p)) {
+  align-items: center;
+}
+.sb-scroll.more {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+}
+/* the tray under the composer only shows when it holds something */
+.ctray:not(:has(.composer-under, .status-line)) {
+  display: none;
+}

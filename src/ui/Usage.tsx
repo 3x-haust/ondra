@@ -86,7 +86,10 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   /** the share of the window, worked out the same way as the context sheet */
   const pct = () => { const x = c(); return x ? (x.window ? (x.tokens / x.window) * 100 : x.percent) : 0; };
   const [ctxOpen, setCtxOpen] = createSignal(false);
+  // with no account and nothing measured yet there is nothing to show: no empty strip
+  const any = () => !!state.accounts.some((a) => a.id === props.accountId) || !!c() || !!props.shells || !!props.branch;
   return (
+    <Show when={any()}>
     <div class="status-line">
       <Show when={state.accounts.find((a) => a.id === props.accountId)}>
         {(a) => <AccountPicker accountId={a().id} space={props.space ?? a().space} onPick={props.onAccount} running={props.running} />}
@@ -115,7 +118,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>
         <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율 (이 대화 전체)">
-          CH {pctText(reusePct(props.agent!)!)}%
+          캐시 {pctText(reusePct(props.agent!)!)}%
         </span>
       </Show>
       <Show when={props.shells}>
@@ -123,5 +126,6 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <Show when={props.branch}><span class="st-br" title="이 일의 브랜치"><Icon name="branch" size={11} />{props.branch}</span></Show>
     </div>
+    </Show>
   );
 }
