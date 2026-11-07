@@ -16,10 +16,10 @@ const limitsShown = (id: string) => (state.accounts.find((a) => a.id === id)?.pr
 const promptOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
 
 const secs = (ms: number) => {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}초`;
   const m = Math.floor(ms / 60_000);
   const s = Math.round((ms % 60_000) / 1000);
-  return s ? `${m}m ${s}s` : `${m}m`;
+  return s ? `${m}분 ${s}초` : `${m}분`;
 };
 
 /** One quiet line under an answer: speed, cache hit, time, tokens; plan windows on hover. */
@@ -33,9 +33,9 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
   return (
     <div class="usage-line" title={detail()}>
       <Show when={props.lead}><span>{props.lead}</span></Show>
-      <Show when={props.u.tps}><span>{props.u.tps} tok/s</span></Show>
+      <Show when={props.u.tps}><span>초당 {props.u.tps}토큰</span></Show>
       <Show when={promptOf(props.u)}>
-        <span class="usage-cache" title="이 답의 입력 중 캐시에서 읽은 비율">Cache hit {pctText((props.u.cacheRead / promptOf(props.u)) * 100)}%</span>
+        <span class="usage-cache" title="이 답의 입력 중 캐시에서 읽은 비율">캐시 {pctText((props.u.cacheRead / promptOf(props.u)) * 100)}%</span>
       </Show>
       <Show when={props.u.ms}><span>{secs(props.u.ms!)}</span></Show>
       <span class="usage-tok">입력 {tokens(promptOf(props.u))} · 출력 {tokens(props.u.output)}</span>
@@ -83,6 +83,8 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   });
   const list = () => limitsShown(props.accountId);
   const c = () => (props.agent ? ctx[props.agent] : undefined);
+  /** the share of the window, worked out the same way as the context sheet */
+  const pct = () => { const x = c(); return x ? (x.window ? (x.tokens / x.window) * 100 : x.percent) : 0; };
   const [ctxOpen, setCtxOpen] = createSignal(false);
   return (
     <div class="status-line">
@@ -99,12 +101,12 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       <Show when={props.agent}>
         <button
           class="st-ctx"
-          classList={{ hot: (c()?.percent ?? 0) >= 70 }}
+          classList={{ hot: pct() >= 70 }}
           title={c() ? `대화 길이 ${tokens(c()!.tokens)}/${tokens(c()!.window)} · 누르면 모델이 받는 내용을 보여줘요` : "누르면 모델이 받는 내용을 보여줘요"}
           onClick={() => setCtxOpen(true)}
         >
           <Show when={c()} fallback="컨텍스트">
-            {(x) => <>{tokens(x().tokens)} ({x().percent < 1 ? x().percent.toFixed(1) : Math.round(x().percent)}%)</>}
+            {(x) => <>{tokens(x().tokens)} ({pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%)</>}
           </Show>
         </button>
         <Show when={ctxOpen()}>

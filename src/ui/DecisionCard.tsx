@@ -106,7 +106,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
           </button>
         )}
       </Show>
-      <Show when={context().length}>
+      {/* inside the job's own thread its words are right above: only pictures sent with the question */}
+      <Show when={(props.showTask !== false || props.d.context.length) && context().length}>
         <div class="decision-ctx"><For each={context()}>{(b) => <BlockView block={b} />}</For></div>
       </Show>
       {/* like Codex: the choices as a list, and a line to answer in your own words */}
