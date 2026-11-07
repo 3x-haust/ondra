@@ -26,7 +26,8 @@ decompile at most 400 lines
 Universal Mach-O requires --arch. Supported targets: 64-bit ARM/x86 Mach-O, ELF, PE.
 Outputs JSON; diagnostics go to stderr. Exit 1 means incomplete/failed, 2 invalid arguments.
 No target execution, user plugins, user configuration, network or external runtimes.
-Each engine invocation is limited to 120 seconds and 32 MiB output; input to 512 MiB.
+Each engine invocation is limited to 120 seconds; input and raw engine output to
+512 MiB each. The printed result is always bounded to a model-sized summary.
 Static parsing is not a security sandbox. Analyze hostile inputs only in an isolated lab.";
 
 #[derive(Debug)]
@@ -93,6 +94,12 @@ fn resources() -> Result<PathBuf, String> {
     Err("Bundled analysis engine is missing; rebuild or reinstall Ondra. No external engine will be used.".into())
 }
 
+// The raw radare2 JSON is only an intermediate: `bound` always reduces it to a
+// context-sized result before we print. So this cap only guards against runaway
+// engine output, not the model's context, and can be far larger than the emitted
+// caps in `bound`. A fully analyzed 21 MiB Mach-O already yields ~52 MiB of aflj.
+const ENGINE_OUTPUT_LIMIT: u64 = 512 * 1024 * 1024;
+
 fn engine(root: &Path, scratch: &Path, arch: &Option<String>, commands: &str) -> Result<Value, String> {
     let stdout = scratch.join("stdout");
     let stderr = scratch.join("stderr");
@@ -114,7 +121,7 @@ fn engine(root: &Path, scratch: &Path, arch: &Option<String>, commands: &str) ->
             Ok(None) => {},
             Err(e) => { let _ = child.kill(); let _ = child.wait(); return Err(e.to_string()); }
         }
-        let oversized = [&stdout, &stderr].iter().any(|p| fs::metadata(p).is_ok_and(|m| m.len() > 32 * 1024 * 1024));
+        let oversized = [&stdout, &stderr].iter().any(|p| fs::metadata(p).is_ok_and(|m| m.len() > ENGINE_OUTPUT_LIMIT));
         if oversized || started.elapsed() >= Duration::from_secs(120) {
             let _ = child.kill();
             let _ = child.wait();
@@ -126,7 +133,7 @@ fn engine(root: &Path, scratch: &Path, arch: &Option<String>, commands: &str) ->
     if !diagnostics.is_empty() { eprint!("{diagnostics}"); }
     if !status.success() { return Err(format!("Engine exited with {status}")); }
     let output = fs::read(&stdout).map_err(|e| e.to_string())?;
-    if output.len() > 32 * 1024 * 1024 { return Err("Engine output limit exceeded".into()); }
+    if output.len() as u64 > ENGINE_OUTPUT_LIMIT { return Err("Engine output limit exceeded".into()); }
     serde_json::from_slice(&output).map_err(|e| format!("Engine did not return valid JSON: {e}"))
 }
 
@@ -295,5 +302,30 @@ mod tests {
         for invalid in [vec!["run", "a"], vec!["decompile", "a"], vec!["inspect", "a", "--address", "0x1"], vec!["decompile", "a", "--address", "0x1;!touch /tmp/injected"], vec!["inspect", "a", "--arch", "mips"], vec!["inspect", "a", "--arch"], vec!["inspect", "a", "--arch", "arm64", "--arch", "x86_64"]] {
             assert!(parse(&args(&invalid)).is_err(), "{invalid:?}");
         }
+    }
+    #[test]
+    fn bounds_a_large_function_list_to_a_context_sized_preview() {
+        // A big binary yields ~100k functions and tens of MiB of raw engine JSON
+        // (allowed up to ENGINE_OUTPUT_LIMIT); the printed result stays tiny.
+        assert!(ENGINE_OUTPUT_LIMIT >= 512 * 1024 * 1024);
+        // Each real aflj entry carries dozens of fields; approximate that bulk so
+        // the raw array genuinely exceeds the old 32 MiB cap, as a real big binary does.
+        let bulk: Vec<i64> = (0..40).collect();
+        let list: Vec<Value> = (0..101_917)
+            .map(|i| json!({"name": format!("sym.imp.some_longish_demangled_function_name_{i:08x}"),
+                "addr": i, "size": 16, "ops": bulk, "callrefs": bulk, "datarefs": bulk, "codexrefs": bulk}))
+            .collect();
+        let raw = Value::Array(list);
+        let full = serde_json::to_vec(&raw).unwrap();
+        let bounded = bound("functions", false, raw);
+        let emitted = serde_json::to_vec(&bounded).unwrap();
+        assert!(full.len() > 32 * 1024 * 1024, "raw list should exceed the old 32 MiB cap");
+        assert!(emitted.len() < 64 * 1024, "emitted preview must stay context-sized");
+        assert_eq!(bounded["total"], json!(101_917));
+        assert_eq!(bounded["shown"], json!(FUNCTION_PREVIEW));
+        assert_eq!(bounded["truncated"], json!(true));
+        assert_eq!(bounded["functions"].as_array().unwrap().len(), FUNCTION_PREVIEW);
+        // The preview drops per-function detail (e.g. ops) to the three fields.
+        assert_eq!(bounded["functions"][0].as_object().unwrap().len(), 3);
     }
 }
