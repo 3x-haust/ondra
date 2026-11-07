@@ -1,6 +1,7 @@
 // Updates from GitHub Releases. A while after start, every hour and on coming back, the
 // app asks whether a newer release is out; if so a notice stays until the user
-// installs it (download, verify, restart) or closes it.
+// installs it (download, verify, restart) or closes it. Settings shows the same.
+import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate } from "../lib/native";
 import { toast } from "../state/ui";
 
@@ -10,23 +11,37 @@ const AGAIN = 30 * 60_000;
 let shown = "";
 let lastCheck = 0;
 
+export type UpdateState = "idle" | "checking" | "latest" | "installing";
+const [status, setStatus] = createSignal<UpdateState>("idle");
+const [available, setAvailable] = createSignal<string | null>(null);
+const [checkedAt, setCheckedAt] = createSignal(0);
+export { available, checkedAt, status as updateStatus };
+
 export async function checkUpdate(manual = false) {
+  if (status() === "checking" || status() === "installing") return;
   lastCheck = Date.now();
+  setStatus("checking");
   const next = await checkForUpdate().catch(() => null);
+  setCheckedAt(Date.now());
+  setAvailable(next?.version ?? null);
+  setStatus(next ? "idle" : "latest");
   if (!next) {
     if (manual) toast("최신 버전이에요");
     return;
   }
   if (next.version === shown && !manual) return;
   shown = next.version;
-  toast(`새 버전 ${next.version}이 나왔어요`, "info", { label: "업데이트", run: () => void install() }, { stay: true });
+  toast(`새 버전 ${next.version}이 나왔어요`, "info", { label: "업데이트", run: () => void installNow() }, { stay: true });
 }
 
-async function install() {
+export async function installNow() {
+  if (status() === "installing") return;
+  setStatus("installing");
   toast("업데이트 받는 중이에요. 끝나면 다시 시작해요", "info", undefined, { stay: true });
   try {
     await installUpdate();
   } catch (e) {
+    setStatus("idle");
     toast(`업데이트하지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
   }
 }

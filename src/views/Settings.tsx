@@ -27,6 +27,8 @@ import { ToolsTab } from "./Tools";
 import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
+import { getVersion } from "@tauri-apps/api/app";
+import { available, checkedAt, checkUpdate, installNow, updateStatus } from "../engine/update";
 
 
 function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
@@ -116,7 +118,33 @@ function General() {
         </For>
       </div>
       <Show when={editing()}>{(id) => <SpaceSheet id={id()} onClose={() => setEditing(null)} />}</Show>
+
+      <div class="set-group-title">업데이트</div>
+      <div class="set-group">
+        <UpdateRow />
+      </div>
     </>
+  );
+}
+
+function UpdateRow() {
+  const [version] = createResource(() => getVersion().catch(() => ""));
+  const note = () =>
+    updateStatus() === "checking" ? "확인 중…"
+    : updateStatus() === "installing" ? "받는 중… 끝나면 다시 시작해요"
+    : available() ? `${available()} 나옴`
+    : checkedAt() ? `최신 버전 · ${ago(checkedAt())} 확인`
+    : "";
+  return (
+    <Row title={`Ondra ${version() ?? ""}`}>
+      <span class="set-note">{note()}</span>
+      <Show
+        when={available()}
+        fallback={<button class="btn sm" disabled={updateStatus() === "checking" || updateStatus() === "installing"} onClick={() => void checkUpdate(true)}>업데이트 확인</button>}
+      >
+        <button class="btn primary sm" disabled={updateStatus() === "installing"} onClick={() => void installNow()}>업데이트</button>
+      </Show>
+    </Row>
   );
 }
 
