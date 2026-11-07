@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
@@ -213,6 +213,7 @@ describe.skipIf(process.platform !== "darwin")("게스트 실행기 입장 검�
     const home = mkdtempSync(join(directory, "capture-"));
     const path = join(home, "screenshot.png");
     writeFileSync(path, bytes, { mode });
+    chmodSync(path, mode); // the umask may have taken bits off
     return { home, path };
   }
   function screenshotEnvelope(ok = true) {
