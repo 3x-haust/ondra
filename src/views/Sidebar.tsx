@@ -178,7 +178,7 @@ function ProjectMenu() {
   );
 }
 /** 확인할 일: the jobs waiting on you, to pick one */
-const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number } | null>(null);
+const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; w: number } | null>(null);
 function NeedsMenu() {
   const close = () => setNeedsMenu(null);
   const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && needsMenu() && (e.preventDefault(), e.stopPropagation(), close());
@@ -196,7 +196,7 @@ function NeedsMenu() {
   return (
     <Show when={needsMenu()}>
       {(m) => (
-        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, top: `${Math.min(m().y, window.innerHeight - 60 - list().length * 34)}px` }} onClick={(e) => e.stopPropagation()}>
+        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, width: `${m().w}px`, top: `${Math.min(m().y, window.innerHeight - 60 - list().length * 34)}px` }} onClick={(e) => e.stopPropagation()}>
           <For each={list()}>
             {(t) => (
               <button onClick={() => (openTask(t.id), close())}>
@@ -372,7 +372,7 @@ export function Sidebar() {
               if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
               if (needsMenu()) return setNeedsMenu(null);
               const r = e.currentTarget.getBoundingClientRect();
-              setNeedsMenu({ x: r.left, y: r.bottom + 4 });
+              setNeedsMenu({ x: r.left, y: r.bottom + 4, w: r.width });
             }}
             data-shortcut="waiting"
             title="답하거나 확인할 일 (⌘.로 다음 일)"
@@ -460,7 +460,7 @@ export function Sidebar() {
         </Fold>
 
         <Head id="devices" label="디바이스" count={bootedDevices().length}>
-          <button class="icon-btn xs" data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
+          <button class="icon-btn xs" classList={{ on: view().name === "devices" }} data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
             <Icon name="arrow" size={13} />
           </button>
         </Head>
@@ -491,6 +491,7 @@ export function Sidebar() {
         </div>
         </Fold>
 
+        <Show when={loose().length || hidden() || archived().length}>
         <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
@@ -518,6 +519,7 @@ export function Sidebar() {
           </Show>
         </div>
         </Fold>
+        </Show>
       </div>
       <RowMenu />
       <ProjectMenu />

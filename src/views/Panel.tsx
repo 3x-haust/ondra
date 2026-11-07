@@ -140,16 +140,21 @@ function Overview(props: { t: Task }) {
       <Show when={t().plan.length}>
         <div>
           <div class="pane-title">계획</div>
-          <div class="plan">
+          {/* the same marks as the 할 일 list under the job */}
+          <ol class="todos-list plan-list">
             <For each={t().plan}>
               {(s) => (
-                <div class={`plan-step ${s.state}`}>
-                  <span class="mark"><Show when={s.state === "done"}><Icon name="check" size={9} stroke={3.5} /></Show></span>
-                  <span>{s.text}</span>
-                </div>
+                <li class={`todo ${s.state}`}>
+                  <span class="todo-box">
+                    <Show when={s.state === "done"} fallback={<Show when={s.state === "now"}><i /></Show>}>
+                      <Icon name="check" size={10} stroke={3} />
+                    </Show>
+                  </span>
+                  <span class="todo-text">{s.text}</span>
+                </li>
               )}
             </For>
-          </div>
+          </ol>
         </div>
       </Show>
       <Show when={t().legs.length > 1}>

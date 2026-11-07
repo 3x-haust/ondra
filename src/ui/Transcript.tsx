@@ -143,8 +143,10 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
   const report = () => (props.last && !answer() && props.task.status === "done" && props.task.result?.trim()) || "";
   const took = () => {
     if (props.turn.ms) return props.turn.ms;
-    const from = props.turn.user?.at ?? body()[0]?.at ?? 0;
     const to = Math.max(...body().map((e) => (e.kind === "tool" ? (e.tool.endedAt ?? e.at) : e.at)), props.task.finishedAt ?? 0);
+    // counted from when the job started, not from when it was asked (the same time "걸림" shows)
+    const asked = props.turn.user?.at ?? body()[0]?.at ?? 0;
+    const from = props.task.startedAt && props.task.startedAt > asked && props.task.startedAt < to ? props.task.startedAt : asked;
     return to - from;
   };
   const toggle = () => {

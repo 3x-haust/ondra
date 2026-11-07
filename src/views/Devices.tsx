@@ -60,7 +60,7 @@ function SpacePick(props: { d: Device }) {
   return (
     <Show when={!own()}>
       <select
-        class="dev-space"
+        class="select dev-space"
         value={deviceSpace(props.d) ?? ""}
         onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
       >
