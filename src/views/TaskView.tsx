@@ -201,7 +201,7 @@ export function TaskView(props: { id: string }) {
           if (made.length && !(panelOpen() && panelTab() === "artifacts"))
             out.push(
               <button class="strip" onClick={() => openPanel("artifacts")}>
-                <Icon name="spark" size={14} />
+                <Icon name="inbox" size={14} />
                 <b>결과물 {made.length}개</b>
                 <span class="rest">{made[0].name}</span>
                 <span class="strip-act">보기</span>

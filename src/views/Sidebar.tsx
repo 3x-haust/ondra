@@ -73,7 +73,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
     if (b() === "review") return "";
     if (x.status === "queued") return "대기";
     if (x.status === "paused") return "쉼";
-    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? "방금 시작" : `${compact(now() - x.startedAt)}째`) : "";
+    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? "방금" : compact(now() - x.startedAt)) : "";
     return ago(x.finishedAt ?? x.createdAt);
   };
   return (

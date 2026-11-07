@@ -42,7 +42,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
     { id: "update", label: "업데이트 확인", icon: "download", section: "앱", run: () => void checkUpdate(true) },
     { id: "s-tools", label: "도구 · 권한", icon: "shield", section: "앱", run: () => setView({ name: "settings", tab: "tools" }) },
-    { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "spark", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "monitor", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
 
   const items = createMemo<Item[]>(() => {
