@@ -75,6 +75,12 @@ fn hold_to_quit(app: &AppHandle) {
             }
             std::thread::sleep(Duration::from_millis(30));
         }
+        // quit once Q is let go: quitting while it is still down hands the
+        // repeating ⌘Q to the next app, which quits too
+        let held_at = Instant::now();
+        while held() && held_at.elapsed() < Duration::from_secs(30) {
+            std::thread::sleep(Duration::from_millis(30));
+        }
         app.exit(0);
     });
 }
