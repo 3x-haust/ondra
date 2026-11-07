@@ -1,0 +1,82 @@
+/* stat family (src/ui/viz/stat): statistics, evaluation and paper figures.
+   Marks carry the palette; every word stays in ink tokens. */
+.st .st-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.st .st-thin { fill: none; stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; }
+.st .st-area { stroke: none; fill-opacity: 0.1; }
+.st .st-band { stroke: none; fill-opacity: 0.14; }
+.st .st-ref { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+.st .st-ref-solid { stroke: var(--viz-base); stroke-width: 1; fill: none; }
+.st .st-cross { stroke: var(--viz-base); stroke-width: 1; pointer-events: none; }
+.st .st-hit { fill: none; stroke-width: 2; pointer-events: none; }
+.st text.st-dl, .st .st-dl { fill: var(--ink-2); font-size: 12px; }
+/* labels inside a plot keep a knock-out halo in the surface colour so marks never cut a word */
+.st text.st-dl, .st text.st-mute, .st text.st-halo { paint-order: stroke; stroke: var(--viz-gap); stroke-width: 3px; stroke-linejoin: round; }
+.st text.st-mute, .st .st-sub { fill: var(--ink-3); font-size: 12px; }
+.st text.st-strong { fill: var(--ink); font-weight: 600; }
+.st text.st-on-dark { fill: #ffffff; }
+.st text.st-on-light { fill: #18181b; }
+.st .st-cell-v { font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.st .st-rowlabels text { fill: var(--ink-2); }
+.st .st-whisker { stroke-width: 1.5; fill: none; }
+.st .st-dendro { stroke: var(--ink-3); stroke-width: 1; fill: none; }
+.st .st-axisline { stroke: var(--viz-base); stroke-width: 1; fill: none; }
+.st .st-tri-grid { stroke: var(--viz-grid); stroke-width: 1; fill: none; }
+
+/* colour-scale key under a chart */
+.st-key { display: flex; align-items: center; gap: var(--s-6); font-size: var(--fs-2xs); color: var(--ink-3); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.st-key-title { color: var(--ink-2); margin-right: var(--s-4); }
+.st-key-bar { width: 120px; height: 8px; border-radius: var(--r-pill); }
+
+/* number-at-risk table under a survival curve */
+.st-risk { display: grid; gap: 2px; font-size: var(--fs-2xs); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.st-risk-title { color: var(--ink-3); }
+
+/* results table (paper style): best bold, second underlined */
+.st-results { overflow-x: auto; }
+.st-results table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.st-results th, .st-results td { padding: var(--s-6) var(--s-10); text-align: right; white-space: nowrap; }
+.st-results th:first-child, .st-results td:first-child { text-align: left; white-space: normal; min-width: 7em; }
+.st-results thead th { color: var(--ink-3); font-weight: var(--fw-medium); border-bottom: 1px solid var(--line); }
+.st-results thead th .st-arrow { margin-left: 2px; color: var(--ink-3); }
+.st-results tbody td { color: var(--ink-2); border-bottom: 1px solid var(--line-soft); }
+.st-results tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+.st-results tbody tr.st-group td { color: var(--ink-3); font-size: var(--fs-2xs); padding-top: var(--s-10); border-bottom: 1px solid var(--line-soft); }
+.st-results tbody tr.em td { background: var(--accent-soft); }
+.st-results td b { color: var(--ink); font-weight: 650; }
+.st-results td u { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.st-results td .st-pm { color: var(--ink-3); font-size: 0.86em; }
+.st-results caption { caption-side: bottom; text-align: left; padding-top: var(--s-6); font-size: var(--fs-2xs); color: var(--ink-3); }
+
+/* equation block (KaTeX, bundled fonts) */
+.st-eq { display: grid; gap: var(--s-8); }
+.st-eq-body { overflow-x: auto; overflow-y: hidden; color: var(--ink); padding: var(--s-4) 0; }
+.st-eq-body .katex-display { margin: var(--s-4) 0; }
+.st-eq-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s-12); }
+.st-eq-num { color: var(--ink-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.st-eq-terms { display: grid; grid-template-columns: auto 1fr; gap: var(--s-4) var(--s-12); margin: 0; font-size: var(--fs-sm); color: var(--ink-2); align-items: baseline; }
+.st-eq-terms dt { color: var(--ink); }
+.st-eq-terms dd { margin: 0; }
+.st-eq-raw { font-family: var(--mono); font-size: var(--fs-code); color: var(--ink-2); white-space: pre-wrap; }
+.st-key-after { margin-left: var(--s-8); color: var(--ink-2); }
+
+/* text on ramp fills (classes from onSeq / onDiv): picked per theme, since the ramps flip */
+.st text.st-on-s1, .st text.st-on-s2, .st text.st-on-s3, .st text.st-on-d0, .st text.st-on-d1 { fill: #18181b; }
+.st text.st-on-s4, .st text.st-on-s5, .st text.st-on-s6, .st text.st-on-s7, .st text.st-on-d2, .st text.st-on-d3 { fill: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .st text.st-on-s1, :root:not([data-theme="light"]) .st text.st-on-s2, :root:not([data-theme="light"]) .st text.st-on-s3,
+  :root:not([data-theme="light"]) .st text.st-on-s4, :root:not([data-theme="light"]) .st text.st-on-d0, :root:not([data-theme="light"]) .st text.st-on-d1 { fill: #ffffff; }
+  :root:not([data-theme="light"]) .st text.st-on-s5, :root:not([data-theme="light"]) .st text.st-on-s6, :root:not([data-theme="light"]) .st text.st-on-s7,
+  :root:not([data-theme="light"]) .st text.st-on-d2, :root:not([data-theme="light"]) .st text.st-on-d3 { fill: #18181b; }
+}
+:root[data-theme="dark"] .st text.st-on-s1, :root[data-theme="dark"] .st text.st-on-s2, :root[data-theme="dark"] .st text.st-on-s3,
+:root[data-theme="dark"] .st text.st-on-s4, :root[data-theme="dark"] .st text.st-on-d0, :root[data-theme="dark"] .st text.st-on-d1 { fill: #ffffff; }
+:root[data-theme="dark"] .st text.st-on-s5, :root[data-theme="dark"] .st text.st-on-s6, :root[data-theme="dark"] .st text.st-on-s7,
+:root[data-theme="dark"] .st text.st-on-d2, :root[data-theme="dark"] .st text.st-on-d3 { fill: #18181b; }
+
+/* narrow columns: the ± part drops under the mean, equations shrink a step */
+.st-results, .st-eq { container-type: inline-size; }
+@container (max-width: 480px) {
+  .st-results th, .st-results td { padding: var(--s-6) var(--s-6); }
+  .st-results td .st-pm { display: block; }
+  .st-results th:first-child, .st-results td:first-child { min-width: 0; white-space: nowrap; }
+}

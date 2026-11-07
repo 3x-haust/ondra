@@ -31,6 +31,7 @@
     "d3-sankey": "^0.12.3",
     "d3-scale": "^4.0.3",
     "d3-shape": "^3.2.1",
+    "katex": "0.16.22",
     "lucide-solid": "^1.67.0",
     "marked": "^15.0.0",
     "pdfjs-dist": "^6.5.438",
