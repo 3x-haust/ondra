@@ -38,7 +38,7 @@ export const [activeTab, setActiveTab] = createSignal(1);
 export const panelTab = (): PanelTab => ptabs().find((t) => t.id === activeTab())?.kind ?? "new";
 /** Show a tool: switch to its tab, or turn the empty tab into it, or open a new tab. */
 export function setPanelTab(kind: PanelTab) {
-  const have = kind === "new" ? undefined : ptabs().find((t) => t.kind === kind);
+  const have = ptabs().find((t) => t.kind === kind);
   if (have) return setActiveTab(have.id);
   const cur = ptabs().find((t) => t.id === activeTab());
   if (cur?.kind === "new" && kind !== "new") {

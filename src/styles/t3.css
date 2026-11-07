@@ -1343,6 +1343,10 @@ body.resizing .panel {
   font-variant-numeric: tabular-nums;
   min-width: 0;
 }
+.status-line .pop {
+  font-family: var(--font);
+  font-variant-numeric: normal;
+}
 .status-line > * + *::before {
   content: "·";
   margin-right: var(--s-10);
