@@ -75,3 +75,38 @@ export function hash(s: string): number {
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
 }
+
+/** "#rgb" / "#rrggbb" / "rgb(r, g, b)" → [r, g, b] in 0..255 */
+export function parseColor(c: string): [number, number, number] | undefined {
+  const s = c.trim();
+  let m = s.match(/^#([0-9a-f]{3})$/i);
+  if (m) return [...m[1]].map((h) => parseInt(h + h, 16)) as [number, number, number];
+  m = s.match(/^#([0-9a-f]{6})/i);
+  if (m) return [0, 2, 4].map((i) => parseInt(m![1].slice(i, i + 2), 16)) as [number, number, number];
+  m = s.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+  return undefined;
+}
+const lum = ([r, g, b]: [number, number, number]) => {
+  const f = (v: number) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+};
+export const INK_DARK = "#0b0b0b";
+export const INK_LIGHT = "#ffffff";
+/**
+ * The label ink for text set inside a fill: near-black or white, whichever contrasts
+ * more with the fill as seen (the fill at `opacity` over the `bg` surface).
+ */
+export function inkFor(fill: string, opacity = 1, bg = "#ffffff"): string {
+  const f = parseColor(fill);
+  const b = parseColor(bg) ?? [255, 255, 255];
+  if (!f) return INK_DARK;
+  const seen = f.map((v, i) => v * opacity + b[i] * (1 - opacity)) as [number, number, number];
+  const L = lum(seen);
+  const onWhite = 1.05 / (L + 0.05);
+  const onDark = (L + 0.05) / (lum(parseColor(INK_DARK)!) + 0.05);
+  return onDark >= onWhite ? INK_DARK : INK_LIGHT;
+}

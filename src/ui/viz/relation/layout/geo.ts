@@ -129,3 +129,53 @@ export function bins(min: number, max: number, k = 5): number[] {
   if (!(max > min)) return [min, max];
   return Array.from({ length: k + 1 }, (_, i) => min + ((max - min) * i) / k);
 }
+
+export interface Classes {
+  /** linear: continuous min→max; quantile: equal-count classes; diverging: around 0 */
+  kind: "linear" | "quantile" | "diverging";
+  min: number;
+  max: number;
+  /** class edges, min … max (quantile only) */
+  breaks: number[];
+  /** 0..1 position on the sequential ramp (−1..1 when diverging) */
+  t: (v: number) => number;
+}
+
+/**
+ * How map values become colours. Data that crosses 0 diverges around it. Skewed
+ * positive data (max/min over 5, or a long right tail) gets 5–7 quantile classes,
+ * so a single big region doesn't paint every other one the same colour.
+ */
+export function classify(vs: number[]): Classes {
+  const xs = vs.filter(Number.isFinite).sort((a, b) => a - b);
+  const min = xs[0] ?? 0;
+  const max = xs[xs.length - 1] ?? 0;
+  if (min < 0 && max > 0) {
+    const m = Math.max(-min, max);
+    return { kind: "diverging", min: -m, max: m, breaks: [], t: (v) => v / m };
+  }
+  const n = xs.length;
+  const mean = xs.reduce((s, x) => s + x, 0) / Math.max(1, n);
+  const sd = Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / Math.max(1, n));
+  const skew = sd > 0 ? xs.reduce((s, x) => s + ((x - mean) / sd) ** 3, 0) / n : 0;
+  const ratio = min > 0 ? max / min : min === 0 && max > 0 ? Infinity : 1;
+  if (n >= 6 && (ratio > 5 || skew > 1)) {
+    const k = Math.max(5, Math.min(7, Math.floor(n / 3)));
+    const q = (p: number) => {
+      const i = (n - 1) * p;
+      const lo = Math.floor(i);
+      return xs[lo] + (xs[Math.min(n - 1, lo + 1)] - xs[lo]) * (i - lo);
+    };
+    const breaks = [...new Set(Array.from({ length: k + 1 }, (_, i) => q(i / k)))];
+    const classes = breaks.length - 1;
+    if (classes >= 2) {
+      const t = (v: number) => {
+        let c = 0;
+        while (c < classes - 1 && v >= breaks[c + 1]) c++;
+        return c / (classes - 1);
+      };
+      return { kind: "quantile", min, max, breaks, t };
+    }
+  }
+  return { kind: "linear", min, max, breaks: [], t: (v) => (max > min ? (v - min) / (max - min) : 1) };
+}

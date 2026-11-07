@@ -6,9 +6,9 @@ import { geoCentroid, geoEqualEarth, geoMercator, geoPath, type GeoProjection } 
 import { feature } from "topojson-client";
 import { defineViz } from "../registry";
 import { Frame, div, seq, series, useTip } from "../kit";
-import { SIDO, SIDO_TILES, countryKo, countryName, dotsIn, flowArc, lonLat, sidoCode } from "./layout/geo";
+import { SIDO, SIDO_TILES, classify, countryKo, countryName, dotsIn, flowArc, lonLat, sidoCode } from "./layout/geo";
 import { arr, declutter, hash, isObj, toNum, toStr } from "./layout/text";
-import { Empty, FS_SM, Ramp, Safe, fit, onSeq, tw, val } from "./ui";
+import { Empty, FS_SM, Ramp, Safe, fit, onFillStyle, tw, val } from "./ui";
 
 type Feat = { type: "Feature"; id?: string; properties: { name?: string; code?: string }; geometry: any };
 type MapKind = "world" | "korea";
@@ -33,7 +33,10 @@ function fitMap(kind: MapKind, feats: Feat[], w: number, maxH: number, opt: { ro
   const fc = { type: "FeatureCollection", features: feats } as any;
   if (kind === "korea") {
     const side = opt.side ?? 0;
-    const h = Math.round(Math.max(300, Math.min(maxH, (w - 2 * side) * 1.25)));
+    // as tall as the map is at this width (no empty band), within 220..maxH
+    const probe = geoMercator().fitWidth(Math.max(40, w - 2 * side - 12), fc);
+    const [[, y0], [, y1]] = geoPath(probe).bounds(fc);
+    const h = Math.round(Math.max(220, Math.min(maxH, y1 - y0 + 12)));
     return { proj: geoMercator().fitExtent([[6 + side, 6], [w - 6 - side, h - 6]], fc), h };
   }
   const proj = geoEqualEarth().rotate([-(opt.rotate ?? 0), 0]).fitWidth(w - 2, opt.rotate ? ({ type: "Sphere" } as any) : fc);
@@ -82,14 +85,10 @@ function valued(kind: MapKind, raw: unknown): Valued[] {
   return [...out.values()];
 }
 
-/** colour for a value: sequential from min to max, or diverging around 0 when the data crosses it */
+/** colour for a value: classes from layout/geo classify (quantile when skewed, diverging around 0) */
 function scaleOf(vs: number[]) {
-  const min = Math.min(...vs);
-  const max = Math.max(...vs);
-  const diverging = min < 0 && max > 0;
-  const m = Math.max(Math.abs(min), Math.abs(max)) || 1;
-  const t = (v: number) => (diverging ? v / m : max > min ? (v - min) / (max - min) : 1);
-  return { min: diverging ? -m : min, max: diverging ? m : max, diverging, color: (v: number) => (diverging ? div(t(v)) : seq(t(v))), t };
+  const c = classify(vs);
+  return { ...c, diverging: c.kind === "diverging", color: (v: number) => (c.kind === "diverging" ? div(c.t(v)) : seq(c.t(v))) };
 }
 
 /** maps overlap marks everywhere, so only three colours stay apart: the rest fold into "기타" grey */
@@ -132,7 +131,7 @@ function Choropleth(b: MapB & { kind: MapKind }) {
   const korea = () => b.kind === "korea";
   return (
     <Show when={data().length} fallback={<Empty label={b.label} />}>
-      <MapFrame label={b.label} kind={b.kind} feats={feats()} side={korea() ? calloutW : undefined} below={<Ramp min={sc().min} max={sc().max} unit={b.unit} diverging={sc().diverging} noData={!!feats() && feats()!.length > data().length} />}>
+      <MapFrame label={b.label} kind={b.kind} feats={feats()} side={korea() ? calloutW : undefined} below={<Ramp min={sc().min} max={sc().max} unit={b.unit} diverging={sc().diverging} breaks={sc().breaks} noData={!!feats() && feats()!.length > data().length} />}>
         {(_proj, path, w, h) => {
           const by = new Map(data().map((d) => [d.key, d]));
           const fs = feats()!;
@@ -210,8 +209,8 @@ function Choropleth(b: MapB & { kind: MapKind }) {
               </For>
               <For each={shown}>
                 {(l) => (
-                  <text class="rl-halo rl-sm" x={l.x} y={l.y - 6} text-anchor="middle">
-                    <tspan class="rl-strong">{l.name}</tspan>
+                  <text class="rl-in rl-fillhalo rl-sm" style={onFillStyle(sc().color(l.d.value), 1, true)} x={l.x} y={l.y - 6} text-anchor="middle">
+                    <tspan font-weight="600">{l.name}</tspan>
                     <tspan class="rl-num" x={l.x} dy="1.2em">{l.v}</tspan>
                   </text>
                 )}
@@ -281,7 +280,7 @@ function KoreaTiles(b: MapB) {
         class="rl"
         height={(w) => Math.round(Math.min(76, (w - 8) / 4) * 5 + 4)}
         margin={{ t: 0, r: 0, b: 0, l: 0 }}
-        below={<Ramp min={sc().min} max={sc().max} unit={b.unit} diverging={sc().diverging} noData={data().length < 17} />}
+        below={<Ramp min={sc().min} max={sc().max} unit={b.unit} diverging={sc().diverging} breaks={sc().breaks} noData={data().length < 17} />}
         alt={b.label}
       >
         {(box) => {
@@ -293,16 +292,16 @@ function KoreaTiles(b: MapB) {
               <For each={Object.entries(SIDO_TILES)}>
                 {([code, [c, r]]) => {
                   const d = by.get(code);
-                  const t = d ? (sc().diverging ? Math.abs(sc().t(d.value)) : sc().t(d.value)) : 0;
+                  const fillC = d ? sc().color(d.value) : "var(--rl-land)";
                   const x = ox + c * s + 1;
                   const y = r * s + 1;
                   const v = d ? val(d.value, b.unit) : "";
                   return (
                     <g class="rl-tile" onMouseMove={(e) => tip.show(e, d ? `${val(d.value, b.unit)}\n${SIDO[code][1]}${d.note ? `\n${d.note}` : ""}` : `${SIDO[code][1]}\n자료 없음`)} onMouseLeave={tip.hide}>
-                      <rect x={x} y={y} width={s - 2} height={s - 2} rx={4} fill={d ? sc().color(d.value) : "var(--rl-land)"} style={d?.em ? { stroke: "var(--ink)", "stroke-width": "2px" } : undefined} />
-                      <text class={d ? onSeq(t) : ""} x={x + (s - 2) / 2} y={y + (s - 2) / 2 + (v && s >= 44 ? -7 : 0)} dy="0.35em" text-anchor="middle" font-weight="600">{SIDO[code][0]}</text>
+                      <rect x={x} y={y} width={s - 2} height={s - 2} rx={4} fill={fillC} style={d?.em ? { stroke: "var(--ink)", "stroke-width": "2px" } : undefined} />
+                      <text class="rl-in" style={d ? onFillStyle(fillC) : undefined} x={x + (s - 2) / 2} y={y + (s - 2) / 2 + (v && s >= 44 ? -7 : 0)} dy="0.35em" text-anchor="middle" font-weight="600">{SIDO[code][0]}</text>
                       <Show when={v && s >= 44}>
-                        <text class={`${onSeq(t)} rl-sm rl-num`} x={x + (s - 2) / 2} y={y + (s - 2) / 2 + 10} dy="0.35em" text-anchor="middle">{fit(v, s - 8, FS_SM)}</text>
+                        <text class="rl-in rl-sm rl-num" style={onFillStyle(fillC)} x={x + (s - 2) / 2} y={y + (s - 2) / 2 + 10} dy="0.35em" text-anchor="middle">{fit(v, s - 8, FS_SM)}</text>
                       </Show>
                     </g>
                   );

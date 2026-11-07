@@ -3,8 +3,8 @@ import { acyclic, alluvialGraph, arcOrder, chordMatrix, cleanLinks, cleanNodes, 
 import { cleanGraph, egoLayout, forceLayout, matrixOrder, bundleTree } from "../src/ui/viz/relation/layout/graph";
 import { balance, orgIndented, orgLayout, sized, toTree } from "../src/ui/viz/relation/layout/trees";
 import { cleanSets, distFor, exclusive, layoutCircles, lens, regions, upset } from "../src/ui/viz/relation/layout/sets";
-import { countryName, dotsIn, flowArc, lonLat, sidoCode, SIDO, SIDO_TILES } from "../src/ui/viz/relation/layout/geo";
-import { declutter, ellipsize, estW, toNum } from "../src/ui/viz/relation/layout/text";
+import { classify, countryName, dotsIn, flowArc, lonLat, sidoCode, SIDO, SIDO_TILES } from "../src/ui/viz/relation/layout/geo";
+import { declutter, ellipsize, estW, inkFor, INK_DARK, INK_LIGHT, toNum } from "../src/ui/viz/relation/layout/text";
 import { KR_SIDO } from "../src/ui/viz/relation/layout/krSido";
 import { feature } from "topojson-client";
 
@@ -235,5 +235,42 @@ describe("relation: maps", () => {
   it("trims a flow arc short of its end", () => {
     const f = flowArc([0, 0], [100, 0], 0.2, 5);
     expect(Math.hypot(f.end[0] - 100, f.end[1])).toBeCloseTo(5);
+  });
+  it("classes skewed values by quantile so one big region doesn't flatten the rest", () => {
+    const pop = [933, 326, 236, 302, 141, 144, 110, 39, 1369, 152, 159, 213, 174, 179, 255, 325, 67];
+    const c = classify(pop);
+    expect(c.kind).toBe("quantile");
+    expect(c.breaks.length - 1).toBeGreaterThanOrEqual(5);
+    expect(c.breaks.length - 1).toBeLessThanOrEqual(7);
+    expect(c.breaks[0]).toBe(39);
+    expect(c.breaks[c.breaks.length - 1]).toBe(1369);
+    // every class is used, and the colours spread across the ramp
+    const ts = new Set(pop.map(c.t));
+    expect(ts.size).toBe(c.breaks.length - 1);
+    expect(c.t(39)).toBe(0);
+    expect(c.t(1369)).toBe(1);
+    expect(c.t(933)).toBe(1);
+  });
+  it("keeps even data linear and data around 0 diverging", () => {
+    expect(classify([2.1, 2.3, 2.5, 2.6, 2.9, 3.1, 3.4]).kind).toBe("linear");
+    const d = classify([-0.9, 0.4, 1.4]);
+    expect(d.kind).toBe("diverging");
+    expect(d.t(1.4)).toBe(1);
+    expect(classify([]).kind).toBe("linear");
+  });
+});
+
+describe("relation: label ink on fills", () => {
+  it("puts dark text on light fills and white on dark fills", () => {
+    expect(inkFor("#cde2fb")).toBe(INK_DARK);
+    expect(inkFor("#0d366b")).toBe(INK_LIGHT);
+    expect(inkFor("#b7d3f6", 1, "#0d0d0d")).toBe(INK_DARK);
+    expect(inkFor("#104281", 1, "#0d0d0d")).toBe(INK_LIGHT);
+    expect(inkFor("#eda100")).toBe(INK_DARK);
+    expect(inkFor("rgb(255, 255, 255)")).toBe(INK_DARK);
+  });
+  it("accounts for a see-through fill over the surface", () => {
+    expect(inkFor("#0d366b", 0.15, "#ffffff")).toBe(INK_DARK);
+    expect(inkFor("#b7d3f6", 0.15, "#0d0d0d")).toBe(INK_LIGHT);
   });
 });

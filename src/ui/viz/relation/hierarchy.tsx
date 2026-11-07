@@ -7,7 +7,7 @@ import { defineViz } from "../registry";
 import { Frame, series, useTip } from "../kit";
 import { balance, branchOf, orgIndented, orgLayout, sized, toTree, type TNode } from "./layout/trees";
 import { declutter } from "./layout/text";
-import { Empty, FS, FS_SM, Safe, fit, legendOf, onFill, tw, val } from "./ui";
+import { Empty, FS, FS_SM, Safe, fit, legendOf, onFillStyle, tw, val } from "./ui";
 
 interface TreeB { label?: string; unit?: string; root?: unknown; items?: unknown; radial?: boolean; depth?: number }
 
@@ -75,7 +75,7 @@ function Treemap(b: TreeB) {
                         onMouseLeave={tip.hide}
                       />
                       <Show when={name}>
-                        <text class={onFill(f.slot)} x={n.x0 + 5} y={n.y0 + 14}>
+                        <text class="rl-in" style={onFillStyle(f.c)} x={n.x0 + 5} y={n.y0 + 14}>
                           <tspan font-weight="500">{name}</tspan>
                           <Show when={two}><tspan x={n.x0 + 5} dy="1.25em" class="rl-num">{v}</tspan></Show>
                         </text>
@@ -161,6 +161,7 @@ function Sunburst(b: TreeB) {
                   const arcLen = (n.x1 - n.x0) * rMid;
                   const name = arcLen >= 14 ? fit(n.data.name, thick, FS_SM, 500) : "";
                   const deg = (mid * 180) / Math.PI;
+                  const op = n.depth === 1 ? 1 : n.depth === 2 ? 0.82 : 0.66;
                   const rot = deg - 90;
                   const flip = deg > 180;
                   return (
@@ -169,12 +170,12 @@ function Sunburst(b: TreeB) {
                         class="viz-mark"
                         d={a(n) ?? ""}
                         fill={f.c}
-                        fill-opacity={n.depth === 1 ? 1 : n.depth === 2 ? 0.82 : 0.66}
+                        fill-opacity={op}
                         onMouseMove={(e) => tip.show(e, `${val(n.value, b.unit)}${share(n)}\n${pathOf(n)}`)}
                         onMouseLeave={tip.hide}
                       />
                       <Show when={name}>
-                        <text class={`${onFill(f.slot)} rl-sm`} transform={`rotate(${rot}) translate(${rMid},0) rotate(${flip ? 180 : 0})`} dy="0.35em" text-anchor="middle">{name}</text>
+                        <text class="rl-in rl-sm" style={onFillStyle(f.c, op)} transform={`rotate(${rot}) translate(${rMid},0) rotate(${flip ? 180 : 0})`} dy="0.35em" text-anchor="middle">{name}</text>
                       </Show>
                     </g>
                   );
@@ -239,18 +240,19 @@ function Icicle(b: TreeB) {
                   const name = h >= 15 && w > 24 ? fit(n.data.name, w - 10, FS_SM, 500) : "";
                   const v = val(n.value, b.unit);
                   const two = name && h >= 32 && tw(v, FS_SM) <= w - 10;
+                  const op = n.depth <= 1 ? 1 : n.depth === 2 ? 0.82 : 0.66;
                   return (
                     <g>
                       <rect
                         class="viz-mark"
                         x={x} y={n.x0} width={Math.max(0, w)} height={Math.max(0.5, h)} rx={2}
                         fill={f.c}
-                        fill-opacity={n.depth <= 1 ? 1 : n.depth === 2 ? 0.82 : 0.66}
+                        fill-opacity={op}
                         onMouseMove={(e) => tip.show(e, `${v}${share(n)}\n${pathOf(n)}`)}
                         onMouseLeave={tip.hide}
                       />
                       <Show when={name}>
-                        <text class={`${onFill(f.slot)} rl-sm`} x={x + 5} y={n.x0 + (two ? 13 : h / 2 + 1)} dy={two ? 0 : "0.35em"}>
+                        <text class="rl-in rl-sm" style={onFillStyle(f.c, op)} x={x + 5} y={n.x0 + (two ? 13 : h / 2 + 1)} dy={two ? 0 : "0.35em"}>
                           <tspan font-weight="500">{name}</tspan>
                           <Show when={two}><tspan x={x + 5} dy="1.25em">{v}</tspan></Show>
                         </text>
@@ -331,7 +333,7 @@ function Pack(b: TreeB) {
                   l.group ? (
                     <text class="rl-head rl-halo" x={l.x} y={l.y} dy="0.35em" text-anchor="middle">{l.name}</text>
                   ) : (
-                    <text class={`${onFill(fillOf(l.n, root()).slot)} rl-sm`} x={l.x} y={l.y + (l.two ? -6 : 0)} dy="0.35em" text-anchor="middle">
+                    <text class="rl-in rl-sm" style={onFillStyle(fillOf(l.n, root()).c)} x={l.x} y={l.y + (l.two ? -6 : 0)} dy="0.35em" text-anchor="middle">
                       <tspan font-weight="500">{l.name}</tspan>
                       <Show when={l.two}><tspan x={l.x} dy="1.2em">{val(l.n.value, b.unit)}</tspan></Show>
                     </text>

@@ -76,7 +76,7 @@ Common pieces:
 
 - `worldmap`: a value per country, as colour. `{"type":"worldmap","unit":"명","items":[{"region":"KR","value":412000}]}`
 - `koreamap`: a value per 시도, as colour. `{"type":"koreamap","unit":"만","items":[{"region":"서울","value":933}]}`
-  Negative and positive values get a diverging scale centred on 0.
+  Negative and positive values get a diverging scale centred on 0; skewed values (like population) get quantile classes.
 - `koreatile`: the same 17 values on equal squares, so small cities count as much as big provinces. Same fields.
 - `bubblemap`: how much sits at each place, as circle area.
   `{"type":"bubblemap","map":"korea","unit":"건","items":[{"label":"이천","lat":37.27,"lon":127.44,"value":48200,"group":"수도권"}]}`

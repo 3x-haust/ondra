@@ -16,23 +16,9 @@
 .rl .viz-svg .rl-halo { paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round; }
 .rl .viz-svg .dimtext { fill: var(--ink-3); }
 
-/* text inside fills */
-.rl .viz-svg .rl-on, .rl .viz-svg .rl-on tspan { fill: #fff; }
-.rl .viz-svg .rl-on.k4, .rl .viz-svg .rl-on.k4 tspan { fill: #0b0b0b; }
-.rl .viz-svg .rl-on.ko, .rl .viz-svg .rl-on.ko tspan { fill: #0b0b0b; }
-.rl .viz-svg .rl-on-lo, .rl .viz-svg .rl-on-lo tspan { fill: #0b0b0b; }
-.rl .viz-svg .rl-on-hi, .rl .viz-svg .rl-on-hi tspan { fill: #fff; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .rl .viz-svg .rl-on.k4, :root:not([data-theme="light"]) .rl .viz-svg .rl-on.k4 tspan { fill: #fff; }
-  :root:not([data-theme="light"]) .rl .viz-svg .rl-on.ko, :root:not([data-theme="light"]) .rl .viz-svg .rl-on.ko tspan { fill: #fff; }
-  :root:not([data-theme="light"]) .rl .viz-svg .rl-on-lo, :root:not([data-theme="light"]) .rl .viz-svg .rl-on-lo tspan { fill: #fff; }
-  :root:not([data-theme="light"]) .rl .viz-svg .rl-on-hi, :root:not([data-theme="light"]) .rl .viz-svg .rl-on-hi tspan { fill: #0b0b0b; }
-}
-:root[data-theme="dark"] .rl .viz-svg .rl-on.k4, :root[data-theme="dark"] .rl .viz-svg .rl-on.k4 tspan { fill: #fff; }
-:root[data-theme="dark"] .rl .viz-svg .rl-on.ko, :root[data-theme="dark"] .rl .viz-svg .rl-on.ko tspan { fill: #fff; }
-:root[data-theme="dark"] .rl .viz-svg .rl-on-lo, :root[data-theme="dark"] .rl .viz-svg .rl-on-lo tspan { fill: #fff; }
-:root[data-theme="dark"] .rl .viz-svg .rl-on-hi, :root[data-theme="dark"] .rl .viz-svg .rl-on-hi tspan { fill: #0b0b0b; }
-.rl .viz-svg .rl-on, .rl .viz-svg .rl-on-lo, .rl .viz-svg .rl-on-hi { pointer-events: none; }
+/* text inside fills: its ink (near-black or white) is picked per fill in ui.tsx inkOn */
+.rl .viz-svg .rl-in { pointer-events: none; }
+.rl .viz-svg .rl-fillhalo { paint-order: stroke; stroke-width: 3px; stroke-linejoin: round; }
 
 /* flows */
 .rl-link { stroke-opacity: 0.38; transition: stroke-opacity var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease); }
@@ -109,3 +95,8 @@
 .rl .viz-svg .rl-tiny { font-size: 10.5px; }
 .rl .viz-svg .rl-num { font-variant-numeric: tabular-nums; }
 .rl-leader { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-opacity: 0.7; }
+.rl-cls { display: inline-grid; gap: 3px; max-width: 100%; padding: 0 22px; box-sizing: border-box; }
+.rl-cls-bar { display: flex; gap: 2px; }
+.rl-cls-bar i { flex: 1; height: 8px; border-radius: 2px; }
+.rl-cls-ticks { position: relative; height: 14px; }
+.rl-cls-ticks .rl-ramp-v { position: absolute; top: 0; white-space: nowrap; line-height: 14px; transform: translateX(-50%); }
