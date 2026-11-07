@@ -66,7 +66,7 @@ function tone(t: Task): string {
   return "done";
 }
 
-function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] } {
+function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "그 밖의 일", folder: spaceById(space as Task["space"]).folder });
@@ -84,7 +84,7 @@ function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] }
     const top = y;
     // a grid, not one long column: up to 3 jobs side by side, a job's own
     // sub-jobs stacked under it
-    const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
+    const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
     for (let r = 0; r < jobs.length; r += cols) {
       const row = jobs.slice(r, r + cols);
       let rowH = 0;
@@ -628,7 +628,9 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 
 export function Canvas() {
   const space = () => state.space;
-  const graph = createMemo(() => layout(space(), unfolded()));
+  /** jobs side by side only as many as the canvas can show readably */
+  const [maxCols, setMaxCols] = createSignal(3);
+  const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
   /** projects that have finished jobs folded away (or unfolded) */
   const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
   const allOpen = () => foldable().length > 0 && foldable().every((id) => unfolded().includes(id));
@@ -699,7 +701,7 @@ export function Canvas() {
   const fold = (next: string[]) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
     const before = graph().nodes;
-    const after = layout(space(), next).nodes;
+    const after = layout(space(), next, maxCols()).nodes;
     const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
     const was = at(before);
     const will = Object.fromEntries(after.map((n) => [n.id, { x: n.x, y: n.y }]));
@@ -871,7 +873,10 @@ export function Canvas() {
   };
   const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
   onMount(() => {
-    const ro = new ResizeObserver(() => setVpSize({ w: vp.clientWidth, h: vp.clientHeight }));
+    const ro = new ResizeObserver(() => {
+      setVpSize({ w: vp.clientWidth, h: vp.clientHeight });
+      setMaxCols(Math.max(1, Math.min(3, Math.floor((vp.clientWidth / 0.6 - X.job - 120) / (W.job + GAP.col)))));
+    });
     ro.observe(vp);
     onCleanup(() => ro.disconnect());
   });
