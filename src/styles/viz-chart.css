@@ -1,0 +1,130 @@
+/* chart family (src/ui/viz/chart): comparison, change over time, part of a whole,
+   finance and KPIs. Marks wear the palette; text stays in ink tokens. */
+.viz.ch .viz-svg { font: 400 12.5px/1.2 var(--font); }
+.viz.ch .viz-axis text { font-size: 12px; }
+.viz.ch .viz-svg text.ch-val { fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.viz.ch .viz-svg text.ch-val.strong { fill: var(--ink); font-weight: 600; }
+.viz.ch .viz-svg text.ch-end { fill: var(--ink-2); }
+.viz.ch .viz-svg text.ch-note { fill: var(--ink-3); font-size: 11.5px; }
+.viz.ch .viz-svg text.ch-cat { fill: var(--ink-2); }
+.viz.ch .viz-svg text.ch-muted { fill: var(--ink-3); }
+.viz.ch .viz-svg text.ch-panel-title { fill: var(--ink-2); font-weight: 500; }
+.viz.ch .viz-svg text.ch-big { fill: var(--ink); font-weight: 600; }
+/* text set inside a coloured fill: white, near-black on yellow / warning */
+.viz.ch .viz-svg text.ch-in { fill: #ffffff; font-weight: 500; pointer-events: none; }
+.viz.ch .viz-svg text.ch-in.dark { fill: #0b0b0b; }
+
+/* legends mirror the mark: line keys for line charts */
+.viz.ch-lines .viz-legend i { width: 14px; height: 2px; border-radius: 1px; }
+
+.ch-line { fill: none; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; }
+.ch-line.dash { stroke-dasharray: 5 4; }
+.ch-line.quiet { stroke-width: 1.5px; }
+.ch-ghost { fill: none; stroke: var(--viz-grid); stroke-width: 1.25px; stroke-linejoin: round; }
+.ch-dot { stroke: var(--card); stroke-width: 2px; }
+.ch-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.25px; }
+.ch-leader { fill: none; stroke: var(--viz-base); stroke-width: 1px; }
+.ch-target { stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 4 3; }
+.ch-event { stroke: var(--viz-base); stroke-width: 1px; stroke-dasharray: 2 3; }
+.ch-cross-line { stroke: var(--ink-3); stroke-width: 1px; opacity: 0.6; pointer-events: none; }
+.ch-cross circle { pointer-events: none; }
+.ch-band { stroke: var(--card); stroke-width: 1.5px; opacity: 0.85; }
+.ch-stem { stroke: var(--viz-base); stroke-width: 2px; stroke-linecap: round; }
+.ch-conn { stroke: var(--viz-base); stroke-width: 1px; }
+.ch-hit { fill: transparent; }
+.ch-seg { stroke: var(--card); stroke-width: 2px; }
+.ch-track { fill: var(--viz-grid); }
+
+/* tooltip */
+.ch-tip { display: grid; gap: 2px; white-space: normal; }
+.ch-tip-title { color: var(--ink-3); margin-bottom: 2px; }
+.ch-tip-row { display: flex; align-items: center; gap: var(--s-6); }
+.ch-tip-row b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ch-tip-row span { color: var(--ink-3); }
+.ch-tip-foot { color: var(--ink-3); margin-top: 2px; }
+.ch-key { flex: none; width: 10px; height: 2px; border-radius: 1px; background: var(--c); }
+.ch-key.box { height: 8px; width: 8px; border-radius: 2px; }
+.ch-key.dash { background: repeating-linear-gradient(90deg, var(--c) 0 3px, transparent 3px 5px); }
+
+/* deltas: direction by the arrow, good / bad by the text-safe status inks */
+.ch-arrow { flex: none; fill: currentColor; }
+.ch-good { color: var(--ok-ink); }
+.ch-bad { color: var(--bad-ink); }
+.ch-flat { color: var(--ink-3); }
+
+/* text on fills that change lightness between themes (diverging and sequential steps) */
+.viz.ch .viz-svg text.ch-in.lt, .viz.ch .viz-svg text.ch-in.seq1, .viz.ch .viz-svg text.ch-in.seq2, .viz.ch .viz-svg text.ch-in.seq3 { fill: #0b0b0b; }
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.lt,
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq1, :root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq2,
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq3, :root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq4 { fill: #ffffff; }
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.dk,
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq5, :root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq6,
+:root[data-theme="dark"] .viz.ch .viz-svg text.ch-in.seq7 { fill: #0b0b0b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.lt,
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq1, :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq2,
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq3, :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq4 { fill: #ffffff; }
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.dk,
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq5, :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq6,
+  :root:not([data-theme="light"]) .viz.ch .viz-svg text.ch-in.seq7 { fill: #0b0b0b; }
+}
+
+/* ── HTML-drawn kinds: tables, tiles, goals, big number ── */
+.ch-htable-scroll { overflow-x: auto; }
+.ch-htable table, .ch-sparks table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-xs); }
+.ch-htable th, .ch-htable td, .ch-sparks th, .ch-sparks td { padding: var(--s-6) var(--s-8); text-align: right; white-space: nowrap; }
+.ch-htable thead th, .ch-sparks thead th { color: var(--ink-3); font-weight: var(--fw-medium); border-bottom: 1px solid var(--line); vertical-align: bottom; white-space: normal; }
+.ch-htable tbody th, .ch-sparks tbody th { text-align: left; color: var(--ink-2); font-weight: var(--fw-medium); max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
+.ch-htable td { color: var(--ink); font-variant-numeric: tabular-nums; border-radius: var(--r-xs); border: 1px solid var(--card); }
+.ch-htable thead th:first-child, .ch-sparks thead th:first-child { text-align: left; }
+.ch-sparks td { color: var(--ink); font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line-soft); }
+.ch-sparks tbody th { border-bottom: 1px solid var(--line-soft); }
+.ch-sparks tbody tr:last-child > * { border-bottom: 0; }
+.ch-sparks td.spark { width: 1%; padding-block: var(--s-2); }
+.ch-sparks td.spark svg { display: block; margin-left: auto; }
+.ch-sparks { container-type: inline-size; }
+.ch-sparks .ch-narrow { display: none; }
+@container (max-width: 400px) {
+  .ch-sparks .chg { display: none; }
+  .ch-sparks .ch-narrow { display: block; }
+  .ch-sparks tbody th { max-width: 7em; }
+  .ch-sparks th, .ch-sparks td { padding-inline: var(--s-4); }
+}
+@container (max-width: 300px) {
+  .ch-sparks td.spark svg { width: 72px; height: auto; }
+}
+
+.ch-delta { display: inline-flex; align-items: center; gap: var(--s-4); font-size: var(--fs-xs); white-space: nowrap; }
+.ch-delta b { font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
+.ch-vs { color: var(--ink-3); font-size: var(--fs-xs); }
+.ch-delta .ch-vs { margin-left: var(--s-2); }
+
+.ch-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s-8); }
+.ch-kpi { display: grid; align-content: start; gap: var(--s-4); min-width: 0; padding: var(--s-10) var(--s-12); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card); }
+.ch-kpi-label { font-size: var(--fs-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-kpi-value { font-size: var(--fs-xl); font-weight: var(--fw-strong); letter-spacing: -0.02em; color: var(--ink); line-height: 1.2; overflow-wrap: anywhere; }
+.ch-kpi-value small, .ch-hero small { font-size: 0.55em; font-weight: var(--fw-medium); color: var(--ink-3); margin-left: 3px; letter-spacing: 0; }
+.ch-kpi .ch-spark { margin-top: var(--s-2); max-width: 100%; }
+.ch-kpi-target { display: grid; gap: 3px; font-size: 12px; color: var(--ink-3); }
+
+.ch-meter { display: block; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--viz-1) 18%, transparent); overflow: hidden; }
+.ch-meter.lg { height: 8px; border-radius: 4px; }
+.ch-meter i { display: block; height: 100%; border-radius: inherit; background: var(--viz-1); }
+
+.ch-goals { gap: var(--s-12); }
+.ch-goal { display: grid; gap: var(--s-6); }
+.ch-goal-top { display: flex; align-items: baseline; gap: var(--s-8); min-width: 0; font-size: var(--fs-sm); }
+.ch-goal-label { color: var(--ink); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ch-goal-note { color: var(--ink-3); font-size: var(--fs-xs); white-space: nowrap; }
+.ch-goal-v { margin-left: auto; color: var(--ink-2); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ch-goal-v span { color: var(--ink-3); }
+.ch-goal-top b { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.ch-goal.done .ch-meter i { background: var(--viz-good); }
+
+.ch-big { gap: var(--s-6); }
+.ch-hero { font-size: 52px; font-weight: var(--fw-strong); letter-spacing: -0.03em; line-height: 1.05; color: var(--ink); overflow-wrap: anywhere; }
+.ch-big-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4) var(--s-12); }
+.ch-big .ch-spark { margin-top: var(--s-4); max-width: 100%; }
+.ch-big-note { color: var(--ink-3); font-size: var(--fs-xs); }
+/* forecast fan: the interval keys are areas, not lines */
+.viz.ch-fan .viz-legend li:nth-child(n + 3) i { width: 10px; height: 10px; border-radius: 3px; }
