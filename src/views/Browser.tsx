@@ -110,7 +110,7 @@ export function BrowserView(_props: { embedded?: boolean }) {
           </label>
         </div>
         <div class="bscreen" ref={area}>
-          {failed() ? <div class="bempty">브라우저를 열 수 없어요</div> : null}
+          {failed() ? <div class="bempty">브라우저를 열 수 없어요</div> : !url() ? <div class="bempty">열린 페이지 없음</div> : null}
         </div>
       </div>
     </div>

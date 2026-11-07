@@ -262,7 +262,7 @@
 .term-sub {
   display: flex;
   gap: var(--s-2);
-  padding: var(--s-8) var(--s-10);
+  padding: var(--s-8) var(--s-16);
   border-bottom: 1px solid var(--line);
 }
 .shells {
@@ -1478,7 +1478,7 @@ body.resizing iframe {
   display: flex;
   align-items: center;
   gap: var(--s-8);
-  margin: var(--s-10) var(--s-10) var(--s-6);
+  margin: var(--s-12) var(--s-12) var(--s-6);
   padding: 0 var(--s-4) 0 var(--s-10);
   height: var(--h-md);
   border-radius: var(--r-md);

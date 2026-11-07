@@ -194,12 +194,12 @@ export function SideChat() {
   };
   return (
     <div class="side-chat">
-      <div class="side-head">
-                <span class="spacer" />
-        <Show when={msgs().length}>
+      <Show when={msgs().length}>
+        <div class="side-head">
+          <span class="spacer" />
           <button class="link-btn" onClick={() => clearSide(space())}>새로 시작</button>
-        </Show>
-      </div>
+        </div>
+      </Show>
       <div class="side-list" ref={box}>
         <For each={msgs()} >
           {(m) => (

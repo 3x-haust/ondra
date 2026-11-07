@@ -350,7 +350,7 @@ export function PreviewPane() {
   const dir = () => full().split("/").slice(0, -1).join("/");
   const name = () => full().split("/").pop() ?? "";
   return (
-    <Show when={path()} fallback={<div class="pane-empty" />}>
+    <Show when={path()} fallback={<div class="pane-empty">미리 볼 파일 없음</div>}>
       <div class="pv">
         <Show when={kind() !== "code"}>
           <div class="fv-head">
