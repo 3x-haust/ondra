@@ -76,6 +76,7 @@
       "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/engine/": "engine/",
       "resources/chrome/": "chrome/",
+      "resources/computer/": "computer/",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"
     }

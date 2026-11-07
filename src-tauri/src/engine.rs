@@ -22,6 +22,83 @@ struct Proc {
     stdin: ChildStdin,
     /// Tells a process apart from the one it replaced under the same id.
     generation: u64,
+    #[cfg(target_os = "macos")]
+    computer: Option<computer_channel::Channel>,
+}
+
+impl Proc {
+    fn revoke(&mut self) {
+        #[cfg(target_os = "macos")]
+        drop(self.computer.take());
+    }
+
+    fn terminate(&mut self) {
+        self.revoke();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+
+    fn finish(&mut self) -> Option<i32> {
+        self.revoke();
+        self.child.wait().ok().and_then(|status| status.code())
+    }
+}
+
+impl Drop for Proc {
+    fn drop(&mut self) {
+        self.terminate();
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod computer_channel {
+    use crate::computer::{EngineChannel, OwnedVm, SOCKET_ENV};
+    use std::{ffi::CStr, path::PathBuf, process::{Child, Command}, sync::Arc};
+
+    // The socket and its private directory have one owner and one lifetime.
+    pub struct Channel {
+        channel: Option<EngineChannel>,
+        directory: PathBuf,
+    }
+
+    impl Channel {
+        pub fn bind_child(&self, child: &mut Child, generation: u64) -> Result<(), &'static str> {
+            self.channel.as_ref().ok_or("GUEST_REVOKED")?.bind_child(child, generation)
+        }
+    }
+
+    impl Drop for Channel {
+        fn drop(&mut self) {
+            // EngineChannel revokes before unlinking; only then remove its directory.
+            drop(self.channel.take());
+            let _ = std::fs::remove_dir(&self.directory);
+        }
+    }
+
+    pub fn prepare(cmd: &mut Command, id: &str, generation: u64, vm: Option<Arc<OwnedVm>>) -> Result<Option<Channel>, String> {
+        cmd.env_remove(SOCKET_ENV);
+        // Job ids come from tasks.agentOf; captains, login and probes are not jobs.
+        if !id.strip_prefix("t:").is_some_and(|job| !job.is_empty()) {
+            return Ok(None);
+        }
+        // Ignore TMPDIR and all job paths. mkdtemp creates a fresh 0700 directory
+        // atomically; never chmod, unlink or adopt a caller-supplied directory.
+        let mut template = b"/private/tmp/ondra-c-XXXXXX\0".to_vec();
+        let created = unsafe { libc::mkdtemp(template.as_mut_ptr().cast()) };
+        if created.is_null() {
+            return Err("컴퓨터 채널 폴더를 만들 수 없습니다".into());
+        }
+        // SAFETY: mkdtemp returned the NUL-terminated ASCII template above.
+        let directory = PathBuf::from(unsafe { CStr::from_ptr(created) }.to_string_lossy().into_owned());
+        let mut owner = Channel { channel: None, directory };
+        owner.directory = std::fs::canonicalize(&owner.directory)
+            .map_err(|_| "컴퓨터 채널 폴더를 확인할 수 없습니다")?;
+        let channel = EngineChannel::prepare(&owner.directory, generation, vm)
+            .map_err(|code| format!("컴퓨터 채널을 준비하지 못했습니다: {code}"))?;
+        cmd.env(SOCKET_ENV, channel.socket_path());
+        owner.channel = Some(channel);
+        Ok(Some(owner))
+    }
 }
 
 static GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -43,7 +120,7 @@ impl Engine {
     pub fn kill_all(&self) {
         if let Ok(mut procs) = self.procs.lock() {
             for (_, mut p) in procs.drain() {
-                let _ = p.child.kill();
+                p.terminate();
             }
         }
     }
@@ -107,6 +184,7 @@ pub fn engine_command(app: &AppHandle) -> Result<Command, String> {
     for (k, v) in engine_env(app) {
         cmd.env(k, v);
     }
+    cmd.env_remove("ONDRA_COMPUTER_SOCKET");
     cmd.arg("--no-extensions");
     Ok(cmd)
 }
@@ -218,10 +296,13 @@ pub fn agent_spawn(
     env: Vec<(String, String)>,
 ) -> Result<(), String> {
     let mut cmd = engine_command(&app)?;
+    #[cfg(target_os = "macos")]
+    let computer_state = app.state::<crate::computer_setup::ComputerState>();
+    #[cfg(target_os = "macos")]
+    let computer_access = computer_state.engine_access().map_err(str::to_owned)?;
     if let Some(mut old) = engine.procs.lock().unwrap().remove(&id) {
         RETIRED.lock().unwrap().push(old.generation);
-        let _ = old.child.kill();
-        let _ = old.child.wait();
+        old.terminate();
     }
     let generation = GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let cwd = if cwd.is_empty() { home().display().to_string() } else { cwd };
@@ -240,6 +321,9 @@ pub fn agent_spawn(
     if !path_parts.is_empty() {
         cmd.env("PATH", format!("{}:{}", path_parts.join(":"), with_sidecars(user_path())));
     }
+    cmd.env_remove("ONDRA_COMPUTER_SOCKET");
+    #[cfg(target_os = "macos")]
+    let computer = computer_channel::prepare(&mut cmd, &id, generation, computer_access.current_vm(&id))?;
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -247,10 +331,30 @@ pub fn agent_spawn(
         .spawn()
         .map_err(|e| format!("엔진을 시작하지 못했습니다: {e}"))?;
 
-    let stdout = child.stdout.take().ok_or("stdout 없음")?;
-    let stderr = child.stderr.take().ok_or("stderr 없음")?;
-    let stdin = child.stdin.take().ok_or("stdin 없음")?;
-    engine.procs.lock().unwrap().insert(id.clone(), Proc { child, stdin, generation });
+    #[cfg(target_os = "macos")]
+    if let Some(channel) = &computer {
+        if let Err(error) = channel.bind_child(&mut child, generation) {
+            drop(computer);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("컴퓨터 채널을 연결하지 못했습니다: {error}"));
+        }
+    }
+    let pipes = (child.stdout.take(), child.stderr.take(), child.stdin.take());
+    let (Some(stdout), Some(stderr), Some(stdin)) = pipes else {
+        #[cfg(target_os = "macos")]
+        drop(computer);
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("엔진 입출력 파이프를 열지 못했습니다".into());
+    };
+    engine.procs.lock().unwrap().insert(id.clone(), Proc {
+        child, stdin, generation,
+        #[cfg(target_os = "macos")]
+        computer,
+    });
+    #[cfg(target_os = "macos")]
+    drop(computer_access);
 
     {
         let app = app.clone();
@@ -296,7 +400,7 @@ pub fn agent_spawn(
             };
             let Some(mine) = mine else { return };
             crate::focus::job_gone(&id);
-            let code = mine.and_then(|mut p| p.child.wait().ok()).and_then(|s| s.code());
+            let code = mine.and_then(|mut p| p.finish());
             let _ = app.emit("agent:exit", json!({ "id": id, "code": code }));
         });
     }
@@ -322,8 +426,7 @@ pub fn agent_send(engine: State<'_, Engine>, id: String, command: Value) -> Resu
 #[tauri::command]
 pub fn agent_kill(engine: State<'_, Engine>, id: String) {
     if let Some(mut p) = engine.procs.lock().unwrap().remove(&id) {
-        let _ = p.child.kill();
-        let _ = p.child.wait();
+        p.terminate();
     }
 }
 
