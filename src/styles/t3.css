@@ -8509,3 +8509,6 @@ textarea { resize: none !important; field-sizing: content; }
 .seg button.on .seg-n {
   color: var(--ink-2);
 }
+.cv-mini.gone {
+  display: none;
+}
