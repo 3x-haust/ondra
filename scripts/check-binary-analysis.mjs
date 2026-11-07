@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { launcherLicenses } from "./bundle-binary-analysis.mjs";
@@ -21,8 +21,11 @@ mkdirSync(out, { recursive: true });
 const home = join(out, "home");
 mkdirSync(home);
 const parent = dirname(analyzer);
-const root = [join(parent, "../Resources/binary-analysis"), join(parent, "../resources/binary-analysis"), join(parent, "../../resources/binary-analysis")].map(resolvePath => resolve(resolvePath)).find(p => existsSync(join(p, "bin/radare2")));
-assert(root, "Missing bundled engine");
+const candidate = [join(parent, "../Resources/binary-analysis"), join(parent, "../resources/binary-analysis"), join(parent, "../../resources/binary-analysis")].map(resolvePath => resolve(resolvePath)).find(p => existsSync(join(p, "bin/radare2")));
+assert(candidate, "Missing bundled engine");
+// The launcher canonicalizes this path before exec; match it so the isolation
+// profile's literal allowance works even when resources is reached via a symlink.
+const root = realpathSync(candidate);
 const records = [];
 function build(command, args) {
   execFileSync(command, args, { stdio: "pipe" });
@@ -126,6 +129,9 @@ try {
     const address = `0x${fn.addr.toString(16)}`;
     const assembly = invoke(`${sample.name}-disassemble`, ["disassemble", sample.file, ...options, "--address", address]);
     const decompile = invoke(`${sample.name}-decompile`, ["decompile", sample.file, ...options, "--address", address]);
+    const named = invoke(`${sample.name}-named`, ["functions", sample.file, ...options, "--name", "classify_bucket"]);
+    assert(named.data.length > 0 && named.data.every(f => f.name.includes("classify_bucket")), `${sample.name}: --name must return only matching functions`);
+    assert(named.data.length < functions.data.length, `${sample.name}: --name must narrow the list`);
     assert(assembly.data.ops.length > 3, "Expected actual machine instructions");
     assert(assembly.data.ops.some(op => op.type === "ret"), "Expected a return instruction");
     assert.match(decompile.data.code, /return/);
@@ -139,6 +145,8 @@ try {
     sample.sha256 = hash;
     console.log(`PASS ${sample.name}: metadata, functions, instructions, Ghidra pseudocode`);
   }
+  invoke("name-miss", ["functions", join(out, "macho-arm64"), "--name", "no_such_function_zzz"], 1, /No analyzed function name contains/);
+  invoke("name-wrong-op", ["inspect", join(out, "macho-arm64"), "--name", "main"], 2, /only filters the functions/);
   invoke("missing-slice", ["inspect", universal], 1, /requires --arch/);
   invoke("wrong-arch", ["inspect", join(out, "macho-arm64"), "--arch", "x86_64"], 1, /architecture.*not present/);
   invoke("unknown-address", ["decompile", join(out, "macho-arm64"), "--address", "0x1"], 1, /No complete|valid JSON/);

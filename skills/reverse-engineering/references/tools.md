@@ -51,6 +51,18 @@ loads and disassembles; it does **not** execute the target or prove a breakpoint
 For universal files, enumerate slices and choose the intended CPU. `strings`
 provides leads only; search references before assigning meaning.
 
+The bundled analyzer reports hardening flags (`nx`, `canary`, `pic`, `stripped`)
+but not the code-signing identity or entitlements. On macOS read those with the
+system `codesign`, which inspects the signature without running the target:
+
+```sh
+codesign -dv --verbose=4 "$BIN"                 # identifier, authority, flags, hardened runtime
+codesign -d --entitlements - --xml "$BIN"       # entitlements, or '-' plist on newer tools
+```
+
+Report these as the recorded signature state, not proof the OS would accept the
+binary; `spctl -a -vvv "$APP"` is the Gatekeeper assessment when that is the question.
+
 With installed LLVM tools, inspect their help and select format-specific options:
 
 ```sh
