@@ -72,6 +72,7 @@ describe("private computer evaluation", () => {
     const root = temporary();
     const publicDir = join(root, "public-private-name");
     mkdirSync(publicDir, { mode: 0o755 });
+    chmodSync(publicDir, 0o755); // the umask may have taken bits off
     const alias = join(root, "alias");
     symlinkSync(root, alias);
     for (const path of [publicDir, alias, "relative", join(root, "missing-private-name"), root + "/../" + root.split("/").at(-1)]) {
