@@ -173,13 +173,13 @@ function BlockBody(props: { block: Block }) {
         {(tl) => (
           <div class="blk">
             <Show when={tl().label}><div class="blk-label">{tl().label}</div></Show>
-            <ol class="tl">
+            <ol class="vz-tl">
               <For each={tl().items}>
                 {(it) => (
-                  <li class={`tl-item ${it.state}`}>
-                    <span class="tl-dot"><Show when={it.state === "done"}><Icon name="check" size={9} stroke={3.5} /></Show></span>
-                    <span class="tl-label">{it.label}</span>
-                    <Show when={it.at}><span class="tl-at">{it.at}</span></Show>
+                  <li class={`vz-tl-item ${it.state}`}>
+                    <span class="vz-tl-dot"><Show when={it.state === "done"}><Icon name="check" size={9} stroke={3.5} /></Show></span>
+                    <span class="vz-tl-label">{it.label}</span>
+                    <Show when={it.at}><span class="vz-tl-at">{it.at}</span></Show>
                   </li>
                 )}
               </For>

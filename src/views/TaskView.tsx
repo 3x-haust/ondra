@@ -294,7 +294,7 @@ export function TaskView(props: { id: string }) {
               </Show>
             </nav>
             <Show when={task().status === "done" && task().unverified?.length}>
-              <span class="unverified-badge" title={task().unverified!.join("\n")}>확인 안 됨 {task().unverified!.length}</span>
+              <span class="status-chip unverified" title={task().unverified!.join("\n")}>확인 안 됨 {task().unverified!.length}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged">검토 대기</span>
