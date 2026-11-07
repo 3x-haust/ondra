@@ -352,7 +352,7 @@
   background: var(--mk);
   transform: translateY(-1px);
 }
-.ms-piece span {
+.ms-piece > span:not(.mb) {
   min-width: 0;
   overflow: hidden;
   display: -webkit-box;
@@ -1372,7 +1372,7 @@ button.md-kinds .chip:hover,
 .tl > .tl-day:first-child::before {
   top: 12px;
 }
-.tl-row {
+.tl .tl-row {
   display: flex;
   align-items: center;
   gap: 8px;

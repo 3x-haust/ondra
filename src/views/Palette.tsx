@@ -6,7 +6,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show }
 import { setState, spaceById, state, taskById } from "../state/store";
 import { StatusIcon } from "../ui/ForkCard";
 import { openTask, paletteMode, setPaletteMode, setPaletteOpen, setView } from "../state/ui";
-import { ignoredKey, matchesShortcut, noModifiers, shortcutHint, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
+import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
 import { throwThought } from "../engine/captain";
 import { ago, compact, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -36,7 +36,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
   const commandsOnly = () => paletteMode() === "commands" || q().startsWith(">");
 
   const places: Item[] = [
-    ...props.commands.map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
+    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
     { id: "s-accounts", label: "계정", icon: "key", section: "앱", run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-import", label: "가져오기", icon: "download", section: "앱", run: () => setView({ name: "settings", tab: "import" }) },
     { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
@@ -147,10 +147,6 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           />
           <kbd>esc</kbd>
         </div>
-        <button class="palette-item" onClick={() => { setPaletteMode(commandsOnly() ? "all" : "commands"); setQ(""); setSel(0); input.focus(); }}>
-          <Icon name="list" size={15} /><span class="label">{commandsOnly() ? "일도 함께 찾기" : "단축키 · 명령 모두 보기"}</span><kbd>{shortcutHint("commands")}</kbd>
-        </button>
-        <Show when={commandsOnly()}><div class="palette-sec">입력 중에는 검색과 명령 안내만 · 다른 단축키는 입력창 밖에서 사용해요</div></Show>
         <div class="palette-list">
           <For each={items()} fallback={<div class="pane-empty">결과 없음</div>}>
             {(it, i) => (

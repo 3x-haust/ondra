@@ -226,7 +226,7 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
         <span class="shell-time">{short((props.s.endedAt ?? now()) - props.s.startedAt)}</span>
       </button>
       <Fold open={props.open}>
-        <pre class="shell-out" ref={pre}>{props.s.tail.trim() || (props.s.endedAt ? "출력 없음" : "출력 대기 중…")}</pre>
+        <pre class="shell-out" ref={pre}>{props.s.tail.replace(/^\n+/, "").trimEnd() || (props.s.endedAt ? "출력 없음" : "출력 대기 중…")}</pre>
       </Fold>
     </div>
   );
