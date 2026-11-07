@@ -152,7 +152,8 @@ fn merge(repo: &str, path: &str, branch: &str, message: &str) -> Result<String, 
 /// and its PR was merged): nothing uncommitted, and HEAD is in the remote's
 /// default branch. Returns that branch ("origin/main"), or None.
 fn landed(path: &str) -> Option<String> {
-    if !Path::new(path).is_dir() || !run(path, &["status", "--porcelain"]).ok()?.is_empty() {
+    // Ondra's own folder (job notes, memory) is not work left behind
+    if !Path::new(path).is_dir() || !run(path, &["status", "--porcelain", "--", ".", ":(exclude).ondra"]).ok()?.is_empty() {
         return None;
     }
     let remote = "origin";
@@ -328,6 +329,10 @@ mod tests {
         sh(&wt, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "b"]);
         assert_eq!(landed(&wt), None, "not on the remote yet");
         sh(&wt, &["push", "-q", "origin", "job:main"]);
+        assert_eq!(landed(&wt).as_deref(), Some("origin/main"));
+        // Ondra's own notes in the folder are not work left behind
+        std::fs::create_dir_all(root.join("wt/.ondra")).unwrap();
+        std::fs::write(root.join("wt/.ondra/note.md"), "x").unwrap();
         assert_eq!(landed(&wt).as_deref(), Some("origin/main"));
         let _ = std::fs::remove_dir_all(&root);
     }

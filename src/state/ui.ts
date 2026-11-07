@@ -148,10 +148,10 @@ export interface Toast {
 export const [toasts, setToasts] = createSignal<Toast[]>([]);
 let seq = 0;
 export const dropToast = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
-export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"], opts: { stay?: boolean } = {}) {
+export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"], opts: { stay?: boolean; ms?: number } = {}) {
   const id = ++seq;
   setToasts((t) => [...t.slice(-2), { id, text, tone, action, stay: opts.stay }]);
-  if (!opts.stay) setTimeout(() => dropToast(id), tone === "bad" ? 7000 : 4000);
+  if (!opts.stay) setTimeout(() => dropToast(id), opts.ms ?? (tone === "bad" ? 7000 : 4000));
   return id;
 }
 

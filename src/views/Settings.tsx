@@ -29,7 +29,7 @@ import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
-import { available, checkedAt, checkUpdate, installNow, updateStatus } from "../engine/update";
+import { available, checkedAt, checkUpdate, installNow, updateProgress, updateReady, updateStatus } from "../engine/update";
 import { setNotesFor } from "../engine/releaseNotes";
 
 
@@ -132,21 +132,27 @@ function General() {
 
 function UpdateRow() {
   const [version] = createResource(() => getVersion().catch(() => ""));
+  const pct = () => { const p = updateProgress(); return p === null ? "" : p < 0 ? "" : ` ${p}%`; };
   const note = () =>
-    updateStatus() === "checking" ? "확인 중…"
-    : updateStatus() === "installing" ? "받는 중… 끝나면 다시 시작해요"
+    updateStatus() === "checking" ? "확인 중"
+    : updateProgress() !== null ? `${available() ?? ""} 받는 중${pct()}`
+    : updateStatus() === "installing" ? "다시 시작하는 중"
+    : updateReady() && updateReady() === available() ? `${available()} 준비됨`
     : available() ? `${available()} 나옴`
     : checkedAt() ? `최신 버전 · ${ago(checkedAt())} 확인`
     : "";
+  const busy = () => updateStatus() === "installing";
   return (
     <Row title={`Ondra ${version() ?? ""}`}>
       <span class="set-note">{note()}</span>
       <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>릴리즈 노트</button>
-      <Show
-        when={available()}
-        fallback={<button class="btn sm" disabled={updateStatus() === "checking" || updateStatus() === "installing"} onClick={() => void checkUpdate(true)}>업데이트 확인</button>}
-      >
-        <button class="btn primary sm" disabled={updateStatus() === "installing"} onClick={() => void installNow()}>{available()} 설치</button>
+      <Show when={!busy()}>
+        <Show
+          when={available()}
+          fallback={<button class="btn sm" disabled={updateStatus() === "checking"} onClick={() => void checkUpdate(true)}>업데이트 확인</button>}
+        >
+          <button class="btn primary sm" onClick={() => void installNow()}>{updateReady() === available() ? "다시 시작해서 업데이트" : `${available()} 설치`}</button>
+        </Show>
       </Show>
     </Row>
   );
