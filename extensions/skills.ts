@@ -11,7 +11,8 @@ export function searchSkills(skills: Skill[], query: string, limit = 5) {
     .map((skill) => {
       const name = skill.name.toLocaleLowerCase();
       const description = skill.description.toLocaleLowerCase();
-      const score = terms.reduce((n, term) => n + (name === term ? 8 : name.includes(term) ? 4 : 0) + (description.includes(term) ? 1 : 0), 0);
+      const words = new Set(description.match(/[\p{L}\p{N}]+/gu) ?? []);
+      const score = terms.reduce((n, term) => n + (name === term ? 8 : name.includes(term) ? 4 : 0) + (words.has(term) ? 3 : description.includes(term) ? 1 : 0), 0);
       return { skill, score };
     })
     .filter(({ score }) => score > 0)
