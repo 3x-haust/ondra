@@ -268,7 +268,10 @@ type BlockBody =
   | { type: "tree"; label?: string; unit?: string; items: { path: string; note?: string; value?: number; state?: VisItem["state"] }[] }
   | { type: "groups"; label?: string; groups: { label: string; note?: string; items: VisItem[] }[]; links?: { from: string; to: string; label?: string }[] }
   | { type: "sequence"; label?: string; actors: string[]; steps: { from: string; to: string; label: string; note?: string; em?: boolean }[] }
-  | { type: "steps"; label?: string; items: VisItem[] };
+  | { type: "steps"; label?: string; items: VisItem[] }
+  /** a chart or figure from the viz families (src/ui/viz) */
+  | VizBlock;
+export type VizBlock = { type: import("../ui/viz/kinds").VizKind; label?: string; say?: string; [k: string]: unknown };
 
 export interface VisItem {
   label: string;

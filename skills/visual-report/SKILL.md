@@ -83,6 +83,23 @@ or cause (Tversky); long LLM answers are easier to grasp as diagrams
 - Before/after: two pictures with the same boxes in the same order.
 - A straight chain of boxes is `steps`, not `diagram`.
 
+## More charts
+
+Beyond the pictures above there is a catalog of charts and figures, one file
+per family. When a question needs one, read the matching file and use its
+`type` exactly as written there:
+
+- `references/stat.md`: distributions, uncertainty, statistics and paper
+  figures (histogram, box/violin, error bars, regression, ROC, survival…)
+- `references/chart.md`: comparison, change over time, part of a whole,
+  finance and KPIs (line, area, stacked, pie, waterfall, candlestick, gauge…)
+- `references/relation.md`: networks, flows, hierarchies, sets and maps
+  (sankey, chord, treemap, sunburst, venn, mind map, choropleth…)
+- `references/slide.md`: presentation and business figures (2x2 matrix,
+  pyramid, cycle, roadmap, gantt, SWOT, funnel, KPI grid, layouts…)
+
+Use only the numbers you really have; never invent data to fill a chart.
+
 ## Rules
 
 - Show, don't tell: a `compare` beats "속도가 빨라졌습니다", a `diagram` beats a paragraph about how modules talk.

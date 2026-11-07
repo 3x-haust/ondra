@@ -9,6 +9,7 @@ import { Arch, Classes, Deps, Er, Flow, States } from "./Charts";
 import { Diff, Git, Options, Tests, Trace } from "./Work";
 import { Bars, Groups, Scope, Sequence, Steps, Tree } from "./Visuals";
 import { openImage } from "./Lightbox";
+import { vizOf } from "./viz";
 
 type Of<T extends Block["type"]> = Extract<Block, { type: T }>;
 
@@ -329,6 +330,7 @@ function BlockBody(props: { block: Block }) {
       <Match when={as("sequence")}>{(x) => <Sequence label={x().label} actors={x().actors ?? []} steps={x().steps ?? []} />}</Match>
       <Match when={as("steps")}>{(x) => <Steps label={x().label} items={x().items ?? []} />}</Match>
       <Match when={as("evidence")}>{(x) => <EvidenceView items={x().items ?? []} unverified={x().unverified} />}</Match>
+      <Match when={vizOf(b().type)}>{(s) => s().render(b())}</Match>
     </Switch>
   );
 }

@@ -207,6 +207,7 @@ ONE diagram. Pick by the question:
 - where the time goes in a request → {"type":"trace","unit":"ms","spans":[{id,label,start,dur,parent,service,error}]}
 - branches, commits, merges → {"type":"git","commits":[{id,branch,msg,parents:[…],tag}]} (oldest first)
 - how much / which is largest → {"type":"bars","unit":"GB","items":[{label,value,note,highlight}]}
+- statistics, paper figures, trends, shares, finance, networks, hierarchies, maps, slide figures → read the visual-report skill's "More charts" catalog and use its type
 - where things are (folders, files) → {"type":"tree","items":[{path:"a/b",note,value,state}]}
 - "A turns into B", layers that aren't running services → {"type":"groups","groups":[{label,note,items:[…]}],"links":[{from,to,label}]}
 - a straight list of steps or what's done → {"type":"checklist","label":"3/5","items":[{label,done}]}
@@ -654,6 +655,7 @@ ONE diagram. Pick by the question:
 - where the time goes in a request → {"type":"trace","unit":"ms","spans":[{id,label,start,dur,parent,service,error}]}
 - branches, commits, merges → {"type":"git","commits":[{id,branch,msg,parents:[…],tag}]} (oldest first)
 - how much / which is largest → {"type":"bars","unit":"GB","items":[{label,value,note,highlight}]}
+- statistics, paper figures, trends, shares, finance, networks, hierarchies, maps, slide figures → read the visual-report skill's "More charts" catalog and use its type
 - where things are (folders, files) → {"type":"tree","items":[{path:"a/b",note,value,state}]}
 - "A turns into B", layers that aren't running services → {"type":"groups","groups":[{label,note,items:[…]}],"links":[{from,to,label}]}
 - a straight list of steps or what's done → {"type":"checklist","label":"3/5","items":[{label,done}]}
