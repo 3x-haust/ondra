@@ -7,13 +7,17 @@ import "./styles/app.css";
 import "./styles/t3.css";
 import "./styles/memory-tree.css";
 import "./styles/context.css";
+import "./styles/viz.css";
 import App from "./App";
 import { Capture } from "./views/Capture";
+import { VizGallery } from "./views/VizGallery";
 
 // One bundle, two windows: the ⌥Space window loads with #capture.
 const isCapture = location.hash === "#capture";
 document.documentElement.classList.toggle("capture-window", isCapture);
-render(() => (isCapture ? <Capture /> : <App />), document.getElementById("root") as HTMLElement);
+// every chart kind with its examples, for checking them side by side (?gallery)
+const isGallery = new URLSearchParams(location.search).has("gallery");
+render(() => (isCapture ? <Capture /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
 
 // text boxes grow with what's typed (WebKit without field-sizing)
 if (!CSS.supports("field-sizing", "content")) {
