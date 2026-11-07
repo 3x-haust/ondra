@@ -789,6 +789,10 @@ button.route:hover {
   align-items: center;
   gap: var(--s-8);
 }
+.set-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
 .stepper {
   display: inline-flex;
   align-items: center;
