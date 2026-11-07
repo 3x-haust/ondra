@@ -92,7 +92,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       <For each={list()}>
         {(l) => (
           <span class="st-lim" classList={{ hot: l.used >= 80 }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
-            {l.window >= 10080 ? "7d" : l.window >= 1440 ? `${Math.round(l.window / 1440)}d` : `${Math.round(l.window / 60)}h`} {Math.round(l.used)}%
+            {windowLabel(l.window)} {Math.round(l.used)}%
           </span>
         )}
       </For>

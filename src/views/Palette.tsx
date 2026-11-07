@@ -71,7 +71,10 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: "결과", run: () => setView({ name: "results", id: r.id }) }))
       : [];
     const all = commandsOnly() ? places : [...tasks, ...places];
-    const hits = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
+    const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
+    // each section once: its items together, sections in the order they first appear
+    const order = [...new Set(found.map((i) => i.section))];
+    const hits = order.flatMap((sec) => found.filter((i) => i.section === sec));
     const send: Item[] = text && !commandsOnly()
       ? [{ id: "send", label: text, hint: "메인에게 보내기", icon: "send", section: "보내기", run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
       : [];
