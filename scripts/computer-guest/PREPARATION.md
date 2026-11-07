@@ -28,8 +28,10 @@ A refused file drop is rejected before reading the drag pasteboard.
 
 Use an explicit private `LUME_HOME`, explicit VM `--storage`, telemetry disabled,
 `--network nat`, `--vnc disabled`, no shared directories, no extra disks and no
-clipboard option. The preparation viewer uses `--display native` only while a
-person approves guest permissions. It does not grant an automation lease.
+clipboard option. The VM is named `ondra-guest` and runs with `--display none`
+by default: no window and no Dock icon on the host (`lume-local` runs as an
+accessory process). Use `--display native` only while a person approves guest
+permissions, then restart headless. A viewer does not grant an automation lease.
 
 These constraints do not make VNC-enabled runs safe, block every upstream CLI
 command, or prove that AppKit cannot change focus under every macOS condition.
@@ -54,7 +56,9 @@ including a verified preparer digest and pinned connection files. It does not
 adopt an arbitrary VM, provision accounts, or register a computer runtime. A
 restart marker prevents accidental repetition; a partial failure requires
 inspection, not deleting the marker and trying again. Required checks use
-explicit exceptions even when Python optimization is enabled.
+explicit exceptions even when Python optimization is enabled. The restarted
+guest is headless; pass `--viewer` only when a person needs the guest window to
+approve permissions.
 
 ```sh
 python3 -B scripts/computer-guest/test_restart_preparation.py
