@@ -306,8 +306,9 @@ export function Sequence(props: { label?: string; actors: string[]; steps: { fro
             const left = () => (Math.min(a(), b()) + 0.5) * W();
             const width = () => (self() ? W() * 0.32 : Math.abs(b() - a()) * W());
             // the words may run a little past a short arrow, never past the next role's middle
-            const room = () => (self() ? W() * 0.62 : width() + W() * 0.8);
             const mid = () => (self() ? left() + width() + 1.5 : left() + width() / 2);
+            // a self-loop's label may use all the room to its right
+            const room = () => (self() ? Math.max(W() * 0.62, 99 - mid()) : width() + W() * 0.8);
             return (
               <div class="vz-msg" classList={{ em: !!s.em, self: self() }}>
                 <div class="vz-msg-line" classList={{ back: b() < a(), self: self() }} style={{ left: `${left()}%`, width: `${width()}%` }} />

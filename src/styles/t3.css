@@ -1869,7 +1869,7 @@ body.resizing .panel {
   pointer-events: none;
 }
 /* 25 · timeline: one continuous line between the checks */
-.tl-item:not(:last-child)::after {
+.vz-tl-item:not(:last-child)::after {
   top: calc(50% + 9px);
   height: calc(100% - 18px);
   width: 1px;
@@ -4156,7 +4156,8 @@ input[type="checkbox"] {
 .ev-kind {
   flex: none;
   color: var(--ink-3);
-  width: 56px;
+  min-width: 56px;
+  white-space: nowrap;
 }
 .ev-ref {
   font: var(--fs-xs) var(--mono);
@@ -4552,7 +4553,7 @@ input[type="checkbox"] {
 }
 .vz-bar {
   display: grid;
-  grid-template-columns: minmax(110px, 34%) 1fr auto 42px;
+  grid-template-columns: minmax(110px, 34%) 1fr 72px 42px;
   align-items: center;
   gap: var(--s-12);
   padding: 5px 0;
@@ -8601,4 +8602,31 @@ select.select.dev-space {
 /* cards in the thread keep the thread's own gap */
 .thread-inner > .blocks {
   margin: 0;
+}
+/* header chips: one shape; colour by state as in the sidebar (waiting amber, review green, done grey) */
+.status-chip.unverified {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.status-chip.unmerged {
+  background: var(--ok-soft);
+  color: var(--ok-ink);
+}
+.status-chip.done {
+  background: var(--active);
+  color: var(--ink-2);
+}
+.task-view .status-chip + .status-chip {
+  margin-left: var(--s-6);
+}
+/* a finished job's total ("끝 · …") replaces the last answer's stats; those show on hover like the rest */
+.task-view .thread-inner:has(.job-cost) > .reply-foot:not(:hover) .usage-line {
+  opacity: 0;
+}
+/* a code location stays on one line; long ones end in … */
+.vz-ref {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

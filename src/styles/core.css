@@ -1891,13 +1891,13 @@ kbd {
 }
 
 /* ───────────── visuals: timeline, relay, more-text ───────────── */
-.tl {
+.vz-tl {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
 }
-.tl-item {
+.vz-tl-item {
   position: relative;
   display: flex;
   align-items: center;
@@ -1905,7 +1905,7 @@ kbd {
   min-height: var(--h-md);
   font-size: var(--fs-md);
 }
-.tl-item:not(:last-child)::after {
+.vz-tl-item:not(:last-child)::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -1915,10 +1915,10 @@ kbd {
   border-radius: var(--r-bar);
   background: var(--line);
 }
-.tl-item.done:not(:last-child)::after {
+.vz-tl-item.done:not(:last-child)::after {
   background: var(--accent-line);
 }
-.tl-dot {
+.vz-tl-dot {
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -1928,14 +1928,14 @@ kbd {
   box-shadow: inset 0 0 0 2px var(--input);
   color: var(--accent);
 }
-.tl-item.done .tl-dot {
+.vz-tl-item.done .vz-tl-dot {
   background: var(--accent-soft);
   box-shadow: none;
 }
-.tl-item.now .tl-dot {
+.vz-tl-item.now .vz-tl-dot {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
-.tl-item.now .tl-dot::after {
+.vz-tl-item.now .vz-tl-dot::after {
   content: "";
   width: 6px;
   height: 6px;
@@ -1943,13 +1943,13 @@ kbd {
   background: var(--accent);
   animation: none;
 }
-.tl-item.todo .tl-label {
+.vz-tl-item.todo .vz-tl-label {
   color: var(--ink-3);
 }
-.tl-item.now .tl-label {
+.vz-tl-item.now .vz-tl-label {
   font-weight: var(--fw-medium);
 }
-.tl-at {
+.vz-tl-at {
   margin-left: auto;
   font-size: var(--fs-xs);
   color: var(--ink-3);
