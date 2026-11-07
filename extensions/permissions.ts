@@ -12,7 +12,7 @@ type Mode = "ask" | "edits" | "full";
 const MODES: Mode[] = ["ask", "edits", "full"];
 const ALLOW = "허용";
 const DENY = "막기";
-const GUEST_ONLY = "Mac 앱 조작은 별도 macOS 게스트 안에서만 실행하세요. 게스트가 준비되지 않았으면 중단하고 준비가 필요하다고 알려주세요. 호스트 앱 실행·AX·PID 입력이나 전경 조작으로 우회하지 마세요.";
+const HOST_POLICY = "Mac 앱 조작은 computer 도구(백그라운드 호스트 도우미)로만 하세요. 이 도우미는 앱을 앞으로 가져오거나 커서를 옮기거나 전역 이벤트를 보내지 않고, 매 동작 전후로 전경 앱·키 윈도·마우스가 그대로인지 확인해요. osascript·System Events UI 스크립팅, cliclick, 활성화되는 open, 호스트 agent-desktop, 직접 CGEvent 입력으로 우회하지 마세요. 배경으로 할 수 없는 동작이면 포기하지 말고 그대로 보고하세요.";
 
 /** Conservative command checks, not a shell sandbox or an OS isolation boundary. */
 export function hostComputerUse(command: string): string | undefined {
@@ -92,7 +92,7 @@ export function focusSteal(command: string): { what: string; how: string } | und
     if (sub === "press" && !args.includes("--app"))
       what ??= "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)";
   });
-  return what ? { what, how: GUEST_ONLY } : undefined;
+  return what ? { what, how: HOST_POLICY } : undefined;
 }
 
 /** Known host input APIs, both system-wide and process-targeted. */
@@ -211,7 +211,7 @@ export default function (pi: any) {
     // in every mode: killing by name also kills the user's own apps (Electron → Discord, VS Code)
     if (event.toolName === "bash") {
       const host = hostComputerUse(String(event.input?.command ?? ""));
-      if (host) return { block: true, reason: `${host}는 이 실행 경로에서 지원하지 않아요. ${GUEST_ONLY}` };
+      if (host) return { block: true, reason: `${host}는 이 실행 경로에서 지원하지 않아요. ${HOST_POLICY}` };
       const broad = broadKill(String(event.input?.command ?? ""), ctx.cwd);
       if (broad)
         return {
@@ -223,11 +223,11 @@ export default function (pi: any) {
       if (typed)
         return {
           block: true,
-          reason: `${typed}는 호스트의 입력·포커스 보존을 확인할 수 없어 차단했어요. ${GUEST_ONLY}`,
+          reason: `${typed}는 호스트의 입력·포커스 보존을 확인할 수 없어 차단했어요. ${HOST_POLICY}`,
         };
       // A permission choice cannot turn a host action into an isolated action.
       const steal = focusSteal(String(event.input?.command ?? ""));
-      if (steal) return { block: true, reason: `${steal.what}는 차단했어요. ${GUEST_ONLY}` };
+      if (steal) return { block: true, reason: `${steal.what}는 차단했어요. ${HOST_POLICY}` };
       // in every mode: another space's (or the user's, or another job's) device is off-limits
       const mine = jobDevices();
       const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);

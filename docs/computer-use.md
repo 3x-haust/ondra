@@ -1,11 +1,92 @@
-# Isolated computer use
+# Computer use
+
+The `computer` tool operates one Mac app. The **default** is background host mode,
+which runs on the user's own Mac without taking focus. A dedicated isolated macOS
+**guest** VM remains available as an opt-in mode; the rest of this document, from
+"Isolated guest (optional mode)" on, describes that guest.
+
+## Host background mode (default)
+
+A signed Swift helper, `ondra-cuhost` (`src-tauri/helpers/cuhost.swift`, built by
+`src-tauri/helpers/build.sh`, bundled via `externalBin`), drives one target app
+using only **public** APIs:
+
+- **Observe** the target app's Accessibility tree as a compact tree where every
+  element has a stable `id`; later observations are a JSON **delta** since the
+  last tree, or `unchanged`.
+- **Act** with AX first — `AXUIElementPerformAction` and settable-attribute writes
+  need no events at all — falling back to **pid-targeted** `CGEventPostToPid` for
+  keys, text, scroll and coordinate clicks. Never the global session.
+- **Capture** the target app's own key window with ScreenCaptureKit
+  (`SCScreenshotManager`), only when the model asks (`look`). Never the whole
+  screen.
+- **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
+  so the user's frontmost app stays in front.
+
+The background contract is **verified, not masked**: the helper records the
+frontmost app, key window and mouse position before and after every action and
+returns whether they changed; the tool refuses to continue if they did, rather
+than forging focus events the way Codex does (see `computer-use-host.md`). It
+never activates an app, warps the cursor or posts global events. `act` re-observes
+in the **same call**, so one step is one round trip (Codex needs two). The
+TypeScript side is `extensions/lib/computer-host.ts`; the tool selects host mode
+when `ONDRA_COMPUTER_HOST=1`, which the app sets whenever the helper is bundled.
+
+Any model works: text-only models use the AX tree; vision models can also request
+window crops with `look`.
+
+### Permissions (host mode)
+
+The **host app** (Ondra) needs, in System Settings → Privacy & Security:
+- **Accessibility** — to read the tree and perform actions.
+- **Screen Recording** — only for `look` (window capture).
+Grant them to Ondra; the helper inherits them. The tool reports a missing
+permission rather than failing silently. No VM, IPSW, SSH or guest login is
+involved.
+
+### Measured (on the user's Mac, 2026‑11‑08, macOS 26 / arm64)
+
+Measured with the helper driving apps the test launched (TextEdit, Calculator and
+a tiny built AppKit app), while the user's browser stayed frontmost throughout.
+
+| App (window) | AX tree bytes | ≈ tokens/observation | observe median | act median (act+re-observe) |
+|---|---:|---:|---:|---:|
+| Tiny test app | 969 B | ~240 | 6 ms | ~75–165 ms |
+| Calculator | 6.9 KB | ~1,700 | ~65 ms | 77 ms (AXPress, pure AX) |
+| TextEdit (document) | ~19 KB | ~4,700 | ~67 ms | 63 ms |
+| TextEdit (Open panel, large) | ~42 KB | ~10,400 | ~550 ms | — |
+
+- **Window-only `look`**: e.g. 312×237 → 6.3 KB PNG; 911×448 → 134 KB PNG. Never
+  a full-screen capture.
+- **Background invariant**: `backgroundPreserved = true` on every launch and
+  action; frontmost app and mouse position identical before vs after the whole
+  run (`frontmostThroughout` = the user's browser).
+- **Vs Codex, where measurable**: one round trip per step vs Codex's mandatory
+  separate `get_app_state` each turn; AX-first actions touch no input queue;
+  delta-only observations keep later steps near Calculator/test-app sizes. Codex's
+  own metrics (`time_to_first_get_app_state`, `time_to_first_write`) are internal
+  and not externally measurable here. Absolute token costs depend on the app's
+  tree size for both tools.
+
+### Not yet in background mode
+
+- **Drag** is not implemented in the helper yet (the other actions are).
+- **App-level hidden windows**: a fully hidden app exposes no Accessibility tree,
+  so host mode launches without activation (window behind the user's front app)
+  rather than hidden. ScreenCaptureKit can still capture an occluded window.
+- Fully offscreen/minimized windows and multi-window targeting are minimal (key
+  or largest window).
+
+---
+
+# Isolated guest (optional mode)
 
 ## Status and scope
 
-The `computer` tool targets one app in a dedicated local macOS guest, created and
-owned by the app. It does **not** control existing host windows, reuse host logins,
-or fall back to host desktop commands. The host coding shell is not an OS sandbox;
-guest-tool isolation is not a claim that all other tools are isolated.
+In this mode the `computer` tool targets one app in a dedicated local macOS guest,
+created and owned by the app. It does **not** control existing host windows, reuse
+host logins, or fall back to host desktop commands. The host coding shell is not an
+OS sandbox; guest-tool isolation is not a claim that all other tools are isolated.
 
 The native setup API, authenticated engine registration, forced-full evaluation
 mode and private snapshot capture/export are implemented. Offline fixture checks

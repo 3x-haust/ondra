@@ -234,6 +234,12 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     if let Some(helper) = sidecar("agent-desktop-macos-helper") {
         env.push(("AGENT_DESKTOP_MACOS_HELPER_PATH".into(), helper.display().to_string()));
     }
+    // Background host computer use is the default when its signed helper is bundled.
+    // The engine's computer extension spawns it on `start`; no VM guest is involved.
+    if let Some(cuhost) = sidecar("ondra-cuhost") {
+        env.push(("ONDRA_COMPUTER_HOST".into(), "1".into()));
+        env.push(("ONDRA_COMPUTER_HOST_BIN".into(), cuhost.display().to_string()));
+    }
     let session = crate::browser::session_for(&worker_id, shared);
     match shared {
         Some(port) => env.extend(crate::browser::attach_env(port, &session)),
