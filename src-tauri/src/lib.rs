@@ -342,6 +342,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             update::update_check,
             update::update_install,
+            update::update_prepare,
             open_capture,
             hide_capture,
             submit_capture,

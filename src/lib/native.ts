@@ -513,7 +513,12 @@ export const bridgeReply = (id: number, value: string) => call<void>("bridge_rep
 
 /** A newer release on GitHub, or null (always null in development builds). */
 export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);
-/** Download, verify and install it; the app restarts on success. */
+/** Fetch the newer release's package in the background; true once it is ready to install. */
+export const prepareUpdate = () => call<boolean>("update_prepare", {}, false);
+/** Install it (fetching it first if needed); the app restarts on success. */
 export const installUpdate = () => call<void>("update_install");
+/** How far the package download is: 0–100, or -1 when the size isn't known. */
+export const onUpdateProgress = (f: (p: { version: string; percent: number }) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<{ version: string; percent: number }>("update:progress", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Save bytes as a file in ~/Downloads (a free name); returns the path. */
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
