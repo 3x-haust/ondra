@@ -460,9 +460,6 @@ export function Sidebar() {
       <ProjectMenu />
 
       <div class="sb-foot">
-        <button class="row" data-shortcut="commands" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
-          <Icon name="list" size={16} /><span class="row-title">단축키</span><kbd>{shortcutHint("commands")}</kbd>
-        </button>
         <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">설정</span>
