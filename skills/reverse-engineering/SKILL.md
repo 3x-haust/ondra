@@ -7,13 +7,14 @@ description: >-
   ELF, PE, Ghidra, LLDB, GDB, Frida, or investigating REA claims. Identify the
   actual target, inspect machine code, test hypotheses with real tools, and
   preserve reproducible evidence. Never substitute a visual clone for analysis.
-compatibility: Static inspection needs a format-aware tool. Dynamic analysis needs a compatible isolated host and permission. Bundled calibration requires macOS arm64 or x86_64, Python 3, and Xcode Command Line Tools. External analysis engines are not bundled.
+compatibility: Ondra bundles ondra-binary (radare2 and native r2ghidra) for static 64-bit ARM/x86 Mach-O, ELF and PE analysis without user-installed tools or runtimes. Dynamic work needs a compatible isolated host and permission. The optional debugger calibration still needs Python 3 and Xcode Command Line Tools.
 ---
 
 # Reverse engineering
 
 Answer a narrow question about how a program actually works. A skill is a
-workflow, not a disassembler. Tool output is evidence; prose and reconstructed
+workflow; Ondra supplies its native analysis engine through `ondra-binary`.
+Tool output is evidence; prose and reconstructed
 pseudocode are not execution. Read [the tool guide](references/tools.md) before
 choosing commands and [the evidence guide](references/evidence.md) before analysis.
 Resolve every relative path from this skill's directory, never the task cwd.
@@ -48,11 +49,18 @@ software, activate licenses, change system security settings, or silently replac
 an unavailable backend with invented output. See the platform matrix in
 `references/tools.md`. Record available / missing / launch-denied separately.
 
-Use the smallest real toolchain that can answer the question. macOS inspection
-with file, otool, nm and LLDB does not require REA, an MCP server or a GUI. Ghidra
-is useful when decompilation and references materially help. If REA or another
-bridge is already installed, verify its backend and one real operation before
-trusting the connection. A connected server alone proves no analysis capability.
+Use `ondra-binary` first for supported static targets. It is on the worker's
+bundled PATH and includes radare2, r2ghidra, SLEIGH data and native libraries.
+No Java, Python, Xcode, Homebrew, MCP server or separate engine install is needed.
+Read [the bundled analyzer guide](references/bundled.md) in full, then check
+`ondra-binary --help` and `ondra-binary --version`. Save `inspect`, `functions`,
+`disassemble` and, where successful, `decompile` JSON plus stderr. A missing or
+failed bundled engine is incomplete; never silently use a system installation.
+
+Other format-aware tools are optional for unsupported targets or deeper work.
+If REA or another bridge is already installed, verify its backend and one real
+operation before trusting the connection. A connected server alone proves no
+analysis capability.
 
 ## 3. Static analysis: locate the decision
 
@@ -104,7 +112,8 @@ rerun the discriminating case after a change. A renamed function or attractive
 reconstruction is not proof. Keep observations separate from interpretation.
 Use `references/evidence.md` for the deliverable and stop conditions.
 
-For a host/toolchain calibration, read and run [the owned sample lab](references/lab.md):
+The built-in analyzer's static/decompiler check does not need the developer lab.
+Only for a separate host/debugger calibration, read and run [the owned sample lab](references/lab.md):
 
 ```sh
 python3 "<skill-directory>/scripts/verify.py" --help

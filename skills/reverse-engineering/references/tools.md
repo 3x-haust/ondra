@@ -2,16 +2,19 @@
 
 Check executable paths, versions and local help before using any command below.
 These are recipes, not evidence that the tools ran. Do not install a backend or
-upload a sample without permission. This skill bundles no decompiler, debugger,
-MCP server, Java runtime, license or isolated guest OS.
+upload a sample without permission. Ondra includes `ondra-binary`: radare2 and
+r2ghidra's native Ghidra decompiler, with their runtime libraries and processor
+data. Start with [the bundled analyzer](bundled.md); no user installation is
+needed for its supported targets. A debugger, MCP server, full Ghidra/Java GUI,
+paid license and isolated guest OS are not included.
 
 ## Capability matrix
 
 | Target / host | Static inspection | Dynamic work | Requirements / limits |
 | --- | --- | --- | --- |
-| Mach-O on macOS | file, nm, otool, LLDB; optional Ghidra | Native LLDB on owned programs | Xcode or Command Line Tools; debugger permission and compatible CPU. SIP/protected targets can deny attach even for root. |
-| ELF on macOS | Format-aware LLVM or Ghidra | Compatible isolated Linux guest | Parsing ELF does not make it runnable on macOS. CPU and OS ABI both matter. |
-| PE on macOS | Ghidra or LLVM COFF inspection | Authorized isolated Windows environment | PE parsing is not Windows process debugging. Do not execute through an unreviewed compatibility layer. |
+| Mach-O on macOS | Bundled ondra-binary for 64-bit ARM/x86; optional Apple tools | Optional LLDB on owned programs | Static work needs no installs. LLDB needs Xcode/Command Line Tools and permissions; protected targets can deny attach. |
+| ELF on macOS | Bundled ondra-binary for 64-bit ARM/x86; optional LLVM/Ghidra | Compatible isolated Linux guest | Static parsing/decompilation does not make ELF runnable on macOS. CPU and OS ABI both matter. |
+| PE on macOS | Bundled ondra-binary for 64-bit ARM/x86; optional LLVM/Ghidra | Authorized isolated Windows environment | PE parsing/decompilation is not Windows process debugging. No unreviewed compatibility layer. |
 | Android DEX/APK | Optional JADX for DEX; native libraries separately | Authorized emulator/device and suitable instrumentation | Java decompilation does not cover JNI native libraries. APK installation is execution. |
 | JavaScript/Electron | Source/bundle/AST and source-map inspection | Authorized app runtime/devtools | Static IPC edges do not prove handlers were registered or executed. |
 | Raw/packed/unknown | Inspect headers/entropy/loader clues in isolation | Only an approved disposable lab | CPU/load address may be unknown; do not guess a decompiler architecture and present it as fact. |
@@ -61,7 +64,7 @@ File offset, image-relative RVA, virtual address and runtime ASLR address differ
 Disable external symbol downloads when analyzing private samples; the current
 LLVM docs include `--no-debuginfod`, but check the installed tool supports it.
 
-## Decompilation with Ghidra
+## Optional full Ghidra application
 
 Use the official release archive and the JDK required by **that release's**
 installation guide. Do not assume an old JDK recipe applies to the current
@@ -89,9 +92,10 @@ output. Never claim a decompilation run merely because `analyzeHeadless` started
 Ghidra p-code and inferred variables/types are analysis models, not original
 source. Compare important predicates with disassembly and observed behavior.
 
-radare2 and Rizin are optional alternatives, not prerequisites. Inspect the local
-command help and installed plugins: radare2's r2ghidra decompilation is not a
-promise of the base install, and Rizin is a distinct project, not a command alias.
+Ondra's `ondra-binary decompile` uses its bundled r2ghidra plugin, not the full
+Ghidra application. A separate system radare2 or Rizin is optional, never a
+prerequisite. Inspect their local command help and installed plugins: a separate
+radare2 install does not necessarily include r2ghidra; Rizin is a distinct project.
 Hopper/IDA require their own installation and applicable licenses. No engine
 backend should be silently swapped while retaining another tool's label.
 

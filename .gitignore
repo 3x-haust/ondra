@@ -2,6 +2,7 @@ node_modules
 dist
 src-tauri/binaries/
 src-tauri/target/
+tools/binary-analysis/target/
 src-tauri/gen/schemas/
 .DS_Store
 src-tauri/resources/

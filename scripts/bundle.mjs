@@ -11,6 +11,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, re
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -50,6 +51,9 @@ function copyBin(name, src) {
   chmodSync(dest, 0o755);
   log(`${name}${fresh ? " (up to date)" : ""}`);
 }
+
+// ── native static binary analysis (engine, decompiler, libraries and source) ──
+await bundleBinaryAnalysis();
 
 // ── agent-browser / agent-desktop ──
 copyBin("agent-browser", join(root, `node_modules/agent-browser/bin/agent-browser-darwin-${nodeArch}`));
