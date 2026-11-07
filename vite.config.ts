@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-// @ts-expect-error type error without @types/node package
 import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 

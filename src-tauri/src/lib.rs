@@ -14,6 +14,10 @@ mod browser;
 mod inbrowser;
 mod devices;
 mod engine;
+#[cfg(target_os = "macos")]
+mod computer;
+#[cfg(target_os = "macos")]
+mod computer_setup;
 pub mod focus;
 mod keychain;
 mod git;
@@ -147,6 +151,11 @@ fn set_tray_count(app: AppHandle, running: u32, waiting: u32) {
 }
 
 fn kill_children(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    if let Err(code) = app.state::<computer_setup::ComputerState>().shutdown(|| app.state::<engine::Engine>().kill_all()) {
+        eprintln!("computer shutdown: {code}");
+    }
+    #[cfg(not(target_os = "macos"))]
     app.state::<engine::Engine>().kill_all();
     app.state::<pty::Ptys>().kill_all();
     browser::stop(app);
@@ -224,6 +233,8 @@ pub fn run() {
         .manage(pty::Ptys::default())
         .manage(browser::Shared::default())
         .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            app.manage(computer_setup::ComputerState::default());
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
@@ -342,6 +353,16 @@ pub fn run() {
             engine::agent_kill,
             engine::agent_alive,
             engine::engine_models,
+            #[cfg(target_os = "macos")]
+            computer_setup::computer_prepare,
+            #[cfg(target_os = "macos")]
+            computer_setup::computer_open_setup_viewer,
+            #[cfg(target_os = "macos")]
+            computer_setup::computer_start,
+            #[cfg(target_os = "macos")]
+            computer_setup::computer_recover,
+            #[cfg(target_os = "macos")]
+            computer_setup::computer_status,
             pty::pty_open,
             pty::pty_open_login,
             pty::pty_write,

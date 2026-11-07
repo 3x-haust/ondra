@@ -11,6 +11,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, re
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stageComputerAssets } from "./computer-assets.mjs";
 import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -64,6 +65,10 @@ copyBin("agent-browser", join(root, `node_modules/agent-browser/bin/agent-browse
 const patchedDesktop = join(process.env.HOME ?? "", ".cache/ondra/agent-desktop-patched");
 copyBin("agent-desktop", existsSync(patchedDesktop) ? patchedDesktop : join(root, `node_modules/agent-desktop/bin/agent-desktop-darwin-${nodeArch}`));
 copyBin("agent-desktop-macos-helper", join(root, `node_modules/agent-desktop/bin/agent-desktop-macos-helper-darwin-${nodeArch}`));
+
+// Isolated guests use only pinned upstream arm64 assets, never the host patch.
+stageComputerAssets(root);
+log("sealed computer assets staged");
 
 const skillsDest = join(resDir, "agent-browser-skills");
 rmSync(skillsDest, { recursive: true, force: true });

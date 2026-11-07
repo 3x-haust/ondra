@@ -1,16 +1,30 @@
 // Ondra's permission modes, enforced inside the engine.
 //   ask   — ask before every edit and every command (reading is free)
 //   edits — edits inside the job's folder go through; commands and paths outside ask
-//   full  — nothing asks
+//   full  — no prompts; safety restrictions still apply
 // Starts from ONDRA_PERMISSION and can be changed mid-run with `/ondra-permission <mode>`.
 // Questions go out as ui.select, which Ondra shows as a decision card.
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { visitShellCommands } from "./lib/shell-commands";
 
 type Mode = "ask" | "edits" | "full";
 const MODES: Mode[] = ["ask", "edits", "full"];
 const ALLOW = "허용";
 const DENY = "막기";
+const GUEST_ONLY = "Mac 앱 조작은 별도 macOS 게스트 안에서만 실행하세요. 게스트가 준비되지 않았으면 중단하고 준비가 필요하다고 알려주세요. 호스트 앱 실행·AX·PID 입력이나 전경 조작으로 우회하지 마세요.";
+
+/** Conservative command checks, not a shell sandbox or an OS isolation boundary. */
+export function hostComputerUse(command: string): string | undefined {
+  let hit: string | undefined;
+  visitShellCommands(command, ([executable]) => {
+    const name = basename(executable);
+    if (/^agent-desktop(?:-macos-helper)?$/.test(name)) hit ??= "호스트 데스크톱 도구";
+    if (name === "osascript") hit ??= "호스트 AppleScript 실행";
+    if (name === "open") hit ??= "호스트 앱·문서 열기";
+  });
+  return hit;
+}
 
 /**
  * A pkill / killall that names a program instead of something this job owns:
@@ -58,65 +72,52 @@ export function foreignData(text: string, data: string, allowed: string[], space
  * keyboard or move the mouse: AppleScript activate / frontmost / System Events
  * keystrokes and clicks, `open` without -g, and agent-desktop's headed and
  * focus commands (or `press` without --app). Returns what it is and the
- * background way to do it instead, or undefined.
+ * isolated execution requirement, or undefined.
  */
-/** The command as the shell reads it: heredoc bodies and quoted text are data, not commands, and are left out. */
-export function shellWords(command: string): string {
-  const out: string[] = [];
-  let end: string | undefined;
-  for (const line of command.split("\n")) {
-    if (end !== undefined) {
-      if (line.replace(/^\t+/, "").trim() === end) end = undefined;
-      continue;
-    }
-    out.push(line);
-    end = line.match(/<<-?\s*(['"]?)([\w.-]+)\1/)?.[2];
-  }
-  return out.join("\n").replace(/'[^']*'/g, "''").replace(/"(?:[^"\\]|\\.)*"/g, '""');
-}
-
 export function focusSteal(command: string): { what: string; how: string } | undefined {
-  if (/\bosascript\b/.test(command)) {
-    if (/\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(command))
-      return { what: "앱을 앞으로 가져오는 AppleScript", how: "`agent-desktop launch <앱>` 또는 `open -g -a <앱> <파일>` (뒤에서 열려요)" };
-  }
-  for (const part of shellWords(command).split(/;|&&|\|\||\||\n/)) {
-    const c = part.trim().replace(/^(?:\w+=\S*\s+)*(?:sudo\s+|command\s+|exec\s+)?/, "");
-    const open = c.match(/^open(\s+.*)?$/);
-    if (open) {
-      const flags = (open[1] ?? "").trim().split(/\s+/).filter((w) => /^-[a-zA-Z]+$/.test(w)).join("");
-      if (!/g/.test(flags) && !/--background\b/.test(c))
-        return { what: "`open` (앱이 앞으로 와요)", how: "`open -g` (뒤에서 열어요; 앱은 `open -g -a <앱> <파일>`), 웹 페이지는 browser-use 스킬" };
-      continue;
+  let what: string | undefined;
+  visitShellCommands(command, ([executable, ...args]) => {
+    const name = basename(executable);
+    const c = [name, ...args].join(" ");
+    if (name === "osascript" && /\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(args.join(" ")))
+      what ??= "앱을 앞으로 가져오는 AppleScript";
+    if (name === "open") {
+      const flags = args.filter((w) => /^-[a-zA-Z]+$/.test(w)).join("");
+      if (!/g/.test(flags) && !args.includes("--background")) what ??= "`open` (앱이 앞으로 와요)";
     }
-    if (!/\bagent-desktop\b/.test(c)) continue;
+    if (name !== "agent-desktop") return;
     const sub = c.match(/\bagent-desktop\s+(?:--?[\w-]+(?:\s+(?!-)\S+)?\s+)*?([\w-]+)/)?.[1] ?? "";
     if (/^(focus|focus-window|maximize|hover|drag|cursor-overlay)$|^mouse-/.test(sub) || /--activate\b|--headed\b|--xy\b|--cursor\b/.test(c))
-      return { what: `agent-desktop ${sub || "앞으로 가져오는 옵션"}`, how: "ref로 하는 `click`, `set-value`, `toggle`, `press --app <앱>` (포커스와 마우스를 건드리지 않아요)" };
-    if (sub === "press" && !/--app\b/.test(c))
-      return { what: "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)", how: "`agent-desktop press <키> --app <앱>`" };
-  }
-  return undefined;
+      what ??= `agent-desktop ${sub || "앞으로 가져오는 옵션"}`;
+    if (sub === "press" && !args.includes("--app"))
+      what ??= "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)";
+  });
+  return what ? { what, how: GUEST_ONLY } : undefined;
 }
 
-/** Calls that post a key or mouse event to the whole system (the HID or session tap), in source or a binary. */
+/** Known host input APIs, both system-wide and process-targeted. */
 const SYSTEM_EVENT =
-  /CGEventPost\s*\(|\.post\s*\(\s*tap\s*:|CGEvent\s*\(\s*(keyboardEventSource|mouseEventSource)|CGEvent\s*\(\s*keyboardEvent|CGEventCreateKeyboardEvent|CGEventCreateMouseEvent|Quartz\.CGEventPost|\.cghidEventTap|\.cgSessionEventTap|kCGHIDEventTap|kCGSessionEventTap|CGEventTapLocation\.(HID|Session)/;
-/** The same calls as a binary imports them (CGEventPostToPid alone is fine). */
-const SYSTEM_EVENT_SYMBOL = /_CGEventPost(?!ToPid)\b|CGEventPost\x00|_CGEventCreateKeyboardEvent|_CGEventCreateMouseEvent/;
+  /CGEventPost(?:ToPid)?\s*\(|\.postToPid\s*\(|\.post\s*\(\s*tap\s*:|CGEvent\s*\(\s*(keyboardEventSource|mouseEventSource)|CGEvent\s*\(\s*keyboardEvent|CGEventCreateKeyboardEvent|CGEventCreateMouseEvent|Quartz\.CGEventPost|\.cghidEventTap|\.cgSessionEventTap|kCGHIDEventTap|kCGSessionEventTap|CGEventTapLocation\.(HID|Session)/;
+/** The same calls as a binary imports them, including process-targeted input. */
+const SYSTEM_EVENT_SYMBOL = /_CGEventPost(?:ToPid)?\b|CGEventPost(?:ToPid)?\x00|_CGEventCreateKeyboardEvent|_CGEventCreateMouseEvent/;
 
 /**
  * A command that types or clicks for the whole system rather than into one app
  * the job launched: code posting CGEvents to the HID or session tap (in the
  * command itself, a heredoc, a source file it compiles or runs, or a binary it
  * runs), cliclick, and AppleScript keystrokes / key codes / clicks. Those land
- * in whatever the user has in front (their terminal, their editor). Posting to
- * one process (CGEventPostToPid, agent-desktop press --app) is not this.
+ * in whatever the user has in front (their terminal, their editor). PID-targeted
+ * input is also rejected: process selection does not isolate app side effects.
  */
 export function systemInput(command: string, cwd = ""): string | undefined {
-  if (/(^|[\s;&|(])cliclick\b/.test(command)) return "cliclick";
-  if (/\bosascript\b/.test(command) && /\b(keystroke|key code|click at)\b/i.test(command)) return "AppleScript 키 입력·클릭";
-  if (SYSTEM_EVENT.test(command)) return "시스템 전체 키·마우스 이벤트 코드";
+  let input: string | undefined;
+  visitShellCommands(command, ([executable, ...args]) => {
+    const name = basename(executable);
+    if (name === "cliclick") input ??= "cliclick";
+    if (name === "osascript" && /\b(keystroke|key code|click at)\b/i.test(args.join(" "))) input ??= "AppleScript 키 입력·클릭";
+  });
+  if (input) return input;
+  if (SYSTEM_EVENT.test(command)) return "호스트 키·마우스 이벤트 코드";
   // files the command compiles, runs or reads: their source, or the binary's imports
   for (const m of command.matchAll(/(?:^|[\s'"=])((?:\/|~\/|\.{1,2}\/)?[\w.\/~-]+)/g)) {
     const raw = m[1];
@@ -130,7 +131,7 @@ export function systemInput(command: string, cwd = ""): string | undefined {
       if (!st.isFile() || st.size > 30_000_000 || (!source && !(st.mode & 0o111))) continue;
       const body = readFileSync(path);
       if (source ? SYSTEM_EVENT.test(body.toString("utf8")) : SYSTEM_EVENT_SYMBOL.test(body.toString("latin1")))
-        return `시스템 전체 키·마우스 이벤트 (${raw})`;
+        return `호스트 키·마우스 이벤트 (${raw})`;
     } catch {
       /* unreadable: not ours to judge */
     }
@@ -180,12 +181,7 @@ function jobDevices(): string[] | undefined {
   return out;
 }
 
-const ONCE = "이번만 허용";
-const ALWAYS = "이 일에서는 계속 허용";
-
 export default function (pi: any) {
-  /** the user let this job bring windows forward for the rest of the job */
-  let focusOk = false;
   let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
 
   pi.registerCommand("ondra-permission", {
@@ -214,28 +210,24 @@ export default function (pi: any) {
     }
     // in every mode: killing by name also kills the user's own apps (Electron → Discord, VS Code)
     if (event.toolName === "bash") {
+      const host = hostComputerUse(String(event.input?.command ?? ""));
+      if (host) return { block: true, reason: `${host}는 이 실행 경로에서 지원하지 않아요. ${GUEST_ONLY}` };
       const broad = broadKill(String(event.input?.command ?? ""), ctx.cwd);
       if (broad)
         return {
           block: true,
           reason: `\`${broad}\` 는 이름이 같은 사용자의 다른 앱까지 꺼요. 이 일이 띄운 것만 끄세요: \`pgrep -f '<이 작업 폴더 경로>'\`로 PID를 찾아 \`kill <PID>\`, 또는 \`lsof -ti :<포트> | xargs kill\`.`,
         };
-      // in every mode: keys and clicks made for the whole system land in the user's own apps
+      // in every mode: reject known host input APIs, including PID-targeted input
       const typed = systemInput(String(event.input?.command ?? ""), ctx.cwd);
       if (typed)
         return {
           block: true,
-          reason: `${typed}는 시스템 전체에 키·마우스를 보내서, 사용자가 쓰고 있는 앱(터미널, 편집기)에 들어가요. 단축키와 입력은 단위 테스트나 앱 자체의 테스트 훅으로 확인하고, 실제 키 입력은 unverified에 적으세요. 이 일이 띄운 앱 하나에만 보내야 하면 \`agent-desktop press <키> --app <앱>\`이나 CGEventPostToPid(그 앱의 pid)로 하세요.`,
+          reason: `${typed}는 호스트의 입력·포커스 보존을 확인할 수 없어 차단했어요. ${GUEST_ONLY}`,
         };
-      // in every mode: the user keeps their screen, keyboard and mouse; taking them needs a yes
-      const steal = !focusOk && focusSteal(String(event.input?.command ?? ""));
-      if (steal) {
-        const reason = `${steal.what}는 사용자가 보던 창을 가로채요. 뒤에서 하세요: ${steal.how}. 정말 앞에 띄워야만 확인되는 일이면 그 이유와 함께 ask로 먼저 물어보세요.`;
-        if (!ctx.hasUI) return { block: true, reason };
-        const choice = await ctx.ui.select(`사용자 화면을 가로채는 명령이에요 (${steal.what}). 실행할까요?\n\n${String(event.input?.command ?? "").slice(0, 400)}`, [DENY, ONCE, ALWAYS]);
-        if (choice === ALWAYS) focusOk = true;
-        else if (choice !== ONCE) return { block: true, reason };
-      }
+      // A permission choice cannot turn a host action into an isolated action.
+      const steal = focusSteal(String(event.input?.command ?? ""));
+      if (steal) return { block: true, reason: `${steal.what}는 차단했어요. ${GUEST_ONLY}` };
       // in every mode: another space's (or the user's, or another job's) device is off-limits
       const mine = jobDevices();
       const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);

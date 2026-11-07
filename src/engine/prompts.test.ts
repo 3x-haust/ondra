@@ -76,6 +76,22 @@ const bundledSkills = import.meta.glob<string>("../../skills/*/SKILL.md", { quer
 const mimikyuFile = "../../skills/mimikyu/SKILL.md";
 const mimikyuPath = decodeURIComponent(new URL(mimikyuFile, import.meta.url).pathname);
 
+describe("isolated computer-use instructions", () => {
+  it.each([["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM]])("requires a guest for the %s role", (_role, prompt) => {
+    expect(prompt).toContain("isolated macOS guest");
+    expect(prompt).toContain("No host fallback");
+    expect(prompt).not.toContain("It all runs behind");
+  });
+
+  it("does not teach host GUI commands as a background path", () => {
+    const skill = bundledSkills["../../skills/computer-use/SKILL.md"];
+    expect(skill).toContain("isolated macOS guest");
+    expect(skill).toContain("not an OS sandbox");
+    expect(skill).not.toMatch(/agent-desktop (launch|press|click|batch)|open -g -a/);
+    expect(skill).not.toContain("never move the user's mouse or steal focus");
+  });
+});
+
 describe("bundled design workflow", () => {
   it("ships an automatically discoverable mimikyu skill with the app", () => {
     expect(tauriConfig.bundle.resources["../skills/"]).toBe("app-skills/");

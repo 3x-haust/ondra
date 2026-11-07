@@ -1,8 +1,96 @@
-import { describe, expect, it } from "vitest";
-import { focusSteal, foreignData, systemInput } from "./permissions";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import permissions, { focusSteal, foreignData, hostComputerUse, systemInput } from "./permissions";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+afterEach(() => vi.unstubAllEnvs());
+
+// Exercise the engine hook without dispatching shell commands or GUI input.
+describe("host computer-use boundary", () => {
+  it.each([
+    "agent-desktop launch Calculator",
+    "agent-desktop press cmd+n --app Calculator",
+    "agent-desktop click @s1:e2",
+    `agent-desktop batch '[{"command":"launch","args":{"app":"Calculator","activate":true}}]'`,
+    `sh -c 'agent-desktop launch Calculator --activate'`,
+    '"/Applications/Ondra.app/Contents/MacOS/agent-desktop" click @s1:e2',
+    "open -g -a TextEdit document.txt",
+    "open -gj -a Calculator",
+    "open -a Calculator",
+    `sh -c 'open -g -a Calculator'`,
+    '"/usr/bin/open" -g -a Calculator',
+    `osascript -e 'tell application "TextEdit" to activate'`,
+    `python3 -c 'import Quartz; Quartz.CGEventPostToPid(123, event)'`,
+  ])("refuses %s even with full permissions and a UI", async (command) => {
+    vi.stubEnv("ONDRA_PERMISSION", "full");
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    const select = vi.fn().mockResolvedValue("이 일에서는 계속 허용");
+    permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
+
+    const result = await handlers.get("tool_call")!({ toolName: "bash", input: { command } }, { cwd: process.cwd(), hasUI: true, ui: { select } });
+
+    expect(result).toMatchObject({ block: true });
+    expect(select).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(["full", "ask"])("shell execution contexts in %s mode", (mode) => {
+  async function decision(command: string) {
+    vi.stubEnv("ONDRA_PERMISSION", mode);
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    const select = vi.fn().mockResolvedValue("허용");
+    permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
+    const result = await handlers.get("tool_call")!({ toolName: "bash", input: { command } }, { cwd: process.cwd(), hasUI: true, ui: { select } });
+    return { result, select };
+  }
+
+  it.each([
+    `bash -lc 'open -g -a Calculator'`,
+    `printf "%s" "$(open -g -a Calculator)"`,
+    `env FOO=bar open -g -a Calculator`,
+    `bash <<'EOF'\nopen -g -a Calculator\nEOF`,
+    `sh <<EOF\nopen -g -a Calculator\nEOF`,
+    `bash -lc 'agent-desktop launch Calculator'`,
+    `printf "%s" "$(agent-desktop launch Calculator)"`,
+    `env FOO=bar osascript -e 'return 1'`,
+    `sh <<'EOF'\nagent-desktop launch Calculator\nEOF`,
+    `cat <<EOF\n$(open -g -a Calculator)\nEOF`,
+    'printf "%s" "`open -g -a Calculator`"',
+    `printf "%s" "$(printf '%s' "$(open -g -a Calculator)")"`,
+  ])("blocks executable GUI commands: %s", async (command) => {
+    const { result, select } = await decision(command);
+    expect(result).toMatchObject({ block: true });
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    `rg -n "agent-desktop" skills`,
+    `git log --oneline --grep=osascript`,
+    `rg -n 'osascript.*activate' skills`,
+    `rg -n 'osascript keystroke' skills`,
+    `rg -n agent-desktop skills -- --activate`,
+    `printf '%s' '$(open -g -a Calculator)'`,
+    `bash -lc 'rg -n "agent-desktop" skills'`,
+    `cat <<'EOF'\nagent-desktop launch Calculator\n$(open -g -a Calculator)\nEOF`,
+    `python3 notes.py <<'EOF'\n{"title":"open source driver"}\nEOF`,
+  ])("allows search terms and document data: %s", async (command) => {
+    const { result, select } = await decision(command);
+    expect(result).toBeUndefined();
+    expect(select).toHaveBeenCalledTimes(mode === "ask" ? 1 : 0);
+  });
+});
+
+describe("host command detection", () => {
+  it.each([
+    "git status --short",
+    "pnpm openapi:gen",
+    `echo "done | open it later"`,
+    `python3 notes.py <<'EOF'\n{"title":"open source driver"}\nopen questions\nEOF`,
+  ])("does not reject ordinary work: %s", (command) => {
+    expect(hostComputerUse(command)).toBeUndefined();
+  });
+});
 
 const D = "/Users/me/Library/Application Support/ondra";
 describe("foreignData", () => {
@@ -37,7 +125,7 @@ describe("focusSteal", () => {
     expect(focusSteal('agent-desktop click @s1:e2 --headed --session "$SID"')).toBeDefined();
     expect(focusSteal('agent-desktop press cmd+k --session "$SID"')?.what).toMatch(/press/);
   });
-  it("lets background work through", () => {
+  it("only detects explicit foreground requests, not isolation", () => {
     expect(focusSteal("open -g -a TextEdit note.txt")).toBeUndefined();
     expect(focusSteal("open -gj -a Calculator")).toBeUndefined();
     expect(focusSteal(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
@@ -67,9 +155,11 @@ describe("systemInput", () => {
     expect(systemInput(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`)).toBeDefined();
     expect(systemInput(`osascript -e 'tell application "System Events" to key code 36'`)).toBeDefined();
   });
-  it("lets input to one launched app and ordinary commands through", () => {
-    expect(systemInput(`swift ${dir}/pid.swift`)).toBeUndefined();
-    expect(systemInput(`${dir}/pidbin`)).toBeUndefined();
+  it("rejects PID-targeted input in source and executable imports", () => {
+    expect(systemInput(`swift ${dir}/pid.swift`)).toBeDefined();
+    expect(systemInput(`${dir}/pidbin`)).toBeDefined();
+  });
+  it("leaves ordinary commands to the other permission checks", () => {
     expect(systemInput(`tail -20 ${dir}/notes.log`)).toBeUndefined();
     expect(systemInput('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
     expect(systemInput("swift test && git status")).toBeUndefined();
