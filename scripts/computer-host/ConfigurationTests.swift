@@ -57,6 +57,15 @@ struct ConfigurationTests {
         do { try locked.check(); fatalError("구성 변경 감지 누락") }
         catch let error as HostFailure { precondition(error.code == "CONFIGURATION_CHANGED") }
         print("통과: 실제 flock 중복 거부 및 열린 구성 변경 감지")
+        // Disk and NVRAM stay unlocked by the runner so the framework can lock them.
+        let disk = root.appendingPathComponent("disk.img").path
+        FileManager.default.createFile(atPath: disk, contents: Data([0]), attributes: [.posixPermissions: 0o600])
+        let held = try LockedFile(disk, writable: true, lock: false)
+        let framework = open(disk, O_RDWR | O_CLOEXEC)
+        precondition(framework >= 0 && flock(framework, LOCK_EX | LOCK_NB) == 0, "러너가 디스크 잠금을 선점")
+        close(framework)
+        try held.check()
+        print("통과: 디스크·NVRAM 잠금은 프레임워크가 가짐")
 
         let launch = LaunchConfiguration(version: 1, vmDirectory: root.path, stateDirectory: root.path,
             cpuCount: 2, memoryBytes: 4 * 1024 * 1024 * 1024, hardwareModel: Data([1]),

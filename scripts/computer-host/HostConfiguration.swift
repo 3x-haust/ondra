@@ -60,14 +60,16 @@ final class LockedFile {
     let initial: stat
     let content: Data?
 
-    init(_ path: String, readContent: Bool = false, writable: Bool = false) throws {
+    /// lock takes an exclusive flock. Virtualization.framework locks the disk image and
+    /// auxiliary storage itself and refuses to start if another descriptor holds them.
+    init(_ path: String, readContent: Bool = false, writable: Bool = false, lock: Bool = true) throws {
         self.path = path
         fd = open(path, (writable ? O_RDWR : O_RDONLY) | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         try requireHost(fd >= 0, "FILE_UNAVAILABLE")
         var info = stat()
         guard fstat(fd, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
             && info.st_uid == getuid() && info.st_nlink == 1 && info.st_mode & 0o022 == 0
-            && flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            && (!lock || flock(fd, LOCK_EX | LOCK_NB) == 0) else {
             close(fd)
             throw HostFailure(code: "FILE_BUSY_OR_UNSAFE")
         }
@@ -234,8 +236,9 @@ final class OwnedConfiguration {
         try privateDirectory(launch.vmDirectory)
         if let directory = launch.setupDirectory { try validateSetupDirectory(directory, vmDirectory: launch.vmDirectory) }
         let configFile = try LockedFile(launch.vmDirectory + "/config.json", readContent: true)
-        let disk = try LockedFile(launch.vmDirectory + "/disk.img", writable: true)
-        let auxiliary = try LockedFile(launch.vmDirectory + "/nvram.bin", writable: true)
+        // The config flock is this runner's ownership; the framework locks disk and NVRAM.
+        let disk = try LockedFile(launch.vmDirectory + "/disk.img", writable: true, lock: false)
+        let auxiliary = try LockedFile(launch.vmDirectory + "/nvram.bin", writable: true, lock: false)
         guard let hardware = VZMacHardwareModel(dataRepresentation: launch.hardwareModel), hardware.isSupported,
               let machine = VZMacMachineIdentifier(dataRepresentation: launch.machineIdentifier),
               let mac = VZMACAddress(string: launch.macAddress) else { throw HostFailure(code: "INVALID_PLATFORM") }
