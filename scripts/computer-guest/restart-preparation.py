@@ -1,5 +1,9 @@
 """One approved guest restart; no host activation, forced stop or TCC modification."""
-import fcntl, hashlib, ipaddress, json, os, pathlib, plistlib, secrets, shlex, subprocess, time, uuid
+import fcntl, hashlib, ipaddress, json, os, pathlib, plistlib, secrets, shlex, subprocess, sys, time, uuid
+
+VM = 'ondra-guest'
+# Headless by default. A viewer window on the host is opt-in, only while a person approves guest permissions.
+DISPLAY = 'native' if sys.argv[1:] == ['--viewer'] else 'none'
 
 def require(condition, message):
     if not condition:
@@ -17,7 +21,7 @@ check = json.loads((root / 'isolated-preparer-check.json').read_text())
 require(hashlib.sha256(binary.read_bytes()).hexdigest() == check['sha256'], 'Prepared binary changed')
 subprocess.run(['/usr/bin/codesign', '--verify', '--strict', str(binary)], check=True)
 old_pid = int((root / 'account-run.pid').read_text())
-expected_command = str(root / 'bin/lume-local') + ' run ondra-eval --storage ' + str(root / 'vms') + ' --display none --vnc disabled --network nat'
+expected_command = str(root / 'bin/lume-local') + ' run ' + VM + ' --storage ' + str(root / 'vms') + ' --display none --vnc disabled --network nat'
 actual_command = subprocess.check_output(['/bin/ps', '-p', str(old_pid), '-o', 'command='], text=True).strip()
 require(actual_command == expected_command, 'Runner no longer matches the prepared guest')
 
@@ -53,7 +57,7 @@ end = time.monotonic() + 120
 while time.monotonic() < end:
     alive = subprocess.run(['/bin/ps', '-p', str(old_pid), '-o', 'pid='], capture_output=True).returncode == 0
     if not alive:
-        with (root / 'vms/ondra-eval/config.json').open('rb') as config:
+        with (root / 'vms' / VM / 'config.json').open('rb') as config:
             fcntl.flock(config, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fcntl.flock(config, fcntl.LOCK_UN)
         break
@@ -62,12 +66,12 @@ else:
     raise SystemExit('Old guest did not stop; no force or second restart attempted.')
 print('Original guest OS shut down and runner released its config lock.', flush=True)
 with (root / 'isolated-run.log').open('xb') as output:
-    runner = subprocess.Popen([str(binary), 'run', 'ondra-eval', '--storage', str(root / 'vms'), '--display', 'native', '--vnc', 'disabled', '--network', 'nat'], env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+    runner = subprocess.Popen([str(binary), 'run', VM, '--storage', str(root / 'vms'), '--display', DISPLAY, '--vnc', 'disabled', '--network', 'nat'], env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
 (root / 'isolated-run.pid').write_text(str(runner.pid))
 end = time.monotonic() + 480
 while time.monotonic() < end:
     require(runner.poll() is None, 'New runner exited; do not relaunch automatically')
-    status = subprocess.run([str(binary), 'get', 'ondra-eval', '--storage', str(root / 'vms'), '--format', 'json'], env=env, capture_output=True, text=True)
+    status = subprocess.run([str(binary), 'get', VM, '--storage', str(root / 'vms'), '--format', 'json'], env=env, capture_output=True, text=True)
     if status.returncode == 0:
         details = json.loads(status.stdout)[0]
         address = details.get('ipAddress')
@@ -99,7 +103,7 @@ result = remote('/usr/local/libexec/ondra-computer-endpoint', json.dumps(request
 identity = json.loads(result.stdout)
 require(result.returncode == 0, 'Renewed endpoint identity query failed')
 require(all(identity[k] == v for k, v in {'taskId': provision['taskId'], 'vmUuid': provision['vmUuid'], 'bootNonce': boot['bootNonce']}.items()), 'Renewed endpoint identity mismatch')
-session = json.loads((root / 'vms/ondra-eval/sessions.json').read_text())
+session = json.loads((root / 'vms' / VM / 'sessions.json').read_text())
 require(session.get('vncEnabled') is False and session.get('pid') == runner.pid, 'Runner session mismatch')
 require(not session.get('sharedDirectories'), 'Explicit directory sharing found')
 require('Directory sharing configuration deviceCount=0 enabled=false' in (root / 'isolated-run.log').read_text() or 'Directory sharing configuration enabled=false deviceCount=0' in (root / 'isolated-run.log').read_text(), 'Actual directory sharing configuration not confirmed')
