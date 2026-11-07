@@ -165,18 +165,5 @@ src/                 SolidJS UI
 src-tauri/src/       Rust: 엔진 프로세스, 공유 브라우저, 워크트리, 키체인, 기기, 알림
 skills/              모든 일이 받는 스킬
 extensions/          엔진 확장(권한, 기기, 훅, 기억)
-evals/               하네스 평가와 개선 루프
 brand/ docs/         브랜드와 디자인 시스템
 ```
-
-## 평가
-
-Ondra를 고치는 기준은 "다음 요청을 혼자서 잘 해내는가"예요. `evals/cases/`의 케이스를 실제로 메인에게 보내 채점하고, `evals/main/`은 메인이 요청을 어떻게 나누는지 봐요.
-
-```sh
-node evals/run.mjs                  # 전체
-node evals/run.mjs cu-calculator    # 하나만
-node evals/main-sim.mjs --parallel 5 <케이스>   # 메인의 나누기
-```
-
-케이스마다 끝까지 했는지, 답, 증거 사진, 걸린 시간, 도구 수, 실패한 도구, 포커스를 가져갔는지, 기기를 정리했는지 봐요. 결과는 `evals/results/`에, 배운 것은 `evals/LEARNINGS.md`에 남아요.

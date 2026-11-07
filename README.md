@@ -166,18 +166,5 @@ src/                 SolidJS UI
 src-tauri/src/       Rust: engine process, shared browser, worktrees, keychain, devices, notifications
 skills/              skills every job gets
 extensions/          engine extensions (permissions, devices, hooks, memory)
-evals/               harness evals and the improvement loop
 brand/ docs/         brand and design system
 ```
-
-## Evals
-
-The bar for changing Ondra is "does it do the next request well on its own". The cases in `evals/cases/` are sent to main for real and graded; `evals/main/` checks how main routes requests.
-
-```sh
-node evals/run.mjs                  # all
-node evals/run.mjs cu-calculator    # just one
-node evals/main-sim.mjs --parallel 5 <cases>   # main's routing
-```
-
-Each case checks whether it finished, the answer, evidence screenshots, time taken, tool count, failed tools, whether it took focus, and whether it cleaned up its devices. Results go to `evals/results/`; what was learned goes to `evals/LEARNINGS.md`.
