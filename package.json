@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@types/node": "^24.19.2",
     "agent-browser": "^0.41.1",
     "agent-desktop": "^1.1.0",
     "typescript": "~6.0.3",
