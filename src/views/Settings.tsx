@@ -30,6 +30,7 @@ import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
 import { available, checkedAt, checkUpdate, installNow, updateStatus } from "../engine/update";
+import { setNotesFor } from "../engine/releaseNotes";
 
 
 function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
@@ -139,11 +140,12 @@ function UpdateRow() {
   return (
     <Row title={`Ondra ${version() ?? ""}`}>
       <span class="set-note">{note()}</span>
+      <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>릴리즈 노트</button>
       <Show
         when={available()}
         fallback={<button class="btn sm" disabled={updateStatus() === "checking" || updateStatus() === "installing"} onClick={() => void checkUpdate(true)}>업데이트 확인</button>}
       >
-        <button class="btn primary sm" disabled={updateStatus() === "installing"} onClick={() => void installNow()}>업데이트</button>
+        <button class="btn primary sm" disabled={updateStatus() === "installing"} onClick={() => void installNow()}>{available()} 설치</button>
       </Show>
     </Row>
   );
