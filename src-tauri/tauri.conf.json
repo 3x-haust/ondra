@@ -60,7 +60,8 @@
       "binaries/agent-desktop-macos-helper",
       "binaries/ondra-engine",
       "binaries/ondra-binary",
-      "binaries/ondra-simhelper"
+      "binaries/ondra-simhelper",
+      "binaries/ondra-cuhost"
     ],
     "icon": [
       "icons/32x32.png",

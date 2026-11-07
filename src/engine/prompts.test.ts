@@ -76,19 +76,26 @@ const bundledSkills = import.meta.glob<string>("../../skills/*/SKILL.md", { quer
 const mimikyuFile = "../../skills/mimikyu/SKILL.md";
 const mimikyuPath = decodeURIComponent(new URL(mimikyuFile, import.meta.url).pathname);
 
-describe("isolated computer-use instructions", () => {
-  it.each([["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM]])("requires a guest for the %s role", (_role, prompt) => {
-    expect(prompt).toContain("isolated macOS guest");
-    expect(prompt).toContain("No host fallback");
-    expect(prompt).not.toContain("It all runs behind");
+describe("background host computer-use instructions", () => {
+  it.each([["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM]])("runs in the background on this Mac for the %s role", (_role, prompt) => {
+    expect(prompt).toContain("background");
+    // never teaches the raw host-GUI escape hatches as a fallback
+    expect(prompt).toContain("blocked");
+    expect(prompt).toMatch(/AppleScript\/System Events|agent-desktop/);
+    // the guest VM survives only as an optional separate mode, no longer required
+    expect(prompt).toContain("optional separate mode");
+    expect(prompt).not.toContain("No host fallback");
   });
 
   it("does not teach host GUI commands as a background path", () => {
     const skill = bundledSkills["../../skills/computer-use/SKILL.md"];
-    expect(skill).toContain("isolated macOS guest");
-    expect(skill).toContain("not an OS sandbox");
+    expect(skill).toContain("background");
+    expect(skill).toContain("never take the user's focus");
+    // the optional isolated guest is still documented, just not the default
+    expect(skill).toContain("isolated macOS");
+    // and raw host GUI automation is still refused, not demonstrated
     expect(skill).not.toMatch(/agent-desktop (launch|press|click|batch)|open -g -a/);
-    expect(skill).not.toContain("never move the user's mouse or steal focus");
+    expect(skill).toMatch(/cliclick|AppleScript or System Events/);
   });
 });
 
