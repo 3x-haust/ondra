@@ -8553,3 +8553,19 @@ textarea { resize: none !important; field-sizing: content; }
 .fv .dv-num {
   padding-right: var(--s-16);
 }
+/* composer menus open from the composer's edge, so they never cover what's being typed */
+.composer .composer-bar .picker,
+.composer-wrap .ctray .picker {
+  position: static;
+}
+/* "생각 깊이" reads like the other section labels in the menu */
+.eff-head > span {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+/* "5시간 41%": Korean words read in the UI font, numbers stay even */
+.status-line .st-lim {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+}

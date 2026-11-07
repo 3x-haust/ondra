@@ -2,7 +2,7 @@
 import { modelsOf } from "../engine/modelList";
 import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
 import { appCommands } from "../state/commands";
-import { createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { EFFORTS, prettyModel } from "../ui/ModelPicker";
@@ -629,10 +629,13 @@ export function SettingsPage(props: { onBack: () => void }) {
   };
   onMount(() => window.addEventListener("keydown", key, true));
   onCleanup(() => window.removeEventListener("keydown", key, true));
+  let body!: HTMLDivElement;
+  // each tab opens at its top
+  createEffect(on(settingsTab, () => body && (body.scrollTop = 0), { defer: true }));
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />
-      <div class="settings-body">
+      <div class="settings-body" ref={body}>
         <div class="settings-inner">
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>
