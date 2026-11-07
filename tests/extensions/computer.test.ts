@@ -97,6 +97,24 @@ describe("computer extension", () => {
     expect(boundary.create).not.toHaveBeenCalled();
   });
 
+  it("returns a coordinate frame only for a whole-screen look", async () => {
+    startResponses();
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    boundary.execute.mockResolvedValueOnce({ version: "2.6", command: "list-displays", ok: true,
+      data: [{ id: "1", is_primary: true, scale: 1, bounds: { x: 0, y: 0, width: 1, height: 1 } }] }).mockResolvedValueOnce(screenshot());
+    const looked = data(await call({ action: "look", screen: true }));
+    expect(looked).toMatchObject({ frame: "f1", actionable: true, width: 1, height: 1 });
+    expect(boundary.execute.mock.calls.slice(3).map(([argv]) => argv)).toEqual([
+      ["--session", "fixture", "list-displays"], ["--session", "fixture", "screenshot", "--screen", "0"]]);
+    boundary.execute.mockResolvedValueOnce(ok("mouse-click", {})).mockResolvedValueOnce(snapshot("s2"));
+    const clicked = data(await call({ action: "act", input: { kind: "click-at", epoch: "f1", x: 0, y: 0 } }));
+    expect(boundary.execute.mock.calls[5][0]).toEqual(["--session", "fixture", "mouse-click", "--xy=0,0", "--button", "left", "--count", "1", "--headed"]);
+    expect(clicked.observation.snapshot_id).toBe("s2");
+    await expect(call({ action: "look", screen: "yes" })).rejects.toThrow("screen must be boolean");
+    await expect(call({ action: "observe", screen: true })).rejects.toThrow("Invalid computer action fields");
+  });
+
   it("registers the native authority at session start before runtime creation", async () => {
     const { ready } = load();
     await ready;
