@@ -165,6 +165,8 @@ function actOf(t: Task): Act {
   const last = t.entries[t.entries.length - 1];
   if (last?.kind === "tool" && !last.tool.endedAt) return pick(last.tool.kind, last.tool.target);
   if (live[t.id]) return pick("write-text");
+  // what the job itself says it's doing, as in its own view
+  if (t.now) return { kind: "think", icon: ACT.think.icon, label: t.now };
   return pick("think");
 }
 
@@ -735,7 +737,7 @@ export function Canvas() {
     const minX = Math.min(...ns.map((n) => n.x)), maxX = Math.max(...ns.map((n) => n.x + n.w));
     const minY = Math.min(...ns.map((n) => n.y)), maxY = Math.max(...ns.map((n) => n.y + n.h));
     const zw = (r.width - 120) / (maxX - minX), zh = (r.height - 150) / (maxY - minY);
-    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.55, Math.min(1, zw, Math.max(zh, 0.8)));
+    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.5, Math.min(1, zw, Math.max(zh, 0.5)));
     if (animate) vp.classList.add("glide");
     setZoom(z);
     // too tall to fit: start at the top, readable

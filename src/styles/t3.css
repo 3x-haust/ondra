@@ -8569,3 +8569,22 @@ textarea { resize: none !important; field-sizing: content; }
   font-family: var(--font);
   font-variant-numeric: tabular-nums;
 }
+/* light: the folded cards peek out as thin lines, not a grey bar */
+:root[data-theme="light"] .cv-node.cv-more:not(:has(.cv-more-row.open)) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 5px 0 -1px var(--cv-card),
+    0 5px 0 0 color-mix(in srgb, var(--ink) 7%, transparent),
+    0 10px 0 -2px var(--cv-card),
+    0 10px 0 -1px color-mix(in srgb, var(--ink) 4%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .cv-node.cv-more:not(:has(.cv-more-row.open)) {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+      0 5px 0 -1px var(--cv-card),
+      0 5px 0 0 color-mix(in srgb, var(--ink) 7%, transparent),
+      0 10px 0 -2px var(--cv-card),
+      0 10px 0 -1px color-mix(in srgb, var(--ink) 4%, transparent);
+  }
+}

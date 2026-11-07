@@ -550,7 +550,14 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       const fs = FS[n.kind] ?? 11;
       const w = textW(labelOf(n) + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
       const box = [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
+      // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
+      if (n.kind === "file" && rank(n) > 1) continue;
       if (rank(n) > 0 && placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3])) continue;
+      // nor across another node
+      if (rank(n) > 0 && props.graph.nodes.some((o) => {
+        const ob = o.id !== n.id && bodies.get(o.id);
+        return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
+      })) continue;
       placed.push(box);
       on.add(n.id);
     }
