@@ -111,7 +111,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         </Show>
         <Show when={t().pinned && !props.kid}><Icon name="pin" size={11} class="sb-pin" /></Show>
         <span class="sb-meta">
-          <Show when={b() === "review" && !meta()} fallback={meta()}>
+          <Show when={b() === "review" && !meta() && (changes(t()).add || changes(t()).del)} fallback={meta()}>
             <span class="add">+{changes(t()).add}</span>
             <Show when={changes(t()).del}> <span class="del">−{changes(t()).del}</span></Show>
           </Show>
