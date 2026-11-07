@@ -33,6 +33,7 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
     let owned: OwnedConfiguration
     let vm: VZVirtualMachine
     private var stopping = false
+    private var releasing = false
     private var viewer: NSWindow?
     private var installer: VZMacOSInstaller?
 
@@ -83,7 +84,23 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
         else { exit(75) }
     }
 
-    func guestDidStop(_ virtualMachine: VZVirtualMachine) { terminate("GUEST_STOPPED") }
+    /// Owner release after it asked the guest OS to shut down (through the guest's
+    /// provisioner): wait for that, and power off only if it has not stopped in time.
+    /// VZ requestStop is not used: a macOS guest ignored it for 40 s in testing.
+    func release() {
+        guard !stopping else { return }
+        releasing = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { self.terminate("OWNER_RELEASED") }
+    }
+
+    func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+        if releasing && !stopping {
+            stopping = true
+            emit(["version": 1, "event": "revoked", "code": "OWNER_RELEASED"])
+            exit(0)
+        }
+        terminate("GUEST_STOPPED")
+    }
     func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
         terminate("VM_STOPPED")
     }
@@ -115,12 +132,13 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
                                   Set(value.keys) == ["version", "id", "op"],
                                   let version = value["version"] as? Int, version == 1,
                                   let id = value["id"] as? String, id.count <= 64,
-                                  let op = value["op"] as? String, ["inspect", "stop", "viewer"].contains(op) else {
+                                  let op = value["op"] as? String, ["inspect", "stop", "release", "viewer"].contains(op) else {
                                 throw HostFailure(code: "INVALID_REQUEST")
                             }
                             DispatchQueue.main.sync {
                                 if op == "stop" { self.terminate("OWNER_RELEASED") }
-                                else {
+                                else if op == "release" { self.release() }
+                                else if !self.releasing {
                                     do {
                                         if op == "viewer" { try self.openViewer() }
                                         try self.inspect(id)
@@ -129,7 +147,8 @@ final class Runner: NSObject, VZVirtualMachineDelegate {
                                 }
                             }
                         } catch {
-                            DispatchQueue.main.async { self.terminate("OWNER_CHANNEL_LOST") }
+                            // A released owner stops sending frames while the guest shuts down.
+                            DispatchQueue.main.async { if !self.releasing { self.terminate("OWNER_CHANNEL_LOST") } }
                             return
                         }
                     }

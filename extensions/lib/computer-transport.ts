@@ -52,6 +52,18 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Parses the endpoint's own refusal record; anything else stays an unknown failure. */
+function endpointRefusal(bytes: Buffer): string | undefined {
+  if (bytes.length > 4096) return undefined;
+  try {
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!record(value) || value.version !== 1 || !record(value.error)) return undefined;
+    const { code, delivery, retry } = value.error;
+    return typeof code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(code) && delivery === "not_delivered" && retry === "never"
+      ? code : undefined;
+  } catch { return undefined; }
+}
+
 function validateMetadata(value: VerifiedGuestMetadata): void {
   if (!record(value) || value.version !== 1 || typeof value.taskId !== "string" ||
       !/^[a-zA-Z0-9_-]{1,128}$/.test(value.taskId) || typeof value.vmUuid !== "string" || !UUID.test(value.vmUuid) ||
@@ -136,14 +148,15 @@ function sshArguments(directory: string, guest: VerifiedGuestMetadata, timeoutMs
 }
 
 /**
- * Executes only the fixed guest endpoint. Request and response are single JSON
- * documents. identity requests contain only version, op and a fresh requestId;
- * the endpoint must read taskId/vmUuid/bootNonce from its own provisioned state,
- * not echo client claims. exec requests also carry that identity plus argv.
- * The endpoint must check identity BEFORE executing its fixed desktop binary
- * with argv (never a shell), and return {version:1, requestId, taskId, vmUuid,
- * bootNonce, result}. Result is the unmodified desktop envelope, not proof of
- * action success. stdout must contain no banners/logs; stderr is not exposed.
+ * Executes only the fixed guest endpoint, in one SSH round trip per command.
+ * Request and response are single JSON documents. exec requests carry the
+ * verified taskId/vmUuid/bootNonce plus argv. The endpoint reads its identity
+ * from its own provisioned state and checks the claims BEFORE executing its
+ * fixed desktop binary with argv (never a shell); a refusal exits 64 with a
+ * not_delivered record on stderr. Success returns {version:1, requestId, taskId,
+ * vmUuid, bootNonce, result}, checked here again. Result is the unmodified
+ * desktop envelope, not proof of action success. stdout must contain no
+ * banners/logs; stderr is parsed only for that refusal record.
  *
  * The private directory contains manifest.json (GuestManifest), identity and
  * known_hosts (exactly `ondra-guest-<vmUuid> <sshHostKey>\n`). Keep it immutable
@@ -184,7 +197,8 @@ export class ComputerTransport {
     this.active = controller;
     options.signal?.addEventListener("abort", abort, { once: true });
     try {
-      await this.exchange("identity", undefined, controller.signal, deadline);
+      // One SSH round trip: the endpoint checks these identity claims against its own
+      // provisioned boot state before it runs anything, and echoes its identity back.
       return await this.exchange("exec", args, controller.signal, deadline);
     } catch (error) {
       // Never retry an ambiguous action or reuse an unproven connection.
@@ -196,11 +210,11 @@ export class ComputerTransport {
     }
   }
 
-  private async exchange(op: "identity" | "exec", argv: string[] | undefined, signal: AbortSignal, deadline: number): Promise<unknown> {
+  private async exchange(op: "exec", argv: string[], signal: AbortSignal, deadline: number): Promise<unknown> {
     if (signal.aborted) refuse("CANCELLED");
     if (deadline <= Date.now()) refuse("TIMEOUT");
     const requestId = randomUUID();
-    const request = op === "identity" ? { version: 1, op, requestId } : {
+    const request = {
       version: 1, op, requestId, taskId: this.guest.taskId, vmUuid: this.guest.vmUuid, bootNonce: this.guest.bootNonce, argv,
     };
     const args = sshArguments(this.directory, this.guest, deadline - Date.now());
@@ -221,7 +235,7 @@ export class ComputerTransport {
         reject(new ComputerTransportError("SSH_ERROR", "not_delivered"));
         return;
       }
-      const delivery = (): ComputerDelivery => op === "exec" && sent ? "unknown" : "not_delivered";
+      const delivery = (): ComputerDelivery => sent ? "unknown" : "not_delivered";
       const finish = (error?: ComputerTransportError, result?: unknown) => {
         if (settled) return;
         settled = true;
@@ -245,11 +259,12 @@ export class ComputerTransport {
       child.stdin.on("error", () => fail("STDIN_ERROR"));
       child.stdout.on("error", () => fail("STDOUT_ERROR"));
       child.stderr.on("error", () => fail("STDERR_ERROR"));
+      const errors: Buffer[] = [];
       const data = (chunk: Buffer, stdout: boolean) => {
         if (settled) return;
         size += chunk.length;
         if (size > MAX_OUTPUT) return fail("OUTPUT_LIMIT");
-        if (stdout) chunks.push(chunk);
+        (stdout ? chunks : errors).push(chunk);
       };
       child.stdout.on("data", (chunk: Buffer) => data(chunk, true));
       child.stderr.on("data", (chunk: Buffer) => data(chunk, false));
@@ -264,6 +279,11 @@ export class ComputerTransport {
         if (settled) return;
         if (signal.aborted) return onAbort();
         if (Date.now() >= deadline) return fail("TIMEOUT");
+        if (code === 64 && !exitSignal) {
+          // The pinned endpoint exits 64 only when it refused before running anything.
+          const refusal = endpointRefusal(Buffer.concat(errors));
+          if (refusal) return finish(new ComputerTransportError(refusal, "not_delivered"));
+        }
         if (code !== 0 || exitSignal) return fail("SSH_EXIT");
         let response: unknown;
         try { response = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))); }
@@ -272,7 +292,7 @@ export class ComputerTransport {
             response.taskId !== this.guest.taskId || response.vmUuid !== this.guest.vmUuid || response.bootNonce !== this.guest.bootNonce) {
           return fail("GUEST_IDENTITY_MISMATCH");
         }
-        if (op === "exec" && !Object.prototype.hasOwnProperty.call(response, "result")) return fail("INVALID_RESPONSE");
+        if (!Object.prototype.hasOwnProperty.call(response, "result")) return fail("INVALID_RESPONSE");
         finish(undefined, response.result);
       });
       if (signal.aborted) onAbort();

@@ -17,7 +17,8 @@ export type ComputerRuntimeJob = { taskId: string; artifactsDir: string };
  * The endpoint must verify the real guest UUID and current boot itself.
  *
  * Abort invalidated BEFORE stopping/rebooting/reassigning the VM or changing any
- * of these properties. renew is read-only, abort-aware and bounded to 5 seconds.
+ * of these properties. renew is read-only, abort-aware and bounded to 5 seconds;
+ * a runtime reuses a fresh lease for back-to-back commands instead of renewing each.
  * Leases are at most 60 seconds. The authority must hold exclusive VM ownership
  * across leases, including across engine processes, not just this JS module.
  * Nothing here proves these native facts. There is deliberately no env/file
@@ -41,6 +42,9 @@ type Binding = {
   claimed: boolean;
 };
 const bindings = new Map<string, Binding>();
+
+/** A lease (at most 45 s from the native owner) is reused while this much of it remains. */
+const LEASE_REUSE_REMAINING_MS = 30_000;
 
 function refuse(code: string): never { throw new ComputerTransportError(code, "not_delivered"); }
 function jobKey(job: ComputerRuntimeJob): string {
@@ -128,7 +132,8 @@ export function createComputerRuntime(job: ComputerRuntimeJob) {
   let pending: Promise<void> | undefined;
   let disposal: Promise<void> | undefined;
   let identity: Readonly<VerifiedGuestMetadata> | undefined;
-  const invalidate = () => { closed = true; active?.abort(); transport?.dispose(); };
+  let verified: VerifiedGuestMetadata | undefined;
+  const invalidate = () => { closed = true; verified = undefined; active?.abort(); transport?.dispose(); };
   binding.revoked.signal.addEventListener("abort", invalidate, { once: true });
 
   function checkOwnership() {
@@ -156,7 +161,10 @@ export function createComputerRuntime(job: ComputerRuntimeJob) {
     let dispatched = false;
     try {
       checkOwnership();
-      const lease = { ...await renew(binding!.authority, controller.signal) };
+      // Reuse a lease verified within the last few seconds. The native owner still
+      // revokes it immediately, and the endpoint rechecks boot identity per command.
+      const lease = verified && verified.expiresAt - Date.now() >= LEASE_REUSE_REMAINING_MS
+        ? verified : { ...await renew(binding!.authority, controller.signal) };
       if (controller.signal.aborted || closed) refuse("CANCELLED");
       checkOwnership();
       const fields = ["version", "taskId", "hostUuid", "vmUuid", "bootNonce", "host", "port", "username", "sshHostKey", "identitySha256"] as const;
@@ -164,6 +172,7 @@ export function createComputerRuntime(job: ComputerRuntimeJob) {
       // Constructor validates lease age and independent host/guest distinction.
       transport = new ComputerTransport(binding!.directory, lease);
       identity ??= Object.freeze({ ...lease });
+      verified = lease;
       dispatched = true;
       const value = await transport.execute(args, { signal: controller.signal });
       // A response racing revocation is not permission to continue this runtime.
@@ -171,6 +180,7 @@ export function createComputerRuntime(job: ComputerRuntimeJob) {
       return value;
     } catch (error) {
       closed = true;
+      verified = undefined;
       if (dispatched && (!(error instanceof ComputerTransportError) || error.delivery === "unknown")) uncertain = true;
       throw error;
     } finally {

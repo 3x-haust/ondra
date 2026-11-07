@@ -40,7 +40,7 @@ export const engineModels = (accountId: string) => call<string[]>("engine_models
 
 // ───────────────────────── isolated computer preparation ─────────────────────────
 export interface ComputerStatus {
-  phase: "idle" | "preparing" | "setup" | "starting" | "ready" | "recovering" | "error" | "closed";
+  phase: "idle" | "preparing" | "setup" | "stopped" | "starting" | "ready" | "recovering" | "error" | "closed";
   busy: boolean;
   prepared: boolean;
   taskId: string | null;

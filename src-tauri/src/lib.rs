@@ -234,7 +234,10 @@ pub fn run() {
         .manage(browser::Shared::default())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
-            app.manage(computer_setup::ComputerState::default());
+            {
+                app.manage(computer_setup::ComputerState::default());
+                computer_setup::resume_existing(app.handle());
+            }
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());

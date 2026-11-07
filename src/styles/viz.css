@@ -37,7 +37,7 @@
 .viz { display: grid; gap: var(--s-8); min-width: 0; }
 .viz-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-12); flex-wrap: wrap; }
 .viz-host { position: relative; min-width: 0; }
-.viz-svg { display: block; max-width: 100%; overflow: visible; font-size: var(--fs-xs); }
+.viz-svg { display: block; max-width: 100%; overflow: visible; font: var(--fs-xs) var(--font); }
 .viz-svg text { fill: var(--ink-2); }
 .viz-axis text { fill: var(--ink-3); font-variant-numeric: tabular-nums; }
 .viz-axis-title { fill: var(--ink-3); font-size: 11px; }

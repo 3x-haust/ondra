@@ -7,7 +7,7 @@ import { state } from "../state/store";
 
 const phases: Record<ComputerStatus["phase"], string> = {
   idle: "아직 준비하지 않았어요", preparing: "macOS를 설치하고 있어요", setup: "게스트 설정을 마쳐 주세요",
-  starting: "공유 없이 새로 부팅하고 있어요", ready: "선택한 작업에 연결할 수 있어요",
+  stopped: "준비된 게스트가 꺼져 있어요", starting: "공유 없이 새로 부팅하고 있어요", ready: "선택한 작업에 연결할 수 있어요",
   recovering: "이전 실행을 종료하고 복구하고 있어요", error: "연결 상태를 확인해 주세요", closed: "연결이 닫혔어요",
 };
 
@@ -62,7 +62,7 @@ export function ComputerSetupPanel() {
               <button class="btn sm" disabled={busy() || unavailable()} onClick={() => void pickImage()}>파일 선택</button>
               <button class="btn sm" disabled={busy() || unavailable() || !image()} onClick={() => void run(() => computerPrepare({ restoreImage: image() }))}>새 게스트 준비</button>
             </div>
-            <p class="desc">4코어 · 메모리 8 GiB · 디스크 64 GiB로 새로 설치해요. 다운로드는 하지 않아요. 앱을 종료하면 기존 게스트에 다시 연결할 수 없어요.</p>
+            <p class="desc">4코어 · 메모리 8 GiB · 디스크 64 GiB로 새로 설치해요. 다운로드는 하지 않아요. 앱을 종료하면 게스트도 종료되고, 다음에 앱을 열면 같은 게스트를 다시 사용해요.</p>
           </div>
         </Show>
         <Show when={status()?.prepared}>
@@ -83,7 +83,7 @@ export function ComputerSetupPanel() {
             <Show when={status()?.taskId}><p class="desc">연결 작업: {state.tasks.find(t => t.space === state.space && `t:${t.id}` === status()?.taskId)?.title ?? "다른 공간의 작업"}</p></Show>
             <p class="desc">작업을 먼저 일시정지해 주세요. 시작·복구는 게스트를 재부팅해요. 연결한 뒤 해당 작업의 ‘다시 시작’을 눌러 새 엔진으로 진행해 주세요.</p>
             <div class="set-value">
-              <button class="btn sm" disabled={busy() || status()?.phase !== "setup" || !(status()?.taskId ? bound() : selected())} onClick={() => void run(() => computerStart(status()?.taskId ?? task()))}>자동화 시작</button>
+              <button class="btn sm" disabled={busy() || (status()?.phase !== "setup" && status()?.phase !== "stopped") || !(status()?.taskId ? bound() : selected())} onClick={() => void run(() => computerStart(status()?.taskId ?? task()))}>자동화 시작</button>
               <button class="btn sm" disabled={busy() || status()?.phase === "setup" || !status()?.taskId || !bound()} onClick={() => void run(() => computerRecover(status()!.taskId!))}>연결 복구</button>
             </div>
           </div>

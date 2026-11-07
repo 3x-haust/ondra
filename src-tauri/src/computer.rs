@@ -28,6 +28,8 @@ use std::{
 
 const FRAME_LIMIT: usize = 16 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long the guest OS gets to shut down before the runner is killed.
+const GRACEFUL_STOP: Duration = Duration::from_secs(35);
 const REVOKED: &[u8] = b"{\"version\":1,\"event\":\"revoked\",\"code\":\"GUEST_REVOKED\"}\n";
 pub const SOCKET_ENV: &str = "ONDRA_COMPUTER_SOCKET";
 type Result<T> = std::result::Result<T, &'static str>;
@@ -222,6 +224,8 @@ pub struct OwnedVm {
     boot_preparation_started: AtomicBool,
     ended: Arc<AtomicBool>,
     viewer: Arc<AtomicBool>,
+    /// Set once the guest OS was asked to shut down; stopping then waits for it.
+    release: Arc<AtomicBool>,
     launch: Option<HostLaunch>,
     authority: Mutex<Option<GuestAuthority>>,
     machine_digest: String,
@@ -316,6 +320,8 @@ impl OwnedVm {
         let worker_viewer = viewer.clone();
         let active = Arc::new(AtomicBool::new(true));
         let worker_active = active.clone();
+        let release = Arc::new(AtomicBool::new(false));
+        let worker_release = release.clone();
         let machine_digest = ready["machineIdentifierSha256"]
             .as_str()
             .unwrap()
@@ -324,10 +330,16 @@ impl OwnedVm {
         thread::spawn(move || {
             let _held_binary = held_binary;
             let mut sequence = 0u64;
-            while matches!(
-                stopping.recv_timeout(Duration::from_secs(2)),
-                Err(mpsc::RecvTimeoutError::Timeout)
-            ) {
+            let mut graceful = false;
+            loop {
+                match stopping.recv_timeout(Duration::from_secs(2)) {
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Ok(()) => {
+                        graceful = true;
+                        break;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
                 if !matches!(child.try_wait(), Ok(None)) {
                     break;
                 }
@@ -362,8 +374,21 @@ impl OwnedVm {
                 }
             }
             worker_active.store(false, Ordering::Release);
-            // Killing the owned runner is not proof of an in-flight guest action's outcome.
+            // After the guest OS was asked to shut down, give it time so its disk is clean
+            // for the next app run; then power off whatever is left. Neither proves an
+            // in-flight action's outcome.
             // The durable fence remains; no timer or Drop implementation clears it.
+            if graceful
+                && worker_release.load(Ordering::Acquire)
+                && stdin
+                    .write_all(b"{\"version\":1,\"id\":\"release\",\"op\":\"release\"}\n")
+                    .is_ok()
+            {
+                let deadline = Instant::now() + GRACEFUL_STOP;
+                while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(100));
+                }
+            }
             let _ = child.kill();
             if child.wait().is_ok() {
                 worker_ended.store(true, Ordering::Release);
@@ -376,6 +401,7 @@ impl OwnedVm {
             boot_preparation_started: AtomicBool::new(false),
             ended,
             viewer,
+            release,
             launch: Some(actual_launch),
             authority: Mutex::new(None),
             machine_digest,
@@ -421,6 +447,44 @@ impl OwnedVm {
         }
         Ok(request)
     }
+    /// A VM whose runner is proven gone (see `ComputerSetup::resume`). It owns no
+    /// process; the next start launches a runner on the same machine files.
+    fn stopped(launch: HostLaunch, host_uuid: String, machine_digest: String) -> Arc<Self> {
+        let (stop, _) = mpsc::channel();
+        Arc::new(Self {
+            active: Arc::new(AtomicBool::new(false)),
+            stop,
+            host_uuid,
+            boot_preparation_started: AtomicBool::new(true),
+            ended: Arc::new(AtomicBool::new(true)),
+            viewer: Arc::new(AtomicBool::new(false)),
+            release: Arc::new(AtomicBool::new(false)),
+            launch: Some(launch),
+            authority: Mutex::new(None),
+            machine_digest,
+            claimed: AtomicBool::new(false),
+        })
+    }
+    /// Best effort, for app exit: asks the authenticated guest's provisioner to shut
+    /// the guest OS down, so the next stop waits for a clean power-off.
+    fn request_guest_shutdown(&self) {
+        let Ok(authority) = self.authority.lock() else { return };
+        let Some(authority) = authority.as_ref() else { return };
+        let Ok(host) = owned_address(&authority.mac) else { return };
+        let challenge = random_secret();
+        let reply = ssh_exchange(
+            &authority.provision_directory,
+            &authority.provision_identity,
+            "ondra-enrollment",
+            &host,
+            true,
+            &json!({"op":"shutdown","challenge":challenge}),
+            Duration::from_secs(3),
+        );
+        if reply.is_ok_and(|r| r["version"] == 1 && r["challenge"] == challenge.as_str() && r["shutdown"] == true) {
+            self.release.store(true, Ordering::Release);
+        }
+    }
     pub fn quarantine(&self) {
         self.active.store(false, Ordering::Release);
         let _ = self.stop.send(());
@@ -430,7 +494,7 @@ impl OwnedVm {
     }
     fn stop_and_wait(&self) -> Result<()> {
         self.quarantine();
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + GRACEFUL_STOP + Duration::from_secs(10);
         while !self.ended.load(Ordering::Acquire) {
             if Instant::now() >= deadline {
                 return Err("OWNED_PROCESS_NOT_STOPPED");
@@ -920,7 +984,38 @@ pub struct ComputerSetup {
     vm: Mutex<Arc<OwnedVm>>,
     files: Vec<(PathBuf, File)>,
     previous_boot: Mutex<Option<(String, String)>>,
+    /// Loaded from disk after an app restart; the first boot needs no recovery request.
+    resumed: AtomicBool,
 }
+
+/// Machine files a runner holds with an exclusive flock while it runs.
+const MACHINE_FILES: [&str; 3] = ["config.json", "disk.img", "nvram.bin"];
+/// Written once the OS install finished, and once automation first authenticated.
+const INSTALLED_MARKER: &str = "installed";
+const AUTOMATION_MARKER: &str = "automation";
+
+fn open_machine_files(machine: &Path) -> Result<Vec<(PathBuf, File)>> {
+    MACHINE_FILES
+        .iter()
+        .map(|name| {
+            let path = machine.join(name);
+            OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+                .open(&path)
+                .map(|file| (path, file))
+                .map_err(|_| "OWNED_FILE_UNAVAILABLE")
+        })
+        .collect()
+}
+
+fn mark(path: &Path) -> Result<()> {
+    match write_private(path, b"ok\n", 0o600) {
+        Ok(()) | Err("PRIVATE_FILE_EXISTS") => Ok(()),
+        Err(code) => Err(code),
+    }
+}
+
 impl ComputerSetup {
     pub fn prepare(assets: ComputerAssets, request: SetupRequest) -> Result<Self> {
         // Validate all assets and paths before generating credentials or launching anything.
@@ -1020,16 +1115,9 @@ impl ComputerSetup {
             .map_err(|_| "INVALID_ENROLLMENT")?,
             0o600,
         )?;
-        let mut files = Vec::new();
-        for name in ["config.json", "disk.img", "nvram.bin"] {
-            let path = machine.join(name);
-            let file = OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-                .open(&path)
-                .map_err(|_| "OWNED_FILE_UNAVAILABLE")?;
-            files.push((path, file));
-        }
+        let files = open_machine_files(&machine)?;
+        // The runner reports ready only after the OS install finished and the guest booted.
+        mark(&request.directory.join(INSTALLED_MARKER))?;
         Ok(Self {
             assets,
             directory: request.directory,
@@ -1038,13 +1126,107 @@ impl ComputerSetup {
             vm: Mutex::new(vm),
             files,
             previous_boot: Mutex::new(None),
+            resumed: AtomicBool::new(false),
         })
     }
+
+    /// Loads a guest prepared by an earlier app run, without booting it. Every
+    /// machine file must take an exclusive flock first: a runner holds those locks
+    /// for its whole life, so success proves no earlier runner is still alive.
+    /// Keys, the server pin and the enrollment secret are the ones `prepare` wrote.
+    pub fn resume(assets: ComputerAssets, directory: PathBuf, state_directory: PathBuf) -> Result<Self> {
+        for asset in [&assets.runner, &assets.endpoint, &assets.desktop, &assets.helper] {
+            checked_runner(&asset.path, &asset.sha256)?;
+        }
+        safe_ssh_path(&directory)?;
+        private_directory(&directory)?;
+        private_directory(&state_directory)?;
+        if directory.parent() != Some(state_directory.as_path()) {
+            return Err("UNSAFE_DIRECTORY");
+        }
+        read_private(&directory.join(INSTALLED_MARKER), 64).map_err(|_| "PREPARATION_INCOMPLETE")?;
+        let machine = directory.join("machine");
+        let share = directory.join("setup");
+        private_directory(&machine)?;
+        private_directory(&share)?;
+        let files = open_machine_files(&machine)?;
+        for (_, file) in &files {
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+                return Err("GUEST_STILL_RUNNING");
+            }
+        }
+        let mut launch: HostLaunch =
+            serde_json::from_slice(&read_private(&machine.join("config.json"), FRAME_LIMIT as u64)?)
+                .map_err(|_| "INVALID_CONFIGURATION")?;
+        for (_, file) in &files {
+            unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
+        }
+        if launch.version != 1
+            || launch.vm_directory != machine
+            || launch.state_directory != state_directory
+            || launch.setup_directory.as_deref() != Some(share.as_path())
+        {
+            return Err("INVALID_CONFIGURATION");
+        }
+        launch.restore_image = None;
+        launch.disk_bytes = None;
+        if fs::symlink_metadata(directory.join(AUTOMATION_MARKER)).is_ok() {
+            read_private(&directory.join(AUTOMATION_MARKER), 64)?;
+            launch.setup_directory = None;
+        }
+        let pin = String::from_utf8(read_private(&share.join("server-key.pub"), 4096)?)
+            .map_err(|_| "HOST_KEY_CHANGED")?;
+        let fields: Vec<_> = pin.split_whitespace().collect();
+        if fields.len() < 2 || fields[0] != "ssh-ed25519" || fields[1].len() != 68 {
+            return Err("HOST_KEY_CHANGED");
+        }
+        let enrollment: Value =
+            serde_json::from_slice(&read_private(&share.join("enrollment.json"), 4096)?)
+                .map_err(|_| "INVALID_ENROLLMENT")?;
+        let secret = enrollment["secret"]
+            .as_str()
+            .filter(|s| s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit()))
+            .ok_or("INVALID_ENROLLMENT")?
+            .to_owned();
+        let host_uuid = enrollment["hostUuid"]
+            .as_str()
+            .filter(|s| valid_uuid(s))
+            .ok_or("INVALID_ENROLLMENT")?
+            .to_owned();
+        // The runner names the state fence after its machine identifier digest. A state
+        // directory owns one machine, so at most one such fence can be left behind.
+        let mut fences = fs::read_dir(&state_directory)
+            .map_err(|_| "UNSAFE_DIRECTORY")?
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter_map(|name| name.strip_suffix(".quarantine").map(str::to_owned))
+            .filter(|stem| stem.len() == 64 && stem.bytes().all(|c| c.is_ascii_hexdigit()));
+        let machine_digest = fences.next().unwrap_or_default();
+        if fences.next().is_some() {
+            return Err("QUARANTINE_CHANGED");
+        }
+        for path in ["identity", "provision-identity"] {
+            read_private(&directory.join(path), 32768)?;
+        }
+        Ok(Self {
+            assets,
+            directory,
+            server_pin: format!("{} {}", fields[0], fields[1]),
+            secret,
+            vm: Mutex::new(OwnedVm::stopped(launch, host_uuid, machine_digest)),
+            files,
+            previous_boot: Mutex::new(None),
+            resumed: AtomicBool::new(true),
+        })
+    }
+
     /// Revoke the current VM and wait for its owned runner to be reaped.
     /// Callers must prevent new start/recover operations after shutdown.
     pub fn shutdown(&self) -> Result<()> {
         // A failed operation must not prevent cleanup of the child it owned.
         let vm = self.vm.lock().unwrap_or_else(|error| error.into_inner());
+        if vm.is_active() {
+            vm.request_guest_shutdown();
+        }
         vm.stop_and_wait()
     }
     /// The owned runner has not yet been replaced by a no-share automation run.
@@ -1055,7 +1237,16 @@ impl ComputerSetup {
         })
     }
     pub fn open_setup_viewer(&self) -> Result<()> {
-        let vm = self.vm.lock().map_err(|_| "GUEST_REVOKED")?;
+        let mut vm = self.vm.lock().map_err(|_| "GUEST_REVOKED")?;
+        // A guest resumed mid-setup boots again with its setup share, then shows the viewer.
+        if self.resumed.load(Ordering::Acquire)
+            && vm.launch.as_ref().is_some_and(|l| l.setup_directory.is_some())
+        {
+            self.retire_runner(&vm, true)?;
+            let launch = vm.launch.clone().ok_or("OWNERSHIP_NOT_ESTABLISHED")?;
+            *vm = OwnedVm::launch(&self.assets.runner.path, &self.assets.runner.sha256, launch)?;
+            self.resumed.store(false, Ordering::Release);
+        }
         if !vm.is_active()
             || vm
                 .launch
@@ -1092,9 +1283,28 @@ impl ComputerSetup {
         }
         let mut current = self.vm.lock().map_err(|_| "GUEST_REVOKED")?;
         let mut launch = current.launch.clone().ok_or("OWNERSHIP_NOT_ESTABLISHED")?;
-        if recovery == launch.setup_directory.is_some() {
+        // A resumed guest has no runner yet; either request may boot it.
+        let resumed = self.resumed.load(Ordering::Acquire);
+        if !resumed && recovery == launch.setup_directory.is_some() {
             return Err("EXPLICIT_RECOVERY_REQUIRED");
         }
+        self.retire_runner(&current, resumed)?;
+        launch.setup_directory = None;
+        launch.restore_image = None;
+        launch.disk_bytes = None;
+        let vm = OwnedVm::launch(&self.assets.runner.path, &self.assets.runner.sha256, launch)?;
+        self.resumed.store(false, Ordering::Release);
+        *current = vm.clone();
+        if let Err(code) = self.authenticate(&vm, task_id) {
+            vm.quarantine();
+            return Err(code);
+        }
+        Ok(vm)
+    }
+    /// Stops the current runner, checks the held machine files, and removes its
+    /// fences so the next runner can boot the same disk.
+    fn retire_runner(&self, current: &OwnedVm, resumed: bool) -> Result<()> {
+        let launch = current.launch.as_ref().ok_or("OWNERSHIP_NOT_ESTABLISHED")?;
         current.stop_and_wait()?;
         for (path, held) in &self.files {
             let old = held.metadata().map_err(|_| "OWNED_FILE_CHANGED")?;
@@ -1117,6 +1327,10 @@ impl ComputerSetup {
                 .state_directory
                 .join(format!("{}.quarantine", current.machine_digest)),
         ] {
+            // resume proved the earlier runner gone; it may have died before fencing.
+            if resumed && fs::symlink_metadata(&path).is_err() {
+                continue;
+            }
             if read_private(&path, 4096)? != b"owned-run-requires-explicit-recovery\n" {
                 return Err("QUARANTINE_CHANGED");
             }
@@ -1125,15 +1339,7 @@ impl ComputerSetup {
                 .and_then(|f| f.sync_all())
                 .map_err(|_| "QUARANTINE_CHANGED")?;
         }
-        launch.setup_directory = None;
-        launch.restore_image = None;
-        let vm = OwnedVm::launch(&self.assets.runner.path, &self.assets.runner.sha256, launch)?;
-        *current = vm.clone();
-        if let Err(code) = self.authenticate(&vm, task_id) {
-            vm.quarantine();
-            return Err(code);
-        }
-        Ok(vm)
+        Ok(())
     }
     fn authenticate(&self, vm: &OwnedVm, task_id: &str) -> Result<()> {
         let launch = vm.launch.as_ref().ok_or("OWNERSHIP_NOT_ESTABLISHED")?;
@@ -1272,7 +1478,8 @@ impl ComputerSetup {
         authority.verify(vm)?;
         *vm.authority.lock().map_err(|_| "GUEST_REVOKED")? = Some(authority);
         *previous = Some((vm_uuid.to_owned(), boot_uuid.to_owned()));
-        Ok(())
+        // Setup is finished: later app runs boot this guest straight into automation.
+        mark(&self.directory.join(AUTOMATION_MARKER))
     }
 }
 
@@ -1559,6 +1766,7 @@ mod tests {
                 boot_preparation_started: AtomicBool::new(false),
                 ended: Arc::new(AtomicBool::new(true)),
                 viewer: Arc::new(AtomicBool::new(false)),
+                release: Arc::new(AtomicBool::new(false)),
                 launch: None,
                 authority: Mutex::new(None),
                 machine_digest: String::new(),
@@ -1660,6 +1868,7 @@ mod tests {
                 boot_preparation_started: AtomicBool::new(false),
                 ended: Arc::new(AtomicBool::new(true)),
                 viewer: Arc::new(AtomicBool::new(false)),
+                release: Arc::new(AtomicBool::new(false)),
                 launch: None,
                 authority: Mutex::new(None),
                 machine_digest: String::new(),

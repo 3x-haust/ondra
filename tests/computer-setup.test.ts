@@ -173,6 +173,21 @@ ${definitions}
         assert_eq!(status.phase, "closed"); assert_eq!(status.error, Some("OWNED_PROCESS_NOT_STOPPED"));
         assert!(matches!(state.engine_access(), Err("COMPUTER_CLOSED")));
     }
+    #[test] fn resumed_guest_is_stopped_until_a_task_starts_it() {
+        let state = ComputerState::default();
+        let status = state.resume(|| { let setup = ComputerSetup::new(); setup.setup_pending.store(false, Ordering::Release); Ok(setup) }).unwrap();
+        assert!(status.prepared); assert_eq!(status.phase, "stopped"); assert_eq!(status.task_id, None);
+        assert!(state.engine_access().unwrap().current_vm("t:one").is_none(), "a resumed guest is not authorized before boot");
+        assert!(matches!(state.prepare(|| panic!("resumed guest replaced")), Err("COMPUTER_ALREADY_PREPARED")));
+        assert!(matches!(state.start("t:one", true), Err("COMPUTER_NOT_STARTED")));
+        assert_eq!(state.start("t:one", false).unwrap().phase, "ready");
+        let unfinished = ComputerState::default();
+        assert_eq!(unfinished.resume(|| Ok(ComputerSetup::new())).unwrap().phase, "setup");
+        let refused = ComputerState::default();
+        assert!(matches!(refused.resume(|| Err("GUEST_STILL_RUNNING")), Err("GUEST_STILL_RUNNING")));
+        assert!(!refused.snapshot().unwrap().prepared);
+        assert_eq!(refused.prepare(|| Ok(ComputerSetup::new())).unwrap().phase, "setup");
+    }
     #[test] fn preparation_errors_clear_busy_and_allow_a_new_explicit_attempt() {
         let state = ComputerState::default();
         assert!(matches!(state.prepare(|| Err("COMPUTER_ASSETS_UNAVAILABLE")), Err("COMPUTER_ASSETS_UNAVAILABLE")));
@@ -189,7 +204,7 @@ ${definitions}
       execFileSync("cargo", ["check", ...args, "--tests"], options);
       for (let repeat = 0; repeat < 3; repeat++) {
         const output = execFileSync("cargo", ["test", ...args, "setup_tests::", "--", "--test-threads=1"], options);
-        expect(output).toContain("10 passed; 0 failed");
+        expect(output).toContain("11 passed; 0 failed");
       }
       // Mutation check: a cross-task authorization regression must be caught.
       writeFileSync(join(directory, "lib.rs"), program.replace(' || status.task_id.as_deref() != Some(id)', ""));

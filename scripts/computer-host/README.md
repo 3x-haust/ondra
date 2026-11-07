@@ -20,7 +20,7 @@ bash scripts/computer-host/build.sh /절대경로/출력폴더
 - `recover(task_id)`: 직접 보유 중인 이전 실행의 종료를 확인한 뒤 새로운 부팅 nonce로 명시 복구한다. 이전 작업의 성공을 추정하지 않는다.
 - `current_vm()`: 인증 완료·active인 VM만 반환한다. 앱은 이를 엔진 `EngineChannel::prepare`에 전달한다.
 
-`SetupRequest.directory`는 존재하지 않는 새 경로, 그 부모와 `state_directory`는 canonical 0700 앱 소유 폴더여야 한다. 상태 폴더는 작업 artifacts와 분리해 고정한다. IPSW는 로컬 절대 경로다. CPU/메모리는 해당 IPSW의 최소 요구 이상, 디스크는 64 GiB~1 TiB다. 머신·키 상태는 메모리의 직접 소유 핸들과 결합된다. **앱 재시작 후 디스크 파일만으로 이어 붙이는 API는 없다.** 이 경우 새 전용 VM을 준비한다.
+`SetupRequest.directory`는 존재하지 않는 새 경로, 그 부모와 `state_directory`는 canonical 0700 앱 소유 폴더여야 한다. 상태 폴더는 작업 artifacts와 분리해 고정한다. IPSW는 로컬 절대 경로다. CPU/메모리는 해당 IPSW의 최소 요구 이상, 디스크는 64 GiB~1 TiB다. 머신·키 상태는 메모리의 직접 소유 핸들과 결합된다. 앱 재시작 뒤에는 `ComputerSetup::resume(assets, directory, state_directory)`가 설치를 마친(`vm/installed`) 같은 게스트를 꺼진 상태로 다시 소유한다. 실행 중인 러너가 머신 파일을 잡고 있으면 거부하고, 다음 시작은 같은 디스크를 새 부팅 신원으로 인증한다.
 
 ## 나중에 최초 준비할 때
 

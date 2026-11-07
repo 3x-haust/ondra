@@ -180,21 +180,54 @@ func allowedArguments(_ input: Any?) throws -> [String] {
     guard let argv = input as? [String], !argv.isEmpty, argv.count <= 16,
           argv.allSatisfy({ !$0.contains("\0") && $0.utf8.count <= 65536 }) else { throw Refusal("INVALID_ARGV") }
     if argv == ["session", "start", "--no-trace"] { return argv }
-    try require(argv.count >= 4 && argv[0] == "--session" && matches(argv[1], "^[A-Za-z0-9_-]{1,256}$"), "INVALID_ARGV")
+    try require(argv.count >= 3 && argv[0] == "--session" && matches(argv[1], "^[A-Za-z0-9_-]{1,256}$"), "INVALID_ARGV")
     let args = Array(argv.dropFirst(2))
     let command = args[0]
     let refPattern = "^@s[A-Za-z0-9_-]{1,255}:e[1-9][0-9]{0,9}$"
+    let pointPattern = "[0-9]{1,5},[0-9]{1,5}"
     switch command {
     case "session":
         try require(args == ["session", "end", argv[1]], "INVALID_ARGV")
     case "launch":
         try require(args.count == 2 && validApp(args[1]), "INVALID_ARGV")
-    case "snapshot", "screenshot":
+    case "snapshot":
         try require(args.count == 3 && args[1] == "--app" && validApp(args[2]), "INVALID_ARGV")
+    case "screenshot":
+        // An app window, or the whole primary guest display for coordinate input.
+        try require(args.count == 3 && ((args[1] == "--app" && validApp(args[2]))
+                    || (args[1] == "--screen" && args[2] == "0")), "INVALID_ARGV")
+    case "list-displays":
+        try require(args.count == 1, "INVALID_ARGV")
     case "click":
         try require(args.count == 2 && matches(args[1], refPattern), "INVALID_ARGV")
-    case "set-value":
+    case "set-value", "type":
         try require(args.count == 4 && matches(args[1], refPattern) && args[2] == "--", "INVALID_ARGV")
+    case "clipboard-set":
+        try require(args.count == 3 && args[1] == "--", "INVALID_ARGV")
+    case "scroll":
+        try require(args.count == 6 && matches(args[1], refPattern) && args[2] == "--direction"
+                    && ["up", "down", "left", "right"].contains(args[3]) && args[4] == "--amount"
+                    && matches(args[5], "^(?:[1-9]|[1-4][0-9]|50)$"), "INVALID_ARGV")
+    // Pointer input stays inside the guest's own window server; --headed is required by the CLI.
+    case "mouse-click":
+        try require(args.count == 7 && matches(args[1], "^--xy=" + pointPattern + "$")
+                    && args[2] == "--button" && ["left", "right"].contains(args[3])
+                    && args[4] == "--count" && ["1", "2"].contains(args[5]) && args[6] == "--headed", "INVALID_ARGV")
+    case "mouse-wheel":
+        try require(args.count == 6 && matches(args[1], "^--x=[0-9]{1,5}$") && matches(args[2], "^--y=[0-9]{1,5}$")
+                    && matches(args[3], "^--dx=-?(?:[0-9]|[1-4][0-9]|50)$")
+                    && matches(args[4], "^--dy=-?(?:[0-9]|[1-4][0-9]|50)$") && args[5] == "--headed", "INVALID_ARGV")
+    case "drag":
+        try require(args.count >= 4 && args.count <= 6 && args.last == "--headed", "INVALID_ARGV")
+        var rest = Array(args.dropFirst().dropLast())
+        for side in ["from", "to"] {
+            if rest.first == "--" + side, rest.count >= 2, matches(rest[1], refPattern) {
+                rest.removeFirst(2)
+            } else if let first = rest.first, matches(first, "^--" + side + "-xy=" + pointPattern + "$") {
+                rest.removeFirst()
+            } else { throw Refusal("INVALID_ARGV") }
+        }
+        try require(rest.isEmpty, "INVALID_ARGV")
     case "press":
         try require(args.count == 4 && args[2] == "--app" && validApp(args[3]), "INVALID_ARGV")
         let keys = args[1].split(separator: "+", omittingEmptySubsequences: false).map(String.init)
@@ -207,7 +240,9 @@ func allowedArguments(_ input: Any?) throws -> [String] {
     return argv
 }
 
-func verifyDesktop() throws {
+/// Returns the verified helper bytes for a private per-command copy.
+@discardableResult
+func verifyDesktop() throws -> Data {
     try secureDirectory(desktopDirectory)
     #if arch(arm64)
     let binaryHash = "a89c781a3b2cf29bc0467c30a4e1063b6f564858540f2dc58a75c79ce2c9d9f3"
@@ -218,10 +253,44 @@ func verifyDesktop() throws {
     #else
     throw Refusal("UNSUPPORTED_ARCHITECTURE")
     #endif
+    var helper = Data()
     for (path, digest) in [(desktopBinary, binaryHash), (desktopHelper, helperHash)] {
         let data = try secureFile(path, limit: 128 * 1024 * 1024, mode: 0o755)
         let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         try require(actual == digest, "DESKTOP_VERSION_MISMATCH")
+        if path == desktopHelper { helper = data }
+    }
+    return helper
+}
+
+/// agent-desktop runs its helper only when the helper is owned by the calling user
+/// (clipboard commands fail with the root-owned install). Each command gets a
+/// private copy of the verified bytes; the root-owned original stays immutable.
+final class HelperCopy {
+    let directory: String
+    var path: String { directory + "/agent-desktop-macos-helper" }
+
+    init(_ data: Data, home: String = guestHome) throws {
+        var template = Array((home + "/.ondra-helper-XXXXXX").utf8CString)
+        guard mkdtemp(&template) != nil else { throw Refusal("HELPER_COPY_ERROR") }
+        directory = String(decoding: template.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        let fd = open(directory + "/agent-desktop-macos-helper", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o700)
+        guard fd >= 0 else {
+            rmdir(directory)
+            throw Refusal("HELPER_COPY_ERROR")
+        }
+        defer { close(fd) }
+        let written = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+        guard written == data.count, fchmod(fd, 0o700) == 0 else {
+            unlink(path)
+            rmdir(directory)
+            throw Refusal("HELPER_COPY_ERROR")
+        }
+    }
+
+    deinit {
+        unlink(path)
+        rmdir(directory)
     }
 }
 
@@ -322,15 +391,16 @@ func screenshotImage(directoryFD: Int32, owner: uid_t) throws -> [String: Any] {
 }
 
 // Once started, timeout/IO/exit failures are ambiguous. Never replay a command.
-func executeDesktop(_ argv: [String]) throws -> Any {
+func executeDesktop(_ argv: [String], helper: Data) throws -> Any {
     let capture = argv.count == 5 && argv[2] == "screenshot" ? try ScreenshotCapture() : nil
-    defer { withExtendedLifetime(capture) {} }
+    let helperCopy = try HelperCopy(helper)
+    defer { withExtendedLifetime((capture, helperCopy)) {} }
     let child = Process()
     child.executableURL = URL(fileURLWithPath: desktopBinary)
     child.arguments = try capture?.arguments(argv) ?? argv
     child.currentDirectoryURL = URL(fileURLWithPath: guestHome)
     child.environment = ["HOME": guestHome, "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8",
-                         "AGENT_DESKTOP_MACOS_HELPER_PATH": desktopHelper]
+                         "AGENT_DESKTOP_MACOS_HELPER_PATH": helperCopy.path]
     child.standardInput = FileHandle.nullDevice
     let output = Pipe(), errors = Pipe()
     child.standardOutput = output
@@ -376,7 +446,8 @@ func desktopResult(_ stdout: Data, status: Int32, normalExit: Bool, command: Str
     guard let result = try? object(stdout), result["version"] as? String == "2.6",
           let ok = result["ok"] as? NSNumber, CFGetTypeID(ok) == CFBooleanGetTypeID(),
           result["command"] as? String == command,
-          result[ok.boolValue ? "data" : "error"] is [String: Any] else {
+          result[ok.boolValue ? "data" : "error"] is [String: Any]
+            || (command == "list-displays" && ok.boolValue && result["data"] is [Any]) else {
         throw Refusal("INVALID_DESKTOP_RESPONSE", "unknown")
     }
     // v1.1.0: 0 success, 1 operational error, 2 structured argument error.
@@ -406,11 +477,11 @@ struct Endpoint {
             if op == "exec" {
                 try validateClaims(request, identity)
                 let argv = try allowedArguments(request["argv"])
-                try verifyDesktop()
+                let helper = try verifyDesktop()
                 // Detect a lifecycle transition between admission and spawn.
                 let fresh = try loadIdentity()
                 try validateClaims(request, fresh)
-                response["result"] = try executeDesktop(argv)
+                response["result"] = try executeDesktop(argv, helper: helper)
             }
             let data = try JSONSerialization.data(withJSONObject: response, options: [.sortedKeys])
             if data.count + 1 > outputLimit { throw Refusal("OUTPUT_LIMIT", "unknown") }

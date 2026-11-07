@@ -31,6 +31,7 @@ automation startup are explicit app operations, separate from the model-facing
 | App operation | Native API | Effect |
 | --- | --- | --- |
 | Prepare | `ComputerSetup::prepare(assets, request)` | Install a **new** dedicated VM from a local IPSW; no download or adoption of existing VMs. |
+| Resume | `ComputerSetup::resume(assets, directory, state_directory)` | At app start, adopt the guest an earlier run of this app prepared in the app data folder, powered off. It never reinstalls; a guest that never finished setup returns to setup. |
 | Open preparation viewer | `open_setup_viewer()` | Show the preparation guest only after an explicit request, without host activation. |
 | Start automation | `start(task_id)` | Confirm the owned preparation runner has exited, boot headlessly without shares, authenticate provisioning and endpoint identity. |
 | Recover | `recover(task_id)` | Confirm the owned previous runner has exited, then boot with fresh identity; do not infer earlier task success. |
@@ -98,17 +99,32 @@ The preparation share contains only dedicated installation material; private
 host client keys stay outside it. Automation verifies the pinned server key,
 independent endpoint identity, boot binding and directly owned child. A PID file,
 address, environment variable or model-supplied manifest cannot grant ownership.
-Leases last at most 45 seconds and are revalidated on renewal. Release, expiry,
+Leases last at most 45 seconds and are revalidated on renewal. A task engine
+reuses a lease while at least 30 seconds of it remain, and sends each command
+in one SSH round trip: the endpoint checks the boot identity claims against its
+own provisioned state before running anything. Release, expiry,
 uncertain delivery or changed evidence quarantines the VM; use explicit native
 recovery and a new task engine, not lock deletion or an automatic retry.
 
 On app exit, new attachments are refused, task engines are stopped, and the native
-owner waits for its VM runner to exit before dropping ownership. A failure to
-confirm exit remains an error, not proof of shutdown. An in-progress installation
-has no cancellation API; app exit waits for preparation to return first.
+owner asks the authenticated guest's provisioner to shut macOS down, waits up to
+35 seconds for the runner to exit, then kills it. A failure to confirm exit remains
+an error, not proof of shutdown. An in-progress installation has no cancellation
+API; app exit waits for preparation to return first.
 
-**Only newly prepared VMs are supported. After an app restart there is no API to
-adopt the previous VM from its files; prepare a new dedicated VM.**
+### Keeping the guest across app restarts
+
+The guest's disk lives in the app data folder (`computer-*/vm/machine`). When the
+app starts, it adopts the newest guest whose installation finished
+(`vm/installed`). Adoption needs no running VM: it checks that no runner still
+holds the machine files, re-reads the owned launch configuration, server key and
+enrollment, and shows the guest as stopped. The next **Start automation** boots
+the same disk headlessly and authenticates it with a fresh boot identity, exactly
+as after setup. Fences of the earlier run are removed only after that check. A
+guest that never reached automation (`vm/automation` is written on the first
+successful authentication) returns to setup, and its viewer boots it with the
+read-only setup share again. Nothing is inferred about work the earlier run was
+doing.
 
 ### Earlier Lume preparation environment
 
@@ -157,12 +173,34 @@ attempts a following structured observation:
 ```json
 {"action":"act","input":{"kind":"click","epoch":"<latest epoch>","ref":"e1"}}
 {"action":"act","input":{"kind":"set-value","epoch":"<latest epoch>","ref":"e2","value":"test text"}}
+{"action":"act","input":{"kind":"type","epoch":"<latest epoch>","ref":"e2","text":"appended text"}}
+{"action":"act","input":{"kind":"type","epoch":"<latest epoch>","text":"into the focused field"}}
 {"action":"act","input":{"kind":"press","epoch":"<latest epoch>","key":"return","modifiers":["cmd"]}}
+{"action":"act","input":{"kind":"scroll","epoch":"<latest epoch>","ref":"e3","direction":"down","amount":5}}
+{"action":"act","input":{"kind":"drag","epoch":"<latest epoch>","from":{"ref":"e4"},"to":{"ref":"e5"}}}
 ```
 
 Use actual values from the latest observation, not the illustrative placeholders.
 `press` accepts the named key grammar, not arbitrary text or a shell command.
-There is no coordinate-click, drag or arbitrary host-input escape hatch.
+`type` without a ref pastes through the guest clipboard into the focused field,
+so click the field first.
+
+Prefer refs. For controls that `observe` does not expose, `look` with
+`"screen": true` captures the whole guest screen and returns a `frame`. Coordinate
+actions take pixels of that image and the frame as their epoch; the session maps
+them to guest screen points. Any action or read retires the frame:
+
+```json
+{"action":"look","screen":true}
+{"action":"act","input":{"kind":"click-at","epoch":"f1","x":640,"y":380,"button":"left","count":2}}
+{"action":"act","input":{"kind":"scroll","epoch":"f2","x":640,"y":380,"direction":"up"}}
+{"action":"act","input":{"kind":"drag","epoch":"f3","from":{"x":100,"y":100},"to":{"x":400,"y":300}}}
+```
+
+Pointer actions are physical input inside the guest's own window server. They
+never reach the host. There is no arbitrary command or host-input escape hatch.
+The guest endpoint must be reinstalled from the app build that adds these
+commands; an older endpoint refuses them as `INVALID_ARGV`.
 
 ### Full, delta, unchanged and refs
 
@@ -184,14 +222,13 @@ There is no coordinate-click, drag or arbitrary host-input escape hatch.
   `OBSERVATION_TOO_LARGE` with refs invalidated. It is not silently clipped into
   an actionable view.
 
-`look` explicitly captures a guest PNG and saves it privately. It does not
-supply action targets and invalidates old refs: call `observe` again before
-acting. Identical images are omitted unless `full: true` is requested or the
+`look` explicitly captures a guest PNG and saves it privately. It invalidates
+old refs: call `observe` again before ref actions. Only a screen look supplies
+coordinate targets, through its frame. Identical images are omitted unless `full: true` is requested or the
 model/context resets. Images are limited to 4 MiB, 8192 pixels per dimension and
 16 megapixels. Image-capable models receive image content; text-only models get
 `MODEL_IMAGE_UNSUPPORTED` and can use structured observations only. Visual-only
-controls remain unsupported for text-only models; an image alone does not make
-coordinate actions available. Provider-independent tool calling is not evidence
+controls remain unsupported for text-only models. Provider-independent tool calling is not evidence
 that every model can complete every task.
 
 ### Stop and recovery

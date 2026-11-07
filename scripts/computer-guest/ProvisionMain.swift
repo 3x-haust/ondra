@@ -38,6 +38,7 @@ struct GuestBootInstaller {
                 let data = try input()
                 let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
                 if object?["op"] as? String == "status" { receipt = try enrollmentStatus(data) }
+                else if object?["op"] as? String == "shutdown" { receipt = try shutdownGuest(data) }
                 else { receipt = try authenticatedGuestBoot(AuthenticatedBootRequest.decode(data)) }
             case "--install-boot":
                 receipt = try installGuestBoot(BootInstallRequest.decode(input()))

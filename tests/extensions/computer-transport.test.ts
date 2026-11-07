@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe("pinned guest transport", () => {
-  it("sends identity first and preserves hostile argv only in stdin JSON", async () => {
+  it("sends one exec request and preserves hostile argv only in stdin JSON", async () => {
     vi.stubEnv("SSH_AUTH_SOCK", "/host-agent");
     vi.stubEnv("SSH_ASKPASS", "/host-program");
     vi.stubEnv("ONDRA_GUEST_HOST", "127.0.0.1");
@@ -82,12 +82,9 @@ describe("pinned guest transport", () => {
     const result = await new ComputerTransport(directory, metadata).execute(argv);
 
     expect(result).toEqual({ ok: true, data: { text: "안녕" } });
-    expect(spawn).toHaveBeenCalledTimes(2);
-    const identity = JSON.parse(children[0].input);
-    const command = JSON.parse(children[1].input);
-    expect(identity).toEqual({ version: 1, op: "identity", requestId: expect.any(String) });
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const command = JSON.parse(children[0].input);
     expect(command).toEqual({ version: 1, op: "exec", requestId: expect.any(String), taskId: metadata.taskId, vmUuid: VM, bootNonce: NONCE, argv });
-    expect(identity.requestId).not.toBe(command.requestId);
     for (const [binary, args, options] of spawn.mock.calls) {
       expect(binary).toBe("/usr/bin/ssh");
       expect(args.slice(0, 5)).toEqual(["-F", "/dev/null", "-T", "-a", "-x"]);
@@ -186,21 +183,35 @@ describe("pinned guest transport", () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it.each(["requestId", "vmUuid", "bootNonce", "taskId", "version"])("checks the guest's own %s before delivering argv", async key => {
+  it.each(["requestId", "vmUuid", "bootNonce", "taskId", "version"])("rejects a reply whose %s is not the guest's own", async key => {
     onRequest = (child, request) => reply(child, response(request, { [key]: "wrong" }));
     const transport = new ComputerTransport(directory, metadata);
-    await expect(transport.execute(["click", "e1"])).rejects.toMatchObject({ code: "GUEST_IDENTITY_MISMATCH", delivery: "not_delivered" });
+    await expect(transport.execute(["click", "e1"])).rejects.toMatchObject({ code: "GUEST_IDENTITY_MISMATCH", delivery: "unknown" });
     await expect(transport.execute(["click", "e1"])).rejects.toMatchObject({ code: "TRANSPORT_CLOSED" });
     expect(spawn).toHaveBeenCalledTimes(1);
   });
 
-  it("revalidates private files between identity and execution", async () => {
-    onRequest = (child, request) => {
-      writeFileSync(join(directory, "known_hosts"), `* ${hostKey}\n`);
-      reply(child, response(request));
+  it("reports the endpoint's own refusal as not delivered", async () => {
+    onRequest = child => {
+      child.stderr.write(JSON.stringify({ version: 1, error: { code: "STALE_BOOT_IDENTITY", delivery: "not_delivered", retry: "never" } }));
+      child.emit("close", 64, null);
     };
-    await expect(new ComputerTransport(directory, metadata).execute(["click", "e1"])).rejects.toMatchObject({ code: "HOST_KEY_MISMATCH", delivery: "not_delivered" });
-    expect(spawn).toHaveBeenCalledTimes(1);
+    const transport = new ComputerTransport(directory, metadata);
+    await expect(transport.execute(["click", "e1"])).rejects.toMatchObject({ code: "STALE_BOOT_IDENTITY", delivery: "not_delivered" });
+    await expect(transport.execute(["click", "e1"])).rejects.toMatchObject({ code: "TRANSPORT_CLOSED" });
+  });
+
+  it.each([
+    ["an unknown delivery", 64, { version: 1, error: { code: "DESKTOP_TIMEOUT", delivery: "unknown", retry: "never" } }],
+    ["another exit code", 70, { version: 1, error: { code: "STALE_BOOT_IDENTITY", delivery: "not_delivered", retry: "never" } }],
+    ["a malformed code", 64, { version: 1, error: { code: "x; id", delivery: "not_delivered", retry: "never" } }],
+    ["plain stderr", 64, "Permission denied"],
+  ])("keeps %s after dispatch unknown", async (_name, code, stderr) => {
+    onRequest = child => {
+      child.stderr.write(typeof stderr === "string" ? stderr : JSON.stringify(stderr));
+      child.emit("close", code, null);
+    };
+    await expect(new ComputerTransport(directory, metadata).execute(["click", "e1"])).rejects.toMatchObject({ code: "SSH_EXIT", delivery: "unknown" });
   });
 
   it.each([[], "snapshot", ["type", "\0"], [1], Array(257).fill("x"), ["type", "x".repeat(65537)]])("rejects invalid argv %j", async argv => {
@@ -243,8 +254,8 @@ describe("pinned guest transport", () => {
     metadata.bootNonce = "2".repeat(64);
     argv[0] = "evil";
     await result;
-    expect(spawn.mock.calls[1][1]).toContain("192.168.64.2");
-    expect(JSON.parse(children[1].input).argv).toEqual(["snapshot"]);
+    expect(spawn.mock.calls[0][1]).toContain("192.168.64.2");
+    expect(JSON.parse(children[0].input).argv).toEqual(["snapshot"]);
   });
 });
 
@@ -256,17 +267,14 @@ describe("cancellation and ambiguous delivery", () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it.each(["identity", "exec"])("cancels during %s with conservative delivery and no retry", async phase => {
+  it("cancels during exec with conservative delivery and no retry", async () => {
     const controller = new AbortController();
     const transport = new ComputerTransport(directory, metadata);
-    onRequest = (child, request) => {
-      if (request.op === phase) controller.abort();
-      else reply(child, response(request));
-    };
-    await expect(transport.execute(["click"], { signal: controller.signal })).rejects.toMatchObject({ code: "CANCELLED", delivery: phase === "exec" ? "unknown" : "not_delivered" });
+    onRequest = () => controller.abort();
+    await expect(transport.execute(["click"], { signal: controller.signal })).rejects.toMatchObject({ code: "CANCELLED", delivery: "unknown" });
     expect(children.at(-1)?.kill).toHaveBeenCalledWith("SIGKILL");
     await expect(transport.execute(["click"])).rejects.toMatchObject({ code: "TRANSPORT_CLOSED" });
-    expect(spawn).toHaveBeenCalledTimes(phase === "exec" ? 2 : 1);
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it("cancels before process spawn without sending request bytes", async () => {
@@ -279,11 +287,11 @@ describe("cancellation and ambiguous delivery", () => {
     expect(children[0].input).toBe("");
   });
 
-  it.each(["identity", "exec"])("bounds elapsed time during %s even if SSH never closes", async phase => {
+  it("bounds elapsed time during exec even if SSH never closes", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-    onRequest = (child, request) => { if (request.op !== phase) reply(child, response(request)); };
+    onRequest = () => {};
     const pending = new ComputerTransport(directory, metadata).execute(["click"], { timeoutMs: 20 });
-    const assertion = expect(pending).rejects.toMatchObject({ code: "TIMEOUT", delivery: phase === "exec" ? "unknown" : "not_delivered" });
+    const assertion = expect(pending).rejects.toMatchObject({ code: "TIMEOUT", delivery: "unknown" });
     await vi.advanceTimersByTimeAsync(20);
     await assertion;
     expect(children.at(-1)?.kill).toHaveBeenCalledWith("SIGKILL");
@@ -301,12 +309,12 @@ describe("cancellation and ambiguous delivery", () => {
 
   it("limits a running command to the remaining verified lease", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-    onRequest = (child, request) => { if (request.op === "identity") reply(child, response(request)); };
+    onRequest = () => {};
     const pending = new ComputerTransport(directory, { ...metadata, expiresAt: Date.now() + 10 }).execute(["click"], { timeoutMs: 100 });
     const assertion = expect(pending).rejects.toMatchObject({ code: "TIMEOUT", delivery: "unknown" });
     await vi.advanceTimersByTimeAsync(10);
     await assertion;
-    expect(children[1].kill).toHaveBeenCalledWith("SIGKILL");
+    expect(children[0].kill).toHaveBeenCalledWith("SIGKILL");
   });
 
   it("expires the verified lifecycle lease and does not begin another request", async () => {
@@ -319,7 +327,6 @@ describe("cancellation and ambiguous delivery", () => {
 
   it.each(["exit", "signal", "malformed", "wrong identity", "missing result", "stdin", "stdout", "stderr", "error"])("marks %s after action dispatch unknown and closes transport", async failure => {
     onRequest = (child, request) => {
-      if (request.op === "identity") return reply(child, response(request));
       if (failure === "exit") return reply(child, response(request), 255);
       if (failure === "signal") return reply(child, response(request), null, "SIGTERM");
       if (failure === "malformed") { child.stdout.write("not json"); return child.emit("close", 0, null); }
@@ -331,12 +338,11 @@ describe("cancellation and ambiguous delivery", () => {
     const transport = new ComputerTransport(directory, metadata);
     await expect(transport.execute(["click"])).rejects.toMatchObject({ name: "ComputerTransportError", delivery: "unknown" });
     await expect(transport.execute(["click"])).rejects.toMatchObject({ code: "TRANSPORT_CLOSED" });
-    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it("rejects invalid UTF-8 instead of silently changing the guest result", async () => {
     onRequest = (child, request) => {
-      if (request.op === "identity") return reply(child, response(request));
       const valid = JSON.stringify(response(request, { result: "X" }));
       const split = valid.indexOf('"X"');
       child.stdout.write(Buffer.concat([Buffer.from(valid.slice(0, split + 1)), Buffer.from([0xff]), Buffer.from(valid.slice(split + 2))]));
@@ -347,13 +353,12 @@ describe("cancellation and ambiguous delivery", () => {
 
   it.each(["stdout", "stderr"])("bounds %s and never returns truncated success", async stream => {
     onRequest = (child, request) => {
-      if (request.op === "identity") return reply(child, response(request));
       child.stdout.write(" ");
       child[stream as "stdout" | "stderr"].write(Buffer.alloc(8 * 1024 * 1024, 32));
       reply(child, response(request));
     };
     await expect(new ComputerTransport(directory, metadata).execute(["snapshot"])).rejects.toMatchObject({ code: "OUTPUT_LIMIT", delivery: "unknown" });
-    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it("does not fall back when OpenSSH fails before spawn", async () => {
@@ -376,7 +381,6 @@ describe("cancellation and ambiguous delivery", () => {
   it("reports failure to terminate SSH without hanging cancellation", async () => {
     const controller = new AbortController();
     onRequest = (child, request) => {
-      if (request.op === "identity") return reply(child, response(request));
       child.kill.mockImplementation(() => { throw new Error("EPERM private detail"); });
       controller.abort();
     };
@@ -390,7 +394,7 @@ describe("cancellation and ambiguous delivery", () => {
     await expect(transport.execute(["click"])).rejects.toMatchObject({ code: "TRANSPORT_BUSY", delivery: "not_delivered" });
     transport.dispose();
     transport.dispose();
-    await expect(pending).rejects.toMatchObject({ code: "CANCELLED", delivery: "not_delivered" });
+    await expect(pending).rejects.toMatchObject({ code: "CANCELLED", delivery: "unknown" });
     await expect(transport.execute(["click"])).rejects.toMatchObject({ code: "TRANSPORT_CLOSED" });
     expect(spawn).toHaveBeenCalledTimes(1);
   });
