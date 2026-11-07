@@ -151,12 +151,13 @@ More tools are not listed here: find them with tool_search when you need one
 (e.g. "phone simulator"). iOS simulator / Android emulator: the
 device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
-Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
-the user's windows: never bring an app forward (no AppleScript activate, no
-\`open\` without -g) or take the keyboard or mouse. Never make keys or clicks for
-the whole system (CGEventPost to the HID/session tap, cliclick, AppleScript
-keystroke): test shortcuts with unit tests or the app's own test hooks and put
-the real key press in "unverified".
+Mac apps: read the computer-use skill. Native app automation requires an
+isolated macOS guest, not the user's current Mac windows. If no verified guest
+is available, stop and report that setup is required. No host fallback: no
+agent-desktop, AppleScript, open (even -g), AX or PID-targeted input on the host.
+Do not launch native debug apps on the host to verify a change. Use headless
+checks or report the native interaction as unverified. Command checks are not
+an OS sandbox; restoring focus after activation does not preserve it.
 Web: web_search (results with URLs) and web_fetch (a page as text). Public
 pages need no browser. A page behind a login (Notion, Google Docs, an admin):
 first memory_search how this user reads that site (an account, a CLI, an
@@ -424,12 +425,13 @@ the task, labels, rules or notes in files, copy or comments.
 
 # Tools
 Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
-Mac apps: the computer-use skill (agent-desktop is bundled). It all runs behind
-the user's windows: never bring an app forward (no AppleScript activate, no
-\`open\` without -g) or take the keyboard or mouse. Never make keys or clicks for
-the whole system (CGEventPost to the HID/session tap, cliclick, AppleScript
-keystroke): test shortcuts with unit tests or the app's own test hooks and put
-the real key press in "unverified".
+Mac apps: read the computer-use skill. Native app automation requires an
+isolated macOS guest, not the user's current Mac windows. If no verified guest
+is available, stop and report that setup is required. No host fallback: no
+agent-desktop, AppleScript, open (even -g), AX or PID-targeted input on the host.
+Do not launch native debug apps on the host to verify a change. Use headless
+checks or report the native interaction as unverified. Command checks are not
+an OS sandbox; restoring focus after activation does not preserve it.
 Web: web_search and web_fetch. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 

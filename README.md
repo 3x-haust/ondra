@@ -76,7 +76,7 @@ Work and personal are separate workspaces, not filters. Switching spaces switche
 
 **Shared browser.** A real Chrome inside the app, with a tab per job. Sign in once in the panel and that space's jobs use the session. Passwords come from the macOS Keychain and never reach the model. With Aside installed, jobs browse through it.
 
-**Computer use, in the background.** Jobs drive Mac apps through the Accessibility API without taking your mouse, keyboard or focus. Commands that would bring an app forward or type into your screen ask first. Keystrokes sent to the whole system are blocked. If an app a job launched jumps to the front, your window comes back right away.
+**Computer use.** Native Mac app automation requires a separately prepared, isolated macOS guest. It does not control windows already open on your Mac. Known host desktop commands are blocked, including process-targeted input; without a verified guest connection, native app automation stops instead of switching to your desktop. These command checks are not an OS sandbox for arbitrary shell commands.
 
 **Device use.** Each job makes its own iOS simulator or Android emulator, leaves screenshots as evidence and removes it when done. You can watch and touch the screen from the device panel. Emulators render on the Mac GPU and idle when nothing changes.
 
@@ -127,7 +127,7 @@ The canvas shows how main, projects, jobs and sub-agents connect, and what each 
    ```sh
    xattr -dr com.apple.quarantine /Applications/Ondra.app
    ```
-3. Connect a model account (ChatGPT/Codex, Claude, …) in Settings. Computer use asks once for Accessibility and Screen Recording permission.
+3. Connect a model account (ChatGPT/Codex, Claude, …) in Settings. Native computer use requires a separate macOS guest with its own apps and permissions; granting host Accessibility or Screen Recording permission does not provide an isolated environment.
 
 Ondra checks GitHub Releases and offers to update itself.
 
