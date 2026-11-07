@@ -23,10 +23,22 @@ ondra-binary inspect "$BIN" > "$OUT/inspect.json" 2> "$OUT/inspect.stderr"
 ondra-binary functions "$BIN" > "$OUT/functions.json" 2> "$OUT/functions.stderr"
 ```
 
-Read the actual `data` function array, including `addr`, `name` and `size`.
-Choose the function that answers the question. Convert its virtual address to
-hexadecimal; do not use a file offset, runtime ASLR address or guessed symbol.
-Then run both operations using that same numeric address:
+A real application can hold thousands of functions; the full `functions` JSON
+for one app bundle can exceed a model's context. Narrow it instead of reading it
+whole. Pass `--name SUBSTR` (case-insensitive) to return only matching functions,
+or filter the file on disk without loading it:
+
+```sh
+ondra-binary functions "$BIN" --name check_password > "$OUT/functions-named.json" 2> "$OUT/functions-named.stderr"
+jq '.data[] | {name, addr, size}' "$OUT/functions.json"   # or: grep '"name"'
+```
+
+`--name` exits 1 when nothing matches. Discovery is heuristic, so a stripped or
+optimized target may name the relevant code `sym.func.<addr>`; also search by
+address range or follow references from strings and imports. Read the chosen
+entry's `addr`, `name` and `size`. Convert its virtual address to hexadecimal;
+do not use a file offset, runtime ASLR address or guessed symbol. Then run both
+operations using that same numeric address:
 
 ```sh
 ondra-binary disassemble "$BIN" --address "$ADDRESS" > "$OUT/disassembly.json" 2> "$OUT/disassembly.stderr"
@@ -35,7 +47,10 @@ ondra-binary decompile "$BIN" --address "$ADDRESS" > "$OUT/decompile.json" 2> "$
 
 For universal Mach-O, add `--arch arm64` or `--arch x86_64` to every command.
 The choice must match the target under investigation. Thin files normally detect
-their CPU automatically. The analyzer rejects unknown options and free-form
+their CPU automatically. On Apple silicon the system binaries and most shipping
+apps are `arm64e` (sometimes with an extra `arm64e.x1` slice) rather than plain
+`arm64`; `--arch arm64` selects any 64-bit ARM slice, so use it for those and
+confirm `target.machine` in the output. The analyzer rejects unknown options and free-form
 engine commands. It never falls back to a system tool or installs a plugin.
 
 ## Read the result
