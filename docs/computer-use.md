@@ -98,7 +98,10 @@ The preparation share contains only dedicated installation material; private
 host client keys stay outside it. Automation verifies the pinned server key,
 independent endpoint identity, boot binding and directly owned child. A PID file,
 address, environment variable or model-supplied manifest cannot grant ownership.
-Leases last at most 45 seconds and are revalidated on renewal. Release, expiry,
+Leases last at most 45 seconds and are revalidated on renewal. A task engine
+reuses a lease while at least 30 seconds of it remain, and sends each command
+in one SSH round trip: the endpoint checks the boot identity claims against its
+own provisioned state before running anything. Release, expiry,
 uncertain delivery or changed evidence quarantines the VM; use explicit native
 recovery and a new task engine, not lock deletion or an automatic retry.
 

@@ -61,22 +61,31 @@ it("does not convert environment or manifest claims into lifecycle authority", (
   expect(() => createComputerRuntime({ taskId: guest.taskId, artifactsDir: directory })).toThrow("GUEST_SETUP_REQUIRED");
   expect(spawn).not.toHaveBeenCalled();
 });
-it("renews independent lifecycle evidence before each real transport exchange", async () => {
+it("renews lifecycle evidence before the first exchange and reuses only a fresh lease", async () => {
   const runtime = bind();
   await expect(runtime.execute(["snapshot"])).resolves.toEqual({ ok: true });
   await expect(runtime.execute(["snapshot"])).resolves.toEqual({ ok: true });
+  expect(renew).toHaveBeenCalledTimes(1);
+  expect(spawn).toHaveBeenCalledTimes(2);
+  const later = Date.now() + 21000;
+  renew.mockResolvedValueOnce({ ...guest, expiresAt: later + 20000 });
+  vi.spyOn(Date, "now").mockReturnValue(later);
+  await expect(runtime.execute(["snapshot"])).resolves.toEqual({ ok: true });
   expect(renew).toHaveBeenCalledTimes(2);
-  expect(spawn).toHaveBeenCalledTimes(4);
+  await expect(runtime.execute(["snapshot"])).resolves.toEqual({ ok: true });
+  expect(renew).toHaveBeenCalledTimes(3);
+  vi.restoreAllMocks();
   expect(spawn.mock.calls.every(call => call[0] === "/usr/bin/ssh")).toBe(true);
   await runtime.dispose();
   expect(existsSync(join(directory, "runtime.lock"))).toBe(false);
 });
 it.each(["taskId", "vmUuid", "hostUuid", "bootNonce", "sshHostKey", "identitySha256", "host", "port", "username"])("never rolls over %s during renewal", async field => {
   const runtime = bind();
+  renew.mockResolvedValueOnce({ ...guest, expiresAt: Date.now() + 20000 });
   await runtime.execute(["snapshot"]);
   renew.mockResolvedValueOnce({ ...guest, [field]: field === "port" ? 23 : "changed" });
   await expect(runtime.execute(["snapshot"])).rejects.toThrow("GUEST_BINDING_CHANGED");
-  expect(spawn).toHaveBeenCalledTimes(2);
+  expect(spawn).toHaveBeenCalledTimes(1);
   await runtime.dispose();
 });
 it("rejects concurrent runtimes and concurrent operations", async () => {
@@ -92,10 +101,7 @@ it("rejects concurrent runtimes and concurrent operations", async () => {
 });
 it("keeps an ambiguous dispatch quarantined across disposal and re-registration", async () => {
   const runtime = bind();
-  request = (child, value) => {
-    if (value.op === "identity") reply(child, value);
-    else child.emit("close", 255, null);
-  };
+  request = child => child.emit("close", 255, null);
   await expect(runtime.execute(["click", "e1"])).rejects.toMatchObject({ delivery: "unknown" });
   await expect(runtime.execute(["snapshot"])).rejects.toThrow("RUNTIME_CLOSED");
   await expect(runtime.dispose()).rejects.toThrow("GUEST_QUARANTINED");
@@ -103,7 +109,7 @@ it("keeps an ambiguous dispatch quarantined across disposal and re-registration"
   unregister!();
   unregister = registerComputerGuest({ taskId: guest.taskId, artifactsDir: directory, connectionDir: directory, authority });
   expect(() => createComputerRuntime({ taskId: guest.taskId, artifactsDir: directory })).toThrow("GUEST_LOCKED");
-  expect(spawn).toHaveBeenCalledTimes(2);
+  expect(spawn).toHaveBeenCalledTimes(1);
 });
 it("cancels renewal without dispatch even when the native authority resolves late", async () => {
   const runtime = bind();
@@ -120,10 +126,7 @@ it("cancels renewal without dispatch even when the native authority resolves lat
 it("revokes idle and in-flight leases on lifecycle invalidation", async () => {
   const runtime = bind();
   const controller = new AbortController();
-  request = (child, value) => {
-    if (value.op === "identity") reply(child, value);
-    else invalidated.abort();
-  };
+  request = () => invalidated.abort();
   await expect(runtime.execute(["click", "e1"], controller.signal)).rejects.toMatchObject({ delivery: "unknown" });
   await expect(runtime.dispose()).rejects.toThrow("GUEST_QUARANTINED");
 });
@@ -153,10 +156,7 @@ it("disposal waits for cancellation classification and never clears an uncertain
   const runtime = bind();
   let dispatched!: () => void;
   const reached = new Promise<void>(resolve => { dispatched = resolve; });
-  request = (child, value) => {
-    if (value.op === "identity") reply(child, value);
-    else dispatched();
-  };
+  request = () => dispatched();
   const pending = runtime.execute(["click", "e1"]);
   const rejected = expect(pending).rejects.toMatchObject({ delivery: "unknown" });
   await reached;
