@@ -1,0 +1,111 @@
+/* relation family (src/ui/viz/relation): flows, networks, hierarchies, sets, maps.
+   Marks carry colour; text stays in ink tokens (white/near-black only inside fills). */
+:root {
+  --rl-land: #ecebe6; --rl-edge: #c3c2b7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --rl-land: #262624; --rl-edge: #4a4a47; }
+}
+:root[data-theme="dark"] { --rl-land: #262624; --rl-edge: #4a4a47; }
+
+.rl .viz-svg { font-size: 12px; }
+.rl .viz-svg text { fill: var(--ink-2); }
+.rl .viz-svg .rl-strong { fill: var(--ink); font-weight: 500; }
+.rl .viz-svg .rl-muted { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rl .viz-svg .rl-head { fill: var(--ink-3); font-size: 11px; font-weight: 500; }
+.rl .viz-svg .rl-halo { paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round; }
+.rl .viz-svg .dimtext { fill: var(--ink-3); }
+
+/* text inside fills */
+.rl .viz-svg .rl-on, .rl .viz-svg .rl-on tspan { fill: #fff; }
+.rl .viz-svg .rl-on.k4, .rl .viz-svg .rl-on.k4 tspan { fill: #0b0b0b; }
+.rl .viz-svg .rl-on.ko, .rl .viz-svg .rl-on.ko tspan { fill: #0b0b0b; }
+.rl .viz-svg .rl-on-lo, .rl .viz-svg .rl-on-lo tspan { fill: #0b0b0b; }
+.rl .viz-svg .rl-on-hi, .rl .viz-svg .rl-on-hi tspan { fill: #fff; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rl .viz-svg .rl-on.k4, :root:not([data-theme="light"]) .rl .viz-svg .rl-on.k4 tspan { fill: #fff; }
+  :root:not([data-theme="light"]) .rl .viz-svg .rl-on.ko, :root:not([data-theme="light"]) .rl .viz-svg .rl-on.ko tspan { fill: #fff; }
+  :root:not([data-theme="light"]) .rl .viz-svg .rl-on-lo, :root:not([data-theme="light"]) .rl .viz-svg .rl-on-lo tspan { fill: #fff; }
+  :root:not([data-theme="light"]) .rl .viz-svg .rl-on-hi, :root:not([data-theme="light"]) .rl .viz-svg .rl-on-hi tspan { fill: #0b0b0b; }
+}
+:root[data-theme="dark"] .rl .viz-svg .rl-on.k4, :root[data-theme="dark"] .rl .viz-svg .rl-on.k4 tspan { fill: #fff; }
+:root[data-theme="dark"] .rl .viz-svg .rl-on.ko, :root[data-theme="dark"] .rl .viz-svg .rl-on.ko tspan { fill: #fff; }
+:root[data-theme="dark"] .rl .viz-svg .rl-on-lo, :root[data-theme="dark"] .rl .viz-svg .rl-on-lo tspan { fill: #fff; }
+:root[data-theme="dark"] .rl .viz-svg .rl-on-hi, :root[data-theme="dark"] .rl .viz-svg .rl-on-hi tspan { fill: #0b0b0b; }
+.rl .viz-svg .rl-on, .rl .viz-svg .rl-on-lo, .rl .viz-svg .rl-on-hi { pointer-events: none; }
+
+/* flows */
+.rl-link { stroke-opacity: 0.38; transition: stroke-opacity var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease); }
+.rl-link:hover { stroke-opacity: 0.62; }
+.rl-link.em { stroke-opacity: 0.55; }
+.rl-link.dim { stroke-opacity: 0.28; }
+.rl-ribbon { fill-opacity: 0.6; transition: fill-opacity var(--dur-fast) var(--ease); }
+.rl-ribbon.dim { fill-opacity: 0.08; }
+.rl-ribbon:hover { fill-opacity: 0.8; }
+.rl-arc { stroke-opacity: 0.55; transition: stroke-opacity var(--dur-fast) var(--ease); }
+.rl-arc.em { stroke-opacity: 0.85; }
+.rl-arc.dim { stroke-opacity: 0.07; }
+.rl-ring { stroke: var(--card); stroke-width: 2px; }
+.rl-hit { cursor: default; }
+
+/* networks */
+.rl-edge { stroke: var(--rl-edge); stroke-linecap: round; transition: stroke-opacity var(--dur-fast) var(--ease); }
+.rl-edge.em { stroke: var(--viz-1); }
+.rl-edge.dim { stroke-opacity: 0.15; }
+.rl-node.dim { opacity: 0.25; }
+.rl-node { transition: opacity var(--dur-fast) var(--ease); }
+.rl-cell { transition: opacity var(--dur-fast) var(--ease); }
+.rl-band { fill: var(--ink); fill-opacity: 0.04; }
+.rl-ringline { fill: none; stroke: var(--viz-grid); stroke-width: 1; }
+
+/* hierarchies */
+.rl-tlink { fill: none; stroke: var(--rl-edge); stroke-width: 1.2; stroke-opacity: 0.85; }
+.rl-tlink.em { stroke: var(--viz-1); stroke-width: 2; }
+.rl-group { fill: var(--ink); fill-opacity: 0.035; }
+.rl-pack-parent { fill: var(--ink); fill-opacity: 0.045; }
+.rl-box { fill: var(--card); stroke: var(--line); stroke-width: 1; }
+.rl-box.em { stroke: var(--viz-1); stroke-width: 1.5; }
+.rl-box.tap { cursor: pointer; }
+.rl-box.tap:hover { stroke: var(--ink-3); }
+.rl-badge { fill: var(--bg); stroke: var(--line); }
+.rl .viz-svg .rl-badge-t { fill: var(--ink-3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.rl-crumb { cursor: pointer; }
+
+/* sets */
+.rl-set { fill-opacity: 0.16; stroke-width: 1.5; transition: fill-opacity var(--dur-fast) var(--ease); }
+.rl-set:hover { fill-opacity: 0.26; }
+.rl-dot-on { fill: var(--ink-2); }
+.rl-dot-off { fill: var(--viz-grid); }
+.rl-bar-set { fill: var(--viz-muted); }
+
+/* maps */
+.rl-land { fill: var(--rl-land); stroke: var(--card); stroke-width: 0.6; }
+.rl-region { stroke: var(--card); stroke-width: 0.8; transition: opacity var(--dur-fast) var(--ease); }
+.rl-region.nodata { fill: var(--rl-land); }
+.rl-region:hover { opacity: 0.8; }
+.rl-sphere { fill: none; stroke: var(--viz-grid); stroke-width: 1; }
+.rl-bubble { fill-opacity: 0.55; stroke: var(--card); stroke-width: 1; transition: fill-opacity var(--dur-fast) var(--ease); }
+.rl-bubble:hover { fill-opacity: 0.85; }
+.rl-route { fill: none; stroke-linecap: round; stroke-opacity: 0.6; transition: stroke-opacity var(--dur-fast) var(--ease); }
+.rl-route:hover { stroke-opacity: 0.95; }
+.rl-tile { transition: opacity var(--dur-fast) var(--ease); }
+.rl-tile:hover { opacity: 0.85; }
+
+/* ramp legend (maps, matrices) */
+.rl-ramp { display: flex; align-items: center; gap: var(--s-6); font-size: var(--fs-2xs); color: var(--ink-3); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.rl-ramp-bar { display: inline-flex; gap: 2px; }
+.rl-ramp-bar i { width: 18px; height: 8px; border-radius: 2px; }
+.rl-ramp-nd { display: inline-flex; align-items: center; gap: var(--s-4); margin-left: var(--s-8); }
+.rl-ramp-nd i { width: 10px; height: 10px; border-radius: 3px; background: var(--rl-land); }
+.rl-empty-line { font-size: var(--fs-xs); color: var(--ink-3); }
+
+/* breadcrumbs and toggles above some figures */
+.rl-bar { display: flex; align-items: center; gap: var(--s-6); flex-wrap: wrap; font-size: var(--fs-2xs); color: var(--ink-3); min-height: 20px; }
+.rl-bar button { all: unset; cursor: pointer; color: var(--ink-2); padding: 1px 6px; border-radius: var(--r-sm); }
+.rl-bar button:hover { background: var(--accent-soft); }
+.rl-bar button[aria-pressed="true"] { color: var(--ink); background: var(--accent-soft); }
+.rl .viz-svg .rl-sm { font-size: 11px; }
+.rl .viz-svg .rl-num-in { fill: var(--ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rl .viz-svg .rl-tiny { font-size: 10.5px; }
+.rl .viz-svg .rl-num { font-variant-numeric: tabular-nums; }
+.rl-leader { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-opacity: 0.7; }
