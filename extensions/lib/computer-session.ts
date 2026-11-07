@@ -2,12 +2,23 @@ import { ComputerObservation } from "./computer-observation";
 import type { ComputerEvaluation, ComputerObservationCapture } from "./computer-evaluation";
 
 export type GuestExecute = (argv: string[], signal?: AbortSignal) => Promise<unknown>;
+/** Pixel position in the latest screen look's image. */
+export type ComputerPoint = { x: number; y: number };
 export type ComputerAction =
   | { kind: "click"; epoch: string; ref: string }
   | { kind: "set-value"; epoch: string; ref: string; value: string }
-  | { kind: "press"; epoch: string; key: string; modifiers?: ("cmd" | "ctrl" | "alt" | "shift")[] };
+  | { kind: "press"; epoch: string; key: string; modifiers?: ("cmd" | "ctrl" | "alt" | "shift")[] }
+  /** Types into ref, or into the focused field when ref is omitted. */
+  | { kind: "type"; epoch: string; ref?: string; text: string }
+  /** Scrolls ref, or under a point of the latest screen look. */
+  | { kind: "scroll"; epoch: string; direction: "up" | "down" | "left" | "right"; amount?: number; ref?: string; x?: number; y?: number }
+  /** Both ends are refs, or both are points of the latest screen look. */
+  | { kind: "drag"; epoch: string; from: { ref: string } | ComputerPoint; to: { ref: string } | ComputerPoint }
+  /** Clicks a point of the latest screen look. epoch is that look's frame. */
+  | { kind: "click-at"; epoch: string; x: number; y: number; button?: "left" | "right"; count?: 1 | 2 };
 export type SessionObservation = ReturnType<ComputerObservation["accept"]>;
-export type GuestImage = { mimeType: "image/png"; data: string; width: number; height: number };
+export type GuestImage = { mimeType: "image/png"; data: string; width: number; height: number; frame?: string };
+type Frame = { id: string; width: number; height: number; scaleX: number; scaleY: number; originX: number; originY: number };
 export type CommandReport = {
   ok: boolean | null;
   /** Verification is the adapter's named scope, never application-level persistence. */
@@ -112,22 +123,69 @@ function screenshotImage(value: unknown): GuestImage {
   return { mimeType: "image/png", data: image.data, width, height };
 }
 
+/** Primary display bounds in guest screen points, the space of coordinate commands. */
+function primaryDisplay(value: unknown): { x: number; y: number; width: number; height: number } {
+  if (!record(value) || value.version !== "2.6" || value.command !== "list-displays" || value.ok !== true || !Array.isArray(value.data)) {
+    throw new Error("Malformed list-displays envelope");
+  }
+  const primary = value.data.find(display => record(display) && display.is_primary === true);
+  const bounds = record(primary) ? primary.bounds : undefined;
+  if (!record(bounds) || ![bounds.x, bounds.y, bounds.width, bounds.height].every(n => typeof n === "number" && Number.isFinite(n)) ||
+      (bounds.width as number) < 1 || (bounds.height as number) < 1) throw new Error("Primary guest display unavailable");
+  return bounds as { x: number; y: number; width: number; height: number };
+}
+
 function appName(value: unknown): asserts value is string {
   if (typeof value !== "string" || !value.trim() || value.length > 512 || /^[\s-]/.test(value) || /[\x00-\x1f\x7f]/.test(value)) {
     throw new Error("Invalid app name");
   }
 }
 
+const REF = /^e[1-9]\d*$/;
+const isRef = (value: unknown): value is string => typeof value === "string" && REF.test(value);
+const isPoint = (value: unknown): value is ComputerPoint => record(value) && Object.keys(value).length === 2 &&
+  [value.x, value.y].every(n => Number.isSafeInteger(n) && (n as number) >= 0 && (n as number) <= 16384);
+const isEnd = (value: unknown): value is { ref: string } => record(value) && Object.keys(value).length === 1 && isRef(value.ref);
+const textValue = (value: unknown) => typeof value === "string" && !value.includes("\0") && Buffer.byteLength(value) <= 65536;
+
+/** Coordinate actions target a screen look's frame; the rest target an observation epoch. */
+function usesFrame(action: ComputerAction): boolean {
+  return action.kind === "click-at" || (action.kind === "scroll" && action.ref === undefined) ||
+    (action.kind === "drag" && !isEnd(action.from));
+}
+
 function actionFields(action: ComputerAction): void {
   if (!record(action)) throw new Error("Expected one typed action");
   const fields = action.kind === "click" ? ["kind", "epoch", "ref"]
     : action.kind === "set-value" ? ["kind", "epoch", "ref", "value"]
-    : action.kind === "press" ? ["kind", "epoch", "key", "modifiers"] : [];
+    : action.kind === "press" ? ["kind", "epoch", "key", "modifiers"]
+    : action.kind === "type" ? ["kind", "epoch", "ref", "text"]
+    : action.kind === "scroll" ? ["kind", "epoch", "direction", "amount", "ref", "x", "y"]
+    : action.kind === "drag" ? ["kind", "epoch", "from", "to"]
+    : action.kind === "click-at" ? ["kind", "epoch", "x", "y", "button", "count"] : [];
   if (!fields.length || Object.keys(action).some(key => !fields.includes(key)) || typeof action.epoch !== "string") {
     throw new Error("Invalid action fields");
   }
-  if (action.kind !== "press" && (typeof action.ref !== "string" || !/^e[1-9]\d*$/.test(action.ref))) throw new Error("Invalid observation ref");
+  if ((action.kind === "click" || action.kind === "set-value") && !isRef(action.ref)) throw new Error("Invalid observation ref");
   if (action.kind === "set-value" && (typeof action.value !== "string" || action.value.includes("\0"))) throw new Error("Invalid value");
+  if (action.kind === "type") {
+    if (action.ref !== undefined && !isRef(action.ref)) throw new Error("Invalid observation ref");
+    if (!textValue(action.text) || !action.text) throw new Error("Invalid text");
+  }
+  if (action.kind === "scroll") {
+    if (!["up", "down", "left", "right"].includes(action.direction)) throw new Error("Invalid scroll direction");
+    if (action.amount !== undefined && (!Number.isSafeInteger(action.amount) || action.amount < 1 || action.amount > 50)) throw new Error("Invalid scroll amount");
+    const point = action.x !== undefined || action.y !== undefined;
+    if (point ? action.ref !== undefined || !isPoint({ x: action.x, y: action.y }) : !isRef(action.ref)) throw new Error("Scroll needs a ref or a point");
+  }
+  if (action.kind === "drag" && !((isEnd(action.from) && isEnd(action.to)) || (isPoint(action.from) && isPoint(action.to)))) {
+    throw new Error("Drag needs two refs or two points");
+  }
+  if (action.kind === "click-at") {
+    if (!isPoint({ x: action.x, y: action.y })) throw new Error("Invalid point");
+    if (action.button !== undefined && !["left", "right"].includes(action.button)) throw new Error("Invalid button");
+    if (action.count !== undefined && action.count !== 1 && action.count !== 2) throw new Error("Invalid click count");
+  }
   if (action.kind === "press") {
     if (typeof action.key !== "string" || !/^(?:[a-zA-Z0-9]|return|escape|tab|space|delete|up|down|left|right|f[1-9]|f1[0-2])$/.test(action.key)) {
       throw new Error("Invalid key");
@@ -159,6 +217,8 @@ export class ComputerSession {
   private sessionId?: string;
   private observations?: ComputerObservation;
   private epoch?: string;
+  private frame?: Frame;
+  private frames = 0;
   private generation = 0;
   private pending?: AbortController;
 
@@ -199,19 +259,31 @@ export class ComputerSession {
     });
   }
 
-  /** A screenshot is evidence only: it never supplies or refreshes action targets. */
-  look(signal?: AbortSignal): Promise<GuestImage> {
+  /**
+   * A screenshot never refreshes refs. An app look is evidence only. A screen look
+   * captures the whole primary guest display and returns a frame: the epoch for
+   * coordinate actions on that image's pixels, valid until the next action or read.
+   */
+  look(signal?: AbortSignal, screen = false): Promise<GuestImage> {
     return this.exclusive(signal, async active => {
       this.requireSession();
       const generation = this.generation;
       this.epoch = undefined;
+      this.frame = undefined;
       this.observations!.invalidateRefs();
       try {
         this.checkAbort(active);
-        const value = await this.execute(["--session", this.sessionId!, "screenshot", "--app", this.app!], active);
+        const display = screen ? primaryDisplay(await this.execute(["--session", this.sessionId!, "list-displays"], active)) : undefined;
+        this.checkAbort(active);
+        const value = await this.execute(["--session", this.sessionId!, "screenshot", ...(screen ? ["--screen", "0"] : ["--app", this.app!])], active);
         this.checkAbort(active);
         if (generation !== this.generation) throw new Error("Observations reset during capture; look again");
-        return screenshotImage(value);
+        const image = screenshotImage(value);
+        if (!display) return image;
+        const frame: Frame = { id: `f${++this.frames}`, width: image.width, height: image.height,
+          scaleX: display.width / image.width, scaleY: display.height / image.height, originX: display.x, originY: display.y };
+        this.frame = frame;
+        return { ...image, frame: frame.id };
       } catch (error) {
         this.resetObservations();
         throw error;
@@ -223,16 +295,57 @@ export class ComputerSession {
     return this.exclusive(signal, async active => {
       this.requireSession();
       actionFields(action);
-      if (!this.epoch || action.epoch !== this.epoch) throw new Error("Fresh actionable observation epoch required");
-      const argv = action.kind === "press"
-        ? ["press", [...(action.modifiers ?? []), action.key].join("+"), "--app", this.app!]
-        : [action.kind, this.observations!.resolve(action.epoch, action.ref), ...(action.kind === "set-value" ? ["--", action.value] : [])];
+      const frame = usesFrame(action) ? this.frame : undefined;
+      if (usesFrame(action) ? !frame || action.epoch !== frame.id : !this.epoch || action.epoch !== this.epoch) {
+        throw new Error(usesFrame(action) ? "Fresh screen look frame required for coordinates" : "Fresh actionable observation epoch required");
+      }
+      const commands = this.commands(action, frame);
       this.epoch = undefined;
+      this.frame = undefined;
       this.observations!.invalidateRefs();
-      const result = await this.runReport(argv, action.kind, active);
+      let result!: CommandReport;
+      for (const [argv, command, requiresDisposition] of commands) {
+        result = await this.runReport(argv, command, active, requiresDisposition);
+        if (result.ok !== true) break;
+      }
       if (result.ok !== true) this.resetObservations();
       return { action: result, ...await this.afterAction(active) };
     });
+  }
+
+  /** Guest CLI commands for one action; refs and points are resolved before refs are invalidated. */
+  private commands(action: ComputerAction, frame?: Frame): [string[], string, boolean][] {
+    const ref = (value: string) => this.observations!.resolve(action.epoch, value);
+    const point = ({ x, y }: ComputerPoint) => {
+      if (!frame || x >= frame.width || y >= frame.height) throw new Error("Point outside the screen look");
+      return [Math.round(frame.originX + x * frame.scaleX), Math.round(frame.originY + y * frame.scaleY)];
+    };
+    switch (action.kind) {
+      case "click": return [[["click", ref(action.ref)], "click", true]];
+      case "set-value": return [[["set-value", ref(action.ref), "--", action.value], "set-value", true]];
+      case "press": return [[["press", [...(action.modifiers ?? []), action.key].join("+"), "--app", this.app!], "press", true]];
+      case "type":
+        return action.ref !== undefined ? [[["type", ref(action.ref), "--", action.text], "type", false]]
+          // No ref: paste into the focused field through the guest clipboard.
+          : [[["clipboard-set", "--", action.text], "clipboard-set", false], [["press", "cmd+v", "--app", this.app!], "press", true]];
+      case "scroll": {
+        const amount = action.amount ?? 3;
+        if (action.ref !== undefined) return [[["scroll", ref(action.ref), "--direction", action.direction, "--amount", String(amount)], "scroll", false]];
+        const [x, y] = point({ x: action.x!, y: action.y! });
+        const dx = action.direction === "right" ? amount : action.direction === "left" ? -amount : 0;
+        const dy = action.direction === "up" ? amount : action.direction === "down" ? -amount : 0;
+        return [[["mouse-wheel", `--x=${x}`, `--y=${y}`, `--dx=${dx}`, `--dy=${dy}`, "--headed"], "mouse-wheel", false]];
+      }
+      case "drag": {
+        const side = (name: "from" | "to", value: { ref: string } | ComputerPoint) =>
+          "ref" in value ? [`--${name}`, ref(value.ref)] : [`--${name}-xy=${point(value).join(",")}`];
+        return [[["drag", ...side("from", action.from), ...side("to", action.to), "--headed"], "drag", false]];
+      }
+      case "click-at": {
+        const [x, y] = point(action);
+        return [[["mouse-click", `--xy=${x},${y}`, "--button", action.button ?? "left", "--count", String(action.count ?? 1), "--headed"], "mouse-click", false]];
+      }
+    }
   }
 
   /** Invalidate immediately, but retain the lock until execute settles. */
@@ -245,6 +358,7 @@ export class ComputerSession {
   resetObservations(): void {
     this.generation++;
     this.epoch = undefined;
+    this.frame = undefined;
     this.observations?.invalidate();
     this.capture?.reset();
   }
@@ -308,6 +422,7 @@ export class ComputerSession {
     const generation = this.generation;
     // The previous refs cannot be used while a replacement observation is pending.
     this.epoch = undefined;
+    this.frame = undefined;
     try {
       this.checkAbort(signal);
       const value = await this.execute(["--session", this.sessionId!, "snapshot", "--app", this.app!], signal);

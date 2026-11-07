@@ -44,6 +44,17 @@ import Darwin
                 }
                 result = ["argv": argv, "result": try desktopResult(Data((input["stdout"] as! String).utf8),
                     status: Int32(input["status"] as? Int ?? 0), normalExit: true, command: "screenshot", capture: capture)]
+            case "helper":
+                var copied: [String: Any] = [:]
+                do {
+                    let copy = try HelperCopy(Data((input["data"] as! String).utf8), home: input["home"] as! String)
+                    var info = stat()
+                    _ = lstat(copy.path, &info)
+                    copied = ["path": copy.path, "mode": Int(info.st_mode & 0o7777), "owner": Int(info.st_uid),
+                              "links": Int(info.st_nlink), "data": String(decoding: FileManager.default.contents(atPath: copy.path)!, as: UTF8.self)]
+                }
+                copied["removed"] = !FileManager.default.fileExists(atPath: copied["path"] as! String)
+                result = copied
             case "fifo":
                 guard mkfifo(input["path"] as! String, 0o600) == 0 else { throw Refusal("FIXTURE_ERROR") }
                 result = true
@@ -180,6 +191,21 @@ describe.skipIf(process.platform !== "darwin")("게스트 실행기 입장 검�
     expect(check({ check: "result", stdout, status, normalExit })).toEqual({ error });
   });
 
+  it("명령마다 호출 사용자 소유의 비공개 helper 사본을 만들고 정리한다", () => {
+    const home = mkdtempSync(join(tmpdir(), "computer-helper-"));
+    const copied = check({ check: "helper", home, data: "verified helper bytes" }).value;
+    expect(copied).toMatchObject({ mode: 0o700, owner: process.getuid!(), links: 1, data: "verified helper bytes", removed: true });
+    expect(copied.path.startsWith(home + "/.ondra-helper-")).toBe(true);
+    expect(readdirSync(home)).toEqual([]);
+  });
+
+  it("화면 목록만 배열 데이터를 허용한다", () => {
+    const displays = { version: "2.6", command: "list-displays", ok: true, data: [{ id: "1", is_primary: true }] };
+    expect(check({ check: "result", command: "list-displays", stdout: JSON.stringify(displays), status: 0, normalExit: true })).toEqual({ value: displays });
+    const snapshot = { ...displays, command: "snapshot" };
+    expect(check({ check: "result", command: "snapshot", stdout: JSON.stringify(snapshot), status: 0, normalExit: true })).toEqual({ error: "INVALID_DESKTOP_RESPONSE" });
+  });
+
   it("캡처 소유권 없는 스크린샷 성공 경로를 이미지로 전달하지 않는다", () => {
     const envelope = { version: "2.6", command: "screenshot", ok: true, data: { path: "/guest/capture.png" } };
     expect(check({ check: "result", command: "screenshot", stdout: JSON.stringify(envelope), status: 0, normalExit: true }))
@@ -302,6 +328,16 @@ describe.skipIf(process.platform !== "darwin")("게스트 실행기 입장 검�
     [...session, "set-value", ref, "--", "--headed $(touch /tmp/no); 한글\n"],
     [...session, "set-value", ref, "--", ""],
     [...session, "press", "cmd+shift+a", "--app", "Calculator"],
+    [...session, "screenshot", "--screen", "0"],
+    [...session, "list-displays"],
+    [...session, "type", ref, "--", "--headed $(id) 한글"],
+    [...session, "clipboard-set", "--", "-x"],
+    [...session, "scroll", ref, "--direction", "left", "--amount", "50"],
+    [...session, "mouse-click", "--xy=0,99999", "--button", "right", "--count", "2", "--headed"],
+    [...session, "mouse-wheel", "--x=10", "--y=20", "--dx=-50", "--dy=0", "--headed"],
+    [...session, "drag", "--from", ref, "--to", ref, "--headed"],
+    [...session, "drag", "--from-xy=1,2", "--to-xy=3,4", "--headed"],
+    [...session, "drag", "--from", ref, "--to-xy=3,4", "--headed"],
   ];
   it.each(allowed.map(argv => [JSON.stringify(argv), argv] as const))("허용 형식을 변경 없이 유지한다: %s", (_, argv) => {
     expect(check({ check: "argv", argv })).toEqual({ value: argv });
@@ -323,6 +359,20 @@ describe.skipIf(process.platform !== "darwin")("게스트 실행기 입장 검�
     [...session, "set-value", ref, "--", "x".repeat(65537)],
     [...session, "session", "end", "another"], [...session, "batch", "[]"],
     ["--session", "../escape", "click", ref],
+    [...session, "screenshot", "--screen", "1"], [...session, "screenshot"], [...session, "list-displays", "--json"],
+    [...session, "type", ref, "text"], [...session, "type", ref, "--", "\0"], [...session, "clipboard-set", "x"],
+    [...session, "clipboard-set", "--image", "/tmp/x.png"], [...session, "clipboard-get"],
+    [...session, "scroll", ref, "--direction", "in", "--amount", "3"], [...session, "scroll", ref, "--direction", "up", "--amount", "51"],
+    [...session, "scroll", ref, "--direction", "up", "--amount", "0"],
+    [...session, "mouse-click", "--xy=-1,2", "--button", "left", "--count", "1", "--headed"],
+    [...session, "mouse-click", "--xy=1,2", "--button", "middle", "--count", "1", "--headed"],
+    [...session, "mouse-click", "--xy=1,2", "--button", "left", "--count", "3", "--headed"],
+    [...session, "mouse-click", "--xy=1,2", "--button", "left", "--count", "1"],
+    [...session, "mouse-wheel", "--x=10", "--y=20", "--dx=51", "--dy=0", "--headed"],
+    [...session, "drag", "--from", ref, "--headed"], [...session, "drag", "--from", ref, "--to", ref],
+    [...session, "drag", "--to", ref, "--from", ref, "--headed"], [...session, "drag", "--from", "/tmp/x", "--to", ref, "--headed"],
+    [...session, "drag", "--from", ref, "--to", ref, "--duration", "1", "--headed"],
+    [...session, "mouse-move", "--xy=1,1", "--headed"], [...session, "key-down", "cmd"],
   ];
   it.each(denied.map((argv, i) => [i, argv] as const))("허용되지 않은 인자 형식 %i을 거부한다", (_, argv) => {
     expect(check({ check: "argv", argv })).toEqual({ error: "INVALID_ARGV" });

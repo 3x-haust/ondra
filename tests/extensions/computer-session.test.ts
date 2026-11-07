@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import { ComputerSession, type ComputerAction, type GuestExecute } from "../../extensions/lib/computer-session";
 
@@ -215,6 +216,96 @@ describe("ComputerSession", () => {
     expect(result.observation).toMatchObject({ kind: "unchanged", base_epoch: epoch, snapshot_id: "s2" });
     await expect(session.act(action)).rejects.toThrow("Fresh actionable");
     expect(execute).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([
+    ["type at a ref", { kind: "type", ref: "e2", text: "-x $(id) 한글" }, [["type", "@s1:e11", "--", "-x $(id) 한글"]]],
+    ["type into the focused field", { kind: "type", text: "hello" }, [["clipboard-set", "--", "hello"], ["press", "cmd+v", "--app", "TextEdit"]]],
+    ["scroll a ref", { kind: "scroll", ref: "e1", direction: "down", amount: 5 }, [["scroll", "@s1:e10", "--direction", "down", "--amount", "5"]]],
+    ["drag between refs", { kind: "drag", from: { ref: "e1" }, to: { ref: "e3" } }, [["drag", "--from", "@s1:e10", "--to", "@s1:e12", "--headed"]]],
+  ] as const)("dispatches %s then observes", async (_name, input, commands) => {
+    const { session, execute } = ready(...commands.map(([command]) => delivered(command)), snapshot("s2"));
+    const first = await session.start("TextEdit");
+    const result = await session.act({ epoch: first.observation!.epoch, ...input } as ComputerAction);
+    expect(execute.mock.calls.slice(3, 3 + commands.length).map(call => call[0])).toEqual(commands.map(argv => ["--session", "guest-session-1", ...argv]));
+    expect(execute.mock.calls.at(-1)![0]).toEqual(["--session", "guest-session-1", "snapshot", "--app", "TextEdit"]);
+    expect(result.action.ok).toBe(true);
+    expect(result.observation?.snapshot_id).toBe("s2");
+  });
+
+  it("stops a focused-field paste when the clipboard write fails", async () => {
+    const { session, execute } = ready(failed("clipboard-set"), snapshot("s2"));
+    const first = await session.start("TextEdit");
+    const result = await session.act({ kind: "type", epoch: first.observation!.epoch, text: "hello" });
+    expect(result.action.ok).toBe(false);
+    expect(execute.mock.calls.map(call => call[0][2])).not.toContain("press");
+  });
+
+  // A real 200×100 PNG of a guest display that is 100×50 points at 2× scale.
+  const pixels = (width: number, height: number) => {
+    const crc = (bytes: Buffer) => {
+      let value = 0xffffffff;
+      for (const byte of bytes) { value ^= byte; for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0); }
+      return (value ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type: string, data: Buffer) => {
+      const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+      const out = Buffer.alloc(body.length + 8);
+      out.writeUInt32BE(data.length, 0); body.copy(out, 4); out.writeUInt32BE(crc(body), body.length + 4);
+      return out;
+    };
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 0;
+    const rows = Buffer.alloc((width + 1) * height);
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header),
+      chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]).toString("base64");
+  };
+  const displays = () => ({ version: "2.6", ok: true, command: "list-displays",
+    data: [{ id: "1", is_primary: true, scale: 2, bounds: { x: 0, y: 0, width: 100, height: 50 } }] });
+  const screen = () => screenshot({ data: pixels(200, 100), width: 200, height: 100 });
+
+  it.each([
+    ["click-at", { kind: "click-at", x: 21, y: 10, count: 2 }, ["mouse-click", "--xy=11,5", "--button", "left", "--count", "2", "--headed"]],
+    ["scroll at a point", { kind: "scroll", x: 199, y: 99, direction: "up" }, ["mouse-wheel", "--x=100", "--y=50", "--dx=0", "--dy=3", "--headed"]],
+    ["drag between points", { kind: "drag", from: { x: 0, y: 0 }, to: { x: 10, y: 21 } }, ["drag", "--from-xy=0,0", "--to-xy=5,11", "--headed"]],
+  ] as const)("maps %s from screen look pixels to guest points", async (_name, input, argv) => {
+    const { session, execute } = ready(displays(), screen(), delivered(argv[0]), snapshot("s2"));
+    await session.start("TextEdit");
+    const image = await session.look(undefined, true);
+    expect(execute.mock.calls[3][0]).toEqual(["--session", "guest-session-1", "list-displays"]);
+    expect(execute.mock.calls[4][0]).toEqual(["--session", "guest-session-1", "screenshot", "--screen", "0"]);
+    expect(image).toMatchObject({ width: 200, height: 100, frame: "f1" });
+    const result = await session.act({ epoch: image.frame!, ...input } as ComputerAction);
+    expect(execute.mock.calls[5][0]).toEqual(["--session", "guest-session-1", ...argv]);
+    expect(result.observation?.snapshot_id).toBe("s2");
+    await expect(session.act({ epoch: image.frame!, ...input } as ComputerAction)).rejects.toThrow("Fresh screen look");
+  });
+
+  it("refuses coordinates without a current screen look or outside its image", async () => {
+    const { session, execute } = ready(screenshot(), displays(), screen(), snapshot("s2"));
+    const first = await session.start("TextEdit");
+    await expect(session.act({ kind: "click-at", epoch: first.observation!.epoch, x: 1, y: 1 })).rejects.toThrow("Fresh screen look");
+    const app = await session.look();
+    expect(app.frame).toBeUndefined();
+    const image = await session.look(undefined, true);
+    await expect(session.act({ kind: "click-at", epoch: image.frame!, x: 200, y: 0 })).rejects.toThrow("outside");
+    await session.observe();
+    await expect(session.act({ kind: "click-at", epoch: image.frame!, x: 1, y: 1 })).rejects.toThrow("Fresh screen look");
+    expect(execute).toHaveBeenCalledTimes(7);
+  });
+
+  it.each([
+    { kind: "type", ref: "e1", text: "" }, { kind: "type", ref: "e1", text: "a\0" }, { kind: "type", ref: "@s1:e10", text: "a" },
+    { kind: "scroll", ref: "e1", direction: "sideways" }, { kind: "scroll", ref: "e1", direction: "up", amount: 51 },
+    { kind: "scroll", direction: "up" }, { kind: "scroll", ref: "e1", x: 1, y: 1, direction: "up" },
+    { kind: "drag", from: { ref: "e1" }, to: { x: 1, y: 1 } }, { kind: "drag", from: "e1", to: "e2" },
+    { kind: "click-at", x: -1, y: 1 }, { kind: "click-at", x: 1.5, y: 1 }, { kind: "click-at", x: 1, y: 1, button: "middle" },
+    { kind: "click-at", x: 1, y: 1, count: 3 }, { kind: "click-at", x: 1, y: 1, headed: false },
+  ])("refuses invalid new action fields %j", async input => {
+    const { session, execute } = ready();
+    const first = await session.start("TextEdit");
+    await expect(session.act({ epoch: first.observation!.epoch, ...input } as ComputerAction)).rejects.toThrow();
+    expect(execute).toHaveBeenCalledTimes(3);
   });
 
   it.each([

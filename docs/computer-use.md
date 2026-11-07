@@ -160,12 +160,34 @@ attempts a following structured observation:
 ```json
 {"action":"act","input":{"kind":"click","epoch":"<latest epoch>","ref":"e1"}}
 {"action":"act","input":{"kind":"set-value","epoch":"<latest epoch>","ref":"e2","value":"test text"}}
+{"action":"act","input":{"kind":"type","epoch":"<latest epoch>","ref":"e2","text":"appended text"}}
+{"action":"act","input":{"kind":"type","epoch":"<latest epoch>","text":"into the focused field"}}
 {"action":"act","input":{"kind":"press","epoch":"<latest epoch>","key":"return","modifiers":["cmd"]}}
+{"action":"act","input":{"kind":"scroll","epoch":"<latest epoch>","ref":"e3","direction":"down","amount":5}}
+{"action":"act","input":{"kind":"drag","epoch":"<latest epoch>","from":{"ref":"e4"},"to":{"ref":"e5"}}}
 ```
 
 Use actual values from the latest observation, not the illustrative placeholders.
 `press` accepts the named key grammar, not arbitrary text or a shell command.
-There is no coordinate-click, drag or arbitrary host-input escape hatch.
+`type` without a ref pastes through the guest clipboard into the focused field,
+so click the field first.
+
+Prefer refs. For controls that `observe` does not expose, `look` with
+`"screen": true` captures the whole guest screen and returns a `frame`. Coordinate
+actions take pixels of that image and the frame as their epoch; the session maps
+them to guest screen points. Any action or read retires the frame:
+
+```json
+{"action":"look","screen":true}
+{"action":"act","input":{"kind":"click-at","epoch":"f1","x":640,"y":380,"button":"left","count":2}}
+{"action":"act","input":{"kind":"scroll","epoch":"f2","x":640,"y":380,"direction":"up"}}
+{"action":"act","input":{"kind":"drag","epoch":"f3","from":{"x":100,"y":100},"to":{"x":400,"y":300}}}
+```
+
+Pointer actions are physical input inside the guest's own window server. They
+never reach the host. There is no arbitrary command or host-input escape hatch.
+The guest endpoint must be reinstalled from the app build that adds these
+commands; an older endpoint refuses them as `INVALID_ARGV`.
 
 ### Full, delta, unchanged and refs
 
@@ -187,14 +209,13 @@ There is no coordinate-click, drag or arbitrary host-input escape hatch.
   `OBSERVATION_TOO_LARGE` with refs invalidated. It is not silently clipped into
   an actionable view.
 
-`look` explicitly captures a guest PNG and saves it privately. It does not
-supply action targets and invalidates old refs: call `observe` again before
-acting. Identical images are omitted unless `full: true` is requested or the
+`look` explicitly captures a guest PNG and saves it privately. It invalidates
+old refs: call `observe` again before ref actions. Only a screen look supplies
+coordinate targets, through its frame. Identical images are omitted unless `full: true` is requested or the
 model/context resets. Images are limited to 4 MiB, 8192 pixels per dimension and
 16 megapixels. Image-capable models receive image content; text-only models get
 `MODEL_IMAGE_UNSUPPORTED` and can use structured observations only. Visual-only
-controls remain unsupported for text-only models; an image alone does not make
-coordinate actions available. Provider-independent tool calling is not evidence
+controls remain unsupported for text-only models. Provider-independent tool calling is not evidence
 that every model can complete every task.
 
 ### Stop and recovery
