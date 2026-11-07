@@ -567,13 +567,13 @@
 @media (prefers-reduced-motion: no-preference) {
   .tone-live .sb-dot,
   .g-node.running {
-    animation: halo 1.8s var(--ease) infinite;
+    animation: none;
   }
   .g-node.running {
     animation: none;
   }
   .tone-ask .sb-dot {
-    animation: ask-ping 1.6s var(--ease) infinite;
+    animation: none;
   }
   /* menus pop from where they open */
   .pop {
@@ -583,24 +583,15 @@
   /* work in progress shimmers */
   .g-row:not(.past) .g-line2,
   .fork-line.shimmer {
-    background: linear-gradient(90deg, var(--ink-4) 0%, var(--ink-2) 50%, var(--ink-4) 100%);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer 2.8s linear infinite;
+    color: var(--ink-3);
   }
   .g-row.past .g-line2 {
     animation: none;
   }
   /* buttons feel pressable */
-  button:not(:disabled):active {
-    transform: scale(0.97);
-  }
-  .sb-row:active,
-  .panel-tab:active,
-  .g-row:active {
-    transform: none;
+  .icon-btn:not(:disabled):active,
+  .btn.sm:not(:disabled):active {
+    transform: scale(0.96);
   }
   .reply.linked::before {
     animation: grow-y 0.3s var(--ease-drawer) both;
@@ -964,7 +955,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
-    animation: status-pulse 2s steps(6) infinite;
+    animation: none;
   }
 }
 /* 11 · flow: metadata ends on one right edge; lanes fade in at the top */
@@ -1766,7 +1757,7 @@ body.resizing .panel {
 }
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
-    animation: status-pulse 1.8s var(--ease) infinite;
+    animation: none;
   }
 }
 /* 17 · one header title style everywhere */
@@ -7897,20 +7888,9 @@ textarea { resize: none !important; field-sizing: content; }
   .browser-view .burl { transition: none; }
 }
 
-/* live status text ("생각하는 중", what a job is doing): a light band sweeps
-   across the letters while it works (Codex); still text when motion is reduced */
+/* live status text ("생각하는 중", what a job is doing): still text */
 .shimmer {
   color: var(--ink-3);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .shimmer {
-    background: linear-gradient(100deg, var(--ink-4) 0%, var(--ink-4) 40%, var(--ink) 50%, var(--ink-4) 60%, var(--ink-4) 100%);
-    background-size: 250% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer-sweep 1.8s linear infinite;
-  }
 }
 @keyframes shimmer-sweep {
   from { background-position: 100% 0; }
