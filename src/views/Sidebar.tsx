@@ -381,6 +381,22 @@ export function Sidebar() {
                     <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}><span class="sb-meta">{all()}</span></Show>}><span class="sb-live" title={`이 프로젝트에서 일하는 중 ${live()}개`}><i />{live()}</span></Show>}>
                       <span class="spin sm" />
                     </Show>
+                    <span class="sb-acts">
+                      <span
+                        class="sb-act"
+                        role="button"
+                        title="더 보기"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closePops();
+                          setMenu(null);
+                          const r = e.currentTarget.getBoundingClientRect();
+                          setProjMenu({ id: p.id, x: r.left, y: r.bottom + 4 });
+                        }}
+                      >
+                        <Icon name="more" size={14} />
+                      </span>
+                    </span>
                   </button>
                   <Show when={all()}>
                     <Fold open={open()}>

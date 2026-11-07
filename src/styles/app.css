@@ -771,6 +771,13 @@ button.route:hover {
   align-items: stretch;
   gap: var(--s-8);
 }
+.set-row .textarea.plain {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: vertical;
+}
 .set-label {
   flex: 1;
   min-width: 0;
