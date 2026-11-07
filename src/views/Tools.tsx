@@ -18,6 +18,14 @@ const KO: Record<string, string> = {
   find: "이름으로 파일을 찾아요",
   ls: "폴더 안 목록을 봐요",
   powershell: "PowerShell 명령을 실행해요",
+  memory: "나중에 볼 기억을 저장하거나 바꿔요",
+  memory_search: "저장한 기억에서 찾아요",
+  memory_save: "나중에 볼 기억을 저장하거나 바꿔요",
+  memory_forget: "저장한 기억을 지워요",
+  skill_search: "필요한 스킬을 찾아요",
+  web_search: "웹에서 검색해요",
+  web_fetch: "웹 페이지를 읽어요",
+  device: "시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요",
 };
 
 const hasHangul = (s: string) => /[가-힣]/.test(s);
@@ -148,7 +156,7 @@ export function ToolsTab() {
                         <button class="tl-head" onClick={() => setOpen(open() === r.key ? null : r.key)} aria-expanded={open() === r.key}>
                           <span class="tl-name">{r.name}</span>
                           <span class="tl-line" classList={{ en: !r.ko }} title={r.full}>{r.line}</span>
-                          <span class="tl-src">{r.source}</span>
+                          <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버"}><span class="tl-src">{r.source.replace(/^Ondra 확장 · |^확장 · /, "")}</span></Show>
                           <span class="tl-size">{r.off ? "꺼짐" : r.found ? "검색" : `${tokens(r.size)}`}</span>
                         </button>
                         <div class="tl-more" classList={{ open: open() === r.key }}>

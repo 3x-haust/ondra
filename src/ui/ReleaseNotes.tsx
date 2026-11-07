@@ -17,7 +17,19 @@ export function ReleaseNotes(props: { current: string }) {
   return (
     <Sheet title="릴리즈 노트" class="rn-sheet" onClose={() => setNotesFor(null)}>
       <div class="rn-list" ref={body}>
-        <Show when={releases().length} fallback={<div class="rn-empty">{releasesLoading() ? "불러오는 중…" : releasesFailed() ? "릴리즈 노트를 불러오지 못했어요" : ""}</div>}>
+        <Show
+          when={releases().length}
+          fallback={
+            <Show when={releasesLoading() || releasesFailed()}>
+              <div class="rn-empty">
+                <Show when={!releasesLoading()} fallback="불러오는 중…">
+                  릴리즈 노트를 불러오지 못했어요
+                  <button class="btn sm" onClick={() => void loadReleases()}>다시 시도</button>
+                </Show>
+              </div>
+            </Show>
+          }
+        >
           <For each={releases()}>
             {(r) => (
               <section class="rn-entry" data-version={r.version}>

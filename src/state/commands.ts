@@ -48,7 +48,7 @@ export function appCommands(): ShortcutCommand[] {
     }, panelAvailable),
     command("browser", "공유 브라우저", "패널", "globe", () => openBrowser(), panelAvailable),
     ...([
-      ["artifacts", "결과물", "inbox"], ["changes", "변경 사항", "diff"], ["pr", "PR", "pr"],
+      ["artifacts", "결과물", "box"], ["changes", "변경 사항", "diff"], ["pr", "PR", "pr"],
       ["files", "파일", "file"], ["terminal", "셸", "shell"], ["overview", "일 정보", "list"],
     ] as const).map(([id, label, icon]) => command(id, label, "일 패널", icon, () => openPanel(id), () => !!job())),
     command("newTab", "새 패널 탭", "패널", "plus", newPanelTab, visiblePanel),

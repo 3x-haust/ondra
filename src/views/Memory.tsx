@@ -437,6 +437,14 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
           if (first) alpha = 0, fit(false);
           return heat(0.03);
         }
+        // opened fresh: lay it out before showing it, then fit, so it opens in view and holds still
+        if (first) {
+          alpha = 1;
+          for (let i = 0; i < 400 && alpha > 0.02; i++) step(), (alpha *= 0.982);
+          alpha = 0;
+          setTick((t) => t + 1);
+          return fit(false);
+        }
         heat(added > 20 ? 0.9 : added ? 0.6 : 0.3);
       },
     ),

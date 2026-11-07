@@ -339,7 +339,19 @@ export function Sidebar() {
       </div>
       </Show>
 
-      <div class="sb-scroll">
+      <div
+        class="sb-scroll"
+        ref={(el) => {
+          // more rows below the fold: the list fades out at the bottom instead of a clean cut
+          const mark = () => el.classList.toggle("more", el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+          el.addEventListener("scroll", mark, { passive: true });
+          const ro = new ResizeObserver(mark);
+          ro.observe(el);
+          const mo = new MutationObserver(mark);
+          mo.observe(el, { childList: true, subtree: true });
+          onCleanup(() => (ro.disconnect(), mo.disconnect()));
+        }}
+      >
         <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} data-shortcut="main" title="메인에게 말하기 (⌘0)">
           <Icon name="message" size={15} class="sb-main-ic" />
           <span class="sb-title">메인</span>

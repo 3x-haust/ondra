@@ -750,3 +750,7 @@
     transition: none;
   }
 }
+/* rows without a source keep the size in its own column */
+.tl-head .tl-size {
+  grid-column: 4;
+}
