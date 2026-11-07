@@ -8083,7 +8083,7 @@ textarea { resize: none !important; field-sizing: content; }
 .req-head:hover { background: var(--hover); color: var(--ink-2, var(--ink)); }
 .req-sum { display: flex; align-items: center; gap: var(--s-8); min-width: 0; }
 .req-tag { font-size: var(--fs-xs); color: var(--ink-3); }
-.req-tag.ask { color: var(--warn, #e5a50a); }
+.req-tag.ask { color: var(--warn-ink); }
 .req-tag.live { color: var(--accent); }
 .req-chev { margin-left: auto; color: var(--ink-4); transition: transform var(--dur) var(--ease); }
 .req-board.open .req-chev { transform: rotate(90deg); }
@@ -8629,4 +8629,14 @@ select.select.dev-space {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* the request list floats over the conversation like other menus */
+.req-list {
+  box-shadow: var(--shadow-pop);
+}
+/* keyboard focus shows the hidden message actions it lands on */
+.convo > .reply .reply-foot:focus-within .msg-actions,
+.task-view .thread-inner > .reply-foot:focus-within .msg-actions,
+.user-turn:focus-within .msg-actions {
+  opacity: 1;
 }

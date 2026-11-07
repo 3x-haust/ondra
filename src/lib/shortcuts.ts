@@ -19,6 +19,7 @@ export const shortcuts = {
   sidebar: cmd("KeyB"),
   board: cmd("KeyB", true),
   memory: cmd("KeyM", true),
+  results: cmd("KeyE", true),
   devices: cmd("KeyD", true),
   previousJob: cmd("BracketLeft", true),
   nextJob: cmd("BracketRight", true),

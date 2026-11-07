@@ -31,6 +31,7 @@ export function appCommands(): ShortcutCommand[] {
     command("sidebar", "왼쪽 목록 접기 · 펴기", "보기", "panelLeft", toggleSidebar),
     command("board", "캔버스 (모든 일)", "이동", "canvas", () => setView(view().name === "board" ? { name: "main" } : { name: "board" })),
     command("memory", "기억", "이동", "memory", () => setView({ name: "memory" })),
+    command("results", "결과", "이동", "inbox", () => setView({ name: "results" })),
     command("devices", "디바이스 허브", "이동", "phone", () => setView({ name: "devices" })),
     ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: `${s.label} 공간으로 전환`, section: "공간", icon: "arrow", shortcut: i < 9 ? { code: `Digit${i + 1}`, meta: true } : undefined, run: () => switchSpace(s.id) })),
     command("previousJob", "이전 일", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1)),
