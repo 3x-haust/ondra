@@ -8510,8 +8510,7 @@ textarea { resize: none !important; field-sizing: content; }
   display: none;
 }
 .needs-menu {
-  min-width: 260px;
-  max-width: 340px;
+  min-width: 0;
 }
 .needs-menu .row-title {
   flex: 1;
@@ -8587,4 +8586,19 @@ textarea { resize: none !important; field-sizing: content; }
       0 10px 0 -2px var(--cv-card),
       0 10px 0 -1px color-mix(in srgb, var(--ink) 4%, transparent);
   }
+}
+/* the device's space picker sits with the small buttons beside it */
+select.select.dev-space {
+  height: var(--h-sm);
+  font-size: var(--fs-xs);
+  padding-left: var(--s-8);
+}
+.todos-list.plan-list {
+  padding: 0;
+  max-height: none;
+  overflow: visible;
+}
+/* cards in the thread keep the thread's own gap */
+.thread-inner > .blocks {
+  margin: 0;
 }
