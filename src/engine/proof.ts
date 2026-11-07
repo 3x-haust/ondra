@@ -173,3 +173,9 @@ export function reviewFound(text: string): boolean {
   }
   return false;
 }
+
+/** A "done" whose last sentence promises work for later ("…배포할게요") is not done. */
+export function promisesLater(summary: string): boolean {
+  const last = summary.trim().split(/(?<=[.!?。])\s+/).pop() ?? "";
+  return /(할게요|할께요|하겠(습니다|어요)|할\s*예정|예정이에요|예정입니다|드릴게요|볼게요|올릴게요|낼게요)\s*[.!。]?$/.test(last.trim());
+}
