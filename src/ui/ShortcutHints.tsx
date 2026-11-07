@@ -3,15 +3,17 @@ import { editableTarget, localKeysTarget, shortcutLabel, shortcutOverlay, type S
 import { watchShortcutHold } from "../lib/shortcutHold";
 import "./shortcutHints.css";
 
-interface Hint { id: string; label: string; rect: DOMRect }
+interface Hint { id: string; label: string; rect: DOMRect; row?: DOMRect }
 
 export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enabled: () => boolean }) {
   const [hints, setHints] = createSignal<Hint[]>([]);
   const [visible, setVisible] = createSignal(false);
   let layer!: HTMLDivElement;
   let anchors: { el: HTMLElement; rect: DOMRect }[] = [];
+  // an empty composer is where focus rests: hints still show there
+  const emptyComposer = (el: Element | null) => el instanceof HTMLTextAreaElement && !el.value && !!el.closest(".composer");
   const allowed = () => props.enabled() && !document.hidden && !shortcutOverlay()
-    && !editableTarget(document.activeElement) && !localKeysTarget(document.activeElement);
+    && (!editableTarget(document.activeElement) || emptyComposer(document.activeElement)) && !localKeysTarget(document.activeElement);
   const hide = () => setVisible(false);
   const show = () => {
     const commands = new Map(props.commands().map((c) => [c.id, c]));
@@ -27,7 +29,9 @@ export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enable
       const top = document.elementFromPoint(x, y);
       if (!top || !el.contains(top)) continue;
       anchors.push({ el, rect: r });
-      next.push({ id: command.id, label: shortcutLabel(command.shortcut), rect: r });
+      // a small button in a sidebar heading: its badge lines up with the rows' badges
+      const row = el.closest<HTMLElement>(".sb-head")?.getBoundingClientRect();
+      next.push({ id: command.id, label: shortcutLabel(command.shortcut), rect: r, row });
     }
     setHints(next);
     // Each badge sits inside its own control: centered on a small button, at the right
@@ -41,7 +45,7 @@ export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enable
       const h = badge.offsetHeight;
       const r = hint.rect;
       const small = r.width <= Math.max(64, w + 12) && r.height <= 48;
-      let left = small ? r.left + (r.width - w) / 2 : r.right - w - 8;
+      let left = hint.row && w > r.width ? hint.row.right - w - 8 : small ? r.left + (r.width - w) / 2 : r.right - w - 8;
       let top = r.height > 48 ? r.top + 8 : r.top + (r.height - h) / 2;
       left = Math.round(Math.max(4, Math.min(left, innerWidth - w - 4)));
       top = Math.round(Math.max(4, Math.min(top, innerHeight - h - 4)));

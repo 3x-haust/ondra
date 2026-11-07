@@ -888,7 +888,14 @@ export function Canvas() {
     refit = requestAnimationFrame(() => fit(false));
   }, { defer: true }));
   /** the map only helps when there's room to spare */
-  const roomy = () => vpSize().w >= 640 && vpSize().h >= 460;
+  /** everything is already in view: the map would only cover a card */
+  const allInView = () => {
+    const ns = graph().nodes;
+    if (!ns.length) return true;
+    const z = zoom(), p = pan(), v = vpSize();
+    return ns.every((n) => { const q = pos(n); const x = q.x * z + p.x, y = q.y * z + p.y; return x >= 0 && y >= 0 && x + n.w * z <= v.w && y + n.h * z <= v.h; });
+  };
+  const roomy = () => vpSize().w >= 640 && vpSize().h >= 460 && !allInView();
 
   const send = () => {
     const t = ask().trim();
