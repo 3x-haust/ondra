@@ -145,6 +145,30 @@ try {
     sample.sha256 = hash;
     console.log(`PASS ${sample.name}: metadata, functions, instructions, Ghidra pseudocode`);
   }
+  // Default output must stay context-sized: many functions and one huge function.
+  const bigSource = join(out, "large.c");
+  const helpers = Array.from({ length: 400 }, (_, i) => `__attribute__((noinline)) unsigned f${i}(unsigned x) { return x * ${i + 3}u ^ ${i}u; }`);
+  const steps = Array.from({ length: 1500 }, (_, i) => `  v = (v * ${i % 97 + 3}u) ^ (v >> ${i % 13 + 1}); if (v & ${2 ** (i % 31)}u) v += f${i % 400}(v);`);
+  writeFileSync(bigSource, `${helpers.join("\n")}\n__attribute__((noinline)) unsigned huge(volatile unsigned v) {\n${steps.join("\n")}\n  return v;\n}\nint main(int c, char **a) { (void)a; return (int)huge((unsigned)c); }\n`);
+  const large = join(out, "large");
+  build("/usr/bin/clang", ["-O0", "-mmacosx-version-min=13.0", bigSource, "-o", large]);
+  chmodSync(large, 0o600);
+  const listing = invoke("large-functions", ["functions", large]);
+  assert(listing.data.truncated === true && listing.data.total > 300, "Large listing must be compact");
+  assert.equal(listing.data.functions.length, 200);
+  assert(listing.data.functions.every(f => Object.keys(f).sort().join() === "addr,name,size"), "Preview entries carry only name/addr/size");
+  assert.match(listing.data.hint, /--name/);
+  const hugeFn = invoke("large-named", ["functions", large, "--name", "huge"]).data.find(f => f.name.includes("huge"));
+  assert(hugeFn, "Named lookup must still return the full entry");
+  const hugeAddress = `0x${hugeFn.addr.toString(16)}`;
+  const longAsm = invoke("large-disassemble", ["disassemble", large, "--address", hugeAddress]);
+  assert(longAsm.data.truncated === true && longAsm.data.ops.length === 300 && longAsm.data.totalOps > 300, "Disassembly must be capped");
+  const longCode = invoke("large-decompile", ["decompile", large, "--address", hugeAddress]);
+  assert(longCode.data.truncated === true && longCode.data.code.split("\n").length <= 401 && longCode.data.totalLines > 400, "Pseudocode must be capped");
+  for (const [label, result] of [["functions", listing], ["disassemble", longAsm], ["decompile", longCode]]) {
+    assert(JSON.stringify(result).length < 128 * 1024, `Bounded ${label} output must stay under 128 KiB`);
+  }
+  console.log("PASS large target: compact function preview, capped disassembly and pseudocode");
   invoke("name-miss", ["functions", join(out, "macho-arm64"), "--name", "no_such_function_zzz"], 1, /No analyzed function name contains/);
   invoke("name-wrong-op", ["inspect", join(out, "macho-arm64"), "--name", "main"], 2, /only filters the functions/);
   invoke("missing-slice", ["inspect", universal], 1, /requires --arch/);
