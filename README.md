@@ -138,12 +138,13 @@ Requirements: macOS 13 or later, Apple silicon. Device use needs Xcode (iOS Simu
 ```sh
 pnpm install
 cp .env.example .env           # fill in values if you need them
-pnpm bundle                    # agent-browser, agent-desktop, the engine and headless Chrome into the app
+pnpm bundle                    # browser, desktop, agent engine, Chrome and native binary analyzer into the app
 pnpm tauri dev                 # run in development
 pnpm tauri build && pnpm dmg   # .app, then the install .dmg (pip install ds_store mac_alias)
 pnpm manifest                  # latest.json for in-app updates (build with TAURI_SIGNING_PRIVATE_KEY set)
 ```
 
+- Static binary analysis ships with radare2 and r2ghidra, including native libraries and processor data; users need no separate engine or runtime. Build and isolated package checks: [binary analyzer](tools/binary-analysis/README.md).
 - The agent engine is the coding-agent from [3xhaustpi](https://github.com/3x-haust/3xhaustpi), built into a single file. Put it in a sibling folder or point `ONDRA_ENGINE_DIST` at it.
 - On macOS 27, agent-desktop 1.1.0 hangs on every command when an app with pid -1 (Xcode's Device Hub) is running. Build it with the patch in `scripts/patches/` and put the binary at `~/.cache/ondra/agent-desktop-patched`; the bundle step uses it.
 

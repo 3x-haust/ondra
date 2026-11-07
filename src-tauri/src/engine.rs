@@ -133,8 +133,9 @@ fn login_env() -> &'static HashMap<String, String> {
     static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
     ENV.get_or_init(|| {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-        let script = r#"for v in PATH CLAUDE_CONFIG_DIR CODEX_HOME PI_CODING_AGENT_DIR LANG; do printf '\n__ENV__%s=%s' "$v" "$(printenv $v)"; done; printf '\n'"#;
-        let out = Command::new(shell).args(["-ilc", script]).stdin(Stdio::null()).stderr(Stdio::null()).output();
+        let vars = ["PATH", "LANG"].iter().chain(crate::LOGIN_VARS).copied().collect::<Vec<_>>().join(" ");
+        let script = format!(r#"for v in {vars}; do printf '\n__ENV__%s=%s' "$v" "$(printenv $v)"; done; printf '\n'"#);
+        let out = Command::new(shell).args(["-ilc", &script]).stdin(Stdio::null()).stderr(Stdio::null()).output();
         let mut map = HashMap::new();
         if let Ok(o) = out {
             for line in String::from_utf8_lossy(&o.stdout).lines() {
@@ -195,6 +196,12 @@ pub fn engine_env(app: &AppHandle) -> Vec<(String, String)> {
         ("PATH".to_string(), with_sidecars(user_path())),
         ("PI_SKIP_VERSION_CHECK".to_string(), "1".to_string()),
     ];
+    // logins the user's shell sets (a space's own env overrides these)
+    for k in crate::LOGIN_VARS {
+        if let Some(v) = login_env().get(*k) {
+            env.push((k.to_string(), v.clone()));
+        }
+    }
     if let Some(dir) = engine_assets(app) {
         env.push(("PI_PACKAGE_DIR".into(), dir.display().to_string()));
     }

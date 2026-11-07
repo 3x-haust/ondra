@@ -106,6 +106,12 @@ export function Flow() {
     return r ? Math.max(2, r.y - 4) : 2;
   };
 
+  /** the trunk reaches the lowest fork (each job leaves it a little below its row) */
+  const trunkEnd = () => {
+    const tops = rows().filter((r) => !r.kid && r.t.status !== "queued").map((r) => cy(r) + 14);
+    const last = rows()[rows().length - 1];
+    return Math.max(last ? cy(last) : 0, ...tops);
+  };
   const paths = createMemo(() => {
     const out: { d: string; cls: string }[] = [];
     for (const r of rows()) {
@@ -166,7 +172,7 @@ export function Flow() {
       </button>
       <div class="g-body" style={{ height: `${height()}px` }}>
         <svg class="g-lines" classList={{ dim: !!hoverTask() }} width={gutter()} height={Math.max(1, height())} aria-hidden="true">
-          <line class="g-trunk" x1={TRUNK} y1={0} x2={TRUNK} y2={rows().length ? cy(rows()[rows().length - 1]) : 0} />
+          <line class="g-trunk" x1={TRUNK} y1={0} x2={TRUNK} y2={trunkEnd()} />
           <For each={paths()}>{(p) => <path class={p.cls} d={p.d} pathLength={p.cls.includes("twig") ? undefined : 1} />}</For>
           <For each={rows()}>
             {(r) => (
@@ -185,7 +191,7 @@ export function Flow() {
             <button
               class="g-row"
               classList={{ kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
-              style={{ top: `${r.y}px`, height: `${r.h}px`, "padding-left": `${r.kid ? gutter() + 4 : gutter()}px` }}
+              style={{ top: `${r.y}px`, height: `${r.h}px`, "padding-left": `${r.kid ? gutter() + 12 : gutter()}px` }}
               onClick={() => openTask(r.t.id)}
               onMouseEnter={() => setHoverTask(r.kid ? r.t.parentId! : r.t.id)}
               onMouseLeave={() => setHoverTask(null)}

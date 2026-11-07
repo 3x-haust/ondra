@@ -31,11 +31,6 @@ import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/su
 import { SidebarToggle } from "./Sidebar";
 
 /** Folder for the next request; "" = let main decide. */
-const STARTERS = [
-  { text: "이 폴더가 어떻게 짜여 있는지 설명해 줘" },
-  { text: "테스트 돌리고 깨진 거 고쳐 줘. 그리고 어제 바뀐 코드도 리뷰해 줘" },
-  { text: "acme.dev 요금제 페이지에서 결제 버튼이 되는지 봐 줘" },
-] as const;
 
 /** Put text in the main input as if typed (the user still presses send). */
 function fill(text: string) {
@@ -191,10 +186,10 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
           <Show when={suggestLoading() === key() && !picks().length}>
             <div class="hero-pick wait"><span class="spin xs" /><span>최근 일을 보는 중</span></div>
           </Show>
-          <For each={(picks().length ? picks() : suggestLoading() === key() ? [] : STARTERS.map((s) => ({ text: s.text, why: "" }))).slice(0, 3)}>
+          <For each={picks().slice(0, 3)}>
             {(s) => (
               <button class="hero-pick" onClick={() => fill(s.text)} title={s.why || undefined}>
-                <Icon name="spark" size={14} class="hero-pick-ic" />
+                <Icon name="arrow" size={14} class="hero-pick-ic" />
                 <span class="hero-pick-text">{s.text}</span>
               </button>
             )}

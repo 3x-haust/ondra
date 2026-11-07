@@ -1,4 +1,4 @@
-import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
@@ -32,6 +32,9 @@ import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
 import { ShortcutHints } from "./ui/ShortcutHints";
 import { startUpdates } from "./engine/update";
+import { afterLaunch, notesFor } from "./engine/releaseNotes";
+import { ReleaseNotes } from "./ui/ReleaseNotes";
+import { getVersion } from "@tauri-apps/api/app";
 import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
@@ -52,6 +55,7 @@ function Slide(props: { from: 1 | -1; children: JSX.Element }) {
 }
 
 export default function App() {
+  const [appVersion, setAppVersion] = createSignal("");
   keepSpaces();
   // settings fill the window; "back" returns to wherever you were
   let lastView: View = { name: "main" };
@@ -99,7 +103,10 @@ export default function App() {
       soonIndex();
     });
     if (!location.search.includes("fixture")) startTidy();
-    if (!location.search.includes("fixture")) startUpdates();
+    if (!location.search.includes("fixture")) {
+      startUpdates();
+      void getVersion().then((v) => { setAppVersion(v); void afterLaunch(v); }).catch(() => {});
+    }
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
@@ -168,6 +175,7 @@ export default function App() {
       </div>
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette commands={appCommands()} /></Show>
+      <Show when={notesFor() !== null}><ReleaseNotes current={appVersion()} /></Show>
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
       <VisualViewer />

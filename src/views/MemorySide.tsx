@@ -78,7 +78,7 @@ function Crumbs(props: { model: Model; home?: string; trail?: { id: string; labe
 /** numbers in a row, each with its label under it */
 function Stats(props: { items: { n: number | string; label: string; go?: () => void; tone?: string }[] }) {
   return (
-    <div class="mst" style={{ "--n": props.items.length }}>
+    <div class="mst" style={{ "--n": props.items.length, "--cols": props.items.length <= 4 ? props.items.length : 3 }}>
       <For each={props.items}>
         {(x) => (
           <button class="mst-c" classList={{ go: !!x.go }} disabled={!x.go} onClick={() => x.go?.()}>
@@ -241,7 +241,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
             { n: props.model.journal.length, label: "일 기록", go: props.model.journal.length ? () => props.onSel(JOURNAL) : undefined },
             { n: live().filter((m) => m.paths?.length).length, label: "경로 규칙" },
             { n: live().filter((m) => m.skill).length, label: "스킬" },
-          ]}
+          ].filter((x, i) => i === 0 || x.n)}
         />
       </Show>
       <Show when={nows().length}>

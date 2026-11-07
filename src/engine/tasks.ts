@@ -37,6 +37,8 @@ interface Run {
   genMs?: number;
   turnMs?: number;
   msgAt?: number;
+  /** the entry the current message's output goes after (its blocks land while it streams) */
+  msgAfter?: string;
   stats: TokenStats;
   /** toolCallId → entry id */
   tools: Map<string, string>;
@@ -813,6 +815,8 @@ function handlers(id: string, run: Run) {
             run.text = "";
             run.cursor = 0;
             run.msgAt = Date.now();
+            const es = taskById(id)?.entries;
+            run.msgAfter = es?.[es.length - 1]?.id;
           }
           break;
         case "message_update": {
@@ -836,7 +840,12 @@ function handlers(id: string, run: Run) {
           batch(() => {
             setLive(id, "");
             updateTask(id, (t) => {
-              if (text) push(t, { kind: "text", text: text.slice(0, 20000) });
+              if (text) {
+                // above the blocks it streamed, so a heading stays over the files it introduces
+                const at = run.msgAfter ? t.entries.findIndex((e) => e.id === run.msgAfter) + 1 : -1;
+                push(t, { kind: "text", text: text.slice(0, 20000) });
+                if (at > 0 && at < t.entries.length - 1) t.entries.splice(at, 0, t.entries.pop()!);
+              }
               if (items.length) applyBlocks(t, items, run);
               if (ev.message?.stopReason === "error" && ev.message?.errorMessage) run.error = String(ev.message.errorMessage);
             });

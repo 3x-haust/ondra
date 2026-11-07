@@ -20,8 +20,12 @@ function written(taskId: string): ArtifactFile[] {
   return [...seen.values()];
 }
 
+/** What a person opens and reads: pages, pictures, recordings, documents, builds. Not data or logs. */
+export const forPeople = (name: string) =>
+  /\.(html?|pdf|svg|png|jpe?g|gif|webp|heic|mp4|mov|webm|m4a|mp3|wav|md|csv|docx?|xlsx?|pptx?|key|pages|numbers|zip|dmg|apk|aab|ipa)$/i.test(name);
+
 export async function loadArtifacts(taskId: string) {
-  const own = await artifactsList(taskId).catch(() => []);
+  const own = (await artifactsList(taskId).catch(() => [])).filter((f) => forPeople(f.name));
   const list = [...own, ...written(taskId).filter((w) => !own.some((o) => o.path === w.path))].sort((a, b) => b.modified - a.modified);
   const now = artifacts[taskId] ?? [];
   if (list.length !== now.length || list[0]?.modified !== now[0]?.modified) setArtifacts(taskId, list);

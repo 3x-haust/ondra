@@ -113,7 +113,7 @@ export function BtwCard(props: { scope: string }) {
 export const btwCommand = (scope: () => string) => ({
   name: "btw",
   desc: "옆에서 바로 묻기 · 그냥 /btw 는 지난 btw 보기",
-  icon: "spark",
+  icon: "message",
   files: true,
   run: (arg: string, _also?: string[], files: string[] = []) => {
     if (arg.trim() || files.length) void askBtw(scope(), arg, files);
@@ -172,7 +172,7 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
   }
   for (const sk of skillsIn(state.space).filter((x) => x.menu))
     out.push({ section: "스킬", icon: "skill", label: sk.name, desc: sk.description.split(/[.。]/)[0], run: ({ insert }) => insert(`/${sk.name} `) });
-  out.push({ section: "옆에서", icon: "spark", label: "btw", desc: "하던 일은 두고 바로 묻기", run: ({ insert }) => insert("/btw ") });
+  out.push({ section: "옆에서", icon: "message", label: "btw", desc: "하던 일은 두고 바로 묻기", run: ({ insert }) => insert("/btw ") });
   out.push({ section: "옆에서", icon: "message", label: "사이드챗", desc: "따로 하는 대화 (⌘J)", run: () => openPanel("side") });
   return out;
 }
@@ -194,12 +194,12 @@ export function SideChat() {
   };
   return (
     <div class="side-chat">
-      <div class="side-head">
-                <span class="spacer" />
-        <Show when={msgs().length}>
+      <Show when={msgs().length}>
+        <div class="side-head">
+          <span class="spacer" />
           <button class="link-btn" onClick={() => clearSide(space())}>새로 시작</button>
-        </Show>
-      </div>
+        </div>
+      </Show>
       <div class="side-list" ref={box}>
         <For each={msgs()} >
           {(m) => (

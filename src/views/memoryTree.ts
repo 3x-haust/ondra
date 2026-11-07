@@ -164,6 +164,11 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     for (const f of p.files) if (!seenFile.has(f)) seenFile.add(f), projHome(p.project).files.push(f);
   for (const s of inp.files?.bySpace ?? [])
     for (const f of s.files) if (!seenFile.has(f)) seenFile.add(f), fileHome(f, spaceHome(s.space)).files.push(f);
+  // two folders with the same name: tell them apart by the folder they sit in
+  const byLabel = new Map<string, Home[]>();
+  for (const h of homes.values()) if (h.kind === "project") byLabel.set(`${h.parent}|${h.label}`, [...(byLabel.get(`${h.parent}|${h.label}`) ?? []), h]);
+  for (const same of byLabel.values())
+    if (same.length > 1) for (const h of same) if (h.path) h.label = `${h.label} · ${base(h.path.replace(/\/[^/]+\/?$/, "")) || "/"}`;
 
   // topic hubs: a tool or service two or more live pieces are about (as the mirror's 주제/)
   const topics = new Map<string, Topic>();

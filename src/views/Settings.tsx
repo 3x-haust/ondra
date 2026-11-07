@@ -1,7 +1,8 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { modelsOf } from "../engine/modelList";
-import { ignoredKey, noModifiers, viewKey } from "../lib/shortcuts";
-import { createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
+import { appCommands } from "../state/commands";
+import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { EFFORTS, prettyModel } from "../ui/ModelPicker";
@@ -27,6 +28,9 @@ import { ToolsTab } from "./Tools";
 import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
+import { getVersion } from "@tauri-apps/api/app";
+import { available, checkedAt, checkUpdate, installNow, updateStatus } from "../engine/update";
+import { setNotesFor } from "../engine/releaseNotes";
 
 
 function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
@@ -88,8 +92,9 @@ function General() {
       <div class="set-group">
         <div class="set-row col">
           <textarea
-            class="textarea"
+            class="textarea plain"
             rows={6}
+            placeholder="모든 일에 적용할 지시"
             value={state.settings.instructions}
             
             onChange={(e) => setState("settings", "instructions", e.currentTarget.value)}
@@ -116,7 +121,34 @@ function General() {
         </For>
       </div>
       <Show when={editing()}>{(id) => <SpaceSheet id={id()} onClose={() => setEditing(null)} />}</Show>
+
+      <div class="set-group-title">업데이트</div>
+      <div class="set-group">
+        <UpdateRow />
+      </div>
     </>
+  );
+}
+
+function UpdateRow() {
+  const [version] = createResource(() => getVersion().catch(() => ""));
+  const note = () =>
+    updateStatus() === "checking" ? "확인 중…"
+    : updateStatus() === "installing" ? "받는 중… 끝나면 다시 시작해요"
+    : available() ? `${available()} 나옴`
+    : checkedAt() ? `최신 버전 · ${ago(checkedAt())} 확인`
+    : "";
+  return (
+    <Row title={`Ondra ${version() ?? ""}`}>
+      <span class="set-note">{note()}</span>
+      <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>릴리즈 노트</button>
+      <Show
+        when={available()}
+        fallback={<button class="btn sm" disabled={updateStatus() === "checking" || updateStatus() === "installing"} onClick={() => void checkUpdate(true)}>업데이트 확인</button>}
+      >
+        <button class="btn primary sm" disabled={updateStatus() === "installing"} onClick={() => void installNow()}>{available()} 설치</button>
+      </Show>
+    </Row>
   );
 }
 
@@ -316,7 +348,7 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
             <For each={EFFORTS}>{(x) => <option value={x.id}>{x.label}</option>}</For>
           </select>
           <select class="select" value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
-            <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+            <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}에서 쓰기</option>}</For>
           </select>
           <Show when={used()} fallback={<span class="muted acc-usage">사용 기록 없음</span>}>
             <span class="acc-usage" title="앞부분을 다시 써서 아낀 비율이에요">
@@ -432,7 +464,7 @@ function Import() {
         <button class="btn ghost sm" onClick={scan} disabled={scanning()}><Icon name="refresh" size={13} />{scanning() ? "검색 중" : "다시 검색"}</button>
       </div>
       <div class="src-grid">
-        <For each={sources()} fallback={<div class="muted">{scanning() ? "검색 중…" : "발견한 도구 없음"}</div>}>
+        <For each={sources()} fallback={<div class="set-group src-empty"><div class="empty-line">{scanning() ? "찾는 중" : "발견한 도구 없음"}</div></div>}>
           {(s) => (
             <div class="src" classList={{ off: !s.found }}>
               <div class="src-head">
@@ -462,7 +494,7 @@ function Import() {
       </Show>
 
       <div class="set-group-title">세션 이어받기</div>
-      <input class="input" placeholder="세션 검색 (제목, 폴더, 도구)" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} style={{ "margin-bottom": "var(--s-8)" }} />
+      <input class="input" placeholder="세션 검색 (제목, 폴더, 도구)" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} style={{ width: "100%", "margin-bottom": "var(--s-8)" }} />
       <div class="set-group">
         <For each={sessions()} fallback={<div class="empty-line">세션 없음</div>}>
           {(s) => (
@@ -511,10 +543,38 @@ function Tools() {
           </Show>
         </Row>
       </div>
-      <div class="set-group-title">빠른 입력</div>
+    </>
+  );
+}
+
+// ───────────────── shortcuts
+function Shortcuts() {
+  const groups = createMemo(() => {
+    const out = new Map<string, ShortcutCommand[]>();
+    for (const c of appCommands()) if (c.shortcut) out.set(c.section, [...(out.get(c.section) ?? []), c]);
+    return [...out];
+  });
+  return (
+    <>
+      <h2>단축키</h2>
       <div class="set-group">
-        <Row title="어디서든 열기" desc="다른 앱을 쓰다가도 바로 요청을 보내요"><kbd>⌥ Space</kbd></Row>
-        <Row title="터미널에서 보내기" desc="스크립트나 훅에서 사용"><code class="muted">throw.sh "요청"</code></Row>
+        <Row title="버튼마다 단축키 보기"><kbd>⌘ 길게</kbd></Row>
+        <Row title="어디서든 요청 보내기"><kbd>⌥ Space</kbd></Row>
+        <Row title="종료"><kbd>⌘Q 길게</kbd></Row>
+      </div>
+      <For each={groups()}>
+        {([section, list]) => (
+          <>
+            <div class="set-group-title">{section}</div>
+            <div class="set-group">
+              <For each={list}>{(c) => <Row title={c.label}><kbd>{shortcutLabel(c.shortcut!)}</kbd></Row>}</For>
+            </div>
+          </>
+        )}
+      </For>
+      <div class="set-group-title">터미널</div>
+      <div class="set-group">
+        <Row title="터미널에서 보내기"><code class="muted">throw.sh "요청"</code></Row>
       </div>
     </>
   );
@@ -522,6 +582,7 @@ function Tools() {
 
 export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: "general", label: "일반", icon: "gear" },
+  { id: "shortcuts", label: "단축키", icon: "list" },
   { id: "accounts", label: "계정", icon: "key" },
   { id: "import", label: "가져오기", icon: "download" },
   { id: "agent-tools", label: "도구", icon: "tools" },
@@ -568,13 +629,17 @@ export function SettingsPage(props: { onBack: () => void }) {
   };
   onMount(() => window.addEventListener("keydown", key, true));
   onCleanup(() => window.removeEventListener("keydown", key, true));
+  let body!: HTMLDivElement;
+  // each tab opens at its top
+  createEffect(on(settingsTab, () => body && (body.scrollTop = 0), { defer: true }));
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />
-      <div class="settings-body">
+      <div class="settings-body" ref={body}>
         <div class="settings-inner">
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>
+            <Match when={settingsTab() === "shortcuts"}><Shortcuts /></Match>
             <Match when={settingsTab() === "accounts"}><Accounts /></Match>
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>

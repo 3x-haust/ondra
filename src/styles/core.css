@@ -96,7 +96,7 @@ code,
   -webkit-user-select: text;
 }
 .add {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .del {
   color: var(--bad);
@@ -450,12 +450,7 @@ button.chip:hover,
   }
 }
 .shimmer {
-  background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink-3) 40%, var(--ink) 50%, var(--ink-3) 60%, var(--ink-3) 100%);
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
+  color: var(--ink-3);
 }
 @keyframes shimmer {
   from {
@@ -471,7 +466,7 @@ button.chip:hover,
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 var(--accent-line);
-  animation: pulse 2s var(--ease) infinite;
+  animation: none;
 }
 @keyframes pulse {
   70% {
@@ -518,7 +513,7 @@ button.chip:hover,
 /* finished, not merged yet: an open ring around the check */
 .st-icon.done.unmerged {
   background: transparent;
-  color: var(--ok);
+  color: var(--ok-ink);
   box-shadow: inset 0 0 0 1.5px var(--ok);
 }
 .st-icon.waiting {
@@ -563,7 +558,7 @@ button.chip:hover,
 }
 .status-chip.waiting {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .status-chip.failed {
   background: var(--bad-soft);
@@ -1056,7 +1051,7 @@ button.strip:hover {
   overflow-y: auto;
 }
 .decision-q .icon {
-  color: var(--warn);
+  color: var(--warn-ink);
   margin-top: var(--s-4);
 }
 .decision.stalled .decision-q .icon {
@@ -1391,7 +1386,7 @@ button.reply-note:hover {
   font-size: var(--fs-xs);
 }
 .fork-card.waiting .fork-line {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .fork-card.failed .fork-line {
   color: var(--bad);
@@ -1946,7 +1941,7 @@ kbd {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  animation: pulse 2s var(--ease) infinite;
+  animation: none;
 }
 .tl-item.todo .tl-label {
   color: var(--ink-3);
@@ -2542,7 +2537,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .g-row.you .g-meta {
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .g-line2 {
   font-size: var(--fs-xs);

@@ -352,7 +352,7 @@
   background: var(--mk);
   transform: translateY(-1px);
 }
-.ms-piece span {
+.ms-piece > span:not(.mb) {
   min-width: 0;
   overflow: hidden;
   display: -webkit-box;
@@ -367,7 +367,7 @@
   font-size: var(--fs-2xs);
   color: var(--ink-3);
 }
-.ms-piece.past span {
+.ms-piece.past > span:not(.mb) {
   text-decoration: line-through;
   color: var(--ink-3);
 }
@@ -703,17 +703,20 @@
 
 /* numbers in a row */
 .mst {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: 1px;
   border: 1px solid var(--line-soft);
   border-radius: var(--r-xl);
-  background: var(--card);
+  background: var(--line-soft);
   overflow: hidden;
 }
-.mst {
-  flex-wrap: wrap;
+/* five: three over two, the last one fills the row */
+.mst-c:nth-child(5):last-child {
+  grid-column: span 2;
 }
 .mst-c {
-  flex: 1 1 64px;
+  background: var(--card);
   display: grid;
   gap: 2px;
   padding: 10px 8px 9px 10px;
@@ -721,14 +724,11 @@
   text-align: left;
   transition: background var(--dur-fast) var(--ease);
 }
-.mst-c + .mst-c {
-  border-left: 1px solid var(--line-soft);
-}
 .mst-c:disabled {
   opacity: 1;
 }
 .mst-c.go:hover {
-  background: var(--hover);
+  background: linear-gradient(var(--hover), var(--hover)), var(--card);
 }
 .mst-c b {
   font-size: 18px;
@@ -777,10 +777,13 @@
 .ms-piece i {
   transform: none;
 }
-.ms-piece span {
+.ms-piece > span:not(.mb) {
   flex: 1;
 }
-.ms-piece.faint span {
+.ms-piece .mb {
+  flex: none;
+}
+.ms-piece.faint > span:not(.mb) {
   color: var(--ink-3);
 }
 .ms-piece .mb {
@@ -1372,7 +1375,7 @@ button.md-kinds .chip:hover,
 .tl > .tl-day:first-child::before {
   top: 12px;
 }
-.tl-row {
+.tl .tl-row {
   display: flex;
   align-items: center;
   gap: 8px;

@@ -10,6 +10,9 @@ import { tokens, now } from "./bits";
 import { state } from "../state/store";
 import { ContextSheet } from "../views/Context";
 
+/** no login yet: no limits to show (numbers kept from before would say otherwise) */
+const limitsShown = (id: string) => (state.accounts.find((a) => a.id === id)?.providers.length ? usageOf(id, now()) : []);
+
 const promptOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
 
 const secs = (ms: number) => {
@@ -50,7 +53,7 @@ const left = (ms: number) => {
 /** Live plan windows for an account, under the input. */
 export function LimitBar(props: { accountId: string }) {
   onMount(() => void refreshLimits(props.accountId));
-  const list = () => usageOf(props.accountId, now());
+  const list = () => limitsShown(props.accountId);
   return (
     <Show when={list().length}>
       <div class="limit-bar">
@@ -78,7 +81,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     void refreshLimits(props.accountId);
     void loadEmail(props.accountId);
   });
-  const list = () => usageOf(props.accountId, now());
+  const list = () => limitsShown(props.accountId);
   const c = () => (props.agent ? ctx[props.agent] : undefined);
   const [ctxOpen, setCtxOpen] = createSignal(false);
   return (
@@ -89,7 +92,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       <For each={list()}>
         {(l) => (
           <span class="st-lim" classList={{ hot: l.used >= 80 }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
-            {l.window >= 10080 ? "7d" : l.window >= 1440 ? `${Math.round(l.window / 1440)}d` : `${Math.round(l.window / 60)}h`} {Math.round(l.used)}%
+            {windowLabel(l.window)} {Math.round(l.used)}%
           </span>
         )}
       </For>

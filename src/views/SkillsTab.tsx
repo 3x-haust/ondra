@@ -248,7 +248,7 @@ export function SkillsTab() {
       <Icon name="skill" size={15} class="muted" />
       <div class="item-main">
         <b>{p.e.name}</b>
-        <p title={p.e.description}>{p.e.description || "설명이 없어요"}</p>
+        <Show when={p.e.description}><p title={p.e.description}>{p.e.description}</p></Show>
       </div>
       <Show when={p.e.kind === "changed" || p.e.kind === "imported"}><span class="pill">{p.e.kind === "imported" ? `${FROM[p.e.from ?? ""] ?? p.e.from ?? "가져옴"}에서` : KIND_LABEL[p.e.kind]}</span></Show>
       <Icon name="chevron" size={13} class="muted" />

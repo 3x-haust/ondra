@@ -73,7 +73,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
     if (b() === "review") return "";
     if (x.status === "queued") return "대기";
     if (x.status === "paused") return "쉼";
-    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? "방금 시작" : `${compact(now() - x.startedAt)}째`) : "";
+    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? "방금" : compact(now() - x.startedAt)) : "";
     return ago(x.finishedAt ?? x.createdAt);
   };
   return (
@@ -111,7 +111,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         </Show>
         <Show when={t().pinned && !props.kid}><Icon name="pin" size={11} class="sb-pin" /></Show>
         <span class="sb-meta">
-          <Show when={b() === "review" && !meta()} fallback={meta()}>
+          <Show when={b() === "review" && !meta() && (changes(t()).add || changes(t()).del)} fallback={meta()}>
             <span class="add">+{changes(t()).add}</span>
             <Show when={changes(t()).del}> <span class="del">−{changes(t()).del}</span></Show>
           </Show>
@@ -177,6 +177,41 @@ function ProjectMenu() {
     </Show>
   );
 }
+/** 확인할 일: the jobs waiting on you, to pick one */
+const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; w: number } | null>(null);
+function NeedsMenu() {
+  const close = () => setNeedsMenu(null);
+  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && needsMenu() && (e.preventDefault(), e.stopPropagation(), close());
+  window.addEventListener("click", close);
+  window.addEventListener("blur", close);
+  window.addEventListener("keydown", esc, true);
+  createEffect(() => anyPop() && close());
+  onCleanup(() => {
+    window.removeEventListener("click", close);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("keydown", esc, true);
+  });
+  const list = () => forkOrder(state.space).filter((t) => !t.archived && (bucket(t) === "you" || bucket(t) === "review"));
+  const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
+  return (
+    <Show when={needsMenu()}>
+      {(m) => (
+        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, width: `${m().w}px`, top: `${Math.min(m().y, window.innerHeight - 60 - list().length * 34)}px` }} onClick={(e) => e.stopPropagation()}>
+          <For each={list()}>
+            {(t) => (
+              <button onClick={() => (openTask(t.id), close())}>
+                <span class="dot" classList={{ ask: bucket(t) === "you", ok: bucket(t) === "review" }} />
+                <span class="row-title">{t.title}</span>
+                <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? "멈춤" : "답 필요") : "검토"}{where(t) ? ` · ${where(t)}` : ""}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 const [renaming, setRenaming] = createSignal<string | null>(null);
 export { renaming, setRenaming };
 
@@ -329,7 +364,19 @@ export function Sidebar() {
         </button>
         {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
         <Show when={needs()}>
-          <button class="sb-row sb-main sb-todo" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }} data-shortcut="waiting" title="답하거나 확인할 다음 일로 (⌘.)">
+          <button
+            class="sb-row sb-main sb-todo"
+            classList={{ on: !!needsMenu() }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
+              if (needsMenu()) return setNeedsMenu(null);
+              const r = e.currentTarget.getBoundingClientRect();
+              setNeedsMenu({ x: r.left, y: r.bottom + 4, w: r.width });
+            }}
+            data-shortcut="waiting"
+            title="답하거나 확인할 일 (⌘.로 다음 일)"
+          >
             <Icon name="alert" size={15} class="sb-main-ic" />
             <span class="sb-title">확인할 일</span>
             <span class="sb-need">{needs()}</span>
@@ -381,6 +428,22 @@ export function Sidebar() {
                     <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}><span class="sb-meta">{all()}</span></Show>}><span class="sb-live" title={`이 프로젝트에서 일하는 중 ${live()}개`}><i />{live()}</span></Show>}>
                       <span class="spin sm" />
                     </Show>
+                    <span class="sb-acts">
+                      <span
+                        class="sb-act"
+                        role="button"
+                        title="더 보기"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closePops();
+                          setMenu(null);
+                          const r = e.currentTarget.getBoundingClientRect();
+                          setProjMenu({ id: p.id, x: r.left, y: r.bottom + 4 });
+                        }}
+                      >
+                        <Icon name="more" size={14} />
+                      </span>
+                    </span>
                   </button>
                   <Show when={all()}>
                     <Fold open={open()}>
@@ -397,7 +460,7 @@ export function Sidebar() {
         </Fold>
 
         <Head id="devices" label="디바이스" count={bootedDevices().length}>
-          <button class="icon-btn xs" data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
+          <button class="icon-btn xs" classList={{ on: view().name === "devices" }} data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
             <Icon name="arrow" size={13} />
           </button>
         </Head>
@@ -428,10 +491,11 @@ export function Sidebar() {
         </div>
         </Fold>
 
+        <Show when={loose().length || hidden() || archived().length}>
         <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
-          <For each={loose()} fallback={<p class="sb-empty">{projectsIn(state.space).length ? "프로젝트 밖에서 맡긴 일이 여기에 생겨요" : "메인에게 일을 맡기면 여기에 생겨요"}</p>}>
+          <For each={loose()}>
             {(t, i) => <Row t={t} index={i()} />}
           </For>
           <Show when={hidden()}>
@@ -455,14 +519,13 @@ export function Sidebar() {
           </Show>
         </div>
         </Fold>
+        </Show>
       </div>
       <RowMenu />
       <ProjectMenu />
+      <NeedsMenu />
 
       <div class="sb-foot">
-        <button class="row" data-shortcut="commands" title={`단축키 · 명령 안내 (${shortcutHint("commands")})`} onClick={() => { setPaletteMode("commands"); setPaletteOpen(true); }}>
-          <Icon name="list" size={16} /><span class="row-title">단축키</span><kbd>{shortcutHint("commands")}</kbd>
-        </button>
         <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">설정</span>

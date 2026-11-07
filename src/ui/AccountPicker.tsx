@@ -78,7 +78,7 @@ export function AccountPicker(props: {
           </For>
           <div class="pop-sep" />
           <button type="button" class="pop-item" onClick={() => (setOpen(false), setView({ name: "settings", tab: "accounts" }))}>
-            <span class="pop-item-main">계정 추가 · 관리</span>
+            <span class="pop-item-main">계정 관리</span>
           </button>
         </div>
       </Show>

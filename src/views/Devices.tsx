@@ -22,7 +22,8 @@ const ago = (ms?: number | null) => {
   const m = Math.round((Date.now() - ms) / 60000);
   return m < 60 ? `${Math.max(1, m)}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
 };
-const platformLabel = (d: Device) => (d.platform === "ios" ? "iOS" : "Android") + (d.kind === "phone" ? " 기기" : "");
+/** "iOS 26.3", "Android 에뮬레이터", "iOS 26.3 · 실제 기기" — the OS is already in the runtime */
+const platformLabel = (d: Device) => d.runtime + (d.kind === "phone" ? " · 실제 기기" : "");
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function act(label: string, f: () => Promise<unknown>) {
@@ -59,7 +60,7 @@ function SpacePick(props: { d: Device }) {
   return (
     <Show when={!own()}>
       <select
-        class="dev-space"
+        class="select dev-space"
         value={deviceSpace(props.d) ?? ""}
         onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
       >
@@ -515,7 +516,7 @@ function LiveCard(props: { d: Device; hidden: boolean; onOpen: () => void }) {
         <div class="dev-name">
           <b>{props.d.name}</b>
         </div>
-        <div class="dev-sub">{platformLabel(props.d)} · {props.d.runtime}</div>
+        <div class="dev-sub">{platformLabel(props.d)}</div>
         <Status d={props.d} />
         <UsedBy d={props.d} />
         <Actions d={props.d} />
@@ -542,7 +543,7 @@ function Control(props: { d: Device; onClose: () => void }) {
         <button class="icon-btn" title="목록으로 (Esc)" onClick={props.onClose}><Icon name="back" size={15} /></button>
         <b>{props.d.name}</b>
         <Status d={props.d} />
-        <span class="dev-sub">{platformLabel(props.d)} · {props.d.runtime}</span>
+        <span class="dev-sub">{platformLabel(props.d)}</span>
         <Show when={recording().includes(props.d.id)}>
           <span class="dev-rec-label">녹화 중</span>
         </Show>
@@ -592,7 +593,7 @@ export function Devices() {
           <For each={[["all", "전체"], ["ios", "iOS"], ["android", "Android"]] as [Filter, string][]}>
             {([id, label]) => (
               <button classList={{ on: filter() === id }} onClick={() => setFilter(id)}>
-                {label} <span class="muted">{count(id)}</span>
+                {label}<span class="seg-n">{count(id)}</span>
               </button>
             )}
           </For>
@@ -621,7 +622,7 @@ export function Devices() {
                       <div class="dev-row">
                         <Icon name="phone" size={15} class="muted" />
                         <b>{d.name}</b>
-                        <span class="dev-sub">{platformLabel(d)}</span>
+                        <Show when={d.kind === "phone"}><span class="dev-sub">실제 기기</span></Show>
                         <Show when={d.lastUsed}><span class="dev-sub">{ago(d.lastUsed)}</span></Show>
                         <UsedBy d={d} />
                         <span class="spacer" />

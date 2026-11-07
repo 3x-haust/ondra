@@ -49,6 +49,13 @@ export default function(pi) {
     report.blank = await search.execute("blank", {query: "   "}, undefined, undefined, ctx);
     report.design = await search.execute("design", {query: "피그마", limit: 3}, undefined, undefined, ctx);
     report.limited = await search.execute("limited", {query: "use", limit: 1}, undefined, undefined, ctx);
+    report.reversing = [];
+    for (const query of ["리버싱", "역공학", "바이너리 분석", "reverse-engineering", "disassembly", "decompilation", "LLDB", "REA"]) {
+      report.reversing.push({ query, result: await search.execute("reverse", {query, limit: 3}, undefined, undefined, ctx) });
+    }
+    const reversing = JSON.parse(report.reversing[0].result.content[0].text).skills.find(s => s.name === "reverse-engineering");
+    report.reverseBody = await createReadTool(ctx.cwd).execute("reverse-body", {path: reversing.path});
+    report.reverseReference = await createReadTool(ctx.cwd).execute("reverse-reference", {path: reversing.baseDir + "/references/evidence.md"});
     const found = JSON.parse(report.search.content[0].text).skills[0];
     const reader = createReadTool(ctx.cwd);
     report.selected = await reader.execute("selected", {path: found.path});
@@ -107,6 +114,14 @@ export default function(pi) {
         expect(JSON.parse(result.empty.content[0].text).skills).toEqual([]);
         expect(JSON.parse(result.blank.content[0].text).skills).toEqual([]);
         expect(JSON.parse(result.design.content[0].text).skills.map((s) => s.name)).toContain("mimikyu");
+        for (const { query, result: searchResult } of result.reversing) {
+          const found = JSON.parse(searchResult.content[0].text).skills;
+          expect(found.map((s) => s.name), query).toContain("reverse-engineering");
+          expect(searchResult.content[0].text).not.toContain("Establish the target and boundary");
+        }
+        expect(result.reverseBody.content[0].text).toContain("Establish the target and boundary");
+        expect(result.reverseReference.content[0].text).toContain("Completion gates");
+        expect(result.initial).not.toContain("Evidence-driven reverse engineering");
         expect(result.selected.content[0].text).toContain("SELECTED_BODY_ONLY");
         expect(result.reference.content[0].text).toBe("REFERENCE_ONLY");
         expect(result.after).not.toContain("<available_skills>");

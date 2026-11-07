@@ -18,7 +18,7 @@ export type View =
   | { name: "results"; id?: string }
   | { name: "settings"; tab?: SettingsTab };
 
-export type SettingsTab = "general" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
+export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
 export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview";
 
@@ -38,7 +38,7 @@ export const [activeTab, setActiveTab] = createSignal(1);
 export const panelTab = (): PanelTab => ptabs().find((t) => t.id === activeTab())?.kind ?? "new";
 /** Show a tool: switch to its tab, or turn the empty tab into it, or open a new tab. */
 export function setPanelTab(kind: PanelTab) {
-  const have = kind === "new" ? undefined : ptabs().find((t) => t.kind === kind);
+  const have = ptabs().find((t) => t.kind === kind);
   if (have) return setActiveTab(have.id);
   const cur = ptabs().find((t) => t.id === activeTab());
   if (cur?.kind === "new" && kind !== "new") {

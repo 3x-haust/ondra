@@ -1,11 +1,12 @@
 // ⌘K: jump to any task or place, or send what you typed to the captain.
+import { checkUpdate } from "../engine/update";
 import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { setState, spaceById, state, taskById } from "../state/store";
 import { StatusIcon } from "../ui/ForkCard";
 import { openTask, paletteMode, setPaletteMode, setPaletteOpen, setView } from "../state/ui";
-import { ignoredKey, matchesShortcut, noModifiers, shortcutHint, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
+import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
 import { throwThought } from "../engine/captain";
 import { ago, compact, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -35,12 +36,13 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
   const commandsOnly = () => paletteMode() === "commands" || q().startsWith(">");
 
   const places: Item[] = [
-    ...props.commands.map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
+    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
     { id: "s-accounts", label: "계정", icon: "key", section: "앱", run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-import", label: "가져오기", icon: "download", section: "앱", run: () => setView({ name: "settings", tab: "import" }) },
     { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
+    { id: "update", label: "업데이트 확인", icon: "download", section: "앱", run: () => void checkUpdate(true) },
     { id: "s-tools", label: "도구 · 권한", icon: "shield", section: "앱", run: () => setView({ name: "settings", tab: "tools" }) },
-    { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "spark", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "monitor", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
 
   const items = createMemo<Item[]>(() => {
@@ -69,7 +71,10 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: "결과", run: () => setView({ name: "results", id: r.id }) }))
       : [];
     const all = commandsOnly() ? places : [...tasks, ...places];
-    const hits = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
+    const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
+    // each section once: its items together, sections in the order they first appear
+    const order = [...new Set(found.map((i) => i.section))];
+    const hits = order.flatMap((sec) => found.filter((i) => i.section === sec));
     const send: Item[] = text && !commandsOnly()
       ? [{ id: "send", label: text, hint: "메인에게 보내기", icon: "send", section: "보내기", run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
       : [];
@@ -145,10 +150,6 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           />
           <kbd>esc</kbd>
         </div>
-        <button class="palette-item" onClick={() => { setPaletteMode(commandsOnly() ? "all" : "commands"); setQ(""); setSel(0); input.focus(); }}>
-          <Icon name="list" size={15} /><span class="label">{commandsOnly() ? "일도 함께 찾기" : "단축키 · 명령 모두 보기"}</span><kbd>{shortcutHint("commands")}</kbd>
-        </button>
-        <Show when={commandsOnly()}><div class="palette-sec">입력 중에는 검색과 명령 안내만 · 다른 단축키는 입력창 밖에서 사용해요</div></Show>
         <div class="palette-list">
           <For each={items()} fallback={<div class="pane-empty">결과 없음</div>}>
             {(it, i) => (

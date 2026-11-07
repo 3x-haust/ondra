@@ -33,7 +33,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   return (
     <div class="branch-card" classList={{ closed: w().state !== "open" }}>
       <div class="branch-line">
-        <span class="branch-title">{w().state !== "open" ? "이 일의 변경" : props.t.status === "running" || props.t.status === "queued" ? "일이 끝나면 합칠 수 있어요" : "확인하고 합치면 원래 폴더에 들어가요"}</span>
+        <span class="branch-title">이 일의 변경</span>
         <span class="spacer" />
         <Show when={w().state === "merged"}><span class="branch-state ok"><Icon name="merge" size={12} />{w().into?.startsWith("PR ") ? `${w().into} 합쳐짐` : `${w().into}에 합침`}</span></Show>
         <Show when={w().state === "discarded"}><span class="branch-state">버림</span></Show>
@@ -140,16 +140,21 @@ function Overview(props: { t: Task }) {
       <Show when={t().plan.length}>
         <div>
           <div class="pane-title">계획</div>
-          <div class="plan">
+          {/* the same marks as the 할 일 list under the job */}
+          <ol class="todos-list plan-list">
             <For each={t().plan}>
               {(s) => (
-                <div class={`plan-step ${s.state}`}>
-                  <span class="mark"><Show when={s.state === "done"}><Icon name="check" size={9} stroke={3.5} /></Show></span>
-                  <span>{s.text}</span>
-                </div>
+                <li class={`todo ${s.state}`}>
+                  <span class="todo-box">
+                    <Show when={s.state === "done"} fallback={<Show when={s.state === "now"}><i /></Show>}>
+                      <Icon name="check" size={10} stroke={3} />
+                    </Show>
+                  </span>
+                  <span class="todo-text">{s.text}</span>
+                </li>
               )}
             </For>
-          </div>
+          </ol>
         </div>
       </Show>
       <Show when={t().legs.length > 1}>
@@ -226,7 +231,7 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
         <span class="shell-time">{short((props.s.endedAt ?? now()) - props.s.startedAt)}</span>
       </button>
       <Fold open={props.open}>
-        <pre class="shell-out" ref={pre}>{props.s.tail.trim() || (props.s.endedAt ? "출력 없음" : "출력 대기 중…")}</pre>
+        <pre class="shell-out" ref={pre}>{props.s.tail.replace(/^\n+/, "").trimEnd() || (props.s.endedAt ? "출력 없음" : "출력 대기 중…")}</pre>
       </Fold>
     </div>
   );
@@ -465,16 +470,16 @@ function ArtifactsPane(props: { t: Task }) {
 const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?: boolean }[] = [
   { kind: "flow", label: "흐름", icon: "branch", keys: shortcutHint("flow") },
   { kind: "side", label: "사이드챗", icon: "message", keys: shortcutHint("side") },
-  { kind: "artifacts", label: "결과물", icon: "spark", keys: shortcutHint("artifacts"), job: true },
+  { kind: "artifacts", label: "결과물", icon: "inbox", keys: shortcutHint("artifacts"), job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: shortcutHint("changes"), job: true },
   { kind: "pr", label: "PR", icon: "pr", keys: shortcutHint("pr"), job: true },
   { kind: "terminal", label: "셸", icon: "shell", keys: shortcutHint("terminal"), job: true },
   { kind: "files", label: "파일", icon: "file", keys: shortcutHint("files"), job: true },
   { kind: "browser", label: "브라우저", icon: "globe", keys: shortcutHint("browser") },
   { kind: "overview", label: "정보", icon: "list", keys: shortcutHint("overview"), job: true },
-  { kind: "preview", label: "미리보기", icon: "file" },
+  { kind: "preview", label: "미리보기", icon: "monitor" },
 ];
-const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "plus" };
+const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "more" };
 
 /** The empty tab: the tools you can open here. */
 function NewTab(props: { t?: Task }) {
@@ -641,7 +646,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               <BrowserView embedded />
             </div>
           </Match>
-          <Match when={needsJob()}><div class="pane-empty" /></Match>
+          <Match when={needsJob()}><div class="pane-empty">열린 일 없음</div></Match>
           <Match when={props.t}>
             {(t) => (
               <Switch>

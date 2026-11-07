@@ -4,7 +4,7 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
-import { batch, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 type P = { x: number; y: number };
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
@@ -66,7 +66,7 @@ function tone(t: Task): string {
   return "done";
 }
 
-function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] } {
+function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "그 밖의 일", folder: spaceById(space as Task["space"]).folder });
@@ -84,7 +84,7 @@ function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] }
     const top = y;
     // a grid, not one long column: up to 3 jobs side by side, a job's own
     // sub-jobs stacked under it
-    const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
+    const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
     for (let r = 0; r < jobs.length; r += cols) {
       const row = jobs.slice(r, r + cols);
       let rowH = 0;
@@ -165,6 +165,8 @@ function actOf(t: Task): Act {
   const last = t.entries[t.entries.length - 1];
   if (last?.kind === "tool" && !last.tool.endedAt) return pick(last.tool.kind, last.tool.target);
   if (live[t.id]) return pick("write-text");
+  // what the job itself says it's doing, as in its own view
+  if (t.now) return { kind: "think", icon: ACT.think.icon, label: t.now };
   return pick("think");
 }
 
@@ -626,7 +628,9 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 
 export function Canvas() {
   const space = () => state.space;
-  const graph = createMemo(() => layout(space(), unfolded()));
+  /** jobs side by side only as many as the canvas can show readably */
+  const [maxCols, setMaxCols] = createSignal(3);
+  const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
   /** projects that have finished jobs folded away (or unfolded) */
   const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
   const allOpen = () => foldable().length > 0 && foldable().every((id) => unfolded().includes(id));
@@ -697,7 +701,7 @@ export function Canvas() {
   const fold = (next: string[]) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
     const before = graph().nodes;
-    const after = layout(space(), next).nodes;
+    const after = layout(space(), next, maxCols()).nodes;
     const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
     const was = at(before);
     const will = Object.fromEntries(after.map((n) => [n.id, { x: n.x, y: n.y }]));
@@ -724,24 +728,29 @@ export function Canvas() {
     }
   };
 
-  /** `all`: everything in view (the button, ⇧1); otherwise stay readable and start at the top. */
+  /** the person moved or zoomed the view: a window resize no longer refits it */
+  let touched = false;
+  /** `all`: everything in view (the button, ⇧1); otherwise the full width, readable, from the top. */
   const fit = (animate = true, all = false) => {
     const ns = graph().nodes;
     if (!ns.length || !vp) return;
+    touched = false;
     const r = vp.getBoundingClientRect();
     const minX = Math.min(...ns.map((n) => n.x)), maxX = Math.max(...ns.map((n) => n.x + n.w));
     const minY = Math.min(...ns.map((n) => n.y)), maxY = Math.max(...ns.map((n) => n.y + n.h));
-    const z = Math.max(all ? 0.3 : 0.8, Math.min(1, (r.width - 120) / (maxX - minX), (r.height - 150) / (maxY - minY)));
+    const zw = (r.width - 120) / (maxX - minX), zh = (r.height - 150) / (maxY - minY);
+    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.5, Math.min(1, zw, Math.max(zh, 0.5)));
     if (animate) vp.classList.add("glide");
     setZoom(z);
     // too tall to fit: start at the top, readable
     const y = (maxY - minY) * z > r.height - 150 ? 76 - minY * z : (r.height - (maxY - minY) * z) / 2 - minY * z + 20;
-    setPan({ x: Math.max(48 - minX * z, (r.width - (maxX - minX) * z) / 2 - minX * z), y });
+    setPan({ x: Math.max(72 - minX * z, (r.width - (maxX - minX) * z) / 2 - minX * z), y });
     if (animate) setTimeout(() => vp?.classList.remove("glide"), 260);
   };
   onMount(() => requestAnimationFrame(() => fit(false)));
 
   const zoomAt = (factor: number, cx = vp.clientWidth / 2, cy = vp.clientHeight / 2) => {
+    touched = true;
     const z0 = zoom();
     const z = Math.min(2, Math.max(0.3, z0 * factor));
     const p = pan();
@@ -751,6 +760,7 @@ export function Canvas() {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    touched = true;
     const r = vp.getBoundingClientRect();
     if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
     else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
@@ -763,7 +773,10 @@ export function Canvas() {
     const start = { x: e.clientX, y: e.clientY, p: pan() };
     vp.setPointerCapture(e.pointerId);
     vp.classList.add("grabbing");
-    const move = (ev: PointerEvent) => setPan({ x: start.p.x + ev.clientX - start.x, y: start.p.y + ev.clientY - start.y });
+    const move = (ev: PointerEvent) => {
+      touched = true;
+      setPan({ x: start.p.x + ev.clientX - start.x, y: start.p.y + ev.clientY - start.y });
+    };
     const up = () => {
       vp.classList.remove("grabbing");
       vp.removeEventListener("pointermove", move);
@@ -860,10 +873,22 @@ export function Canvas() {
   };
   const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
   onMount(() => {
-    const ro = new ResizeObserver(() => setVpSize({ w: vp.clientWidth, h: vp.clientHeight }));
+    const ro = new ResizeObserver(() => {
+      setVpSize({ w: vp.clientWidth, h: vp.clientHeight });
+      setMaxCols(Math.max(1, Math.min(3, Math.floor((vp.clientWidth / 0.6 - X.job - 120) / (W.job + GAP.col)))));
+    });
     ro.observe(vp);
     onCleanup(() => ro.disconnect());
   });
+  // the window or a side panel changed size: keep the untouched view fitted
+  let refit = 0;
+  createEffect(on(vpSize, () => {
+    if (touched) return;
+    cancelAnimationFrame(refit);
+    refit = requestAnimationFrame(() => fit(false));
+  }, { defer: true }));
+  /** the map only helps when there's room to spare */
+  const roomy = () => vpSize().w >= 640 && vpSize().h >= 460;
 
   const send = () => {
     const t = ask().trim();
@@ -991,7 +1016,7 @@ export function Canvas() {
 
             <svg
               class="cv-mini"
-              classList={{ shifted: !!selTask() }}
+              classList={{ shifted: !!selTask(), gone: !roomy() }}
               viewBox={`${bounds().x} ${bounds().y} ${bounds().w} ${bounds().h}`}
               preserveAspectRatio="xMidYMid meet"
               onPointerDown={(e) => {
@@ -1001,6 +1026,7 @@ export function Canvas() {
                 pt.x = e.clientX;
                 pt.y = e.clientY;
                 const w = pt.matrixTransform(svg.getScreenCTM()!.inverse());
+                touched = true;
                 setPan({ x: vpSize().w / 2 - w.x * zoom(), y: vpSize().h / 2 - w.y * zoom() });
               }}
             >

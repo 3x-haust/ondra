@@ -262,7 +262,7 @@
 .term-sub {
   display: flex;
   gap: var(--s-2);
-  padding: var(--s-8) var(--s-10);
+  padding: var(--s-8) var(--s-16);
   border-bottom: 1px solid var(--line);
 }
 .shells {
@@ -378,7 +378,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  animation: blink 1.6s ease-in-out infinite;
+  animation: none;
 }
 @keyframes blink {
   50% {
@@ -771,6 +771,13 @@ button.route:hover {
   align-items: stretch;
   gap: var(--s-8);
 }
+.set-row .textarea.plain {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: vertical;
+}
 .set-label {
   flex: 1;
   min-width: 0;
@@ -788,6 +795,10 @@ button.route:hover {
   display: flex;
   align-items: center;
   gap: var(--s-8);
+}
+.set-note {
+  font-size: 12px;
+  color: var(--text-3);
 }
 .stepper {
   display: inline-flex;
@@ -831,7 +842,7 @@ button.route:hover {
 }
 .pill.warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .pill.bad {
   background: var(--bad-soft);
@@ -1319,7 +1330,7 @@ body.resizing iframe {
 }
 .dv-st.A {
   background: var(--diff-add);
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-st.D {
   background: var(--diff-del);
@@ -1430,10 +1441,10 @@ body.resizing iframe {
 }
 .dv-row.add .dv-num {
   background: var(--diff-add-strong);
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-row.add .dv-sign {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-row.del {
   background: var(--diff-del);
@@ -1467,7 +1478,7 @@ body.resizing iframe {
   display: flex;
   align-items: center;
   gap: var(--s-8);
-  margin: var(--s-10) var(--s-10) var(--s-6);
+  margin: var(--s-12) var(--s-12) var(--s-6);
   padding: 0 var(--s-4) 0 var(--s-10);
   height: var(--h-md);
   border-radius: var(--r-md);
@@ -1545,7 +1556,7 @@ body.resizing iframe {
   color: var(--accent);
 }
 .ft-st.A {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .ft-st.D {
   color: var(--bad);
@@ -1735,7 +1746,7 @@ button.st-sh:hover { text-decoration: underline; }
   color: var(--ink-4);
 }
 .prv-check.ok .prv-mark {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .prv-check.bad .prv-mark {
   color: var(--bad);
@@ -1885,4 +1896,8 @@ button.st-sh:hover { text-decoration: underline; }
 .prv-inline {
   white-space: normal;
   font-size: var(--fs-sm);
+}
+.src-empty {
+  grid-column: 1 / -1;
+  margin: 0;
 }

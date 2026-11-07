@@ -232,7 +232,9 @@
 /* ───────────── right: tabs in the top bar ───────────── */
 .panel {
   width: var(--job-w, 560px);
-  min-width: 400px;
+  /* the job beside it keeps room for its title and composer */
+  min-width: min(400px, calc(100vw - 460px));
+  max-width: calc(100vw - 460px);
   background: var(--bg);
   border-left: 1px solid var(--line);
 }
@@ -567,13 +569,13 @@
 @media (prefers-reduced-motion: no-preference) {
   .tone-live .sb-dot,
   .g-node.running {
-    animation: halo 1.8s var(--ease) infinite;
+    animation: none;
   }
   .g-node.running {
     animation: none;
   }
   .tone-ask .sb-dot {
-    animation: ask-ping 1.6s var(--ease) infinite;
+    animation: none;
   }
   /* menus pop from where they open */
   .pop {
@@ -583,24 +585,15 @@
   /* work in progress shimmers */
   .g-row:not(.past) .g-line2,
   .fork-line.shimmer {
-    background: linear-gradient(90deg, var(--ink-4) 0%, var(--ink-2) 50%, var(--ink-4) 100%);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer 2.8s linear infinite;
+    color: var(--ink-3);
   }
   .g-row.past .g-line2 {
     animation: none;
   }
   /* buttons feel pressable */
-  button:not(:disabled):active {
-    transform: scale(0.97);
-  }
-  .sb-row:active,
-  .panel-tab:active,
-  .g-row:active {
-    transform: none;
+  .icon-btn:not(:disabled):active,
+  .btn.sm:not(:disabled):active {
+    transform: scale(0.96);
   }
   .reply.linked::before {
     animation: grow-y 0.3s var(--ease-drawer) both;
@@ -964,7 +957,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
-    animation: status-pulse 2s steps(6) infinite;
+    animation: none;
   }
 }
 /* 11 · flow: metadata ends on one right edge; lanes fade in at the top */
@@ -1104,6 +1097,10 @@ body.resizing .panel {
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+.main > .slide > * {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .panel {
   transition: width 0.32s var(--ease-drawer);
@@ -1351,6 +1348,10 @@ body.resizing .panel {
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
   min-width: 0;
+}
+.status-line .pop {
+  font-family: var(--font);
+  font-variant-numeric: normal;
 }
 .status-line > * + *::before {
   content: "·";
@@ -1613,7 +1614,9 @@ body.resizing .panel {
   display: inline-flex;
 }
 .sb-row:hover .sb-meta,
-.sb-row:hover .sb-pin {
+.sb-row:hover .sb-pin,
+.sb-proj:hover .sb-live,
+.sb-proj:hover .spin {
   display: none;
 }
 .sb-act {
@@ -1766,7 +1769,7 @@ body.resizing .panel {
 }
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
-    animation: status-pulse 1.8s var(--ease) infinite;
+    animation: none;
   }
 }
 /* 17 · one header title style everywhere */
@@ -2034,7 +2037,7 @@ input[type="checkbox"] {
   font-variant-numeric: tabular-nums;
 }
 .sb-meta .add {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .sb-meta .del {
   color: var(--bad);
@@ -2308,7 +2311,7 @@ input[type="checkbox"] {
 .branch-card:not(:has(.branch-actions > *)) {
   border: 0;
   background: none;
-  padding: var(--s-4) var(--s-2);
+  padding: var(--s-4) var(--s-4);
   min-height: 0;
   color: var(--ink-3);
 }
@@ -2550,7 +2553,7 @@ input[type="checkbox"] {
   gap: 3px;
 }
 .bc-diff .add {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .bc-diff .del {
   color: var(--bad);
@@ -2801,10 +2804,10 @@ input[type="checkbox"] {
   display: flex;
   align-items: flex-end;
   gap: var(--s-6);
-  margin: 0 var(--s-12) var(--s-12);
+  margin: 0 var(--s-12) var(--s-20);
   padding: var(--s-8) var(--s-8) var(--s-8) var(--s-12);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: 22px;
   background: var(--card);
 }
 .side-input:focus-within {
@@ -4137,7 +4140,7 @@ input[type="checkbox"] {
   place-items: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--ok) 16%, transparent);
-  color: var(--ok);
+  color: var(--ok-ink);
   font-size: 10px;
   font-weight: 700;
   align-self: center;
@@ -4175,7 +4178,7 @@ input[type="checkbox"] {
   padding: 1px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--warn) 16%, transparent);
-  color: var(--warn);
+  color: var(--warn-ink);
   white-space: nowrap;
 }
 .tool-note {
@@ -4252,18 +4255,13 @@ input[type="checkbox"] {
 .tool-row .tool-verb {
   order: 2;
 }
-.tool-row .tool-stat {
+/* the counts keep the right edge; the time (shown on hover) sits just before them */
+.tool-row .tool-time {
   order: 3;
   margin-left: auto;
 }
-.tool-row .tool-time {
+.tool-row .tool-stat {
   order: 4;
-}
-.tool-row .tool-stat ~ .tool-time {
-  margin-left: 0;
-}
-.tool-row .tool-time:not(.tool-stat ~ .tool-time) {
-  margin-left: auto;
 }
 
 /* ───────── settings fill the window (Codex): sidebar = sections, main = the page */
@@ -5202,7 +5200,7 @@ input[type="checkbox"] {
 .ev-check.ran,
 .ev-check.exists,
 .ev-check.read {
-  color: var(--ok);
+  color: var(--ok-ink);
   background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
 .ev-check.no-run,
@@ -7821,7 +7819,7 @@ textarea { resize: none !important; field-sizing: content; }
 .tool-row.click:hover,
 .tool-row.click:hover .tool-target,
 .tool-row.click:hover .tool-verb { color: var(--ink); background: none; }
-.tool-row .tool-time { order: 4; }
+.tool-row .tool-time { order: 3; }
 /* a run of work lines sits together; the thread's 24px gap stays around it */
 .thread-inner > .tool + .tool { margin-top: -22px; }
 .tool.explore.open > .tool-row .tool-chev { opacity: 1; transform: rotate(90deg); }
@@ -7897,20 +7895,9 @@ textarea { resize: none !important; field-sizing: content; }
   .browser-view .burl { transition: none; }
 }
 
-/* live status text ("생각하는 중", what a job is doing): a light band sweeps
-   across the letters while it works (Codex); still text when motion is reduced */
+/* live status text ("생각하는 중", what a job is doing): still text */
 .shimmer {
   color: var(--ink-3);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .shimmer {
-    background: linear-gradient(100deg, var(--ink-4) 0%, var(--ink-4) 40%, var(--ink) 50%, var(--ink-4) 60%, var(--ink-4) 100%);
-    background-size: 250% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer-sweep 1.8s linear infinite;
-  }
 }
 @keyframes shimmer-sweep {
   from { background-position: 100% 0; }
@@ -8328,7 +8315,7 @@ textarea { resize: none !important; field-sizing: content; }
 .acell:hover .athumb { border-color: var(--ink-3); }
 .aname { font-size: var(--fs-xs); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-cache { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.st-cache.low { color: var(--warn); }
+.st-cache.low { color: var(--warn-ink); }
 .sp-gh { display: flex; align-items: center; gap: var(--s-8); min-height: 32px; }
 .sp-gh code { font-size: var(--fs-sm); }
 .sp-git-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s-8); }
@@ -8510,4 +8497,108 @@ textarea { resize: none !important; field-sizing: content; }
   border-radius: 2px;
   background: var(--accent);
   transition: width var(--dur) var(--ease);
+}
+.seg-n {
+  margin-left: var(--s-6);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.seg button.on .seg-n {
+  color: var(--ink-2);
+}
+.cv-mini.gone {
+  display: none;
+}
+.needs-menu {
+  min-width: 0;
+}
+.needs-menu .row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.needs-menu .row-hint {
+  flex: none;
+}
+.needs-menu .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-4);
+}
+.needs-menu .dot.ask {
+  background: var(--warn);
+}
+.needs-menu .dot.ok {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--ok);
+}
+/* a narrow one-row composer keeps the input readable: the model chip shows only the effort */
+.composer-wrap.slim {
+  container-type: inline-size;
+}
+@container (max-width: 480px) {
+  .composer-wrap.slim .model-chip .model-name {
+    display: none;
+  }
+}
+/* an open file fills the pane, and its numbers keep the diff's distance from the code */
+.files > .fv {
+  flex: 1;
+}
+.fv .dv-num {
+  padding-right: var(--s-16);
+}
+/* composer menus open from the composer's edge, so they never cover what's being typed */
+.composer .composer-bar .picker,
+.composer-wrap .ctray .picker {
+  position: static;
+}
+/* "생각 깊이" reads like the other section labels in the menu */
+.eff-head > span {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+/* "5시간 41%": Korean words read in the UI font, numbers stay even */
+.status-line .st-lim {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+}
+/* light: the folded cards peek out as thin lines, not a grey bar */
+:root[data-theme="light"] .cv-node.cv-more:not(:has(.cv-more-row.open)) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 5px 0 -1px var(--cv-card),
+    0 5px 0 0 color-mix(in srgb, var(--ink) 7%, transparent),
+    0 10px 0 -2px var(--cv-card),
+    0 10px 0 -1px color-mix(in srgb, var(--ink) 4%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .cv-node.cv-more:not(:has(.cv-more-row.open)) {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+      0 5px 0 -1px var(--cv-card),
+      0 5px 0 0 color-mix(in srgb, var(--ink) 7%, transparent),
+      0 10px 0 -2px var(--cv-card),
+      0 10px 0 -1px color-mix(in srgb, var(--ink) 4%, transparent);
+  }
+}
+/* the device's space picker sits with the small buttons beside it */
+select.select.dev-space {
+  height: var(--h-sm);
+  font-size: var(--fs-xs);
+  padding-left: var(--s-8);
+}
+.todos-list.plan-list {
+  padding: 0;
+  max-height: none;
+  overflow: visible;
+}
+/* cards in the thread keep the thread's own gap */
+.thread-inner > .blocks {
+  margin: 0;
 }

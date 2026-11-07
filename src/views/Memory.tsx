@@ -252,6 +252,14 @@ export function MemoryView() {
  * the node they belong to.
  */
 type Body = { x: number; y: number; vx: number; vy: number; fx?: number; fy?: number };
+/** 0..1 from a string: the same node starts in the same spot, so the graph lays out the same way every time */
+function unit(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 100000) / 100000;
+}
+/** where nodes settled last time, so reopening the view shows the same picture */
+const settled = new Map<string, { x: number; y: number }>();
 type View = { x: number; y: number; z: number };
 const CUT = 220;
 
@@ -306,7 +314,8 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       minX = Math.min(minX, b!.x - r - 30), maxX = Math.max(maxX, b!.x + r + 30);
       minY = Math.min(minY, b!.y - r - 10), maxY = Math.max(maxY, b!.y + r + 22);
     }
-    const { w, h } = size();
+    // measure now: on the first frame the observer hasn't reported the size yet
+    const w = svg?.clientWidth || size().w, h = svg?.clientHeight || size().h;
     const z = Math.min(props.graph.focus ? 1.4 : 1.5, Math.max(0.25, Math.min((w - 60) / (maxX - minX || 1), (h - 70) / (maxY - minY || 1))));
     goTo({ z, x: w / 2 - ((minX + maxX) / 2) * z, y: h / 2 - ((minY + maxY) / 2) * z }, ease);
   };
@@ -335,7 +344,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
             let dx = b.x - a.x, dy = b.y - a.y;
             let d2 = dx * dx + dy * dy;
             if (d2 > CUT * CUT) continue;
-            if (d2 < 0.01) (dx = Math.random() - 0.5), (dy = Math.random() - 0.5), (d2 = 0.5);
+            if (d2 < 0.01) (dx = ((i * 7 + j * 13) % 10) / 10 - 0.45), (dy = ((i * 11 + j * 5) % 10) / 10 - 0.45), (d2 = 0.5);
             const d = Math.sqrt(d2);
             const rr = ns[i].r + ns[j].r;
             const min = rr + 14;
@@ -404,18 +413,30 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
         const ids = new Set(props.graph.nodes.map((n) => n.id));
         const f = props.graph.focus ? bodies.get(props.graph.focus) : undefined;
         center = f ? { x: f.x, y: f.y } : { x: 0, y: 0 };
-        let added = 0;
+        let added = 0, restored = 0;
+        const first = !bodies.size;
         for (const n of props.graph.nodes)
           if (!bodies.has(n.id)) {
+            const was = settled.get(n.id);
+            if (was) {
+              bodies.set(n.id, { ...was, vx: 0, vy: 0 });
+              restored++;
+              continue;
+            }
             const p = (n.anchor && bodies.get(n.anchor)) || f || center;
-            const a = Math.random() * Math.PI * 2;
-            const r = 10 + Math.random() * 30;
+            const a = unit(n.id) * Math.PI * 2;
+            const r = 10 + unit(n.id + "~") * 30;
             bodies.set(n.id, { x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, vx: 0, vy: 0 });
             added++;
           }
         for (const id of [...bodies.keys()]) if (!ids.has(id)) bodies.delete(id);
         frames = 0;
         userMoved = false;
+        // reopened as it was: show it where it settled instead of shaking it again
+        if (restored && !added) {
+          if (first) alpha = 0, fit(false);
+          return heat(0.03);
+        }
         heat(added > 20 ? 0.9 : added ? 0.6 : 0.3);
       },
     ),
@@ -423,10 +444,13 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   onMount(() => {
     const ro = new ResizeObserver(() => {
       setSize({ w: svg.clientWidth, h: svg.clientHeight });
-      if (!userMoved && !raf) fit(false);
+      if (!userMoved && (!raf || alpha < 0.05)) fit(false);
     });
     ro.observe(svg);
-    onCleanup(() => (ro.disconnect(), cancelAnimationFrame(raf), cancelAnimationFrame(tween)));
+    onCleanup(() => {
+      ro.disconnect(), cancelAnimationFrame(raf), cancelAnimationFrame(tween);
+      for (const [id, b] of bodies) settled.set(id, { x: b.x, y: b.y });
+    });
   });
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -526,7 +550,14 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       const fs = FS[n.kind] ?? 11;
       const w = textW(labelOf(n) + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
       const box = [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
+      // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
+      if (n.kind === "file" && rank(n) > 1) continue;
       if (rank(n) > 0 && placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3])) continue;
+      // nor across another node
+      if (rank(n) > 0 && props.graph.nodes.some((o) => {
+        const ob = o.id !== n.id && bodies.get(o.id);
+        return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
+      })) continue;
       placed.push(box);
       on.add(n.id);
     }

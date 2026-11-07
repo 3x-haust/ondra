@@ -8,6 +8,7 @@ import { openBrowser, openTask } from "../state/ui";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
+import { dropAsked } from "./decisionText";
 
 export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const t = () => taskById(props.d.taskId);
@@ -22,7 +23,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       if (e.kind === "block" && !["plan", "now", "ask", "done"].includes(String((e.block as { type?: string }).type))) out.push(e.block);
       if (e.kind === "text" && e.text.trim()) out.push({ type: "text", text: e.text.trim() } as Block);
     }
-    return out.slice(-4);
+    return dropAsked(out.slice(-4));
   };
   // the recommended choice starts selected. Clicking, ↑↓ or a number only
   // selects; Enter or the send button answers (never on hover, never by accident)
