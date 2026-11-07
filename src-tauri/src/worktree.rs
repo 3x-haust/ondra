@@ -119,7 +119,22 @@ fn create(cwd: &str, dest: &str, branch: &str) -> Result<Worktree, String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     run(&top, &["worktree", "add", "-b", branch, dest, &base])?;
+    keep_notes_out(&top);
     Ok(Worktree { repo: top, path: dest.to_string(), branch: branch.to_string(), base, sub })
+}
+
+/// Ondra's own notes (`.ondra/`) never go into the user's commits: list them in the
+/// repo's local exclude file (shared by its worktrees, never committed).
+fn keep_notes_out(top: &str) {
+    let Ok(common) = run(top, &["rev-parse", "--path-format=absolute", "--git-common-dir"]) else { return };
+    let file = Path::new(&common).join("info").join("exclude");
+    let now = std::fs::read_to_string(&file).unwrap_or_default();
+    if now.lines().any(|l| matches!(l.trim(), ".ondra" | ".ondra/" | "/.ondra" | "/.ondra/")) {
+        return;
+    }
+    let _ = std::fs::create_dir_all(file.parent().unwrap());
+    let sep = if now.is_empty() || now.ends_with('\n') { "" } else { "\n" };
+    let _ = std::fs::write(&file, format!("{now}{sep}.ondra/\n"));
 }
 
 /// Commit everything left in the worktree. Ok(true) if a commit was made.
@@ -235,6 +250,9 @@ mod tests {
         let wa = create(&repo.join("app").display().to_string(), &a, "task/a").unwrap();
         let wb = create(&repo.join("app").display().to_string(), &b, "task/b").unwrap();
         assert_eq!(wa.sub, "app");
+        std::fs::create_dir_all(Path::new(&a).join(".ondra")).unwrap();
+        std::fs::write(Path::new(&a).join(".ondra/goal.md"), "notes").unwrap();
+        assert!(commit_all(&a, "notes only").map(|made| !made).unwrap(), "Ondra notes are not committed");
         std::fs::write(Path::new(&a).join("app/a.txt"), "one\ntwo\n").unwrap();
         std::fs::write(Path::new(&b).join("app/b.txt"), "bee\n").unwrap();
         assert_eq!(std::fs::read_to_string(repo.join("app/a.txt")).unwrap(), "one\n");

@@ -16,7 +16,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agent
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { commandKind } from "./commandKind";
-import { checkEvidence, isCodeFile, reviewUnresolved } from "./proof";
+import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
@@ -1283,6 +1283,12 @@ function reviewedBefore(t: Task): Task | undefined {
 }
 
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
+  // "done" that still promises the work for later
+  if (promisesLater(run.done ?? ""))
+    return {
+      label: "아직 할 일이 남음",
+      ask: "끝냈다고 했는데 요약이 앞으로 할 일이에요. 그 일을 지금 끝내고 done으로 끝내 줘. 지금 할 수 없으면 무엇이 막혔는지 사용자에게 묻거나, 못 한 걸 unverified에 적고 요약은 실제로 한 것만 적어 줘.",
+    };
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   if (!wrote.length) return null; // looked things up, answered: nothing to prove
   // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)
