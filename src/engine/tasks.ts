@@ -7,7 +7,7 @@ import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
-import { limits, refreshLimits, snapshot } from "../state/limits";
+import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { noteCall, noteCtx } from "../state/ctx";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
@@ -103,7 +103,7 @@ export function chooseAccount(space: Task["space"], topic: string): string {
   const pick = state.accountPick?.[space];
   if (pick && pick !== "auto" && pool.some((a) => a.id === pick)) return pick;
   if (pool.length === 1) return pool[0].id;
-  const load = (id: string) => Math.max(0, ...(limits[id] ?? []).map((l) => l.used));
+  const load = (id: string) => Math.max(0, ...usageOf(id).map((l) => l.used));
   const roomy = pool.filter((a) => load(a.id) < 85);
   const use = roomy.length ? roomy : pool;
   const HOUR = 60 * 60_000;
