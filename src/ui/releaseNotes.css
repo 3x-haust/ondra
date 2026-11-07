@@ -62,8 +62,12 @@
 .rn-md li > ul { margin-top: 2px; }
 .rn-none,
 .rn-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-12);
   margin: 0;
   padding: var(--s-20);
   font-size: 13px;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }

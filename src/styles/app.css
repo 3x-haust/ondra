@@ -1019,6 +1019,7 @@ button.route:hover {
   overflow: hidden;
 }
 .sheet-head {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--s-10);

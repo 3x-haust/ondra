@@ -40,12 +40,14 @@ export function ResultsView() {
         <SidebarToggle />
         <h1 class="head-title">결과</h1>
         <span class="spacer" data-tauri-drag-region />
-        <div class="mem-search">
-          <Icon name="search" size={13} />
-          <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
-        </div>
+        <Show when={all().length}>
+          <div class="mem-search">
+            <Icon name="search" size={13} />
+            <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
+          </div>
+        </Show>
       </header>
-      <Show when={all().length} fallback={<div class="pane-empty">아직 결과가 없어요</div>}>
+      <Show when={all().length} fallback={<div class="pane-empty">결과 없음</div>}>
       <div class="res-body">
         <div class="res-list">
           <For each={list()} fallback={<div class="res-empty">찾은 결과가 없어요</div>}>

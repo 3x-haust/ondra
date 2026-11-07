@@ -4,7 +4,7 @@ import { Dynamic } from "solid-js/web";
 import {
   AlertTriangle, ArrowRight, ArrowUp, BookOpen, Brain, Check, ChevronDown, ChevronRight, Circle, Clock,
   CornerDownRight, Download, ExternalLink, FileDiff, FilePen, FilePlus, FileText, FlaskConical, Folder,
-  GitBranch, GitPullRequest, Globe, History, Home, Inbox, KeyRound, LayoutList, Link, MessageSquare,
+  GitBranch, GitPullRequest, Globe, History, Home, Inbox, Package, KeyRound, LayoutList, Link, MessageSquare,
   Monitor, MoreHorizontal, PanelLeft,
   PanelRight, Pause, Play, Plus, RefreshCw, Route, Search, Settings, Shield,
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
@@ -16,7 +16,7 @@ const map: Record<string, Component<any>> = {
   down: ChevronDown, chevron: ChevronRight, dot: Circle, clock: Clock, handoff: CornerDownRight,
   download: Download, external: ExternalLink, diff: FileDiff, edit: FilePen, write: FilePlus, file: FileText,
   test: FlaskConical, folder: Folder, branch: GitBranch, pr: GitPullRequest, globe: Globe, history: History,
-  home: Home, inbox: Inbox, key: KeyRound, list: LayoutList, link: Link, board: Columns3, canvas: Workflow, dots: Grip, minus: Minus, fit: Maximize, tidy: LayoutGrid, message: MessageSquare,
+  home: Home, inbox: Inbox, box: Package, key: KeyRound, list: LayoutList, link: Link, board: Columns3, canvas: Workflow, dots: Grip, minus: Minus, fit: Maximize, tidy: LayoutGrid, message: MessageSquare,
   monitor: Monitor, more: MoreHorizontal, panel: PanelRight, panelLeft: PanelLeft, pause: Pause, play: Play, plus: Plus,
   refresh: RefreshCw, route: Route, search: Search, gear: Settings, shield: Shield, phone: Smartphone,
   spark: Sparkles, stop: Square, terminal: SquareTerminal, shell: Terminal, trash: Trash2, video: Video,
