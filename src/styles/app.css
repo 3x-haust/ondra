@@ -1897,3 +1897,7 @@ button.st-sh:hover { text-decoration: underline; }
   white-space: normal;
   font-size: var(--fs-sm);
 }
+.src-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+}

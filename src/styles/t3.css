@@ -4253,18 +4253,13 @@ input[type="checkbox"] {
 .tool-row .tool-verb {
   order: 2;
 }
-.tool-row .tool-stat {
+/* the counts keep the right edge; the time (shown on hover) sits just before them */
+.tool-row .tool-time {
   order: 3;
   margin-left: auto;
 }
-.tool-row .tool-time {
+.tool-row .tool-stat {
   order: 4;
-}
-.tool-row .tool-stat ~ .tool-time {
-  margin-left: 0;
-}
-.tool-row .tool-time:not(.tool-stat ~ .tool-time) {
-  margin-left: auto;
 }
 
 /* ───────── settings fill the window (Codex): sidebar = sections, main = the page */
@@ -7822,7 +7817,7 @@ textarea { resize: none !important; field-sizing: content; }
 .tool-row.click:hover,
 .tool-row.click:hover .tool-target,
 .tool-row.click:hover .tool-verb { color: var(--ink); background: none; }
-.tool-row .tool-time { order: 4; }
+.tool-row .tool-time { order: 3; }
 /* a run of work lines sits together; the thread's 24px gap stays around it */
 .thread-inner > .tool + .tool { margin-top: -22px; }
 .tool.explore.open > .tool-row .tool-chev { opacity: 1; transform: rotate(90deg); }
