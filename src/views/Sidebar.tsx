@@ -177,6 +177,41 @@ function ProjectMenu() {
     </Show>
   );
 }
+/** 확인할 일: the jobs waiting on you, to pick one */
+const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number } | null>(null);
+function NeedsMenu() {
+  const close = () => setNeedsMenu(null);
+  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && needsMenu() && (e.preventDefault(), e.stopPropagation(), close());
+  window.addEventListener("click", close);
+  window.addEventListener("blur", close);
+  window.addEventListener("keydown", esc, true);
+  createEffect(() => anyPop() && close());
+  onCleanup(() => {
+    window.removeEventListener("click", close);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("keydown", esc, true);
+  });
+  const list = () => forkOrder(state.space).filter((t) => !t.archived && (bucket(t) === "you" || bucket(t) === "review"));
+  const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
+  return (
+    <Show when={needsMenu()}>
+      {(m) => (
+        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, top: `${Math.min(m().y, window.innerHeight - 60 - list().length * 34)}px` }} onClick={(e) => e.stopPropagation()}>
+          <For each={list()}>
+            {(t) => (
+              <button onClick={() => (openTask(t.id), close())}>
+                <span class="dot" classList={{ ask: bucket(t) === "you", ok: bucket(t) === "review" }} />
+                <span class="row-title">{t.title}</span>
+                <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? "멈춤" : "답 필요") : "검토"}{where(t) ? ` · ${where(t)}` : ""}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 const [renaming, setRenaming] = createSignal<string | null>(null);
 export { renaming, setRenaming };
 
@@ -329,7 +364,19 @@ export function Sidebar() {
         </button>
         {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
         <Show when={needs()}>
-          <button class="sb-row sb-main sb-todo" onClick={() => { const t = nextWaiting(state.space); if (t) openTask(t.id); }} data-shortcut="waiting" title="답하거나 확인할 다음 일로 (⌘.)">
+          <button
+            class="sb-row sb-main sb-todo"
+            classList={{ on: !!needsMenu() }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
+              if (needsMenu()) return setNeedsMenu(null);
+              const r = e.currentTarget.getBoundingClientRect();
+              setNeedsMenu({ x: r.left, y: r.bottom + 4 });
+            }}
+            data-shortcut="waiting"
+            title="답하거나 확인할 일 (⌘.로 다음 일)"
+          >
             <Icon name="alert" size={15} class="sb-main-ic" />
             <span class="sb-title">확인할 일</span>
             <span class="sb-need">{needs()}</span>
@@ -474,6 +521,7 @@ export function Sidebar() {
       </div>
       <RowMenu />
       <ProjectMenu />
+      <NeedsMenu />
 
       <div class="sb-foot">
         <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
