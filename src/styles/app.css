@@ -835,7 +835,7 @@ button.route:hover {
 }
 .pill.warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 .pill.bad {
   background: var(--bad-soft);
@@ -1323,7 +1323,7 @@ body.resizing iframe {
 }
 .dv-st.A {
   background: var(--diff-add);
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-st.D {
   background: var(--diff-del);
@@ -1434,10 +1434,10 @@ body.resizing iframe {
 }
 .dv-row.add .dv-num {
   background: var(--diff-add-strong);
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-row.add .dv-sign {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .dv-row.del {
   background: var(--diff-del);
@@ -1549,7 +1549,7 @@ body.resizing iframe {
   color: var(--accent);
 }
 .ft-st.A {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .ft-st.D {
   color: var(--bad);
@@ -1739,7 +1739,7 @@ button.st-sh:hover { text-decoration: underline; }
   color: var(--ink-4);
 }
 .prv-check.ok .prv-mark {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .prv-check.bad .prv-mark {
   color: var(--bad);

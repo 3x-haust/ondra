@@ -45,9 +45,10 @@ export function ResultsView() {
           <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && setQ("")} />
         </div>
       </header>
+      <Show when={all().length} fallback={<div class="pane-empty">아직 결과가 없어요</div>}>
       <div class="res-body">
         <div class="res-list">
-          <For each={list()} fallback={<div class="res-empty">{q().trim() ? "찾은 결과가 없어요" : "아직 없어요"}</div>}>
+          <For each={list()} fallback={<div class="res-empty">찾은 결과가 없어요</div>}>
             {(r, i) => (
               <>
                 <Show when={i() === 0 || dayOf(list()[i() - 1].at) !== dayOf(r.at)}>
@@ -96,6 +97,7 @@ export function ResultsView() {
           </Show>
         </div>
       </div>
+      </Show>
     </div>
   );
 }

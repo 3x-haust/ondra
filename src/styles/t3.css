@@ -2025,7 +2025,7 @@ input[type="checkbox"] {
   font-variant-numeric: tabular-nums;
 }
 .sb-meta .add {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .sb-meta .del {
   color: var(--bad);
@@ -2541,7 +2541,7 @@ input[type="checkbox"] {
   gap: 3px;
 }
 .bc-diff .add {
-  color: var(--ok);
+  color: var(--ok-ink);
 }
 .bc-diff .del {
   color: var(--bad);
@@ -4128,7 +4128,7 @@ input[type="checkbox"] {
   place-items: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--ok) 16%, transparent);
-  color: var(--ok);
+  color: var(--ok-ink);
   font-size: 10px;
   font-weight: 700;
   align-self: center;
@@ -4166,7 +4166,7 @@ input[type="checkbox"] {
   padding: 1px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--warn) 16%, transparent);
-  color: var(--warn);
+  color: var(--warn-ink);
   white-space: nowrap;
 }
 .tool-note {
@@ -5193,7 +5193,7 @@ input[type="checkbox"] {
 .ev-check.ran,
 .ev-check.exists,
 .ev-check.read {
-  color: var(--ok);
+  color: var(--ok-ink);
   background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
 .ev-check.no-run,
@@ -8308,7 +8308,7 @@ textarea { resize: none !important; field-sizing: content; }
 .acell:hover .athumb { border-color: var(--ink-3); }
 .aname { font-size: var(--fs-xs); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-cache { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.st-cache.low { color: var(--warn); }
+.st-cache.low { color: var(--warn-ink); }
 .sp-gh { display: flex; align-items: center; gap: var(--s-8); min-height: 32px; }
 .sp-gh code { font-size: var(--fs-sm); }
 .sp-git-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s-8); }

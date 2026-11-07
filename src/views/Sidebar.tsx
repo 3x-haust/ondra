@@ -431,7 +431,7 @@ export function Sidebar() {
         <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
-          <For each={loose()} fallback={<p class="sb-empty">{projectsIn(state.space).length ? "프로젝트 밖에서 맡긴 일이 여기에 생겨요" : "메인에게 일을 맡기면 여기에 생겨요"}</p>}>
+          <For each={loose()}>
             {(t, i) => <Row t={t} index={i()} />}
           </For>
           <Show when={hidden()}>
