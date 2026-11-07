@@ -11,12 +11,14 @@ use std::{
 };
 
 const HELP: &str = "Ondra bundled static binary analysis (radare2 + r2ghidra 6.2.6)
-Usage: ondra-binary <inspect|functions|disassemble|decompile> <file> [--arch arm64|x86_64] [--address 0xHEX]
+Usage: ondra-binary <inspect|functions|disassemble|decompile> <file> [--arch arm64|x86_64] [--address 0xHEX] [--name SUBSTR]
        ondra-binary --help | --version
 
 inspect: metadata; functions: analyzed function list;
 disassemble: function instructions; decompile: Ghidra decompiler pseudocode.
 Disassemble/decompile require a function's virtual address from functions.
+functions accepts --name SUBSTR (case-insensitive) to return only matching
+functions; a real app can have thousands, so filter before reading the JSON.
 Universal Mach-O requires --arch. Supported targets: 64-bit ARM/x86 Mach-O, ELF, PE.
 Outputs JSON; diagnostics go to stderr. Exit 1 means incomplete/failed, 2 invalid arguments.
 No target execution, user plugins, user configuration, network or external runtimes.
@@ -29,13 +31,14 @@ struct Args {
     input: PathBuf,
     arch: Option<String>,
     address: Option<u64>,
+    name: Option<String>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
     if args.len() < 2 || !["inspect", "functions", "disassemble", "decompile"].contains(&args[0].as_str()) {
         return Err(HELP.into());
     }
-    let mut result = Args { operation: args[0].clone(), input: PathBuf::from(&args[1]), arch: None, address: None };
+    let mut result = Args { operation: args[0].clone(), input: PathBuf::from(&args[1]), arch: None, address: None, name: None };
     for pair in args[2..].chunks(2) {
         if pair.len() != 2 { return Err("Every option needs a value".into()); }
         match pair[0].as_str() {
@@ -45,12 +48,16 @@ fn parse(args: &[String]) -> Result<Args, String> {
                     .ok_or("Address must be a hexadecimal virtual address (0xHEX)")?;
                 result.address = Some(u64::from_str_radix(hex, 16).map_err(|e| e.to_string())?);
             }
+            "--name" if result.name.is_none() && !pair[1].is_empty() => result.name = Some(pair[1].clone()),
             _ => return Err(format!("Invalid or repeated option: {}", pair[0])),
         }
     }
     let needs_address = ["disassemble", "decompile"].contains(&result.operation.as_str());
     if needs_address != result.address.is_some() {
         return Err("Only disassemble/decompile require --address".into());
+    }
+    if result.name.is_some() && result.operation != "functions" {
+        return Err("--name only filters the functions operation".into());
     }
     Ok(result)
 }
@@ -174,7 +181,15 @@ fn analyze(args: Args) -> Result<Value, String> {
         "decompile" => Some(format!("aaa;pdgj @ {:#x}", args.address.unwrap())),
         _ => unreachable!(),
     };
-    let data = match command { Some(ref c) => engine(&root, &scratch.0, &args.arch, c)?, None => info.clone() };
+    let mut data = match command { Some(ref c) => engine(&root, &scratch.0, &args.arch, c)?, None => info.clone() };
+    if let Some(needle) = &args.name {
+        let needle = needle.to_lowercase();
+        let matches: Vec<Value> = data.as_array().map(|list| list.iter()
+            .filter(|f| f["name"].as_str().is_some_and(|n| n.to_lowercase().contains(&needle)))
+            .cloned().collect()).unwrap_or_default();
+        if matches.is_empty() { return Err(format!("No analyzed function name contains {needle:?}")); }
+        data = Value::Array(matches);
+    }
     let complete = match args.operation.as_str() {
         "inspect" => true,
         "functions" => data.as_array().is_some_and(|v| !v.is_empty()),
