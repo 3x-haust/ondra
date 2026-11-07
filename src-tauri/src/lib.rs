@@ -181,7 +181,25 @@ fn load_env() {
     }
 }
 
+/// Where CLIs keep their logins. Started from a terminal, the app would pick up
+/// that terminal's accounts (another profile's gh, git or Claude login) and
+/// every job would run as them. Drop them; the login shell's own come back
+/// through `engine::login_env`.
+pub(crate) const LOGIN_VARS: &[&str] = &[
+    "GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "GIT_CONFIG_GLOBAL", "GIT_SSH_COMMAND",
+    "CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_PROFILE", "CLOUDSDK_CONFIG", "DOCKER_CONFIG", "KUBECONFIG", "ONDRA_CLI_HOME",
+];
+
+fn drop_launcher_logins() {
+    for k in LOGIN_VARS {
+        // SAFETY: runs first thing in `run`, before any other thread exists
+        unsafe { std::env::remove_var(k) };
+    }
+}
+
 pub fn run() {
+    drop_launcher_logins();
     load_env();
     let capture_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
