@@ -3,7 +3,7 @@ import { editableTarget, localKeysTarget, shortcutLabel, shortcutOverlay, type S
 import { watchShortcutHold } from "../lib/shortcutHold";
 import "./shortcutHints.css";
 
-interface Hint { id: string; label: string; x: number; y: number }
+interface Hint { id: string; label: string; rect: DOMRect }
 
 export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enabled: () => boolean }) {
   const [hints, setHints] = createSignal<Hint[]>([]);
@@ -27,24 +27,34 @@ export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enable
       const top = document.elementFromPoint(x, y);
       if (!top || !el.contains(top)) continue;
       anchors.push({ el, rect: r });
-      next.push({ id: command.id, label: shortcutLabel(command.shortcut), x, y: r.bottom });
+      next.push({ id: command.id, label: shortcutLabel(command.shortcut), rect: r });
     }
     setHints(next);
-    // Measure rendered badges so they stay inside the window and never overlap each other.
+    // Each badge sits inside its own control: centered on a small button, at the right
+    // end of a row, in the top-right corner of a large box. Never outside, never stacked.
     const placed: DOMRect[] = [];
-    for (const badge of layer.querySelectorAll<HTMLElement>(".shortcut-hint")) {
-      const r = badge.getBoundingClientRect();
-      const left = Math.max(0, Math.min(r.left, innerWidth - r.width));
-      let top = Math.max(0, Math.min(r.top, innerHeight - r.height));
-      for (const other of placed) {
-        if (left < other.right && left + r.width > other.left && top < other.bottom && top + r.height > other.top) top = other.bottom;
+    const badges = layer.querySelectorAll<HTMLElement>(".shortcut-hint");
+    next.forEach((hint, i) => {
+      const badge = badges[i];
+      if (!badge) return;
+      const w = badge.offsetWidth;
+      const h = badge.offsetHeight;
+      const r = hint.rect;
+      const small = r.width <= Math.max(64, w + 12) && r.height <= 48;
+      let left = small ? r.left + (r.width - w) / 2 : r.right - w - 8;
+      let top = r.height > 48 ? r.top + 8 : r.top + (r.height - h) / 2;
+      left = Math.round(Math.max(4, Math.min(left, innerWidth - w - 4)));
+      top = Math.round(Math.max(4, Math.min(top, innerHeight - h - 4)));
+      const box = new DOMRect(left, top, w, h);
+      if (placed.some((o) => box.left < o.right - 1 && box.right - 1 > o.left && box.top < o.bottom && box.bottom > o.top)) {
+        badge.style.visibility = "hidden";
+        return;
       }
-      if (top + r.height > innerHeight) { badge.style.visibility = "hidden"; continue; }
       badge.style.left = `${left}px`;
       badge.style.top = `${top}px`;
-      badge.style.transform = "none";
-      placed.push(new DOMRect(left, top, r.width, r.height));
-    }
+      badge.style.visibility = "visible";
+      placed.push(box);
+    });
     setVisible(true);
   };
   onMount(() => {
@@ -62,6 +72,6 @@ export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enable
     onCleanup(() => { stop(); observer.disconnect(); });
   });
   return <div ref={layer} class="shortcut-hints" classList={{ visible: visible() }} aria-hidden="true">
-    <For each={hints()}>{(hint) => <kbd class="shortcut-hint" data-hint={hint.id} style={{ left: `${hint.x}px`, top: `${hint.y}px` }}>{hint.label}</kbd>}</For>
+    <For each={hints()}>{(hint) => <kbd class="shortcut-hint" data-hint={hint.id}>{hint.label}</kbd>}</For>
   </div>;
 }

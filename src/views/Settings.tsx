@@ -1,6 +1,7 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { modelsOf } from "../engine/modelList";
-import { ignoredKey, noModifiers, viewKey } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
+import { appCommands } from "../state/commands";
 import { createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { SpaceId } from "../state/types";
@@ -539,10 +540,38 @@ function Tools() {
           </Show>
         </Row>
       </div>
-      <div class="set-group-title">빠른 입력</div>
+    </>
+  );
+}
+
+// ───────────────── shortcuts
+function Shortcuts() {
+  const groups = createMemo(() => {
+    const out = new Map<string, ShortcutCommand[]>();
+    for (const c of appCommands()) if (c.shortcut) out.set(c.section, [...(out.get(c.section) ?? []), c]);
+    return [...out];
+  });
+  return (
+    <>
+      <h2>단축키</h2>
       <div class="set-group">
-        <Row title="어디서든 열기" desc="다른 앱을 쓰다가도 바로 요청을 보내요"><kbd>⌥ Space</kbd></Row>
-        <Row title="터미널에서 보내기" desc="스크립트나 훅에서 사용"><code class="muted">throw.sh "요청"</code></Row>
+        <Row title="버튼마다 단축키 보기"><kbd>⌘ 길게</kbd></Row>
+        <Row title="어디서든 요청 보내기"><kbd>⌥ Space</kbd></Row>
+        <Row title="종료"><kbd>⌘Q 길게</kbd></Row>
+      </div>
+      <For each={groups()}>
+        {([section, list]) => (
+          <>
+            <div class="set-group-title">{section}</div>
+            <div class="set-group">
+              <For each={list}>{(c) => <Row title={c.label}><kbd>{shortcutLabel(c.shortcut!)}</kbd></Row>}</For>
+            </div>
+          </>
+        )}
+      </For>
+      <div class="set-group-title">터미널</div>
+      <div class="set-group">
+        <Row title="터미널에서 보내기"><code class="muted">throw.sh "요청"</code></Row>
       </div>
     </>
   );
@@ -550,6 +579,7 @@ function Tools() {
 
 export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: "general", label: "일반", icon: "gear" },
+  { id: "shortcuts", label: "단축키", icon: "list" },
   { id: "accounts", label: "계정", icon: "key" },
   { id: "import", label: "가져오기", icon: "download" },
   { id: "agent-tools", label: "도구", icon: "tools" },
@@ -603,6 +633,7 @@ export function SettingsPage(props: { onBack: () => void }) {
         <div class="settings-inner">
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>
+            <Match when={settingsTab() === "shortcuts"}><Shortcuts /></Match>
             <Match when={settingsTab() === "accounts"}><Accounts /></Match>
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>
