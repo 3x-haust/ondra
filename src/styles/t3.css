@@ -232,7 +232,9 @@
 /* ───────────── right: tabs in the top bar ───────────── */
 .panel {
   width: var(--job-w, 560px);
-  min-width: 400px;
+  /* the job beside it keeps room for its title and composer */
+  min-width: min(400px, calc(100vw - 460px));
+  max-width: calc(100vw - 460px);
   background: var(--bg);
   border-left: 1px solid var(--line);
 }
@@ -2309,7 +2311,7 @@ input[type="checkbox"] {
 .branch-card:not(:has(.branch-actions > *)) {
   border: 0;
   background: none;
-  padding: var(--s-4) var(--s-2);
+  padding: var(--s-4) var(--s-4);
   min-height: 0;
   color: var(--ink-3);
 }
@@ -2802,10 +2804,10 @@ input[type="checkbox"] {
   display: flex;
   align-items: flex-end;
   gap: var(--s-6);
-  margin: 0 var(--s-12) var(--s-12);
+  margin: 0 var(--s-12) var(--s-20);
   padding: var(--s-8) var(--s-8) var(--s-8) var(--s-12);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: 22px;
   background: var(--card);
 }
 .side-input:focus-within {
@@ -8534,4 +8536,20 @@ textarea { resize: none !important; field-sizing: content; }
 .needs-menu .dot.ok {
   background: transparent;
   box-shadow: inset 0 0 0 2px var(--ok);
+}
+/* a narrow one-row composer keeps the input readable: the model chip shows only the effort */
+.composer-wrap.slim {
+  container-type: inline-size;
+}
+@container (max-width: 480px) {
+  .composer-wrap.slim .model-chip .model-name {
+    display: none;
+  }
+}
+/* an open file fills the pane, and its numbers keep the diff's distance from the code */
+.files > .fv {
+  flex: 1;
+}
+.fv .dv-num {
+  padding-right: var(--s-16);
 }

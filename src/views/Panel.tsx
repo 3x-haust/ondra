@@ -641,7 +641,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               <BrowserView embedded />
             </div>
           </Match>
-          <Match when={needsJob()}><div class="pane-empty" /></Match>
+          <Match when={needsJob()}><div class="pane-empty">열린 일 없음</div></Match>
           <Match when={props.t}>
             {(t) => (
               <Switch>
