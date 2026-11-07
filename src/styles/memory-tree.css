@@ -367,7 +367,7 @@
   font-size: var(--fs-2xs);
   color: var(--ink-3);
 }
-.ms-piece.past span {
+.ms-piece.past > span:not(.mb) {
   text-decoration: line-through;
   color: var(--ink-3);
 }
@@ -777,10 +777,13 @@
 .ms-piece i {
   transform: none;
 }
-.ms-piece span {
+.ms-piece > span:not(.mb) {
   flex: 1;
 }
-.ms-piece.faint span {
+.ms-piece .mb {
+  flex: none;
+}
+.ms-piece.faint > span:not(.mb) {
   color: var(--ink-3);
 }
 .ms-piece .mb {
