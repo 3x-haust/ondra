@@ -1096,6 +1096,10 @@ body.resizing .panel {
   min-height: 0;
   display: flex;
 }
+.main > .slide > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .panel {
   transition: width 0.32s var(--ease-drawer);
 }
@@ -8496,4 +8500,12 @@ textarea { resize: none !important; field-sizing: content; }
   border-radius: 2px;
   background: var(--accent);
   transition: width var(--dur) var(--ease);
+}
+.seg-n {
+  margin-left: var(--s-6);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.seg button.on .seg-n {
+  color: var(--ink-2);
 }
