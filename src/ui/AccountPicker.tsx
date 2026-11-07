@@ -4,7 +4,7 @@
 // running keeps its account; switching a job starts its cache fresh, so it's said.
 import { createEffect, For, Show } from "solid-js";
 import { accountsIn, setState, state } from "../state/store";
-import { emails, limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
+import { emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { setView } from "../state/ui";
 import { Logo } from "./Logos";
 import { Icon } from "./Icon";
@@ -12,7 +12,7 @@ import { usePop } from "./ModelPicker";
 
 const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
 /** the windows the provider really has (now usually only the weekly one): "주간 19%" */
-const usage = (id: string) => (limits[id] ?? []).map((l) => `${windowLabel(l.window)} ${Math.round(l.used)}%`).join(" · ");
+const usage = (id: string) => usageOf(id).map((l) => `${windowLabel(l.window)} ${Math.round(l.used)}%`).join(" · ");
 
 export function AccountPicker(props: {
   accountId: string;

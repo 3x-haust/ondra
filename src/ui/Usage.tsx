@@ -1,12 +1,12 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
 import { openPanel } from "../state/ui";
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
-import { limits, loadEmail, refreshLimits, windowLabel } from "../state/limits";
+import { loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
-import { tokens } from "./bits";
+import { tokens, now } from "./bits";
 import { state } from "../state/store";
 import { ContextSheet } from "../views/Context";
 
@@ -50,9 +50,7 @@ const left = (ms: number) => {
 /** Live plan windows for an account, under the input. */
 export function LimitBar(props: { accountId: string }) {
   onMount(() => void refreshLimits(props.accountId));
-  const timer = setInterval(() => void refreshLimits(props.accountId), 5 * 60_000);
-  onCleanup(() => clearInterval(timer));
-  const list = () => limits[props.accountId] ?? [];
+  const list = () => usageOf(props.accountId, now());
   return (
     <Show when={list().length}>
       <div class="limit-bar">
@@ -80,9 +78,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     void refreshLimits(props.accountId);
     void loadEmail(props.accountId);
   });
-  const timer = setInterval(() => void refreshLimits(props.accountId), 5 * 60_000);
-  onCleanup(() => clearInterval(timer));
-  const list = () => limits[props.accountId] ?? [];
+  const list = () => usageOf(props.accountId, now());
   const c = () => (props.agent ? ctx[props.agent] : undefined);
   const [ctxOpen, setCtxOpen] = createSignal(false);
   return (

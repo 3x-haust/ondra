@@ -1,5 +1,6 @@
 // Plan limits per account (5-hour / weekly windows), asked from the provider.
-// Refreshed on start, every few minutes, and after each turn; never stored.
+// Refreshed on start, every two minutes for every account, when the window comes
+// back to the front, and after each turn; never stored.
 import { createStore } from "solid-js/store";
 import { accountEmail, accountLimits, type Limit } from "../lib/native";
 
@@ -7,6 +8,25 @@ const [limits, setLimits] = createStore<Record<string, Limit[]>>({});
 const asked = new Map<string, number>();
 
 export { limits };
+
+/** An account's windows as they stand at `at`: a window past its reset time has started over at 0%. */
+export const usageOf = (accountId: string, at = Date.now()): Limit[] =>
+  (limits[accountId] ?? []).map((l) => (l.resetsAt && l.resetsAt <= at ? { ...l, used: 0, resetsAt: undefined } : l));
+
+let watching = false;
+/** Keep every account's numbers fresh, also while the window is in the back (its timers slow down there). */
+export function watchLimits(accountIds: () => string[]) {
+  if (watching) return;
+  watching = true;
+  const all = (force: boolean) => {
+    for (const id of accountIds()) void refreshLimits(id, force);
+  };
+  setInterval(() => all(true), 2 * 60_000);
+  window.addEventListener("focus", () => all(false));
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) all(false);
+  });
+}
 
 export async function refreshLimits(accountId: string, force = false) {
   const last = asked.get(accountId) ?? 0;

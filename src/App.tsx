@@ -88,6 +88,7 @@ export default function App() {
     // jobs still running in the engine from before a reload: hear them again
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
     startScheduler();
+    void import("./state/limits").then((m) => m.watchLimits(() => state.accounts.map((a) => a.id)));
     if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());
     void import("./engine/results").then((m) => m.backfillResults());
     warmModels();
