@@ -1,4 +1,5 @@
 // ⌘K: jump to any task or place, or send what you typed to the captain.
+import { checkUpdate } from "../engine/update";
 import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
@@ -39,6 +40,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     { id: "s-accounts", label: "계정", icon: "key", section: "앱", run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-import", label: "가져오기", icon: "download", section: "앱", run: () => setView({ name: "settings", tab: "import" }) },
     { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
+    { id: "update", label: "업데이트 확인", icon: "download", section: "앱", run: () => void checkUpdate(true) },
     { id: "s-tools", label: "도구 · 권한", icon: "shield", section: "앱", run: () => setView({ name: "settings", tab: "tools" }) },
     { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "spark", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
