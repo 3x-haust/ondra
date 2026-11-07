@@ -1,0 +1,273 @@
+--- a/src/VM/VM.swift
++++ b/src/VM/VM.swift
+@@ -212,10 +212,11 @@
+     static func shouldStartClipboardWatcher(
+         displayMode: DisplayMode,
+         osType: String,
+-        explicitlyRequested: Bool
++        explicitlyRequested: Bool,
++        vncEnabled: Bool = true
+     ) -> Bool {
+-        explicitlyRequested
+-            || (displayMode == .native && osType.caseInsensitiveCompare("macOS") == .orderedSame)
++        vncEnabled && (explicitlyRequested
++            || (displayMode == .native && osType.caseInsensitiveCompare("macOS") == .orderedSame))
+     }
+ 
+     func run(
+@@ -348,6 +349,7 @@
+                 additionalDiskPaths: additionalDiskPaths,
+                 networkMode: networkMode
+             )
++            config.directorySharingEnabled = vncPolicy.isEnabled
+             activeNetworkMode = config.networkMode
+             // A saved state restores only into the devices it was saved
+             // with: one saved without the socket device resumes without
+@@ -464,7 +466,8 @@
+             if Self.shouldStartClipboardWatcher(
+                 displayMode: displayMode,
+                 osType: getOSType(),
+-                explicitlyRequested: clipboard
++                explicitlyRequested: clipboard,
++                vncEnabled: vncPolicy.isEnabled
+             ) {
+                 await startClipboardWatcherIfNeeded()
+             }
+@@ -479,6 +482,7 @@
+                 vncURL: vncInfo,
+                 resolution: vmDirContext.config.display,
+                 vmName: vmDirContext.name,
++                allowsHostSharing: vncPolicy.isEnabled,
+                 copyFromGuest: { [weak self] in
+                     guard let self else { throw ClipboardSyncError.unavailable }
+                     try await self.copyClipboardFromGuest()
+@@ -597,7 +601,7 @@
+     }
+ 
+     private func startClipboardWatcherIfNeeded() async {
+-        guard clipboardWatcher == nil else { return }
++        guard activeVNCPolicy.isEnabled, clipboardWatcher == nil else { return }
+         let watcher = ClipboardWatcher(
+             vmName: vmDirContext.name,
+             storage: vmDirContext.storage,
+--- a/src/VM/VMDisplayPresenter.swift
++++ b/src/VM/VMDisplayPresenter.swift
+@@ -18,6 +18,7 @@
+         vncURL: String?,
+         resolution: VMDisplayResolution,
+         vmName: String = "Lume VM",
++        allowsHostSharing: Bool = true,
+         copyFromGuest: (@MainActor () async throws -> Void)? = nil,
+         pasteIntoGuest: (@MainActor () async throws -> Void)? = nil,
+         addSharedFolder: (@MainActor (URL, Bool) async throws -> Void)? = nil,
+@@ -27,10 +28,10 @@
+         self.vncURL = vncURL
+         self.resolution = resolution
+         self.vmName = vmName
+-        self.copyFromGuest = copyFromGuest
+-        self.pasteIntoGuest = pasteIntoGuest
+-        self.addSharedFolder = addSharedFolder
+-        self.copyFilesToGuestDesktop = copyFilesToGuestDesktop
++        self.copyFromGuest = allowsHostSharing ? copyFromGuest : nil
++        self.pasteIntoGuest = allowsHostSharing ? pasteIntoGuest : nil
++        self.addSharedFolder = allowsHostSharing ? addSharedFolder : nil
++        self.copyFilesToGuestDesktop = allowsHostSharing ? copyFilesToGuestDesktop : nil
+     }
+ }
+ 
+@@ -161,9 +162,10 @@
+     }
+ 
+     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
++        guard canAcceptFileDrop?() == true, let onFileDrop else { return false }
+         let urls = fileURLs(from: sender)
+         defer { resetCachedDrag() }
+-        guard !urls.isEmpty, let onFileDrop else { return false }
++        guard !urls.isEmpty else { return false }
+         return onFileDrop(urls)
+     }
+ 
+@@ -451,9 +453,8 @@
+     private func attachAndShow() {
+         guard let window, let machineView, let virtualMachine else { return }
+         machineView.virtualMachine = virtualMachine
+-        window.makeKeyAndOrderFront(nil)
++        window.orderBack(nil)
+         window.makeFirstResponder(machineView)
+-        NSApplication.shared.activate(ignoringOtherApps: true)
+     }
+ 
+     private func installMenu(in application: NSApplication) {
+--- a/src/VM/NativeApplicationLoop.swift
++++ b/src/VM/NativeApplicationLoop.swift
+@@ -49,8 +49,7 @@
+         if showsStartupWindow {
+             let startupWindow = makeStartupWindow()
+             self.startupWindow = startupWindow
+-            startupWindow.makeKeyAndOrderFront(nil)
+-            application.activate(ignoringOtherApps: true)
++            startupWindow.orderBack(nil)
+         }
+ 
+         isActive = true
+--- a/src/Virtualization/VMVirtualizationService.swift
++++ b/src/Virtualization/VMVirtualizationService.swift
+@@ -19,6 +19,7 @@
+     let networkMode: NetworkMode
+     /// Adds a virtio socket device (for host port forwards over vsock).
+     var socketDevice: Bool = false
++    var directorySharingEnabled: Bool = true
+ }
+ 
+ /// Protocol defining the interface for virtualization operations
+@@ -549,30 +550,42 @@
+             }
+         }
+ 
+-        // Directory sharing. Keep a populated macOS automount device available so
+-        // the native toolbar can replace its share while the VM is running.
+-        var directorySharingDevices = createDirectorySharingDevices(
+-            sharedDirectories: config.sharedDirectories,
+-            withLiveUpdatePlaceholder: true
++        configureDirectorySharing(vzConfig, config: config)
++        Logger.info("Directory sharing configuration", metadata: [
++            "deviceCount": "\(vzConfig.directorySharingDevices.count)",
++            "enabled": "\(config.directorySharingEnabled)",
++        ])
++
++        // USB Controller configuration
++        if #available(macOS 15.0, *) {
++            let usbControllerConfiguration = VZXHCIControllerConfiguration()
++            vzConfig.usbControllers = [usbControllerConfiguration]
++        }
++
++        try vzConfig.validate()
++        return vzConfig
++    }
++
++    static func configureDirectorySharing(
++        _ vzConfig: VZVirtualMachineConfiguration, config: VMVirtualizationServiceContext
++    ) {
++        guard config.directorySharingEnabled else {
++            vzConfig.directorySharingDevices = []
++            return
++        }
++        // Keep the live-update placeholder only in sharing-enabled configurations.
++        var devices = createDirectorySharingDevices(
++            sharedDirectories: config.sharedDirectories, withLiveUpdatePlaceholder: true
+         )
+         let automountTag = VZVirtioFileSystemDeviceConfiguration.macOSGuestAutomountTag
+-        if !directorySharingDevices.contains(where: {
++        if !devices.contains(where: {
+             ($0 as? VZVirtioFileSystemDeviceConfiguration)?.tag == automountTag
+         }) {
+             let device = VZVirtioFileSystemDeviceConfiguration(tag: automountTag)
+             device.share = createDirectoryShare([], withLiveUpdatePlaceholder: true)
+-            directorySharingDevices.append(device)
+-        }
+-        vzConfig.directorySharingDevices = directorySharingDevices
+-
+-        // USB Controller configuration
+-        if #available(macOS 15.0, *) {
+-            let usbControllerConfiguration = VZXHCIControllerConfiguration()
+-            vzConfig.usbControllers = [usbControllerConfiguration]
+-        }
+-
+-        try vzConfig.validate()
+-        return vzConfig
++            devices.append(device)
++        }
++        vzConfig.directorySharingDevices = devices
+     }
+ 
+     static func generateMacAddress() -> String {
+--- a/tests/DisplayModeTests.swift
++++ b/tests/DisplayModeTests.swift
+@@ -41,6 +41,18 @@
+     )
+ }
+ 
++@MainActor
++@Test("VNC-disabled preparation refuses automatic and explicit clipboard bridging")
++func isolatedClipboardSelection() {
++  for mode in DisplayMode.allCases {
++    for requested in [false, true] {
++      #expect(!VM.shouldStartClipboardWatcher(
++        displayMode: mode, osType: "macOS", explicitlyRequested: requested, vncEnabled: false
++      ))
++    }
++  }
++}
++
+ @Test("--no-display remains an alias for display none")
+ func noDisplayCompatibility() throws {
+   let command = try Run.parse(["test-vm", "--display", "native", "--no-display"])
+--- a/tests/VMDisplayLifecycleTests.swift
++++ b/tests/VMDisplayLifecycleTests.swift
+@@ -108,6 +108,37 @@
+   }
+ }
+ 
++@MainActor
++@Test("VNC-disabled preparation never exposes host sharing callbacks")
++func isolatedPreparationContext() async throws {
++  let (root, _, context) = try makeDisplayTestDirectory()
++  defer { try? FileManager.default.removeItem(at: root) }
++  let service = MockVMVirtualizationService()
++  let vnc = MockVNCService(vmDirectory: context.dir)
++  let presenter = MockDisplayPresenter()
++  let vm = MockVM(
++    vmDirContext: context,
++    virtualizationServiceFactory: { supplied in
++      #expect(!supplied.directorySharingEnabled)
++      return service
++    },
++    vncServiceFactory: { _ in vnc },
++    displayPresenterFactory: { _, _ in presenter }
++  )
++  let runTask = Task {
++    try await vm.run(displayMode: .native, sharedDirectories: [], mount: nil, vncPolicy: .disabled)
++  }
++  try await waitUntil { presenter.showCount == 1 }
++  service.simulateGuestStop()
++  try await runTask.value
++  #expect(presenter.lastContext != nil)
++  #expect(presenter.lastContext?.copyFromGuest == nil)
++  #expect(presenter.lastContext?.pasteIntoGuest == nil)
++  #expect(presenter.lastContext?.addSharedFolder == nil)
++  #expect(presenter.lastContext?.copyFilesToGuestDesktop == nil)
++  #expect(vnc.startCallCount == 0)
++}
++
+ @MainActor
+ @Test("Fatal guest stop releases presenter and VNC resources")
+ func fatalGuestStopCleanup() async throws {
+--- /dev/null
++++ b/tests/IsolatedDirectoryConfigurationTests.swift
+@@ -0,0 +1,26 @@
++import Foundation
++import Testing
++import Virtualization
++@testable import lume
++
++@MainActor
++@Test("Disabled directory sharing creates no VirtioFS configuration", arguments: [false, true])
++func isolatedDirectoryConfiguration(explicitShare: Bool) throws {
++    var context = VMVirtualizationServiceContext(
++        cpuCount: 2, memorySize: 4 * 1024 * 1024 * 1024, display: "1024x768",
++        sharedDirectories: explicitShare
++            ? [SharedDirectory(hostPath: "/var/empty", tag: "test", readOnly: true)] : [],
++        mount: nil, hardwareModel: nil, machineIdentifier: nil, macAddress: "02:11:22:33:44:55",
++        diskPath: Path("/unused/disk"), nvramPath: Path("/unused/nvram"), recoveryMode: false,
++        usbMassStoragePaths: nil, additionalDiskPaths: nil, networkMode: .nat)
++    let actual = VZVirtualMachineConfiguration()
++    context.directorySharingEnabled = false
++    DarwinVirtualizationService.configureDirectorySharing(actual, config: context)
++    #expect(actual.directorySharingDevices.isEmpty)
++    context.directorySharingEnabled = true
++    DarwinVirtualizationService.configureDirectorySharing(actual, config: context)
++    #expect(!actual.directorySharingDevices.isEmpty)
++    context.directorySharingEnabled = false
++    DarwinVirtualizationService.configureDirectorySharing(actual, config: context)
++    #expect(actual.directorySharingDevices.isEmpty)
++}
