@@ -450,12 +450,7 @@ button.chip:hover,
   }
 }
 .shimmer {
-  background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink-3) 40%, var(--ink) 50%, var(--ink-3) 60%, var(--ink-3) 100%);
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
+  color: var(--ink-3);
 }
 @keyframes shimmer {
   from {
@@ -471,7 +466,7 @@ button.chip:hover,
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 0 var(--accent-line);
-  animation: pulse 2s var(--ease) infinite;
+  animation: none;
 }
 @keyframes pulse {
   70% {
@@ -1946,7 +1941,7 @@ kbd {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  animation: pulse 2s var(--ease) infinite;
+  animation: none;
 }
 .tl-item.todo .tl-label {
   color: var(--ink-3);

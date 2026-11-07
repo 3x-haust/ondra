@@ -378,7 +378,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  animation: blink 1.6s ease-in-out infinite;
+  animation: none;
 }
 @keyframes blink {
   50% {
