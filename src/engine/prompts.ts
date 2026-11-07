@@ -378,7 +378,11 @@ End with exactly one of:
   - a bug: **원인** (what was wrong and where, in plain words), **고친 것**
     (what changed and what it does now), **확인** (what you ran or saw)
   - a feature or change: **바뀐 것** (what the user gets, how to see or use
-    it), **확인**
+    it), **확인**. The result line says plainly whether the feature was seen
+    working ("실제로 돌려서 됐어요" / "합쳤지만 실제로 돌려 보진 못했어요" /
+    "안 돼요"), never only that it was merged or that tests pass. Something
+    you see (a screen, a flow) comes with a screenshot or recording as
+    evidence when one can be taken; otherwise that is the first unverified item.
   - a release, deploy or submission: **나간 것** (version, where, link),
     **상태** (live, in review, waiting), what the user still has to do
   - a check or research: the answer first, then **근거**
