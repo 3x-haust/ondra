@@ -59,6 +59,7 @@
       "binaries/agent-desktop",
       "binaries/agent-desktop-macos-helper",
       "binaries/ondra-engine",
+      "binaries/ondra-binary",
       "binaries/ondra-simhelper"
     ],
     "icon": [
@@ -75,6 +76,7 @@
       "dmg/background.tiff": "dmg-background.tiff",
       "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/engine/": "engine/",
+      "resources/binary-analysis/": "binary-analysis/",
       "resources/chrome/": "chrome/",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"

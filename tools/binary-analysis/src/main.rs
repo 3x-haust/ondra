@@ -1,0 +1,228 @@
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::{
+    env, fs,
+    io::{Read, Write},
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
+const HELP: &str = "Ondra bundled static binary analysis (radare2 + r2ghidra 6.2.6)
+Usage: ondra-binary <inspect|functions|disassemble|decompile> <file> [--arch arm64|x86_64] [--address 0xHEX]
+       ondra-binary --help | --version
+
+inspect: metadata; functions: analyzed function list;
+disassemble: function instructions; decompile: Ghidra decompiler pseudocode.
+Disassemble/decompile require a function's virtual address from functions.
+Universal Mach-O requires --arch. Supported targets: 64-bit ARM/x86 Mach-O, ELF, PE.
+Outputs JSON; diagnostics go to stderr. Exit 1 means incomplete/failed, 2 invalid arguments.
+No target execution, user plugins, user configuration, network or external runtimes.
+Each engine invocation is limited to 120 seconds and 32 MiB output; input to 512 MiB.
+Static parsing is not a security sandbox. Analyze hostile inputs only in an isolated lab.";
+
+#[derive(Debug)]
+struct Args {
+    operation: String,
+    input: PathBuf,
+    arch: Option<String>,
+    address: Option<u64>,
+}
+
+fn parse(args: &[String]) -> Result<Args, String> {
+    if args.len() < 2 || !["inspect", "functions", "disassemble", "decompile"].contains(&args[0].as_str()) {
+        return Err(HELP.into());
+    }
+    let mut result = Args { operation: args[0].clone(), input: PathBuf::from(&args[1]), arch: None, address: None };
+    for pair in args[2..].chunks(2) {
+        if pair.len() != 2 { return Err("Every option needs a value".into()); }
+        match pair[0].as_str() {
+            "--arch" if result.arch.is_none() && ["arm64", "x86_64"].contains(&pair[1].as_str()) => result.arch = Some(pair[1].clone()),
+            "--address" if result.address.is_none() => {
+                let hex = pair[1].strip_prefix("0x").filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit()))
+                    .ok_or("Address must be a hexadecimal virtual address (0xHEX)")?;
+                result.address = Some(u64::from_str_radix(hex, 16).map_err(|e| e.to_string())?);
+            }
+            _ => return Err(format!("Invalid or repeated option: {}", pair[0])),
+        }
+    }
+    let needs_address = ["disassemble", "decompile"].contains(&result.operation.as_str());
+    if needs_address != result.address.is_some() {
+        return Err("Only disassemble/decompile require --address".into());
+    }
+    Ok(result)
+}
+
+struct Scratch(PathBuf);
+impl Scratch {
+    fn new() -> Result<Self, String> {
+        // Do not use inherited TMPDIR: tools must not discover user configuration.
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+        let dir = PathBuf::from(format!("/tmp/ondra-binary-{}-{stamp}", std::process::id()));
+        fs::create_dir(&dir).map_err(|e| e.to_string())?;
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
+        Ok(Self(dir))
+    }
+}
+impl Drop for Scratch {
+    fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+}
+
+fn resources() -> Result<PathBuf, String> {
+    let exe = env::current_exe().map_err(|e| e.to_string())?;
+    let parent = exe.parent().ok_or("Executable has no parent")?;
+    // Installed .app, then Tauri's local binaries/ or target/{debug,release}/.
+    for path in [parent.join("../Resources/binary-analysis"), parent.join("../resources/binary-analysis"), parent.join("../../resources/binary-analysis")] {
+        if path.join("bin/radare2").is_file() {
+            return fs::canonicalize(path).map_err(|e| e.to_string());
+        }
+    }
+    Err("Bundled analysis engine is missing; rebuild or reinstall Ondra. No external engine will be used.".into())
+}
+
+fn engine(root: &Path, scratch: &Path, arch: &Option<String>, commands: &str) -> Result<Value, String> {
+    let stdout = scratch.join("stdout");
+    let stderr = scratch.join("stderr");
+    let mut cmd = Command::new(root.join("bin/radare2"));
+    cmd.env_clear().env("HOME", scratch).env("XDG_CONFIG_HOME", scratch).env("XDG_DATA_HOME", scratch)
+        .env("XDG_CACHE_HOME", scratch).env("TMPDIR", scratch).env("PATH", "")
+        .env("LC_ALL", "C").env("R2_PREFIX", root)
+        .env("SLEIGHHOME", root.join("lib/radare2/6.2.6/r2ghidra_sleigh"))
+        .current_dir(scratch).args(["-N", "-q", "-e", "scr.color=0", "-e", "scr.interactive=false", "-e", "bin.relocs.apply=true", "-e", "bin.demangle=false"]);
+    if let Some(arch) = arch { cmd.args(["-a", if arch == "arm64" { "arm" } else { "x86" }, "-b", "64"]); }
+    cmd.args(["-c", commands, "sample.bin"]).stdin(Stdio::null())
+        .stdout(fs::File::create(&stdout).map_err(|e| e.to_string())?)
+        .stderr(fs::File::create(&stderr).map_err(|e| e.to_string())?);
+    let mut child = cmd.spawn().map_err(|e| format!("Cannot start bundled engine: {e}"))?;
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {},
+            Err(e) => { let _ = child.kill(); let _ = child.wait(); return Err(e.to_string()); }
+        }
+        let oversized = [&stdout, &stderr].iter().any(|p| fs::metadata(p).is_ok_and(|m| m.len() > 32 * 1024 * 1024));
+        if oversized || started.elapsed() >= Duration::from_secs(120) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(if oversized { "Engine output limit exceeded" } else { "Engine timed out after 120 seconds" }.into());
+        }
+        thread::sleep(Duration::from_millis(25));
+    };
+    let diagnostics = fs::read_to_string(&stderr).map_err(|e| e.to_string())?;
+    if !diagnostics.is_empty() { eprint!("{diagnostics}"); }
+    if !status.success() { return Err(format!("Engine exited with {status}")); }
+    let output = fs::read(&stdout).map_err(|e| e.to_string())?;
+    if output.len() > 32 * 1024 * 1024 { return Err("Engine output limit exceeded".into()); }
+    serde_json::from_slice(&output).map_err(|e| format!("Engine did not return valid JSON: {e}"))
+}
+
+fn open_input(input: &Path) -> Result<fs::File, String> {
+    let validate = |meta: fs::Metadata| {
+        if !meta.is_file() || meta.len() > 512 * 1024 * 1024 {
+            Err("Input must be a regular file of at most 512 MiB".to_string())
+        } else { Ok(()) }
+    };
+    validate(fs::metadata(input).map_err(|e| e.to_string())?)?;
+    // A path can be replaced after metadata; never wait for a FIFO writer.
+    let source = fs::OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK)
+        .open(input).map_err(|e| e.to_string())?;
+    validate(source.metadata().map_err(|e| e.to_string())?)?;
+    Ok(source)
+}
+
+fn analyze(args: Args) -> Result<Value, String> {
+    let root = resources()?;
+    let input = fs::canonicalize(&args.input).map_err(|e| format!("Input: {e}"))?;
+    let mut source = open_input(&input)?;
+    let scratch = Scratch::new()?;
+    let mut target = fs::File::create(scratch.0.join("sample.bin")).map_err(|e| e.to_string())?;
+    target.set_permissions(fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut size = 0_u64;
+    let mut magic = Vec::new();
+    let mut buf = [0_u8; 64 * 1024];
+    loop {
+        let count = source.read(&mut buf).map_err(|e| e.to_string())?;
+        if count == 0 { break; }
+        size += count as u64;
+        if size > 512 * 1024 * 1024 { return Err("Input exceeds 512 MiB".into()); }
+        if magic.is_empty() { magic.extend_from_slice(&buf[..count.min(4)]); }
+        hasher.update(&buf[..count]);
+        target.write_all(&buf[..count]).map_err(|e| e.to_string())?;
+    }
+    drop(target);
+    let universal = [[0xca, 0xfe, 0xba, 0xbe], [0xbe, 0xba, 0xfe, 0xca], [0xca, 0xfe, 0xba, 0xbf], [0xbf, 0xba, 0xfe, 0xca]].iter().any(|m| magic == m);
+    if universal && args.arch.is_none() { return Err("Universal Mach-O requires --arch arm64 or --arch x86_64".into()); }
+    let info = engine(&root, &scratch.0, &args.arch, "ij")?;
+    let bin = &info["bin"];
+    let format = bin["class"].as_str().unwrap_or("");
+    let arch = bin["arch"].as_str().unwrap_or("");
+    if !["MACH064", "ELF64", "PE32+"].contains(&format) || !["arm", "x86"].contains(&arch) || bin["bits"] != 64 {
+        return Err(format!("Unsupported target: format={format}, arch={arch}, bits={}. Supported: 64-bit ARM/x86 Mach-O, ELF, PE", bin["bits"]));
+    }
+    if let Some(requested) = &args.arch {
+        let expected = if requested == "arm64" { "arm" } else { "x86" };
+        if arch != expected { return Err("Requested architecture is not present in the target".into()); }
+    }
+    let command = match args.operation.as_str() {
+        "inspect" => None,
+        "functions" => Some("aaa;aflj".to_string()),
+        "disassemble" => Some(format!("aaa;pdfj @ {:#x}", args.address.unwrap())),
+        "decompile" => Some(format!("aaa;pdgj @ {:#x}", args.address.unwrap())),
+        _ => unreachable!(),
+    };
+    let data = match command { Some(ref c) => engine(&root, &scratch.0, &args.arch, c)?, None => info.clone() };
+    let complete = match args.operation.as_str() {
+        "inspect" => true,
+        "functions" => data.as_array().is_some_and(|v| !v.is_empty()),
+        "disassemble" => data["ops"].as_array().is_some_and(|v| !v.is_empty()),
+        "decompile" => data["code"].as_str().is_some_and(|s| s.contains('{') && s.contains('}')) && data.get("errors").is_none(),
+        _ => false,
+    };
+    if !complete { return Err(format!("No complete {} result: {data}", args.operation)); }
+    Ok(json!({
+        "engine": {"radare2": "6.2.6", "r2ghidra": "6.2.6"},
+        "operation": args.operation, "input": input, "sha256": format!("{:x}", hasher.finalize()),
+        "size": size, "target": bin, "address": args.address, "data": data,
+        "executedTarget": false,
+        "pseudocode": args.operation == "decompile"
+    }))
+}
+
+fn main() {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args == ["--help"] || args == ["-h"] { println!("{HELP}"); return; }
+    if args == ["--version"] { println!("ondra-binary 0.1.0 (radare2 6.2.6, r2ghidra 6.2.6)"); return; }
+    let args = parse(&args).unwrap_or_else(|e| { eprintln!("{e}"); std::process::exit(2) });
+    match analyze(args) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Err(e) => { eprintln!("Analysis incomplete: {e}"); std::process::exit(1); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn args(s: &[&str]) -> Vec<String> { s.iter().map(|s| s.to_string()).collect() }
+    #[test]
+    fn opens_regular_files_and_rejects_nonregular_inputs() {
+        let scratch = Scratch::new().unwrap();
+        let file = scratch.0.join("sample");
+        fs::write(&file, b"sample").unwrap();
+        let mut contents = String::new();
+        open_input(&file).unwrap().read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "sample");
+        assert!(open_input(&scratch.0).unwrap_err().contains("regular file"));
+    }
+    #[test]
+    fn validates_operations_addresses_and_options() {
+        assert!(parse(&args(&["inspect", "a"])).is_ok());
+        assert_eq!(parse(&args(&["decompile", "a", "--address", "0x123"])).unwrap().address, Some(0x123));
+        for invalid in [vec!["run", "a"], vec!["decompile", "a"], vec!["inspect", "a", "--address", "0x1"], vec!["decompile", "a", "--address", "0x1;!touch /tmp/injected"], vec!["inspect", "a", "--arch", "mips"], vec!["inspect", "a", "--arch"], vec!["inspect", "a", "--arch", "arm64", "--arch", "x86_64"]] {
+            assert!(parse(&args(&invalid)).is_err(), "{invalid:?}");
+        }
+    }
+}
