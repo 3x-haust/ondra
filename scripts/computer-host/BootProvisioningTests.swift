@@ -38,6 +38,15 @@ struct BootProvisioningTests {
                 enrollment: enrollment, consumed: false, actualUUID: guest)
         }
         print("통과: 최초 일회성 비밀·소비 후 재사용 거부·호스트와 설치 결합")
+        let challenge = String(repeating: "e", count: 64)
+        let accepted = try guestShutdownRequest(Data(#"{"op":"shutdown","challenge":"\#(challenge)"}"#.utf8))
+        precondition(accepted == challenge)
+        for bad in [#"{"op":"shutdown"}"#, #"{"op":"shutdown","challenge":"x"}"#,
+                    #"{"op":"shutdown","challenge":"\#(challenge)","when":"later"}"#] {
+            do { _ = try guestShutdownRequest(Data(bad.utf8)); fatalError("종료 요청 검증 누락") }
+            catch let error as BootProvisionFailure { precondition(error.code == "INVALID_BOOT_DOCUMENT") }
+        }
+        print("통과: 게스트 종료 요청은 정확한 형태만 허용")
         let initial = try BootInstallPlan(request: request(), actualUUID: guest, currentBoot: oldBoot,
             guestUid: 501, endpointDigest: hash, previousProvision: nil, previousBoot: nil)
         let renewed = try BootInstallPlan(request: request(nonce: String(repeating: "d", count: 64)),

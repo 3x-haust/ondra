@@ -87,6 +87,31 @@ func enrollmentStatus(_ data: Data) throws -> [String: Any] {
         "secretConsumed": try bootFileExists(directory + "/consumed")]
 }
 
+/// The validated shutdown request; the caller then starts an orderly guest OS shutdown.
+func guestShutdownRequest(_ data: Data) throws -> String {
+    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          Set(object.keys) == ["op", "challenge"], object["op"] as? String == "shutdown",
+          let challenge = object["challenge"] as? String, bootMatches(challenge, bootHexPattern) else {
+        throw BootProvisionFailure(code: "INVALID_BOOT_DOCUMENT")
+    }
+    return challenge
+}
+
+/// Lets the native owner shut the guest down cleanly on app exit, so its disk is
+/// consistent for the next app run. No argument reaches the command.
+func shutdownGuest(_ data: Data) throws -> [String: Any] {
+    let challenge = try guestShutdownRequest(data)
+    let shutdown = Process()
+    shutdown.executableURL = URL(fileURLWithPath: "/sbin/shutdown")
+    shutdown.arguments = ["-h", "now"]
+    shutdown.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
+    shutdown.standardInput = FileHandle.nullDevice
+    shutdown.standardOutput = FileHandle.nullDevice
+    shutdown.standardError = FileHandle.nullDevice
+    do { try shutdown.run() } catch { throw BootProvisionFailure(code: "GUEST_SHUTDOWN_FAILED") }
+    return ["version": 1, "challenge": challenge, "shutdown": true]
+}
+
 func authenticatedGuestBoot(_ envelope: AuthenticatedBootRequest) throws -> [String: Any] {
     let directory = "/private/var/db/ondra-computer-enrollment"
     try bootDirectory(directory, mode: 0o700)
