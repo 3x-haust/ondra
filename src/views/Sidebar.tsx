@@ -2,19 +2,21 @@
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import { anyPop, closePops } from "../ui/ModelPicker";
+import { anyPop } from "../ui/ModelPicker";
 import { taskDiff } from "../state/progress";
-import { addProject, decisionsIn, projectsIn, removeProject, state, taskById, tasksIn } from "../state/store";
-import { pickFolder } from "../lib/native";
+import { addProject, decisionsIn, projectsIn, removeProject, renameProject, state, taskById, tasksIn } from "../state/store";
+import { pickFolder, revealPath } from "../lib/native";
+import { expand } from "../engine/rpc";
+import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { toast, goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { ago, compact, now } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { Fold } from "../ui/Fold";
-import { archiveTask, duplicateTask, togglePin, transcriptMarkdown } from "../engine/tasks";
+import { archiveTask, togglePin } from "../engine/tasks";
 import { t as tr } from "../i18n";
 
 export type Bucket = "you" | "review" | "work" | "done";
@@ -56,6 +58,28 @@ const openRoot = () => {
 const DONE_FOR = 10 * 60_000;
 const ended = (t: Task) => t.status === "done" && t.worktree?.state !== "open";
 
+/** The status glyph's shape (st-icon classes): what the row needs, not only its own status.
+ *  One look everywhere a task is listed: sidebar, ⌘K, the 내 차례 popover. */
+export function glyphOf(x: Task): "failed" | "waiting" | "inreview" | "running" | "paused" | "queued" | "done" {
+  const b = bucket(x);
+  if (x.status === "failed") return "failed";
+  if (b === "you") return "waiting";
+  if (b === "review") return "inreview";
+  if (x.status === "running") return "running";
+  if (x.status === "paused" || x.status === "queued") return x.status;
+  return "done";
+}
+export function Glyph(props: { t: Task; class?: string }) {
+  const g = () => glyphOf(props.t);
+  return (
+    <span class={`sb-glyph st-icon sm ${g()} ${props.class ?? ""}`} aria-hidden="true">
+      <Show when={g() === "running"} fallback={<Show when={g() === "done"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
+        <span class="spin" />
+      </Show>
+    </span>
+  );
+}
+
 // ───────────── one row per job (T3-style thread list)
 function Row(props: { t: Task; kid?: boolean; index: number }) {
   const t = () => props.t;
@@ -64,32 +88,27 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   const showKids = () => open() ?? (openRoot() === t().id || kids().some((k) => k.status === "waiting" || k.status === "failed"));
   const b = () => bucket(t());
   const tone = () =>
-    t().status === "failed" ? "bad" : b() === "you" ? "ask" : b() === "review" ? "ok" : t().status === "running" ? "live" : t().status === "queued" || t().status === "paused" ? "idle" : "done";
-  /** the status glyph's shape (st-icon classes): what the row needs, not only its own status */
-  const glyph = () => {
-    const x = t();
-    if (x.status === "failed") return "failed";
-    if (b() === "you") return "waiting";
-    if (b() === "review") return "done unmerged";
-    if (x.status === "running") return "running";
-    if (x.status === "paused" || x.status === "queued") return x.status;
-    return "done";
-  };
+    t().status === "failed" ? "bad" : b() === "you" ? "ask" : b() === "review" ? "review" : t().status === "running" ? "live" : t().status === "queued" || t().status === "paused" ? "idle" : "done";
   const meta = () => {
     const x = t();
     if (x.status === "failed") return tr("실패");
     if (x.status === "waiting" || (b() === "you" && !props.kid)) return tr("응답 필요");
-    if (b() === "review") return "";
+    if (b() === "review") return tr("검토");
     if (x.status === "queued") return tr("대기");
     if (x.status === "paused") return tr("일시정지");
     if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "";
     return ago(x.finishedAt ?? x.createdAt);
   };
+  // a task in review says so; its size is in the tooltip
+  const tip = () => {
+    const d = changes(t());
+    return b() === "review" && (d.add || d.del) ? `${t().title} · +${d.add} −${d.del}` : t().title;
+  };
   return (
     <>
       <button
         class={`sb-row tone-${tone()}`}
-        classList={{ menu: menu()?.id === t().id, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
+        classList={{ menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
         onClick={() => openTask(t().id)}
@@ -97,16 +116,11 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         onMouseLeave={() => setHoverTask(null)}
         onContextMenu={(e) => {
           e.preventDefault();
-          closePops();
-          setMenu({ id: t().id, x: e.clientX, y: e.clientY });
+          openTaskMenu(t().id, e);
         }}
-        title={t().title}
+        title={tip()}
       >
-        <span class={`sb-glyph st-icon sm ${glyph()}`} aria-hidden="true">
-          <Show when={glyph() === "running"} fallback={<Show when={glyph().startsWith("done")} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
-            <span class="spin" />
-          </Show>
-        </span>
+        <Glyph t={t()} />
         <span class="sb-title">{t().title}</span>
         <Show when={!props.kid && kids().length}>
           <span
@@ -123,23 +137,23 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
             <Icon name="chevron" size={12} class="sb-kids-chev" />
           </span>
         </Show>
-        <Show when={t().pinned && !props.kid}><Icon name="pin" size={12} class="sb-pin" /></Show>
-        <span class="sb-meta">
-          <Show when={b() === "review" && !meta() && (changes(t()).add || changes(t()).del)} fallback={meta()}>
-            <span class="add">+{changes(t()).add}</span>
-            <Show when={changes(t()).del}> <span class="del">−{changes(t()).del}</span></Show>
+        {/* the time and the hover actions share one slot: hovering swaps them, the title keeps its width */}
+        <span class="sb-trail" classList={{ acts: !props.kid }}>
+          <span class="sb-meta">
+            <Show when={t().pinned && !props.kid}><Icon name="pin" size={12} class="sb-pin" /></Show>
+            {meta()}
+          </span>
+          <Show when={!props.kid}>
+            <span class="sb-acts">
+              <span class="sb-act" role="button" title={t().pinned ? tr("고정 해제") : tr("고정")} aria-label={t().pinned ? tr("고정 해제") : tr("고정")} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
+                <Icon name="pin" size={14} />
+              </span>
+              <span class="sb-act" role="button" title={tr("보관")} aria-label={tr("보관")} onClick={(e) => (e.stopPropagation(), archiveTask(t().id))}>
+                <Icon name="archive" size={14} />
+              </span>
+            </span>
           </Show>
         </span>
-        <Show when={!props.kid}>
-          <span class="sb-acts">
-            <span class="sb-act" role="button" title={t().pinned ? tr("고정 해제") : tr("고정")} aria-label={t().pinned ? tr("고정 해제") : tr("고정")} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
-              <Icon name="pin" size={14} />
-            </span>
-            <span class="sb-act" role="button" title={tr("보관")} aria-label={tr("보관")} onClick={(e) => (e.stopPropagation(), archiveTask(t().id))}>
-              <Icon name="archive" size={14} />
-            </span>
-          </span>
-        </Show>
       </button>
       <Show when={!props.kid && showKids() && kids().length}>
         <div class="sb-kid-list">
@@ -150,73 +164,75 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   );
 }
 
-/** Right-click on a job in the list. */
-const [menu, setMenu] = createSignal<{ id: string; x: number; y: number } | null>(null);
-const [projMenu, setProjMenu] = createSignal<{ id: string; x: number; y: number; sure?: boolean } | null>(null);
-
-/** right-click on a project: delete it (the folder and its jobs stay) */
-function ProjectMenu() {
-  const close = () => setProjMenu(null);
-  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && projMenu() && (e.preventDefault(), e.stopPropagation(), close());
-  window.addEventListener("click", close);
-  window.addEventListener("blur", close);
-  window.addEventListener("keydown", esc, true);
-  createEffect(() => anyPop() && close());
-  onCleanup(() => {
-    window.removeEventListener("click", close);
-    window.removeEventListener("blur", close);
-    window.removeEventListener("keydown", esc, true);
-  });
-  return (
-    <Show when={projMenu()}>
-      {(m) => (
-        <div class="menu ctx-menu" style={{ left: `${Math.min(m().x, window.innerWidth - 220)}px`, top: `${Math.min(m().y, window.innerHeight - 120)}px` }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => (goMain(m().id), close())}><Icon name="arrow" size={16} class="muted" /><span class="row-title">{tr("열기")}</span></button>
-          <div class="menu-sep" />
-          <button
-            class="danger"
-            onClick={() => {
-              if (!m().sure) return setProjMenu({ ...m(), sure: true });
-              const v = view();
-              if (v.name === "main" && v.project === m().id) goMain();
-              removeProject(m().id);
-              close();
-            }}
-          >
-            <Icon name="trash" size={16} class="muted" />
-            <span class="row-title">{m().sure ? tr("다시 눌러 삭제") : tr("프로젝트 삭제")}</span>
-          </button>
-        </div>
-      )}
-    </Show>
-  );
+/** a project's menu: open, start a task there, rename, show the folder, remove it from the list */
+function projectMenu(id: string): MenuEntry[] {
+  const p = projectsIn(state.space).find((x) => x.id === id);
+  if (!p) return [];
+  const n = state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && !t.answer).length;
+  return [
+    { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
+    { id: "new", label: tr("새 작업"), icon: "compose", run: () => (goMain(p.id), setTimeout(() => document.getElementById("main-input")?.focus(), 60)) },
+    "sep",
+    { id: "rename", label: tr("이름 바꾸기"), icon: "pencil", run: () => setRenamingProject(p.id) },
+    { id: "finder", label: tr("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(p.folder)) },
+    "sep",
+    {
+      id: "remove",
+      label: tr("목록에서 제거"),
+      icon: "trash",
+      danger: true,
+      run: () =>
+        confirmAsk({
+          title: tr("{name} 프로젝트를 목록에서 제거할까요?", { name: p.name }),
+          body: n ? tr("폴더와 작업 {n}개는 그대로 남아요", { n }) : tr("폴더는 그대로 남아요"),
+          action: tr("제거"),
+          danger: true,
+          run: () => {
+            const v = view();
+            if (v.name === "main" && v.project === p.id) goMain();
+            removeProject(p.id);
+          },
+        }),
+    },
+  ];
 }
-/** 확인 필요: the jobs waiting on you, to pick one */
-const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; w: number } | null>(null);
+const [renamingProject, setRenamingProject] = createSignal<string | null>(null);
+
+/** 내 차례: the tasks waiting on you, in a popover beside the row (§9.8) */
+const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number } | null>(null);
 function NeedsMenu() {
+  let el!: HTMLDivElement;
   const close = () => setNeedsMenu(null);
   const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && needsMenu() && (e.preventDefault(), e.stopPropagation(), close());
-  window.addEventListener("click", close);
+  const away = (e: Event) => needsMenu() && el && !el.contains(e.target as Node) && !(e.target as Element).closest?.(".sb-todo") && close();
+  window.addEventListener("pointerdown", away, true);
   window.addEventListener("blur", close);
   window.addEventListener("keydown", esc, true);
   createEffect(() => anyPop() && close());
+  createEffect(() => ctxFor() && close());
   onCleanup(() => {
-    window.removeEventListener("click", close);
+    window.removeEventListener("pointerdown", away, true);
     window.removeEventListener("blur", close);
     window.removeEventListener("keydown", esc, true);
   });
   const list = () => forkOrder(state.space).filter((t) => !t.archived && (bucket(t) === "you" || bucket(t) === "review"));
   const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
+  createEffect(() => needsMenu() && !list().length && close());
   return (
     <Show when={needsMenu()}>
       {(m) => (
-        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, width: `${m().w}px`, top: `${Math.min(m().y, window.innerHeight - 24 - list().length * 28)}px` }} onClick={(e) => e.stopPropagation()}>
+        <div
+          ref={el}
+          class="menu ctx-menu needs-menu"
+          role="menu"
+          aria-label={tr("내 차례")}
+          style={{ left: `${m().x}px`, top: `${Math.max(8, Math.min(m().y, window.innerHeight - 16 - list().length * 28))}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <For each={list()}>
             {(t) => (
-              <button onClick={() => (openTask(t.id), close())}>
-                <span class={`st-icon sm ${t.status === "failed" ? "failed" : bucket(t) === "you" ? "waiting" : "done unmerged"}`} aria-hidden="true">
-                  <Show when={bucket(t) === "review"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>
-                </span>
+              <button role="menuitem" onClick={() => (openTask(t.id), close())}>
+                <Glyph t={t} />
                 <span class="row-title">{t.title}</span>
                 <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? tr("실패") : tr("응답 필요")) : tr("검토")}{where(t) ? ` · ${where(t)}` : ""}</span>
               </button>
@@ -230,6 +246,8 @@ function NeedsMenu() {
 
 const [renaming, setRenaming] = createSignal<string | null>(null);
 export { renaming, setRenaming };
+// the shared task menu's 이름 바꾸기 edits the title in the task's header
+onRename((id) => setRenaming(id));
 
 /** The sidebar from the keyboard: ↑↓ move between rows, F2 renames a job, ⇧F10 or the menu key opens its menu (Enter opens it, as a button). */
 function rowKeys(e: KeyboardEvent) {
@@ -242,54 +260,18 @@ function rowKeys(e: KeyboardEvent) {
     return;
   }
   const id = row.dataset.task;
-  if (!id) return;
-  if (e.key === "F2") {
+  const proj = row.dataset.project;
+  if (e.key === "F2" && (id || proj)) {
     e.preventDefault();
-    openTask(id);
-    setRenaming(id);
+    if (id) (openTask(id), setRenaming(id));
+    else setRenamingProject(proj!);
   } else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
     e.preventDefault();
     const r = row.getBoundingClientRect();
-    closePops();
-    setMenu({ id, x: r.left + 24, y: r.bottom + 2 });
+    const at = new DOMRect(r.left + 24, r.top, 0, r.height);
+    if (id) openTaskMenu(id, at, true);
+    else if (proj) openMenuAt(`project:${proj}`, () => projectMenu(proj), at, true);
   }
-}
-
-function RowMenu() {
-  const close = () => setMenu(null);
-  const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && menu() && (e.preventDefault(), e.stopPropagation(), close());
-  window.addEventListener("click", close);
-  window.addEventListener("blur", close);
-  window.addEventListener("keydown", esc, true);
-  // one menu at a time: a picker or the ⋯ menu opening closes this one
-  createEffect(() => anyPop() && close());
-  onCleanup(() => {
-    window.removeEventListener("click", close);
-    window.removeEventListener("blur", close);
-    window.removeEventListener("keydown", esc, true);
-  });
-  return (
-    <Show when={menu()}>
-      {(m) => {
-        const t = () => taskById(m().id);
-        return (
-          <Show when={t()}>
-            {(x) => (
-              <div class="menu ctx-menu" style={{ left: `${Math.min(m().x, window.innerWidth - 220)}px`, top: `${Math.min(m().y, window.innerHeight - 260)}px` }} onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => (openTask(x().id), close())}><Icon name="arrow" size={16} class="muted" /><span class="row-title">{tr("열기")}</span></button>
-                <button onClick={() => (openTask(x().id), setRenaming(x().id), close())}><Icon name="pencil" size={16} class="muted" /><span class="row-title">{tr("이름 바꾸기")}</span><span class="menu-kbd">F2</span></button>
-                <button onClick={() => (togglePin(x().id), close())}><Icon name="pin" size={16} class="muted" /><span class="row-title">{x().pinned ? tr("고정 해제") : tr("고정")}</span></button>
-                <button onClick={() => { const n = duplicateTask(x().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={16} class="muted" /><span class="row-title">{tr("다시 실행")}</span></button>
-                <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(x().id)); toast(tr("복사했어요")); close(); }}><Icon name="copy" size={16} class="muted" /><span class="row-title">{tr("Markdown으로 복사")}</span></button>
-                <div class="menu-sep" />
-                <button onClick={() => (archiveTask(x().id, !x().archived), close())}><Icon name="archive" size={16} class="muted" /><span class="row-title">{x().archived ? tr("보관 해제") : tr("보관")}</span></button>
-              </div>
-            )}
-          </Show>
-        );
-      }}
-    </Show>
-  );
 }
 
 // what's folded in the sidebar (sections, and each project's jobs), kept per machine
@@ -416,34 +398,46 @@ export function Sidebar() {
           <span class="sb-title">{tr("결과물")}</span>
           <kbd class="sb-kbd">{shortcutHint("results")}</kbd>
         </button>
-        {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
+        {/* tasks anywhere in this space that need a reply or a merge: a row of its own, not under one section */}
         <Show when={needs()}>
           <button
             class="sb-row sb-main sb-todo"
-            classList={{ on: !!needsMenu() }}
+            classList={{ open: !!needsMenu() }}
+            aria-haspopup="menu"
+            aria-expanded={!!needsMenu()}
             onClick={(e) => {
               e.stopPropagation();
               if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
               if (needsMenu()) return setNeedsMenu(null);
               const r = e.currentTarget.getBoundingClientRect();
-              setNeedsMenu({ x: r.left, y: r.bottom + 4, w: r.width });
+              setNeedsMenu({ x: r.right + 8, y: r.top - 4 });
             }}
             data-shortcut="waiting"
-            title={`${tr("다음")} ${shortcutHint("waiting")}`}
+            title={`${tr("다음 내 차례")} ${shortcutHint("waiting")}`}
           >
-            <Icon name="alert" size={16} class="sb-main-ic" />
-            <span class="sb-title">{tr("확인 필요")}</span>
+            <Icon name="hand" size={16} class="sb-main-ic" />
+            <span class="sb-title">{tr("내 차례")}</span>
             <span class="sb-need">{needs()}</span>
           </button>
         </Show>
         <Head id="projects" label={tr("프로젝트")} count={projectsIn(state.space).length}>
-          <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
-            <Icon name="plus" size={14} />
-          </button>
+          <Show when={projectsIn(state.space).length}>
+            <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
+              <Icon name="plus" size={14} />
+            </button>
+          </Show>
         </Head>
         <Fold open={!fold("projects")}>
         <div class="sb-projects">
-          <For each={projectsIn(state.space)} >
+          <For
+            each={projectsIn(state.space)}
+            fallback={
+              <button class="sb-row sb-proj sb-add" onClick={() => void addFolder()}>
+                <Icon name="plus" size={16} class="sb-main-ic" />
+                <span class="sb-title">{tr("프로젝트 추가")}</span>
+              </button>
+            }
+          >
             {(p) => {
               const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
               const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && t.status === "running").length;
@@ -456,13 +450,12 @@ export function Sidebar() {
                 <>
                   <button
                     class="sb-row sb-proj"
-                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: projMenu()?.id === p.id }}
-                    onClick={() => goMain(p.id)}
+                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: ctxFor() === `project:${p.id}` }}
+                    data-project={p.id}
+                    onClick={() => renamingProject() !== p.id && goMain(p.id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      closePops();
-                      setMenu(null);
-                      setProjMenu({ id: p.id, x: e.clientX, y: e.clientY });
+                      openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);
                     }}
                     title={p.folder}
                   >
@@ -478,25 +471,40 @@ export function Sidebar() {
                       <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
-                    <span class="sb-title">{p.name}</span>
-                    <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}><span class="sb-meta">{all()}</span></Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: live() })}><span class="spin xs" />{live()}</span></Show>}>
-                      <span class="spin sm" />
-                    </Show>
-                    <span class="sb-acts">
-                      <span
-                        class="sb-act"
-                        role="button"
-                        title={tr("더보기")}
-                        aria-label={tr("더보기")}
-                        onClick={(e) => {
+                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}</span>}>
+                      <input
+                        class="sb-rename"
+                        value={p.name}
+                        aria-label={tr("이름 바꾸기")}
+                        ref={(el) => setTimeout(() => (el.focus(), el.select()), 0)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
                           e.stopPropagation();
-                          closePops();
-                          setMenu(null);
-                          const r = e.currentTarget.getBoundingClientRect();
-                          setProjMenu({ id: p.id, x: r.left, y: r.bottom + 4 });
+                          if (e.key === "Enter" && !e.isComposing) (renameProject(p.id, e.currentTarget.value), setRenamingProject(null));
+                          else if (e.key === "Escape") setRenamingProject(null);
                         }}
-                      >
-                        <Icon name="more" size={14} />
+                        onBlur={(e) => renamingProject() === p.id && (renameProject(p.id, e.currentTarget.value), setRenamingProject(null))}
+                      />
+                    </Show>
+                    <span class="sb-trail acts">
+                      <span class="sb-meta">
+                        <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}>{all()}</Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: live() })}><span class="spin xs" />{live()}</span></Show>}>
+                          <span class="spin sm" />
+                        </Show>
+                      </span>
+                      <span class="sb-acts">
+                        <span
+                          class="sb-act"
+                          role="button"
+                          title={tr("더보기")}
+                          aria-label={tr("더보기")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e.currentTarget.getBoundingClientRect());
+                          }}
+                        >
+                          <Icon name="more" size={14} />
+                        </span>
                       </span>
                     </span>
                   </button>
@@ -576,8 +584,6 @@ export function Sidebar() {
         </Fold>
         </Show>
       </div>
-      <RowMenu />
-      <ProjectMenu />
       <NeedsMenu />
 
       <div class="sb-foot">

@@ -4,7 +4,7 @@ import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { setState, spaceById, state, taskById } from "../state/store";
-import { StatusIcon } from "../ui/ForkCard";
+import { Glyph } from "./Sidebar";
 import { openTask, paletteMode, setPaletteMode, setPaletteOpen, setView } from "../state/ui";
 import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
 import { throwThought } from "../engine/captain";
@@ -39,12 +39,15 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
   // commands come with their labels already in the current language (appCommands)
   const places: Item[] = [
     ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
-    { id: "s-accounts", label: tr("계정"), icon: "key", section: tr("앱"), run: () => setView({ name: "settings", tab: "accounts" }) },
-    { id: "s-import", label: tr("가져오기"), icon: "download", section: tr("앱"), run: () => setView({ name: "settings", tab: "import" }) },
-    { id: "update", label: tr("업데이트 확인"), icon: "download", section: tr("앱"), run: () => void checkUpdate(true) },
-    { id: "s-tools", label: tr("도구 · 권한"), icon: "shield", section: tr("앱"), run: () => setView({ name: "settings", tab: "tools" }) },
-    { id: "theme", label: tr("테마 전환"), icon: "monitor", section: tr("보기"), run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    { id: "s-accounts", label: tr("계정"), icon: "key", section: tr("설정"), run: () => setView({ name: "settings", tab: "accounts" }) },
+    { id: "s-agent-tools", label: tr("도구"), icon: "tools", section: tr("설정"), run: () => setView({ name: "settings", tab: "agent-tools" }) },
+    { id: "s-tools", label: tr("권한"), icon: "shield", section: tr("설정"), run: () => setView({ name: "settings", tab: "tools" }) },
+    { id: "s-import", label: tr("가져오기"), icon: "download", section: tr("설정"), run: () => setView({ name: "settings", tab: "import" }) },
+    { id: "update", label: tr("업데이트 확인"), icon: "update", section: tr("설정"), run: () => void checkUpdate(true) },
+    { id: "theme", label: tr("테마 전환"), icon: "monitor", section: tr("설정"), run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
+  /** with nothing typed: a few tasks, then the places you go to most */
+  const START = ["main", "new", "board", "memory", "results", "devices", "settings"];
 
   const items = createMemo<Item[]>(() => {
     const text = q().replace(/^>/, "").trim();
@@ -71,15 +74,18 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           .slice(0, 5)
           .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: tr("결과물"), run: () => setView({ name: "results", id: r.id }) }))
       : [];
-    const all = commandsOnly() ? places : [...tasks, ...places];
+    // the command list doesn't list itself
+    const cmds = commandsOnly() ? places.filter((i) => i.id !== "commands") : places;
+    const all = commandsOnly() ? cmds : needle ? [...tasks, ...cmds] : [...tasks.slice(0, 6), ...START.map((id) => cmds.find((i) => i.id === id)!).filter(Boolean)];
     const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
     // each section once: its items together, sections in the order they first appear
-    const order = [...new Set(found.map((i) => i.section))];
+    // (settings last, as in the sidebar and the shortcut sheet)
+    const order = [...new Set(found.map((i) => i.section))].sort((a, b) => Number(a === tr("설정")) - Number(b === tr("설정")));
     const hits = order.flatMap((sec) => found.filter((i) => i.section === sec));
     const send: Item[] = text && !commandsOnly()
       ? [{ id: "send", label: text, hint: tr("메인에 보내기"), icon: "send", section: tr("보내기"), run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
       : [];
-    return [...(commandsOnly() ? hits : hits.slice(0, needle ? 13 : 10)), ...results, ...send];
+    return [...(commandsOnly() || !needle ? hits : hits.slice(0, 13)), ...results, ...send];
   });
 
   createEffect(() => {
@@ -161,11 +167,15 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
                 <button class="palette-item" disabled={it.enabled?.() === false} title={it.enabled?.() === false ? tr("여기서는 사용할 수 없어요") : undefined} classList={{ on: sel() === i() }} onMouseMove={() => setSel(i())} onClick={() => choose(i())}>
                   <span class="palette-ic">
                     <Show when={it.status} fallback={<Icon name={it.icon ?? "dot"} size={16} />}>
-                      <Show when={taskById(it.id)}>{(t) => <StatusIcon t={t()} size="sm" />}</Show>
+                      <Show when={taskById(it.id)}>{(t) => <Glyph t={t()} />}</Show>
                     </Show>
                   </span>
                   <span class="label">{it.label}</span>
-                  <Show when={it.hint}><span class="hint" classList={{ keys: !it.status && it.section !== tr("결과물") && it.id !== "send" }}>{it.hint}</span></Show>
+                  <Show when={it.hint}>
+                    <Show when={!it.status && it.section !== tr("결과물") && it.id !== "send"} fallback={<span class="hint">{it.hint}</span>}>
+                      <kbd class="hint-keys">{it.hint}</kbd>
+                    </Show>
+                  </Show>
                 </button>
               </>
             )}

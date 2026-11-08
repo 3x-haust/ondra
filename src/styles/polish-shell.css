@@ -944,3 +944,297 @@
 .status-line .st-lim.hot {
   color: var(--warn-ink);
 }
+
+/* ═════════════ round 2 ═════════════ */
+
+/* status glyphs: review is its own mark (ring + full disc, as on the board), never a check */
+.app .sidebar .sb-glyph.inreview,
+.palette .st-icon.inreview,
+.needs-menu .st-icon.inreview {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+  color: var(--accent-text);
+}
+.app .sidebar .sb-glyph.inreview i,
+.palette .st-icon.inreview i,
+.needs-menu .st-icon.inreview i {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+.palette .st-icon.running,
+.needs-menu .st-icon.running {
+  box-shadow: none;
+}
+.palette .st-icon .spin,
+.needs-menu .st-icon .spin {
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+}
+/* running reads the same on the board as in the sidebar (DESIGN §2.4: the accent) */
+.app .cv-st.t-live {
+  color: var(--accent-text);
+}
+.app .sidebar .tone-review .sb-meta {
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}
+
+/* trailing slot: the time (or state) and the hover actions take turns in one place,
+   so the title never changes width on hover */
+.app .sidebar .sb-row .sb-trail {
+  flex: none;
+  display: inline-grid;
+  justify-items: end;
+  align-items: center;
+  margin-left: auto;
+}
+.app .sidebar .sb-row .sb-trail.acts {
+  min-width: 46px;
+}
+.app .sidebar .sb-row .sb-trail > * {
+  grid-area: 1 / 1;
+}
+.app .sidebar .sb-row .sb-trail .sb-meta,
+.app .sidebar .sb-row:hover .sb-trail .sb-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-left: 0;
+}
+.app .sidebar .sb-row .sb-trail .sb-acts {
+  position: static;
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 calc(-1 * var(--s-6)) 0 0;
+  padding: 0;
+  transform: none;
+  background: none;
+  visibility: hidden;
+}
+.app .sidebar .sb-row .sb-trail .sb-act {
+  width: 22px;
+  height: 22px;
+}
+.app .sidebar .sb-row:hover .sb-trail .sb-acts,
+.app .sidebar .sb-row:focus-within .sb-trail .sb-acts {
+  visibility: visible;
+}
+.app .sidebar .sb-row:hover .sb-trail.acts .sb-meta,
+.app .sidebar .sb-row:focus-within .sb-trail.acts .sb-meta {
+  visibility: hidden;
+}
+.app .sidebar .sb-row:hover .sb-title {
+  margin-right: 0;
+}
+.app .sidebar .sb-row .sb-trail .sb-pin,
+.app .sidebar .sb-row:hover .sb-trail .sb-pin {
+  display: inline-block;
+}
+.app .sidebar .sb-proj:hover .sb-trail .sb-live,
+.app .sidebar .sb-proj:hover .sb-trail .spin {
+  display: inline-flex;
+}
+.app .sidebar .sb-trail .sb-live {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* project rename in place */
+.app .sidebar .sb-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0 0 0 calc(-1 * var(--s-4));
+  padding: 0 var(--s-4);
+  border: 1px solid var(--focus);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+/* an empty project list still offers the way in */
+.app .sidebar .sb-add {
+  color: var(--ink-3);
+}
+.app .sidebar .sb-add:hover {
+  color: var(--ink);
+}
+
+/* 내 차례: neutral icon; while its popover is open the row keeps no fill (one highlight at a time) */
+.app .sidebar .sb-todo.open .sb-main-ic,
+.app .sidebar .sb-todo.open .sb-title {
+  color: var(--ink);
+}
+.app .sidebar .sb-need {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-2);
+}
+/* the popover opens to the right of the row, over the main pane, never over the list */
+.needs-menu.ctx-menu {
+  min-width: 260px;
+  max-width: 360px;
+  transform-origin: left top;
+}
+.needs-menu .row-hint {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the workspace switcher: the attention dot sits right after its tab's name */
+.app .sidebar .space-seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-6);
+}
+.app .sidebar .space-seg .space-alert {
+  position: static;
+  flex: none;
+  margin: 0;
+}
+
+/* more rows below: a hairline over the footer instead of fading the last rows */
+.app .sidebar .sb-scroll.more {
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.app .sidebar .sb-foot {
+  border-top: 1px solid transparent;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.app .sidebar:has(.sb-scroll.more) .sb-foot {
+  border-top-color: var(--line-soft);
+}
+
+/* ═════════════ confirm dialog (§9.9) ═════════════ */
+.backdrop.confirm-backdrop {
+  z-index: var(--z-overlay);
+  place-items: center;
+  padding: 0;
+}
+.confirm {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  padding: var(--s-20);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2xl);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .confirm {
+    animation: shell-dialog-in 200ms var(--ease-drawer) both;
+  }
+}
+.confirm-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+}
+.confirm-body {
+  margin: var(--s-6) 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--ink-2);
+}
+.confirm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-8);
+  margin-top: var(--s-20);
+}
+
+/* ═════════════ `?` sheet: sticky title with a close button, tighter rows ═════════════ */
+.backdrop:has(> .keysheet) {
+  place-items: center;
+  padding: var(--s-24) 0;
+}
+.keysheet {
+  max-height: calc(100vh - 48px);
+  padding: 0 var(--s-20) var(--s-12);
+}
+.keysheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  margin: 0 calc(-1 * var(--s-20)) var(--s-4);
+  padding: 0 var(--s-12) 0 var(--s-20);
+  background: var(--card);
+}
+.keysheet .keysheet-head h3 {
+  flex: 1;
+  margin: 0;
+}
+.keysheet-head .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  color: var(--ink-3);
+}
+.keysheet-head .icon-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.keysheet-cols {
+  column-gap: var(--s-32);
+}
+.keysheet section {
+  margin-bottom: var(--s-12);
+}
+.keysheet .keysheet-row {
+  min-height: 24px;
+}
+.keysheet-row kbd,
+.palette-item .hint-keys {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--s-4);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-3);
+  box-shadow: none;
+  font-family: var(--font);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 18px;
+  letter-spacing: 0;
+  text-align: center;
+}
+.palette-item .hint-keys {
+  flex: none;
+  margin-left: auto;
+}
+
+/* ═════════════ account picker: provider and email ═════════════ */
+.acc-pop .acc-row {
+  min-width: 0;
+  gap: var(--s-6);
+}
+.acc-pop .acc-name {
+  flex: none;
+  color: var(--ink);
+}
+.acc-pop .acc-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}

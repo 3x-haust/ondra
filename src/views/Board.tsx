@@ -11,6 +11,7 @@ import { ago, compact, IssueTag, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { changes, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
+import { taskContextMenu } from "../ui/taskMenu";
 
 type Col = { id: string; label: string; tone: string; tasks: Task[] };
 
@@ -196,7 +197,7 @@ function Card(props: { t: Task; byProject: boolean }) {
   const foot = () => !!(kids().length || diff().add || diff().del || sent());
 
   return (
-    <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
+    <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} onContextMenu={taskContextMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
       <div class="bc-top">
         <i class={`cv-st t-${TONE[st()]}`} classList={{ failed: job().status === "failed", paused: job().status === "paused" }} />
         <IssueTag t={job()} />

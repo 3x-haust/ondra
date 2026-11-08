@@ -12,9 +12,18 @@ import { usePop } from "./ModelPicker";
 import { t } from "../i18n";
 
 const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
-/** the windows the provider really has (now usually only the weekly one): "주간 19%" */
+const services = (id: string) => [...new Set((state.accounts.find((x) => x.id === id)?.providers ?? []).map(service))];
+/** what an account is called: its provider (ChatGPT, Claude), unless it was given a name of its own
+ *  (the default name is only the workspace's, "회사 2", which says nothing about the account) */
+const nameOf = (id: string) => {
+  const x = state.accounts.find((a) => a.id === id);
+  if (!x) return "";
+  const own = x.label && !state.spaces.some((s) => x.label === s.label || x.label.startsWith(`${s.label} `));
+  return own ? x.label : services(id).join(" · ") || t(x.label);
+};
+/** the windows the provider really has (now usually only the weekly one): "주간 19% 사용" */
 const usage = (id: string) =>
-  [...usageOf(id).map((l) => `${windowLabel(l.window)} ${Math.round(l.used)}%`), ...(creditsOf(id) ? [t("크레딧 {n}", { n: creditsOf(id)! })] : [])].join(" · ");
+  [...usageOf(id).map((l) => t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })), ...(creditsOf(id) ? [t("크레딧 {n}", { n: creditsOf(id)! })] : [])].join(" · ");
 
 export function AccountPicker(props: {
   accountId: string;
@@ -25,7 +34,6 @@ export function AccountPicker(props: {
 }) {
   const [open, setOpen] = usePop();
   const pool = () => accountsIn(props.space);
-  const a = () => state.accounts.find((x) => x.id === props.accountId);
   const pick = () => state.accountPick?.[props.space] ?? "auto";
   const auto = () => !props.onPick && pick() === "auto";
   // every account in the list shows who it is and how much of its window is used
@@ -49,10 +57,10 @@ export function AccountPicker(props: {
       <button
         class="st-acc"
         classList={{ on: open() }}
-        title={[a()?.label, emails[props.accountId], auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
+        title={[nameOf(props.accountId), emails[props.accountId], auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
         onClick={() => setOpen(!open())}
       >
-        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{t(a()?.label ?? "")}</span></>}>
+        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{nameOf(props.accountId)}</span></>}>
           <Icon name="key" size={14} />
           <span class="st-acc-name">{t("자동")}</span>
         </Show>
@@ -71,8 +79,12 @@ export function AccountPicker(props: {
             {(x) => (
               <button type="button" class="pop-item" disabled={props.running && x.id !== props.accountId} onClick={() => choose(x.id)}>
                 <span class="pop-item-main">
-                  <span class="acc-row"><Logos id={x.id} />{t(x.label)}</span>
-                  <span class="pop-item-sub">{[emails[x.id], usage(x.id)].filter(Boolean).join(" · ") || (x.providers.length ? "" : t("로그인 필요"))}</span>
+                  <span class="acc-row">
+                    <Logos id={x.id} />
+                    <span class="acc-name">{nameOf(x.id)}</span>
+                    <Show when={emails[x.id]}><span class="acc-email">{emails[x.id]}</span></Show>
+                  </span>
+                  <span class="pop-item-sub">{usage(x.id) || (x.providers.length ? "" : t("로그인 필요"))}</span>
                 </span>
                 <Show when={props.onPick ? x.id === props.accountId : pick() === x.id}><Icon name="check" size={14} /></Show>
               </button>
