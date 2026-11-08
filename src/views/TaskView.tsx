@@ -22,7 +22,7 @@ import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
-import { StatusLine, ContextRing } from "../ui/Usage";
+import { StatusLine } from "../ui/Usage";
 import { Transcript } from "../ui/Transcript";
 import { renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
@@ -407,7 +407,6 @@ export function TaskView(props: { id: string }) {
                   onStop={() => stopTask(task().id)}
                   right={
                     <>
-                    <ContextRing agent={`t:${task().id}`} accountId={task().accountId} />
                     <ModelPicker
                       up
                       accountId={task().accountId}

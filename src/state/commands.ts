@@ -30,7 +30,7 @@ export function appCommands(): ShortcutCommand[] {
     command("search", "검색", "일반", "search", () => { setPaletteMode("all"); setPaletteOpen(true); }, undefined, true),
     command("commands", "명령 보기", "일반", "list", showCommands, undefined, true),
     command("main", "메인", "이동", "message", () => goMain()),
-    command("new", "새 작업", "이동", "compose", () => goMain()),
+    command("new", "새 작업", "이동", "compose", () => void import("../views/MainView").then((m) => m.startNewTask())),
     command("settings", "설정", "설정", "gear", () => setView({ name: "settings" })),
     command("board", "캔버스", "이동", "canvas", () => setView(view().name === "board" ? { name: "main" } : { name: "board" })),
     command("memory", "메모리", "이동", "memory", () => setView({ name: "memory" })),

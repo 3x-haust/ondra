@@ -290,7 +290,7 @@ async function ensureSide(space: SpaceId) {
     exit() {
       sideAttached.delete(space);
       markDead(agent);
-      sideErr.set(space, stderrOf(agent).split("\n").filter(Boolean).pop() ?? tr("사이드챗이 끝났어요"));
+      sideErr.set(space, stderrOf(agent).split("\n").filter(Boolean).pop() ?? tr("옆 대화가 끝났어요"));
       sideSettled.get(space)?.();
     },
   });

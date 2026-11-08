@@ -130,7 +130,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         </span>
       </Show>
       <Show when={props.shells}>
-        <button class="st-sh" title={t("셸 보기")} onClick={() => openPanel("terminal")}>{t("셸 {n}", { n: props.shells! })}</button>
+        <button class="st-sh" title={t("터미널 보기")} onClick={() => openPanel("terminal")}>{t("터미널 {n}", { n: props.shells! })}</button>
       </Show>
       <Show when={props.branch}><span class="st-br" title={t("브랜치")}><Icon name="branch" size={12} />{props.branch}</span></Show>
     </div>
@@ -143,6 +143,4 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
  * already says how full the context is (and opens the sheet). Renders nothing so
  * the task view's call still compiles; drop it there and this can go.
  */
-export function ContextRing(_props: { agent: string; accountId: string }) {
-  return null;
-}
+

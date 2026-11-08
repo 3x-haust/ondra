@@ -591,7 +591,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         </Show>
         <Show when={job().plan.length}>
           <section>
-            <h4>{t("계획")}</h4>
+            <h4>{t("할 일")}</h4>
             <ol class="cv-dr-plan">
               <For each={job().plan}>
                 {(p) => (

@@ -657,7 +657,7 @@ function Shortcuts() {
     <>
       <h2>{t("단축키")}</h2>
       <div class="set-group">
-        <Row title={t("버튼 단축키 표시")}><kbd>{t("⌘ 길게")}</kbd></Row>
+        <Row title={t("단축키 힌트")}><kbd>{t("⌘ 길게")}</kbd></Row>
         <Row title={t("어디서든 요청")}><kbd>⌥ Space</kbd></Row>
         <Row title={t("단축키 목록")}><kbd>?</kbd></Row>
         <Row title={t("종료")}><kbd>{t("⌘Q 길게")}</kbd></Row>

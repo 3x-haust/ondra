@@ -77,7 +77,7 @@ export default {
   "삭제": "Delete",
   "취소": "Cancel",
   "이 작업을 삭제할까요?": "Delete this task?",
-  "서브에이전트 {n}개 포함": "Includes 1 subagent|Includes {n} subagents",
+  "서브에이전트 {n}개 포함": "Includes {n} subagent|Includes {n} subagents",
   "브랜치는 남아요": "The branch stays",
 
   // ⌘K palette
