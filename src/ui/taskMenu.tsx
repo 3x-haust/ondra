@@ -7,6 +7,7 @@ import { state, taskById } from "../state/store";
 import { goMain, openPanel, openTask, toast, view } from "../state/ui";
 import { archiveTask, discardTask, duplicateTask, finishTask, mergeTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 import { expand } from "../engine/rpc";
+import { discarded, taskDiff } from "../state/progress";
 import { openInEditor, revealPath } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { anyPop, closePops } from "./ModelPicker";
@@ -52,7 +53,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
       ...(x.status === "queued" ? [{ id: "start", label: t("지금 시작"), icon: "play", run: () => void startTask(id) }] : []),
       ...(x.status !== "done" ? [{ id: "done", label: t("완료로 표시"), icon: "flag", run: () => finishTask(id) }] : []),
     ],
-    x.worktree?.state === "open" && !live
+    x.worktree?.state === "open" && !live && !discarded(x)
       ? [
           { id: "merge", label: t("병합"), icon: "merge", run: () => void mergeTask(id) },
           {
@@ -86,11 +87,14 @@ export function taskMenuItems(id: string): MenuEntry[] {
         },
       },
     ],
-    [
-      { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void openInEditor(expand(x.cwd)) },
-      { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(x.cwd)) },
-      { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (openTask(id), openPanel("terminal")) },
-    ],
+    // its worktree is gone with the discarded changes: nothing to open
+    discarded(x)
+      ? []
+      : [
+          { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void openInEditor(expand(x.cwd)) },
+          { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(x.cwd)) },
+          { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (openTask(id), openPanel("terminal")) },
+        ],
     [
       {
         id: "archive",
@@ -228,7 +232,8 @@ export function ContextMenuHost() {
 
 interface Ask {
   title: string;
-  body?: string;
+  /** what is lost; a function when it can still change while the dialog is up (a diff still being counted) */
+  body?: string | (() => string);
   action: string;
   danger?: boolean;
   run: () => void;
@@ -240,7 +245,12 @@ export const confirmAsk = (a: Ask) => (closePops(), setCtx(null), setAsk(a));
 export function confirmDiscard(id: string) {
   const x = taskById(id);
   if (!x) return;
-  confirmAsk({ title: t("변경을 버릴까요?"), body: x.title, action: t("버리기"), danger: true, run: () => void discardTask(id) });
+  // the body says what goes: its files and lines, counted the one way every screen does
+  const lost = () => {
+    const d = taskDiff(x);
+    return d.files.length ? `${t("파일 {n}개", { n: d.files.length })} · +${d.add} −${d.del}` : x.title;
+  };
+  confirmAsk({ title: t("변경을 버릴까요?"), body: lost, action: t("버리기"), danger: true, run: () => void discardTask(id) });
 }
 
 export function confirmDeleteTask(id: string) {
@@ -264,7 +274,8 @@ export function ConfirmHost() {
   return (
     <Show when={ask()} keyed>
       {(a) => {
-        let ok!: HTMLButtonElement;
+        let cancel!: HTMLButtonElement;
+        const body = () => (typeof a.body === "function" ? a.body() : a.body);
         const close = () => setAsk(null);
         const go = () => (close(), a.run());
         const key = (e: KeyboardEvent) => {
@@ -274,7 +285,8 @@ export function ConfirmHost() {
         };
         onMount(() => {
           window.addEventListener("keydown", key, true);
-          ok.focus();
+          // Cancel takes the focus: Enter or a stray Space never confirms by itself
+          cancel.focus();
         });
         onCleanup(() => window.removeEventListener("keydown", key, true));
         return (
@@ -282,10 +294,10 @@ export function ConfirmHost() {
             <div class="backdrop confirm-backdrop" onClick={close}>
               <div class="confirm" role="alertdialog" aria-modal="true" aria-label={a.title} onClick={(e) => e.stopPropagation()}>
                 <h3 class="confirm-title">{a.title}</h3>
-                <Show when={a.body}><p class="confirm-body">{a.body}</p></Show>
+                <Show when={body()}><p class="confirm-body">{body()}</p></Show>
                 <div class="confirm-foot">
-                  <button class="btn sm" onClick={close}>{t("취소")}</button>
-                  <button ref={ok} class="btn sm" classList={{ danger: !!a.danger, primary: !a.danger }} onClick={go}>{a.action}</button>
+                  <button ref={cancel} class="btn sm" onClick={close}>{t("취소")}</button>
+                  <button class="btn sm" classList={{ danger: !!a.danger, primary: !a.danger }} onClick={go}>{a.action}</button>
                 </div>
               </div>
             </div>

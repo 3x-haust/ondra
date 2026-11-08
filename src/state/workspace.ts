@@ -1,12 +1,14 @@
-// Each space is its own workspace: switching keeps where you were in the one you
-// leave (the screen, the right panel and its tabs) and brings back the other's.
+// Each space is its own workspace: switching keeps the screen you're on when the
+// other space has it too (memory, results, the board, devices, settings), and
+// brings back the other's right panel and its tabs. A task or a project, which
+// belong to one space, land on the other's Main.
 import { batch, createEffect, untrack } from "solid-js";
 import { projectById, setSpace, state, taskById } from "./store";
 import type { SpaceId } from "./types";
+import { devicesIn } from "./devices";
 import { activeTab, panelOpen, previewPath, ptabs, setActiveTab, setPanelOpen, setPreviewPath, setPtabs, setView, view, type PTab, type View } from "./ui";
 
 interface Place {
-  view: View;
   panel: boolean;
   tabs: PTab[];
   tab: number;
@@ -21,11 +23,13 @@ const places: Record<string, Place> = (() => {
   }
 })();
 
-/** a saved screen that still makes sense in that space */
-function valid(v: View | undefined, space: SpaceId): View {
-  if (!v || v.name === "settings") return { name: "main" };
+/** The screen to show in `space` when you switch to it from `v`: the same one when that space has it. */
+export function carried(v: View, space: SpaceId): View {
   if (v.name === "task") return taskById(v.id)?.space === space ? v : { name: "main" };
-  if (v.name === "main" && v.project) return projectById(v.project, space) ? v : { name: "main" };
+  if (v.name === "main") return v.project && projectById(v.project, space) ? v : { name: "main" };
+  // a result is one space's own: that space's list opens at its first
+  if (v.name === "results") return v.id ? { name: "results" } : v;
+  if (v.name === "devices" && v.device) return devicesIn(space).some((d) => d.id === v.device) ? v : { name: "devices" };
   return v;
 }
 
@@ -52,17 +56,17 @@ export function keepSpaces() {
   });
 }
 
-/** Go to another space, where you left it. */
+/** Go to another space: the same screen when it has one, with its own panel as you left it. */
 export function switchSpace(id: SpaceId, then?: View, leaving: View = view()) {
   if (id === state.space) return void (then && setView(then));
-  places[state.space] = { view: leaving, panel: panelOpen(), tabs: ptabs(), tab: activeTab(), preview: previewPath() };
+  places[state.space] = { panel: panelOpen(), tabs: ptabs(), tab: activeTab(), preview: previewPath() };
   try {
     localStorage.setItem(KEY, JSON.stringify(places));
   } catch {}
   const p = places[id];
   batch(() => {
     setSpace(id);
-    setView(then ?? valid(p?.view, id));
+    setView(then ?? carried(leaving, id));
     if (p) {
       setPtabs(p.tabs?.length ? p.tabs : [{ id: 1, kind: "flow" }]);
       setActiveTab(p.tab ?? p.tabs?.[0]?.id ?? 1);

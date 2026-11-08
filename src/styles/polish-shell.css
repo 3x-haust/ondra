@@ -1418,3 +1418,14 @@
   margin-right: var(--s-4);
   color: var(--ink-4);
 }
+
+/* ═════════════ round 6 ═════════════ */
+
+/* discarded: the done check, muted (beats the accent done look above) */
+.app .sidebar .sb-glyph.done.discarded,
+.palette .st-icon.done.discarded,
+.needs-menu .st-icon.done.discarded {
+  background: var(--active);
+  box-shadow: none;
+  color: var(--ink-3);
+}
