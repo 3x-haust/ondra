@@ -1,6 +1,7 @@
 // Small shared pieces: status dot and labels, time formatting, a ticking clock.
 import { createSignal, Show } from "solid-js";
 import type { Status, Task } from "../state/types";
+import type { View } from "../state/ui";
 import { openUrl } from "../lib/native";
 import { lang, t } from "../i18n";
 
@@ -37,8 +38,18 @@ export function IssueTag(props: { t: Task }) {
   );
 }
 
-/** The sidebar's 새 작업 screen, open in the main pane (its project, if one is picked). MainView owns it; the sidebar highlights it. */
-export const [newTaskOpen, setNewTaskOpen] = createSignal<{ project?: string } | null>(null);
+/** The sidebar's 새 작업 screen, open in the main pane (its project, if one is picked, and the view it was opened
+ *  from, to go back to). MainView owns it; the sidebar highlights it. */
+export const [newTaskOpen, setNewTaskOpen] = createSignal<{ project?: string; from?: View } | null>(null);
+
+/** A title from what was typed: its first line, cut at a word boundary with "…" when longer than `max`. */
+export function titleOf(text: string, max = 40): string {
+  const first = (text.split("\n").find((l) => l.trim()) ?? text).trim().replace(/\s+/g, " ");
+  if (first.length <= max) return first;
+  const room = first.slice(0, max - 1);
+  const cut = room.lastIndexOf(" ");
+  return `${(cut > max * 0.5 ? room.slice(0, cut) : room).replace(/[\s,.;:·…-]+$/, "")}…`;
+}
 
 const [tick, setTick] = createSignal(Date.now());
 setInterval(() => setTick(Date.now()), 1000);

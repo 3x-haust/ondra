@@ -1,6 +1,6 @@
 // A question a task is waiting on, with its answers as buttons.
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { state, taskById } from "../state/store";
+import { projectById, state, taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
 import { inBrowserShare } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
@@ -9,7 +9,26 @@ import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
 import { dropAsked } from "./decisionText";
+import { ProjectBadge } from "./ProjectBadge";
 import { t as tr } from "../i18n";
+
+/** An answered question as the task stores it (`"question" → answer`), or undefined for any other message. */
+export function answerOf(text: string): { q: string; a: string } | undefined {
+  const m = text.match(/^"([\s\S]+?)" → ([\s\S]+)$/);
+  return m ? { q: m[1].trim(), a: m[2].trim() } : undefined;
+}
+
+/** A question already answered, kept in the thread where the card was: the question, then the answer. */
+export function AnsweredCard(props: { q: string; a: string }) {
+  return (
+    <div class="decision-done">
+      <Icon name="message" size={14} />
+      <span class="decision-done-q">{props.q}</span>
+      <Icon name="arrow" size={12} class="decision-done-to" />
+      <span class="decision-done-a">{props.a}</span>
+    </div>
+  );
+}
 
 /** what was typed in each question's own-answer line, kept while the card is away (another view, Main ↔ task) */
 const ownDrafts = new Map<string, string>();
@@ -117,7 +136,17 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       <Show when={props.showTask !== false && t()}>
         {(x) => (
           <button class="decision-src" onClick={() => openTask(x().id)}>
-            {x().topic} / {x().title}
+            {/* where it runs: its project (badge and name), the topic only when it has none */}
+            <Show when={x().project ? projectById(x().project!) : undefined} fallback={<span>{x().topic}</span>}>
+              {(p) => (
+                <>
+                  <ProjectBadge name={p().name} />
+                  <span>{p().name}</span>
+                </>
+              )}
+            </Show>
+            <span class="decision-src-sep">/</span>
+            <span class="decision-src-title">{x().title}</span>
           </button>
         )}
       </Show>

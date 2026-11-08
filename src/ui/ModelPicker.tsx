@@ -213,7 +213,7 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
   const cur = () => PERMISSIONS.find((p) => p.id === props.value) ?? PERMISSIONS[1];
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class={`chip perm-chip p-${cur().id}`} classList={{ on: open(), full: cur().id === "full" }} onClick={() => setOpen(!open())} title={t("권한")}>
+      <button type="button" class="chip perm-chip" classList={{ [`p-${cur().id}`]: true, on: open(), full: cur().id === "full" }} onClick={() => setOpen(!open())} title={t("권한")}>
         <Icon name={cur().icon} size={14} />
         {t(cur().label)}
       </button>

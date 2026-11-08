@@ -38,7 +38,6 @@ export default {
 
   // main chat
   "메인": "Main",
-  "프로젝트 채팅": "Project chat",
   "패널 (⌘\\)": "Panel (⌘\\)",
   "메인에서": "From Main",
   "메시지 보내기|input": "Message",
@@ -137,8 +136,6 @@ export default {
   "출력 없음": "No output",
   "출력 대기 중…": "Waiting for output…",
   "서브에이전트 {n}개": "{n} subagent|{n} subagents",
-  "{n}개 진행 중": "{n} running",
-  "모두 완료": "All done",
   "세션 {n}에서 계속": "Continued in session {n}",
   "다음: {next}": "Next: {next}",
   "맨 아래로": "Jump to bottom",
@@ -237,4 +234,7 @@ export default {
   "저장하지 못했어요: {e}": "Couldn't save: {e}",
   "이미지를 복사했어요": "Image copied",
   "복사하지 못했어요: {e}": "Couldn't copy: {e}",
+  "중단됨": "Stopped",
+  "{n}개 {state}": "{n} {state}",
+  "찾기": "Search",
 } satisfies Record<string, string>;
