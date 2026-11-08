@@ -209,4 +209,6 @@ export default {
   "셸 보기": "Show shells",
   "셸 {n}": "Shells {n}",
   "브랜치": "Branch",
+  "기타": "Other",
+  "macOS 앱에서만 쓸 수 있어요": "Available in the macOS app only",
 } satisfies Record<string, string>;

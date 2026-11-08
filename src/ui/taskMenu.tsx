@@ -60,7 +60,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
             label: t("버리기"),
             icon: "undo",
             // the work goes with the worktree: asked first, like delete
-            run: () => confirmAsk({ title: t("변경을 버릴까요?"), body: x.title, action: t("버리기"), danger: true, run: () => void discardTask(id) }),
+            run: () => confirmDiscard(id),
           },
         ]
       : [],
@@ -235,6 +235,13 @@ interface Ask {
 }
 const [ask, setAsk] = createSignal<Ask | null>(null);
 export const confirmAsk = (a: Ask) => (closePops(), setCtx(null), setAsk(a));
+
+/** 버리기 / Discard, wherever it is offered (menu, review bar, /discard, Panel): asked once, same words */
+export function confirmDiscard(id: string) {
+  const x = taskById(id);
+  if (!x) return;
+  confirmAsk({ title: t("변경을 버릴까요?"), body: x.title, action: t("버리기"), danger: true, run: () => void discardTask(id) });
+}
 
 export function confirmDeleteTask(id: string) {
   const x = taskById(id);

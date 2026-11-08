@@ -9,9 +9,9 @@ import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
-import { ago, compact, newTaskOpen, now } from "../ui/bits";
+import { ago, compact, newTaskOpen, now, setNewTaskOpen } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -45,6 +45,9 @@ export function forkOrder(space: string): Task[] {
 export function changes(t: Task) {
   return taskDiff(t);
 }
+
+// the new-task screen (and the 새 작업 highlight) ends when you leave Main, whatever MainView is doing
+onLeaveMain(() => setNewTaskOpen(null));
 
 const openId = () => {
   const v = view();
@@ -113,8 +116,8 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   return (
     <>
       <button
-        class={`sb-row tone-${tone()}`}
-        classList={{ menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
+        class="sb-row"
+        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
         onClick={() => openTask(t().id)}
@@ -250,11 +253,9 @@ function NeedsMenu() {
                   <span class="sb-glyph st-icon sm failed" aria-hidden="true"><i /></span>
                 </Show>
                 <span class="row-title">{t.title}</span>
-                <span class="row-hint">
-                  {/* the state word in its tone, as on the sidebar row */}
-                  <span class={`needs-word ${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
-                  {where(t) ? ` · ${where(t)}` : ""}
-                </span>
+                {/* "state · project": the state word in its tone, as on the sidebar row; both line up in columns */}
+                <span class={`needs-word tone-${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
+                <span class="needs-where">{where(t) ?? tr("기타")}</span>
               </button>
             )}
           </For>
@@ -379,7 +380,7 @@ export function Sidebar() {
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: !!newTaskOpen() }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
+        <button class="icon-btn" classList={{ on: !!newTaskOpen() && view().name === "main" }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
           <Icon name="compose" size={16} />
         </button>
         <button class="icon-btn" data-shortcut="search" title={`${tr("검색")} ${shortcutHint("search")}`} aria-label={tr("검색")} onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
@@ -481,7 +482,8 @@ export function Sidebar() {
           >
             {(p) => {
               const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
-              const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && t.status === "running").length;
+              // top-level tasks only, like every running count (a subagent is part of its task)
+              const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = () => shown().filter((t) => t.project === p.id);
               const done = () => roots().filter((t) => old(t) && t.project === p.id);

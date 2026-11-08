@@ -4,6 +4,7 @@
 // worked on without the shell.
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { t } from "../i18n";
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -218,10 +219,10 @@ export interface WorktreeInfo {
 /** New worktree + branch for a task. Rejects when the folder is not a git repo with commits. */
 // the git commands run as the job's space (`env` = its spaceEnv): its git identity, GitHub login, ssh keys
 export const worktreeCreate = (cwd: string, dest: string, branch: string, env: Env = []) =>
-  inTauri ? invoke<WorktreeInfo>("worktree_create", { cwd, dest, branch, env }) : Promise.reject(new Error("앱에서만 돼요"));
+  inTauri ? invoke<WorktreeInfo>("worktree_create", { cwd, dest, branch, env }) : Promise.reject(new Error(t("macOS 앱에서만 쓸 수 있어요")));
 /** Commit what is left and merge into the repo's current branch; resolves to that branch's name. */
 export const worktreeMerge = (repo: string, path: string, branch: string, message: string, env: Env = []) =>
-  inTauri ? invoke<string>("worktree_merge", { repo, path, branch, message, env }) : Promise.reject(new Error("앱에서만 돼요"));
+  inTauri ? invoke<string>("worktree_merge", { repo, path, branch, message, env }) : Promise.reject(new Error(t("macOS 앱에서만 쓸 수 있어요")));
 /** The job's branch is already in the remote's main line: its name ("origin/main"), else null. */
 export const worktreeLanded = (path: string, env: Env = []) =>
   inTauri ? invoke<string | null>("worktree_landed", { path, env }) : Promise.resolve(null);
