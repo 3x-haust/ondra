@@ -191,6 +191,8 @@ export interface Task {
   endedBy?: "user";
   /** when the user stopped it; cleared when it is resumed */
   parkedAt?: number;
+  /** a subagent its fork's pause stopped (the fork's id): it resumes when the fork does */
+  pausedBy?: string;
   /** Other spaces the user let this job use (their memory, folder and past jobs). Spaces are separate otherwise. */
   reach?: SpaceId[];
   /** A review subagent: its findings go back to the fork to fix. */

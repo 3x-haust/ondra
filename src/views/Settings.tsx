@@ -41,8 +41,6 @@ import { LogIn } from "lucide-solid";
 
 /** a workspace folder as shown: "~" is the home folder */
 const folderName = (f: string | undefined) => (!f || f === "~" ? t("홈 폴더") : f);
-/** effort ids as words (DESIGN §12: 낮음 · 보통 · 높음 · 매우 높음 · 최대) */
-const EFFORT_LABEL: Record<string, string> = { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최대" };
 
 
 function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
@@ -459,18 +457,15 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         <span class="acc-usage">
           <For each={windows()}>
             {(l) => (
-              <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={[t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) }), ...(l.resetsAt ? [t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) })] : [])].join(" · ")}>
-                <span class="acc-lim-name">{windowLabel(l.window)}</span>
-                <span class="acc-lim-num">{Math.round(l.used)}%</span>
+              <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={l.resetsAt ? t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) }) : undefined}>
+                {t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })}
               </span>
             )}
           </For>
           <Show when={credits()}>
             {(c) => <span class="acc-stat" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
           </Show>
-          <Show when={used()} fallback={<Show when={!windows().length}><span class="acc-stat">{t("사용 기록 없음")}</span></Show>}>
-            <span class="acc-stat" title={t("{k} 토큰", { n: used(), k: tokens(used()) })}>{t("캐시 적중 {p}%", { p: cache() })}</span>
-          </Show>
+          <Show when={!used() && !windows().length}><span class="acc-stat">{t("사용 기록 없음")}</span></Show>
         </span>
       </div>
       <div class="acc-line acc-fields">
@@ -484,7 +479,7 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         <label class="acc-field">
           <span>{t("추론 강도")}</span>
           <select class="select" value={a().effort || "high"} onChange={(e) => updateAccount(props.id, (x) => (x.effort = e.currentTarget.value))}>
-            <For each={EFFORTS}>{(x) => <option value={x.id}>{t(EFFORT_LABEL[x.id] ?? x.label)}</option>}</For>
+            <For each={EFFORTS}>{(x) => <option value={x.id}>{t(x.name)}</option>}</For>
           </select>
         </label>
         <label class="acc-field">
@@ -494,6 +489,9 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
           </select>
         </label>
         <span class="spacer" />
+        <Show when={used()}>
+          <span class="acc-stat acc-cache" title={t("{k} 토큰", { n: used(), k: tokens(used()) })}>{t("캐시 적중 {p}%", { p: cache() })}</span>
+        </Show>
         <button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{t(loginWord(a()))}</button>
         <Show when={props.id !== "default"}>
           <Show
@@ -527,6 +525,14 @@ async function refreshProviders() {
   }
 }
 
+/** a 계정 추가 asked for from outside Settings, waiting for the 계정 tab to pick it up */
+const [addFor, setAddFor] = createSignal<SpaceId | null>(null);
+/** Opens Settings › 계정 and starts 계정 추가 for this workspace (e.g. from a no-account card). */
+export function openAddAccount(space: SpaceId = state.space) {
+  setAddFor(space);
+  setView({ name: "settings", tab: "accounts" });
+}
+
 function Accounts() {
   /** the sign-in sheet open now, and the words on the button that opened it */
   const [login, setLogin] = createSignal<{ id: string; title: string } | null>(null);
@@ -543,6 +549,13 @@ function Accounts() {
     setPending({ id, space });
     setLogin({ id, title: "계정 추가" });
   };
+  // a request from outside (openAddAccount): start it once this tab is up
+  createEffect(() => {
+    const s = addFor();
+    if (!s) return;
+    setAddFor(null);
+    if (!pending() && state.spaces.some((x) => x.id === s)) add(s);
+  });
   const closed = async () => {
     const p = pending();
     setLogin(null);

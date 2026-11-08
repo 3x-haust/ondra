@@ -682,6 +682,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     t.status = "running";
     t.startedAt ??= Date.now();
     t.now = "준비 중";
+    t.pausedBy = undefined;
   });
   // resuming after its worktree went away would carry on in the user's own
   // checkout with the old paths in mind: go on in a fresh session on a new worktree
@@ -1168,7 +1169,7 @@ async function settle(id: string, run: Run) {
       updateTask(id, (x) => {
         x.saidDone = undefined;
         x.now = "증거를 채우는 중";
-        push(x, { kind: "note", text: `끝내기 전에 확인 · ${missing.label}` });
+        push(x, { kind: "note", text: `확인 필요 · ${missing.label}` });
       });
       try {
         run.turnStart = Date.now();
@@ -1796,6 +1797,7 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
 export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string } = {}) {
   const t = taskById(id);
   if (!t) return;
+  const wasPaused = t.status === "paused";
   const agent = agentOf(id);
   if (!opts.now && t.status === "running" && isAlive(agent)) {
     updateTask(id, (x) => (x.queue = [...(x.queue ?? []), { id: uid("q"), text: message, at: Date.now() }]));
@@ -1825,6 +1827,7 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     x.inbox.push(message);
     if (x.status !== "queued") requeue(x);
   });
+  if (wasPaused) resumeKids(id);
 }
 
 /** Steer a queued message in now. */
@@ -1954,7 +1957,19 @@ export function pauseTask(id: string) {
     closeOpen(t);
     push(t, { kind: "note", text: "일시정지" });
   });
-  for (const k of activeKids(id)) pauseTask(k.id);
+  // its subagents stop with it, and remember it was this pause that stopped them
+  for (const k of activeKids(id)) {
+    pauseTask(k.id);
+    updateTask(k.id, (x) => (x.pausedBy = id));
+  }
+}
+
+/** The subagents a task's own pause stopped go back in line with it (and theirs with them). */
+function resumeKids(id: string) {
+  for (const k of childrenOf(id).filter((k) => k.pausedBy === id && k.status === "paused")) {
+    updateTask(k.id, (x) => requeue(x));
+    resumeKids(k.id);
+  }
 }
 
 /** The user stopped it: paused, and main doesn't carry it on by itself. */
@@ -1963,7 +1978,11 @@ export function stopTask(id: string) {
   updateTask(id, (t) => (t.parkedAt = Date.now()));
 }
 
-export const resumeTask = (id: string) => updateTask(id, (t) => requeue(t));
+export function resumeTask(id: string) {
+  // resumed on its own: it no longer waits for the fork that paused it
+  updateTask(id, (t) => (requeue(t), (t.pausedBy = undefined)));
+  resumeKids(id);
+}
 export const finishTask = (id: string) => {
   updateTask(id, (t) => (t.endedBy = "user"));
   finish(id, "직접 완료 처리");
@@ -2043,6 +2062,8 @@ export function schedule() {
   for (const k of state.tasks.filter((k) => k.parentId && k.status === "queued" && k.legs.length > 0)) {
     const p = taskById(k.parentId!);
     if (p && (p.status === "running" || p.status === "waiting")) continue;
+    // resumed with its fork: it starts beside the fork once the fork is running
+    if (p && k.pausedBy === p.id && p.status === "queued") continue;
     // a review of a job that has ended has no one to report to
     if (k.review && (!p || p.status === "done" || p.status === "failed")) {
       pauseTask(k.id);
