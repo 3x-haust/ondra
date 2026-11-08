@@ -43,6 +43,7 @@ export default {
   "기타 작업": "Other tasks",
   "완료 {n}개": "{n} done",
   "버림 {n}개": "{n} discarded",
+  "완료 {n}개 · 버림 {m}개": "{n} done · {m} discarded",
   "보관함 {n}개": "{n} archived",
   "설정": "Settings",
   "서브에이전트 접기": "Hide subagents",

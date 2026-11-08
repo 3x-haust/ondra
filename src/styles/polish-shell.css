@@ -1429,3 +1429,22 @@
   box-shadow: none;
   color: var(--ink-3);
 }
+
+/* 내 차례 with nothing waiting: the row stays (nothing below moves), greyed and inert */
+.app .sidebar .sb-todo.empty {
+  cursor: default;
+}
+.app .sidebar .sb-todo.empty:hover {
+  background: transparent;
+}
+.app .sidebar .sb-todo.empty .sb-title,
+.app .sidebar .sb-todo.empty .sb-main-ic,
+.app .sidebar .sb-todo.empty:hover .sb-main-ic {
+  color: var(--ink-4);
+}
+
+/* the confirm's default button (Cancel) shows its ring however the dialog was opened */
+.confirm-foot .btn:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
