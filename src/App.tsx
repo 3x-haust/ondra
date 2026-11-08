@@ -6,6 +6,7 @@ import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, paletteOpen, panelOpen, setView, sidebarAway, toast, toasts, dropToast, view } from "./state/ui";
 import { appCommands } from "./state/commands";
+import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
 import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
 import { anyPop } from "./ui/ModelPicker";
 import { spaceById, taskById } from "./state/store";
@@ -119,7 +120,13 @@ export default function App() {
 
   const onKey = (e: KeyboardEvent) => {
     if (!loaded() || !state.onboarded || anyPop()) return;
-    if (dispatchShortcut(e, appCommands(), shortcutContext(e))) return;
+    const ctx = shortcutContext(e);
+    if (dispatchShortcut(e, appCommands(), ctx)) return;
+    if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey && !ctx.editing && !ctx.local && !ctx.overlay && !e.isComposing) {
+      e.preventDefault();
+      setSheetOpen(true);
+      return;
+    }
     // Local views handle Escape first; only an unclaimed Escape closes the panel.
     if (e.key === "Escape" && noModifiers(e) && viewKey(e) && panelOpen() && view().name !== "settings") {
       e.preventDefault();
@@ -176,6 +183,7 @@ export default function App() {
       </div>
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette commands={appCommands()} /></Show>
+      <Show when={sheetOpen()}><ShortcutSheet /></Show>
       <QuoteBar />
       <Show when={notesFor() !== null}><ReleaseNotes current={appVersion()} /></Show>
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />

@@ -568,6 +568,7 @@ function Shortcuts() {
       <div class="set-group">
         <Row title="버튼마다 단축키 보기"><kbd>⌘ 길게</kbd></Row>
         <Row title="어디서든 요청 보내기"><kbd>⌥ Space</kbd></Row>
+        <Row title="단축키 보기"><kbd>?</kbd></Row>
         <Row title="종료"><kbd>⌘Q 길게</kbd></Row>
       </div>
       <For each={groups()}>
