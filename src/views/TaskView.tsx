@@ -377,7 +377,7 @@ export function TaskView(props: { id: string }) {
                 <Icon name="check" size={12} />
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
                 {/* merged: when it was merged (older tasks without mergedAt: when it finished) */}
-                <span class="faint">{ago((task().worktree?.state === "merged" ? (task() as Task & { mergedAt?: number }).mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
+                <span class="faint">{ago((task().worktree?.state === "merged" ? task().mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
             <Show when={task().status !== "done" && !discarded(task())}>
