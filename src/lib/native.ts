@@ -240,6 +240,12 @@ export interface FileText {
 }
 export const fsRead = (path: string) =>
   call<FileText>("fs_read", { path }, { text: "import { restore } from './auth/session';\n\nexport async function guard(to) {\n  await restore();\n  return to;\n}\n", size: 80, binary: false });
+/** Lines in the folder's files containing `query` (case-insensitive), up to 500. */
+export const fsGrep = (cwd: string, query: string) =>
+  call<{ path: string; line: number; text: string }[]>("fs_grep", { cwd, query }, [
+    { path: "src/router.ts", line: 4, text: "await restore();" },
+    { path: "src/auth/session.ts", line: 12, text: "export async function restore() {" },
+  ]);
 /** Save edited text; rejects with "CHANGED" when the file moved on since `expect` (its modified time when read). Resolves to the new modified time. */
 export const fsWrite = (path: string, text: string, expect?: number) => call<number>("fs_write", { path, text, expect: expect ?? null }, Date.now());
 export const pickFiles = (prompt: string) => call<string[]>("pick_files", { prompt }, []);
