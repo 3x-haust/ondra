@@ -546,6 +546,20 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
       }),
     ),
   );
+  // tabs show in full; when the strip runs short they share it evenly, and past that the others keep just their icon
+  const [tight, setTight] = createSignal(false);
+  onMount(() => {
+    const fit = () => {
+      const strip = bar?.parentElement;
+      if (!strip) return;
+      const add = strip.querySelector<HTMLElement>(".ptab-add")?.offsetWidth ?? 28;
+      setTight((strip.clientWidth - add - 48) / Math.max(1, ptabs().length) < 78);
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar.parentElement!);
+    createEffect(on(() => ptabs().length, fit));
+    onCleanup(() => ro.disconnect());
+  });
   // drag the left edge to resize; remembered per machine
   const KEY = "ondra.jobW";
   try {
@@ -585,7 +599,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-resize" onPointerDown={drag} title="끌어서 너비 바꾸기" />
       <div class="panel-bar" data-tauri-drag-region>
-        <div class="ptabs" ref={bar} classList={{ compact: ptabs().length >= 5 }}>
+        <div class="ptabs" ref={bar} classList={{ tight: tight() }}>
           <span class="tab-ind" classList={{ on: ind().on }} style={{ transform: `translateX(${ind().x}px)`, width: `${ind().w}px` }} />
           <For each={ptabs()}>
             {(x) => {
