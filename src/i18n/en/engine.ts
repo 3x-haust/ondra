@@ -53,7 +53,6 @@ export default {
   "빌드 중": "Building",
   "설치": "Install",
   "설치하는 중": "Installing",
-  "검사": "Check",
   "검사하는 중": "Checking",
   "앱 띄우기": "Start app",
   "앱 띄우는 중": "Starting app",
@@ -80,7 +79,6 @@ export default {
   "파일 정리": "Move files",
   "파일 정리 중": "Moving files",
   "살펴보기": "Read",
-  "살펴보는 중": "Reading",
   "열기": "Open",
   "여는 중": "Opening",
   "명령 실행": "Run command",
@@ -122,13 +120,11 @@ export default {
   // prWatch.ts
   "리뷰·코멘트 {n}개": "{n} reviews/comments",
   "검사 실패": "checks failed",
-  "충돌": "conflict",
   "PR #{num} · {parts}": "PR #{num} · {parts}",
 
   // update.ts
   "최신 버전이에요": "You're up to date",
   "{v} 업데이트 준비됨": "Update {v} ready",
-  "다시 시작": "Restart",
   "업데이트하지 못했어요 · {why}": "Couldn't update · {why}",
 
   // memgit.ts

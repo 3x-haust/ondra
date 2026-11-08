@@ -61,6 +61,6 @@ export function appCommands(): ShortcutCommand[] {
     command("closeTab", "패널 탭 닫기", "패널", "x", () => closePanelTab(activeTab()), visiblePanel),
     command("previousTab", "이전 패널 탭", "패널", "back", () => stepTab(-1), () => visiblePanel() && ptabs().length > 1),
     command("nextTab", "다음 패널 탭", "패널", "arrow", () => stepTab(1), () => visiblePanel() && ptabs().length > 1),
-    command("focusInput", "입력창으로 이동", "대화", "message", () => input()?.focus(), () => !!input()),
+    command("focusInput", "입력창으로 이동", "대화|section", "message", () => input()?.focus(), () => !!input()),
   ];
 }

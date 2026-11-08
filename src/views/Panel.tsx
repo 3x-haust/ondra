@@ -202,7 +202,7 @@ function Overview(props: { t: Task }) {
           <dt>{tr("종류")}</dt>
           <dd>
             <div class="seg">
-              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>{tr("일반")}</button>
+              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>{tr("일반|weight")}</button>
               <button classList={{ on: t().weight === "heavy" }} onClick={() => setWeight(t().id, "heavy")}>{tr("무거운 작업")}</button>
             </div>
           </dd>

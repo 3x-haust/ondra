@@ -30,7 +30,7 @@ const FILTERS = [
   { id: "open", label: "열림", icon: "issue", q: "is:open" },
   { id: "mine", label: "내 이슈", icon: "at", q: "is:open assignee:@me" },
   { id: "authored", label: "내가 작성", icon: "pencil", q: "is:open author:@me" },
-  { id: "working", label: "작업 중", icon: "play", q: "" },
+  { id: "working", label: "작업 중|issue", icon: "play", q: "" },
   { id: "recent", label: "최근", icon: "clock", q: "sort:updated-desc" },
 ] as const;
 
@@ -72,7 +72,7 @@ export function IssuesPane(props: { t?: Task }) {
   // grouped like gitsu's list: what an agent works on first, then open, then closed
   const groups = createMemo(() => {
     const g: { id: string; label: string; items: Issue[] }[] = [
-      { id: "working", label: "작업 중", items: [] },
+      { id: "working", label: "작업 중|issue", items: [] },
       { id: "open", label: "열림", items: [] },
       { id: "closed", label: "닫힘", items: [] },
     ];
@@ -190,7 +190,7 @@ function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>;
           when={job() && props.i.state === "OPEN"}
           fallback={<span class="iss-st" classList={{ closed: props.i.state !== "OPEN" }}><Icon name={props.i.state === "OPEN" ? "issue" : "done"} size={14} /></span>}
         >
-          <span class="iss-st working" title={t("작업 중")}><span class="tk-run" /></span>
+          <span class="iss-st working" title={t("작업 중|issue")}><span class="tk-run" /></span>
         </Show>
         <span class="iss-n">#{props.i.number}</span>
         <span class="iss-title" title={props.i.title}>{props.i.title}</span>

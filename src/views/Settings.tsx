@@ -176,7 +176,7 @@ function UpdateRow() {
           when={available()}
           fallback={<button class="btn sm" disabled={updateStatus() === "checking"} onClick={() => void checkUpdate(true)}>{t("업데이트 확인")}</button>}
         >
-          <button class="btn primary sm" onClick={() => void installNow()}>{updateReady() === available() ? t("다시 시작") : t("{v} 설치", { v: available()! })}</button>
+          <button class="btn primary sm" onClick={() => void installNow()}>{updateReady() === available() ? t("다시 시작|update") : t("{v} 설치", { v: available()! })}</button>
         </Show>
       </Show>
     </Row>
@@ -255,7 +255,7 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
             <Icon name="folder" size={14} />
             <code>{folder()}</code>
             <span class="spacer" />
-            <span class="muted">{t("변경")}</span>
+            <span class="muted">{t("변경|action")}</span>
           </button>
         </div>
         <Show when={cur}>
@@ -273,7 +273,7 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
               <Icon name="folder" size={14} />
               <Show when={tools()?.home} fallback={<span>{t("Mac 기본")}</span>}><code>{tilde(tools()!.home!)}</code></Show>
               <span class="spacer" />
-              <span class="muted">{t("변경")}</span>
+              <span class="muted">{t("변경|action")}</span>
             </button>
           </div>
           <div class="sp-field">
@@ -507,7 +507,7 @@ function Import() {
             <div class="set-row src-row" classList={{ off: !s.found }}>
               <div class="set-label"><b>{s.name}</b></div>
               <div class="set-value">
-                <Show when={s.found} fallback={<span class="set-note">{t("없음")}</span>}>
+                <Show when={s.found} fallback={<span class="set-note">{t("없음|missing")}</span>}>
                   <span class="set-note">{t("지침 {a} · 스킬 {b} · 메모리 {c} · 세션 {d}", { a: s.rules.length, b: s.skills.length, c: s.memories.length, d: s.sessions.length })}</span>
                   <Show when={s.loggedIn}><span class="pill ok">{t("로그인됨")}</span></Show>
                 </Show>
@@ -565,15 +565,15 @@ function Permissions() {
       <div class="set-group">
         <Row title={t("에이전트")}>
           <span class="set-note">{engine.info.engineVersion ?? ""}</span>
-          {ok(engine.ready, "없음")}
+          {ok(engine.ready, "없음|missing")}
         </Row>
         <Row title={t("브라우저")}>
           <span class="set-note">{status()?.browserVersion ?? ""}</span>
-          {ok(!!status()?.browserVersion && status()?.chromeReady, "없음")}
+          {ok(!!status()?.browserVersion && status()?.chromeReady, "없음|missing")}
         </Row>
         <Row title={t("앱 조작")}>
           <span class="set-note">{status()?.desktopVersion ?? ""}</span>
-          {ok(!!status()?.desktopVersion, "없음")}
+          {ok(!!status()?.desktopVersion, "없음|missing")}
         </Row>
       </div>
       <GroupTitle title={t("macOS 권한")} />

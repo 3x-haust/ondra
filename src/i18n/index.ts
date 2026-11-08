@@ -22,7 +22,10 @@ export const lang = (): Lang => {
 
 /** "{n}개" with { n: 3 } → "3개" */
 export function t(ko: string, vars?: Record<string, string | number>): string {
-  const s = lang() === "en" ? (en[ko] ?? ko) : ko;
+  // "일시정지|action": same Korean, its own English
+  const bar = ko.indexOf("|");
+  const base = bar < 0 ? ko : ko.slice(0, bar);
+  const s = lang() === "en" ? (en[ko] ?? en[base] ?? base) : base;
   return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : s;
 }
 

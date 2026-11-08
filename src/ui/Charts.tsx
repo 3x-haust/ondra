@@ -676,7 +676,7 @@ export function Deps(props: { label?: string; nodes: DepNode[]; edges?: { from: 
 export type UmlClass = { name: string; kind?: "class" | "interface" | "enum" | "type" | "abstract"; fields?: string[]; methods?: string[]; state?: State; ref?: string; em?: boolean };
 export type UmlRel = { from: string; to: string; kind: "extends" | "implements" | "has" | "owns" | "uses"; label?: string; card?: [string?, string?]; em?: boolean };
 /** what a UML line means, said on the line when the agent gave no verb */
-const REL: Record<UmlRel["kind"], string> = { extends: "상속", implements: "구현", owns: "소유", has: "포함", uses: "사용" };
+const REL: Record<UmlRel["kind"], string> = { extends: "상속", implements: "구현", owns: "소유", has: "포함", uses: "사용|uml" };
 export function Classes(props: { label?: string; classes: UmlClass[]; relations?: UmlRel[]; dir?: "TB" | "LR" }) {
   const HEAD = 34, LINE = 19, PAD = 8;
   const head = (c: UmlClass) => (c.kind && c.kind !== "class" ? 14 : 0);

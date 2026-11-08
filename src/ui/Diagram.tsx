@@ -99,7 +99,7 @@ export function Diagram(props: { label?: string; nodes: DiagramNode[]; edges?: E
                       <Show when={n.state === "new"}><span class="dg-tag new">{t("새로")}</span></Show>
                       <Show when={n.state === "changed"}><span class="dg-tag changed">{t("바뀜")}</span></Show>
                       <Show when={n.state === "gone"}><span class="dg-tag">{t("없앰")}</span></Show>
-                      <Show when={n.by}><span class="dg-tag" title={n.by === "user" ? t("요청한 것") : t("AI가 정한 것")}>{n.by === "user" ? t("요청") : t("AI 판단")}</span></Show>
+                      <Show when={n.by}><span class="dg-tag" title={n.by === "user" ? t("요청한 것") : t("추정한 것")}>{n.by === "user" ? t("요청|by") : t("추정")}</span></Show>
                     </div>
                     <Show when={n.note}><div class="dg-note">{n.note}</div></Show>
                     <Show when={n.ref}>

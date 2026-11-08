@@ -259,7 +259,7 @@ function BinaryMap(props: { b: RBinary; focus?: number; live?: number; onPick: (
           fallback={
             <>
               <span><i class="rv-sw d1" />{t("함수")} {n(counts().all)}</span>
-              <Show when={counts().found}><span><i class="rv-sw d2" />{t("찾음")} {n(counts().found)}</span></Show>
+              <Show when={counts().found}><span><i class="rv-sw d2" />{t("찾음|found")} {n(counts().found)}</span></Show>
               <span><i class="rv-sw d3" />{t("어셈블리")} {n(counts().asm + counts().code)}</span>
               <span><i class="rv-sw d4" />{t("의사코드")} {n(counts().code)}</span>
             </>
