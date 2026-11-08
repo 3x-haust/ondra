@@ -739,7 +739,8 @@ export function Canvas() {
     const minX = Math.min(...ns.map((n) => n.x)), maxX = Math.max(...ns.map((n) => n.x + n.w));
     const minY = Math.min(...ns.map((n) => n.y)), maxY = Math.max(...ns.map((n) => n.y + n.h));
     const zw = (r.width - 120) / (maxX - minX), zh = (r.height - 150) / (maxY - minY);
-    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.5, Math.min(1, zw, Math.max(zh, 0.5)));
+    // opened: readable first (cards' text at 12px or more), the rest a pan away; ⇧1 shows it all
+    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.8, Math.min(1, zw, Math.max(zh, 0.8)));
     if (animate) vp.classList.add("glide");
     setZoom(z);
     // too tall to fit: start at the top, readable
