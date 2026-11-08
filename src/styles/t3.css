@@ -2173,16 +2173,26 @@ input[type="checkbox"] {
 }
 
 /* ═════════════ audit 3 fixes ═════════════ */
-/* 1 · tabs: × only on the active or hovered tab; with many tabs the others show just their icon */
-.ptab:not(.on):not(:hover) .ptab-x {
-  display: none;
+/* 1 · tabs: every tab keeps its ×'s room, so hovering never changes a width; a short strip shares out evenly, then the others keep just their icon */
+.ptab {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 160px;
 }
-.ptabs.compact .ptab:not(.on) {
+.ptab-x {
+  opacity: 0;
+}
+.ptab:hover .ptab-x,
+.ptab:focus-within .ptab-x,
+.ptab.on .ptab-x {
+  opacity: 1;
+}
+.ptabs.tight .ptab:not(.on) {
   flex: 0 0 auto;
-  min-width: 32px;
   padding: 0 var(--s-8);
 }
-.ptabs.compact .ptab:not(.on) .ptab-label {
+.ptabs.tight .ptab:not(.on) .ptab-label,
+.ptabs.tight .ptab:not(.on) .ptab-x {
   display: none;
 }
 .ptabs {
