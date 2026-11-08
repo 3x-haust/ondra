@@ -328,11 +328,14 @@ export interface Limit {
   window: number;
   used: number;
   resetsAt?: number | null;
+  /** window 0: paid credits on top of the plan ("12.5", "무제한", "$61.95 / $200") */
+  credits?: string;
 }
 export const accountLimits = (accountId: string) =>
   call<Limit[]>("account_limits", { accountId }, [
     { provider: "openai-codex", window: 300, used: 41, resetsAt: Date.now() + 2.4 * 3_600_000 },
-    { provider: "openai-codex", window: 10080, used: 32, resetsAt: Date.now() + 5.1 * 86_400_000 },
+    { provider: "openai-codex", window: 10080, used: 100, resetsAt: Date.now() + 5.1 * 86_400_000 },
+    { provider: "openai-codex", window: 0, used: 0, credits: "12.5" },
   ]);
 export const accountEmail = (accountId: string) => call<string | null>("account_email", { accountId }, "me@example.com");
 export const gitCommit = (cwd: string, message: string, env: Env = []) => call<string>("git_commit", { cwd, message, env }, "abc1234");
