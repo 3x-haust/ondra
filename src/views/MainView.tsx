@@ -21,7 +21,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago, compact, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
+import { ago, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -33,7 +33,7 @@ import { StatusLine, UsageLine } from "../ui/Usage";
 import { matchesShortcut, noModifiers, shortcutHint, shortcuts } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
-import { Glyph, SidebarToggle, stateMeta } from "./Sidebar";
+import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
 import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
 
@@ -838,14 +838,16 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       else out.push({ id: ask.id, text: ((t) => t.split("\n").find((l) => l.trim() && !/^https?:\/\//.test(l.trim())) ?? t)(((a) => a.rest.trim() || a.skills.join(", "))(skillAsk(ask.text ?? ""))), tasks: [...tasks], state: "done", at: 0 });
     }
     for (const r of out) {
-      // a finished job is finished: subagents it left stopped don't keep the request open
-      const all = r.tasks.flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
+      // a finished job is finished, and so is a discarded one (even paused or failed): subagents it
+      // left stopped don't keep the request open
+      const all = r.tasks.filter((t) => !discarded(t)).flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
       r.state = all.some((t) => t.status === "waiting" || t.status === "failed")
         ? "ask"
         : all.some((t) => t.status === "running" || t.status === "queued" || t.status === "paused")
           ? "live"
           : "done";
-      r.at = Math.max(...r.tasks.map((t) => t.finishedAt ?? t.startedAt ?? t.createdAt));
+      // when it ended: merged, when it was merged; discarded, when it was discarded
+      r.at = Math.max(...r.tasks.map((t) => endedAt(t) ?? t.startedAt ?? t.createdAt));
     }
     const fresh = Date.now() - 10 * 60_000;
     return out.filter((r) => r.state !== "done" || r.at > fresh).reverse();
@@ -873,7 +875,9 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   };
   const working = () => listed().filter((t) => t.status === "running");
   /** a request's word: what its most pressing task is */
-  const stateOf = (r: Req): Status => (r.state === "done" ? "done" : (ORDER.find((st) => r.tasks.some((t) => t.status === st)) ?? "running"));
+  const stateOf = (r: Req): Status => (r.state === "done" ? "done" : (ORDER.find((st) => r.tasks.some((t) => t.status === st && !discarded(t))) ?? "running"));
+  /** what the row says: every task of it discarded reads 버림 (the muted trash), never 완료 */
+  const rowState = (r: Req): Status | "discarded" => (r.state === "done" && r.tasks.every(discarded) ? "discarded" : stateOf(r));
   /** main's last report on one of the request's jobs */
   const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
   /** a one-task request: its to-do list (skipped steps left out) */
@@ -919,7 +923,9 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
               {(r) => (
                 <li>
                   <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
-                    <i class={`req-dot ${stateOf(r)}`} />
+                    <Show when={rowState(r) === "discarded"} fallback={<i class={`req-dot ${stateOf(r)}`} />}>
+                      <GlyphMark g="discarded" class="req-glyph" />
+                    </Show>
                     <span class="req-text">{r.text}</span>
                     {/* one task: the step it is on and its to-do list; several: how many of the tasks listed below are done */}
                     <Show
@@ -942,7 +948,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                         {r.tasks.filter((x) => x.status === "done").length}/{r.tasks.length}
                       </span>
                     </Show>
-                    <span class={`req-state ${stateOf(r)}`}>{tr(statusLabel[stateOf(r)])}</span>
+                    <span class={`req-state ${rowState(r)}`}>{((st) => (st === "discarded" ? tr("버림") : tr(statusLabel[st])))(rowState(r))}</span>
                   </button>
                   {/* several tasks: one line each, all of them, so the count above adds up */}
                   <Show when={r.tasks.length > 1}>

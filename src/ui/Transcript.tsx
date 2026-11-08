@@ -521,12 +521,14 @@ function EntryView(props: { e: Entry; task: Task }) {
       <Match when={e.kind === "spawn" && e}>
         {(x) => {
           const kids = () => x().childIds.map((id) => state.tasks.find((t) => t.id === id)).filter(Boolean);
-          // how they stand, counted by state: "1개 일시정지 · 1개 완료"
+          // how they stand, counted by state: "1개 일시정지 · 1개 완료" (a discarded one is 버림, never 완료)
           const tally = () =>
-            (["running", "waiting", "failed", "queued", "paused", "done"] as const)
-              .map((st) => [st, kids().filter((k) => k!.status === st).length] as const)
+            [
+              ...(["running", "waiting", "failed", "queued", "paused", "done"] as const).map((st) => [tr(statusLabel[st]), kids().filter((k) => k!.status === st && !discarded(k!)).length] as const),
+              [tr("버림"), kids().filter((k) => discarded(k!)).length] as const,
+            ]
               .filter(([, n]) => n)
-              .map(([st, n]) => tr("{n}개 {state}", { n, state: tr(statusLabel[st]).toLowerCase() }))
+              .map(([word, n]) => tr("{n}개 {state}", { n, state: word.toLowerCase() }))
               .join(" · ");
           return (
             <div class="sub-group">
