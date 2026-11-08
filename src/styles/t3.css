@@ -2181,8 +2181,7 @@ input[type="checkbox"] {
   background: #1c1c1f;
 }
 :root[data-theme="dark"] .decision,
-:root[data-theme="dark"] .strips .strip,
-:root[data-theme="dark"] .strips > .todos {
+:root[data-theme="dark"] .strips {
   background: #18181b;
 }
 @media (prefers-color-scheme: dark) {
@@ -2193,8 +2192,7 @@ input[type="checkbox"] {
     background: #1c1c1f;
   }
   :root:not([data-theme="light"]) .decision,
-  :root:not([data-theme="light"]) .strips .strip,
-  :root:not([data-theme="light"]) .strips > .todos {
+  :root:not([data-theme="light"]) .strips {
     background: #18181b;
   }
 }

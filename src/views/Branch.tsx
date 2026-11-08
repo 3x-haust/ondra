@@ -10,7 +10,8 @@ export function since(t: Task) {
   if (discarded(t)) return tr("버림");
   if (t.status === "failed") return tr("실패");
   if (bucket(t) === "review") return tr("검토");
-  if (t.status === "done") return ago(t.finishedAt ?? t.createdAt);
+  // when it ended: merged, when it was merged
+  if (t.status === "done") return ago((t.worktree?.state === "merged" ? t.mergedAt : undefined) ?? t.finishedAt ?? t.createdAt);
   if (t.status === "queued") return tr("대기");
   if (t.status === "paused") return tr("일시정지");
   return t.startedAt ? compact(now() - t.startedAt) : "";

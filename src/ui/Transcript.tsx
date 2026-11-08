@@ -137,7 +137,7 @@ const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence"
  * whole job is done, each turn's work folds into "작업 과정 N단계 ›" (the time is said once, on the
  * end line) and only its
  * closing summary stays (the answer text and result blocks it ended with); the
- * fold can be opened. Errors never fold.
+ * fold can be opened (a fold of one row is just that row). Errors never fold.
  */
 function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; end?: boolean }) {
   const [shown, setShown] = createSignal(false);
@@ -153,6 +153,8 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
   /** pictures never fold away: errors and diagrams stay in view after the turn */
   const stays = (e: Entry) => e.kind === "error" || (e.kind === "block" && VISUAL.has(e.block.type));
   const work = () => body().slice(0, tailStart()).filter((e) => !stays(e));
+  /** a fold that would hold one row is just that row */
+  const lone = createMemo(() => rowCount(work()) === 1);
   /** notes at the very end (merged, remembered) come after the answer's actions, not between the two */
   const notesFrom = createMemo(() => {
     let i = body().length;
@@ -184,7 +186,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
       () => props.open,
       (open, was) => {
         // only the turn in view folds visibly; earlier ones just close
-        if (open || !was || !work().length || !props.last) return;
+        if (open || !was || !work().length || lone() || !props.last) return;
         setMounted(true);
         setShown(true);
         setTimeout(() => setShown(false), 450);
@@ -201,7 +203,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
         )}
       </Show>
       <Show when={!props.open} fallback={<Items entries={body()} task={props.task} live />}>
-        <Show when={work().length}>
+        <Show when={work().length && !lone()} fallback={<Show when={lone()}><Items entries={work()} task={props.task} live={false} /></Show>}>
           <div class="work-fold" classList={{ open: shown() }}>
             <button class="work-head" onClick={toggle} aria-expanded={shown()}>
               <span>{tr("작업 과정 {n}단계", { n: rowCount(work()) })}</span>
@@ -455,7 +457,7 @@ function noteIcon(text: string): string {
   return "dot";
 }
 
-/** the sidebar's paused glyph (ring and dot), for a pause in the thread */
+/** the shared paused glyph (a ring with pause bars), for a pause in the thread */
 const PAUSED = { id: "", status: "paused" } as Task;
 
 function EntryView(props: { e: Entry; task: Task }) {
