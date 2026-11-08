@@ -11,7 +11,10 @@ export { limits };
 
 /** An account's windows as they stand at `at`: a window past its reset time has started over at 0%. */
 export const usageOf = (accountId: string, at = Date.now()): Limit[] =>
-  (limits[accountId] ?? []).map((l) => (l.resetsAt && l.resetsAt <= at ? { ...l, used: 0, resetsAt: undefined } : l));
+  (limits[accountId] ?? []).filter((l) => l.window > 0).map((l) => (l.resetsAt && l.resetsAt <= at ? { ...l, used: 0, resetsAt: undefined } : l));
+
+/** Paid credits that keep an account going past its plan, if it has any: "12.5" / "무제한" / "$61.95 / $200.00". */
+export const creditsOf = (accountId: string): string | undefined => (limits[accountId] ?? []).find((l) => l.window === 0 && l.credits)?.credits;
 
 let watching = false;
 /** Keep every account's numbers fresh, also while the window is in the back (its timers slow down there). */
@@ -49,7 +52,7 @@ export function windowLabel(min: number) {
 }
 
 /** what a usage note keeps: the windows as they were then */
-export const snapshot = (accountId: string) => (limits[accountId] ?? []).map((l) => ({ window: l.window, used: Math.round(l.used) }));
+export const snapshot = (accountId: string) => (limits[accountId] ?? []).filter((l) => l.window > 0).map((l) => ({ window: l.window, used: Math.round(l.used) }));
 
 /** Who each account is logged in as. */
 export const [emails, setEmails] = createStore<Record<string, string>>({});

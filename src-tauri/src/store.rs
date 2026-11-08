@@ -516,6 +516,9 @@ pub struct Limit {
     used: f64,
     /// unix ms
     resets_at: Option<u64>,
+    /// paid credits on top of the plan ("12.5", "무제한", "$61.95 / $200"); only on the window-0 entry
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credits: Option<String>,
 }
 
 fn curl_json(url: &str, headers: &[(String, String)]) -> Option<serde_json::Value> {
@@ -561,8 +564,21 @@ pub async fn account_limits(app: AppHandle, account_id: String) -> Vec<Limit> {
                             window: w["limit_window_seconds"].as_u64().unwrap_or(0) / 60,
                             used,
                             resets_at: w["reset_after_seconds"].as_u64().map(|s| now + s * 1000),
+                            credits: None,
                         });
                     }
+                }
+                // credits bought on top of the plan keep it going past 100%
+                let c = &j["credits"];
+                let credits = if c["unlimited"].as_bool() == Some(true) {
+                    Some("무제한".to_string())
+                } else if c["has_credits"].as_bool() == Some(true) {
+                    Some(c["balance"].as_str().map(|b| b.to_string()).unwrap_or_else(|| "있음".into()))
+                } else {
+                    None
+                };
+                if credits.is_some() {
+                    out.push(Limit { provider: "openai-codex".into(), window: 0, used: 0.0, resets_at: None, credits });
                 }
             }
         }
@@ -579,8 +595,19 @@ pub async fn account_limits(app: AppHandle, account_id: String) -> Vec<Limit> {
                     let w = &j[key];
                     if let Some(used) = w["utilization"].as_f64() {
                         let resets_at = w["resets_at"].as_str().and_then(|s| chrono_ms(s));
-                        out.push(Limit { provider: "anthropic".into(), window: mins, used, resets_at });
+                        out.push(Limit { provider: "anthropic".into(), window: mins, used, resets_at, credits: None });
                     }
+                }
+                // extra usage: paid use past the plan, in cents
+                let x = &j["extra_usage"];
+                if x["is_enabled"].as_bool() == Some(true) {
+                    let dollars = |v: &serde_json::Value| v.as_f64().map(|c| format!("${:.2}", c / 100.0));
+                    let label = match (dollars(&x["used_credits"]), dollars(&x["monthly_limit"])) {
+                        (Some(u), Some(l)) => format!("{u} / {l}"),
+                        (Some(u), None) => u,
+                        _ => "켜짐".into(),
+                    };
+                    out.push(Limit { provider: "anthropic".into(), window: 0, used: x["utilization"].as_f64().unwrap_or(0.0), resets_at: None, credits: Some(label) });
                 }
             }
         }

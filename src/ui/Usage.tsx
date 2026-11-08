@@ -2,7 +2,7 @@
 import { openPanel } from "../state/ui";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
-import { loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
@@ -59,7 +59,7 @@ export function LimitBar(props: { accountId: string }) {
       <div class="limit-bar">
         <For each={list()}>
           {(l) => (
-            <span class="limit" classList={{ hot: l.used >= 80 }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
+            <span class="limit" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
               <span class="limit-name">{windowLabel(l.window)}</span>
               <span class="limit-track"><i style={{ width: `${Math.min(100, l.used)}%` }} /></span>
               <span class="limit-num">{Math.round(l.used)}%</span>
@@ -67,6 +67,9 @@ export function LimitBar(props: { accountId: string }) {
             </span>
           )}
         </For>
+        <Show when={creditsOf(props.accountId)}>
+          {(c) => <span class="limit limit-credits" title="요금제를 다 써도 이걸로 계속 써요"><span class="limit-name">크레딧</span><span class="limit-num">{c()}</span></span>}
+        </Show>
       </div>
     </Show>
   );
@@ -96,11 +99,14 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim" classList={{ hot: l.used >= 80 }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
+          <span class="st-lim" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
             {windowLabel(l.window)} {Math.round(l.used)}%
           </span>
         )}
       </For>
+      <Show when={creditsOf(props.accountId)}>
+        {(c) => <span class="st-lim" title="요금제를 다 써도 크레딧으로 계속 써요">크레딧 {c()}</span>}
+      </Show>
       <Show when={props.agent}>
         <button
           class="st-ctx"
