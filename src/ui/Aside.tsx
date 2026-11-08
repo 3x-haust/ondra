@@ -158,7 +158,7 @@ export const DRAW_ASK =
 export const drawCommand = (task: () => string) => ({
   name: "draw",
   get desc() {
-    return t("한 일을 그림으로 보기");
+    return t("작업 흐름 그림");
   },
   icon: "canvas",
   run: () => void tell(task(), DRAW_ASK),

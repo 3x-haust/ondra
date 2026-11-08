@@ -235,7 +235,6 @@ export default {
   "btw 없음 · /btw 뒤에 질문을 적어요": "No btw yet · type a question after /btw",
   "기본 스킬": "Built-in skill",
   "스킬": "Skills",
-  "한 일을 그림으로 보기": "Draw what it did",
   "프로젝트 추가": "Add project",
   "프로젝트 폴더": "Project folder",
   "옆에서": "On the side",
