@@ -992,7 +992,7 @@ button.strip:hover {
   background: var(--bad-soft);
   border-color: var(--bad-line);
 }
-.notice.bad .icon {
+.notice.bad > .icon {
   color: var(--bad);
 }
 .notice .btn {
