@@ -2,11 +2,11 @@
 import { nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { keepBottom } from "../ui/stick";
-import { DecisionCard } from "../ui/DecisionCard";
+import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // Every reply carries chips for the jobs it started; the jobs themselves live
 // in the sidebar, grouped by what they need from you.
-import { chooseAccount, createTask } from "../engine/tasks";
-import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
+import { createEffect, createMemo, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
@@ -20,7 +20,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago, compact, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel } from "../ui/bits";
+import { ago, compact, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -80,11 +80,19 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
             <span class="shimmer reply-thinking">{t("생각하는 중")}</span>
           </Match>
           <Match when={props.m.error}>
-            <div class="reply-error">
-              <Icon name="alert" size={14} />
-              <span>{props.m.error}</span>
-              <button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>
-            </div>
+            {(err) => (
+              <div class="reply-error">
+                <Icon name="alert" size={14} />
+                <span>{err() === NO_ACCOUNT ? t(NO_ACCOUNT) : err()}</span>
+                {/* no account here: trying again can't help, adding one can */}
+                <Show
+                  when={err() === NO_ACCOUNT || err() === t(NO_ACCOUNT)}
+                  fallback={<button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>}
+                >
+                  <button class="retry" onClick={() => setView({ name: "settings", tab: "accounts" })}><Icon name="plus" size={14} />{t("계정 추가")}</button>
+                </Show>
+              </div>
+            )}
           </Match>
           <Match when={true}>
             <Show when={props.m.reply}><p class="reply-line">{props.m.reply}</p></Show>
@@ -158,9 +166,41 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
 }
 
 /** Empty chat: the input, and a few starts under it (like Codex). The header already says where you are. */
+/** this space's accounts only: jobs here never run on the other space's */
+const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
+
+/** The app can't start, or this workspace has no account: said above the input until it is fixed. */
+function SetupNotice() {
+  return (
+    <>
+      <Show when={engine.checked && !engine.ready}>
+        <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>{t("앱을 시작하지 못했어요")}</b><p>{t("다시 설치해 주세요.")}</p></div></div>
+      </Show>
+      <Show when={engine.checked && engine.ready && !loggedIn()}>
+        <div class="notice">
+          <Icon name="key" size={16} />
+          <div class="notice-body"><b>{t("로그인 필요")}</b></div>
+          <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>
+        </div>
+      </Show>
+    </>
+  );
+}
+
 function Hero(props: { project?: string; composer: JSX.Element }) {
-  // this space's accounts only: jobs here never run on the other space's
-  const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
+  return (
+    <div class="page hero-page">
+      <div class="hero">
+        <SetupNotice />
+        {props.composer}
+        <Picks project={props.project} wait />
+      </div>
+    </div>
+  );
+}
+
+/** A few starts for an empty chat: suggestions from recent work, and sessions from other apps to carry on. */
+function Picks(props: { project?: string; wait?: boolean }) {
   const key = () => chatKey(state.space, props.project);
   createEffect(on(key, () => void refreshSuggestions(state.space, props.project)));
   const picks = () => suggestionsFor(key());
@@ -185,21 +225,8 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
   };
   const sessions = () => allSessions().filter((s) => !imported().has(s.path) && inHere(s.cwd)).slice(0, 3);
   return (
-    <div class="page hero-page">
-      <div class="hero">
-        <Show when={engine.checked && !engine.ready}>
-          <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>{t("앱을 시작하지 못했어요")}</b><p>{t("다시 설치해 주세요.")}</p></div></div>
-        </Show>
-        <Show when={engine.checked && engine.ready && !loggedIn()}>
-          <div class="notice">
-            <Icon name="key" size={16} />
-            <div class="notice-body"><b>{t("로그인 필요")}</b></div>
-            <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>
-          </div>
-        </Show>
-        {props.composer}
         <div class="hero-picks">
-          <Show when={suggestLoading() === key() && !picks().length}>
+          <Show when={props.wait && suggestLoading() === key() && !picks().length}>
             <div class="hero-pick wait"><span class="spin xs" /><span>{t("최근 작업 보는 중")}</span></div>
           </Show>
           <For each={picks().slice(0, 3)}>
@@ -230,8 +257,6 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
             )}
           </For>
         </div>
-      </div>
-    </div>
   );
 }
 
@@ -257,6 +282,14 @@ function AccountModel(props: { accountId: string; up?: boolean }) {
 /** Every 새 작업 (sidebar, ⌘N, canvas, board, a project's menu): a blank task to write, in a project picked here. Any move elsewhere ends it. */
 const drafting = newTaskOpen;
 const setDrafting = setNewTaskOpen;
+// any move elsewhere (another view, another workspace) ends it, whether or not Main is still mounted
+createRoot(() => createEffect(on([view, () => state.space], () => setDrafting(null), { defer: true })));
+/** × and Esc: close it and go back to where it was opened from */
+function closeNewTask() {
+  const from = drafting()?.from;
+  setDrafting(null);
+  if (from) setView(from);
+}
 /** Open the new-task screen. `preset` picks its project (a project's menu, the canvas lane); without
  *  it the project in view carries over. A project from the other workspace switches to it first. */
 export function startNewTask(preset?: string) {
@@ -264,8 +297,10 @@ export function startNewTask(preset?: string) {
   const p = preset ? projectById(preset) : undefined;
   if (p && p.space !== state.space) switchSpace(p.space, { name: "main" });
   const project = preset ?? (v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
+  // reopened over itself: keep where it first came from
+  const from = drafting()?.from ?? v;
   setView({ name: "main" });
-  setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined });
+  setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined, from });
   setTimeout(() => document.getElementById("new-task-input")?.focus(), 30);
 }
 
@@ -289,7 +324,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
                 <ProjectBadge name={p.name} />
                 <span class="pop-item-main">{p.name}</span>
                 <span class="pop-item-sub">{midTrim(tilde(p.folder), 24)}</span>
-                <Show when={p.id === props.value}><Icon name="check" size={14} /></Show>
+                <span class="pop-check">{p.id === props.value && <Icon name="check" size={14} />}</span>
               </button>
             )}
           </For>
@@ -297,7 +332,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
           <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(undefined), setOpen(false))}>
             <Icon name="dot" size={14} class="muted" />
             <span class="pop-item-main">{t("프로젝트 없음")}</span>
-            <Show when={!props.value}><Icon name="check" size={14} /></Show>
+            <span class="pop-check">{!props.value && <Icon name="check" size={14} />}</span>
           </button>
           <div class="pop-sep" />
           {/* the same as Main's + menu: pick a folder, it becomes a project and this task's */}
@@ -324,10 +359,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
   const p = () => (props.project ? projectById(props.project) : undefined);
   const account = () => chooseAccount(state.space, p()?.name ?? "");
   const send = (text: string) => {
-    const first = text.split("\n").find((l) => l.trim())?.trim() ?? text;
     const id = createTask({
       space: state.space,
-      title: first,
+      title: titleOf(text),
       topic: p()?.name ?? "",
       ask: text,
       cwd: p()?.folder,
@@ -412,6 +446,38 @@ export function MainView() {
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
     });
+  /** questions of this chat's tasks already answered: one quiet line each where the card was */
+  const answered = createMemo(() => {
+    const out: Answered[] = [];
+    for (const t of state.tasks) {
+      if (t.space !== state.space || (project() && t.project !== project()!.id)) continue;
+      for (const e of t.entries) {
+        if (e.kind !== "user") continue;
+        const a = answerOf(e.text);
+        if (!a) continue;
+        let x = answeredSeen.get(e.id);
+        if (!x || x.a !== a.a) answeredSeen.set(e.id, (x = { id: e.id, at: e.at, taskId: t.id, ...a }));
+        out.push(x);
+      }
+    }
+    return out;
+  });
+  /** the conversation in order: messages, and the answered questions between them */
+  const timeline = createMemo(() => {
+    const list: (CaptainMessage | Answered)[] = [...msgs()];
+    for (const a of answered()) {
+      const i = list.findIndex((m) => m.at > a.at);
+      list.splice(i < 0 ? list.length : i, 0, a);
+    }
+    return list;
+  });
+  /** a project's own chat: how its tasks stand, in the head */
+  const projCounts = () => {
+    const p = project();
+    if (!p) return [];
+    const top = state.tasks.filter((x) => x.project === p.id && x.space === state.space && !x.parentId);
+    return (["waiting", "failed", "running", "queued", "paused", "done"] as Status[]).map((st) => [st, top.filter((x) => x.status === st).length] as const).filter(([, n]) => n);
+  };
   const toBottom = () => queueMicrotask(() => box && (box.scrollTop = box.scrollHeight));
   createEffect(on(() => [state.space, msgs().length, msgs()[msgs().length - 1]?.pending, asks().length], toBottom));
   // warm the cache as soon as a chat is open, so even the first message is cached
@@ -444,20 +510,26 @@ export function MainView() {
       plus={plusFor({ main: true })}
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
+      stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
       right={<AccountModel accountId={account()} up={!big} />}
     />
   );
 
-  // a new task is written here until it is sent, or until anything else is opened
-  createEffect(on([view, () => state.space], () => setDrafting(null), { defer: true }));
+  // a new task is written here until it is sent, or until anything else is opened (closeNewTask above).
+  // Esc closes it in one press while nothing is written, even from its input (which would only blur);
+  // an open menu, or a written draft, takes the Esc first
   const esc = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !drafting() || e.defaultPrevented || !noModifiers(e)) return;
+    if (e.key !== "Escape" || !drafting() || e.defaultPrevented || !noModifiers(e) || e.isComposing) return;
+    if (document.querySelector(".new-task-page :is(.pop, .cpick, .plus-menu)")) return;
+    const input = document.getElementById("new-task-input") as HTMLTextAreaElement | null;
+    if (input?.value.trim() && document.activeElement === input) return;
     e.preventDefault();
-    setDrafting(null);
+    e.stopPropagation();
+    closeNewTask();
   };
-  window.addEventListener("keydown", esc);
-  onCleanup(() => window.removeEventListener("keydown", esc));
+  window.addEventListener("keydown", esc, true);
+  onCleanup(() => window.removeEventListener("keydown", esc, true));
   // going to Main while a new task is open (its sidebar row, ⌘0, the palette) lands on Main: the
   // view is already "main", so nothing else would close the draft
   const toMain = (e: Event) => drafting() && (e.target as Element | null)?.closest?.('[data-shortcut="main"]') && setDrafting(null);
@@ -475,7 +547,7 @@ export function MainView() {
               <SidebarToggle />
               <h1 class="head-title">{t("새 작업")}</h1>
               <span class="spacer" data-tauri-drag-region />
-              <button class="icon-btn" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setDrafting(null)}>
+              <button class="icon-btn" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={closeNewTask}>
                 <Icon name="x" size={16} />
               </button>
             </header>
@@ -489,13 +561,18 @@ export function MainView() {
         <h1 class="head-title">
           <Show when={project()} fallback={t("메인")}>
             {(p) => (
-              <>
-                <span class="head-proj" title={p().folder}>{p().name}</span>
-                <span class="head-sub">{t("프로젝트 채팅")}</span>
-              </>
+              <span class="head-proj-name" title={tilde(p().folder)}>
+                <ProjectBadge name={p().name} />
+                <span class="head-proj">{p().name}</span>
+              </span>
             )}
           </Show>
         </h1>
+        <Show when={projCounts().length}>
+          <span class="head-counts">
+            <For each={projCounts()}>{([st, n]) => <span class={`req-tag ${st}`}>{tr(statusLabel[st])} {n}</span>}</For>
+          </span>
+        </Show>
         <span class="spacer" data-tauri-drag-region />
         <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={t("패널 (⌘\\)")} onClick={togglePanel}>
           <Icon name="panel" size={16} />
@@ -504,7 +581,27 @@ export function MainView() {
       <Show
         when={msgs().length}
         fallback={
-          <Hero project={project()?.id} composer={composer(true)} />
+          <Show when={project()} fallback={<Hero composer={composer(true)} />}>
+            {(p) => (
+              <>
+                {/* a project's chat with nothing said yet: a chat, with its input where it always is */}
+                <div class="thread proj-empty">
+                  <div class="thread-inner convo">
+                    <Picks project={p().id} />
+                    <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
+                    {/* what its tasks are asking is answered here too, before anything is said */}
+                    <For each={asks()}>{(d) => <DecisionCard d={d} />}</For>
+                  </div>
+                </div>
+                <div class="dock">
+                  <div class="dock-inner">
+                    <SetupNotice />
+                    {composer(false)}
+                  </div>
+                </div>
+              </>
+            )}
+          </Show>
         }
       >
         <RequestBoard
@@ -514,10 +611,17 @@ export function MainView() {
         />
         <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el)); }}>
           <div class="thread-inner convo">
-            <For each={msgs()}>
+            <For each={timeline()}>
               {(m) => (
-                <Show when={m.from === "me"} fallback={<Reply m={m} retry={() => retry(m)} chips={started(m)} active={openRoot()} />}>
-                  <UserMsg id={m.id} text={m.text ?? ""} at={m.at} from={m.via === "main" ? t("메인에서") : undefined} onEdit={m.via === "main" ? undefined : (t) => void editMain(m.id, t)} />
+                <Show when={!("taskId" in m) && m} fallback={<AnsweredLine a={m as Answered} />}>
+                  {(c) => (
+                    <Show when={c().from === "me"} fallback={<Reply m={c()} retry={() => retry(c())} chips={started(c())} active={openRoot()} />}>
+                      {/* main's own question answered: the same compact card a task's thread keeps */}
+                      <Show when={answerOf(c().text ?? "")} fallback={<UserMsg id={c().id} text={c().text ?? ""} at={c().at} from={c().via === "main" ? t("메인에서") : undefined} onEdit={c().via === "main" ? undefined : (t) => void editMain(c().id, t)} />}>
+                        {(a) => <AnsweredCard q={a().q} a={a().a} />}
+                      </Show>
+                    </Show>
+                  )}
                 </Show>
               )}
             </For>
@@ -526,7 +630,10 @@ export function MainView() {
           </div>
         </div>
         <div class="dock">
-          <div class="dock-inner">{composer(false)}</div>
+          <div class="dock-inner">
+            <SetupNotice />
+            {composer(false)}
+          </div>
         </div>
       </Show>
       </Show>
@@ -534,6 +641,23 @@ export function MainView() {
   );
 }
 
+
+/** A task's question answered (in Main or in the task), as Main shows it afterwards. */
+type Answered = { id: string; at: number; taskId: string; q: string; a: string };
+const answeredSeen = new Map<string, Answered>();
+
+/** "4월 회고 초안 · 초안으로 저장": the task (opens it) and what was answered; the question on hover */
+function AnsweredLine(props: { a: Answered }) {
+  const task = () => taskById(props.a.taskId);
+  return (
+    <button class="answered-line" onClick={() => openTask(props.a.taskId)} title={`${props.a.q} → ${props.a.a}`}>
+      <Icon name="check" size={14} />
+      <span class="answered-task">{task()?.title ?? t("작업")}</span>
+      <span class="answered-sep">·</span>
+      <span class="answered-a">{props.a.a}</span>
+    </button>
+  );
+}
 
 type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "done"; at: number };
 

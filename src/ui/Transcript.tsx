@@ -1,5 +1,5 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
-import { nowText } from "../engine/describe";
+import { noteText, nowText } from "../engine/describe";
 import { keepBottom } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
@@ -13,11 +13,12 @@ import { describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView } from "./Blocks";
 import { withDiff } from "../state/progress";
-import { long, now, short } from "./bits";
+import { long, now, short, statusLabel } from "./bits";
 import { Icon } from "./Icon";
 import { UsageLine } from "./Usage";
 import { Markdown } from "./Markdown";
 import { MsgActions, UserMsg } from "./MsgActions";
+import { AnsweredCard, answerOf } from "./DecisionCard";
 import { costDetail, jobCost } from "./cost";
 import { t as tr } from "../i18n";
 
@@ -70,8 +71,19 @@ function chunkLinks(blocks: Block[]): (Block | Block[])[] {
   return out;
 }
 
+/** A call left open on a task that isn't working (paused, failed, stopped) isn't running: it shows as stopped. */
+const halted = (t: Task) => t.status !== "running" && t.status !== "waiting";
+
+/** How many rows a run of entries shows: tool runs fold into one line each, links into one list. */
+function rowCount(entries: Entry[]): number {
+  let n = 0;
+  for (const it of group(entries)) n += it.kind === "tools" ? runs(it.tools).length : it.kind === "blocks" ? chunkLinks(it.blocks).length : 1;
+  return n;
+}
+
 function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?: boolean }) {
   const items = createMemo(() => group(props.entries));
+  const stopped = () => halted(props.task);
   return (
     <For each={items()}>
       {(it) => (
@@ -80,8 +92,8 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
             {(g) => (
               <For each={runs(g().tools)}>
                 {(r) => (
-                  <Show when={r.length > 1} fallback={<ToolLine e={r[0]} shells={props.task.shells} />}>
-                    <ToolGroup tools={r} shells={props.task.shells} />
+                  <Show when={r.length > 1} fallback={<ToolLine e={r[0]} shells={props.task.shells} stopped={stopped()} />}>
+                    <ToolGroup tools={r} shells={props.task.shells} stopped={stopped()} />
                   </Show>
                 )}
               </For>
@@ -168,13 +180,17 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
   return (
     <>
       <Show when={props.turn.user}>
-        {(u) => <UserMsg id={u().id} text={u().text} at={u().at} from={assigner(props.task)} onEdit={(t) => void editTurn(props.task.id, u().id, t)} />}
+        {(u) => (
+          <Show when={answerOf(u().text)} fallback={<UserMsg id={u().id} text={u().text} at={u().at} from={assigner(props.task)} onEdit={(t) => void editTurn(props.task.id, u().id, t)} />}>
+            {(a) => <AnsweredCard q={a().q} a={a().a} />}
+          </Show>
+        )}
       </Show>
       <Show when={!props.open} fallback={<Items entries={body()} task={props.task} live />}>
         <Show when={work().length}>
           <div class="work-fold" classList={{ open: shown() }}>
             <button class="work-head" onClick={toggle} aria-expanded={shown()}>
-              <span>{tr("작업 과정 {n}단계", { n: work().length })}</span>
+              <span>{tr("작업 과정 {n}단계", { n: rowCount(work()) })}</span>
               <Icon name="chevron" size={14} class="chev" />
             </button>
             <Show when={mounted()}>
@@ -257,9 +273,10 @@ function runs(tools: ToolEntry[]): ToolEntry[][] {
  * commands", Codex's "파일 수정함 ⌄"): what was done, counted per kind; open it
  * for each call. While one runs, the line says which.
  */
-function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
+function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean }) {
   const [open, setOpen] = createSignal(false);
-  const live = () => props.tools.find((t) => !t.tool.endedAt);
+  const open_ = () => props.tools.find((t) => !t.tool.endedAt);
+  const live = () => (props.stopped ? undefined : open_());
   const failed = () => props.tools.filter((t) => t.tool.ok === false).length;
   const fam = () => familyOf(props.tools[0])!;
   const names = (list: ToolEntry[]) => {
@@ -283,7 +300,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
     return done ? tr("브라우저 {n}번 씀", { n: props.tools.length }) : tr("브라우저 쓰는 중");
   };
   // what it touched; for commands and the browser, the one running now (or the last)
-  const detail = () => (fam() === "explore" || fam() === "edit" ? names(props.tools) : shortName((live() ?? props.tools[props.tools.length - 1]).tool));
+  const detail = () => (fam() === "explore" || fam() === "edit" ? names(props.tools) : shortName((open_() ?? props.tools[props.tools.length - 1]).tool));
   const lead = () => (fam() === "explore" ? "read" : fam() === "edit" ? "edit" : fam() === "run" ? "bash" : "browser") as ToolCall["kind"];
   return (
     <div class="tool group" classList={{ open: open() }}>
@@ -294,11 +311,12 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
         <span class="tool-target">{detail()}</span>
         <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
+        <Show when={props.stopped && open_()}><span class="tool-stopped">{tr("중단됨")}</span></Show>
         <Icon name="chevron" size={12} class="tool-chev" />
       </button>
       <Fold open={open()}>
         <div class="explore-body">
-          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} />}</For>
+          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} />}</For>
         </div>
       </Fold>
     </div>
@@ -316,10 +334,25 @@ function shortName(t: ToolCall) {
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
 }
 
-function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
+// what a call was, for one that stopped before it finished ("테스트 · 중단됨")
+const NOUN: Record<ToolCall["kind"], string> = {
+  read: "읽기",
+  search: "찾기",
+  edit: "수정",
+  write: "만들기",
+  bash: "명령",
+  browser: "브라우저",
+  desktop: "앱 조작",
+  test: "테스트",
+  other: "도구",
+};
+
+function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean }) {
   const t = () => props.e.tool;
   const shell = () => (t().shellId ? props.shells.find((s) => s.id === t().shellId) : undefined);
-  const running = () => !t().endedAt;
+  /** never finished, and the task stopped working: not running any more */
+  const cut = () => !t().endedAt && !!props.stopped;
+  const running = () => !t().endedAt && !props.stopped;
   const what = () => shortName(t());
   const [open, setOpen] = createSignal(false);
   const canOpen = () => !!shell() || t().kind === "other" || t().kind === "search" || !!t().note;
@@ -336,14 +369,20 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
           <span class="spin" />
         </Show>
         <span class="tool-verb" classList={{ shimmer: running() }}>
-          {t().note ? (running() ? tr("메모리에 쓰는 중") : tr("메모리에 저장함")) : tr(t().kind === "bash" ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? "")) : VERB[t().kind][running() ? 0 : 1])}
+          {t().note
+            ? running() ? tr("메모리에 쓰는 중") : cut() ? tr("메모리") : tr("메모리에 저장함")
+            : t().kind === "bash"
+              ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? ""))
+              : tr(cut() ? NOUN[t().kind] : VERB[t().kind][running() ? 0 : 1])}
         </span>
         <span class="tool-target">{what()}</span>
         <Show when={t().add || t().del}>
           <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
         </Show>
         <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
-        <span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>
+        <Show when={cut()} fallback={<span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>}>
+          <span class="tool-stopped">{tr("중단됨")}</span>
+        </Show>
         <Show when={canOpen()}><Icon name="chevron" size={12} class="tool-chev" /></Show>
       </button>
       <Fold open={open() && !!t().note}>
@@ -387,7 +426,7 @@ function EntryView(props: { e: Entry; task: Task }) {
         {(x) => (
           <div class="note">
             <Icon name={x().text.startsWith("기억함") ? "memory" : x().text.startsWith("모델") ? "refresh" : "dot"} size={13} />
-            {x().text}
+            {noteText(x().text)}
           </div>
         )}
       </Match>
@@ -402,13 +441,19 @@ function EntryView(props: { e: Entry; task: Task }) {
       <Match when={e.kind === "spawn" && e}>
         {(x) => {
           const kids = () => x().childIds.map((id) => state.tasks.find((t) => t.id === id)).filter(Boolean);
-          const busy = () => kids().filter((k) => k!.status === "running" || k!.status === "queued").length;
+          // how they stand, counted by state: "1개 일시정지 · 1개 완료"
+          const tally = () =>
+            (["running", "waiting", "failed", "queued", "paused", "done"] as const)
+              .map((st) => [st, kids().filter((k) => k!.status === st).length] as const)
+              .filter(([, n]) => n)
+              .map(([st, n]) => tr("{n}개 {state}", { n, state: tr(statusLabel[st]).toLowerCase() }))
+              .join(" · ");
           return (
             <div class="sub-group">
               <div class="sub-head">
                 <Icon name="branch" size={13} />
                 <b>{tr("서브에이전트 {n}개", { n: x().childIds.length })}</b>
-                <span>{busy() ? tr("{n}개 진행 중", { n: busy() }) : tr("모두 완료")}</span>
+                <span>{tally()}</span>
               </div>
               <For each={x().childIds}>{(id) => <ForkCard id={id} compact />}</For>
             </div>
@@ -430,14 +475,13 @@ function EntryView(props: { e: Entry; task: Task }) {
   );
 }
 
-/** The line a finished task ends on: "완료 · 19분", what it used on hover. While its changes wait for
- *  review it isn't done yet (the review bar below says so): only how long it worked. */
+/** The line a finished task ends on: "19분 동안 작업" (in review or merged alike), what it used on hover. */
 export function JobEnd(props: { t: Task }) {
   const c = () => jobCost(props.t);
   return (
     <Show when={props.t.status === "done" && c().ms}>
       <div class="job-cost" title={costDetail(c()) || undefined}>
-        {props.t.worktree?.state === "open" ? tr("{d} 동안 작업", { d: short(c().ms) }) : `${tr("완료")} · ${short(c().ms)}`}
+        {tr("{d} 동안 작업", { d: short(c().ms) })}
       </div>
     </Show>
   );

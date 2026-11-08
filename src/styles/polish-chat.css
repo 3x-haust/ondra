@@ -557,20 +557,22 @@
 .decision .decision-foot {
   margin-top: 0;
 }
-/* answering is a plain button: the choice is what matters, not the button */
-.decision .decision-send,
-.decision .decision-send:disabled {
+/* answering: a quiet outline until something is chosen, then the filled main action */
+.decision .decision-send {
   padding: 0 var(--s-12);
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--ink);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .decision .decision-send:hover:not(:disabled) {
-  border-color: var(--input);
-  background: var(--muted);
+  border-color: transparent;
+  background: var(--accent-hover);
 }
 .decision .decision-send:disabled {
-  opacity: 0.5;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink-4);
+  opacity: 1;
 }
 /* your own answer reads as a choice like the others, not as a disabled one */
 .decision .decision-own .decision-input {
@@ -967,4 +969,184 @@
   border-radius: var(--r-xs);
   font-size: 8.5px;
   letter-spacing: 0;
+}
+
+/* ═════════════ round 5 ═════════════ */
+
+/* new task's project menu: the check has its own column, so a path never moves when it shows */
+.proj-pop .pop-check {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* decision crumb: the project's badge and name, then the task */
+.decision .decision-src {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  max-width: 100%;
+  min-width: 0;
+}
+.decision .decision-src .pbadge {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-xs);
+  font-size: 7.5px;
+  letter-spacing: 0;
+}
+.decision .decision-src-sep {
+  color: var(--ink-4);
+}
+.decision .decision-src-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* an answered question, kept where its card was: one compact row */
+.decision-done {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--s-8);
+  row-gap: var(--s-2);
+  padding: var(--s-8) var(--s-12);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+.decision-done > .icon {
+  flex: none;
+  align-self: center;
+  color: var(--ink-3);
+}
+.decision-done .decision-done-q {
+  color: var(--ink-3);
+}
+.decision-done .decision-done-to {
+  flex: none;
+  align-self: center;
+  color: var(--ink-4);
+}
+.decision-done .decision-done-a {
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+}
+
+/* Main: a task's question answered, one quiet line where the card was */
+.answered-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 0;
+  height: var(--h-sm);
+  margin-left: calc(-1 * var(--s-8));
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  text-align: left;
+}
+.answered-line:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.answered-line > .icon {
+  flex: none;
+  color: var(--ok-ink);
+}
+.answered-line .answered-task {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.answered-line .answered-sep {
+  flex: none;
+  color: var(--ink-4);
+}
+.answered-line .answered-a {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* a task's input while it works: pause, two bars */
+.composer-bar .send.stop.pause .pause-glyph {
+  display: inline-flex;
+  gap: 2px;
+}
+.composer-bar .send.stop.pause .pause-glyph b {
+  width: 3px;
+  height: 10px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+/* a call that never finished on a task that stopped: no spinner, no clock */
+.tool-row .tool-stopped {
+  order: 4;
+  flex: none;
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* a project's chat: badge and name, then how its tasks stand */
+.main-view .head-title .head-proj-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+}
+.main-view .head-title .head-proj-name .pbadge {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-xs);
+  font-size: 9px;
+  letter-spacing: 0;
+}
+.main-view .head-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-10);
+  margin-left: var(--s-12);
+  white-space: nowrap;
+}
+/* nothing said yet: the starts sit just above the input */
+.main-view .proj-empty .thread-inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 100%;
+}
+.main-view .proj-empty .hero-picks {
+  margin-top: 0;
+  padding: 0;
+}
+
+/* the sign-in notice over the docked input: one compact row */
+.main-view .dock-inner > .notice {
+  margin-bottom: var(--s-8);
+  padding: var(--s-8) var(--s-8) var(--s-8) var(--s-16);
+  border-radius: var(--r-lg);
+}
+
+/* the thread scrolls under the strip: its first line fades in instead of being cut */
+.main-view .req-board + .thread {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent var(--s-8), #000 var(--s-32));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent var(--s-8), #000 var(--s-32));
+}
+.main-view .req-board + .thread > .thread-inner {
+  padding-top: var(--s-16);
 }

@@ -5,7 +5,7 @@ import { For, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
-import { compact, long, now, statusLabel, ago } from "./bits";
+import { compact, now, short, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
 import { glyphOf } from "../views/Sidebar";
 import { costDetail, jobCost } from "./cost";
@@ -60,7 +60,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
   /** how long it took and what it used, for the hover on a finished one */
   const took = (x: NonNullable<ReturnType<typeof t>>) => {
     const c = jobCost(x);
-    return [c.ms ? tr("{d} 동안 작업", { d: long(c.ms) }) : "", costDetail(c)].filter(Boolean).join(" · ");
+    return [c.ms ? tr("{d} 동안 작업", { d: short(c.ms) }) : "", costDetail(c)].filter(Boolean).join(" · ");
   };
   const time = () => {
     const x = t()!;
@@ -68,14 +68,24 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
     if (x.status === "running") return compact(now() - (x.startedAt ?? x.createdAt));
     return tr(statusLabel[x.status]);
   };
+  /** the line under the title, unless it only says the state the right side already says ("일시정지" beside 일시정지) */
+  const sub = () => {
+    const x = t()!;
+    const l = line(x).trim();
+    const word = tr(statusLabel[x.status]);
+    const same = [word, tr("대기 중"), tr("일시정지"), tr("실패"), tr("응답 대기 중"), tr("완료")].some((w) => w.toLowerCase() === l.toLowerCase());
+    return x.status !== "running" && x.status !== "done" && same ? "" : l;
+  };
   return (
     <Show when={t()} fallback={<div class="fork-card gone">{tr("삭제된 작업")}</div>}>
       {(x) => (
-        <button class={`fork-card ${x().status}`} classList={{ compact: props.compact, review: glyphOf(x()) === "inreview" }} onClick={() => openTask(x().id)}>
+        <button class="fork-card" classList={{ [x().status]: true, compact: !!props.compact, review: glyphOf(x()) === "inreview" }} onClick={() => openTask(x().id)}>
           <StatusIcon t={x()} />
           <span class="fork-main">
             <span class="fork-title">{x().title}</span>
-            <span class="fork-line" classList={{ shimmer: x().status === "running" }}>{line(x())}</span>
+            <Show when={sub()}>
+              <span class="fork-line" classList={{ shimmer: x().status === "running" }}>{sub()}</span>
+            </Show>
           </span>
           <span class="fork-side">
             <Show when={x().plan.length && x().status !== "done"}>
