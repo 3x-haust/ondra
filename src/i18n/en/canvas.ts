@@ -41,6 +41,7 @@ export default {
   "메시지": "Message",
   "작업 중에 말하기": "Message while it works",
   "이어서 말하기": "Follow up",
+  "메시지 보내기": "Message",
   "Finder에서 보기": "Show in Finder",
 
   // ── canvas: what a task is doing
@@ -238,7 +239,6 @@ export default {
   "삭제 확인": "Confirm delete",
   "불러오는 중": "Loading",
   "불러오는 중…": "Loading…",
-  "모든 워크스페이스": "All workspaces",
   "리턴 키 보내기": "Send return key",
   "{name} 화면": "{name} screen",
   "기기 조작": "Device controls",

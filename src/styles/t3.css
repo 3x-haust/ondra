@@ -8443,8 +8443,13 @@ textarea { resize: none !important; field-sizing: content; }
 .res-row:hover .res-acts {
   display: inline-flex;
 }
-.res-row:hover .res-time {
+/* on hover the time and the pinned mark give way to the actions (the pin button carries the state) */
+.res-row:hover .res-time,
+.res-row:hover .res-pin {
   display: none;
+}
+.res-act.on {
+  color: var(--accent-text);
 }
 .res-act {
   width: 22px;
@@ -9076,13 +9081,6 @@ select.select.dev-space {
 }
 .cv-ask-opt:hover {
   background: color-mix(in srgb, var(--ink) 11%, transparent);
-}
-.cv-ask-opt.primary {
-  color: var(--on-accent, #fff);
-  background: var(--accent);
-}
-.cv-ask-opt.primary:hover {
-  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
 }
 .cv-live.w-summary {
   background: none;

@@ -197,6 +197,12 @@ const steps = (t: Task) =>
     .flatMap((e) => (e.kind === "tool" ? [{ id: e.id, kind: e.tool.kind, ok: e.tool.ok !== false, open: !e.tool.endedAt, target: e.tool.target }] : []))
     .slice(-28);
 
+/** two texts that read the same (spacing and closing punctuation aside) */
+const same = (a: string, b: string) => {
+  const n = (s: string) => s.replace(/\s+/g, " ").replace(/[\s.。!?…]+$/, "").trim();
+  return n(a) === n(b);
+};
+
 /** +8 −3, plain */
 function Diff(props: { t: Task }) {
   const d = () => changes(props.t);
@@ -359,11 +365,14 @@ function Live(props: { t: Task }) {
       return "none";
     }
     if (job().shot && lastTool()?.kind === "browser") return "browser";
-    return job().summary || job().error || job().ask ? "summary" : "none";
+    // a body that only repeats the title (a queued task's ask, word for word) says nothing
+    const body = job().error || job().summary || job().ask;
+    return body && same(body, job().title) ? "none" : body ? "summary" : "none";
   };
   return (
     <div class={`cv-live w-${what()}`}>
-      <Switch fallback={<div class="cv-live-empty">{job().status === "queued" ? t("대기 중") : job().status === "running" ? t("시작하는 중") : ""}</div>}>
+      {/* a queued task with nothing more to say stays blank: its status line already says 대기 */}
+      <Switch fallback={<div class="cv-live-empty">{job().status === "running" ? t("시작하는 중") : ""}</div>}>
         <Match when={what() === "browser"}><BrowserThumb t={job()} /></Match>
         <Match when={what() === "shell"}>
           <pre class="cv-term"><span class="cv-cmd">$ {shell()!.command}</span>{"\n"}{lastLines(shell()!.tail, 4).join("\n")}</pre>
@@ -383,8 +392,10 @@ function Live(props: { t: Task }) {
               <div class="cv-ask-opts" onPointerDown={(e) => e.stopPropagation()}>
                 <For each={decisionFor(job().id)!.options.slice(0, 3)}>
                   {(o) => (
-                    <button class="cv-ask-opt" classList={{ primary: !!o.primary }} title={o.note ?? o.label} onClick={(e) => (e.stopPropagation(), void decide(decisionFor(job().id)!.id, o.id))}>
-                      {o.label}
+                    // every answer looks the same (nothing reads as already picked); the suggested one is tagged
+                    <button class="cv-ask-opt" title={o.note ?? o.label} onClick={(e) => (e.stopPropagation(), void decide(decisionFor(job().id)!.id, o.id))}>
+                      <span class="cv-ask-label">{o.label}</span>
+                      <Show when={o.primary}><span class="cv-ask-rec">{t("추천")}</span></Show>
                     </button>
                   )}
                 </For>
@@ -667,7 +678,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           }}
         >
           <input
-            placeholder={job().status === "running" ? t("작업 중에 말하기") : t("이어서 말하기")}
+            placeholder={job().status === "running" ? t("작업 중에 말하기") : job().status === "queued" ? t("메시지 보내기") : t("이어서 말하기")}
             value={msg()}
             onInput={(e) => setMsg(e.currentTarget.value)}
             onKeyDown={(e) => e.stopPropagation()}
@@ -754,11 +765,33 @@ export function Canvas() {
     while (t?.parentId) t = taskById(t.parentId);
     return t ? (t.project && graph().nodes.some((x) => x.kind === "proj" && x.project?.id === t!.project) ? t.project : "_") : undefined;
   };
-  /** a new task from the header lands in the selected card's project */
+  /** a new task from the header lands in the selected card's (or lane's) project */
   const selProject = () => {
     const n = sel() ? byId().get(sel()!) : undefined;
-    const p = n && projectOf(n);
+    const p = n?.kind === "proj" ? n.project!.id : n && projectOf(n);
     return p && p !== "_" ? p : undefined;
+  };
+  /** Pick a task card: its side sheet opens, and the card is moved into view beside it. */
+  const pick = (n: Node) => {
+    setSel(n.id);
+    if (!vp) return;
+    const z = zoom(), p = pan(), v = vpSize(), q = pos(n);
+    const room = 16;
+    // the sheet's width (see .cv-drawer) and its inset from the edge
+    const right = v.w - Math.min(400, v.w - 80) - 8 - room;
+    const x = q.x * z + p.x, y = q.y * z + p.y, w = n.w * z, h = n.h * z;
+    let dx = 0, dy = 0;
+    if (x + w > right) dx = right - (x + w);
+    if (x + dx < room) dx = room - x;
+    if (y < room) dy = room - y;
+    else if (y + h > v.h - room) dy = Math.max(room - y, v.h - room - (y + h));
+    if (!dx && !dy) return;
+    touched = true;
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      vp.classList.add("glide");
+      setTimeout(() => vp?.classList.remove("glide"), 260);
+    }
+    setPan({ x: p.x + dx, y: p.y + dy });
   };
   /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. */
   const fold = (next: string[]) => {
@@ -895,12 +928,13 @@ export function Canvas() {
       setDrag(null);
       if (moved) return;
       if (n.kind === "main") goMain();
-      else if (n.kind === "proj") goMain(n.project!.id === "_" ? undefined : n.project!.id);
+      // a lane is picked (새 작업 then lands in it); a double click opens its project
+      else if (n.kind === "proj") setSel(sel() === n.id ? undefined : n.id);
       else if (n.kind === "more") {
         const id = n.project!.id;
         fold(unfolded().includes(id) ? unfolded().filter((x) => x !== id) : [...unfolded(), id]);
       }
-      else setSel(n.id);
+      else pick(n);
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
@@ -919,6 +953,12 @@ export function Canvas() {
     animate(from, to, null, 320, () => queueMicrotask(() => fit(true)));
   };
 
+  /** open what is picked: a task, or a lane's project */
+  const openSel = () => {
+    const n = sel() ? byId().get(sel()!) : undefined;
+    if (n?.kind === "proj") goMain(n.project!.id === "_" ? undefined : n.project!.id);
+    else if (n?.task) openTask(n.id);
+  };
   const onKey = (e: KeyboardEvent) => {
     const target = e.target;
     if (!(target instanceof Element) || (target !== document.body && !target.closest(".canvas-view"))) return;
@@ -927,7 +967,7 @@ export function Canvas() {
     if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), fit(true, true));
     else if (!e.metaKey && (e.key === "=" || e.key === "+")) zoomAt(1.2);
     else if (!e.metaKey && e.key === "-") zoomAt(1 / 1.2);
-    else if (!e.shiftKey && e.key === "Enter" && sel()) (e.preventDefault(), openTask(sel()!));
+    else if (!e.shiftKey && e.key === "Enter" && sel()) (e.preventDefault(), openSel());
     else if (!e.shiftKey && e.key === "Escape" && sel()) (e.preventDefault(), e.stopPropagation(), setSel(undefined));
   };
   window.addEventListener("keydown", onKey, true);
@@ -1075,7 +1115,7 @@ export function Canvas() {
                     onPointerLeave={() => setHover(undefined)}
                     style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
-                    onDblClick={() => n.task && openTask(n.id)}
+                    onDblClick={() => (n.kind === "proj" ? goMain(n.project!.id === "_" ? undefined : n.project!.id) : n.task && openTask(n.id))}
                     onContextMenu={(e) => n.task && n.kind !== "more" && cardMenu(n.id)(e)}
                   >
                     {n.kind === "main" ? <MainCard /> : n.kind === "proj" ? <ProjCard n={node()} space={space()} /> : n.kind === "job" ? <JobCard n={node()} /> : n.kind === "more" ? <MoreCard n={node()} /> : <SubCard n={node()} />}
