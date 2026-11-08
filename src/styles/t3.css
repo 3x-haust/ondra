@@ -8977,3 +8977,29 @@ select.select.dev-space {
 .ctx-ring.hot .ctx-ring-fill {
   stroke: var(--bad);
 }
+
+/* a selection in a reply: quote it into the composer */
+.quote-bar {
+  position: fixed;
+  z-index: var(--z-pop);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 28px;
+  padding: 0 var(--s-10);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  border: 1px solid var(--line);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.quote-bar:hover {
+  background: var(--hover-strong, var(--hover));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .quote-bar {
+    animation: pop-in 0.12s var(--ease-drawer) both;
+  }
+}

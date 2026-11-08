@@ -7,6 +7,7 @@ import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show
 import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
 import { usePop } from "./ModelPicker";
+import { asQuote } from "./quote";
 import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
@@ -39,6 +40,9 @@ export const withFiles = (text: string, files: string[]) => {
   const list = `첨부한 파일:\n${files.map((p) => `- ${p}`).join("\n")}`;
   return t ? `${t}\n\n${list}` : list;
 };
+
+/** The composers on screen, so a quote from a reply goes into the one beside it. */
+export const composers = new Set<{ root: HTMLElement; quote: (text: string) => void }>();
 
 export const isImage = (p: string) => /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(p);
 
@@ -245,6 +249,21 @@ export function Composer(props: {
     setPick(null);
     grow();
   };
+  /** put a quote at the end of what is typed, on its own lines, the cursor after it */
+  const quote = (t: string) => {
+    const v = el.value.replace(/\s+$/, "");
+    const next = `${v ? `${v}\n\n` : ""}${asQuote(t)}\n\n`;
+    setText(next);
+    el.value = next;
+    el.focus();
+    el.setSelectionRange(next.length, next.length);
+    grow();
+  };
+  onMount(() => {
+    const me = { root: wrap, quote };
+    composers.add(me);
+    onCleanup(() => composers.delete(me));
+  });
   const insert = (t: string) => {
     const v = el.value;
     const next = v && !v.endsWith(" ") && !t.startsWith("/") ? `${v} ${t}` : t.startsWith("/") ? `${t}${v ? ` ${v}` : ""}` : `${v}${t}`;

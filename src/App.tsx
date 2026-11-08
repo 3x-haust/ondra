@@ -31,6 +31,7 @@ import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
 import { ShortcutHints } from "./ui/ShortcutHints";
+import { QuoteBar } from "./ui/QuoteBar";
 import { startUpdates } from "./engine/update";
 import { afterLaunch, notesFor } from "./engine/releaseNotes";
 import { ReleaseNotes } from "./ui/ReleaseNotes";
@@ -175,6 +176,7 @@ export default function App() {
       </div>
       <Show when={!state.onboarded}><Onboarding /></Show>
       <Show when={paletteOpen()}><Palette commands={appCommands()} /></Show>
+      <QuoteBar />
       <Show when={notesFor() !== null}><ReleaseNotes current={appVersion()} /></Show>
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
