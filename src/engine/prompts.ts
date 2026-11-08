@@ -392,11 +392,13 @@ End with exactly one of:
   End with **남은 것** only when something is still open. No file-by-file
   diary, no steps that led nowhere, no internal names.
 - {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
-  only when the context is long. Waiting on a subagent or the user is not a
+  only when Ondra tells you the context is nearly full; until then keep
+  working in this session. Waiting on a subagent or the user is not a
   handoff: just end your turn; their results and answers wake you. A fresh session continues
   from that card, the task and the user's own words, nothing else. "found":
   the facts it would otherwise look up again (causes, IDs, paths, commands
-  that worked, log files). "next": every step still owed to the user's
+  that worked, log files). "evidence": the checks that passed; the next
+  session cites them instead of running them again. "next": every step still owed to the user's
   latest ask, not just the one in front of you. "doneWhen": what has to be
   true for the whole task to be over.
 
@@ -914,7 +916,7 @@ export function handoffPrompt(t: Task): string {
     ...relatedLines(t),
     ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
     "",
-    "Continue from the card. The user's words outrank it: if the card's next step drops something they asked for, do what they asked. Send a plan and a `now` block first.",
+    "Continue from the card with its first next step. What it lists as done, found and evidence holds: don't re-read, re-run or re-review it unless you change that code. The user's words outrank it: if the card's next step drops something they asked for, do what they asked. Send a plan and a `now` block first.",
   ].join("\n");
 }
 
