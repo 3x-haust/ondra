@@ -445,12 +445,15 @@
 .settings-inner .tl-row + .tl-row {
   border-top: 1px solid var(--line-soft);
 }
+/* name · description · source · tokens · switch: every row has the same columns,
+   so the numbers and the switches each line up down the page */
 .settings-inner .tl-head {
-  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) auto 76px;
-  align-items: center;
+  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) auto 56px 32px;
+  align-items: start;
   min-height: 44px;
-  padding: var(--s-6) var(--s-14);
+  padding: var(--s-12) var(--s-14);
   border-radius: 0;
+  line-height: var(--lh-sm);
 }
 .settings-inner .tl-row:first-child .tl-head,
 .settings-inner .tl-row:last-child .tl-head {
@@ -465,6 +468,7 @@
 }
 .settings-inner .tl-size {
   white-space: nowrap;
+  line-height: var(--lh-sm);
 }
 
 /* ───────── hooks */
@@ -555,7 +559,7 @@
 
 /* tools: the unit over the numbers column */
 .settings-inner .tl-gtitle .tl-unit {
-  margin-right: var(--s-14);
+  margin-right: calc(var(--s-14) + 32px + var(--s-12));
   font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--ink-4);
@@ -597,40 +601,79 @@
 }
 
 /* ───────── round 3 */
-/* tools: the row opens from anywhere but the switch; name, line and source sit in one button */
+/* tools: the row opens from anywhere but the switch */
 .settings-inner .tl-head {
   cursor: pointer;
 }
 .settings-inner .tl-open {
-  grid-column: 1 / 4;
-  display: grid;
-  grid-template-columns: subgrid;
-  align-items: center;
+  display: block;
   min-width: 0;
   padding: 0;
   text-align: left;
   color: inherit;
+  line-height: var(--lh-sm);
+}
+.settings-inner .tl-open .tl-name {
+  display: block;
+  line-height: var(--lh-sm);
 }
 .settings-inner .tl-open:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: var(--r-xs);
 }
-.settings-inner .tl-size .switch {
-  vertical-align: middle;
+.settings-inner .tl-src {
+  line-height: var(--lh-sm);
 }
-/* an open row's text lines up with the one-line description */
-.settings-inner .tl-more-in {
+.settings-inner .tl-sw {
+  display: flex;
+  justify-content: flex-end;
+  height: var(--lh-sm);
+  align-items: center;
+}
+/* the one line folds away as the whole description folds in, in the same place */
+.settings-inner .tl-desc {
   display: grid;
-  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) 76px;
-  column-gap: var(--s-12);
-  padding: 0 var(--s-14);
+  min-width: 0;
 }
-.settings-inner .tl-more-in p {
-  grid-column: 2;
-  padding: 0 0 var(--s-12);
+.settings-inner .tl-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-width: 0;
+  transition:
+    grid-template-rows 0.28s var(--ease-drawer),
+    opacity 0.2s var(--ease);
+}
+.settings-inner .tl-fold > * {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.settings-inner .tl-fold.tl-more,
+.settings-inner .tl-row.open .tl-fold.tl-short {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.settings-inner .tl-row.open .tl-fold.tl-more {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.settings-inner .tl-short .tl-line {
+  display: block;
+  line-height: var(--lh-sm);
+}
+.settings-inner .tl-more p {
+  margin: 0;
+  padding: 0;
   font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
   color: var(--ink-2);
+  cursor: text;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-inner .tl-fold {
+    transition: none;
+  }
 }
 
 /* accounts: provider logo, then the name; each select with its name above */
@@ -669,4 +712,12 @@
 .settings-inner .acc-fields .btn.sm,
 .settings-inner .acc-fields .icon-btn.sm {
   align-self: flex-end;
+}
+.settings-inner .tl-row.off .tl-more p {
+  color: var(--ink-3);
+}
+/* a tool every job gets: on, and locked (a lighter track, the knob stays crisp) */
+.settings-inner .tl-sw .switch.on:disabled {
+  opacity: 1;
+  background: var(--accent-line);
 }
