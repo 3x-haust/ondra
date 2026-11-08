@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import permissions, { focusSteal, foreignData, hostComputerUse, systemInput } from "./permissions";
+import permissions, { focusSteal, foreignData, githubWrite, hostComputerUse, systemInput } from "./permissions";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -164,5 +164,40 @@ describe("systemInput", () => {
     expect(systemInput('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
     expect(systemInput("swift test && git status")).toBeUndefined();
     expect(systemInput(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
+  });
+});
+
+describe("GitHub writes switched off", () => {
+  it.each([
+    "gh pr merge 38 --squash",
+    "gh issue comment 214 --body done",
+    "gh pr create --title x --body y",
+    "cd repo && gh release create v1.0.0 app.dmg",
+    "gh api repos/acme/web/issues/214/comments -f body=hi",
+    "gh api -X DELETE repos/acme/web/labels/bug",
+    "gh label create agent-working",
+  ])("sees %s as a write", (command) => {
+    expect(githubWrite(command)).toBeTruthy();
+  });
+
+  it.each(["gh pr view 38 --json state", "gh issue list --search is:open", "gh api repos/acme/web/issues/214", "gh api -X GET user", "git push origin main", "gh run view 1 --log"])(
+    "lets %s through",
+    (command) => {
+      expect(githubWrite(command)).toBeUndefined();
+    },
+  );
+
+  it("blocks a write only when the switch is off", async () => {
+    const run = async (flag: string | undefined) => {
+      vi.stubEnv("ONDRA_PERMISSION", "full");
+      if (flag !== undefined) vi.stubEnv("ONDRA_GITHUB_WRITE", flag);
+      const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+      permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
+      return handlers.get("tool_call")!({ toolName: "bash", input: { command: "gh pr merge 38" } }, { cwd: process.cwd(), hasUI: true, ui: { select: vi.fn() } });
+    };
+
+    expect(await run("0")).toMatchObject({ block: true });
+    vi.unstubAllEnvs();
+    expect(await run(undefined)).toBeUndefined();
   });
 });

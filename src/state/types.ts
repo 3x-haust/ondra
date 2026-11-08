@@ -479,6 +479,8 @@ export interface Settings {
   permission: Permission;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
+  /** jobs may change things on GitHub (comments, merges, releases); off = read only */
+  githubWrite?: boolean;
 }
 
 export interface AppState {

@@ -80,6 +80,9 @@ function General() {
         <Row title="PR 지켜보기" desc="리뷰나 실패가 오면 이어서 고쳐요">
           <button class="switch" classList={{ on: !!state.settings.watchPullRequests }} role="switch" aria-checked={!!state.settings.watchPullRequests} onClick={() => setState("settings", "watchPullRequests", !state.settings.watchPullRequests)}><i /></button>
         </Row>
+        <Row title="GitHub에 쓰기" desc="끄면 일이 GitHub을 읽기만 해요">
+          <button class="switch" classList={{ on: state.settings.githubWrite !== false }} role="switch" aria-checked={state.settings.githubWrite !== false} onClick={() => setState("settings", "githubWrite", state.settings.githubWrite === false)}><i /></button>
+        </Row>
         <Row title="자동으로 기억">
           <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
         </Row>
