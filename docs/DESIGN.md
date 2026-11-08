@@ -19,6 +19,8 @@ They were drawn from Linear, T3 Code, Cursor, Codex, Claude and gitsu, then fitt
 
 ## 2. Color
 
+> The color values live in `src/styles/tokens.css` and stay as they are: the blue accent (#1f6fd8 light, #4d9cf0 dark), sky for working, amber for needs-reply, emerald for done, and the near-black dark surfaces. The tables below describe roles; where a hex below differs from tokens.css, tokens.css wins. Never add a new hue.
+
 ### 2.1 What the references use
 
 | Role | Linear light / dark | T3 Code light / dark | gitsu light / dark | Codex light / dark | Claude light / dark | Cursor light / dark |
@@ -441,37 +443,61 @@ Rules:
 
 ---
 
-## 12. Copy tone
+## 12. Copy and language
 
-Rules:
-1. "~요" endings, short. One sentence per surface at most.
-2. Buttons are verbs: 합치기, 버리기, 다시 보내기, 이어서 하기, 준비하기.
-3. No helper text under labels. If a label needs one, the label is wrong.
-4. No internal or technical terms in the UI: stdin, JSON, stderr, exit code, guest, engine, asset, worktree, captain, task id. Say what happens to the person.
-5. No "AI", no "성공적으로", no "~되었습니다", "~하십시오" or "~합니다".
-6. Never explain how the product works inside. Say only the result or the next step.
-7. Errors say what didn't happen and offer one way forward. They don't name the cause unless the person can act on it.
-8. Numbers are fine and often better than words ("3개", "64 GB").
-9. No parentheses that explain things. No exclamation marks, except in a greeting.
+Ondra ships in Korean and English. Every visible string goes through `t()` from
+`src/i18n` with the Korean text as the key; the English sits in `src/i18n/en/<area>.ts`.
+Write it the way a careful product team writes a dev tool (Linear, Toss, Raycast),
+not the way a chatbot talks.
 
-Bad → good (the first nine are real strings from Ondra today, or the examples given for this redesign):
+### 12.1 Rules
+1. Labels are nouns or short noun phrases: `동시 작업 수`, not `한 번에 하는 일`. Settings rows, tabs, menu items, column titles.
+2. Buttons are one or two words, a verb or verb-noun: `저장`, `병합`, `다시 시도`, `작업 만들기`. English: `Save`, `Merge`, `Try again`.
+3. Messages (toasts, empty states, errors) are one short sentence in 해요체 at most, and often just a phrase: `저장했어요`, `이슈 없음`. No cheerful filler, no "~해 드릴게요", no "~했답니다", no exclamation marks.
+4. No helper text under labels. If a label needs one, the label is wrong. A tooltip may hold one short fact.
+5. No internal terms: stdin, JSON, engine, captain, guest, asset, task id. "워크트리" and "브랜치" are fine: the people who use Ondra are developers.
+6. Never explain how the product works inside. Say the result or the next step.
+7. Errors say what didn't happen and offer one way forward: `불러오지 못했어요 · [다시 시도]`.
+8. Numbers over words: `3개`, `64 GB`, `12분 전`.
+9. English: sentence case, no period on a label or button, contractions are fine (`Couldn't load`), no "Oops", no "Let's", no "Successfully".
 
-| # | Where | Bad | Good |
-|---|---|---|---|
-| 1 | Hooks, field help | 표준 입력으로 JSON을 받아요: event, cwd, tool, input (도구 입력)… | *(no help text; field label only)* 실행할 명령 |
-| 2 | Computer setup, status | 아직 준비하지 않았어요 별도 macOS 안의 앱만 조작해요. 이 Mac의 열린 창과 로그인은 사용하지 않아요. | 아직 준비 전이에요 · [준비하기] |
-| 3 | Permission option "매번 묻기" | 파일을 고치거나 명령을 실행하기 전에 매번 물어봐요. 읽기는 묻지 않아요. | 매번 묻기 *(label only; tooltip if any: 고치기 전에 물어봐요)* |
-| 4 | Permission option "편집 허용" | 작업 폴더 안의 파일은 묻지 않고 고쳐요. 명령과 폴더 밖은 물어봐요. | 편집 허용 |
-| 5 | Settings, "PR 지켜보기" | 일이 연 PR에 리뷰가 달리거나 검사가 실패하거나 충돌이 나면 그 일이 이어서 처리해요 | PR 지켜보기 *(switch only)* |
-| 6 | Settings, copies | 프로젝트 폴더라면 일마다 복사본을 만들어 서로 덮어쓰지 않아요. 끝나면 확인하고 합쳐요 | 일마다 따로 작업하기 |
-| 7 | Hooks, blocking mode | 0이 아닌 값으로 끝나면 그 호출을 막고, stderr를 이유로 알려줘요. | 실패하면 막기 |
-| 8 | Computer setup, unavailable | 이 환경에서는 준비할 수 없어요. 컴퓨터 실행 자산이 포함된 macOS 앱이 필요해요. | 이 버전에서는 쓸 수 없어요 |
-| 9 | Computer setup, install | 4코어 · 메모리 8 GiB · 디스크 64 GiB로 새로 설치해요. 다운로드는 하지 않아요. 앱을 종료하면 게스트도 종료되고, 다음에 앱을 열면 같은 게스트를 다시 사용해요. | 새로 설치해요 · 64 GB · [설치] |
-| 10 | Computer setup, busy | 작업을 먼저 일시정지해 주세요. 시작·복구는 게스트를 재부팅해요. 연결한 뒤 해당 작업의 '다시 시작'을 눌러 새 엔진으로 진행해 주세요. | 먼저 일을 멈춰 주세요 |
-| 11 | Login, paste field | 브라우저가 다른 기기에 있으면, 로그인 후 마지막 주소를 여기에 붙여 넣어 주세요 | *(placeholder)* 로그인한 뒤 주소 붙여넣기 |
-| 12 | Generic success | 작업이 성공적으로 완료되었습니다. | 끝났어요 |
-| 13 | Generic error | 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오. | 안 됐어요 · [다시 하기] |
-| 14 | Empty list | 표시할 항목이 없습니다. 새 작업을 생성하여 시작하세요. | 아직 없어요 |
-| 15 | Loading | AI가 분석 중입니다… | 보는 중이에요 |
-| 16 | GitHub write switched off | Agent writes are turned off in Settings → MCP server. | GitHub 쓰기가 꺼져 있어요 · [켜기] |
-| 17 | Offline | 네트워크 연결이 끊어져 변경 사항을 저장할 수 없습니다. 연결을 확인해 주세요. | 오프라인이에요. 연결되면 다시 저장할게요 |
+### 12.2 Words (one word per idea, both languages)
+
+| Idea | 한국어 | English |
+|---|---|---|
+| a unit of work an agent does | 작업 | task |
+| the agent of a task's sub-parts | 서브에이전트 | subagent |
+| the main conversation | 메인 | Main |
+| a folder Ondra knows | 프로젝트 | project |
+| 회사 / 개인 split | 워크스페이스 | workspace |
+| what the agent remembers | 메모리 | memory |
+| files and pages a task made | 결과물 | results |
+| the overview of all tasks | 캔버스 | canvas |
+| a task waiting on the person | 응답 필요 | needs reply |
+| answer it | 응답 | reply |
+| states | 진행 중 · 대기 · 일시정지 · 완료 · 실패 · 검토 | running · queued · paused · done · failed · review |
+| put a task's changes back | 병합 | merge |
+| throw them away | 버리기 | discard |
+| hand an issue to an agent | 작업 만들기 | start task |
+| instructions for every task | 공통 지침 | global instructions |
+| skills / hooks / tools / permissions | 스킬 · 훅 · 도구 · 권한 | skills · hooks · tools · permissions |
+| model effort | 추론 강도 | effort |
+
+Never: 일 (for a task), 맡기기, 대장, 기억 (as the feature name), 공간, 합치기, 답 필요, 끝남.
+
+### 12.3 Bad → good
+
+| Bad | 한국어 | English |
+|---|---|---|
+| 한 번에 하는 일 | 동시 작업 수 | Concurrent tasks |
+| 한 번에 하는 무거운 일 | 무거운 작업 동시 수 | Concurrent heavy tasks |
+| 일마다 따로 작업하기 | 작업마다 워크트리 | Worktree per task |
+| PR 지켜보기 | PR 리뷰 자동 대응 | Follow up on PR reviews |
+| 자동으로 기억 | 메모리 자동 저장 | Save memories automatically |
+| 일이 띄운 앱은 뒤에 | 포커스 지키기 | Keep my window in front |
+| 일로 맡기기 | 작업 만들기 | Start task |
+| 원래 폴더에 합치기 | 병합 | Merge |
+| 작업이 성공적으로 완료되었습니다. | 완료 | Done |
+| 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오. | 실패했어요 · [다시 시도] | Failed · [Try again] |
+| 표시할 항목이 없습니다. | 없음 | Nothing here |
+| AI가 분석 중입니다… | 보는 중 | Looking |

@@ -43,6 +43,7 @@ import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
 import "./engine/journal";
 import "./engine/memgit";
+import { lang } from "./i18n";
 
 let firstSlide = true;
 /** The center's content slides in from the side it comes from (not on first paint). */
@@ -157,6 +158,7 @@ export default function App() {
     void setFocusGuard(state.settings.focusGuard);
   });
   createEffect(() => {
+    document.documentElement.lang = lang();
     const t = state.settings.theme;
     if (t === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = t;
