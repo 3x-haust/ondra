@@ -353,7 +353,7 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
   old ??= replaced;
   if (old && made[0]) retireMemory(old.id, made[0].id, old === replaced ? "새 내용으로 바뀌었어요" : undefined);
   if (!opts.quiet && made.length) {
-    const what = made.length > 1 ? tr("메모리 {n}개 저장", { n: made.length }) : tr("메모리 저장 · {text}", { text: made[0].text.slice(0, 200) });
+    const what = made.length > 1 ? tr("메모리 {n}개 저장", { n: made.length }) : tr("메모리에 저장 · {text}", { text: made[0].text.slice(0, 200) });
     toast(old ? tr("{what} · 이전 메모리 대체", { what }) : what, "info", { label: tr("되돌리기"), run: () => made.forEach((m) => removeMemory(m.id)) });
   }
   return ids[0] ?? null;

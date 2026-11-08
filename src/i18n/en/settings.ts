@@ -157,7 +157,7 @@ export default {
   "원래대로": "Restore",
   "목록에서 빼기": "Remove",
   "편집": "Edit",
-  "불러오는 중": "Loading",
+  "불러오는 중…": "Loading…",
   "이름은 영문, 숫자, -만 돼요": "Use a–z, 0–9 and - in the name",
   "같은 이름의 스킬이 있어요": "A skill with this name exists",
   "설명을 적어 주세요": "Add a description",

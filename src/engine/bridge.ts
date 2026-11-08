@@ -108,7 +108,7 @@ async function handle(c: Call): Promise<unknown> {
         quiet: true,
         onRefuse: (why) => (refused = why),
       });
-      if (id && t) pushNote(t.id, `기억함 · ${text.slice(0, 120)}`);
+      if (id && t) pushNote(t.id, `메모리에 저장 · ${text.slice(0, 120)}`);
       return id ? { saved: id, ...(refused ? { note: refused } : {}) } : { error: refused || "nothing saved" };
     }
     case "memory_forget": {

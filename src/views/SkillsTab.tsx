@@ -154,7 +154,7 @@ function SkillSheet(props: { entry: Entry; onClose: () => void; onChanged: () =>
         <Show when={parsed().description || e().description}><p>{parsed().description || e().description}</p></Show>
         <span class="sk-path selectable">{tilde(e().path)}</span>
       </div>
-      <Show when={!text.loading} fallback={<p class="muted">{t("불러오는 중")}</p>}>
+      <Show when={!text.loading} fallback={<p class="muted">{t("불러오는 중…")}</p>}>
         <Show when={editing()} fallback={<Markdown text={parsed().body} />}>
           <textarea class="sk-edit" spellcheck={false} value={draft()} onInput={(ev) => setDraft(ev.currentTarget.value)} />
         </Show>
@@ -269,7 +269,7 @@ export function SkillsTab() {
       <h2>{t("스킬")}</h2>
       <GroupTitle title={t("기본")} />
       <div class="set-group">
-        <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중") : t("스킬 없음")}</div>}>
+        <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중…") : t("스킬 없음")}</div>}>
           {(e) => <Row e={e} />}
         </For>
       </div>
