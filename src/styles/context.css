@@ -754,3 +754,43 @@
 .tl-head .tl-size {
   grid-column: 4;
 }
+
+/* hooks: what a command gets, folded away until asked for */
+.hk-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: var(--h-sm);
+  margin-top: var(--s-12);
+  padding: 0 var(--s-6);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.hk-more:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.hk-more svg {
+  transform: rotate(-90deg);
+  transition: transform var(--dur) var(--ease);
+}
+.hk-more.on svg {
+  transform: none;
+}
+dl.hk-doc {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-8) var(--s-16);
+  margin: var(--s-8) 0 var(--s-24);
+}
+dl.hk-doc dt {
+  color: var(--ink-3);
+}
+dl.hk-doc dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-6);
+}
