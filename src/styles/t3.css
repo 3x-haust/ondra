@@ -960,13 +960,9 @@
     animation: none;
   }
 }
-/* 11 · flow: metadata ends on one right edge; lanes fade in at the top */
+/* 11 · flow: metadata ends on one right edge */
 .g-main {
   padding-right: var(--s-12);
-}
-.g-lines {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
 }
 /* 13 · changed-files bars: a fixed track, left-aligned */
 .file-bar {

@@ -2417,9 +2417,14 @@ body {
 .g-lines path.ready {
   stroke: var(--ok);
 }
-.g-lines path.past {
+.g-lines path.past,
+.g-lines path.rest,
+.g-lines path.wait {
   stroke: var(--line-strong, var(--ink-4));
   stroke-width: 1.5;
+}
+.g-lines path.wait {
+  stroke-dasharray: 2 2;
 }
 .g-lines.dim path:not(.hot) {
   opacity: 0.25;
@@ -2564,10 +2569,11 @@ body {
   color: var(--ink);
 }
 .g-older-dot {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1.5px dashed var(--ink-4);
+  border: 1.5px solid var(--ink-4);
 }
 .g-empty {
   margin: var(--s-8) 0;
