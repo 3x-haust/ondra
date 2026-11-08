@@ -77,6 +77,8 @@ type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "
 
 /** what was typed in each chat, so switching chats (company / personal, projects, jobs) keeps each its own */
 const drafts = new Map<string, { text: string; files: string[] }>();
+/** something unsent is kept for this input */
+export const hasDraft = (key: string) => drafts.has(key);
 
 export function Composer(props: {
   placeholder: string;

@@ -7,7 +7,7 @@ import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { compact, now, short, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
-import { glyphOf } from "../views/Sidebar";
+import { Glyph, glyphOf } from "../views/Sidebar";
 import { costDetail, jobCost } from "./cost";
 import { t as tr } from "../i18n";
 
@@ -80,7 +80,8 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
     <Show when={t()} fallback={<div class="fork-card gone">{tr("삭제된 작업")}</div>}>
       {(x) => (
         <button class="fork-card" classList={{ [x().status]: true, compact: !!props.compact, review: glyphOf(x()) === "inreview" }} onClick={() => openTask(x().id)}>
-          <StatusIcon t={x()} />
+          {/* the sidebar's glyph, so a queued subagent reads the same here as there (dashed ring) */}
+          <Glyph t={x()} class="fork-glyph" />
           <span class="fork-main">
             <span class="fork-title">{x().title}</span>
             <Show when={sub()}>

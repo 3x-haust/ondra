@@ -1207,3 +1207,52 @@
   margin-right: var(--s-6);
   color: var(--ink-4);
 }
+
+/* ═════════════ round 7 ═════════════ */
+
+/* a project's tasks above its conversation: the Main strip's shell, rows in the sidebar's look */
+.main-view .proj-board .proj-tasks {
+  margin: 0;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+}
+.main-view .proj-board.open .proj-tasks {
+  margin-top: var(--s-2);
+}
+.main-view .proj-board .req-now {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.proj-lead.tone-bad {
+  color: var(--bad-ink);
+}
+.proj-lead.tone-ask {
+  color: var(--warn-ink);
+}
+.proj-lead.tone-review {
+  color: var(--accent-text);
+}
+.main-view .proj-board .proj-tasks-empty {
+  padding: var(--s-6) var(--s-10);
+}
+
+/* the recommended answer: marked at the row's end, never preselected */
+.decision .decision-rec {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--accent-text);
+}
+.decision .decision-opt:has(.decision-note) .decision-rec {
+  margin-top: 3px;
+}
+
+/* the first plan window dropped for width: the one after it reads as the first (no dot) */
+.composer-status .status-line > .st-lim.st-drop + .st-lim {
+  margin-left: 0;
+}
+.composer-status .status-line > :not(.st-lim) + .st-lim.st-drop + .st-lim::before {
+  content: none !important;
+}

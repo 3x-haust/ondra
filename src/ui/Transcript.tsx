@@ -425,6 +425,16 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   );
 }
 
+/** How long a pause lasted: from its note to the first work after it (what the task said or ran),
+ *  or undefined while it hasn't run since. */
+function resumedAfter(task: Task, id: string, at: number): number | undefined {
+  const es = task.entries;
+  const i = es.findIndex((x) => x.id === id);
+  if (i < 0) return undefined;
+  const next = es.slice(i + 1).find((x) => x.kind !== "user" && x.kind !== "note");
+  return next ? Math.max(0, next.at - at) : undefined;
+}
+
 function EntryView(props: { e: Entry; task: Task }) {
   const e = props.e;
   return (
@@ -436,6 +446,19 @@ function EntryView(props: { e: Entry; task: Task }) {
           <Show when={x().usage} fallback={<div class="turn-sep">{tr("{d} 동안 작업", { d: long(x().ms) })}</div>}>
             {(u) => <UsageLine u={u()} lead={x().ms ? tr("{d} 동안 작업", { d: long(x().ms) }) : undefined} />}
           </Show>
+        )}
+      </Match>
+      {/* a pause it has come back from: history, with how long it stayed paused */}
+      <Match when={e.kind === "note" && e.text === "일시정지" && props.task.status !== "paused" && e}>
+        {(x) => (
+          <div class="note past">
+            <Icon name="pause" size={13} />
+            <span>
+              {resumedAfter(props.task, x().id, x().at) !== undefined
+                ? tr("일시정지 · {d} 뒤 다시 시작", { d: short(resumedAfter(props.task, x().id, x().at)!) })
+                : noteText(x().text)}
+            </span>
+          </div>
         )}
       </Match>
       <Match when={e.kind === "note" && e}>

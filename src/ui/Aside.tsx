@@ -6,7 +6,7 @@ import type { SpaceId } from "../state/types";
 import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { ago, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
-import { tell } from "../engine/tasks";
+import { NO_ACCOUNT, tell } from "../engine/tasks";
 import { goMain, openPanel, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
 import { fileSrc, pickFolder } from "../lib/native";
@@ -21,6 +21,13 @@ import { lineOf } from "../views/SkillsTab";
 import { t } from "../i18n";
 
 /** The btw card: the one being looked at, with ‹ › through earlier ones. */
+/** What went wrong with an aside question. No account reads as everywhere else; the notice over
+ *  the input has the one 계정 추가 button. */
+function ErrLine(props: { text?: string }) {
+  const none = () => !!props.text && (props.text === NO_ACCOUNT || props.text === t(NO_ACCOUNT));
+  return <span class="btw-err">{none() ? t("계정 없음|notice") : props.text}</span>;
+}
+
 export function BtwCard(props: { scope: string }) {
   // Esc closes the card first, before it blurs the input or closes the panel
   // (an open "/" or "@" list in the input still closes before it)
@@ -92,7 +99,7 @@ export function BtwCard(props: { scope: string }) {
                 </For>
               </div>
             </Show>
-            <Show when={x().answer} fallback={<Show when={x().pending} fallback={<span class="btw-err">{x().error}</span>}><span class="btw-wait"><span class="tk-run" />{t("보는 중")}</span></Show>}>
+            <Show when={x().answer} fallback={<Show when={x().pending} fallback={<ErrLine text={x().error} />}><span class="btw-wait"><span class="tk-run" />{t("보는 중")}</span></Show>}>
               <Markdown class="msg-text" text={x().answer} />
             </Show>
           </div>
@@ -220,7 +227,7 @@ export function SideChat() {
               fallback={<div class="side-me">{m.text}</div>}
             >
               <div class="side-reply">
-                <Show when={m.text} fallback={<Show when={m.pending} fallback={<span class="btw-err">{m.error}</span>}><span class="btw-wait"><span class="tk-run" />{t("생각하는 중")}</span></Show>}>
+                <Show when={m.text} fallback={<Show when={m.pending} fallback={<ErrLine text={m.error} />}><span class="btw-wait"><span class="tk-run" />{t("생각하는 중")}</span></Show>}>
                   <Markdown class="msg-text" text={m.text} />
                 </Show>
                 <Show when={!m.pending && m.text}>

@@ -113,9 +113,14 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         if (!one) xs.forEach((y) => y.classList.add("st-drop"));
       }
     };
-    // a plan window goes whole ("주간 100% 사용"), never just its word
+    // a plan window goes whole ("주간 100% 사용"), never just its word; the one furthest from
+    // its limit first, so the window that is (nearly) used up is the last to go
     for (const sel of [".st-br", ".st-sh", ".st-cache", ".st-credits"]) drop(sel);
-    drop(".st-lim", true);
+    const wins = [...el.querySelectorAll<HTMLElement>(".st-lim:not(.st-credits)")].sort((a, b) => Number(a.dataset.used) - Number(b.dataset.used));
+    for (const x of wins) {
+      if (!over()) break;
+      x.classList.add("st-drop");
+    }
     el.classList.remove("st-measure");
   };
   const watch = (el: HTMLDivElement) => {
@@ -135,7 +140,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
+          <span class="st-lim" data-used={l.used} classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
             {t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })}
           </span>
         )}

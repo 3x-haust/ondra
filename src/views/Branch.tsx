@@ -3,9 +3,11 @@ import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { ago, compact, now } from "../ui/bits";
 import { bucket, Glyph } from "./Sidebar";
+import { discarded } from "../state/progress";
 import { t as tr } from "../i18n";
 
 export function since(t: Task) {
+  if (discarded(t)) return tr("버림");
   if (t.status === "failed") return tr("실패");
   if (bucket(t) === "review") return tr("검토");
   if (t.status === "done") return ago(t.finishedAt ?? t.createdAt);
@@ -19,7 +21,7 @@ export function BranchChip(props: { t: Task; active?: boolean }) {
     <button class="br-chip" classList={{ active: props.active, "m-review": bucket(props.t) === "review" }} onClick={() => openTask(props.t.id)}>
       <Glyph t={props.t} />
       <span class="br-chip-title">{props.t.title}</span>
-      <span class="br-chip-meta" classList={{ review: props.t.status === "done" && props.t.worktree?.state === "open" }}>{props.t.status === "waiting" ? tr("응답 필요") : since(props.t)}</span>
+      <span class="br-chip-meta" classList={{ review: props.t.status === "done" && props.t.worktree?.state === "open", discarded: discarded(props.t) }}>{props.t.status === "waiting" ? tr("응답 필요") : since(props.t)}</span>
     </button>
   );
 }

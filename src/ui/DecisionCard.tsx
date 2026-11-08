@@ -4,7 +4,7 @@ import { projectById, state, taskById } from "../state/store";
 import type { Block, Decision } from "../state/types";
 import { inBrowserShare } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
-import { openBrowser, openTask } from "../state/ui";
+import { openBrowser, openTask, view } from "../state/ui";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
@@ -32,6 +32,12 @@ export function AnsweredCard(props: { q: string; a: string }) {
 
 /** what was typed in each question's own-answer line, kept while the card is away (another view, Main ↔ task) */
 const ownDrafts = new Map<string, string>();
+
+/** the task's project chat is the view: its crumb would only repeat the header */
+const inOwnProject = (x: { project?: string }) => {
+  const v = view();
+  return v.name === "main" && !!x.project && v.project === x.project;
+};
 
 export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const t = () => taskById(props.d.taskId);
@@ -136,16 +142,19 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       <Show when={props.showTask !== false && t()}>
         {(x) => (
           <button class="decision-src" onClick={() => openTask(x().id)}>
-            {/* where it runs: its project (badge and name), the topic only when it has none */}
-            <Show when={x().project ? projectById(x().project!) : undefined} fallback={<span>{x().topic}</span>}>
-              {(p) => (
-                <>
-                  <ProjectBadge name={p().name} />
-                  <span>{p().name}</span>
-                </>
-              )}
+            {/* where it runs: its project (badge and name), the topic only when it has none;
+                in that project's own chat the header already says it, so only the task */}
+            <Show when={!inOwnProject(x())}>
+              <Show when={x().project ? projectById(x().project!) : undefined} fallback={<span>{x().topic}</span>}>
+                {(p) => (
+                  <>
+                    <ProjectBadge name={p().name} />
+                    <span>{p().name}</span>
+                  </>
+                )}
+              </Show>
+              <span class="decision-src-sep">/</span>
             </Show>
-            <span class="decision-src-sep">/</span>
             <span class="decision-src-title">{x().title}</span>
           </button>
         )}
@@ -170,6 +179,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
                 <span class="decision-label">{o.label}</span>
                 <Show when={o.note}><span class="decision-note">{o.note}</span></Show>
               </span>
+              {/* marked, never preselected */}
+              <Show when={o.primary}><span class="decision-rec">{tr("추천")}</span></Show>
             </button>
           )}
         </For>
