@@ -6,6 +6,7 @@ import { fileSrc, openUrl } from "../lib/native";
 import { previewFile } from "../state/ui";
 import { openImage } from "./Lightbox";
 import { langOf, tokenize, toHtml } from "./highlight";
+import { t } from "../i18n";
 
 // pictures GitHub hosts (PR comments); anything else remote stays text
 const GITHUB_IMG = /^https:\/\/(github\.com\/user-attachments\/|user-images\.githubusercontent\.com\/|private-user-images\.githubusercontent\.com\/|avatars\.githubusercontent\.com\/|raw\.githubusercontent\.com\/)/;
@@ -62,7 +63,7 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
         const swap = () => {
           const a = document.createElement("a");
           a.dataset.href = img.dataset.href ?? "";
-          a.textContent = img.alt || "사진";
+          a.textContent = img.alt || t("사진");
           img.replaceWith(a);
         };
         if (img.complete && !img.naturalWidth) swap();

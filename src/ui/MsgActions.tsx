@@ -9,6 +9,7 @@ import { openImage } from "./Lightbox";
 import { editing, previewFile, setEditing } from "../state/ui";
 import { stamp } from "./bits";
 import { Icon } from "./Icon";
+import { t } from "../i18n";
 
 export function MsgActions(props: { text: string; at?: number; mine?: boolean; onEdit?: () => void; onRetry?: () => void }) {
   const [copied, setCopied] = createSignal(false);
@@ -26,17 +27,17 @@ export function MsgActions(props: { text: string; at?: number; mine?: boolean; o
       <Show when={props.mine && props.at}>
         <span class="msg-time">{stamp(props.at!)}</span>
       </Show>
-      <button class="msg-act" title={copied() ? "복사했어요" : "복사"} aria-label="복사" onClick={copy}>
-        <Icon name={copied() ? "check" : "copy"} size={15} />
+      <button class="msg-act" title={copied() ? t("복사했어요") : t("복사")} aria-label={t("복사")} onClick={copy}>
+        <Icon name={copied() ? "check" : "copy"} size={14} />
       </button>
       <Show when={props.onEdit}>
-        <button class="msg-act" title="고치기 (이 지점부터 다시 해요)" aria-label="고치기" onClick={() => props.onEdit?.()}>
+        <button class="msg-act" title={t("수정")} aria-label={t("수정")} onClick={() => props.onEdit?.()}>
           <Icon name="pencil" size={14} />
         </button>
       </Show>
       <Show when={props.onRetry}>
-        <button class="msg-act" title="다시 하기" aria-label="다시 하기" onClick={() => props.onRetry?.()}>
-          <Icon name="refresh" size={15} />
+        <button class="msg-act" title={t("다시 시도")} aria-label={t("다시 시도")} onClick={() => props.onRetry?.()}>
+          <Icon name="refresh" size={14} />
         </button>
       </Show>
     </div>
@@ -138,8 +139,8 @@ function EditBox(props: { text: string; onCancel: () => void; onSave: (t: string
       />
       <div class="msg-edit-bar">
         <span class="spacer" />
-        <button class="btn sm ghost" onClick={() => props.onCancel()}>취소</button>
-        <button class="btn sm primary" onClick={() => props.onSave(el.value)}>보내기</button>
+        <button class="btn sm ghost" onClick={() => props.onCancel()}>{t("취소")}</button>
+        <button class="btn sm primary" onClick={() => props.onSave(el.value)}>{t("보내기")}</button>
       </div>
     </div>
   );

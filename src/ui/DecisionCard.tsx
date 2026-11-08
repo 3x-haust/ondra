@@ -9,6 +9,7 @@ import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
 import { dropAsked } from "./decisionText";
+import { t as tr } from "../i18n";
 
 export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const t = () => taskById(props.d.taskId);
@@ -95,7 +96,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       <Show when={loginUrl() !== undefined}>
         <button class="decision-login" onClick={openLogin}>
           <Icon name="globe" size={14} />
-          <span>브라우저 열어 로그인</span>
+          <span>{tr("브라우저에서 로그인")}</span>
           <Show when={loginUrl()}>{(u) => <span class="muted">{u().replace(/^https?:\/\/(www\.)?/, "").split("?")[0]}</span>}</Show>
         </button>
       </Show>
@@ -143,7 +144,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
             <input
               ref={own}
               class="decision-input"
-              placeholder="직접 입력"
+              placeholder={tr("직접 입력")}
               onFocus={() => setSel(props.d.options.length)}
               onInput={(e) => setTyped(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -169,8 +170,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       <Show when={!props.d.ui}>
         <div class="decision-foot">
           <button class="decision-send" classList={{ ready: ready() }} type="button" onClick={() => submit()} disabled={!ready()}>
-            보내기
-            <kbd>Enter</kbd>
+            {tr("보내기")}
+            <kbd>↵</kbd>
           </button>
         </div>
       </Show>

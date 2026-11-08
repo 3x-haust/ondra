@@ -5,6 +5,7 @@ import { revealPath, saveDownload } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 import { toast } from "../state/ui";
+import { t } from "../i18n";
 
 const PROPS = [
   "fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity", "stroke-dasharray", "stroke-linecap",
@@ -66,7 +67,7 @@ export async function svgPng(svg: SVGSVGElement, scale = 2): Promise<Blob> {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, pad * scale, pad * scale, w * scale, h * scale);
-  return new Promise((done, fail) => canvas.toBlob((b) => (b ? done(b) : fail(new Error("그림을 만들지 못했어요"))), "image/png"));
+  return new Promise((done, fail) => canvas.toBlob((b) => (b ? done(b) : fail(new Error(t("이미지를 만들지 못했어요")))), "image/png"));
 }
 
 const bytes = async (b: Blob) => [...new Uint8Array(await b.arrayBuffer())];
@@ -96,9 +97,9 @@ export function VisualViewer() {
           <div class="vv" onClick={() => setViewing(null)}>
             <div class="vv-bar" onClick={(e) => e.stopPropagation()}>
               <span class="vv-title">{v().label ?? ""}</span>
-              <button class="icon-btn" title="이미지로 저장" aria-label="이미지로 저장" onClick={() => void saveVisual(v().svg, v().label)}><Icon name="download" size={15} /></button>
-              <button class="icon-btn" title="이미지 복사" aria-label="이미지 복사" onClick={() => void copyVisual(v().svg)}><Icon name="copy" size={15} /></button>
-              <button class="icon-btn" title="닫기 (Esc)" aria-label="닫기" onClick={() => setViewing(null)}><Icon name="x" size={15} /></button>
+              <button class="icon-btn" title={t("이미지로 저장")} aria-label={t("이미지로 저장")} onClick={() => void saveVisual(v().svg, v().label)}><Icon name="download" size={15} /></button>
+              <button class="icon-btn" title={t("이미지 복사")} aria-label={t("이미지 복사")} onClick={() => void copyVisual(v().svg)}><Icon name="copy" size={15} /></button>
+              <button class="icon-btn" title={t("닫기 (Esc)")} aria-label={t("닫기")} onClick={() => setViewing(null)}><Icon name="x" size={15} /></button>
             </div>
             <div class="vv-stage" onClick={(e) => e.stopPropagation()}>{clone}</div>
           </div>
@@ -111,9 +112,9 @@ export function VisualViewer() {
 export async function saveVisual(svg: SVGSVGElement, label?: string) {
   try {
     const path = await saveDownload(await bytes(await svgPng(svg)), fileName(label));
-    toast("다운로드 폴더에 저장했어요", "info", { label: "Finder에서 보기", run: () => void revealPath(path) });
+    toast(t("다운로드 폴더에 저장했어요"), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
   } catch (e) {
-    toast(`저장하지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
+    toast(t("저장하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");
   }
 }
 
@@ -121,8 +122,8 @@ export async function copyVisual(svg: SVGSVGElement) {
   try {
     // the promise form keeps the click's permission while the picture is drawn
     await navigator.clipboard.write([new ClipboardItem({ "image/png": svgPng(svg) })]);
-    toast("이미지를 복사했어요");
+    toast(t("이미지를 복사했어요"));
   } catch (e) {
-    toast(`복사하지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
+    toast(t("복사하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");
   }
 }

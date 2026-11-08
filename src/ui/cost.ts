@@ -2,6 +2,7 @@
 import { state } from "../state/store";
 import type { Task } from "../state/types";
 import { long, tokens } from "./bits";
+import { t } from "../i18n";
 
 export interface JobCost {
   /** from its (last) start to its end; the turns' own times when that's unknown */
@@ -39,14 +40,16 @@ export function jobCost(t: Task): JobCost {
 }
 
 /** "12분 · 토큰 1.2M" */
-export const costShort = (c: JobCost) => [c.ms ? long(c.ms) : "", c.total ? `토큰 ${tokens(c.total)}` : ""].filter(Boolean).join(" · ");
+export const costShort = (c: JobCost) => [c.ms ? long(c.ms) : "", c.total ? t("토큰 {n}", { n: tokens(c.total) }) : ""].filter(Boolean).join(" · ");
 
 /** the breakdown, for a hover or the end of a job's chat */
 export const costDetail = (c: JobCost) =>
   [
-    c.ms ? `${long(c.ms)} 걸림` : "",
-    c.total ? `토큰 ${tokens(c.total)} (새 입력 ${tokens(c.input + c.cacheWrite)} · 캐시 ${tokens(c.cacheRead)} · 출력 ${tokens(c.output)})` : "",
-    c.kids ? `서브 ${c.kids}개 포함` : "",
+    c.ms ? t("{d} 걸림", { d: long(c.ms) }) : "",
+    c.total
+      ? t("토큰 {n} (새 입력 {i} · 캐시 {c} · 출력 {o})", { n: tokens(c.total), i: tokens(c.input + c.cacheWrite), c: tokens(c.cacheRead), o: tokens(c.output) })
+      : "",
+    c.kids ? t("서브에이전트 {n}개 포함", { n: c.kids }) : "",
   ]
     .filter(Boolean)
     .join(" · ");

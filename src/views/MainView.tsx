@@ -29,6 +29,19 @@ import { ContextRing, StatusLine, UsageLine } from "../ui/Usage";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
+import { t, t as tr } from "../i18n";
+
+/** "{task}에 전달했어요" with the task name in bold */
+function withName(key: string, name: string) {
+  const [a, b = ""] = t(key).split("{task}");
+  return (
+    <>
+      {a}
+      <b>{name}</b>
+      {b}
+    </>
+  );
+}
 
 /** Folder for the next request; "" = let main decide. */
 
@@ -53,20 +66,20 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
         {(p) => (
           <button class="reply-from" onClick={() => setView({ name: "main", project: p().id })}>
             <Icon name="folder" size={12} />
-            {p().name}에서
+            {t("{name}에서", { name: p().name })}
           </button>
         )}
       </Show>
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
-            <span class="shimmer reply-thinking">생각하는 중</span>
+            <span class="shimmer reply-thinking">{t("생각하는 중")}</span>
           </Match>
           <Match when={props.m.error}>
             <div class="reply-error">
               <Icon name="alert" size={14} />
               <span>{props.m.error}</span>
-              <button class="retry" onClick={props.retry}><Icon name="refresh" size={13} />다시 보내기</button>
+              <button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>
             </div>
           </Match>
           <Match when={true}>
@@ -74,8 +87,8 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
             <Show when={!props.m.reply && !routes().length}>
               <div class="reply-error">
                 <Icon name="alert" size={14} />
-                <span>답을 받지 못했어요</span>
-                <button class="retry" onClick={props.retry}><Icon name="refresh" size={13} />다시 보내기</button>
+                <span>{t("응답을 받지 못했어요")}</span>
+                <button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>
               </div>
             </Show>
             <For each={routes()}>
@@ -92,24 +105,24 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                   <Match when={r.kind === "append" && r}>
                     {(a) => (
                       <button class="reply-note" onClick={() => openTask(a().taskId)}>
-                        <Icon name="handoff" size={13} />
-                        <span><b>{taskById(a().taskId)?.title ?? "작업"}</b>에 전달했어요</span>
+                        <Icon name="handoff" size={14} />
+                        <span>{withName("{task}에 전달했어요", taskById(a().taskId)?.title ?? t("작업"))}</span>
                       </button>
                     )}
                   </Match>
                   <Match when={r.kind === "stop" && r}>
                     {(a) => (
                       <button class="reply-note" onClick={() => openTask(a().taskId)}>
-                        <Icon name="pause" size={13} />
-                        <span><b>{taskById(a().taskId)?.title ?? "작업"}</b>을 멈췄어요</span>
+                        <Icon name="pause" size={14} />
+                        <span>{withName("{task} 멈춤", taskById(a().taskId)?.title ?? t("작업"))}</span>
                       </button>
                     )}
                   </Match>
                   <Match when={r.kind === "remember" && r}>
                     {(a) => (
                       <div class="reply-note">
-                        <Icon name="memory" size={13} />
-                        <span>기억했어요 · {state.memory.find((x) => x.id === a().memoryId)?.text ?? ""}</span>
+                        <Icon name="memory" size={14} />
+                        <span>{t("메모리에 저장했어요")} · {state.memory.find((x) => x.id === a().memoryId)?.text ?? ""}</span>
                       </div>
                     )}
                   </Match>
@@ -171,20 +184,20 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
     <div class="page hero-page">
       <div class="hero">
         <Show when={engine.checked && !engine.ready}>
-          <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>엔진을 찾을 수 없어요</b><p>앱 파일이 손상됐어요. 다시 설치해 주세요.</p></div></div>
+          <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>{t("앱을 시작하지 못했어요")}</b><p>{t("다시 설치해 주세요.")}</p></div></div>
         </Show>
         <Show when={engine.checked && engine.ready && !loggedIn()}>
           <div class="notice">
             <Icon name="key" size={16} />
-            <div class="notice-body"><b>로그인 필요</b></div>
-            <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>로그인</button>
+            <div class="notice-body"><b>{t("로그인 필요")}</b></div>
+            <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>
           </div>
         </Show>
-        <h2 class="hero-ask">{props.project ? `${projectById(props.project)?.name ?? "이 프로젝트"}에서 뭘 할까요?` : "어떤 일을 할까요?"}</h2>
+        <h2 class="hero-ask">{props.project ? t("{name}에서 무엇을 할까요?", { name: projectById(props.project)?.name ?? "" }) : t("무엇을 할까요?")}</h2>
         {props.composer}
         <div class="hero-picks">
           <Show when={suggestLoading() === key() && !picks().length}>
-            <div class="hero-pick wait"><span class="spin xs" /><span>최근 일을 보는 중</span></div>
+            <div class="hero-pick wait"><span class="spin xs" /><span>{t("최근 작업 보는 중")}</span></div>
           </Show>
           <For each={picks().slice(0, 3)}>
             {(s) => (
@@ -198,7 +211,7 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
             {(s) => (
               <button
                 class="hero-pick"
-                title={`${s.sourceName}에서 하던 일 이어서 하기`}
+                title={t("{app}에서 이어서 하기", { app: s.sourceName })}
                 onClick={async () => {
                   try {
                     openTask(await continueSession(s, state.space, s.sourceName));
@@ -208,7 +221,7 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
                 }}
               >
                 <Icon name="history" size={14} class="hero-pick-ic" />
-                <span class="hero-pick-text">{s.title || "제목 없음"}</span>
+                <span class="hero-pick-text">{s.title || t("제목 없음")}</span>
                 <span class="hero-pick-meta">{s.sourceName} · {ago(s.updatedAt)}</span>
               </button>
             )}
@@ -281,17 +294,17 @@ export function MainView() {
       files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
       commands={[
         btwCommand(() => `main:${key()}`),
-        { name: "side", desc: "사이드챗 열기 (⌘J)", icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
-        { name: "flow", desc: "흐름 열기", icon: "branch", run: () => openPanel("flow") },
-        { name: "ask", desc: "매번 묻도록 바꾸기", icon: "lock", run: () => setState("settings", "permission", "ask") },
-        { name: "edits", desc: "편집 허용으로 바꾸기", icon: "pencil", run: () => setState("settings", "permission", "edits") },
-        { name: "full", desc: "전체 권한으로 바꾸기", icon: "shield", run: () => setState("settings", "permission", "full") },
-        { name: "remember", desc: "기억하기 · 뒤에 적은 내용을 앞으로 지켜요", icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
-        { name: "memory", desc: "기억한 것 보기 (그래프)", icon: "memory", run: () => setView({ name: "memory" }) },
-        { name: "settings", desc: "설정", icon: "gear", run: () => setView({ name: "settings" }) },
+        { name: "side", desc: t("사이드챗 열기 (⌘J)"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
+        { name: "flow", desc: t("흐름 열기"), icon: "branch", run: () => openPanel("flow") },
+        { name: "ask", desc: t("권한: 매번 묻기"), icon: "lock", run: () => setState("settings", "permission", "ask") },
+        { name: "edits", desc: t("권한: 편집 허용"), icon: "pencil", run: () => setState("settings", "permission", "edits") },
+        { name: "full", desc: t("권한: 전체 권한"), icon: "shield", run: () => setState("settings", "permission", "full") },
+        { name: "remember", desc: t("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
+        { name: "memory", desc: t("메모리 보기"), icon: "memory", run: () => setView({ name: "memory" }) },
+        { name: "settings", desc: t("설정"), icon: "gear", run: () => setView({ name: "settings" }) },
         ...skillCommands(() => ({ space: state.space, project: project()?.id })),
       ]}
-      placeholder={big ? "무엇이든 말해 주세요" : project() ? `${project()!.name}에 대해 말하기` : "메인에게 말하기"}
+      placeholder={big ? t("무엇이든 요청하세요") : project() ? t("{name}에 메시지 보내기", { name: project()!.name }) : t("메인에 메시지 보내기")}
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}
@@ -326,17 +339,17 @@ export function MainView() {
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
         <h1 class="head-title">
-          <Show when={project()} fallback="메인">
+          <Show when={project()} fallback={t("메인")}>
             {(p) => (
               <>
                 <span class="head-proj" title={p().folder}>{p().name}</span>
-                <span class="head-sub">프로젝트 채팅</span>
+                <span class="head-sub">{t("프로젝트 채팅")}</span>
               </>
             )}
           </Show>
         </h1>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title="패널 (⌘\)" onClick={togglePanel}>
+        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={t("패널 (⌘\\)")} onClick={togglePanel}>
           <Icon name="panel" size={16} />
         </button>
       </header>
@@ -356,7 +369,7 @@ export function MainView() {
             <For each={msgs()}>
               {(m) => (
                 <Show when={m.from === "me"} fallback={<Reply m={m} retry={() => retry(m)} chips={started(m)} active={openRoot()} />}>
-                  <UserMsg id={m.id} text={m.text ?? ""} at={m.at} from={m.via === "main" ? "메인에서" : undefined} onEdit={m.via === "main" ? undefined : (t) => void editMain(m.id, t)} />
+                  <UserMsg id={m.id} text={m.text ?? ""} at={m.at} from={m.via === "main" ? t("메인에서") : undefined} onEdit={m.via === "main" ? undefined : (t) => void editMain(m.id, t)} />
                 </Show>
               )}
             </For>
@@ -462,7 +475,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     return s && s !== t.title ? s : "";
   };
   const working = () => reqs().flatMap((r) => (r.state === "done" ? [] : r.tasks.filter((t) => t.status === "running")));
-  const label = { ask: "확인 필요", live: "진행 중", done: "끝남" } as const;
+  const label = { ask: "응답 필요", live: "진행 중", done: "완료" } as const;
   /** main's last report on one of the request's jobs */
   const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
   /** the request's to-do lists together (skipped steps left out) */
@@ -494,10 +507,10 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       <div class="req-board" ref={board} classList={{ open: open() }}>
         <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
           <span class="req-sum">
-            요청 {reqs().length}
-            <Show when={count("ask")}><span class="req-tag ask">확인 필요 {count("ask")}</span></Show>
-            <Show when={count("live")}><span class="req-tag live">진행 중 {count("live")}</span></Show>
-            <Show when={count("done")}><span class="req-tag done">끝남 {count("done")}</span></Show>
+            <span class="req-total">{t("요청 {n}", { n: reqs().length })}</span>
+            <Show when={count("ask")}><span class="req-tag ask">{t(label.ask)} {count("ask")}</span></Show>
+            <Show when={count("live")}><span class="req-tag live">{t(label.live)} {count("live")}</span></Show>
+            <Show when={count("done")}><span class="req-tag done">{t(label.done)} {count("done")}</span></Show>
           </span>
           {/* closed: what is being worked on right now, in one line */}
           <Show when={!open() && working()[0]}>{(t) => <span class="req-now">{t().title}<Show when={doing(t())}> · {doing(t())}</Show></span>}</Show>
@@ -517,13 +530,13 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                     </Show>
                     <Show when={r.state !== "done" && steps(r)} fallback={<span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>}>
                       {(st) => (
-                        <span class="req-steps" title={`할 일 ${st().all}개 중 ${st().done}개 끝남`}>
+                        <span class="req-steps" title={t("할 일 {done}/{all} 완료", { done: st().done, all: st().all })}>
                           <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
                           {st().done}/{st().all}
                         </span>
                       )}
                     </Show>
-                    <span class={`req-state ${r.state}`}>{label[r.state]}</span>
+                    <span class={`req-state ${r.state}`}>{t(label[r.state])}</span>
                   </button>
                   {/* several jobs working on it: one line each (one job opens from the row itself) */}
                   <For each={r.state === "done" || r.tasks.filter(active).length < 2 ? [] : r.tasks.filter(active)}>
@@ -531,7 +544,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                       <button class="req-job" onClick={() => openTask(t.id)} title={t.title}>
                         <span class="req-job-title">{t.title}</span>
                         <Show when={doing(t)}><span class="req-job-now">{doing(t)}</span></Show>
-                        <span class="req-job-time">{t.status === "waiting" ? "답 필요" : t.status === "running" && t.startedAt ? `${short(now() - t.startedAt)}째` : "대기"}</span>
+                        <span class="req-job-time">{t.status === "waiting" ? tr("응답 필요") : t.status === "running" && t.startedAt ? tr("{d}째", { d: short(now() - t.startedAt) }) : tr("대기")}</span>
                       </button>
                     )}
                   </For>

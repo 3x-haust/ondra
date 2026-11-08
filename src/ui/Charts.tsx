@@ -17,6 +17,7 @@ import { logoPath } from "./Logos";
 import { graphlib, layout } from "@dagrejs/dagre";
 import { createMemo, For, type JSX, Show } from "solid-js";
 import { previewFile } from "../state/ui";
+import { t as tr } from "../i18n";
 
 /** new/changed/gone: what this work did · risk: watch out · off: there, but not used */
 export type State = "new" | "changed" | "gone" | "risk" | "off" | undefined;
@@ -54,7 +55,9 @@ export function textW(s: string, size = 13, weight = 500, mono = false): number 
 }
 const cut = (s: string, n = 42) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const labelW = (s: string) => textW(s, FL, 500) + LP;
-const chipW = (s: State) => (s && TAG[s] ? textW(TAG[s], 11, 600) + 14 : 0);
+/** the state word, in the app's language */
+const tag = (s: State) => (s && TAG[s] ? tr(TAG[s]) : "");
+const chipW = (s: State) => (tag(s) ? textW(tag(s), 11, 600) + 14 : 0);
 
 // ───────────── layout
 function lay(nodes: LNode[], edges: LEdge[], clusters: { id: string; label: string }[], opt: { dir?: "TB" | "LR"; nodesep?: number; ranksep?: number; onLines?: boolean } = {}): Laid {
@@ -391,7 +394,7 @@ function endPoint(p: Pt[], atEnd: boolean) {
 /** band: inside a header band of that height (tables, classes) instead */
 function Chip(props: { s: State; b: Box; inset?: number; band?: number }) {
   return (
-    <Show when={props.s && TAG[props.s]}>
+    <Show when={tag(props.s)}>
       {(t) => {
         const w = chipW(props.s);
         // on the top-right corner, partly outside: clear of the lines that come in at the middle
@@ -430,9 +433,9 @@ function Frame(props: { label?: string; laid: Laid; clusterLabels?: Map<string, 
     <div class={`blk chart ${props.cls ?? ""}`} classList={{ "has-em": !!props.em }}>
       <Show when={props.label}><div class="blk-label">{props.label}</div></Show>
       <div class="vis-tools">
-        <button class="icon-btn xs" title="크게 보기" aria-label="크게 보기" onClick={() => viewVisual(svgEl, props.label)}><Icon name="fit" size={13} /></button>
-        <button class="icon-btn xs" title="이미지로 저장" aria-label="이미지로 저장" onClick={() => void saveVisual(svgEl, props.label)}><Icon name="download" size={13} /></button>
-        <button class="icon-btn xs" title="이미지 복사" aria-label="이미지 복사" onClick={() => void copyVisual(svgEl)}><Icon name="copy" size={13} /></button>
+        <button class="icon-btn xs" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => viewVisual(svgEl, props.label)}><Icon name="fit" size={13} /></button>
+        <button class="icon-btn xs" title={tr("이미지로 저장")} aria-label={tr("이미지로 저장")} onClick={() => void saveVisual(svgEl, props.label)}><Icon name="download" size={13} /></button>
+        <button class="icon-btn xs" title={tr("이미지 복사")} aria-label={tr("이미지 복사")} onClick={() => void copyVisual(svgEl)}><Icon name="copy" size={13} /></button>
       </div>
       <div class="chart-wrap">
         <svg
@@ -640,7 +643,7 @@ export function Deps(props: { label?: string; nodes: DepNode[]; edges?: { from: 
     // a cycle is red AND says so on the line; an unlabeled import says what it is
     const es = edges().map((e, i) => {
       const cyc = cyclic().has(`${e.from}>${e.to}`);
-      const label = cyc ? (e.label ? `${e.label} · 순환` : "순환") : e.label ?? (e.kind === "import" ? "import" : undefined);
+      const label = cyc ? (e.label ? `${e.label} · ${tr("순환")}` : tr("순환")) : e.label ?? (e.kind === "import" ? "import" : undefined);
       return { id: `e${i}`, from: e.from, to: e.to, label, end: e.kind === "import" ? "open" : "arrow", cls: edgeCls(e.kind, cyc && "cycle", e.em && "em") };
     });
     const cl = groups().map((g) => ({ id: `g:${g}`, label: g }));
@@ -683,7 +686,7 @@ export function Classes(props: { label?: string; classes: UmlClass[]; relations?
   const laid = createMemo(() => {
     const nodes = props.classes.map((c) => ({ id: c.name, w: width(c), h: height(c) }));
     const es = (props.relations ?? []).map((r, i) => {
-      const label = r.label ?? REL[r.kind];
+      const label = r.label ?? tr(REL[r.kind]);
       const em = r.em && "em";
       // UML: the arrow head sits on the parent/interface; the diamond on the owner
       if (r.kind === "extends" || r.kind === "implements") return { id: `r${i}`, from: r.from, to: r.to, end: "tri", cls: edgeCls(r.kind, em), label };
@@ -781,11 +784,11 @@ const KIND_TAG: Record<string, string> = { user: "사용자", app: "앱", servic
 export function Arch(props: { label?: string; zones?: { id: string; label: string }[]; nodes: ArchNode[]; edges?: { from: string; to: string; label?: string; async?: boolean; em?: boolean }[]; dir?: "TB" | "LR" }) {
   const laid = createMemo(() => {
     const nodes = props.nodes.map((n) => {
-      const w = Math.max(textW(cut(n.label, 26), FT, 600) + (archLogo(n) ? 23 : 0), n.note ? textW(cut(n.note, 30), FN, 400) : 0, textW(KIND_TAG[n.kind ?? "service"] ?? "", 11, 500) + chipW(n.state) * 2 + 8) + 32;
+      const w = Math.max(textW(cut(n.label, 26), FT, 600) + (archLogo(n) ? 23 : 0), n.note ? textW(cut(n.note, 30), FN, 400) : 0, textW(tr(KIND_TAG[n.kind ?? "service"] ?? ""), 11, 500) + chipW(n.state) * 2 + 8) + 32;
       const db = n.kind === "db" || n.kind === "cache";
       return { id: n.id, parent: n.zone, first: n.kind === "user", w: Math.max(120, w), h: (n.note ? 66 : 50) + (db ? 12 : 0) };
     });
-    const es = (props.edges ?? []).map((e, i) => ({ id: `e${i}`, from: e.from, to: e.to, label: e.label ?? (e.async ? "비동기" : undefined), end: "arrow", cls: edgeCls(e.async && "async", e.em && "em") }));
+    const es = (props.edges ?? []).map((e, i) => ({ id: `e${i}`, from: e.from, to: e.to, label: e.label ?? (e.async ? tr("비동기") : undefined), end: "arrow", cls: edgeCls(e.async && "async", e.em && "em") }));
     const zones = (props.zones ?? []).map((z) => ({ id: z.id, label: z.label }));
     return fit((dir) => layTiers(nodes, es, zones, dir), props.dir, "LR");
   });
@@ -819,7 +822,7 @@ export function Arch(props: { label?: string; zones?: { id: string; label: strin
               <line x1={b.x + b.w - 14} y1={b.y + 6} x2={b.x + b.w - 14} y2={b.y + b.h - 6} class="ch-sub" />
               <line x1={b.x + b.w - 20} y1={b.y + 6} x2={b.x + b.w - 20} y2={b.y + b.h - 6} class="ch-sub" />
             </Show>
-            <text x={cx} y={ty + 18} text-anchor="middle" class="ch-kind">{KIND_TAG[k]}</text>
+            <text x={cx} y={ty + 18} text-anchor="middle" class="ch-kind">{tr(KIND_TAG[k] ?? "")}</text>
             <Show when={archLogo(n)} fallback={<text x={cx} y={ty + 37} text-anchor="middle" class="ch-t strong">{cut(n.label, 26)}</text>}>
               {(lg) => {
                 const lw = textW(cut(n.label, 26), FT, 600);

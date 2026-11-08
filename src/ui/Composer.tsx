@@ -12,6 +12,7 @@ import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
+import { t } from "../i18n";
 
 /** The composer on screen receives dropped files (there is one per view). */
 let dropInto: ((paths: string[]) => void) | null = null;
@@ -108,10 +109,9 @@ export function Composer(props: {
   const plusItems = (): PlusItem[] => [
     {
       icon: "clip",
-      label: "파일 및 폴더",
-      desc: "끌어다 놓거나 ⌘V로 사진을 붙여도 돼요",
+      label: t("파일 및 폴더"),
       run: async () => {
-        const picked = await pickFiles("첨부할 파일");
+        const picked = await pickFiles(t("첨부할 파일"));
         if (picked.length) add(picked);
       },
     },
@@ -445,7 +445,7 @@ export function Composer(props: {
         <Show when={pick()}>
           {(p) => (
             <div class="cpick" role="listbox" onMouseDown={(e) => e.preventDefault()}>
-              <div class="cpick-head">{p().kind === "cmd" ? "명령" : "파일"}</div>
+              <div class="cpick-head">{p().kind === "cmd" ? t("명령") : t("파일")}</div>
               <For each={p().items as (Command | string)[]}>
                 {(it, i) => (
                   <button type="button" class="cpick-row" classList={{ on: sel() === i() }} onMouseEnter={() => setSel(i())} onClick={() => choose(i())}>
@@ -483,7 +483,7 @@ export function Composer(props: {
                     <span class="attach" title={tilde(f)}>
                       <Icon name="file" size={13} />
                       <span class="attach-name">{base(f)}</span>
-                      <button type="button" aria-label="빼기" onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                      <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
                         <Icon name="x" size={12} />
                       </button>
                     </span>
@@ -491,8 +491,8 @@ export function Composer(props: {
                 >
                   <span class="attach-img" title={tilde(f)}>
                     <img src={fileSrc(f)} alt={base(f)} onClick={() => openImage(f, files().filter(isImage))} />
-                    <button type="button" aria-label="빼기" onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
-                      <Icon name="x" size={11} />
+                    <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                      <Icon name="x" size={12} />
                     </button>
                   </span>
                 </Show>
@@ -510,7 +510,7 @@ export function Composer(props: {
           value={text()}
           placeholder={props.placeholder}
           data-shortcut={props.id === "main-input" || props.id === "task-input" ? "focusInput" : undefined}
-          title={`대화 입력창으로 (${shortcutHint("focusInput")})`}
+          title={t("입력창 ({k})", { k: shortcutHint("focusInput") })}
           onInput={(e) => {
             setText(e.currentTarget.value);
             grow();
@@ -612,14 +612,14 @@ export function Composer(props: {
               type="button"
               class="cbtn"
               classList={{ on: plusOpen() }}
-              title="첨부하고 더 하기"
-              aria-label="더 하기"
+              title={t("첨부 및 기타")}
+              aria-label={t("첨부 및 기타")}
               onClick={(e) => {
                 e.stopPropagation();
                 setPlusOpen(!plusOpen());
               }}
             >
-              <Icon name="plus" size={17} />
+              <Icon name="plus" size={16} />
             </button>
             <Show when={plusOpen()}>
               <div
@@ -649,7 +649,7 @@ export function Composer(props: {
                           it.run({ insert });
                         }}
                       >
-                        <Icon name={it.icon} size={15} />
+                        <Icon name={it.icon} size={16} />
                         <span class="plus-label">{it.label}</span>
                         <Show when={it.desc}><span class="plus-desc">{it.desc}</span></Show>
                       </button>
@@ -664,18 +664,18 @@ export function Composer(props: {
           <Show
             when={props.running && props.onStop && !text().trim()}
             fallback={
-              <button class="send" type="submit" disabled={!ready()} aria-label="보내기" title="보내기 (⏎)">
-                <Icon name="send" size={16} stroke={2.25} />
+              <button class="send" type="submit" disabled={!ready()} aria-label={t("보내기")} title={t("보내기 (↵)")}>
+                <Icon name="send" size={14} stroke={2.25} />
               </button>
             }
           >
-            <button class="send stop" type="button" onClick={() => props.onStop?.()} aria-label="멈추기" title="멈추기">
+            <button class="send stop" type="button" onClick={() => props.onStop?.()} aria-label={t("중지")} title={t("중지")}>
               <i />
             </button>
           </Show>
         </div>
         <Show when={dragging() && dropInto === add}>
-          <div class="drop-hint">여기에 놓으면 첨부돼요</div>
+          <div class="drop-hint">{t("놓아서 첨부")}</div>
         </Show>
       </form>
       <Show when={props.under || props.status}>

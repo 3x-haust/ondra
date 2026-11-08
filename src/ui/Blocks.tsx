@@ -10,6 +10,7 @@ import { Diff, Git, Options, Tests, Trace } from "./Work";
 import { Bars, Groups, Scope, Sequence, Steps, Tree } from "./Visuals";
 import { openImage } from "./Lightbox";
 import { vizOf } from "./viz";
+import { t } from "../i18n";
 
 type Of<T extends Block["type"]> = Extract<Block, { type: T }>;
 
@@ -57,9 +58,9 @@ function Spark(props: { values: number[] }) {
 function Shot(props: { path?: string; caption: string }) {
   return (
     <figure class="shot">
-      <Show when={props.path} fallback={<div class="ph">이미지 없음</div>}>
+      <Show when={props.path} fallback={<div class="ph">{t("이미지 없음")}</div>}>
         {(p) => (
-          <button onClick={() => openImage(p())} title="크게 보기">
+          <button onClick={() => openImage(p())} title={t("크게 보기")}>
             <img src={fileSrc(p())} alt={props.caption} loading="lazy" />
           </button>
         )}
@@ -76,12 +77,12 @@ function Compare(props: { b: Of<"compare"> }) {
     <div class="blk">
       <div class="blk-label">{props.b.label}</div>
       <div class="cmp-row">
-        <span class="muted">전</span>
+        <span class="muted">{t("전")}</span>
         <span class="bar"><i style={{ width: `${(props.b.before / max()) * 100}%` }} /></span>
         <span class="v">{props.b.before}{props.b.unit ?? ""}</span>
       </div>
       <div class="cmp-row">
-        <span class="muted">후</span>
+        <span class="muted">{t("후")}</span>
         <span class={`bar ${good() ? "good" : "bad"}`}><i style={{ width: `${(props.b.after / max()) * 100}%` }} /></span>
         <span class="v strong">{props.b.after}{props.b.unit ?? ""}</span>
       </div>
@@ -100,19 +101,22 @@ function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
   const clickable = (e: Evidence) => /^(https?:\/\/|\/|~)/.test(e.ref);
   return (
     <div class="blk blk-evidence">
-      <div class="blk-label">증거 {props.items.length}개{props.unverified?.length ? ` · 확인 못 한 것 ${props.unverified.length}개` : ""}</div>
+      <div class="blk-label">
+        {t("증거 {n}개", { n: props.items.length })}
+        {props.unverified?.length ? ` · ${t("미확인 {n}개", { n: props.unverified.length })}` : ""}
+      </div>
       <For each={props.items}>
         {(e) => (
           <div class="ev-row" classList={{ bad: e.ok === false }}>
             <span class="ev-mark"><Icon name={e.ok === false ? "x" : "check"} size={11} stroke={3} /></span>
-            <span class="ev-kind">{EVIDENCE_LABEL[e.kind] ?? e.kind}</span>
+            <span class="ev-kind">{EVIDENCE_LABEL[e.kind] ? t(EVIDENCE_LABEL[e.kind]) : e.kind}</span>
             <Show when={clickable(e)} fallback={<code class="ev-ref" title={e.ref}>{e.ref}</code>}>
               <button class="ev-ref link" title={e.ref} onClick={() => open(e)}>{e.ref.replace(/^https?:\/\/(www\.)?/, "").split("/").slice(-2).join("/")}</button>
             </Show>
             <Show when={e.why ?? e.note}><span class="ev-note">{e.why ?? e.note}</span></Show>
             <Show when={e.check}>
-              <span class={`ev-check ${e.check}`} title={e.check === "ran" ? "이 일에서 실제로 돌린 기록과 맞아요" : e.check === "exists" ? "파일이 실제로 있어요" : e.check === "read" ? "이 일에서 실제로 열어 본 페이지예요" : e.check === "self" ? "앱이 확인할 수 없어 일의 말을 그대로 적었어요" : "앱이 확인해 보니 맞지 않아요"}>
-                {e.check === "ran" || e.check === "exists" || e.check === "read" ? "앱이 확인" : e.check === "self" ? "자가 신고" : "안 맞음"}
+              <span class={`ev-check ${e.check}`} title={t(e.check === "ran" ? "실행 기록과 일치" : e.check === "exists" ? "파일 있음" : e.check === "read" ? "열어 본 페이지" : e.check === "self" ? "작업이 보고한 내용" : "기록과 불일치")}>
+                {t(e.check === "ran" || e.check === "exists" || e.check === "read" ? "확인됨" : e.check === "self" ? "자가 보고" : "불일치")}
               </span>
             </Show>
           </div>
@@ -122,7 +126,7 @@ function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
         {(u) => (
           <div class="ev-row todo">
             <span class="ev-mark">?</span>
-            <span class="ev-kind">확인 못 함</span>
+            <span class="ev-kind">{t("미확인")}</span>
             <span class="ev-note">{u}</span>
           </div>
         )}
@@ -211,15 +215,15 @@ function BlockBody(props: { block: Block }) {
               when={c().beforeImage || c().afterImage}
               fallback={
                 <div class="ba-text">
-                  <div class="ba-side before"><span class="ba-tag">전</span>{c().before}</div>
+                  <div class="ba-side before"><span class="ba-tag">{t("전")}</span>{c().before}</div>
                   <Icon name="arrow" size={14} class="ba-arrow" />
-                  <div class="ba-side after"><span class="ba-tag">후</span>{c().after}</div>
+                  <div class="ba-side after"><span class="ba-tag">{t("후")}</span>{c().after}</div>
                 </div>
               }
             >
               <div class="ba-pair">
-                <Shot path={c().beforeImage} caption={`전 · ${c().before}`} />
-                <Shot path={c().afterImage} caption={`후 · ${c().after}`} />
+                <Shot path={c().beforeImage} caption={`${t("전")} · ${c().before}`} />
+                <Shot path={c().afterImage} caption={`${t("후")} · ${c().after}`} />
               </div>
             </Show>
           </div>
@@ -236,7 +240,7 @@ function BlockBody(props: { block: Block }) {
           const max = () => Math.max(...list().map((x) => x.add + x.del), 1);
           return (
             <div class="blk">
-              <div class="blk-label">변경한 파일 {list().length}개</div>
+              <div class="blk-label">{t("변경한 파일 {n}개", { n: list().length })}</div>
               <For each={list()}>
                 {(x) => (
                   <div class="file-row">
@@ -296,7 +300,7 @@ function BlockBody(props: { block: Block }) {
             <div class="blk-page-head">
               <span class="blk-label">{p().label ?? p().path.split("/").pop()}</span>
               <span class="spacer" />
-              <button class="link-btn" onClick={() => previewFile(p().path)}>크게 보기</button>
+              <button class="link-btn" onClick={() => previewFile(p().path)}>{t("크게 보기")}</button>
             </div>
             <iframe class="blk-page-frame" sandbox="allow-scripts" src={fileSrc(p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
           </div>
