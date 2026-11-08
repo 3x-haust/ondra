@@ -10,7 +10,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openTask, setView } from "../state/ui";
-import { tell } from "../engine/tasks";
+import { decide, tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
 import { describeCommand } from "../engine/describe";
 import { costDetail, costShort, jobCost } from "../ui/cost";
@@ -348,7 +348,21 @@ function Live(props: { t: Task }) {
         </Match>
         <Match when={what() === "act"}><Activity t={t()} /></Match>
         <Match when={what() === "question"}>
-          <p class="cv-text ask">{decisionFor(t().id)!.question}</p>
+          <div class="cv-ask">
+            <p class="cv-text ask">{decisionFor(t().id)!.question}</p>
+            {/* the first few answers, pressable right on the card; the rest are in the drawer */}
+            <Show when={!decisionFor(t().id)!.ui && decisionFor(t().id)!.options.length}>
+              <div class="cv-ask-opts" onPointerDown={(e) => e.stopPropagation()}>
+                <For each={decisionFor(t().id)!.options.slice(0, 3)}>
+                  {(o) => (
+                    <button class="cv-ask-opt" classList={{ primary: !!o.primary }} title={o.note ?? o.label} onClick={(e) => (e.stopPropagation(), void decide(decisionFor(t().id)!.id, o.id))}>
+                      {o.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
         </Match>
         <Match when={what() === "summary"}>
           <p class="cv-text" classList={{ muted: !t().summary && !t().error }}>{t().error || t().summary || t().ask}</p>

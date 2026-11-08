@@ -9107,3 +9107,60 @@ select.select.dev-space {
     --hl-punct: #8a8a8a;
   }
 }
+
+/* canvas: a waiting job's question with its answers, and short summaries without an empty box */
+.cv-live.w-question {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.cv-ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  height: 100%;
+}
+.cv-ask .cv-text {
+  height: auto;
+  padding: 0;
+  -webkit-line-clamp: 3;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.cv-ask-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-6);
+  margin-top: auto;
+}
+.cv-ask-opt {
+  max-width: 100%;
+  height: 26px;
+  padding: 0 var(--s-10);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  transition: background-color 0.12s ease;
+}
+.cv-ask-opt:hover {
+  background: color-mix(in srgb, var(--ink) 11%, transparent);
+}
+.cv-ask-opt.primary {
+  color: var(--on-accent, #fff);
+  background: var(--accent);
+}
+.cv-ask-opt.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+.cv-live.w-summary {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.cv-live.w-summary .cv-text {
+  padding: 0;
+}
