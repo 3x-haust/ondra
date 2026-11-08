@@ -94,9 +94,9 @@ export async function loadState() {
             settings: { ...base.settings, ...parsed.settings },
             accounts: parsed.accounts.map((a) => ({ ...base.accounts[0], ...a, badModels: a.badModels ?? [] })),
             // the request queue lives in memory: a reply still "thinking" when the app closed never comes back
-            captain: (parsed.captain ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀서 답이 끊겼어요" } : m)),
-            btws: (parsed.btws ?? []).map((b) => (b.pending ? { ...b, pending: false, error: b.answer ? undefined : "앱이 닫혀서 답이 끊겼어요" } : b)),
-            side: (parsed.side ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀서 답이 끊겼어요" } : m)),
+            captain: (parsed.captain ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),
+            btws: (parsed.btws ?? []).map((b) => (b.pending ? { ...b, pending: false, error: b.answer ? undefined : "앱이 닫혀 응답이 끊겼어요" } : b)),
+            side: (parsed.side ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),
             sent: sentBySpace(parsed),
           }),
         );

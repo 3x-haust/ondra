@@ -178,11 +178,30 @@ export interface Toast {
 }
 export const [toasts, setToasts] = createSignal<Toast[]>([]);
 let seq = 0;
-export const dropToast = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
+/** each passing toast's timer and how long it stays; hovering a toast holds it */
+const timers = new Map<number, { ms: number; timer?: ReturnType<typeof setTimeout> }>();
+export const dropToast = (id: number) => {
+  clearTimeout(timers.get(id)?.timer);
+  timers.delete(id);
+  setToasts((t) => t.filter((x) => x.id !== id));
+};
+export function holdToast(id: number) {
+  const t = timers.get(id);
+  if (t) clearTimeout(t.timer);
+}
+export function releaseToast(id: number) {
+  const t = timers.get(id);
+  if (t) t.timer = setTimeout(() => dropToast(id), Math.min(t.ms, 2000));
+}
+/** One toast at a time (DESIGN.md §9.10): a new one replaces the passing one; kept ones wait under it. 3s, 6s with an action or an error. */
 export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"], opts: { stay?: boolean; ms?: number } = {}) {
   const id = ++seq;
-  setToasts((t) => [...t.slice(-2), { id, text, tone, action, stay: opts.stay }]);
-  if (!opts.stay) setTimeout(() => dropToast(id), opts.ms ?? (tone === "bad" ? 7000 : 4000));
+  for (const x of toasts()) if (!x.stay) (clearTimeout(timers.get(x.id)?.timer), timers.delete(x.id));
+  setToasts((t) => [...t.filter((x) => x.stay), { id, text, tone, action, stay: opts.stay }]);
+  if (!opts.stay) {
+    const ms = opts.ms ?? (action || tone === "bad" ? 6000 : 3000);
+    timers.set(id, { ms, timer: setTimeout(() => dropToast(id), ms) });
+  }
   return id;
 }
 

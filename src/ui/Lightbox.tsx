@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { fileSrc, revealPath } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
+import { t } from "../i18n";
 
 const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(null);
 
@@ -32,11 +33,11 @@ export function Lightbox() {
               <span class="lb-name">{path().split("/").pop()}</span>
               <Show when={s().list.length > 1}>
                 <span class="lb-n">{s().i + 1}/{s().list.length}</span>
-                <button class="icon-btn sm" title="이전 (←)" onClick={() => step(-1)}><Icon name="back" size={14} /></button>
-                <button class="icon-btn sm" title="다음 (→)" onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
+                <button class="icon-btn sm" title={`${t("이전")} ←`} aria-label={t("이전")} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
+                <button class="icon-btn sm" title={`${t("다음")} →`} aria-label={t("다음")} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
               </Show>
-              <button class="icon-btn sm" title="Finder에서 보기" onClick={() => void revealPath(path())}><Icon name="open" size={14} /></button>
-              <button class="icon-btn sm" title="닫기 (Esc)" onClick={() => setShown(null)}><Icon name="x" size={14} /></button>
+              <button class="icon-btn sm" title={t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealPath(path())}><Icon name="open" size={14} /></button>
+              <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setShown(null)}><Icon name="x" size={14} /></button>
             </div>
           </div>
         );

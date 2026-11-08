@@ -3,8 +3,9 @@ import { loadReleases, notesFor, releases, releasesFailed, releasesLoading, setN
 import { Markdown } from "./Markdown";
 import { Sheet } from "./Sheet";
 import "./releaseNotes.css";
+import { lang, t } from "../i18n";
 
-const day = (t?: number) => (t ? new Date(t).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }) : "");
+const day = (t?: number) => (t ? new Date(t).toLocaleDateString(lang() === "en" ? "en-US" : "ko-KR", { year: "numeric", month: "long", day: "numeric" }) : "");
 
 export function ReleaseNotes(props: { current: string }) {
   let body!: HTMLDivElement;
@@ -15,16 +16,16 @@ export function ReleaseNotes(props: { current: string }) {
     queueMicrotask(() => body?.querySelector(`[data-version="${CSS.escape(v)}"]`)?.scrollIntoView({ block: "start" }));
   });
   return (
-    <Sheet title="릴리즈 노트" class="rn-sheet" onClose={() => setNotesFor(null)}>
+    <Sheet title={t("릴리스 노트")} class="rn-sheet" onClose={() => setNotesFor(null)}>
       <div class="rn-list" ref={body}>
         <Show
           when={releases().length}
           fallback={
             <Show when={releasesLoading() || releasesFailed()}>
               <div class="rn-empty">
-                <Show when={!releasesLoading()} fallback="불러오는 중…">
-                  릴리즈 노트를 불러오지 못했어요
-                  <button class="btn sm" onClick={() => void loadReleases()}>다시 시도</button>
+                <Show when={!releasesLoading()} fallback={t("불러오는 중")}>
+                  {t("불러오지 못했어요")}
+                  <button class="btn sm" onClick={() => void loadReleases()}>{t("다시 시도")}</button>
                 </Show>
               </div>
             </Show>
@@ -35,10 +36,10 @@ export function ReleaseNotes(props: { current: string }) {
               <section class="rn-entry" data-version={r.version}>
                 <header class="rn-head">
                   <b>{r.version}</b>
-                  <Show when={r.version === props.current}><span class="rn-now">지금 버전</span></Show>
+                  <Show when={r.version === props.current}><span class="rn-now">{t("현재 버전")}</span></Show>
                   <span class="rn-date">{day(r.date)}</span>
                 </header>
-                <Show when={r.notes} fallback={<p class="rn-none">적힌 내용이 없어요</p>}>
+                <Show when={r.notes} fallback={<p class="rn-none">{t("내용 없음")}</p>}>
                   <Markdown class="rn-md" text={r.notes} />
                 </Show>
               </section>

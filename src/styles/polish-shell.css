@@ -1,0 +1,946 @@
+/* Shell polish: sidebar, ⌘K palette, menus, dialogs, toasts, shortcut sheet,
+   onboarding and login. Values follow docs/DESIGN.md §7–§11; every colour is a token.
+   Rules are prefixed (.app .sidebar …) so they settle the older t3.css layers. */
+
+/* ═════════════ sidebar (§9.1) ═════════════ */
+.app .sidebar .sb-top {
+  gap: var(--s-2);
+  padding-right: var(--s-8);
+}
+.app .sidebar .sb-top .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  color: var(--ink-3);
+}
+.app .sidebar .sb-top .icon-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.app .sidebar .sb-scroll {
+  padding: var(--s-4) var(--s-8) var(--s-16);
+}
+
+/* workspace switcher: a quiet segmented control, not two cards (§9.2) */
+.app .sidebar .space-seg {
+  gap: 0;
+  margin: 0 var(--s-8) var(--s-8);
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--muted);
+}
+.app .sidebar .space-seg button {
+  height: 24px;
+  padding: 0 var(--s-8);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  box-shadow: none;
+}
+.app .sidebar .space-seg button:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.app .sidebar .space-seg button.on {
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+}
+:root[data-theme="dark"] .app .sidebar .space-seg button.on {
+  background: var(--active);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app .sidebar .space-seg button.on {
+    background: var(--active);
+    box-shadow: none;
+  }
+}
+.app .sidebar .space-alert {
+  top: 50%;
+  right: var(--s-8);
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+/* rows: 32 tall, no gaps, every label at the same x */
+.app .sidebar .sb-list,
+.app .sidebar .sb-projects,
+.app .sidebar .sb-proj-jobs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+}
+.app .sidebar .sb-row {
+  height: var(--h-row);
+  margin: 0;
+  padding: 0 var(--s-10);
+  gap: var(--s-8);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-md);
+}
+.app .sidebar .sb-row:hover,
+.app .sidebar .sb-row.hot,
+.app .sidebar .sb-row.menu {
+  --sb-row-bg: var(--canvas);
+  background: var(--hover);
+  color: var(--ink);
+}
+.app .sidebar .sb-row.on {
+  --sb-row-bg: var(--row-selected);
+  background: var(--row-selected);
+  box-shadow: var(--row-selected-shadow);
+  color: var(--ink);
+}
+.app .sidebar .sb-row.past:not(.on):not(:hover) {
+  color: var(--ink-3);
+}
+.app .sidebar .sb-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.app .sidebar .sb-main {
+  margin: 0;
+}
+.app .sidebar .sb-main-ic {
+  width: 16px;
+  flex: none;
+  color: var(--ink-3);
+}
+.app .sidebar .sb-main.on .sb-main-ic,
+.app .sidebar .sb-main:hover .sb-main-ic {
+  color: var(--ink);
+}
+.app .sidebar .sb-main.sb-todo + .sb-head,
+.app .sidebar .sb-main + .sb-head {
+  margin-top: var(--s-12);
+}
+/* the needs-you row: counted in amber (state colour), title stays ink */
+.app .sidebar .sb-need {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 18px;
+}
+
+/* status glyph: 14 in a 16 slot, static (§8) */
+.app .sidebar .sb-glyph,
+.palette .st-icon,
+.needs-menu .st-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+}
+.app .sidebar .sb-glyph i,
+.palette .st-icon i,
+.needs-menu .st-icon i {
+  width: 6px;
+  height: 6px;
+}
+.app .sidebar .sb-glyph.paused i,
+.palette .st-icon.paused i,
+.needs-menu .st-icon.paused i {
+  width: 4px;
+  height: 4px;
+}
+.app .sidebar .sb-glyph.queued,
+.palette .st-icon.queued {
+  box-shadow: none;
+  border: 1.5px dashed var(--ink-4);
+}
+.app .sidebar .sb-glyph.waiting,
+.app .sidebar .sb-glyph.failed,
+.palette .st-icon.waiting,
+.palette .st-icon.failed,
+.needs-menu .st-icon.waiting,
+.needs-menu .st-icon.failed {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.app .sidebar .sb-glyph.waiting,
+.palette .st-icon.waiting,
+.needs-menu .st-icon.waiting {
+  color: var(--warn);
+}
+.app .sidebar .sb-glyph.failed,
+.palette .st-icon.failed,
+.needs-menu .st-icon.failed {
+  color: var(--bad);
+}
+.app .sidebar .sb-glyph.waiting i,
+.app .sidebar .sb-glyph.failed i,
+.palette .st-icon.waiting i,
+.palette .st-icon.failed i,
+.needs-menu .st-icon.waiting i,
+.needs-menu .st-icon.failed i {
+  background: currentColor;
+}
+.app .sidebar .sb-glyph.done,
+.palette .st-icon.done,
+.needs-menu .st-icon.done {
+  background: var(--accent-soft);
+  box-shadow: none;
+  color: var(--accent-text);
+}
+/* finished, waiting to be merged: the check in an open ring */
+.app .sidebar .sb-glyph.done.unmerged,
+.palette .st-icon.done.unmerged,
+.needs-menu .st-icon.done.unmerged {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+}
+.app .sidebar .sb-glyph .spin,
+.palette .st-icon .spin {
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+}
+.app .sidebar .sb-row:hover .sb-glyph {
+  transform: none;
+}
+
+/* meta on the right: one size, one colour; state words keep their tone */
+.app .sidebar .sb-meta {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.app .sidebar .tone-ask .sb-meta {
+  color: var(--warn-ink);
+  font-weight: var(--fw-medium);
+}
+.app .sidebar .tone-bad .sb-meta {
+  color: var(--bad-ink);
+  font-weight: var(--fw-medium);
+}
+.app .sidebar .sb-meta .add {
+  color: var(--ok-ink);
+}
+.app .sidebar .sb-meta .del {
+  color: var(--bad-ink);
+  font-size: var(--fs-xs);
+}
+.app .sidebar .sb-kbd {
+  margin-left: auto;
+  font-family: var(--font);
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+.app .sidebar .sb-live {
+  gap: var(--s-6);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.app .sidebar .sb-live .spin.xs {
+  width: 12px;
+  height: 12px;
+  padding: 2px;
+  border-width: 1.5px;
+}
+.app .sidebar .sb-row:hover .sb-live + .sb-acts,
+.app .sidebar .sb-row .sb-acts {
+  right: var(--s-4);
+}
+.app .sidebar .sb-act {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+}
+.app .sidebar .sb-pin {
+  color: var(--ink-4);
+}
+.app .sidebar .sb-kids {
+  height: 18px;
+  gap: 0;
+  padding: 0 2px 0 var(--s-4);
+  color: var(--ink-3);
+  font-size: var(--fs-2xs);
+}
+.app .sidebar .sb-kids .sb-kids-chev {
+  transition: transform var(--dur) var(--ease);
+}
+.app .sidebar .sb-kids.open .sb-kids-chev {
+  transform: rotate(90deg);
+}
+
+/* subagent rows: 28 tall, glyph on the tree line */
+.app .sidebar .sb-row.kid {
+  height: var(--h-row-kid);
+  padding-left: 34px;
+  font-size: var(--fs-sm);
+}
+.app .sidebar .sb-kid-list::before {
+  left: 17px;
+  top: 0;
+  bottom: 14px;
+  background: var(--line-soft);
+}
+
+/* section headers: 28 tall, 12 above, no rules (§9.1) */
+.app .sidebar .sb-head {
+  height: 28px;
+  margin-top: var(--s-12);
+  padding: 0 var(--s-4) 0 var(--s-10);
+  gap: var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.app .sidebar .sb-head-btn {
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.app .sidebar .sb-head-btn:hover {
+  color: var(--ink);
+}
+.app .sidebar .sb-head-chev {
+  width: 12px;
+  height: 12px;
+}
+.app .sidebar .sb-head-n {
+  color: var(--ink-4);
+  font-size: var(--fs-2xs);
+}
+.app .sidebar .sb-head .icon-btn.xs {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.app .sidebar .sb-head:hover .icon-btn.xs,
+.app .sidebar .sb-head .icon-btn.xs:focus-visible,
+.app .sidebar .sb-head .icon-btn.xs.on {
+  opacity: 1;
+}
+.app .sidebar .sb-head .icon-btn.xs:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* project rows: badge in the 16 slot, its jobs one step in */
+.app .sidebar .sb-proj .sb-title {
+  font-weight: var(--fw-regular);
+}
+.app .sidebar .sb-proj-ic,
+.app .sidebar .sb-proj-ic:has(> .pbadge) {
+  width: 16px;
+  height: 16px;
+}
+.app .sidebar .sb-proj-ic > .pbadge {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  font-size: 8.5px;
+  letter-spacing: 0;
+}
+.app .sidebar .sb-proj-jobs {
+  margin-left: 17px;
+  padding-left: var(--s-4);
+}
+.app .sidebar .sb-proj-jobs::before {
+  top: 4px;
+  bottom: 4px;
+  background: var(--line-soft);
+}
+.app .sidebar .sb-proj-jobs .sb-row {
+  padding-left: var(--s-8);
+}
+/* subagents sit one step in, their glyph under the parent's title */
+.app .sidebar .sb-proj-jobs .sb-row.kid {
+  padding-left: 32px;
+}
+.app .sidebar .sb-proj-jobs .sb-kid-list::before {
+  left: 15px;
+}
+.app .sidebar .sb-proj-jobs + .sb-row,
+.app .sidebar .sb-projects > div + .sb-row {
+  margin-top: 0;
+}
+
+/* "완료 n개", "보관함 n개": quiet disclosure rows, same x as the titles */
+.app .sidebar .sb-older {
+  height: 28px;
+  padding: 0 var(--s-10);
+  gap: var(--s-8);
+  border-radius: var(--r-md);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+.app .sidebar .sb-older:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.app .sidebar .sb-older .sb-older-chev {
+  width: 16px;
+  flex: none;
+}
+
+/* settings at the foot: a 32 row like the rest */
+.app .sidebar .sb-foot {
+  padding: var(--s-8);
+  border-top: 0;
+}
+.app .sidebar .sb-foot .row {
+  height: var(--h-row);
+  padding: 0 var(--s-10);
+  gap: var(--s-8);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+}
+.app .sidebar .sb-foot .row .icon {
+  color: var(--ink-3);
+}
+.app .sidebar .sb-foot .row:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.app .sidebar .sb-foot .row:hover .icon {
+  color: var(--ink);
+}
+.app .sidebar .sb-foot .row .row-title {
+  flex: 1;
+  text-align: left;
+}
+
+/* keyboard hints show on hover only (the kbd replaces the tooltip) */
+.app .sidebar .sb-kbd {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.app .sidebar .sb-row:hover .sb-kbd,
+.app .sidebar .sb-foot .row:hover .sb-kbd,
+.app .sidebar .sb-row:focus-visible .sb-kbd {
+  opacity: 1;
+}
+
+/* ═════════════ menus and popovers (§9.8): one look everywhere ═════════════ */
+.menu,
+.pop,
+.ctx-menu,
+:root[data-theme="dark"] .pop,
+:root[data-theme="dark"] .ctx-menu,
+:root[data-theme="dark"] .menu {
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+}
+.menu,
+.ctx-menu {
+  min-width: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.menu button,
+.ctx-menu button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 var(--s-8);
+  gap: var(--s-8);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+  text-align: left;
+}
+.menu button .icon,
+.ctx-menu button .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+.menu button:hover,
+.ctx-menu button:hover,
+.menu button:focus-visible,
+.ctx-menu button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.menu button.danger,
+.ctx-menu button.danger {
+  color: var(--bad-ink);
+}
+.menu button.danger .icon,
+.ctx-menu button.danger .icon {
+  color: var(--bad-ink);
+}
+.menu .row-title,
+.ctx-menu .row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu .row-hint,
+.ctx-menu .row-hint,
+.menu .menu-kbd,
+.ctx-menu .menu-kbd {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.menu-sep,
+.pop-sep {
+  height: 1px;
+  margin: var(--s-4) calc(-1 * var(--s-4));
+  background: var(--line-soft);
+}
+.pop-label {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--s-8);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+.pop-item {
+  min-height: 28px;
+  padding: var(--s-4) var(--s-8);
+  gap: var(--s-8);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.pop-item:hover,
+.pop-item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.pop-item .icon {
+  flex: none;
+  color: var(--ink-3);
+}
+.pop-item-sub {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.pop-item:disabled {
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ctx-menu,
+  .menu,
+  .pop {
+    animation: shell-pop-in 140ms var(--ease-drawer) both;
+  }
+}
+@keyframes shell-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+/* the needs-you menu: glyph, title, reason */
+.needs-menu button {
+  gap: var(--s-8);
+}
+
+/* ═════════════ dialogs (§9.9) ═════════════ */
+.backdrop {
+  background: var(--scrim);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: fade 160ms var(--ease) both;
+}
+.sheet,
+.keysheet,
+.palette {
+  border: 1px solid var(--line);
+  border-radius: var(--r-2xl);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sheet,
+  .keysheet,
+  .palette {
+    animation: shell-dialog-in 200ms var(--ease-drawer) both;
+  }
+}
+@keyframes shell-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+.sheet-head {
+  height: 52px;
+  padding: 0 var(--s-12) 0 var(--s-20);
+  gap: var(--s-8);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+}
+.sheet-head .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  color: var(--ink-3);
+}
+.sheet-head .icon-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sheet-head .icon-btn:first-child {
+  margin-left: calc(-1 * var(--s-8));
+}
+.sheet-foot {
+  justify-content: flex-end;
+  gap: var(--s-8);
+  padding: var(--s-12) var(--s-20);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ═════════════ toasts (§9.10): bottom centre, one at a time ═════════════ */
+.toasts {
+  left: 50%;
+  right: auto;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+}
+.toast {
+  min-height: 36px;
+  max-width: 420px;
+  gap: var(--s-8);
+  padding: var(--s-8) var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: shell-toast-in 180ms var(--ease-drawer) both;
+  }
+}
+@keyframes shell-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.toast.bad {
+  color: var(--ink);
+}
+.toast .toast-ic {
+  flex: none;
+  color: var(--bad);
+}
+.toast .toast-text {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.toast button.toast-act,
+.toast > button:not(.toast-x) {
+  flex: none;
+  margin-left: var(--s-4);
+  padding: 0;
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+.toast button.toast-act:hover {
+  text-decoration: underline;
+}
+.toast button.toast-x {
+  width: 24px;
+  height: 24px;
+  margin-right: calc(-1 * var(--s-6));
+  justify-content: center;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+}
+.toast button.toast-x:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* ═════════════ ⌘K palette: Raycast/Linear ═════════════ */
+.backdrop:has(> .palette) {
+  padding-top: 14vh;
+}
+.palette {
+  width: 640px;
+  overflow: hidden;
+}
+.palette-input {
+  height: 52px;
+  gap: var(--s-10);
+  padding: 0 var(--s-12) 0 var(--s-16);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-4);
+}
+.palette-input input {
+  font-size: var(--fs-lg);
+  color: var(--ink);
+}
+.palette-input input::placeholder {
+  color: var(--ink-4);
+}
+.palette-input kbd {
+  flex: none;
+}
+.palette-list {
+  padding: var(--s-6);
+}
+.palette-sec {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--s-10);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.palette-sec:not(:first-child) {
+  margin-top: var(--s-4);
+}
+.palette-item {
+  height: 36px;
+  gap: var(--s-10);
+  padding: 0 var(--s-10);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+}
+.palette-item.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+.palette-item:disabled {
+  opacity: 0.5;
+}
+.palette-ic {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--ink-3);
+}
+.palette-item.on .palette-ic {
+  color: var(--ink);
+}
+.palette-item .hint {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.palette-item .hint.keys {
+  color: var(--ink-4);
+  letter-spacing: 0.04em;
+}
+.palette-empty {
+  display: grid;
+  place-items: center;
+  height: 72px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* ═════════════ `?` shortcut sheet ═════════════ */
+.keysheet {
+  width: min(760px, calc(100vw - 48px));
+  padding: var(--s-20);
+}
+.keysheet h3 {
+  margin: 0 0 var(--s-16);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--fw-strong);
+}
+.keysheet h4 {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.keysheet section {
+  margin-bottom: var(--s-16);
+}
+.keysheet-row {
+  min-height: 28px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* ═════════════ shortcut hints (hold ⌘): kbd chips (§9.7) ═════════════ */
+.shortcut-hint {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 var(--s-4);
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--card);
+  color: var(--ink-2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-size: var(--fs-2xs);
+}
+
+/* ═════════════ onboarding: one card, three rows ═════════════ */
+.onb {
+  background: var(--bg);
+}
+.onb-card {
+  width: 520px;
+  padding: var(--s-48) 0;
+}
+.onb-card h1 {
+  margin: 0 0 var(--s-20);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: var(--fw-strong);
+  letter-spacing: -0.02em;
+}
+.onb-steps {
+  margin-bottom: var(--s-20);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  box-shadow: none;
+}
+.onb-step {
+  align-items: center;
+  gap: var(--s-12);
+  min-height: 60px;
+  padding: var(--s-12) var(--s-16);
+  border-bottom: 1px solid var(--line-soft);
+}
+.onb-step .n {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 1.5px solid var(--ink-4);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.onb-step.ok .n {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.onb-step-main {
+  gap: 0;
+}
+.onb-step-main b {
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.onb-step-main p {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.onb-acts {
+  display: flex;
+  gap: var(--s-8);
+  flex: none;
+}
+.onb-foot {
+  justify-content: flex-end;
+}
+
+/* ═════════════ login sheet ═════════════ */
+.login-sheet {
+  width: 480px;
+}
+.login-sheet .login-body {
+  padding: var(--s-16) var(--s-20) var(--s-20);
+}
+
+/* ═════════════ usage line under the input: account · plan windows · context ═════════════ */
+/* words in the UI font, numbers even; mono only for the branch */
+.status-line,
+.ctray .composer-status .status-line {
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.ctray .composer-status .status-line {
+  gap: var(--s-12);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.ctray .composer-status .status-line .st-acc,
+.ctray .composer-status .status-line .st-ctx {
+  height: 28px;
+  padding: 0 var(--s-8);
+  gap: var(--s-6);
+  font-size: var(--fs-sm);
+}
+.ctray .composer-status .status-line .st-acc {
+  margin-left: calc(-1 * var(--s-4));
+  color: var(--ink-2);
+}
+.ctray .composer-status .status-line .st-acc .st-acc-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.ctray .composer-status .status-line .st-ctx {
+  color: var(--ink-3);
+}
+.status-line .st-br {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+.status-line .st-lim.hot {
+  color: var(--warn-ink);
+}

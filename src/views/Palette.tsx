@@ -1,4 +1,4 @@
-// ⌘K: jump to any task or place, or send what you typed to the captain.
+// ⌘K: jump to any task or place, or send what you typed to Main.
 import { checkUpdate } from "../engine/update";
 import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
@@ -10,6 +10,7 @@ import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, typ
 import { throwThought } from "../engine/captain";
 import { ago, compact, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
+import { t as tr } from "../i18n";
 
 interface Item {
   id: string;
@@ -35,14 +36,14 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
   };
   const commandsOnly = () => paletteMode() === "commands" || q().startsWith(">");
 
+  // commands come with their labels already in the current language (appCommands)
   const places: Item[] = [
     ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
-    { id: "s-accounts", label: "계정", icon: "key", section: "앱", run: () => setView({ name: "settings", tab: "accounts" }) },
-    { id: "s-import", label: "가져오기", icon: "download", section: "앱", run: () => setView({ name: "settings", tab: "import" }) },
-    { id: "s-results", label: "결과", icon: "inbox", section: "이동", run: () => setView({ name: "results" }) },
-    { id: "update", label: "업데이트 확인", icon: "download", section: "앱", run: () => void checkUpdate(true) },
-    { id: "s-tools", label: "도구 · 권한", icon: "shield", section: "앱", run: () => setView({ name: "settings", tab: "tools" }) },
-    { id: "theme", label: "테마 바꾸기 (라이트 · 다크 · 시스템)", icon: "monitor", section: "보기", run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    { id: "s-accounts", label: tr("계정"), icon: "key", section: tr("앱"), run: () => setView({ name: "settings", tab: "accounts" }) },
+    { id: "s-import", label: tr("가져오기"), icon: "download", section: tr("앱"), run: () => setView({ name: "settings", tab: "import" }) },
+    { id: "update", label: tr("업데이트 확인"), icon: "download", section: tr("앱"), run: () => void checkUpdate(true) },
+    { id: "s-tools", label: tr("도구 · 권한"), icon: "shield", section: tr("앱"), run: () => setView({ name: "settings", tab: "tools" }) },
+    { id: "theme", label: tr("테마 전환"), icon: "monitor", section: tr("보기"), run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
   ];
 
   const items = createMemo<Item[]>(() => {
@@ -55,9 +56,9 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
       .map((t) => ({
         id: t.id,
         label: t.title,
-        hint: [t.space === state.space ? "" : spaceById(t.space).label, t.status === "done" ? ago(t.finishedAt ?? t.createdAt) : t.status === "waiting" ? "답 필요" : t.startedAt ? compact(now() - t.startedAt) : "대기"].filter(Boolean).join(" · "),
+        hint: [t.space === state.space ? "" : tr(spaceById(t.space).label), t.status === "done" ? ago(t.finishedAt ?? t.createdAt) : t.status === "waiting" ? tr("응답 필요") : t.status === "failed" ? tr("실패") : t.status === "paused" ? tr("일시정지") : t.startedAt ? compact(now() - t.startedAt) : tr("대기")].filter(Boolean).join(" · "),
         status: t.status,
-        section: "일",
+        section: tr("작업"),
         run: () => {
           switchSpace(t.space, { name: "task", id: t.id });
           openTask(t.id);
@@ -68,7 +69,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
       ? resultsIn(state.space)
           .filter((r) => resultText(r).toLowerCase().includes(needle))
           .slice(0, 5)
-          .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: "결과", run: () => setView({ name: "results", id: r.id }) }))
+          .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: tr("결과물"), run: () => setView({ name: "results", id: r.id }) }))
       : [];
     const all = commandsOnly() ? places : [...tasks, ...places];
     const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
@@ -76,7 +77,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     const order = [...new Set(found.map((i) => i.section))];
     const hits = order.flatMap((sec) => found.filter((i) => i.section === sec));
     const send: Item[] = text && !commandsOnly()
-      ? [{ id: "send", label: text, hint: "메인에게 보내기", icon: "send", section: "보내기", run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
+      ? [{ id: "send", label: text, hint: tr("메인에 보내기"), icon: "send", section: tr("보내기"), run: () => { throwThought(text, state.space); setView({ name: "main" }); } }]
       : [];
     return [...(commandsOnly() ? hits : hits.slice(0, needle ? 13 : 10)), ...results, ...send];
   });
@@ -123,13 +124,13 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
 
   return (
     <div class="backdrop" onClick={() => close()}>
-      <div class="palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="명령">
+      <div class="palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={tr("검색")}>
         <div class="palette-input">
           <Icon name="search" size={16} />
           <input
             ref={input}
             value={q()}
-            placeholder={commandsOnly() ? "명령과 단축키 찾기" : "일 찾기, 이동, 또는 메인에게 보내기"}
+            placeholder={commandsOnly() ? tr("명령 검색") : tr("검색하거나 메인에 보내기")}
             onInput={(e) => {
               setQ(e.currentTarget.value);
               setSel(0);
@@ -151,18 +152,20 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
           <kbd>esc</kbd>
         </div>
         <div class="palette-list">
-          <For each={items()} fallback={<div class="pane-empty">결과 없음</div>}>
+          <For each={items()} fallback={<div class="palette-empty">{tr("결과 없음")}</div>}>
             {(it, i) => (
               <>
                 <Show when={i() === 0 || items()[i() - 1].section !== it.section}>
                   <div class="palette-sec">{it.section}</div>
                 </Show>
-                <button class="palette-item" disabled={it.enabled?.() === false} title={it.enabled?.() === false ? "현재 화면에서는 사용할 수 없어요" : undefined} classList={{ on: sel() === i() }} onMouseMove={() => setSel(i())} onClick={() => choose(i())}>
-                  <Show when={it.status} fallback={<Icon name={it.icon ?? "dot"} size={15} />}>
-                    <Show when={taskById(it.id)}>{(t) => <StatusIcon t={t()} size="sm" />}</Show>
-                  </Show>
+                <button class="palette-item" disabled={it.enabled?.() === false} title={it.enabled?.() === false ? tr("여기서는 사용할 수 없어요") : undefined} classList={{ on: sel() === i() }} onMouseMove={() => setSel(i())} onClick={() => choose(i())}>
+                  <span class="palette-ic">
+                    <Show when={it.status} fallback={<Icon name={it.icon ?? "dot"} size={16} />}>
+                      <Show when={taskById(it.id)}>{(t) => <StatusIcon t={t()} size="sm" />}</Show>
+                    </Show>
+                  </span>
                   <span class="label">{it.label}</span>
-                  <Show when={it.hint}><span class="hint">{it.hint}{it.enabled?.() === false ? " · 사용 불가" : ""}</span></Show>
+                  <Show when={it.hint}><span class="hint" classList={{ keys: !it.status && it.section !== tr("결과물") && it.id !== "send" }}>{it.hint}</span></Show>
                 </button>
               </>
             )}
