@@ -149,6 +149,8 @@ export interface Task {
   finishedAt?: number;
   /** when Ondra merged its branch (mergeTask); older tasks lack it */
   mergedAt?: number;
+  /** when its changes were thrown away (discardTask); older tasks lack it */
+  discardedAt?: number;
   /** One line: what it is doing right now. */
   now: string;
   /** what the job itself last said it is doing (its "now" block); tool calls don't replace it */

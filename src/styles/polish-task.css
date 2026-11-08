@@ -1441,3 +1441,16 @@
 .task-head .crumbs > .crumb-proj {
   margin-right: calc(-1 * var(--s-4));
 }
+
+/* Flow: each row's text block, measured to place the rows under it */
+.graph .g-in {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* a long title shortens itself, never the sidebar button beside it */
+.task-head .sb-show {
+  flex-shrink: 0;
+}
