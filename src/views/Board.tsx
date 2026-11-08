@@ -8,7 +8,7 @@ import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
-import { ago, compact, now } from "../ui/bits";
+import { ago, compact, IssueTag, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { StatusIcon } from "../ui/ForkCard";
 import { SidebarToggle } from "./Sidebar";
@@ -197,6 +197,7 @@ function Card(props: { t: Task; byProject: boolean }) {
       <div class="bc-top">
         <StatusIcon t={t()} size="sm" />
         <span class="bc-title">{t().title}</span>
+        <IssueTag t={t()} />
       </div>
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
       <div class="bc-meta">

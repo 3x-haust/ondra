@@ -13,7 +13,7 @@ import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, pan
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
 import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
+import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
 import { Composer } from "../ui/Composer";
@@ -356,6 +356,7 @@ export function TaskView(props: { id: string }) {
                   onBlur={(e) => (renameTask(task().id, e.currentTarget.value), setRenaming(null))}
                 />
               </Show>
+              <IssueTag t={task()} />
             </nav>
             <Show when={task().status === "done" && task().unverified?.length}>
               <span class="status-chip unverified" title={task().unverified!.join("\n")}>확인 안 됨 {task().unverified!.length}</span>
