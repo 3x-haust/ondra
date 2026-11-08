@@ -72,7 +72,9 @@ export default {
   "{k} 토큰": "{k} token|{k} tokens",
   "모델": "Model",
   "추론 강도": "Effort",
-  "서비스 추가": "Add service",
+  "로그인 추가": "Add sign-in",
+  "새 계정": "New account",
+  "로그인 중": "Signing in",
   "계정 삭제": "Delete account",
   "계정 추가": "Add account",
   "계정 없음": "No accounts",
@@ -183,7 +185,7 @@ export default {
   "답이 끝날 때": "When a reply ends",
 
   // tools
-  "도구 {n}개 · {tok} 토큰": "{n} tool · {tok} tokens|{n} tools · {tok} tokens",
+  "켜진 도구 {n}개 · {tok} 토큰": "{n} tool on · {tok} tokens|{n} tools on · {tok} tokens",
   "켜진 도구가 요청마다 쓰는 토큰": "Tokens the tools in use add to each request",
   "토큰": "Tokens",
   "새로고침": "Refresh",

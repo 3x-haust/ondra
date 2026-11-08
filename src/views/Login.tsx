@@ -43,7 +43,7 @@ const say = (m: string) =>
     .replace(/^Complete login in your browser.*$/i, () => t("로그인 후 주소 붙여넣기"))
     .replace(/^Enter (.+) API key:?$/i, (_, name) => t("{name} API 키", { name }));
 
-export function LoginSheet(props: { accountId: string; onClose: () => void }) {
+export function LoginSheet(props: { accountId: string; title?: string; onClose: () => void }) {
   const agent = `login:${props.accountId}:${Date.now()}`;
   // the last list shows at once; the engine (≈2s to start) refreshes it behind
   const KEY = `ondra.loginProviders.${props.accountId}`;
@@ -184,12 +184,12 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
 
   return (
     <div class="backdrop" onClick={props.onClose}>
-      <div class="sheet login-sheet" role="dialog" aria-modal="true" aria-label={t("로그인")} onClick={(e) => e.stopPropagation()}>
+      <div class="sheet login-sheet" role="dialog" aria-modal="true" aria-label={props.title ?? t("로그인")} onClick={(e) => e.stopPropagation()}>
         <div class="sheet-head">
           <Show when={step().kind === "busy"}>
             <button class="icon-btn" title={t("뒤로")} aria-label={t("뒤로")} onClick={cancel}><Icon name="back" size={16} /></button>
           </Show>
-          {t("로그인")}
+          {props.title ?? t("로그인")}
           <span class="spacer" />
           <button class="icon-btn" title={t("닫기")} aria-label={t("닫기")} onClick={props.onClose}><Icon name="x" size={16} /></button>
         </div>

@@ -1,6 +1,6 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { accountName } from "../ui/AccountPicker";
-import { modelsOf } from "../engine/modelList";
+import { modelsOf, refreshModels } from "../engine/modelList";
 import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
@@ -408,6 +408,9 @@ const ownLabel = (a: Account) => {
 /** signed in = the account has a provider login (the same test the account chip uses) */
 const signedIn = (a: Account) => a.providers.length > 0;
 
+/** what the per-account sign-in button says; its sheet carries the same title */
+const loginWord = (a: Account) => (signedIn(a) ? "로그인 추가" : "로그인");
+
 function AccountRow(props: { id: string; onLogin: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
   const [models] = createResource(() => (a().providers.length ? props.id : null), modelsOf);
@@ -470,7 +473,7 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
           </select>
         </label>
         <span class="spacer" />
-        <button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{signedIn(a()) ? t("서비스 추가") : t("로그인")}</button>
+        <button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{t(loginWord(a()))}</button>
         <Show when={props.id !== "default"}>
           <Show
             when={confirm()}
@@ -504,7 +507,10 @@ async function refreshProviders() {
 }
 
 function Accounts() {
-  const [login, setLogin] = createSignal<string | null>(null);
+  /** the sign-in sheet open now, and the words on the button that opened it */
+  const [login, setLogin] = createSignal<{ id: string; title: string } | null>(null);
+  /** 계정 추가: an account that exists only once its sign-in goes through */
+  const [pending, setPending] = createSignal<{ id: string; space: SpaceId } | null>(null);
   onMount(() => {
     refreshProviders();
     for (const a of state.accounts) void loadEmail(a.id).catch(() => {});
@@ -513,12 +519,24 @@ function Accounts() {
   });
   const add = (space: SpaceId) => {
     const id = uid("acc");
-    const n = state.accounts.filter((a) => a.space === space).length + 1;
+    setPending({ id, space });
+    setLogin({ id, title: "계정 추가" });
+  };
+  const closed = async () => {
+    const p = pending();
+    setLogin(null);
+    setPending(null);
+    if (!p) return;
+    // signed in: the account is made now, with what it signed in to; else nothing is left behind
+    const providers = await accountProviders(p.id).catch(() => [] as string[]);
+    if (!providers.length) return void accountRemove(p.id).catch(() => {});
+    const n = state.accounts.filter((a) => a.space === p.space).length + 1;
     setState("accounts", (l) => [
       ...l,
-      { id, space, label: `${t(state.spaces.find((s) => s.id === space)?.label ?? "계정")} ${n}`, providers: [], model: "", badModels: [], stats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
+      { id: p.id, space: p.space, label: `${t(state.spaces.find((s) => s.id === p.space)?.label ?? "계정")} ${n}`, providers, model: "", badModels: [], stats: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
     ]);
-    setLogin(id);
+    void refreshModels(p.id, true);
+    void loadEmail(p.id).catch(() => {});
   };
   return (
     <>
@@ -527,17 +545,26 @@ function Accounts() {
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
-              <button class="btn ghost sm" onClick={() => add(s.id)}><Icon name="plus" size={14} />{t("계정 추가")}</button>
+              <button class="btn ghost sm" disabled={!!pending()} onClick={() => add(s.id)}><Icon name="plus" size={14} />{t("계정 추가")}</button>
             </GroupTitle>
             <div class="set-group">
-              <For each={state.accounts.filter((a) => a.space === s.id)} fallback={<div class="empty-line">{t("계정 없음")}</div>}>
-                {(a) => <AccountRow id={a.id} onLogin={() => setLogin(a.id)} />}
+              <For each={state.accounts.filter((a) => a.space === s.id)} fallback={<Show when={pending()?.space !== s.id}><div class="empty-line">{t("계정 없음")}</div></Show>}>
+                {(a) => <AccountRow id={a.id} onLogin={() => setLogin({ id: a.id, title: loginWord(a) })} />}
               </For>
+              <Show when={pending()?.space === s.id}>
+                <div class="acc-row acc-pending">
+                  <div class="acc-line">
+                    <span class="acc-pending-name">{t("새 계정")}</span>
+                    <span class="spacer" />
+                    <span class="acc-usage"><span class="spin sm" />{t("로그인 중")}</span>
+                  </div>
+                </div>
+              </Show>
             </div>
           </>
         )}
       </For>
-      <Show when={login()}>{(id) => <LoginSheet accountId={id()} onClose={() => setLogin(null)} />}</Show>
+      <Show when={login()}>{(l) => <LoginSheet accountId={l().id} title={t(l().title)} onClose={() => void closed()} />}</Show>
     </>
   );
 }
