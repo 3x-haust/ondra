@@ -401,9 +401,9 @@ export function TaskView(props: { id: string }) {
                           { name: "discard", desc: tr("버리기"), icon: "undo", run: () => void discardTask(task().id) },
                         ]
                       : []),
-                    { name: "ask", desc: tr("권한: 매번 묻기"), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
-                    { name: "edits", desc: tr("권한: 편집 허용"), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
-                    { name: "full", desc: tr("권한: 전체 권한"), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
+                    { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
+                    { name: "edits", desc: tr("권한: {name}", { name: tr("편집 허용") }), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
+                    { name: "full", desc: tr("권한: {name}", { name: tr("전체 권한") }), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
                     ...skillCommands(() => ({ task: task().id, space: task().space })),
                   ]}
                   placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" ? tr("메시지 보내기") : tr("이어서 말하기")}
