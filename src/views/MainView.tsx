@@ -255,9 +255,9 @@ function AccountModel(props: { accountId: string; up?: boolean }) {
 /** The sidebar's 새 작업: a blank task to write, in a project picked here. Any move elsewhere ends it. */
 const drafting = newTaskOpen;
 const setDrafting = setNewTaskOpen;
-export function startNewTask() {
+export function startNewTask(preset?: string) {
   const v = view();
-  const project = v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined;
+  const project = preset ?? (v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
   setView({ name: "main" });
   setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined });
   setTimeout(() => document.getElementById("new-task-input")?.focus(), 30);

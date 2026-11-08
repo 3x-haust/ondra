@@ -74,7 +74,6 @@ export const [loaded, setLoaded] = createSignal(false);
 export async function loadState() {
   if (!inTauri && location.search.includes("fixture")) {
     setState(reconcile(fixture(freshState())));
-    for (const t of state.tasks) if (!t.project) setState("tasks", (x) => x.id === t.id, "project", projectFor(t.space, t.cwd));
     const { setCtx } = await import("./ctx");
     // the window the engine reports for the fixture's model (GPT-5.6 Terra: 272K), the same the context sheet shows
     const W = 272_000;
@@ -110,7 +109,22 @@ export async function loadState() {
   setLoaded(true);
 }
 
+/** Every task carries the project `taskProject` finds, so each place that reads `task.project` agrees. */
+export function fileTasks() {
+  for (const t of state.tasks) {
+    const p = taskProject(t);
+    if (p !== t.project && (p || !t.project)) setState("tasks", (x) => x.id === t.id, "project", p);
+  }
+}
+
 createRoot(() => {
+  // re-file when a project is added or a task gets its worktree
+  createEffect(() => {
+    if (!loaded()) return;
+    for (const t of state.tasks) void (t.project, t.cwd, t.worktree?.repo, t.worktree?.sub);
+    void (state.projects ?? []).map((p) => p.folder);
+    queueMicrotask(fileTasks);
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
     const json = JSON.stringify(state);
@@ -136,6 +150,15 @@ export function projectFor(space: SpaceId, cwd?: string): string | undefined {
   return projectsIn(space)
     .filter((p) => dir === norm(p.folder) || dir.startsWith(`${norm(p.folder)}/`))
     .sort((a, b) => b.folder.length - a.folder.length)[0]?.id;
+}
+/**
+ * The project a task belongs to, one rule for the sidebar, board, canvas, Results and the overview:
+ * its worktree's repo when that is a known project, else the project it was started in, else the
+ * project holding its folder. None of these: no project (기타).
+ */
+export function taskProject(t: Task): string | undefined {
+  const known = (id?: string) => (id && projectsIn(t.space).some((p) => p.id === id) ? id : undefined);
+  return (t.worktree?.repo ? projectFor(t.space, homeDir(t)) : undefined) ?? known(t.project) ?? projectFor(t.space, t.cwd);
 }
 /** A project is the repo, never one of its worktree folders (…/worktrees/<repo>/<job> → …/projects/<repo>). */
 export function repoHome(folder: string): string {
@@ -163,7 +186,7 @@ export function addProject(space: SpaceId, folder: string, name?: string): strin
   const unique = (state.projects ?? []).some((p) => p.id === id) ? `${id}-${uid("").slice(-4)}` : id;
   setState("projects", (l) => [...(l ?? []), { id: unique, space, name: name || folder.split("/").filter(Boolean).pop() || unique, folder }]);
   // jobs already in that folder join it
-  for (const t of state.tasks) if (t.space === space && !t.project && projectFor(space, t.cwd) === unique) setState("tasks", (x) => x.id === t.id, "project", unique);
+  fileTasks();
   return unique;
 }
 /** A project's shown name (its id and folder stay). */

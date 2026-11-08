@@ -19,21 +19,24 @@ import { Fold } from "../ui/Fold";
 import { archiveTask, togglePin } from "../engine/tasks";
 import { t as tr } from "../i18n";
 
-export type Bucket = "you" | "review" | "work" | "done";
+export type Bucket = "you" | "failed" | "review" | "work" | "done";
 
-/** What a job needs from you. A subagent waiting on you pulls its job up. */
+/** What a job needs from you. A subagent waiting on you pulls its job up.
+ *  Failed is its own bucket: never counted or shown as 응답 필요. */
 export function bucket(t: Task): Bucket {
   const kids = state.tasks.filter((k) => k.parentId === t.id);
+  if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   // a subagent that failed under a job that has finished anyway needs nothing from you
-  const open = t.status !== "done";
-  if (t.status === "waiting" || t.status === "failed" || kids.some((k) => k.status === "waiting" || (open && k.status === "failed"))) return "you";
+  if (t.status === "failed" || (t.status !== "done" && kids.some((k) => k.status === "failed"))) return "failed";
   if (t.status === "done") return t.worktree?.state === "open" ? "review" : "done";
   return "work";
 }
+/** needs you: a reply, a failure to look at, or a merge (내 차례) */
+export const needsYou = (t: Task) => bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review";
 
 /** Jobs of a space, most urgent first (the order ⌘⇧[ ] walks). */
 export function forkOrder(space: string): Task[] {
-  const order: Bucket[] = ["you", "review", "work", "done"];
+  const order: Bucket[] = ["you", "failed", "review", "work", "done"];
   return tasksIn(space as Task["space"])
     .filter((t) => !t.parentId && !t.answer)
     .sort((a, b) => order.indexOf(bucket(a)) - order.indexOf(bucket(b)) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
@@ -100,8 +103,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   const [open, setOpen] = createSignal<boolean | undefined>(undefined);
   const showKids = () => open() ?? (openRoot() === t().id || kids().some((k) => k.status === "waiting" || k.status === "failed"));
   const b = () => bucket(t());
-  const tone = () =>
-    t().status === "failed" ? "bad" : b() === "you" ? "ask" : b() === "review" ? "review" : t().status === "running" ? "live" : t().status === "queued" || t().status === "paused" ? "idle" : "done";
+  const tone = () => stateMeta(t(), props.kid).tone;
   const meta = () => stateMeta(t(), props.kid).text;
   // a task in review says so; its size is in the tooltip
   const tip = () => {
@@ -175,7 +177,7 @@ function projectMenu(id: string): MenuEntry[] {
   const n = state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && !t.answer).length;
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
-    { id: "new", label: tr("새 작업"), icon: "compose", run: () => (goMain(p.id), setTimeout(() => document.getElementById("main-input")?.focus(), 60)) },
+    { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
     "sep",
     { id: "rename", label: tr("이름 바꾸기"), icon: "pencil", run: () => setRenamingProject(p.id) },
     { id: "finder", label: tr("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(p.folder)) },
@@ -226,7 +228,7 @@ function NeedsMenu() {
     window.removeEventListener("blur", close);
     window.removeEventListener("keydown", esc, true);
   });
-  const list = () => forkOrder(state.space).filter((t) => !t.archived && (bucket(t) === "you" || bucket(t) === "review"));
+  const list = () => forkOrder(state.space).filter((t) => !t.archived && needsYou(t));
   const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
   createEffect(() => needsMenu() && !list().length && close());
   return (
@@ -243,11 +245,14 @@ function NeedsMenu() {
           <For each={list()}>
             {(t) => (
               <button role="menuitem" onClick={() => (openTask(t.id), close())}>
-                <Glyph t={t} />
+                {/* a job whose subagent failed shows the failure: red glyph, 실패 */}
+                <Show when={bucket(t) === "failed" && t.status !== "failed"} fallback={<Glyph t={t} />}>
+                  <span class="sb-glyph st-icon sm failed" aria-hidden="true"><i /></span>
+                </Show>
                 <span class="row-title">{t.title}</span>
                 <span class="row-hint">
                   {/* the state word in its tone, as on the sidebar row */}
-                  <span class={`needs-word ${t.status === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "you" ? (t.status === "failed" ? tr("실패") : tr("응답 필요")) : tr("검토")}</span>
+                  <span class={`needs-word ${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
                   {where(t) ? ` · ${where(t)}` : ""}
                 </span>
               </button>
@@ -360,7 +365,7 @@ export function Sidebar() {
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = () => shown().filter((t) => !filed(t));
   const looseDone = () => roots().filter((t) => old(t) && !filed(t));
-  const needs = () => roots().filter((t) => bucket(t) === "you" || bucket(t) === "review").length;
+  const needs = () => roots().filter(needsYou).length;
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -628,7 +633,7 @@ export function Sidebar() {
 
 /** Shown in a header while the sidebar is folded away. */
 export function SidebarToggle() {
-  const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you").length;
+  const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you" || bucket(t) === "failed").length;
   return (
     <Show when={sidebarAway()}>
       <button class="icon-btn sb-show" data-shortcut="sidebar" title={`${tr("사이드바 펼치기")} ${shortcutHint("sidebar")}`} aria-label={tr("사이드바 펼치기")} onClick={showSidebar}>
@@ -647,7 +652,7 @@ export function stepFork(space: string, dir: 1 | -1): Task | undefined {
   return list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length];
 }
 export function nextWaiting(space: string): Task | undefined {
-  const list = forkOrder(space).filter((t) => bucket(t) === "you" || bucket(t) === "review");
+  const list = forkOrder(space).filter(needsYou);
   const i = list.findIndex((t) => t.id === openRoot());
   return list[(i + 1) % Math.max(1, list.length)];
 }
