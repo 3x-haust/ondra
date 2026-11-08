@@ -8,7 +8,8 @@ import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
-import { noteCall, noteCtx } from "../state/ctx";
+import { ctx, noteCall, noteCtx } from "../state/ctx";
+import { handoffAt, handoffSteer, windowFor } from "./handoff";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
@@ -69,17 +70,10 @@ interface Run {
   polls?: number;
   /** how many times it was told its context is long (handoff) */
   longNudges?: number;
-  /** prompt size when this session started (the long-context nudge measures growth above it) */
-  base?: number;
   /** a handoff sent while subagents still worked: the new session starts once they are done */
   pendingHandoff?: Handoff;
 }
 
-// A session that grew this many prompt tokens past where it started is told to
-// hand off: every later call re-sends the whole context, so long sessions cost the
-// most and think worst. (Measured from the start: the system prompt and tools
-// alone take ~30k, a resumed session starts bigger.)
-const HANDOFF_AT = [90_000, 150_000];
 
 const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
@@ -718,7 +712,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     markAlive(agent);
     const fresh = taskById(id)!;
     // a resumed session already has totals; only what happens from here counts
+    // (asking also learns the model's context window, which sets the handoff point)
     if (resume) run.stats = await rawStats(agent);
+    else void rawStats(agent);
     if (rewind) {
       updateTask(id, (x) => (x.inbox = []));
       await forkAt(agent, rewind.from);
@@ -859,19 +855,14 @@ function handlers(id: string, run: Run) {
           const u = ev.message?.usage;
           noteCall(agentOf(id), u);
           const prompt = (u?.input ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
-          // where this session started (a resumed one counts from a fresh session's size)
-          if (prompt) run.base ??= Math.min(prompt, 40_000);
+          // near the model's own context window: ask for a handoff (see handoff.ts)
           const level = run.longNudges ?? 0;
-          if (run.streaming && level < HANDOFF_AT.length && prompt - (run.base ?? 30_000) > HANDOFF_AT[level] && !run.done && !run.handoff) {
+          const job = taskById(id);
+          const win = ctx[agentOf(id)]?.window || windowFor(job?.model || (job ? modelFor(job.accountId) : undefined));
+          const at = handoffAt(win);
+          if (run.streaming && level < at.length && prompt > at[level] && !run.done && !run.handoff) {
             run.longNudges = level + 1;
-            const k = Math.round(prompt / 1000);
-            void request(agentOf(id), {
-              type: "steer",
-              message:
-                level === 0
-                  ? `(Ondra) This session is at ${k}k tokens. If only the wrap-up is left (the report, a last check), send done here instead. Otherwise finish the step you are on, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) so a fresh session continues. Don't start anything new here.`
-                  : `(Ondra) This session is at ${k}k tokens. Send done if only the wrap-up is left, otherwise the {"type":"handoff"} block now.`,
-            }).catch(() => {});
+            void request(agentOf(id), { type: "steer", message: handoffSteer(level, prompt, win) }).catch(() => {});
           }
           break;
         }
@@ -1222,7 +1213,6 @@ export function onlyWaits(card: Handoff): boolean {
 async function newSession(id: string, run: Run, card: Handoff) {
   const agent = agentOf(id);
   run.longNudges = 0;
-  run.base = undefined;
   updateTask(id, (x) => {
     const leg = x.legs[x.legs.length - 1];
     if (leg) {
