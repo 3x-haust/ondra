@@ -3,7 +3,7 @@
 /* colours of the parts of a context window: calm, told apart by hue, no gradients */
 :root {
   --cx-engine: #9ca3af;
-  --cx-ondra: #5059ff;
+  --cx-ondra: #1f6fd8;
   --cx-files: #0f9488;
   --cx-skills: #c2780c;
   --cx-tools: #6d5bd0;
@@ -12,7 +12,7 @@
 }
 :root[data-theme="dark"] {
   --cx-engine: #6b7280;
-  --cx-ondra: #6d75ff;
+  --cx-ondra: #4d9cf0;
   --cx-files: #2bb3a5;
   --cx-skills: #e0a03a;
   --cx-tools: #9585ec;
@@ -21,7 +21,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --cx-engine: #6b7280;
-    --cx-ondra: #6d75ff;
+    --cx-ondra: #4d9cf0;
     --cx-files: #2bb3a5;
     --cx-skills: #e0a03a;
     --cx-tools: #9585ec;
