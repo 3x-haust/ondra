@@ -20,12 +20,17 @@ export const lang = (): Lang => {
   return l === "system" ? system() : l;
 };
 
-/** "{n}개" with { n: 3 } → "3개" */
+/** "{n}개" with { n: 3 } → "3개". An English value "{n} file|{n} files" picks by n. */
 export function t(ko: string, vars?: Record<string, string | number>): string {
   // "일시정지|action": same Korean, its own English
   const bar = ko.indexOf("|");
   const base = bar < 0 ? ko : ko.slice(0, bar);
-  const s = lang() === "en" ? (en[ko] ?? en[base] ?? base) : base;
+  let s = lang() === "en" ? (en[ko] ?? en[base] ?? base) : base;
+  // English singular and plural: "{n} file|{n} files" picks by vars.n
+  if (s.includes("|") && vars && typeof vars.n === "number") {
+    const [one, other] = s.split("|");
+    s = vars.n === 1 ? one : (other ?? one);
+  }
   return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
