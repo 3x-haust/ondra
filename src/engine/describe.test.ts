@@ -108,18 +108,25 @@ describe("cutTitle", () => {
   it("keeps a short title whole", () => {
     expect(cutTitle("  로그인 리다이렉트 고치기 ")).toBe("로그인 리다이렉트 고치기");
   });
-  it("cuts a long one where a word ends", () => {
-    const long = "로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기";
+  it("keeps a title up to 80 characters whole", () => {
+    const t = "로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기";
+    expect(cutTitle(t)).toBe(t);
+    expect(cutTitle("Fix the login redirect so people land on the page they were reading")).toBe("Fix the login redirect so people land on the page they were reading");
+  });
+  it("cuts a longer one where a word ends", () => {
+    const long = "로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기, 그리고 세션이 만료된 경우에도 로그인 화면을 거쳐 같은 페이지로 돌려보내는 흐름까지 확인하기";
     const c = cutTitle(long);
     expect(c.endsWith("…")).toBe(true);
-    expect([...c].length).toBeLessThanOrEqual(40);
+    expect([...c].length).toBeLessThanOrEqual(80);
     // the part before … is whole words of the original
     expect(long.startsWith(c.slice(0, -1))).toBe(true);
     expect(long[c.length - 1]).toBe(" ");
-    expect(cutTitle("Fix the login redirect so people land on the page they were reading")).toBe("Fix the login redirect so people land…");
+    expect(
+      cutTitle("Fix the login redirect so people land on the page they were reading before the session timed out"),
+    ).toBe("Fix the login redirect so people land on the page they were reading before the…");
   });
   it("cuts one very long word where it must", () => {
-    const c = cutTitle("a".repeat(60));
-    expect(c).toBe(`${"a".repeat(39)}…`);
+    const c = cutTitle("a".repeat(120));
+    expect(c).toBe(`${"a".repeat(79)}…`);
   });
 });

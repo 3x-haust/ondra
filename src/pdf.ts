@@ -25,7 +25,7 @@ for (const el of document.querySelectorAll<HTMLElement>("[title], [aria-label]")
 for (const el of document.querySelectorAll<HTMLElement>("option, #password-form button")) {
   if (el.textContent) el.textContent = t(el.textContent);
 }
-document.querySelector("#status")!.textContent = t("불러오는 중");
+document.querySelector("#status")!.textContent = t("불러오는 중…");
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 // Vite emits these with their original names: PDF.js requests them by name.

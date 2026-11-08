@@ -11,6 +11,7 @@ import { expand } from "../engine/rpc";
 import { fileSrc, pdfSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
+import { GlyphMark } from "../views/Sidebar";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
 import { discarded, rememberDiff } from "../state/progress";
@@ -728,11 +729,7 @@ export type { GitChanges };
 /** 버리기 asks once, with the same words everywhere (review bar, changes tab, ⋯ menu, /discard). */
 export const askDiscard = (t: Pick<Task, "id" | "title">) => confirmDiscard(t.id);
 
-/** A discarded task's mark: the done check, muted. */
+/** A discarded task's mark: the shared glyph's muted trash (Sidebar.tsx). */
 export function DiscardGlyph(props: { class?: string }) {
-  return (
-    <span class={`sb-glyph st-icon sm done discarded ${props.class ?? ""}`} aria-hidden="true">
-      <Icon name="check" size={9} stroke={2.5} />
-    </span>
-  );
+  return <GlyphMark g="discarded" class={props.class} />;
 }

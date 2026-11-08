@@ -177,7 +177,7 @@ export default {
   "{n}분 전": "{n}m ago",
   "{n}시간 전": "{n}h ago",
   "PR을 불러오지 못했어요": "Couldn't load the PR",
-  "불러오는 중": "Loading",
+  "불러오는 중…": "Loading…",
   "초안": "Draft",
   "닫힘": "Closed",
   "GitHub에서 열기": "Open on GitHub",

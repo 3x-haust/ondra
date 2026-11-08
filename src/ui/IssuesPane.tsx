@@ -117,7 +117,7 @@ export function IssuesPane(props: { t?: Task }) {
           when={!list.error}
           fallback={<div class="pane-empty">{t("이슈를 불러오지 못했어요")}<button class="btn sm" onClick={() => refetch()}>{t("다시 시도")}</button></div>}
         >
-          <Show when={list()} fallback={<div class="pane-empty">{t("불러오는 중")}</div>}>
+          <Show when={list()} fallback={<div class="pane-empty">{t("불러오는 중…")}</div>}>
             <Show
               when={shown().length}
               fallback={<div class="pane-empty">{filter() === "working" && !typed().trim() ? t("작업 중인 이슈 없음") : t("이슈 없음")}</div>}
@@ -217,7 +217,7 @@ function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>;
             <Show when={props.i.author?.login}>{(a) => <b>{a()}</b>}</Show>
             <Show when={full()?.comments?.length}>{(n) => <span>{t("댓글 {n}개", { n: n() })}</span>}</Show>
           </div>
-          <Show when={full()} fallback={<p class="iss-empty">{t("불러오는 중")}</p>}>
+          <Show when={full()} fallback={<p class="iss-empty">{t("불러오는 중…")}</p>}>
             {(f) => (
               <Show when={f().body?.trim()} fallback={<p class="iss-empty">{t("본문 없음")}</p>}>
                 <Markdown class="iss-md" text={f().body!} />

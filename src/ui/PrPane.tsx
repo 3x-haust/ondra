@@ -61,7 +61,7 @@ export function PrPane(props: { t: Task }) {
             <button class="btn sm" onClick={() => void refetch()}>{tr("다시 시도")}</button>
           </div>
         </Match>
-        <Match when={view.loading}><div class="pane-empty">{tr("불러오는 중")}</div></Match>
+        <Match when={view.loading}><div class="pane-empty">{tr("불러오는 중…")}</div></Match>
       </Switch>
     </div>
   );

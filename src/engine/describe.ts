@@ -126,10 +126,10 @@ export function noteText(text: string): string {
 }
 
 /**
- * A title that fits in `max` characters, cut where a word ends with "…" (never
- * mid-word unless one word is longer than half of it).
+ * A title that fits in `max` characters (80: views truncate it with CSS), cut where a
+ * word ends with "…" (never mid-word unless one word is longer than half of it).
  */
-export function cutTitle(s: string, max = 40): string {
+export function cutTitle(s: string, max = 80): string {
   const x = s.replace(/\s+/g, " ").trim();
   const chars = [...x];
   if (chars.length <= max) return x;

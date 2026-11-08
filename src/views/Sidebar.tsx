@@ -1,7 +1,7 @@
 // The left side, after T3 Code: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { switchSpace } from "../state/workspace";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, renameProject, state, taskById, tasksIn } from "../state/store";
@@ -66,11 +66,12 @@ const openRoot = () => {
 const DONE_FOR = 10 * 60_000;
 const ended = (t: Task) => (t.status === "done" && t.worktree?.state !== "open") || discarded(t);
 
+export type GlyphKind = "failed" | "waiting" | "inreview" | "running" | "paused" | "queued" | "done" | "discarded";
 /** The status glyph's shape (st-icon classes): what the row needs, not only its own status.
- *  One look everywhere a task is listed: sidebar, ⌘K, the 내 차례 popover. */
-export function glyphOf(x: Task): "failed" | "waiting" | "inreview" | "running" | "paused" | "queued" | "done" {
+ *  One look everywhere a task's state shows: sidebar, ⌘K, 내 차례, header, board, canvas, flow. */
+export function glyphOf(x: Task): GlyphKind {
   const b = bucket(x);
-  if (discarded(x)) return "done";
+  if (discarded(x)) return "discarded";
   if (x.status === "failed") return "failed";
   if (b === "you") return "waiting";
   if (b === "review") return "inreview";
@@ -78,15 +79,22 @@ export function glyphOf(x: Task): "failed" | "waiting" | "inreview" | "running" 
   if (x.status === "paused" || x.status === "queued") return x.status;
   return "done";
 }
-export function Glyph(props: { t: Task; class?: string }) {
-  const g = () => glyphOf(props.t);
+/** A state's mark, read by shape as well as colour: done ✓, review ring + dot, paused ring + ‖,
+ *  discarded a muted trash, queued a dashed ring, running a pie. For places with no one task. */
+export function GlyphMark(props: { g: GlyphKind; class?: string }) {
   return (
-    <span class={`sb-glyph st-icon sm ${g()} ${discarded(props.t) ? "discarded" : ""} ${props.class ?? ""}`} aria-hidden="true">
-      <Show when={g() === "running"} fallback={<Show when={g() === "done"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
-        <span class="spin" />
-      </Show>
+    <span class={`sb-glyph st-icon sm ${props.g} ${props.class ?? ""}`} aria-hidden="true">
+      <Switch fallback={<i />}>
+        <Match when={props.g === "running"}><span class="spin" /></Match>
+        <Match when={props.g === "done"}><Icon name="check" size={9} stroke={2.5} /></Match>
+        <Match when={props.g === "paused"}><b class="pz" /></Match>
+        <Match when={props.g === "discarded"}><Icon name="trash" size={14} /></Match>
+      </Switch>
     </span>
   );
+}
+export function Glyph(props: { t: Task; class?: string }) {
+  return <GlyphMark g={glyphOf(props.t)} class={props.class} />;
 }
 
 /** What a task's row says on the right, and in which tone: its state when it needs something
@@ -260,7 +268,7 @@ function NeedsMenu() {
                 <span class="row-title">{t.title}</span>
                 {/* the state word in its tone, as on the sidebar row; the project in its own right-aligned column */}
                 <span class={`needs-word tone-${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
-                <span class="needs-where">{where(t) ?? tr("프로젝트 없음")}</span>
+                <span class="needs-where">{where(t) ?? tr("기타")}</span>
               </button>
             )}
           </For>
@@ -613,7 +621,7 @@ export function Sidebar() {
         </Fold>
 
         <Show when={loose().length || looseDone().length || archived().length}>
-        <Head id="jobs" label={projectsIn(state.space).length ? tr("기타 작업") : tr("작업")} count={loose().length} />
+        <Head id="jobs" label={projectsIn(state.space).length ? tr("기타") : tr("작업")} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()}>
