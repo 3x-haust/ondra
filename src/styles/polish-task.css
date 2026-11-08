@@ -1065,7 +1065,7 @@
 }
 /* short window: the to-do line stays reachable under the first tray (it opens on click) */
 @media (max-height: 800px) {
-  .task-view .strips > .todos {
+  .task-view .strips > .todos:not(.queued) {
     display: block;
   }
 }

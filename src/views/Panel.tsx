@@ -8,7 +8,7 @@ import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, S
 import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
-import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, type PanelTab } from "../state/ui";
+import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
@@ -21,6 +21,7 @@ import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
+import { usesReverse } from "../engine/reverse";
 import { askDiscard, ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
@@ -594,8 +595,20 @@ function NewTab(props: { t?: Task }) {
 
 /** A task's tab (Changes, Terminal…): off Main's strip, back when a task is open. */
 const jobOnly = (k: PanelTab) => !!TOOLS.find((x) => x.kind === k)?.job;
-/** On Main a task's tab steps aside: the tab it was on, and the one picked in its place. */
-let parked: { id: number; instead: number } | null = null;
+/** a page of its own: the live browser, its last screenshot, or pages it visited */
+const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.kind === "tool" && e.tool.kind === "browser");
+// which tabs go with you to another place (see enterPlace in state/ui)
+setTabFits((place, kind) => {
+  if (kind === "preview") return previewPlace() === place ? "use" : "drop";
+  if (place === "main") return jobOnly(kind) ? "keep" : "use";
+  const t = state.tasks.find((x) => x.id === place);
+  if (!t) return "use";
+  // the shared browser you opened yourself goes along; a task's own page doesn't
+  if (kind === "browser") return hasPage(t) || panelShared() ? "use" : "drop";
+  if (kind === "reverse") return usesReverse(t, state.tasks) ? "use" : "drop";
+  if (kind === "pr") return t.worktree || prOf(t) ? "use" : "drop";
+  return "use";
+});
 
 /** when the last panel went away: a re-mount right after a close shouldn't slide again */
 let panelGoneAt = 0;
@@ -624,20 +637,14 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
   const running = () => props.t?.shells.filter((s) => !s.endedAt).length ?? 0;
   /** tabs that work here: on Main, not a task's own */
   const usable = (x: { kind: PanelTab }) => !!props.t || !jobOnly(x.kind);
+  // on Main a task's tab steps aside (it's there again on the task)
   createEffect(
     on([() => !!props.t, activeTab], ([job, cur]) => {
-      if (!job) {
-        const at = ptabs().find((x) => x.id === cur);
-        if (!at || usable(at)) return;
-        const alt = ptabs().find(usable);
-        if (alt) setActiveTab(alt.id);
-        else setPanelTab("flow");
-        parked = { id: at.id, instead: activeTab() };
-      } else if (parked) {
-        // back on a task: its tab again, unless another one was picked meanwhile
-        if (cur === parked.instead && ptabs().some((x) => x.id === parked!.id)) setActiveTab(parked.id);
-        parked = null;
-      }
+      const at = ptabs().find((x) => x.id === cur);
+      if (job || !at || usable(at)) return;
+      const alt = ptabs().find(usable);
+      if (alt) setActiveTab(alt.id);
+      else setPanelTab("flow");
     }),
   );
   const tab = panelTab;
