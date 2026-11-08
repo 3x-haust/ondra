@@ -1,6 +1,6 @@
 [package]
 name = "ondra"
-version = "0.26.0"
+version = "0.27.0"
 description = "Throw tasks in; a captain splits them and agents run them in parallel."
 authors = ["3x-haust"]
 edition = "2024"
