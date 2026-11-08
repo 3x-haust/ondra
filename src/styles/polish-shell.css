@@ -1362,3 +1362,33 @@
   color: var(--accent-text);
   font-weight: var(--fw-medium);
 }
+
+/* ═════════════ round 4 ═════════════ */
+
+/* titles get the room: the sidebar grows with a wide window (264 at 1200 and below) */
+.app {
+  --sidebar-w: clamp(264px, 22.3vw, 320px);
+}
+/* at rest a row holds only its title and its time; the subagent count and the
+   pin/archive buttons come in on hover (the title gives way then, not before) */
+.app .sidebar .sb-row .sb-trail.acts {
+  min-width: 0;
+}
+.app .sidebar .sb-row .sb-trail .sb-acts {
+  display: none;
+}
+.app .sidebar .sb-row:hover .sb-trail .sb-acts,
+.app .sidebar .sb-row:focus-within .sb-trail .sb-acts {
+  display: inline-flex;
+}
+.app .sidebar .sb-row:hover .sb-trail.acts .sb-meta,
+.app .sidebar .sb-row:focus-within .sb-trail.acts .sb-meta {
+  display: none;
+}
+.app .sidebar .sb-row .sb-kids {
+  display: none;
+}
+.app .sidebar .sb-row:hover .sb-kids,
+.app .sidebar .sb-row:focus-within .sb-kids {
+  display: inline-flex;
+}

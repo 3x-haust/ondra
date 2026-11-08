@@ -46,7 +46,9 @@ export function taskMenuItems(id: string): MenuEntry[] {
     ],
     [
       ...(x.status === "running" || x.status === "waiting" ? [{ id: "pause", label: t("일시정지|action"), icon: "pause", run: () => stopTask(id) }] : []),
-      ...(x.status === "paused" || x.status === "failed" ? [{ id: "resume", label: t("다시 시작"), icon: "play", run: () => resumeTask(id) }] : []),
+      // a failed task is tried again (the same word as its card); a paused one picks up where it stopped
+      ...(x.status === "paused" ? [{ id: "resume", label: t("다시 시작"), icon: "play", run: () => resumeTask(id) }] : []),
+      ...(x.status === "failed" ? [{ id: "resume", label: t("다시 시도"), icon: "refresh", run: () => resumeTask(id) }] : []),
       ...(x.status === "queued" ? [{ id: "start", label: t("지금 시작"), icon: "play", run: () => void startTask(id) }] : []),
       ...(x.status !== "done" ? [{ id: "done", label: t("완료로 표시"), icon: "flag", run: () => finishTask(id) }] : []),
     ],
@@ -63,7 +65,9 @@ export function taskMenuItems(id: string): MenuEntry[] {
         ]
       : [],
     [
-      {
+      // a fresh run of the same ask: only once it has stopped (running or waiting: paused instead;
+      // failed: tried again above)
+      ...(live || x.status === "queued" || x.status === "failed" ? [] : [{
         id: "rerun",
         label: t("다시 실행"),
         icon: "refresh",
@@ -71,7 +75,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
           const n = duplicateTask(id);
           if (n) openTask(n);
         },
-      },
+      }]),
       {
         id: "copy",
         label: t("Markdown으로 복사"),
