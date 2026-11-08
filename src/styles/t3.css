@@ -9246,3 +9246,47 @@ select.select.dev-space {
 .iss-loading {
   padding: var(--s-8) 0;
 }
+
+/* `?`: every shortcut on one sheet */
+.keysheet {
+  width: min(760px, calc(100vw - 48px));
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: var(--s-20);
+  border-radius: var(--r-2xl);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in var(--dur) var(--ease-drawer) both;
+}
+.keysheet h3 {
+  margin: 0 0 var(--s-16);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+}
+.keysheet-cols {
+  columns: 2 300px;
+  column-gap: var(--s-24);
+}
+.keysheet section {
+  break-inside: avoid;
+  margin-bottom: var(--s-16);
+}
+.keysheet h4 {
+  margin: 0 0 var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.keysheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-12);
+  min-height: var(--h-sm);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.keysheet-row kbd {
+  flex: none;
+}
