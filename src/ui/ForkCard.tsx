@@ -5,7 +5,7 @@ import { For, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
-import { compact, now, short, statusLabel, ago } from "./bits";
+import { ago, compact, endedAt, now, short, statusLabel } from "./bits";
 import { Icon } from "./Icon";
 import { Glyph, glyphOf } from "../views/Sidebar";
 import { costDetail, jobCost } from "./cost";
@@ -64,7 +64,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
   };
   const time = () => {
     const x = t()!;
-    if (x.status === "done") return glyphOf(x) === "inreview" ? tr("검토") : ago(x.finishedAt ?? x.createdAt);
+    if (x.status === "done") return glyphOf(x) === "inreview" ? tr("검토") : ago(endedAt(x) ?? x.createdAt);
     if (x.status === "running") return compact(now() - (x.startedAt ?? x.createdAt));
     return tr(statusLabel[x.status]);
   };

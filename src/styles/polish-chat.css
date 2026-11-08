@@ -1335,3 +1335,14 @@
 .main-view .req-board.open .req-head.req-head {
   background: transparent;
 }
+
+/* a request whose tasks were all discarded: the shared muted trash in the dot's place, text on the same line as the dots */
+.req-row .req-glyph.st-icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0 -2.5px;
+}
+.req-state.discarded {
+  color: var(--ink-3);
+}

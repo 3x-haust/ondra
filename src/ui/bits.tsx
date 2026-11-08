@@ -4,6 +4,7 @@ import type { Status, Task } from "../state/types";
 import type { View } from "../state/ui";
 import { openUrl } from "../lib/native";
 import { lang, t } from "../i18n";
+import { cutTitle } from "../engine/describe";
 
 export const statusLabel: Record<Status, string> = {
   running: "진행 중",
@@ -42,13 +43,19 @@ export function IssueTag(props: { t: Task }) {
  *  from, to go back to). MainView owns it; the sidebar highlights it. */
 export const [newTaskOpen, setNewTaskOpen] = createSignal<{ project?: string; from?: View } | null>(null);
 
-/** A title from what was typed: its first line, cut at a word boundary with "…" when longer than `max`. */
-export function titleOf(text: string, max = 40): string {
-  const first = (text.split("\n").find((l) => l.trim()) ?? text).trim().replace(/\s+/g, " ");
-  if (first.length <= max) return first;
-  const room = first.slice(0, max - 1);
-  const cut = room.lastIndexOf(" ");
-  return `${(cut > max * 0.5 ? room.slice(0, cut) : room).replace(/[\s,.;:·…-]+$/, "")}…`;
+/** A task title from what was typed: its first line, up to 80 characters like any task title (cut at a word
+ *  boundary with "…" past `max`). */
+export function titleOf(text: string, max = 80): string {
+  return cutTitle((text.split("\n").find((l) => l.trim()) ?? text).trim(), max);
+}
+
+/** When a finished task ended, as its "병합됨 · …" / "버림 · …" time says: merged, when it was merged; discarded,
+ *  when the changes were thrown away (older tasks without those: when it finished). */
+export function endedAt(x: Task): number | undefined {
+  const w = x.worktree?.state;
+  // discardedAt is new on Task: read it loosely until every tree has it on the type
+  const at = w === "merged" ? x.mergedAt : w === "discarded" ? (x as Task & { discardedAt?: number }).discardedAt : undefined;
+  return at ?? x.finishedAt;
 }
 
 const [tick, setTick] = createSignal(Date.now());
