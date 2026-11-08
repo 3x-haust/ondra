@@ -1,5 +1,6 @@
 // What the model actually receives for a job or a chat: a bar of how the
 // context window fills up, then each part to open and read.
+import { enabledTools } from "../engine/agentTools";
 import { createMemo, createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
@@ -15,7 +16,7 @@ import { state, taskById } from "../state/store";
 import { fsRead, skillList } from "../lib/native";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
-import { type CtxMessage, type CtxTool, type EngineContext, estimate, type Loaded, loadChat, loadJob } from "./contextData";
+import { type CtxMessage, estimate, type Loaded, loadChat, loadJob } from "./contextData";
 import { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
 import { parseSkill } from "./SkillsTab";
 import { t } from "../i18n";
@@ -75,25 +76,16 @@ export function plainPreview(text: string): string {
     .trim();
 }
 
-/**
- * The tools a job gets, counted as Settings › 도구 counts them: on by default, or switched on there.
- * (Settings exports this count in round 4; switch to its export at merge.)
- */
-const enabledTools = (c: EngineContext): CtxTool[] => {
-  const extra = state.settings.extraTools ?? [];
-  return c.tools.filter((x) => x.active || extra.includes(x.name));
-};
 
 /**
  * The skills agents can load, as Settings › 스킬 lists them: the bundled ones and the user's.
- * (Settings exports this list in round 4; switch to its export at merge.)
  */
 async function settingsSkills(): Promise<{ name: string; description: string; path: string }[]> {
   const files = await skillList().catch(() => []);
   const bundled = await Promise.all(
     files.map(async (f) => ({ name: f.name, path: f.path, description: parseSkill((await fsRead(f.path).catch(() => ({ text: "" }))).text ?? "").description ?? "" })),
   );
-  return [...bundled, ...state.skills.map((s) => ({ name: s.name, path: s.path, description: s.description }))];
+  return [...bundled, ...state.skills.filter((s) => s.enabled).map((s) => ({ name: s.name, path: s.path, description: s.description }))];
 }
 
 /** A part that opens to show what is inside; an empty one is a plain row. */
