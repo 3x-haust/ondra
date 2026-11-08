@@ -83,6 +83,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         class={`sb-row tone-${tone()}`}
         classList={{ menu: menu()?.id === t().id, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
+        data-task={t().id}
         onClick={() => openTask(t().id)}
         onMouseEnter={() => setHoverTask(props.kid ? t().parentId! : t().id)}
         onMouseLeave={() => setHoverTask(null)}
@@ -216,6 +217,30 @@ function NeedsMenu() {
 const [renaming, setRenaming] = createSignal<string | null>(null);
 export { renaming, setRenaming };
 
+/** The sidebar from the keyboard: ↑↓ move between rows, F2 renames a job, ⇧F10 or the menu key opens its menu (Enter opens it, as a button). */
+function rowKeys(e: KeyboardEvent) {
+  const row = (e.target as HTMLElement).closest<HTMLElement>(".sb-row");
+  if (!row || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const rows = [...document.querySelectorAll<HTMLElement>(".sidebar .sb-row")].filter((r) => r.offsetParent !== null);
+    const next = rows[rows.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)];
+    if (next) (e.preventDefault(), next.focus(), next.scrollIntoView({ block: "nearest" }));
+    return;
+  }
+  const id = row.dataset.task;
+  if (!id) return;
+  if (e.key === "F2") {
+    e.preventDefault();
+    openTask(id);
+    setRenaming(id);
+  } else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+    e.preventDefault();
+    const r = row.getBoundingClientRect();
+    closePops();
+    setMenu({ id, x: r.left + 24, y: r.bottom + 2 });
+  }
+}
+
 function RowMenu() {
   const close = () => setMenu(null);
   const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && menu() && (e.preventDefault(), e.stopPropagation(), close());
@@ -314,7 +339,7 @@ export function Sidebar() {
     goMain(id);
   };
   return (
-    <aside class="sidebar">
+    <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
         <button class="icon-btn" data-shortcut="new" title="새로 맡기기 (⌘N)" onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
