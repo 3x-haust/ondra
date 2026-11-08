@@ -13,11 +13,11 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s-10);
+  gap: var(--s-8);
   width: 100%;
-  height: 36px;
+  height: var(--h-row);
   padding: 0 var(--s-10);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   text-align: left;
   color: var(--ink-2);
   font-size: var(--fs-md);
@@ -37,7 +37,7 @@
   color: var(--ink-3);
 }
 .sb-row.kid {
-  height: 30px;
+  height: var(--h-row-kid);
   padding-left: 34px;
   font-size: var(--fs-sm);
 }
