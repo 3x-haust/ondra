@@ -778,3 +778,11 @@
     display: none;
   }
 }
+
+/* ═════════════ round 8 ═════════════ */
+
+/* accounts: the usage line's "·" sits evenly, as in the composer strip (6px each side) */
+.settings-inner .acc-usage .acc-lim,
+.settings-inner .acc-usage .acc-stat {
+  gap: 0;
+}

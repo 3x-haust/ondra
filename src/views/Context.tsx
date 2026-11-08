@@ -205,51 +205,66 @@ function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; on
   const heavy = createMemo(() => [...props.list].sort((a, b) => b.tokens - a.tokens).slice(0, 8));
   const [memOpen, setMemOpen] = createSignal(false);
   const memTokens = () => props.recalled.reduce((n, m) => n + estimate(m.text), 0);
+  /** the rows, largest first: memory, each kind of message, and 나머지 (memory last on a tie) */
+  const order = createMemo(() => {
+    const rows: [string, number][] = [...groups().map((g): [string, number] => [`g:${g.label}`, g.tokens])];
+    if (rest() > 0) rows.push(["rest", rest()]);
+    rows.push(["mem", memTokens()]);
+    return rows.sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  });
   return (
     <>
       <div class="cx-talk">
-        {/* memory goes in with a message: a row of the conversation like the others */}
-        <button
-          class="cx-talk-row cx-talk-mem"
-          classList={{ open: memOpen() }}
-          disabled={!props.recalled.length}
-          aria-expanded={props.recalled.length ? memOpen() : undefined}
-          onClick={() => setMemOpen(!memOpen())}
-        >
-          <span class="cx-talk-label">
-            {t("메모리")}
-            <Show when={props.recalled.length}><Icon name="chevron" size={12} class="cx-chev" /></Show>
-          </span>
-          <span class="cx-talk-n">{t("{n}개", { n: props.recalled.length })}</span>
-          {/* the same columns as the rows below, empty when nothing was recalled */}
-          <span class="cx-talk-track"><i style={{ width: `${pct(memTokens(), props.total)}%` }} /></span>
-          <span class="cx-talk-size">{tokens(memTokens())}</span>
-        </button>
-        <Show when={props.recalled.length}>
-          <Fold open={memOpen()}>
-            <div class="cx-talk-mems">
-              <MemoryList list={props.recalled} empty={t("없음")} onOpen={props.onOpen} />
-            </div>
-          </Fold>
-        </Show>
-        <For each={groups()}>
-          {(g) => (
-            <div class="cx-talk-row">
-              <span class="cx-talk-label">{g.label}</span>
-              <span class="cx-talk-n">{t("{n}개", { n: g.n })}</span>
-              <span class="cx-talk-track"><i style={{ width: `${pct(g.tokens, props.total)}%` }} /></span>
-              <span class="cx-talk-size">{tokens(g.tokens)}</span>
-            </div>
-          )}
+        <For each={order()}>
+          {(key) =>
+            key === "mem" ? (
+              <>
+                {/* memory goes in with a message: a row of the conversation like the others */}
+                <button
+                  class="cx-talk-row cx-talk-mem"
+                  classList={{ open: memOpen() }}
+                  disabled={!props.recalled.length}
+                  aria-expanded={props.recalled.length ? memOpen() : undefined}
+                  onClick={() => setMemOpen(!memOpen())}
+                >
+                  <span class="cx-talk-label">
+                    {t("메모리")}
+                    <Show when={props.recalled.length}><Icon name="chevron" size={12} class="cx-chev" /></Show>
+                  </span>
+                  <span class="cx-talk-n">{t("{n}개", { n: props.recalled.length })}</span>
+                  {/* the same columns as the other rows, empty when nothing was recalled */}
+                  <span class="cx-talk-track"><i style={{ width: `${pct(memTokens(), props.total)}%` }} /></span>
+                  <span class="cx-talk-size">{tokens(memTokens())}</span>
+                </button>
+                <Show when={props.recalled.length}>
+                  <Fold open={memOpen()}>
+                    <div class="cx-talk-mems">
+                      <MemoryList list={props.recalled} empty={t("없음")} onOpen={props.onOpen} />
+                    </div>
+                  </Fold>
+                </Show>
+              </>
+            ) : key === "rest" ? (
+              <div class="cx-talk-row cx-talk-rest" title={t("위 메시지에 없는 토큰")}>
+                <span class="cx-talk-label">{t("나머지|context")}</span>
+                <span class="cx-talk-n" />
+                <span class="cx-talk-track"><i style={{ width: `${pct(rest(), props.total)}%` }} /></span>
+                <span class="cx-talk-size">{tokens(rest())}</span>
+              </div>
+            ) : (
+              <Show when={groups().find((g) => `g:${g.label}` === key)}>
+                {(g) => (
+                  <div class="cx-talk-row">
+                    <span class="cx-talk-label">{g().label}</span>
+                    <span class="cx-talk-n">{t("{n}개", { n: g().n })}</span>
+                    <span class="cx-talk-track"><i style={{ width: `${pct(g().tokens, props.total)}%` }} /></span>
+                    <span class="cx-talk-size">{tokens(g().tokens)}</span>
+                  </div>
+                )}
+              </Show>
+            )
+          }
         </For>
-        <Show when={rest() > 0}>
-          <div class="cx-talk-row cx-talk-rest" title={t("위 메시지에 없는 토큰")}>
-            <span class="cx-talk-label">{t("나머지|context")}</span>
-            <span class="cx-talk-n" />
-            <span class="cx-talk-track"><i style={{ width: `${pct(rest(), props.total)}%` }} /></span>
-            <span class="cx-talk-size">{tokens(rest())}</span>
-          </div>
-        </Show>
       </div>
       <Show when={props.list.length}>
         <div class="cx-sub-title">{t("가장 큰 항목")}</div>

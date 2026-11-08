@@ -1448,3 +1448,15 @@
   outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
+
+/* ═════════════ round 8 ═════════════ */
+
+/* 내 차례 popover: the project is its own right-aligned column, no floating dot */
+.needs-menu .needs-where {
+  justify-self: end;
+  margin-left: var(--s-4);
+  text-align: right;
+}
+.needs-menu .needs-where::before {
+  content: none;
+}

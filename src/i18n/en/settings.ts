@@ -82,7 +82,7 @@ export default {
   "{k} 토큰": "{k} token|{k} tokens",
   "모델": "Model",
   "추론 강도": "Effort",
-  "로그인 추가": "Add sign-in",
+  "서비스 추가": "Add service",
   "새 계정": "New account",
   "로그인 중": "Signing in",
   "계정 삭제": "Delete account",

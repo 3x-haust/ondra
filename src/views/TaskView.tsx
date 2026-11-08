@@ -31,6 +31,12 @@ import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
 
+/** a time inside a phrase: "병합됨 · 방금" / "Merged · just now" */
+const inlineAgo = (at?: number) => {
+  const s = ago(at);
+  return s === tr("방금") ? tr("방금|inline") : s;
+};
+
 function MoreMenu(props: { id: string }) {
   const [open, setOpen] = usePop();
   return (
@@ -175,12 +181,15 @@ function setDraft(text: string) {
   el.focus();
 }
 
-/** The project crumb stays while there is room for it: it goes away (whole) only when the
- *  title would be cut, and comes back once the free space in the header can hold it again. */
+/** The project crumb stays while there is room for it: when the title would be cut it first
+ *  drops its badge ("acme /"), then goes away whole, and comes back as soon as the space the
+ *  title doesn't need can hold it again. 0 = badge + name, 1 = name only, 2 = none. */
 function useCrumbFit(deps: () => unknown) {
-  const [tight, setTight] = createSignal(false);
+  const [level, setLevel] = createSignal<0 | 1 | 2>(0);
   let head: HTMLElement | undefined;
-  let need = 0;
+  /** the room the crumb takes at level 0 and 1 (kept from when it was last shown whole) */
+  let full = 0;
+  let text = 0;
   const check = () => {
     if (!head) return;
     const proj = head.querySelector<HTMLElement>(".crumbs > .crumb-proj");
@@ -188,22 +197,30 @@ function useCrumbFit(deps: () => unknown) {
     const title = head.querySelector<HTMLElement>(".crumbs > h1");
     const spacer = head.querySelector<HTMLElement>(":scope > .spacer");
     if (!proj || !title || !spacer) return;
-    if (!tight()) {
-      const gap = parseFloat(getComputedStyle(proj.parentElement!).columnGap) || 0;
-      need = proj.offsetWidth + (sep?.offsetWidth ?? 0) + gap * 2;
-      if (title.scrollWidth > title.clientWidth + 1) setTight(true);
-    } else if (spacer.offsetWidth >= need) setTight(false);
+    const gap = parseFloat(getComputedStyle(proj.parentElement!).columnGap) || 0;
+    if (level() === 0) {
+      const badge = proj.querySelector<HTMLElement>(".pbadge");
+      const cs = getComputedStyle(proj);
+      full = proj.offsetWidth + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0) + (sep?.offsetWidth ?? 0) + gap * 2;
+      text = full - (badge ? badge.offsetWidth + (parseFloat(cs.columnGap) || 0) : 0);
+    }
+    if (!full) return;
+    // what the crumb could have without cutting the title: its own room, plus what is left over
+    const cut = Math.max(0, title.scrollWidth - title.clientWidth - 1);
+    const room = [full, text, 0][level()] + spacer.offsetWidth - cut;
+    setLevel(full <= room ? 0 : text <= room ? 1 : 2);
   };
   const later = () => requestAnimationFrame(check);
   const ro = new ResizeObserver(later);
   onCleanup(() => ro.disconnect());
-  createEffect(on(deps, later, { defer: true }));
+  // something in the header changed: measure again from the whole crumb (before the next paint)
+  createEffect(on(deps, () => (setLevel(0), later()), { defer: true }));
   const ref = (el: HTMLElement) => {
     head = el;
     ro.observe(el);
     queueMicrotask(() => el.querySelectorAll(":scope > .spacer").forEach((x) => ro.observe(x)));
   };
-  return [tight, ref] as const;
+  return [level, ref] as const;
 }
 
 export function TaskView(props: { id: string }) {
@@ -317,9 +334,9 @@ export function TaskView(props: { id: string }) {
           if (task().queue?.length) out.push(<Queued t={task()} />);
           return out.length ? out : undefined;
         };
-        const [tight, headRef] = useCrumbFit(() => [task().title, task().status, renaming()]);
+        const [crumbFit, headRef] = useCrumbFit(() => [task().title, task().status, task().project, task().worktree?.state, renaming()]);
         const head = (
-          <header class="head task-head" classList={{ "crumb-tight": tight() }} ref={headRef} data-tauri-drag-region>
+          <header class="head task-head" classList={{ "crumb-text": crumbFit() === 1, "crumb-tight": crumbFit() === 2 }} ref={headRef} data-tauri-drag-region>
             <SidebarToggle />
             <nav class="crumbs" data-tauri-drag-region>
               <Show when={task().parentId ? taskById(task().parentId!) : undefined}>
@@ -376,8 +393,9 @@ export function TaskView(props: { id: string }) {
               <span class="status-chip done">
                 <Icon name="check" size={12} />
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
-                {/* merged: when it was merged (older tasks without mergedAt: when it finished) */}
-                <span class="faint">{ago((task().worktree?.state === "merged" ? task().mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
+                {/* "병합됨 · 방금": when it was merged (older tasks without mergedAt: when it finished) */}
+                <span class="faint" aria-hidden="true">·</span>
+                <span class="faint">{inlineAgo((task().worktree?.state === "merged" ? task().mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
             <Show when={task().status !== "done" && !discarded(task())}>
