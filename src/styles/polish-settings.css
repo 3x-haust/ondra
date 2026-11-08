@@ -716,8 +716,33 @@
 .settings-inner .tl-row.off .tl-more p {
   color: var(--ink-3);
 }
-/* a tool every job gets: on, and locked (a lighter track, the knob stays crisp) */
-.settings-inner .tl-sw .switch.on:disabled {
-  opacity: 1;
-  background: var(--accent-line);
+/* a tool every job gets: a lock where the switch would be, centred on the switch's width */
+.settings-inner .tl-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--h-lg);
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* ───────── round 5 */
+/* accounts: the plan windows as the composer shows them ("5시간 41%"), then cache as a labelled stat */
+.settings-inner .acc-usage {
+  gap: var(--s-12);
+  min-width: 0;
+}
+.settings-inner .acc-lim,
+.settings-inner .acc-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-4);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.settings-inner .acc-lim-num {
+  color: var(--ink-2);
+}
+.settings-inner .acc-lim.hot .acc-lim-num {
+  color: var(--warn-ink);
 }

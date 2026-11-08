@@ -92,7 +92,7 @@ export async function continueSession(s: ImportSession, space: SpaceId, sourceNa
   const topic = cwd ? cwd.split("/").filter(Boolean).pop() ?? "가져옴" : "가져옴";
   return createTask({
     space,
-    title: s.title.slice(0, 40),
+    title: s.title,
     topic,
     ask,
     cwd: cwd || undefined,
