@@ -3,22 +3,74 @@ import { readFileSync } from "node:fs";
 import { loadSkills, stripFrontmatter, type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-export function searchSkills(skills: Skill[], query: string, limit = 5) {
-  const terms = [...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])];
+const words = (text: string) => text.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+/**
+ * How well a term names a skill: its name (8 exact, 4 part), a word of its
+ * description (3; also a Korean word with a particle on it, "바이너리를"), or
+ * any part of the description (1).
+ */
+function termScore(term: string, name: string, description: string, own: Set<string>): number {
+  const inName = name === term ? 8 : name.includes(term) ? 4 : 0;
+  const word = own.has(term) || [...own].some((w) => w.length >= 2 && term.length - w.length <= 3 && term.startsWith(w)) ? 3 : 0;
+  return inName + (word || (term.length >= 2 && description.includes(term) ? 1 : 0));
+}
+
+/** Skills ranked for a query. A term that fits many skills counts for less than one that fits a few. */
+function rank(skills: Skill[], query: string) {
+  const terms = [...new Set(words(query))];
   if (!terms.length) return [];
-  return skills
+  const pool = skills
     .filter((s) => !s.disableModelInvocation)
     .map((skill) => {
       const name = skill.name.toLocaleLowerCase();
       const description = skill.description.toLocaleLowerCase();
-      const words = new Set(description.match(/[\p{L}\p{N}]+/gu) ?? []);
-      const score = terms.reduce((n, term) => n + (name === term ? 8 : name.includes(term) ? 4 : 0) + (words.has(term) ? 3 : description.includes(term) ? 1 : 0), 0);
-      return { skill, score };
-    })
+      const own = new Set(words(description));
+      return { skill, hits: terms.map((t) => termScore(t, name, description, own)) };
+    });
+  const df = terms.map((_, i) => pool.filter((p) => p.hits[i] > 0).length);
+  return pool
+    .map(({ skill, hits }) => ({
+      skill,
+      score: hits.reduce((n, h, i) => n + (h ? h * Math.log(1 + pool.length / df[i]) : 0), 0),
+      strong: hits.filter((h) => h >= 3).length,
+      // a word only this skill has ("컴퓨터유즈", "시뮬레이터") says enough on its own
+      unique: hits.some((h, i) => h >= 3 && df[i] === 1 && terms[i].length >= 3),
+      named: hits.some((h) => h >= 4),
+    }))
     .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+    .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name));
+}
+
+const brief = (s: Skill) => ({ name: s.name, description: s.description.slice(0, 1024), path: s.filePath, baseDir: s.baseDir });
+
+export function searchSkills(skills: Skill[], query: string, limit = 5) {
+  return rank(skills, query)
     .slice(0, Math.max(1, Math.min(10, limit)))
-    .map(({ skill: s }) => ({ name: s.name, description: s.description.slice(0, 1024), path: s.filePath, baseDir: s.baseDir }));
+    .map(({ skill }) => brief(skill));
+}
+
+/** The task's own words in a job's first message (a fresh one or a new session's): its title and the ask. */
+export function taskQuery(prompt: string): string | undefined {
+  const lines = prompt.split("\n");
+  const head = lines[0]?.match(/^# (?:Sub-)?[Tt]ask: (.*?)(?: \(session \d+\))?$/);
+  if (!head) return;
+  const original = lines.indexOf("# Original task");
+  let i = original >= 0 ? original + 1 : lines.indexOf("") + 1;
+  const ask: string[] = [];
+  for (; i > 0 && i < lines.length && !lines[i].startsWith("# "); i++) ask.push(lines[i]);
+  return `${head[1]}\n${ask.join("\n")}`.slice(0, 4000);
+}
+
+/** skill_search run on the task itself: the skills that clearly fit, for the job's first turn (or "" when none do). */
+export function skillHint(skills: Skill[], query: string, limit = 3): string {
+  const fit = rank(skills, query).filter((r) => r.named || r.unique || r.strong >= 2).slice(0, limit);
+  if (!fit.length) return "";
+  return [
+    "# Skills for this task (skill_search on the task)",
+    ...fit.map(({ skill }) => `- ${skill.name}: ${skill.description.replace(/\s+/g, " ").slice(0, 200)} (${skill.filePath})`),
+    "Read the SKILL.md of each one that fits before you act, and follow it. Search again when the work moves to another domain.",
+  ].join("\n");
 }
 
 export default function (pi: ExtensionAPI) {
@@ -45,6 +97,14 @@ export default function (pi: ExtensionAPI) {
       const result = { skills: matches };
       return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
     },
+  });
+
+  // A job's first message (fresh or after a handoff): search the skills with the task's own words
+  // and hand the model the ones that fit, so it doesn't depend on remembering to search.
+  pi.on("before_agent_start", (event) => {
+    const query = event.messageType === "user" && typeof event.prompt === "string" ? taskQuery(event.prompt) : undefined;
+    const hint = query ? skillHint(skills, query) : "";
+    if (hint) return { message: { customType: "ondra-skills", content: hint, display: false } };
   });
 
   // Input transforms also run for steer/follow-up. Extension commands cannot
