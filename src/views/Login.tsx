@@ -37,7 +37,7 @@ const ORDER = ["anthropic", "openai-codex", "github-copilot"];
 const say = (m: string) =>
   m
     .replace(/^Select (.+) login method:?$/i, "$1 로그인 방법을 골라 주세요")
-    .replace(/^Complete login in your browser.*$/i, "브라우저가 다른 기기에 있으면, 로그인 후 마지막 주소를 여기에 붙여 넣어 주세요")
+    .replace(/^Complete login in your browser.*$/i, "로그인한 뒤 주소 붙여넣기")
     .replace(/^Enter (.+) API key:?$/i, "$1 API 키를 넣어 주세요");
 
 export function LoginSheet(props: { accountId: string; onClose: () => void }) {

@@ -113,9 +113,9 @@ export function ModelPicker(props: {
 
 // ───────────── what a job may do without asking
 export const PERMISSIONS: { id: Permission; label: string; icon: string; desc: string }[] = [
-  { id: "ask", label: "매번 묻기", icon: "lock", desc: "파일을 고치거나 명령을 실행하기 전에 매번 물어봐요. 읽기는 묻지 않아요." },
-  { id: "edits", label: "편집 허용", icon: "pencil", desc: "작업 폴더 안의 파일은 묻지 않고 고쳐요. 명령과 폴더 밖은 물어봐요." },
-  { id: "full", label: "전체 권한", icon: "shield", desc: "명령 실행과 폴더 밖까지 묻지 않고 다 해요." },
+  { id: "ask", label: "매번 묻기", icon: "lock", desc: "고치기 전에 물어봐요" },
+  { id: "edits", label: "편집 허용", icon: "pencil", desc: "폴더 안은 바로 고쳐요" },
+  { id: "full", label: "전체 권한", icon: "shield", desc: "묻지 않고 다 해요" },
 ];
 
 export function PermissionPicker(props: { value: Permission; onChange: (p: Permission) => void }) {

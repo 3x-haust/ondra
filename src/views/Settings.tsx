@@ -68,22 +68,22 @@ function General() {
             </For>
           </div>
         </Row>
-        <Row title="동시 실행" desc="코드 수정, 조사 같은 일반 작업">
+        <Row title="한 번에 하는 일">
           <Stepper value={state.settings.slots.light} min={1} max={10} onChange={(n) => setState("settings", "slots", "light", n)} />
         </Row>
-        <Row title="무거운 일" desc="시뮬레이터, 빌드, 앱 조작 — 한 번에 몇 개까지">
+        <Row title="한 번에 하는 무거운 일" desc="빌드, 시뮬레이터, 앱 조작">
           <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
-        <Row title="일마다 따로 복사해서 일하기" desc="프로젝트 폴더라면 일마다 복사본을 만들어 서로 덮어쓰지 않아요. 끝나면 확인하고 합쳐요">
+        <Row title="일마다 따로 작업하기" desc="끝나면 확인하고 합쳐요">
           <button class="switch" classList={{ on: state.settings.isolate }} role="switch" aria-checked={state.settings.isolate} onClick={() => setState("settings", "isolate", !state.settings.isolate)}><i /></button>
         </Row>
-        <Row title="PR 지켜보기" desc="일이 연 PR에 리뷰가 달리거나 검사가 실패하거나 충돌이 나면 그 일이 이어서 처리해요">
+        <Row title="PR 지켜보기" desc="리뷰나 실패가 오면 이어서 고쳐요">
           <button class="switch" classList={{ on: !!state.settings.watchPullRequests }} role="switch" aria-checked={!!state.settings.watchPullRequests} onClick={() => setState("settings", "watchPullRequests", !state.settings.watchPullRequests)}><i /></button>
         </Row>
-        <Row title="자동으로 기억" desc="자주 하는 요청과 선호를 알아서 기억해요">
+        <Row title="자동으로 기억">
           <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
         </Row>
-        <Row title="일이 띄운 앱은 뒤에" desc="일이 연 앱이 앞으로 나오면 쓰던 창으로 돌아가요">
+        <Row title="일이 띄운 앱은 뒤에" desc="쓰던 창을 그대로 둬요">
           <button class="switch" classList={{ on: state.settings.focusGuard }} role="switch" aria-checked={state.settings.focusGuard} onClick={() => setState("settings", "focusGuard", !state.settings.focusGuard)}><i /></button>
         </Row>
       </div>
@@ -538,13 +538,13 @@ function Tools() {
       </div>
       <div class="set-group-title">macOS 권한</div>
       <div class="set-group">
-        <Row title="손쉬운 사용" desc="다른 앱의 버튼을 찾아 누를 때 필요해요">
+        <Row title="손쉬운 사용" desc="다른 앱을 누를 때 써요">
           {ok(status()?.accessibility)}
           <Show when={!status()?.accessibility}>
             <button class="btn sm" onClick={async () => { await requestAccessibility(); openPrivacySettings("accessibility"); }}>허용</button>
           </Show>
         </Row>
-        <Row title="화면 기록" desc="앱 화면을 찍어 결과로 보여줄 때 필요해요">
+        <Row title="화면 기록" desc="앱 화면을 찍을 때 써요">
           {ok(status()?.screenRecording)}
           <Show when={!status()?.screenRecording}>
             <button class="btn sm" onClick={() => openPrivacySettings("screen")}>허용</button>

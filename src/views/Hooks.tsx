@@ -4,6 +4,7 @@ import { createSignal, For, onMount, Show } from "solid-js";
 import { hooksLoad, hooksSave } from "../lib/native";
 import { state, uid } from "../state/store";
 import { toast } from "../state/ui";
+import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 
 export type HookEvent = "before_tool" | "after_tool" | "prompt" | "start" | "stop";
@@ -18,18 +19,19 @@ export interface Hook {
   space?: string;
 }
 
-const EVENTS: { id: HookEvent; label: string; help: string }[] = [
-  { id: "before_tool", label: "도구 쓰기 전", help: "0이 아닌 값으로 끝나면 그 호출을 막고, stderr를 이유로 알려줘요." },
-  { id: "after_tool", label: "도구 쓴 뒤", help: "0이 아닌 값으로 끝나면 stderr를 결과에 붙여 모델에게 보여줘요." },
-  { id: "prompt", label: "요청을 받을 때", help: "stdout에 쓴 내용이 요청 뒤에 붙어요." },
-  { id: "start", label: "일을 시작할 때", help: "결과를 기다리지 않아요." },
-  { id: "stop", label: "답을 마쳤을 때", help: "결과를 기다리지 않아요." },
+const EVENTS: { id: HookEvent; label: string }[] = [
+  { id: "before_tool", label: "도구 쓰기 전" },
+  { id: "after_tool", label: "도구 쓴 뒤" },
+  { id: "prompt", label: "요청을 받을 때" },
+  { id: "start", label: "일을 시작할 때" },
+  { id: "stop", label: "답을 마쳤을 때" },
 ];
 const forTools = (e: HookEvent) => e === "before_tool" || e === "after_tool";
 
 export function HooksTab() {
   const [list, setList] = createSignal<Hook[]>([]);
   const [loaded, setLoaded] = createSignal(false);
+  const [more, setMore] = createSignal(false);
   onMount(async () => {
     try {
       const v = JSON.parse(await hooksLoad());
@@ -73,7 +75,7 @@ export function HooksTab() {
                   <input
                     class="input hk-matcher"
                     placeholder="모든 도구"
-                    title="도구 이름. 여러 개는 edit|write 처럼 써요"
+                    title="여러 개는 edit|write"
                     value={h.matcher}
                     onChange={(e) => patch(h.id, { matcher: e.currentTarget.value.trim() })}
                     aria-label="도구"
@@ -88,7 +90,7 @@ export function HooksTab() {
                 class="hk-cmd"
                 rows={2}
                 spellcheck={false}
-                placeholder={h.event === "before_tool" ? `jq -e '.input.command | test("rm -rf") | not' >/dev/null || { echo "rm -rf는 안 돼요" >&2; exit 1; }` : "셸 명령"}
+                placeholder="실행할 명령"
                 value={h.command}
                 onChange={(e) => patch(h.id, { command: e.currentTarget.value })}
                 aria-label="명령"
@@ -97,11 +99,22 @@ export function HooksTab() {
           )}
         </For>
       </div>
-      <div class="set-group-title">명령이 받는 것</div>
-      <div class="hk-doc">
-        표준 입력으로 JSON을 받아요: <code>event</code>, <code>cwd</code>, <code>tool</code>, <code>input</code> (도구 입력), <code>output</code> (도구 쓴 뒤), <code>prompt</code> (요청을 받을 때).
-        환경 변수 <code>ONDRA_HOOK_EVENT</code>, <code>ONDRA_TOOL_NAME</code>도 있어요. 작업 폴더에서 <code>/bin/sh</code>로 실행하고, 60초가 지나면 멈춰요.
-      </div>
+      <button class="hk-more" classList={{ on: more() }} onClick={() => setMore(!more())}>
+        <Icon name="chevron" size={12} />
+        명령에 넘어가는 값
+      </button>
+      <Fold open={more()}>
+        <dl class="hk-doc">
+          <dt>입력</dt>
+          <dd><code>event</code> <code>cwd</code> <code>tool</code> <code>input</code> <code>output</code> <code>prompt</code></dd>
+          <dt>환경 변수</dt>
+          <dd><code>ONDRA_HOOK_EVENT</code> <code>ONDRA_TOOL_NAME</code></dd>
+          <dt>막기</dt>
+          <dd>도구 쓰기 전에 0이 아닌 값으로 끝나면 막아요</dd>
+          <dt>시간</dt>
+          <dd>60초</dd>
+        </dl>
+      </Fold>
     </>
   );
 }

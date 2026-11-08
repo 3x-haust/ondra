@@ -123,7 +123,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         </Show>
       </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>
-        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="이미 보낸 내용을 캐시에서 다시 쓴 비율 (이 대화 전체)">
+        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="캐시에서 다시 쓴 비율">
           캐시 {pctText(reusePct(props.agent!)!)}%
         </span>
       </Show>
