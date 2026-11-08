@@ -83,7 +83,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     // finished jobs' reports: found by what they said, not only their title
     const results: Item[] = needle && !commandsOnly()
       ? resultsIn(state.space)
-          .filter((r) => resultText(r).toLowerCase().includes(needle))
+          .filter((r) => !(taskById(r.taskId) && discarded(taskById(r.taskId)!)) && resultText(r).toLowerCase().includes(needle))
           .slice(0, 5)
           .map((r) => ({ id: `r-${r.id}`, label: r.title, hint: ago(r.at), icon: "inbox", section: tr("결과물"), run: () => setView({ name: "results", id: r.id }) }))
       : [];
