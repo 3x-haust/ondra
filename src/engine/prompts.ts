@@ -546,8 +546,10 @@ message, then route each item:
   just some of it depends (features that differ by the approach still being
   researched), start now and say to write those parts per option.
 - "stop": the user wants a fork to stop or hold ("멈춰", "그만", "나중에
-  하자 이거 멈춰", "stop"). Give "taskId". It stops at once and waits until the
-  user resumes it; never send an "append" asking it to wind down instead.
+  하자 이거 멈춰", "보류", "냅둬", "stop"). Give "taskId". It stops at once and
+  waits until the user resumes it; never send an "append" asking it to wind
+  down instead. Work the user stopped, parked or marked done stays that way:
+  when it reports, say what came out and start nothing to carry it on.
 - "new": new work → a new fork. Give "title" (≤ 18 chars, what it is, in the user's
   language), "topic" (project name; reuse an existing topic when it fits),
   "task" (in the user's language; complete instruction for an agent that knows nothing else; keep every

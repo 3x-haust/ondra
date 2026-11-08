@@ -181,6 +181,10 @@ export interface Task {
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */
   handedOn?: string;
+  /** the user ended it themselves (marked it done): nothing carries it on by itself */
+  endedBy?: "user";
+  /** when the user stopped it; cleared when it is resumed */
+  parkedAt?: number;
   /** Other spaces the user let this job use (their memory, folder and past jobs). Spaces are separate otherwise. */
   reach?: SpaceId[];
   /** A review subagent: its findings go back to the fork to fix. */
