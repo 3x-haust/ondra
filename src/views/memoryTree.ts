@@ -93,6 +93,9 @@ export function monthLabel(at: number) {
   const d = new Date(at);
   return d.toLocaleDateString(locale(), d.getFullYear() === new Date().getFullYear() ? { month: "long" } : { year: "numeric", month: "long" });
 }
+/** a 작업 기록 folder: "2026년 11월" / "Nov 2026", "11월 9일" / "Nov 9" (the folders on disk stay 202611 / 09) */
+export const monthFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { year: "numeric", month: "short" } : { year: "numeric", month: "long" });
+export const dayFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { month: "short", day: "numeric" } : { month: "long", day: "numeric" });
 export function dayLabel(at: number, withMonth = false) {
   const d = new Date(at);
   const k = dayKey(at);
@@ -133,7 +136,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     homes.set(h.id, x);
     return x;
   };
-  mk({ id: "g", kind: "global", label: t("모든 작업") });
+  mk({ id: "g", kind: "global", label: t("전체 공통") });
   for (const s of inp.spaces) mk({ id: `s:${s.id}`, kind: "space", label: t(s.label), parent: "g", space: s.id, path: s.folder });
   const spaceHome = (id?: SpaceId) => {
     const k = `s:${id ?? "?"}`;
@@ -149,7 +152,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
   for (const p of inp.projects) projHome(p.folder, p.name, p.space);
   const nows = new Map<string, { folder: string; home: string; now: ProjectNow }>();
   for (const [folder, now] of Object.entries(inp.now ?? {})) nows.set(folder, { folder, home: projHome(folder).id, now });
-  const homeOf = (m: Memory) => (m.scope === "global" ? homes.get("g")! : m.scope === "space" ? spaceHome(m.space) : projHome(m.project ?? "기타"));
+  const homeOf = (m: Memory) => (m.scope === "global" ? homes.get("g")! : m.scope === "space" ? spaceHome(m.space) : projHome(m.project ?? "기타", m.project ? undefined : t("기타")));
   const memById = new Map<string, Memory>();
   for (const m of inp.memory) {
     memById.set(m.id, m);
@@ -164,11 +167,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     for (const f of p.files) if (!seenFile.has(f)) seenFile.add(f), projHome(p.project).files.push(f);
   for (const s of inp.files?.bySpace ?? [])
     for (const f of s.files) if (!seenFile.has(f)) seenFile.add(f), fileHome(f, spaceHome(s.space)).files.push(f);
-  // two folders with the same name: tell them apart by the folder they sit in
-  const byLabel = new Map<string, Home[]>();
-  for (const h of homes.values()) if (h.kind === "project") byLabel.set(`${h.parent}|${h.label}`, [...(byLabel.get(`${h.parent}|${h.label}`) ?? []), h]);
-  for (const same of byLabel.values())
-    if (same.length > 1) for (const h of same) if (h.path) h.label = `${h.label} · ${base(h.path.replace(/\/[^/]+\/?$/, "")) || "/"}`;
+  // two folders with the same name keep the project's name; the path (a tooltip) tells them apart
 
   // topic hubs: a tool or service two or more live pieces are about (as the mirror's 주제/)
   const topics = new Map<string, Topic>();
@@ -202,10 +201,10 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     for (const e of mine) {
       const mk = `${h.id}|j|${monthKey(e.at)}`;
       let mo = months.find((x) => x.key === mk);
-      if (!mo) months.push((mo = { key: mk, id: `j|${monthKey(e.at)}`, type: "month", label: `${new Date(e.at).getFullYear()}${pad(new Date(e.at).getMonth() + 1)}`, home: JOURNAL, children: [], count: 0, open0: !months.length }));
+      if (!mo) months.push((mo = { key: mk, id: `j|${monthKey(e.at)}`, type: "month", label: monthFolder(e.at), home: JOURNAL, children: [], count: 0, open0: !months.length }));
       const dk = `${h.id}|j|${dayKey(e.at)}`;
       let day = mo.children!.find((x) => x.key === dk);
-      if (!day) mo.children!.push((day = { key: dk, id: `j|${dayKey(e.at)}`, type: "day", label: pad(new Date(e.at).getDate()), home: JOURNAL, children: [], count: 0, open0: !mo.children!.length && !!mo.open0 }));
+      if (!day) mo.children!.push((day = { key: dk, id: `j|${dayKey(e.at)}`, type: "day", label: dayFolder(e.at), home: JOURNAL, children: [], count: 0, open0: !mo.children!.length && !!mo.open0 }));
       day.children!.push({ key: `${dk}>${e.id}`, id: entryId(e), type: "entry", label: `${inp.journalName?.(e.title, e.id) ?? (e.title || e.ask)}.md`, home: JOURNAL, entry: e, count: 0 });
       day.count++;
       mo.count++;
@@ -227,7 +226,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     const kids: TreeNode[] = [];
     for (const n of nows.values())
       if (n.home === h.id && (!match || n.now.text.toLowerCase().includes(s)))
-        kids.push({ key: nowId(n.folder), id: nowId(n.folder), type: "now", label: "지금.md", home: h.id, now: n.now, path: n.folder, count: 0 });
+        kids.push({ key: nowId(n.folder), id: nowId(n.folder), type: "now", label: t("지금"), home: h.id, now: n.now, path: n.folder, count: 0 });
     for (const p of kidsOf(h.id)) {
       const r = homeRow(p);
       if (r) kids.push(r);
@@ -268,7 +267,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     if (!match && !h.live.length && !h.past.length && !kids.some((c) => c.type === "home" || c.type === "now" || c.type === "journal")) return h.files.length ? { key: h.id, id: h.id, type: "home", label: h.label, home: h.id, path: h.path, children: kids, count: 0 } : null;
     // the folder note (회사/회사.md): links to everything in the folder
     // a space folder's note is its 목차.md (it lives in <space>/.ondra/memory)
-    if (h.live.length) kids.push({ key: `${h.id}|note`, id: h.id, type: "index", label: h.kind === "space" && h.path && h.path !== "~" ? "목차.md" : `${h.label}.md`, home: h.id, count: 0 });
+    if (h.live.length) kids.push({ key: `${h.id}|note`, id: h.id, type: "index", label: h.kind === "space" && h.path && h.path !== "~" ? t("목차") : `${h.label}.md`, home: h.id, count: 0 });
     return { key: h.id, id: h.id, type: "home", label: h.label, home: h.id, path: h.path, children: kids, count: count(kids) };
   };
   const roots: TreeNode[] = [];

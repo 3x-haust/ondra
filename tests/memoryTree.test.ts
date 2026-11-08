@@ -9,13 +9,14 @@ const base = {
 const labels = (m: ReturnType<typeof buildModel>) => [...m.homes.values()].filter((h) => h.kind === "project").map((h) => h.label).sort();
 
 describe("project homes", () => {
-  it("tells same-name folders apart by their parent", () => {
+  it("keeps the project name for same-name folders; the path tells them apart", () => {
     const m = buildModel({
       ...base,
       projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }],
       now: { "/u/me/ondra": { text: "x", at: 1, taskId: "t", title: "t" } },
     });
-    expect(labels(m)).toEqual(["ondra · me", "ondra · work"]);
+    expect(labels(m)).toEqual(["ondra", "ondra"]);
+    expect([...m.homes.values()].filter((h) => h.kind === "project").map((h) => h.path).sort()).toEqual(["/u/me/ondra", "/u/work/ondra"]);
   });
   it("leaves unique names alone", () => {
     const m = buildModel({ ...base, projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }] });

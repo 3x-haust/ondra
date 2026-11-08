@@ -15,14 +15,10 @@ import { spaceById, state } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { openTask, setView, toast, view } from "../state/ui";
 import { Icon } from "../ui/Icon";
+import { ago } from "../ui/bits";
 import { t } from "../i18n";
 
 type Filter = "all" | "ios" | "android";
-const ago = (ms?: number | null) => {
-  if (!ms) return "";
-  const m = Math.round((Date.now() - ms) / 60000);
-  return m < 60 ? t("{n}분 전", { n: Math.max(1, m) }) : m < 1440 ? t("{n}시간 전", { n: Math.round(m / 60) }) : t("{n}일 전", { n: Math.round(m / 1440) });
-};
 /** "iOS 26.3", "Android 에뮬레이터", "iOS 26.3 · 실제 기기" — the OS is already in the runtime */
 const platformLabel = (d: Device) => t(d.runtime) + (d.kind === "phone" ? ` · ${t("실제 기기")}` : "");
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -55,19 +51,22 @@ function Status(props: { d: Device }) {
   );
 }
 
-/** Which space the device belongs to; a job's own device goes with its job. */
+/** Which workspace's tasks may use the device (any, when not set); a job's own device goes with its job. */
 function SpacePick(props: { d: Device }) {
   const own = () => /^ondra-/.test(props.d.name) || /^ondra-/.test(props.d.id);
   return (
     <Show when={!own()}>
-      <select
-        class="select dev-space"
-        value={deviceSpace(props.d) ?? ""}
-        onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
-      >
-        <option value="">{t("공용")}</option>
-        <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
-      </select>
+      <label class="dev-space-pick">
+        <span>{t("사용 작업")}</span>
+        <select
+          class="select dev-space"
+          value={deviceSpace(props.d) ?? ""}
+          onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
+        >
+          <option value="">{t("작업 지정 안 함")}</option>
+          <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
+        </select>
+      </label>
     </Show>
   );
 }
@@ -152,7 +151,7 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   createEffect(on(() => props.hidden, (h) => !h && void grab(), { defer: true }));
   return (
     <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title={t("열기")}>
-      <Show when={src()} fallback={<span class="dev-wait">{t("화면 불러오는 중")}</span>}>
+      <Show when={src()} fallback={<span class="dev-wait">{t("불러오는 중")}</span>}>
         <img src={src()} alt={t("{name} 화면", { name: props.d.name })} draggable={false} />
       </Show>
     </button>
@@ -296,7 +295,8 @@ function LiveScreen(props: { d: Device }) {
 
   // ── fit the picture in the stage, turned or not
   const fit = createMemo(() => {
-    const s = size() ?? { w: 9, h: 19.5 };
+    // before the first frame: the shape of the device, so the screen doesn't change size when it arrives
+    const s = size() ?? (ios ? { w: 9, h: 19.5 } : { w: 9, h: 20 });
     const b = box();
     const [w, h] = turn() ? [s.h, s.w] : [s.w, s.h];
     const k = Math.min(b.w / w, b.h / h) || 0;
@@ -416,7 +416,7 @@ function LiveScreen(props: { d: Device }) {
           }}
         />
         <Show when={!size()}>
-          <span class="dev-wait">{t("화면 불러오는 중")}</span>
+          <span class="dev-wait">{t("불러오는 중")}</span>
         </Show>
         <Show when={mark()}>{(m) => <span class="dev-mark" style={{ left: `${m().x * 100}%`, top: `${m().y * 100}%` }} />}</Show>
       </div>
@@ -624,7 +624,7 @@ export function Devices() {
                         <Icon name="phone" size={16} class="muted" />
                         <b>{d.name}</b>
                         <Show when={d.kind === "phone"}><span class="dev-sub">{t("실제 기기")}</span></Show>
-                        <Show when={d.lastUsed}><span class="dev-sub">{ago(d.lastUsed)}</span></Show>
+                        <Show when={d.lastUsed}><span class="dev-sub">{ago(d.lastUsed ?? undefined)}</span></Show>
                         <UsedBy d={d} />
                         <span class="spacer" />
                         <Actions d={d} />

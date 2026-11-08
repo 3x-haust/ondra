@@ -212,7 +212,8 @@ export function ResultsView() {
                       <Show when={r.pinned}>
                         <Icon name="pin" size={12} class="res-pin" />
                       </Show>
-                      <span class="res-time">{whenOf(r.at)}</span>
+                      {/* under a day's header only the time; pinned rows have no day header */}
+                      <span class="res-time">{r.pinned ? whenOf(r.at) : timeOf(r.at)}</span>
                       <span class="res-acts">
                         <button class="res-act" title={r.pinned ? t("고정 해제") : t("고정")} aria-label={r.pinned ? t("고정 해제") : t("고정")} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
                           <Icon name="pin" size={14} />
@@ -261,13 +262,15 @@ export function ResultsView() {
                         </div>
                       </div>
                       <div class="res-tools">
+                        <Show when={taskById(r.taskId)}>
+                          <button class="btn sm res-open" title={`${t("작업 열기")} ⏎`} onClick={() => openTask(r.taskId)}>
+                            {t("작업 열기")}
+                          </button>
+                        </Show>
                         <Tool icon="pin" label={r.pinned ? t("고정 해제") : t("고정")} on={r.pinned} run={() => pinResult(r.id, !r.pinned)} />
                         <Tool icon="copy" label={t("복사")} run={() => void copy(r)} />
                         <Show when={inChat(r)}>
                           <Tool icon="message" label={t("대화에서 보기")} run={() => (setJumpMsg(r.id), setView({ name: "main", project: r.project }))} />
-                        </Show>
-                        <Show when={taskById(r.taskId)}>
-                          <Tool icon="arrow" label={t("작업 열기")} run={() => openTask(r.taskId)} />
                         </Show>
                         <span class="res-tools-sep" />
                         <Tool icon="trash" label={t("삭제")} danger run={() => remove([r.id])} />

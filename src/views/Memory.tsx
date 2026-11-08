@@ -290,6 +290,8 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   let frames = 0;
   let userMoved = false;
   let center = { x: 0, y: 0 };
+  /** when this graph first laid out from nothing: what arrives right after (the files) is laid out with it, not shaken in */
+  let freshAt = 0;
   const at = (id: string) => (tick(), bodies.get(id) ?? { x: 0, y: 0, vx: 0, vy: 0 });
 
   // the view eases to where it should be instead of jumping
@@ -415,6 +417,10 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
         const f = props.graph.focus ? bodies.get(props.graph.focus) : undefined;
         center = f ? { x: f.x, y: f.y } : { x: 0, y: 0 };
         let added = 0, restored = 0;
+        // a moment after a fresh layout (the instruction files load a beat later): lay it all out
+        // again from the same seeds, so the picture is the same every time it opens
+        const again = !!freshAt && !userMoved && performance.now() - freshAt < 2500 && props.graph.nodes.some((n) => !bodies.has(n.id));
+        if (again) bodies.clear();
         const first = !bodies.size;
         for (const n of props.graph.nodes)
           if (!bodies.has(n.id)) {
@@ -440,6 +446,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
         }
         // opened fresh: lay it out before showing it, then fit, so it opens in view and holds still
         if (first) {
+          if (!restored && !again) freshAt = performance.now();
           alpha = 1;
           for (let i = 0; i < 400 && alpha > 0.02; i++) step(), (alpha *= 0.982);
           alpha = 0;
@@ -577,6 +584,8 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   const edgeBy = createMemo(() => new Map(props.graph.edges.map((e) => [edgeKey(e), e])));
   const edgeKeys = createMemo(() => props.graph.edges.filter((e) => e.kind !== "hold").map(edgeKey));
   const focusNode = () => (props.graph.focus ? props.graph.byId.get(props.graph.focus) : undefined);
+  /** the shapes on screen that aren't circles, for the legend */
+  const kinds = createMemo(() => ({ file: props.graph.nodes.some((n) => n.kind === "file"), entry: props.graph.nodes.some((n) => n.kind === "entry") }));
   return (
     <div class="mg" classList={{ local: !!props.graph.focus }}>
       <svg ref={svg} class="mg-svg" onWheel={onWheel} onPointerDown={onDown}>
@@ -633,6 +642,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
                           <rect class={`oc-${n().entry?.outcome ?? "done"}`} x={-n().r} y={-n().r} width={n().r * 2} height={n().r * 2} rx={2.5} transform="rotate(45)" />
                         </Match>
                       </Switch>
+                      <Show when={n().kind === "project" && n().path}><title>{tilde(n().path!)}</title></Show>
                       <text y={n().r + 12} text-anchor="middle" classList={{ off: !labelOn().has(n().id) }}>
                         {labelOf(n())}
                         <Show when={isHub(n().kind) && n().count}><tspan class="mg-n"> {n().count}</tspan></Show>
@@ -652,6 +662,12 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
             <span class="mg-where-name">{f().kind === "memory" ? t("메모리") : f().kind === "entry" ? t("작업 기록") : f().label}</span>
           </div>
         )}
+      </Show>
+      <Show when={kinds().file || kinds().entry}>
+        <div class="mg-legend">
+          <Show when={kinds().file}><span><i class="lg-file" />{t("지침 파일")}</span></Show>
+          <Show when={kinds().entry}><span><i class="lg-entry" />{t("작업 기록")}</span></Show>
+        </div>
       </Show>
       <div class="mg-ctrl">
         <button class="icon-btn sm" title={t("화면에 맞추기")} aria-label={t("화면에 맞추기")} onClick={() => fit()}><Icon name="fit" size={14} /></button>
