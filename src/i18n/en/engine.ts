@@ -110,9 +110,10 @@ export default {
   "리뷰가 아직 진행 중이에요": "Review still in progress",
   "리뷰는 이미 한 번 받았어요": "Already reviewed once",
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
-  "워크트리 정리 · 변경은 PR에 있어요": "Worktree cleaned up · changes are in the PR",
-  "{into} 병합됨 · 워크트리 정리": "{into} merged · worktree cleaned up",
-  "{into}에 이미 반영됨 · 워크트리 정리": "Already in {into} · worktree cleaned up",
+  "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
+  "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",
+  "{into} 병합됨 · 워크트리 정리": "{into} merged · worktree removed",
+  "{into}에 이미 반영됨 · 워크트리 정리": "Already in {into} · worktree removed",
   "변경을 버렸어요": "Changes discarded",
   "컨텍스트 압축 중": "Compacting context",
   "재시도 {a}/{m}": "Retry {a}/{m}",
@@ -147,7 +148,7 @@ export default {
 
   // memory.ts
   "메모리 {n}개 저장": "Saved {n} memory|Saved {n} memories",
-  "메모리 저장 · {text}": "Memory saved · {text}",
+  "메모리에 저장 · {text}": "Saved to memory · {text}",
   "{what} · 이전 메모리 대체": "{what} · replaced the old one",
 
   // aside.ts

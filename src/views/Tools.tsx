@@ -82,7 +82,7 @@ export function ToolsTab() {
     const add = r.mcp ? !on : on;
     setState("settings", "extraTools", (l) => (add ? [...new Set([...(l ?? []), entry])] : (l ?? []).filter((n) => n !== entry)));
   };
-  // a group counts the way the header does: the tools on (sent with every request) of all it lists
+  // every tool group counts the same way, on/all (the tools sent with every request of all it lists); skills, one number
   const counted = (g: Group) => ({ tools: g.rows.some((r) => r.tool), on: g.rows.filter((r) => r.tool && isOn(r) && !r.found).length });
   const toggle = (key: string) => {
     // selecting text in an open row doesn't fold it
@@ -109,14 +109,14 @@ export function ToolsTab() {
         <input placeholder={t("검색")} aria-label={t("도구 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
       </label>
       <Show when={!data.error} fallback={<div class="set-group"><div class="empty-line">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</div></div>}>
-        <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">{t("불러오는 중")}</div></div>}>
+        <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">{t("불러오는 중…")}</div></div>}>
           <For each={groups()} fallback={<div class="set-group"><div class="empty-line">{t("결과 없음")}</div></div>}>
             {(g, i) => (
               <>
                 <div class="set-group-title tl-gtitle">
                   {t(g.title)}
-                  <span class="tl-count" title={counted(g).on < g.rows.length ? t("켜짐 {on} · 전체 {n}", { on: counted(g).on, n: g.rows.length }) : undefined}>
-                    {counted(g).tools && counted(g).on < g.rows.length ? `${counted(g).on}/${g.rows.length}` : g.rows.length}
+                  <span class="tl-count" title={counted(g).tools ? t("켜짐 {on} · 전체 {n}", { on: counted(g).on, n: g.rows.length }) : undefined}>
+                    {counted(g).tools ? `${counted(g).on}/${g.rows.length}` : g.rows.length}
                   </span>
                   <Show when={g.hint}><span class="tl-ghint">{g.hint}</span></Show>
                   <Show when={i() === 0}>

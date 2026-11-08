@@ -56,10 +56,10 @@ export function nowText(now: string | undefined): string {
  * matches them back. `was` lists older wordings still found in saved tasks.
  */
 const NOTE_FORMS: { key: string; was?: string[] }[] = [
-  { key: "메모리 저장 · {text}", was: ["기억함 · {text}"] },
+  { key: "메모리에 저장 · {text}", was: ["메모리 저장 · {text}", "기억함 · {text}"] },
   { key: "이전 작업의 리뷰가 그대로 유효해요", was: ["앞의 일에서 받은 리뷰가 그대로 유효해요"] },
   { key: "작업 전용 브랜치 {b}에서 시작해요" },
-  { key: "{into}에 병합했어요", was: ["{into}에 합쳤어요"] },
+  { key: "{into}에 병합 · 워크트리 정리", was: ["{into}에 병합했어요", "{into}에 합쳤어요"] },
   { key: "워크트리 정리 · 변경은 PR에 있어요", was: ["작업 폴더를 정리했어요. 변경은 PR에 있어요"] },
   { key: "{into} 병합됨 · 워크트리 정리", was: ["{into}이 합쳐져서 작업 폴더를 정리했어요"] },
   { key: "{into}에 이미 반영됨 · 워크트리 정리", was: ["{into}에 이미 들어가서 작업 폴더를 정리했어요"] },
@@ -107,7 +107,7 @@ const NOTE_RES = NOTE_FORMS.flatMap(({ key, was = [] }) => [key, ...was].map((f)
 
 /**
  * A note in a task's thread in the app's language. Notes are stored in Korean
- * ("변경을 버렸어요", "main에 병합했어요"); older wordings read as today's in
+ * ("변경을 버렸어요", "main에 병합 · 워크트리 정리"); older wordings read as today's in
  * Korean too. A line that isn't one of Ondra's stays as written.
  */
 export function noteText(text: string): string {

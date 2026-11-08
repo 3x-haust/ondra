@@ -371,7 +371,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           taskId: t.id,
           quiet: true,
         });
-        if (id) push(t, { kind: "note", text: `기억함 · ${String(b.text).slice(0, 120)}` });
+        if (id) push(t, { kind: "note", text: `메모리에 저장 · ${String(b.text).slice(0, 120)}` });
         break;
       }
       case "handoff":
@@ -613,14 +613,16 @@ export async function mergeTask(id: string): Promise<boolean> {
     const into = await worktreeMerge(w.repo, w.path, w.branch, t.title, env);
     await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
     updateTask(id, (x) => {
+      const now = Date.now();
       x.worktree = { ...w, state: "merged", into };
       x.cwd = homeDir(x);
-      push(x, { kind: "note", text: `${into}에 병합했어요` });
+      x.mergedAt = now;
+      push(x, { kind: "note", text: `${into}에 병합 · 워크트리 정리` });
       if (x.status !== "done") {
         x.status = "done";
         x.plan = closePlan(x.plan);
-        x.finishedAt = Date.now();
-        x.summary ||= `${into}에 합침`;
+        x.finishedAt = now;
+        x.summary ||= `${into}에 병합`;
       }
     });
     toast(tr("{into}에 병합했어요", { into }));
@@ -1449,6 +1451,7 @@ async function dropEmptyBranch(id: string) {
     updateTask(id, (x) => {
       x.cwd = homeDir(x);
       x.worktree = { ...w, state: "merged", into };
+      x.mergedAt = Date.now();
       push(x, { kind: "note", text: pr ? `${into} 병합됨 · 워크트리 정리` : `${into}에 이미 반영됨 · 워크트리 정리` });
     });
     return;
