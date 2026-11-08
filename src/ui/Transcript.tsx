@@ -115,7 +115,8 @@ const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence"
 /**
  * While the job isn't finished you see everything, with nothing to fold or unfold
  * (a steer or a question in between doesn't fold the turn before it). Once the
- * whole job is done, each turn's work folds into "N분 동안 작업 ›" and only its
+ * whole job is done, each turn's work folds into "작업 과정 N단계 ›" (the time is said once, on the
+ * end line) and only its
  * closing summary stays (the answer text and result blocks it ended with); the
  * fold can be opened. Errors never fold.
  */
@@ -145,14 +146,6 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
   // a subagent (a review above all) often ends with only a done block: its findings
   // went to the job that asked, so show them here too
   const report = () => (props.last && !answer() && props.task.status === "done" && props.task.result?.trim()) || "";
-  const took = () => {
-    if (props.turn.ms) return props.turn.ms;
-    const to = Math.max(...body().map((e) => (e.kind === "tool" ? (e.tool.endedAt ?? e.at) : e.at)), props.task.finishedAt ?? 0);
-    // counted from when the job started, not from when it was asked (the same time "걸림" shows)
-    const asked = props.turn.user?.at ?? body()[0]?.at ?? 0;
-    const from = props.task.startedAt && props.task.startedAt > asked && props.task.startedAt < to ? props.task.startedAt : asked;
-    return to - from;
-  };
   const toggle = () => {
     if (!mounted()) {
       setMounted(true);
@@ -181,7 +174,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
         <Show when={work().length}>
           <div class="work-fold" classList={{ open: shown() }}>
             <button class="work-head" onClick={toggle} aria-expanded={shown()}>
-              <span>{tr("{d} 동안 작업", { d: long(took()) })}</span>
+              <span>{tr("작업 과정 {n}단계", { n: work().length })}</span>
               <Icon name="chevron" size={14} class="chev" />
             </button>
             <Show when={mounted()}>
@@ -452,7 +445,16 @@ export function JobEnd(props: { t: Task }) {
 
 export function Transcript(props: { task: Task; agentId: string; footer?: JSX.Element }) {
   let scroller!: HTMLDivElement;
-  const list = createMemo(() => turns(props.task.entries));
+  // a failed task's error is said once, by the card under the thread with 다시 시도: its last
+  // error line here would only repeat it
+  const shownEntries = createMemo(() => {
+    const es = props.task.entries;
+    if (props.task.status !== "failed" || !props.task.error) return es;
+    const at = es.map((e) => e.kind).lastIndexOf("error");
+    const e = es[at];
+    return e?.kind === "error" && e.text === props.task.error ? [...es.slice(0, at), ...es.slice(at + 1)] : es;
+  });
+  const list = createMemo(() => turns(shownEntries()));
   const liveText = () => live[props.agentId] ?? "";
   const working = () => props.task.status === "running";
   /** all its work is over: only then do turns fold */

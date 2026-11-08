@@ -7,8 +7,10 @@ import { DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
-import { fsFiles } from "../lib/native";
+import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
+import { ProjectBadge } from "../ui/ProjectBadge";
+import { switchSpace } from "../state/workspace";
+import { fsFiles, pickFolder } from "../lib/native";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Status, Task } from "../state/types";
 import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
@@ -252,11 +254,15 @@ function AccountModel(props: { accountId: string; up?: boolean }) {
 }
 
 // ───────────── new task
-/** The sidebar's 새 작업: a blank task to write, in a project picked here. Any move elsewhere ends it. */
+/** Every 새 작업 (sidebar, ⌘N, canvas, board, a project's menu): a blank task to write, in a project picked here. Any move elsewhere ends it. */
 const drafting = newTaskOpen;
 const setDrafting = setNewTaskOpen;
+/** Open the new-task screen. `preset` picks its project (a project's menu, the canvas lane); without
+ *  it the project in view carries over. A project from the other workspace switches to it first. */
 export function startNewTask(preset?: string) {
   const v = view();
+  const p = preset ? projectById(preset) : undefined;
+  if (p && p.space !== state.space) switchSpace(p.space, { name: "main" });
   const project = preset ?? (v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
   setView({ name: "main" });
   setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined });
@@ -270,7 +276,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
       <button type="button" class="chip proj-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title={cur()?.folder ? tilde(cur()!.folder) : t("프로젝트|one")}>
-        <Icon name="folder" size={14} />
+        <Show when={cur()} fallback={<Icon name="folder" size={14} />}>{(c) => <ProjectBadge name={c().name} />}</Show>
         <span class="proj-chip-name">{cur()?.name ?? t("프로젝트 없음")}</span>
         <Icon name="down" size={12} class="muted" />
       </button>
@@ -280,7 +286,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
           <For each={projectsIn(state.space)}>
             {(p) => (
               <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(p.id), setOpen(false))}>
-                <Icon name="folder" size={14} class="muted" />
+                <ProjectBadge name={p.name} />
                 <span class="pop-item-main">{p.name}</span>
                 <span class="pop-item-sub">{midTrim(tilde(p.folder), 24)}</span>
                 <Show when={p.id === props.value}><Icon name="check" size={14} /></Show>
@@ -292,6 +298,21 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
             <Icon name="dot" size={14} class="muted" />
             <span class="pop-item-main">{t("프로젝트 없음")}</span>
             <Show when={!props.value}><Icon name="check" size={14} /></Show>
+          </button>
+          <div class="pop-sep" />
+          {/* the same as Main's + menu: pick a folder, it becomes a project and this task's */}
+          <button
+            type="button"
+            class="pop-item"
+            role="menuitem"
+            onClick={async () => {
+              setOpen(false);
+              const dir = await pickFolder(t("프로젝트 폴더"));
+              if (dir) props.onChange(addProject(state.space, dir));
+            }}
+          >
+            <Icon name="plus" size={14} class="muted" />
+            <span class="pop-item-main">{t("프로젝트 추가")}</span>
           </button>
         </div>
       </Show>
@@ -601,9 +622,15 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const ORDER: Status[] = ["waiting", "failed", "running", "queued", "paused", "done"];
   const counts = () => ORDER.map((st) => [st, listed().filter((t) => t.status === st).length] as const).filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
+  // never the state word again (the row ends with it): "실패" beside 실패, "응답 필요" beside 응답 필요
+  // ("대기 중" / "일시정지됨" are the state word too)
+  const sameAsState = (s: string, st: Status) => {
+    const x = s.trim();
+    return x.toLowerCase() === tr(statusLabel[st]).toLowerCase() || x.replace(/\s*(중|됨)$/, "") === statusLabel[st] || (st === "waiting" && x === "응답 대기 중");
+  };
   const doing = (t: Task) => {
     const s = (t.status === "waiting" ? nowText(t.now) : t.intent || nowText(t.now)).trim();
-    return s && s !== t.title ? s : "";
+    return s && s !== t.title && !sameAsState(s, t.status) ? s : "";
   };
   const working = () => listed().filter((t) => t.status === "running");
   /** a request's word: what its most pressing task is */
@@ -619,8 +646,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const stepNow = (r: Req) => {
     const t = focus(r);
     if (!t) return "";
-    const s = (t.status === "waiting" ? nowText(t.now) : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
-    return s.trim();
+    const s = ((t.status === "waiting" ? nowText(t.now) : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "").trim();
+    return sameAsState(s, stateOf(r)) || sameAsState(s, t.status) ? "" : s;
   };
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {

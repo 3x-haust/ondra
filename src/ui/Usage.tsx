@@ -7,7 +7,7 @@ import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
 import { ctxShare, tokens, now } from "./bits";
-import { state } from "../state/store";
+import { state, taskById } from "../state/store";
 import { ContextSheet } from "../views/Context";
 import { t } from "../i18n";
 
@@ -88,7 +88,12 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   });
   const list = () => limitsShown(props.accountId);
   // the one source for how full the context is: the strip, its tooltip and the sheet all read it
-  const c = () => (props.agent ? ctx[props.agent] : undefined);
+  // a task that hasn't started has no context of its own yet (whatever a kept number says)
+  const notStarted = () => {
+    const tk = props.agent?.startsWith("t:") ? taskById(props.agent.slice(2)) : undefined;
+    return tk?.status === "queued" && !tk.startedAt;
+  };
+  const c = () => (props.agent && !notStarted() ? ctx[props.agent] : undefined);
   const [ctxOpen, setCtxOpen] = createSignal(false);
   // with no account and nothing measured yet there is nothing to show: no empty strip
   const any = () => !!state.accounts.some((a) => a.id === props.accountId) || !!c() || !!props.shells || !!props.branch;
@@ -137,17 +142,21 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       <Show when={creditsOf(props.accountId)}>
         {(c) => <span class="st-lim st-credits" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
       </Show>
+      {/* nothing measured yet (a queued task, a chat before its first word): no context item */}
+      <Show when={props.agent ? c() : undefined}>
+        {(x) => (
+          <button
+            class="st-ctx"
+            classList={{ hot: !!x().window && x().tokens / x().window >= 0.7 }}
+            title={t("컨텍스트 {a} / {b}", { a: tokens(x().tokens), b: tokens(x().window) })}
+            aria-label={t("컨텍스트 {a} / {b}", { a: tokens(x().tokens), b: tokens(x().window) })}
+            onClick={() => setCtxOpen(true)}
+          >
+            {tokens(x().tokens)} ({ctxShare(x().tokens, x().window)})
+          </button>
+        )}
+      </Show>
       <Show when={props.agent}>
-        <button
-          class="st-ctx"
-          classList={{ hot: !!c()?.window && c()!.tokens / c()!.window >= 0.7 }}
-          title={c() ? t("컨텍스트 {a} / {b}", { a: tokens(c()!.tokens), b: tokens(c()!.window) }) : t("컨텍스트")}
-          onClick={() => setCtxOpen(true)}
-        >
-          <Show when={c()} fallback={t("컨텍스트")}>
-            {(x) => <>{tokens(x().tokens)} ({ctxShare(x().tokens, x().window)})</>}
-          </Show>
-        </button>
         <Show when={ctxOpen()}>
           <ContextSheet agent={props.agent!} accountId={props.accountId} onClose={() => setCtxOpen(false)} />
         </Show>

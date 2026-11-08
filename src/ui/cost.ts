@@ -43,7 +43,7 @@ export function jobCost(t: Task): JobCost {
 export const costShort = (c: JobCost) => [c.ms ? long(c.ms) : "", c.total ? t("토큰 {n}", { n: tokens(c.total) }) : ""].filter(Boolean).join(" · ");
 
 /** the breakdown, for a hover or the end of a job's chat. No time: wherever it shows,
- *  the time is already beside it (the "N분 동안 작업" fold, a card's own time) */
+ *  the time is already beside it (the end line "완료 · N분", a card's own time) */
 export const costDetail = (c: JobCost) =>
   [
     c.total

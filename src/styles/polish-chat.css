@@ -958,3 +958,13 @@
   color: var(--ink);
   background: var(--card);
 }
+
+/* new task: projects carry the sidebar's badge (16, like the sidebar rows) */
+.proj-chip .pbadge,
+.proj-pop .pbadge {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  font-size: 8.5px;
+  letter-spacing: 0;
+}

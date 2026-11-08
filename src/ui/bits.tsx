@@ -113,8 +113,8 @@ export function stamp(at: number) {
   return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString(locale(), { month: lang() === "en" ? "short" : "long", day: "numeric" })} ${time}`;
 }
 
-/** How full a context window is, one way everywhere (the input's strip, the context sheet): 0.4%, 5.2%, 11% */
+/** How full a context window is, one rounding everywhere (the input's strip, the context sheet): 0%, <1%, 10%, 11% */
 export function ctxShare(used: number, of: number) {
   const p = of ? (used / of) * 100 : 0;
-  return p >= 10 ? `${Math.round(p)}%` : p >= 0.1 ? `${p.toFixed(1)}%` : "0%";
+  return p <= 0 ? "0%" : p < 1 ? "<1%" : `${Math.round(p)}%`;
 }

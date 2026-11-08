@@ -17,6 +17,7 @@ import { isImage, withFiles, type PlusItem } from "./Composer";
 import { openImage } from "./Lightbox";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
+import { lineOf } from "../views/SkillsTab";
 import { t } from "../i18n";
 
 /** The btw card: the one being looked at, with ‹ › through earlier ones. */
@@ -136,8 +137,10 @@ export function skillAsk(text: string): { skills: string[]; rest: string } {
 export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }) =>
   menuSkills().map((sk) => ({
     name: `skill:${sk.name}`,
+    // the same one line as Settings › 스킬 (ours, translated, for a bundled skill); no " · " when there is none
     get desc() {
-      return `${sk.from === "bundled" ? t("기본 스킬") : t("스킬")} · ${sk.description.split(/(?<=[.。])\s/)[0].slice(0, 70)}`;
+      const line = lineOf({ name: sk.name, description: sk.description, kind: sk.from === "bundled" ? "bundled" : "mine" });
+      return [sk.from === "bundled" ? t("기본 스킬") : t("스킬"), line].filter(Boolean).join(" · ");
     },
     icon: "skill",
     skill: true,
@@ -177,7 +180,7 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
     });
   }
   for (const sk of skillsIn(state.space).filter((x) => x.menu))
-    out.push({ section: t("스킬"), icon: "skill", label: sk.name, desc: sk.description.split(/[.。]/)[0], run: ({ insert }) => insert(`/${sk.name} `) });
+    out.push({ section: t("스킬"), icon: "skill", label: sk.name, desc: lineOf({ name: sk.name, description: sk.description, kind: "mine" }) || undefined, run: ({ insert }) => insert(`/${sk.name} `) });
   out.push({ section: t("옆에서"), icon: "bolt", label: t("짧은 질문"), desc: "/btw", run: ({ insert }) => insert("/btw ") });
   out.push({ section: t("옆에서"), icon: "message", label: t("옆 대화"), keys: shortcutHint("side"), run: () => openPanel("side") });
   return out;
