@@ -13,21 +13,31 @@ import { t } from "../i18n";
 
 export function MsgActions(props: { text: string; at?: number; mine?: boolean; onEdit?: () => void; onRetry?: () => void }) {
   const [copied, setCopied] = createSignal(false);
+  let timer: number | undefined;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(props.text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
     } catch {
-      /* clipboard can be blocked; nothing to do */
+      // the clipboard API can be refused: the old way still copies a selection
+      const ta = Object.assign(document.createElement("textarea"), { value: props.text });
+      ta.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      if (!ok) return;
     }
+    // the icon turns into a check for a moment (and the row stays shown meanwhile)
+    setCopied(true);
+    clearTimeout(timer);
+    timer = window.setTimeout(() => setCopied(false), 1400);
   };
   return (
-    <div class="msg-actions" classList={{ mine: props.mine }}>
+    <div class="msg-actions" classList={{ mine: props.mine, copied: copied() }}>
       <Show when={props.mine && props.at}>
         <span class="msg-time">{stamp(props.at!)}</span>
       </Show>
-      <button class="msg-act" title={copied() ? t("복사했어요") : t("복사")} aria-label={t("복사")} onClick={copy}>
+      <button class="msg-act" classList={{ done: copied() }} title={copied() ? t("복사했어요") : t("복사")} aria-label={copied() ? t("복사했어요") : t("복사")} onClick={copy}>
         <Icon name={copied() ? "check" : "copy"} size={14} />
       </button>
       <Show when={props.onEdit}>

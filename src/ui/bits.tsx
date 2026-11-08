@@ -74,20 +74,27 @@ export function ago(at?: number) {
   return d < 30 ? t("{n}일 전", { n: d }) : new Date(at).toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
 
+/** "~/01_Project/…/ondra": long paths keep their start and their end */
+export function midTrim(s: string, max: number) {
+  if (s.length <= max) return s;
+  const tail = Math.ceil((max - 1) * 0.6);
+  return `${s.slice(0, max - 1 - tail)}…${s.slice(s.length - tail)}`;
+}
+
 export function tokens(n: number) {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}K`;
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-/** Compact age for tight rows: 방금 / 13분 / 3시간 / 2일. */
+/** How long a running task has been at it, for tight rows: 방금 시작 / 13분째 / 3시간째 / 2일째 (13m, 3h, 2d). Past times use ago(). */
 export function compact(ms: number): string {
   const m = Math.floor(ms / 60000);
-  if (m < 1) return t("방금");
-  if (m < 60) return t("{n}분", { n: m });
+  if (m < 1) return t("방금 시작");
+  if (m < 60) return t("{n}분째", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return t("{n}시간", { n: h });
-  return t("{n}일", { n: Math.floor(h / 24) });
+  if (h < 24) return t("{n}시간째", { n: h });
+  return t("{n}일째", { n: Math.floor(h / 24) });
 }
 
 /** 오후 7:04 (today) or 9월 27일 오전 4:49, in the app's language. */

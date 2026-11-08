@@ -8,13 +8,15 @@ import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
 import { t } from "../i18n";
 
-export const EFFORTS: { id: string; label: string }[] = [
-  { id: "low", label: "low" },
-  { id: "medium", label: "medium" },
-  { id: "high", label: "high" },
-  { id: "xhigh", label: "xhigh" },
-  { id: "max", label: "max" },
+/** `name` is the Korean key: show it with t(name) (낮음 · 보통 · 높음 · 매우 높음 · 최대). */
+export const EFFORTS: { id: string; label: string; name: string }[] = [
+  { id: "low", label: "low", name: "낮음" },
+  { id: "medium", label: "medium", name: "보통" },
+  { id: "high", label: "high", name: "높음" },
+  { id: "xhigh", label: "xhigh", name: "매우 높음" },
+  { id: "max", label: "max", name: "최대" },
 ];
+export const effortLabel = (id: string) => t(EFFORTS.find((e) => e.id === id)?.name ?? id);
 /** effort when nothing was picked */
 export const effortOf = (t: string | undefined) => (EFFORTS.some((e) => e.id === t) ? t! : "high");
 
@@ -58,53 +60,93 @@ export function ModelPicker(props: {
   const models = () => modelsNow(props.accountId) ?? asked();
   const loading = () => !models() && asked.loading;
   const [showOld, setShowOld] = createSignal(false);
+  const [q, setQ] = createSignal("");
   const auto = () => accountById(props.accountId)?.model;
   const label = () => (props.model ? prettyModel(props.model) : auto() ? prettyModel(auto()!) : t("모델 선택"));
   const effort = () => effortOf(props.thinking);
   const current = () => props.model || auto() || "";
-  const ranked = () => rankModels(models() ?? []);
-  const groups = () => ranked().latest;
+  const all = () => models() ?? [];
+  const ranked = () => rankModels(all());
+  // a short list is shown whole; "자주 씀" only earns its place in front of a long one
+  const often = () => (all().length > 6 ? ranked().often : []);
+  const groups = (): [string, string[]][] =>
+    all().length > 6 ? ranked().latest : [...new Set(all().map((m) => m.split("/")[0]))].map((pv) => [pv, all().filter((m) => m.split("/")[0] === pv)]);
+  const older = () => (all().length > 6 ? ranked().older : []);
+  // typing finds any model, the folded older ones too
+  const found = () => {
+    const k = q().trim().toLowerCase();
+    return k ? all().filter((m) => m.toLowerCase().includes(k) || prettyModel(m).toLowerCase().includes(k)) : null;
+  };
   const PROVIDER: Record<string, string> = { "openai-codex": "OpenAI · ChatGPT 계정", openai: "OpenAI", anthropic: "Anthropic · Claude 계정", google: "Google" };
   const provider = (id: string) => (PROVIDER[id] ? t(PROVIDER[id]) : id);
   const Item = (p: { m: string }) => (
-    <button type="button" class="pop-item" onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
+    <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
       <span class="pop-item-main">{prettyModel(p.m)}</span>
       <Show when={current() === p.m}><Icon name="check" size={14} /></Show>
     </button>
   );
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title={t("모델 · 추론 강도")}>
+      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => (setQ(""), setOpen(!open()))} title={current() ? `${label()} · ${effortLabel(effort())}` : t("모델 · 추론 강도")}>
         <span class="model-name">{label()}</span>
-        <Show when={current()}><span class="model-effort">{effort()}</span></Show>
+        <Show when={current()}><span class="model-effort">{effortLabel(effort())}</span></Show>
         <Icon name="down" size={12} class="muted" />
       </button>
       <Show when={open()}>
         <div class="pop model-pop" classList={{ up: props.up }}>
           <EffortSlider value={effort()} onChange={(id) => props.onChange(props.model, id)} />
           <div class="pop-sep" />
+          <Show when={all().length > 8}>
+            <div class="model-find">
+              <Icon name="search" size={14} />
+              <input
+                placeholder={t("모델 찾기")}
+                aria-label={t("모델 찾기")}
+                value={q()}
+                onInput={(e) => setQ(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  const f = found();
+                  if (e.key === "Enter" && f?.length) (props.onChange(f[0], effort()), setOpen(false));
+                }}
+                ref={(el) => setTimeout(() => el.focus(), 0)}
+              />
+            </div>
+          </Show>
           <div class="pop-scroll">
             <Show when={!loading()} fallback={<div class="pop-empty"><span class="spin sm" />{t("모델 불러오는 중")}</div>}>
-              <Show when={ranked().often.length}>
-                <div class="pop-label">{t("자주 씀")}</div>
-                <For each={ranked().often}>{(m) => <Item m={m} />}</For>
-              </Show>
-              <For each={groups()}>
-                {([id, list]) => (
+              <Show
+                when={found()}
+                fallback={
                   <>
-                    <div class="pop-label">{provider(id)}</div>
-                    <For each={list}>{(m) => <Item m={m} />}</For>
+                    <Show when={often().length}>
+                      <div class="pop-label">{t("자주 씀")}</div>
+                      <For each={often()}>{(m) => <Item m={m} />}</For>
+                    </Show>
+                    <For each={groups()}>
+                      {([id, list]) => (
+                        <>
+                          <div class="pop-label">{provider(id)}</div>
+                          <For each={list}>{(m) => <Item m={m} />}</For>
+                        </>
+                      )}
+                    </For>
+                    <Show when={older().length}>
+                      <button type="button" class="pop-item pop-more" onClick={() => setShowOld(!showOld())} aria-expanded={showOld()}>
+                        <span class="pop-item-main">{t("이전 모델 {n}개", { n: older().length })}</span>
+                        <Icon name={showOld() ? "down" : "chevron"} size={12} class="muted" />
+                      </button>
+                      <Show when={showOld()}><For each={older()}>{(m) => <Item m={m} />}</For></Show>
+                    </Show>
+                    <Show when={!all().length}><div class="pop-empty">{t("모델 없음")}</div></Show>
                   </>
+                }
+              >
+                {(f) => (
+                  <Show when={f().length} fallback={<div class="pop-empty">{t("모델 없음")}</div>}>
+                    <For each={f()}>{(m) => <Item m={m} />}</For>
+                  </Show>
                 )}
-              </For>
-              <Show when={ranked().older.length}>
-                <button type="button" class="pop-item pop-more" onClick={() => setShowOld(!showOld())}>
-                  <span class="pop-item-main">{t("이전 모델 {n}개", { n: ranked().older.length })}</span>
-                  <Icon name={showOld() ? "down" : "chevron"} size={12} class="muted" />
-                </button>
-                <Show when={showOld()}><For each={ranked().older}>{(m) => <Item m={m} />}</For></Show>
               </Show>
-              <Show when={!groups().length && !ranked().often.length}><div class="pop-empty">{t("모델 없음")}</div></Show>
             </Show>
           </div>
         </div>
@@ -173,7 +215,7 @@ function EffortSlider(props: { value: string; onChange: (id: string) => void }) 
         <For each={EFFORTS}>
           {(x, i) => (
             <button type="button" role="radio" tabindex="-1" aria-checked={i() === at()} classList={{ on: i() === at() }} onClick={() => set(i())}>
-              {x.label}
+              {t(x.name)}
             </button>
           )}
         </For>

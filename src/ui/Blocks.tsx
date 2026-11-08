@@ -76,15 +76,17 @@ function Compare(props: { b: Of<"compare"> }) {
   return (
     <div class="blk">
       <div class="blk-label">{props.b.label}</div>
-      <div class="cmp-row">
-        <span class="muted">{t("전")}</span>
-        <span class="bar"><i style={{ width: `${(props.b.before / max()) * 100}%` }} /></span>
-        <span class="v">{props.b.before}{props.b.unit ?? ""}</span>
-      </div>
-      <div class="cmp-row">
-        <span class="muted">{t("후")}</span>
-        <span class={`bar ${good() ? "good" : "bad"}`}><i style={{ width: `${(props.b.after / max()) * 100}%` }} /></span>
-        <span class="v strong">{props.b.after}{props.b.unit ?? ""}</span>
+      <div class="cmp">
+        <div class="cmp-row">
+          <span class="muted">{t("전")}</span>
+          <span class="bar"><i style={{ width: `${(props.b.before / max()) * 100}%` }} /></span>
+          <span class="v">{props.b.before}{props.b.unit ?? ""}</span>
+        </div>
+        <div class="cmp-row">
+          <span class="muted">{t("후")}</span>
+          <span class={`bar ${good() ? "good" : "bad"}`}><i style={{ width: `${(props.b.after / max()) * 100}%` }} /></span>
+          <span class="v strong">{props.b.after}{props.b.unit ?? ""}</span>
+        </div>
       </div>
     </div>
   );

@@ -18,14 +18,14 @@
   font-size: var(--fs-lg);
   line-height: var(--lh-lg);
 }
-.composer-wrap:not(.slim) .composer textarea {
+.composer-wrap .composer textarea {
   min-height: 42px;
   padding: var(--s-12) var(--s-16) var(--s-4);
 }
-.composer-wrap:not(.slim) .composer.big textarea {
+.composer-wrap .composer.big textarea {
   min-height: 68px;
 }
-.composer-wrap:not(.slim) .composer-bar {
+.composer-wrap .composer-bar {
   min-height: 40px;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-8) var(--s-8);
@@ -36,9 +36,6 @@
 }
 .composer-wrap .composer-right {
   margin-right: 0;
-}
-.composer-wrap.slim .composer-right {
-  margin-right: var(--s-4);
 }
 /* + : a 28 ghost icon button */
 .composer-wrap .cbtn {
@@ -140,22 +137,6 @@
   height: 9px;
   border-radius: 2px;
 }
-/* thin (one row): the same controls, centred on the 44 row */
-.composer-wrap.slim .composer {
-  padding: 0 var(--s-8);
-  gap: var(--s-4);
-}
-.composer-wrap.slim .composer textarea {
-  padding: 8px var(--s-4) 10px;
-}
-.composer-wrap.slim .send {
-  margin-left: 0;
-}
-/* the tray under the box: one quiet line */
-.composer-wrap .ctray.open .ctray-in {
-  min-height: 40px;
-  padding: var(--s-2) var(--s-8);
-}
 
 /* + menu: a menu like the others */
 .plus-wrap .plus-menu {
@@ -193,8 +174,12 @@
   white-space: nowrap;
 }
 .plus-wrap .plus-desc {
-  flex: none;
-  max-width: 45%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* "/" and "@" picker over the input */
@@ -572,11 +557,28 @@
 .decision .decision-foot {
   margin-top: 0;
 }
-.decision .decision-send {
-  padding: 0 var(--s-10);
+/* answering is a plain button: the choice is what matters, not the button */
+.decision .decision-send,
+.decision .decision-send:disabled {
+  padding: 0 var(--s-12);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
 }
-.decision .decision-send kbd {
-  font-size: var(--fs-2xs);
+.decision .decision-send:hover:not(:disabled) {
+  border-color: var(--input);
+  background: var(--muted);
+}
+.decision .decision-send:disabled {
+  opacity: 0.5;
+}
+/* your own answer reads as a choice like the others, not as a disabled one */
+.decision .decision-own .decision-input {
+  height: 20px;
+  font-size: var(--fs-md);
+}
+.decision .decision-own .decision-input::placeholder {
+  color: var(--ink-3);
 }
 .decision .decision-login {
   height: var(--h-sm);
@@ -594,4 +596,281 @@
 }
 .quote-bar .icon {
   color: var(--ink-3);
+}
+
+/* ═════════════ round 2 ═════════════ */
+
+/* the input is one size, focused or not; the model chip gives up the effort first, then truncates its name */
+.composer-wrap .composer {
+  container: composer / inline-size;
+}
+.composer-bar .composer-right {
+  min-width: 0;
+}
+.composer-bar .composer-right .picker {
+  min-width: 0;
+}
+.composer-bar .model-chip {
+  min-width: 0;
+  max-width: 100%;
+}
+.composer-bar .model-chip .model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container composer (max-width: 520px) {
+  .composer-bar .model-chip .model-effort {
+    display: none;
+  }
+}
+/* the tray under the input: one line, always the same height (numbers arrive without moving anything) */
+.composer-wrap .ctray .ctray-in {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--s-8);
+  overflow: hidden;
+}
+.ctray .composer-status .status-line {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.ctray .composer-status .status-line .st-lim {
+  flex: none;
+}
+/* narrow: "used" goes first, then the credits; the context number always stays */
+.composer-wrap .ctray .ctray-in {
+  container: tray / inline-size;
+}
+@container tray (max-width: 560px) {
+  .status-line .st-used {
+    display: none;
+  }
+}
+@container tray (max-width: 400px) {
+  .status-line .st-credits {
+    display: none;
+  }
+}
+
+/* key chips in the "/" and + menus (not "(⌘J)" in the text) */
+.cpick-kbd {
+  flex: none;
+  margin-left: auto;
+  padding: 0 var(--s-4);
+  min-width: 20px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: var(--r-xs);
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-family: var(--font);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  text-align: center;
+}
+.composer .cpick-row .cpick-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plus-wrap .plus-row .cpick-kbd {
+  margin-left: var(--s-8);
+}
+
+/* answer stats: on hover only, every one of them */
+.convo > .reply .reply-foot .usage-line,
+.task-view .thread-inner > .reply-foot .usage-line,
+.thread-inner .reply-foot .usage-line {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.convo > .reply:hover .reply-foot .usage-line,
+.task-view .thread-inner > .reply-foot:hover .usage-line,
+.thread-inner .reply-foot:hover .usage-line,
+.thread-inner .reply-foot:focus-within .usage-line {
+  opacity: 1;
+}
+/* a copied message keeps its row in view until the check goes back */
+.msg-actions.copied {
+  opacity: 1 !important;
+}
+.msg-act.done,
+.msg-act.done:hover {
+  color: var(--ok-ink);
+}
+
+/* the Main strip: a solid bar above the thread; its list opens over the thread at the bar's width */
+.main-view .req-board {
+  position: relative;
+  z-index: 3;
+  margin-top: 0;
+  padding-top: var(--s-6);
+  padding-bottom: var(--s-6);
+  background: var(--bg);
+}
+.main-view .req-board .req-head {
+  height: var(--h-sm);
+  padding: 0 var(--s-10);
+}
+.main-view .req-board.open .req-head:not(:hover) {
+  background: transparent;
+}
+.main-view .req-board .req-list {
+  position: absolute;
+  top: calc(100% - var(--s-2));
+  left: var(--s-24);
+  right: var(--s-24);
+  margin: 0;
+  max-height: min(320px, 50vh);
+  box-shadow: var(--shadow-pop);
+}
+.req-head .req-now {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+/* status words in the sidebar's tones */
+.req-tag.waiting,
+.req-state.waiting,
+.req-job-time.waiting {
+  color: var(--warn-ink);
+}
+.req-tag.failed,
+.req-state.failed,
+.req-job-time.failed {
+  color: var(--bad-ink);
+}
+.req-tag.running,
+.req-state.running {
+  color: var(--accent-text);
+}
+.req-tag.queued,
+.req-tag.paused,
+.req-tag.done,
+.req-state.queued,
+.req-state.paused,
+.req-state.done {
+  color: var(--ink-3);
+}
+.req-dot.waiting { background: var(--warn); }
+.req-dot.failed { background: var(--bad); }
+.req-dot.running { background: var(--accent); }
+.req-dot.queued,
+.req-dot.paused { background: var(--ink-4); }
+.req-dot.done { background: var(--ok); }
+.req-row .req-steps {
+  color: var(--ink-3);
+}
+/* a jump to a message lands with room above it */
+.main-view .thread [data-mid] {
+  scroll-margin-top: var(--s-16);
+}
+
+/* new task: the input centred like an empty Main, with its project and permission */
+.new-task .hero {
+  padding-bottom: 14vh;
+}
+.composer-bar .proj-chip .icon {
+  color: var(--ink-3);
+}
+.composer-bar .proj-chip .proj-chip-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop.proj-pop {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  width: 300px;
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+}
+.proj-pop .pop-label {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--s-8);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+}
+.proj-pop .pop-item {
+  min-height: var(--h-sm);
+  padding: 0 var(--s-8);
+  font-size: var(--fs-sm);
+}
+.proj-pop .pop-item .icon.muted {
+  color: var(--ink-3);
+}
+.proj-pop .pop-item-main {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-pop .pop-item-sub {
+  flex: none;
+}
+.proj-pop .pop-sep {
+  margin: var(--s-4) calc(-1 * var(--s-4));
+  background: var(--line-soft);
+}
+
+/* model menu: find any model */
+.model-pop .model-find {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: var(--h-sm);
+  margin: 0 0 var(--s-4);
+  padding: 0 var(--s-8);
+  color: var(--ink-3);
+}
+.model-pop .model-find input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.model-pop .model-find input::placeholder {
+  color: var(--ink-4);
+}
+.model-pop .pop-item.on {
+  color: var(--ink);
+}
+.pop.model-pop {
+  width: 320px;
+}
+
+/* side chat, empty: one line on what it is for */
+.side-chat .side-empty {
+  max-width: 300px;
+}
+.main-view .req-board::after {
+  content: "";
+  position: absolute;
+  left: var(--s-24);
+  right: var(--s-24);
+  bottom: 0;
+  height: 1px;
+  background: var(--line-soft);
+}
+/* each level's name sits in the middle of its cell */
+.model-pop .eff-seg button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

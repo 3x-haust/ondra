@@ -4,13 +4,13 @@ import { state, taskById } from "../state/store";
 import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
 import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
-import { ago } from "./bits";
+import { ago, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
 import { tell } from "../engine/tasks";
 import { goMain, openPanel, toast } from "../state/ui";
 import { addProject, projectsIn } from "../state/store";
 import { fileSrc, pickFolder } from "../lib/native";
-import { ignoredKey, noModifiers, shortcutOverlay } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, shortcutHint, shortcutOverlay } from "../lib/shortcuts";
 import { menuSkills } from "../engine/skillMenu";
 import { tilde } from "../engine/rpc";
 import { isImage, withFiles, type PlusItem } from "./Composer";
@@ -62,7 +62,7 @@ export function BtwCard(props: { scope: string }) {
       {(x) => (
         <div class="btw-card" role="status">
           <div class="btw-head">
-            <span class="btw-tag">btw</span>
+            <span class="btw-tag">{t("짧은 질문")}</span>
             <span class="btw-q" title={x().question}>{x().question}</span>
             <Show when={btwList().length > 1}>
               <span class="btw-nav">
@@ -100,7 +100,7 @@ export function BtwCard(props: { scope: string }) {
               <span class="btw-note" title={t("대화에는 남지 않아요")}>{where(x().scope)} · {ago(x().at)}</span>
               <span class="spacer" />
               <button class="link-btn" onClick={() => (void navigator.clipboard.writeText(x().answer), toast(t("복사했어요")))}>{t("복사")}</button>
-              <button class="link-btn" title="⌘J" onClick={toSide}>{t("사이드챗으로")}</button>
+              <button class="link-btn" title={shortcutHint("side")} onClick={toSide}>{t("옆 대화로 이어가기")}</button>
               <button class="link-btn" onClick={forward}>{props.scope.startsWith("task:") ? t("작업에 보내기") : t("메인에 보내기")}</button>
             </div>
           </Show>
@@ -114,9 +114,9 @@ export function BtwCard(props: { scope: string }) {
 export const btwCommand = (scope: () => string) => ({
   name: "btw",
   get desc() {
-    return t("옆에서 묻기");
+    return t("짧은 질문");
   },
-  icon: "message",
+  icon: "bolt",
   files: true,
   run: (arg: string, _also?: string[], files: string[] = []) => {
     if (arg.trim() || files.length) void askBtw(scope(), arg, files);
@@ -165,7 +165,7 @@ export const drawCommand = (task: () => string) => ({
 export function plusFor(where: { main?: boolean }): PlusItem[] {
   const out: PlusItem[] = [];
   if (where.main) {
-    for (const p of projectsIn(state.space)) out.push({ section: t("프로젝트"), icon: "folder", label: p.name, desc: tilde(p.folder), run: () => goMain(p.id) });
+    for (const p of projectsIn(state.space)) out.push({ section: t("프로젝트"), icon: "folder", label: p.name, desc: midTrim(tilde(p.folder), 24), run: () => goMain(p.id) });
     out.push({
       section: t("프로젝트"),
       icon: "plus",
@@ -178,8 +178,8 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
   }
   for (const sk of skillsIn(state.space).filter((x) => x.menu))
     out.push({ section: t("스킬"), icon: "skill", label: sk.name, desc: sk.description.split(/[.。]/)[0], run: ({ insert }) => insert(`/${sk.name} `) });
-  out.push({ section: t("옆에서"), icon: "message", label: "btw", desc: t("옆에서 묻기"), run: ({ insert }) => insert("/btw ") });
-  out.push({ section: t("옆에서"), icon: "message", label: t("사이드챗"), desc: "⌘J", run: () => openPanel("side") });
+  out.push({ section: t("옆에서"), icon: "bolt", label: t("짧은 질문"), desc: "/btw", run: ({ insert }) => insert("/btw ") });
+  out.push({ section: t("옆에서"), icon: "message", label: t("옆 대화"), keys: shortcutHint("side"), run: () => openPanel("side") });
   return out;
 }
 
@@ -207,6 +207,9 @@ export function SideChat() {
         </div>
       </Show>
       <div class="side-list" ref={box}>
+        <Show when={!msgs().length}>
+          <div class="side-empty">{t("작업과 상관없이 따로 묻는 대화예요")}</div>
+        </Show>
         <For each={msgs()} >
           {(m) => (
             <Show
@@ -239,7 +242,8 @@ export function SideChat() {
           ref={input}
           rows={1}
           id="side-input"
-          placeholder={t("사이드챗에 말하기")}
+          placeholder={t("옆 대화에 묻기")}
+          aria-label={t("옆 대화에 묻기")}
           value={text()}
           onInput={(e) => {
             setText(e.currentTarget.value);

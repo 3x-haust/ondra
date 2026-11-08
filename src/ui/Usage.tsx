@@ -23,7 +23,7 @@ const secs = (ms: number) => {
   return s ? t("{m}분 {s}초", { m, s }) : t("{m}분", { m });
 };
 
-/** One quiet line under an answer: speed, cache hit, time, tokens; plan windows on hover. */
+/** One quiet line under an answer (shown on hover): speed, cache hit, time, tokens; plan windows in its tooltip. */
 export function UsageLine(props: { u: Usage; lead?: string }) {
   const detail = () =>
     [
@@ -39,7 +39,8 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
         <span class="usage-cache" title={t("캐시 적중률")}>{t("캐시 {p}%", { p: pctText((props.u.cacheRead / promptOf(props.u)) * 100) })}</span>
       </Show>
       <Show when={props.u.ms}><span>{secs(props.u.ms!)}</span></Show>
-      <span class="usage-tok">{t("입력 {n}", { n: tokens(promptOf(props.u)) })} · {t("출력 {n}", { n: tokens(props.u.output) })}</span>
+      <span>{t("입력 {n}", { n: tokens(promptOf(props.u)) })}</span>
+      <span>{t("출력 {n}", { n: tokens(props.u.output) })}</span>
     </div>
   );
 }
@@ -101,12 +102,12 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       <For each={list()}>
         {(l) => (
           <span class="st-lim" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
-            {windowLabel(l.window)} {Math.round(l.used)}%
+            {windowLabel(l.window)} {Math.round(l.used)}%<span class="st-used"> {t("사용|used")}</span>
           </span>
         )}
       </For>
       <Show when={creditsOf(props.accountId)}>
-        {(c) => <span class="st-lim" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}", { n: c() })}</span>}
+        {(c) => <span class="st-lim st-credits" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: c() })}</span>}
       </Show>
       <Show when={props.agent}>
         <button
@@ -137,38 +138,11 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   );
 }
 
-/** How full the conversation is, as a small ring beside the model: hover for the numbers, click for what the model gets. */
-export function ContextRing(props: { agent: string; accountId: string }) {
-  const c = () => ctx[props.agent];
-  const pct = () => {
-    const x = c();
-    return x ? Math.min(100, x.window ? (x.tokens / x.window) * 100 : x.percent) : 0;
-  };
-  const [open, setOpen] = createSignal(false);
-  const R = 6.5;
-  const L = 2 * Math.PI * R;
-  return (
-    <Show when={c()}>
-      {(x) => (
-        <>
-          <button
-            type="button"
-            class="ctx-ring"
-            classList={{ warn: pct() >= 70, hot: pct() >= 90 }}
-            title={`${t("컨텍스트 {a} / {b}", { a: tokens(x().tokens), b: tokens(x().window) })} · ${pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%`}
-            aria-label={t("컨텍스트 {p}% 사용", { p: Math.round(pct()) })}
-            onClick={() => setOpen(true)}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <circle class="ctx-ring-track" cx="8" cy="8" r={R} />
-              <circle class="ctx-ring-fill" cx="8" cy="8" r={R} stroke-dasharray={`${(pct() / 100) * L} ${L}`} transform="rotate(-90 8 8)" />
-            </svg>
-          </button>
-          <Show when={open()}>
-            <ContextSheet agent={props.agent} accountId={props.accountId} known={{ tokens: x().tokens, window: x().window }} onClose={() => setOpen(false)} />
-          </Show>
-        </>
-      )}
-    </Show>
-  );
+/**
+ * There is no ring beside the model any more: the status line under the input
+ * already says how full the context is (and opens the sheet). Renders nothing so
+ * the task view's call still compiles; drop it there and this can go.
+ */
+export function ContextRing(_props: { agent: string; accountId: string }) {
+  return null;
 }

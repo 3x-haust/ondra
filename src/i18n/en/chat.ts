@@ -20,20 +20,25 @@ export default {
   "{n}분 전": "{n}m ago",
   "{n}시간 전": "{n}h ago",
   "{n}일 전": "{n}d ago",
-  "{d}째": "{d}",
-  "{d} 걸림": "Took {d}",
   "{d} 동안 작업": "Worked for {d}",
+  // a running task's time so far (past times say "전" / "ago")
+  "방금 시작": "Just started",
+  "{n}분째": "{n}m",
+  "{n}시간째": "{n}h",
+  "{n}일째": "{n}d",
+  "{d}째": "{d}",
 
   // cost
   "토큰 {n}": "{n} tokens",
   "토큰 {n} (새 입력 {i} · 캐시 {c} · 출력 {o})": "{n} tokens ({i} input · {c} cached · {o} output)",
-  "서브에이전트 {n}개 포함": "Includes {n} subagents",
+  "서브에이전트 {n}개 포함": "Includes {n} subagent|Includes {n} subagents",
 
   // main chat
   "메인": "Main",
   "프로젝트 채팅": "Project chat",
   "패널 (⌘\\)": "Panel (⌘\\)",
   "메인에서": "From Main",
+  "메시지 보내기|input": "Message",
   "{name}에서": "From {name}",
   "생각하는 중": "Thinking",
   "다시 시도": "Try again",
@@ -44,24 +49,38 @@ export default {
   "앱을 시작하지 못했어요": "Couldn't start the app",
   "다시 설치해 주세요.": "Reinstall the app.",
   "로그인": "Sign in",
-  "{name}에서 무엇을 할까요?": "What's next in {name}?",
   "최근 작업 보는 중": "Looking at recent tasks",
   "{app}에서 이어서 하기": "Continue from {app}",
   "제목 없음": "Untitled",
-  "무엇이든 요청하세요": "Ask anything",
-  "{name}에 메시지 보내기": "Message {name}",
-  "메인에 메시지 보내기": "Message Main",
 
   // slash commands
-  "사이드챗 열기 (⌘J)": "Open side chat (⌘J)",
-  "흐름 열기": "Open flow",
+  "옆 대화 열기": "Open side chat",
+  "작업 흐름 열기": "Open flow",
+  "메모리 열기": "Open memory",
+  "설정 열기": "Open settings",
   "메모리에 저장": "Save to memory",
-  "메모리 보기": "Open memory",
   "설정": "Settings",
 
   // request board
-  "요청 {n}": "Requests {n}",
-  "할 일 {done}/{all} 완료": "{done} of {all} steps done",
+  "작업 {n}|board": "Tasks {n}",
+  "할 일 {done}/{all}": "To-dos {done}/{all}",
+  "할 일 {done}/{all} 완료": "{done} of {all} to-dos done",
+  "작업 {done}/{all} 완료": "{done} of {all} tasks done",
+
+  // new task
+  "프로젝트|one": "Project",
+  "모델 찾기": "Find a model",
+
+  // usage strip under the input
+  "사용|used": "used",
+  "크레딧 {n}|left": "{n} credits",
+
+  // quick question and side chat
+  "짧은 질문": "Quick question",
+  "옆 대화": "Side chat",
+  "옆 대화로 이어가기": "Continue in side chat",
+  "옆 대화에 묻기": "Ask on the side",
+  "작업과 상관없이 따로 묻는 대화예요": "Ask on the side. Your tasks aren't affected.",
 
   // composer
   "파일 및 폴더": "Files and folders",
@@ -69,7 +88,6 @@ export default {
   "명령": "Commands",
   "파일": "Files",
   "제거": "Remove",
-  "입력창 ({k})": "Message input ({k})",
   "첨부 및 기타": "Attach and more",
   "보내기": "Send",
   "보내기 (↵)": "Send (↵)",
@@ -102,11 +120,11 @@ export default {
   "도구 씀": "Used tool",
   "{names} 외 {n}개": "{names} and {n} more",
   "살펴봄": "Explored",
-  "파일 {n}개 수정함": "Edited {n} files",
-  "파일 {n}개 수정 중": "Editing {n} files",
-  "명령 {n}개 실행함": "Ran {n} commands",
-  "명령 {n}개 실행 중": "Running {n} commands",
-  "브라우저 {n}번 씀": "Used browser {n} times",
+  "파일 {n}개 수정함": "Edited {n} file|Edited {n} files",
+  "파일 {n}개 수정 중": "Editing {n} file|Editing {n} files",
+  "명령 {n}개 실행함": "Ran {n} command|Ran {n} commands",
+  "명령 {n}개 실행 중": "Running {n} command|Running {n} commands",
+  "브라우저 {n}번 씀": "Used the browser once|Used the browser {n} times",
   "실패 {n}": "{n} failed",
   "메모리에 쓰는 중": "Saving to memory",
   "메모리에 저장함": "Saved to memory",
@@ -114,7 +132,7 @@ export default {
   "파일 열기": "Open file",
   "출력 없음": "No output",
   "출력 대기 중…": "Waiting for output…",
-  "서브에이전트 {n}개": "{n} subagents",
+  "서브에이전트 {n}개": "{n} subagent|{n} subagents",
   "{n}개 진행 중": "{n} running",
   "모두 완료": "All done",
   "세션 {n}에서 계속": "Continued in session {n}",
@@ -132,7 +150,7 @@ export default {
 
   // decision card
   "브라우저에서 로그인": "Sign in in browser",
-  "직접 입력": "Type an answer",
+  "다른 답": "Something else",
 
   // model and permission pickers
   "모델 선택": "Choose model",
@@ -141,9 +159,11 @@ export default {
   "Anthropic · Claude 계정": "Anthropic · Claude account",
   "모델 불러오는 중": "Loading models",
   "자주 씀": "Frequent",
-  "이전 모델 {n}개": "{n} older models",
+  "이전 모델 {n}개": "{n} older model|{n} older models",
   "모델 없음": "No models",
   "추론 강도": "Effort",
+  "매우 높음": "Extra high",
+  "최대": "Max",
   "권한": "Permissions",
   "매번 묻기": "Ask first",
   "편집 허용": "Allow edits",
@@ -173,7 +193,7 @@ export default {
   "확인됨": "Verified",
   "자가 보고": "Self-reported",
   "불일치": "Mismatch",
-  "변경한 파일 {n}개": "{n} files changed",
+  "변경한 파일 {n}개": "{n} file changed|{n} files changed",
 
   // pictures
   "새로": "New",

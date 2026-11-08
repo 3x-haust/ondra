@@ -12,6 +12,7 @@ import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
+import { midTrim } from "./bits";
 import { t } from "../i18n";
 
 /** The composer on screen receives dropped files (there is one per view). */
@@ -53,6 +54,8 @@ export interface PlusItem {
   icon: string;
   label: string;
   desc?: string;
+  /** its shortcut, shown as a key chip */
+  keys?: string;
   run: (api: { insert: (text: string) => void }) => void;
 }
 
@@ -60,6 +63,8 @@ export interface Command {
   name: string;
   desc: string;
   icon?: string;
+  /** its shortcut, shown as a key chip */
+  keys?: string;
   /** keep the text after the command as an argument; `also`: more skills named in the same message; `files`: what was attached */
   run: (arg: string, also?: string[], files?: string[]) => void;
   /** takes the attached files and pictures along */
@@ -324,107 +329,17 @@ export function Composer(props: {
     }
     const f = files();
     keep(text());
-    setEngaged(false);
     props.onSend(withFiles(text(), f));
     setText("");
     setFiles([]);
     queueMicrotask(grow);
   };
 
-  // Thin until used (ChatGPT-style): one row with +, model and send. Pressing or
-  // typing in it opens it; a press anywhere else, sending or Esc closes it.
-  // Closing waits until that press has finished as a click: shrinking under the
-  // pointer moved the page (and the size transition covered it), so the first
-  // click elsewhere used to do nothing. A new chat (big) starts open.
-  const [engaged, setEngaged] = createSignal(false);
-  let pressing = false;
-  let closeAfterPress = false;
-  let pressTimer: number | undefined;
-  const close = () => (pressing ? (closeAfterPress = true) : setEngaged(false));
-  // A press ends on whichever comes first: pointerup, mouseup, click or a short
-  // timeout. WebKit can drop the pointerup (a press that starts a text selection),
-  // which left the input open until the next click.
-  const up = () => {
-    if (!pressing) return;
-    pressing = false;
-    clearTimeout(pressTimer);
-    if (!closeAfterPress) return;
-    closeAfterPress = false;
-    // after the click this press makes has been handled
-    setTimeout(() => setEngaged(false), 0);
-  };
-  const down = (e: PointerEvent) => {
-    pressing = true;
-    clearTimeout(pressTimer);
-    pressTimer = window.setTimeout(up, 700);
-    const t = e.target as Element | null;
-    if (!wrap.contains(t) && !t?.closest?.('[role="dialog"]')) close();
-  };
-  // never the input's own blur: that fires on the press itself, and closing then
-  // moved the page under the pointer so the click missed what it was on
-  const ends = ["pointerup", "pointercancel", "mouseup", "click", "dragstart"] as const;
-  const left = (e: Event) => e.target === window && up();
-  document.addEventListener("pointerdown", down, true);
-  for (const k of ends) window.addEventListener(k, up, true);
-  window.addEventListener("blur", left);
-  onCleanup(() => {
-    clearTimeout(pressTimer);
-    document.removeEventListener("pointerdown", down, true);
-    for (const k of ends) window.removeEventListener(k, up, true);
-    window.removeEventListener("blur", left);
-  });
-  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
-  // the to-do list and other strips above the input work on their own: touching them never opens the input
-  const inStrips = (n: EventTarget | null) => n instanceof Element && !!n.closest(".strips");
-  const [open, setOpenState] = createSignal(want());
-  createEffect(
-    on(want, (v) => {
-      if (v === open()) return;
-      // one box that grows or shrinks in place: no cross-fade of two pictures
-      const box = wrap.querySelector<HTMLElement>(".composer");
-      if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return setOpenState(v);
-      // a pill's radius is huge on paper: use what shows (half the height), so the
-      // corners ease from round to square instead of snapping at the end
-      const shape = () => {
-        const h = box.offsetHeight;
-        const r = Math.min(parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0, h / 2);
-        return { height: `${h}px`, borderRadius: `${r}px` };
-      };
-      const from = shape();
-      for (const x of [box, ...box.children]) (x as HTMLElement).getAnimations().forEach((a) => a.cancel());
-      // the signal lands after this effect: switch the class now to measure the end
-      wrap.classList.toggle("slim", !v);
-      setOpenState(v);
-      const to = shape();
-      if (from.height === to.height && from.borderRadius === to.borderRadius) return;
-      box.style.overflow = "hidden";
-      const ease = "cubic-bezier(0.32, 0.72, 0, 1)";
-      const a = box.animate([from, to], { duration: 320, easing: ease });
-      const done = () => (box.style.overflow = "");
-      a.onfinish = done;
-      a.oncancel = done;
-      // what the bigger box adds comes in as it opens, not all at once
-      if (v)
-        for (const c of box.children)
-          (c as HTMLElement).animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 60, easing: ease, fill: "backwards" });
-    }, { defer: true }),
-  );
   let wrap!: HTMLDivElement;
 
   return (
-    <div
-      class="composer-wrap"
-      ref={wrap}
-      classList={{ slim: !open() }}
-      onPointerDown={(e) => !inStrips(e.target) && setEngaged(true)}
-      onMouseDown={(e) => !inStrips(e.target) && setEngaged(true)}
-      onFocusIn={(e) => !inStrips(e.target) && setEngaged(true)}
-      onFocusOut={(e) => {
-        // leaving by keyboard (Tab); a press elsewhere is handled by `down`
-        const to = e.relatedTarget as Node | null;
-        if (!pressing && to && !wrap.contains(to)) close();
-      }}
-    >
+    // one size, focused or not: leaving the input never moves the thread or hides the chips
+    <div class="composer-wrap" ref={wrap}>
       <Show when={props.top}>
         <div class="strips">{props.top}</div>
       </Show>
@@ -455,7 +370,7 @@ export function Composer(props: {
                         <>
                           <Icon name="file" size={14} />
                           <span class="cpick-name">{base(it as string)}</span>
-                          <span class="cpick-desc">{(it as string).split("/").slice(0, -1).join("/")}</span>
+                          <span class="cpick-desc" title={it as string}>{midTrim((it as string).split("/").slice(0, -1).join("/"), 48)}</span>
                         </>
                       }
                     >
@@ -464,6 +379,7 @@ export function Composer(props: {
                           <Icon name={c().icon ?? "dot"} size={14} />
                           <span class="cpick-name">/{c().name}</span>
                           <span class="cpick-desc">{c().desc}</span>
+                          <Show when={c().keys}><kbd class="cpick-kbd">{c().keys}</kbd></Show>
                         </>
                       )}
                     </Show>
@@ -510,7 +426,8 @@ export function Composer(props: {
           value={text()}
           placeholder={props.placeholder}
           data-shortcut={props.id === "main-input" || props.id === "task-input" ? "focusInput" : undefined}
-          title={t("입력창 ({k})", { k: shortcutHint("focusInput") })}
+          aria-label={t("메시지")}
+          title={`${t("메시지")} ${shortcutHint("focusInput")}`.trim()}
           onInput={(e) => {
             setText(e.currentTarget.value);
             grow();
@@ -556,7 +473,6 @@ export function Composer(props: {
             if (e.key === "Escape" && !pick() && noModifiers(e)) {
               e.preventDefault();
               e.stopPropagation();
-              setEngaged(false);
               el.blur();
               return;
             }
@@ -651,7 +567,8 @@ export function Composer(props: {
                       >
                         <Icon name={it.icon} size={16} />
                         <span class="plus-label">{it.label}</span>
-                        <Show when={it.desc}><span class="plus-desc">{it.desc}</span></Show>
+                        <Show when={it.desc}><span class="plus-desc" title={it.desc}>{it.desc}</span></Show>
+                        <Show when={it.keys}><kbd class="cpick-kbd">{it.keys}</kbd></Show>
                       </button>
                     </>
                   )}
@@ -679,7 +596,7 @@ export function Composer(props: {
         </Show>
       </form>
       <Show when={props.under || props.status}>
-        <div class="ctray" classList={{ open: open() }} aria-hidden={!open()}>
+        <div class="ctray open">
           <div class="ctray-in">
             <Show when={props.under}><div class="composer-under">{props.under}</div></Show>
             <Show when={props.status}><div class="composer-status">{props.status}</div></Show>

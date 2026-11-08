@@ -4,12 +4,12 @@ import { keepBottom } from "../ui/stick";
 import { DecisionCard } from "../ui/DecisionCard";
 // Every reply carries chips for the jobs it started; the jobs themselves live
 // in the sidebar, grouped by what they need from you.
-import { chooseAccount } from "../engine/tasks";
+import { chooseAccount, createTask } from "../engine/tasks";
 import { createEffect, createMemo, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, projectById, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { fsFiles } from "../lib/native";
-import { expand } from "../engine/rpc";
-import type { CaptainMessage, Task } from "../state/types";
+import { expand, tilde } from "../engine/rpc";
+import type { CaptainMessage, Status, Task } from "../state/types";
 import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
 import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -17,15 +17,16 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago, now, short } from "../ui/bits";
+import { ago, compact, midTrim, now, statusLabel } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
-import { ModelPicker, PermissionPicker } from "../ui/ModelPicker";
+import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
-import { ContextRing, StatusLine, UsageLine } from "../ui/Usage";
+import { StatusLine, UsageLine } from "../ui/Usage";
+import { noModifiers, shortcutHint } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
@@ -153,7 +154,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
   );
 }
 
-/** Empty chat: a question, the box to answer it, and a few starts under it (like Codex). */
+/** Empty chat: the input, and a few starts under it (like Codex). The header already says where you are. */
 function Hero(props: { project?: string; composer: JSX.Element }) {
   // this space's accounts only: jobs here never run on the other space's
   const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
@@ -193,7 +194,6 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
             <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>
           </div>
         </Show>
-        <h2 class="hero-ask">{props.project ? t("{name}에서 무엇을 할까요?", { name: projectById(props.project)?.name ?? "" }) : t("무엇을 할까요?")}</h2>
         {props.composer}
         <div class="hero-picks">
           <Show when={suggestLoading() === key() && !picks().length}>
@@ -227,6 +227,114 @@ function Hero(props: { project?: string; composer: JSX.Element }) {
             )}
           </For>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The model chip for the account a chat runs on: company and personal keep their own model. */
+function AccountModel(props: { accountId: string; up?: boolean }) {
+  return (
+    <ModelPicker
+      up={props.up}
+      accountId={props.accountId}
+      model={accountById(props.accountId)?.model ?? ""}
+      thinking={effortFor(props.accountId) || ""}
+      onChange={(m, t) =>
+        updateAccount(props.accountId, (x) => {
+          if (m) x.model = m;
+          x.effort = t;
+        })
+      }
+    />
+  );
+}
+
+// ───────────── new task
+/** The sidebar's 새 작업: a blank task to write, in a project picked here. Any move elsewhere ends it. */
+const [drafting, setDrafting] = createSignal<{ project?: string } | null>(null);
+export function startNewTask() {
+  const v = view();
+  const project = v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined;
+  setView({ name: "main" });
+  setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined });
+  setTimeout(() => document.getElementById("new-task-input")?.focus(), 30);
+}
+
+/** Which project a new task runs in: a chip and its menu, like the permission one. */
+function ProjectPick(props: { value?: string; onChange: (id?: string) => void }) {
+  const [open, setOpen] = usePop();
+  const cur = () => (props.value ? projectById(props.value) : undefined);
+  return (
+    <div class="picker" onClick={(e) => e.stopPropagation()}>
+      <button type="button" class="chip proj-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title={cur()?.folder ? tilde(cur()!.folder) : t("프로젝트|one")}>
+        <Icon name="folder" size={14} />
+        <span class="proj-chip-name">{cur()?.name ?? t("프로젝트 없음")}</span>
+        <Icon name="down" size={12} class="muted" />
+      </button>
+      <Show when={open()}>
+        <div class="pop proj-pop" role="menu">
+          <div class="pop-label">{t("프로젝트")}</div>
+          <For each={projectsIn(state.space)}>
+            {(p) => (
+              <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(p.id), setOpen(false))}>
+                <Icon name="folder" size={14} class="muted" />
+                <span class="pop-item-main">{p.name}</span>
+                <span class="pop-item-sub">{midTrim(tilde(p.folder), 24)}</span>
+                <Show when={p.id === props.value}><Icon name="check" size={14} /></Show>
+              </button>
+            )}
+          </For>
+          <div class="pop-sep" />
+          <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(undefined), setOpen(false))}>
+            <Icon name="dot" size={14} class="muted" />
+            <span class="pop-item-main">{t("프로젝트 없음")}</span>
+            <Show when={!props.value}><Icon name="check" size={14} /></Show>
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function NewTask(props: { project?: string; onProject: (id?: string) => void }) {
+  const p = () => (props.project ? projectById(props.project) : undefined);
+  const account = () => chooseAccount(state.space, p()?.name ?? "");
+  const send = (text: string) => {
+    const first = text.split("\n").find((l) => l.trim())?.trim() ?? text;
+    const id = createTask({
+      space: state.space,
+      title: first,
+      topic: p()?.name ?? "",
+      ask: text,
+      cwd: p()?.folder,
+      project: p()?.id,
+      isolate: state.settings.isolate,
+      accountId: account(),
+    });
+    setDrafting(null);
+    openTask(id);
+  };
+  return (
+    <div class="page hero-page new-task">
+      <div class="hero">
+        <Composer
+          id="new-task-input"
+          draftKey={`new:${state.space}`}
+          big
+          autofocus
+          placeholder={t("새 작업")}
+          files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
+          onSend={send}
+          status={<StatusLine accountId={account()} space={state.space} />}
+          left={
+            <>
+              <ProjectPick value={props.project} onChange={props.onProject} />
+              <PermissionPicker value={state.settings.permission ?? "edits"} onChange={(x) => setState("settings", "permission", x)} />
+            </>
+          }
+          right={<AccountModel accountId={account()} />}
+        />
       </div>
     </div>
   );
@@ -294,17 +402,17 @@ export function MainView() {
       files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
       commands={[
         btwCommand(() => `main:${key()}`),
-        { name: "side", desc: t("사이드챗 열기 (⌘J)"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
-        { name: "flow", desc: t("흐름 열기"), icon: "branch", run: () => openPanel("flow") },
+        { name: "side", desc: t("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
+        { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
         { name: "ask", desc: t("권한: 매번 묻기"), icon: "lock", run: () => setState("settings", "permission", "ask") },
         { name: "edits", desc: t("권한: 편집 허용"), icon: "pencil", run: () => setState("settings", "permission", "edits") },
         { name: "full", desc: t("권한: 전체 권한"), icon: "shield", run: () => setState("settings", "permission", "full") },
         { name: "remember", desc: t("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
-        { name: "memory", desc: t("메모리 보기"), icon: "memory", run: () => setView({ name: "memory" }) },
-        { name: "settings", desc: t("설정"), icon: "gear", run: () => setView({ name: "settings" }) },
+        { name: "memory", desc: t("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
+        { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
         ...skillCommands(() => ({ space: state.space, project: project()?.id })),
       ]}
-      placeholder={big ? t("무엇이든 요청하세요") : project() ? t("{name}에 메시지 보내기", { name: project()!.name }) : t("메인에 메시지 보내기")}
+      placeholder={t("메시지 보내기|input")}
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}
@@ -313,29 +421,38 @@ export function MainView() {
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={
-        <>
-        <ContextRing agent={`captain:${key()}`} accountId={account()} />
-        <ModelPicker
-          up={!big}
-          accountId={account()}
-          // the model belongs to the account this chat runs on: company and personal keep their own
-          model={accountById(account())?.model ?? ""}
-          thinking={effortFor(account()) || ""}
-          onChange={(m, t) =>
-            updateAccount(account(), (x) => {
-              if (m) x.model = m;
-              x.effort = t;
-            })
-          }
-        />
-        </>
-      }
+      right={<AccountModel accountId={account()} up={!big} />}
     />
   );
 
+  // a new task is written here until it is sent, or until anything else is opened
+  createEffect(on([view, () => state.space], () => setDrafting(null), { defer: true }));
+  const esc = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || !drafting() || e.defaultPrevented || !noModifiers(e)) return;
+    e.preventDefault();
+    setDrafting(null);
+  };
+  window.addEventListener("keydown", esc);
+  onCleanup(() => window.removeEventListener("keydown", esc));
+
   return (
     <div class="view main-view">
+      <Show when={drafting()}>
+        {(d) => (
+          <>
+            <header class="head" data-tauri-drag-region>
+              <SidebarToggle />
+              <h1 class="head-title">{t("새 작업")}</h1>
+              <span class="spacer" data-tauri-drag-region />
+              <button class="icon-btn" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setDrafting(null)}>
+                <Icon name="x" size={16} />
+              </button>
+            </header>
+            <NewTask project={d().project} onProject={(id) => setDrafting({ project: id })} />
+          </>
+        )}
+      </Show>
+      <Show when={!drafting()}>
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
         <h1 class="head-title">
@@ -380,6 +497,7 @@ export function MainView() {
         <div class="dock">
           <div class="dock-inner">{composer(false)}</div>
         </div>
+      </Show>
       </Show>
     </div>
   );
@@ -467,20 +585,24 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const fresh = Date.now() - 10 * 60_000;
     return out.filter((r) => r.state !== "done" || r.at > fresh).reverse();
   });
-  const count = (k: Req["state"]) => reqs().filter((r) => r.state === k).length;
-  const active = (t: Task) => t.status === "running" || t.status === "waiting" || t.status === "queued";
+  /** every task the list shows, once */
+  const listed = () => [...new Set(reqs().flatMap((r) => r.tasks))];
+  // the head counts the tasks below it, by the words the sidebar uses
+  const ORDER: Status[] = ["waiting", "failed", "running", "queued", "paused", "done"];
+  const counts = () => ORDER.map((st) => [st, listed().filter((t) => t.status === st).length] as const).filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
   const doing = (t: Task) => {
     const s = (t.status === "waiting" ? t.now : t.intent || t.now || "").trim();
     return s && s !== t.title ? s : "";
   };
-  const working = () => reqs().flatMap((r) => (r.state === "done" ? [] : r.tasks.filter((t) => t.status === "running")));
-  const label = { ask: "응답 필요", live: "진행 중", done: "완료" } as const;
+  const working = () => listed().filter((t) => t.status === "running");
+  /** a request's word: what its most pressing task is */
+  const stateOf = (r: Req): Status => (r.state === "done" ? "done" : (ORDER.find((st) => r.tasks.some((t) => t.status === st)) ?? "running"));
   /** main's last report on one of the request's jobs */
   const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
-  /** the request's to-do lists together (skipped steps left out) */
+  /** a one-task request: its to-do list (skipped steps left out) */
   const steps = (r: Req) => {
-    const ps = r.tasks.flatMap((t) => t.plan.filter((p) => p.state !== "skip"));
+    const ps = r.tasks[0].plan.filter((p) => p.state !== "skip");
     return ps.length ? { done: ps.filter((p) => p.state === "done").length, all: ps.length } : undefined;
   };
   /** what it is on now: the question it waits on, else the to-do step under way, else its status line */
@@ -490,7 +612,6 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const s = (t.status === "waiting" ? t.now : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
     return s.trim();
   };
-  const doneOf = (r: Req) => r.tasks.filter((t) => t.status === "done").length;
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
     const all = r.tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
@@ -502,18 +623,18 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       r.tasks[r.tasks.length - 1]
     );
   };
+  /** a task line's right side: how long it has run, or its state */
+  const when = (t: Task) => (t.status === "running" && t.startedAt ? compact(now() - t.startedAt) : tr(statusLabel[t.status]));
   return (
     <Show when={reqs().length}>
       <div class="req-board" ref={board} classList={{ open: open() }}>
         <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
           <span class="req-sum">
-            <span class="req-total">{t("요청 {n}", { n: reqs().length })}</span>
-            <Show when={count("ask")}><span class="req-tag ask">{t(label.ask)} {count("ask")}</span></Show>
-            <Show when={count("live")}><span class="req-tag live">{t(label.live)} {count("live")}</span></Show>
-            <Show when={count("done")}><span class="req-tag done">{t(label.done)} {count("done")}</span></Show>
+            <span class="req-total">{t("작업 {n}|board", { n: listed().length })}</span>
+            <For each={counts()}>{([st, n]) => <span class={`req-tag ${st}`}>{tr(statusLabel[st])} {n}</span>}</For>
           </span>
-          {/* closed: what is being worked on right now, in one line */}
-          <Show when={!open() && working()[0]}>{(t) => <span class="req-now">{t().title}<Show when={doing(t())}> · {doing(t())}</Show></span>}</Show>
+          {/* what is being worked on right now, in one line (the same open or closed, so the head never changes width) */}
+          <Show when={working()[0]}>{(x) => <span class="req-now">{x().title}<Show when={doing(x())}> · {doing(x())}</Show></span>}</Show>
           <Icon name="chevron" size={12} class="req-chev" />
         </button>
         <Show when={open()}>
@@ -522,32 +643,43 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
               {(r) => (
                 <li>
                   <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
-                    <i class={`req-dot ${r.state}`} />
+                    <i class={`req-dot ${stateOf(r)}`} />
                     <span class="req-text">{r.text}</span>
-                    {/* where it is: the step being done now and the to-do list's progress (several jobs show their own lines below) */}
-                    <Show when={r.state !== "done" && r.tasks.filter(active).length < 2 && stepNow(r)}>
-                      {(n) => <span class="req-step-now">{n()}</span>}
+                    {/* one task: the step it is on and its to-do list; several: how many of the tasks listed below are done */}
+                    <Show
+                      when={r.tasks.length > 1}
+                      fallback={
+                        <>
+                          <Show when={r.state !== "done" && stepNow(r)}>{(n) => <span class="req-step-now">{n()}</span>}</Show>
+                          <Show when={r.state !== "done" && steps(r)}>
+                            {(st) => (
+                              <span class="req-steps" title={t("할 일 {done}/{all} 완료", { done: st().done, all: st().all })}>
+                                <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
+                                {t("할 일 {done}/{all}", { done: st().done, all: st().all })}
+                              </span>
+                            )}
+                          </Show>
+                        </>
+                      }
+                    >
+                      <span class="req-steps" title={t("작업 {done}/{all} 완료", { done: r.tasks.filter((x) => x.status === "done").length, all: r.tasks.length })}>
+                        {r.tasks.filter((x) => x.status === "done").length}/{r.tasks.length}
+                      </span>
                     </Show>
-                    <Show when={r.state !== "done" && steps(r)} fallback={<span class="req-steps">{doneOf(r)}/{r.tasks.length}</span>}>
-                      {(st) => (
-                        <span class="req-steps" title={t("할 일 {done}/{all} 완료", { done: st().done, all: st().all })}>
-                          <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
-                          {st().done}/{st().all}
-                        </span>
-                      )}
-                    </Show>
-                    <span class={`req-state ${r.state}`}>{t(label[r.state])}</span>
+                    <span class={`req-state ${stateOf(r)}`}>{tr(statusLabel[stateOf(r)])}</span>
                   </button>
-                  {/* several jobs working on it: one line each (one job opens from the row itself) */}
-                  <For each={r.state === "done" || r.tasks.filter(active).length < 2 ? [] : r.tasks.filter(active)}>
-                    {(t) => (
-                      <button class="req-job" onClick={() => openTask(t.id)} title={t.title}>
-                        <span class="req-job-title">{t.title}</span>
-                        <Show when={doing(t)}><span class="req-job-now">{doing(t)}</span></Show>
-                        <span class="req-job-time">{t.status === "waiting" ? tr("응답 필요") : t.status === "running" && t.startedAt ? tr("{d}째", { d: short(now() - t.startedAt) }) : tr("대기")}</span>
-                      </button>
-                    )}
-                  </For>
+                  {/* several tasks: one line each, all of them, so the count above adds up */}
+                  <Show when={r.tasks.length > 1}>
+                    <For each={r.tasks}>
+                      {(x) => (
+                        <button class="req-job" onClick={() => openTask(x.id)} title={x.title}>
+                          <span class="req-job-title">{x.title}</span>
+                          <Show when={x.status !== "done" && doing(x)}><span class="req-job-now">{doing(x)}</span></Show>
+                          <span class={`req-job-time ${x.status}`}>{when(x)}</span>
+                        </button>
+                      )}
+                    </For>
+                  </Show>
                 </li>
               )}
             </For>

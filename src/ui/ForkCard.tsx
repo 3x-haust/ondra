@@ -4,7 +4,7 @@ import { For, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
-import { compact, now, statusLabel, ago } from "./bits";
+import { compact, long, now, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
 import { costDetail, jobCost } from "./cost";
 import { t as tr } from "../i18n";
@@ -53,6 +53,11 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
   const kids = () => state.tasks.filter((k) => k.parentId === props.id);
   const live = () => kids().filter((k) => k.status === "running").length;
   const planDone = () => t()!.plan.filter((p) => p.state === "done").length;
+  /** how long it took and what it used, for the hover on a finished one */
+  const took = (x: NonNullable<ReturnType<typeof t>>) => {
+    const c = jobCost(x);
+    return [c.ms ? tr("{d} 동안 작업", { d: long(c.ms) }) : "", costDetail(c)].filter(Boolean).join(" · ");
+  };
   const time = () => {
     const x = t()!;
     if (x.status === "done") return ago(x.finishedAt ?? x.createdAt);
@@ -81,7 +86,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
               </span>
             </Show>
             {/* one time per card: when it ended; how long it took is on hover */}
-            <span class="fork-time" title={x().status === "done" && !x().answer ? costDetail(jobCost(x())) || undefined : undefined}>{time()}</span>
+            <span class="fork-time" title={x().status === "done" && !x().answer ? took(x()) || undefined : undefined}>{time()}</span>
             <Icon name="chevron" size={14} class="fork-go" />
           </span>
         </button>

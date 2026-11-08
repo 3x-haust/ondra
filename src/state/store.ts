@@ -76,8 +76,10 @@ export async function loadState() {
     setState(reconcile(fixture(freshState())));
     for (const t of state.tasks) if (!t.project) setState("tasks", (x) => x.id === t.id, "project", projectFor(t.space, t.cwd));
     const { setCtx } = await import("./ctx");
-    setCtx("captain:work", { tokens: 31_200, window: 400_000, percent: 7.8 });
-    for (const t of state.tasks) setCtx(`t:${t.id}`, { tokens: 18_000 + t.entries.length * 2_900, window: 400_000, percent: ((18_000 + t.entries.length * 2_900) / 400_000) * 100 });
+    // the window the engine reports for the fixture's model (GPT-5.6 Terra: 272K), the same the context sheet shows
+    const W = 272_000;
+    setCtx("captain:work", { tokens: 31_200, window: W, percent: (31_200 / W) * 100 });
+    for (const t of state.tasks) setCtx(`t:${t.id}`, { tokens: 18_000 + t.entries.length * 2_900, window: W, percent: ((18_000 + t.entries.length * 2_900) / W) * 100 });
     setLoaded(true);
     return;
   }
