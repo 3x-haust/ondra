@@ -7,6 +7,7 @@ import { openTask } from "../state/ui";
 import { compact, now, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
 import { costDetail, jobCost } from "./cost";
+import { t as tr } from "../i18n";
 
 export function StatusIcon(props: { t: Task; size?: "sm" | "md" }) {
   return (
@@ -39,12 +40,12 @@ export function plain(text: string): string {
 }
 
 export function line(t: Task): string {
-  if (t.status === "done") return plain(t.summary || "") || "끝났어요";
-  if (t.status === "failed") return t.error || "멈췄어요";
-  if (t.status === "waiting") return state.decisions.find((d) => d.taskId === t.id)?.question ?? "답을 기다려요";
-  if (t.status === "queued") return "순서를 기다리는 중";
-  if (t.status === "paused") return "쉬는 중";
-  return plain(t.now || "") || "시작하는 중";
+  if (t.status === "done") return plain(t.summary || "") || tr("완료");
+  if (t.status === "failed") return t.error || tr("실패");
+  if (t.status === "waiting") return state.decisions.find((d) => d.taskId === t.id)?.question ?? tr("응답 대기 중");
+  if (t.status === "queued") return tr("대기 중");
+  if (t.status === "paused") return tr("일시정지");
+  return plain(t.now || "") || tr("시작하는 중");
 }
 
 export function ForkCard(props: { id: string; compact?: boolean }) {
@@ -56,10 +57,10 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
     const x = t()!;
     if (x.status === "done") return ago(x.finishedAt ?? x.createdAt);
     if (x.status === "running") return compact(now() - (x.startedAt ?? x.createdAt));
-    return statusLabel[x.status];
+    return tr(statusLabel[x.status]);
   };
   return (
-    <Show when={t()} fallback={<div class="fork-card gone">지운 작업이에요</div>}>
+    <Show when={t()} fallback={<div class="fork-card gone">{tr("삭제된 작업")}</div>}>
       {(x) => (
         <button class={`fork-card ${x().status}`} classList={{ compact: props.compact }} onClick={() => openTask(x().id)}>
           <StatusIcon t={x()} />
@@ -74,7 +75,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
               </span>
             </Show>
             <Show when={kids().length}>
-              <span class="fork-kids" title="서브에이전트">
+              <span class="fork-kids" title={tr("서브에이전트")}>
                 <Icon name="branch" size={12} />
                 {live() ? `${live()}/${kids().length}` : kids().length}
               </span>

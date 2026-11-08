@@ -6,6 +6,7 @@ import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import type { Permission } from "../state/types";
 import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
+import { t } from "../i18n";
 
 export const EFFORTS: { id: string; label: string }[] = [
   { id: "low", label: "low" },
@@ -58,12 +59,13 @@ export function ModelPicker(props: {
   const loading = () => !models() && asked.loading;
   const [showOld, setShowOld] = createSignal(false);
   const auto = () => accountById(props.accountId)?.model;
-  const label = () => (props.model ? prettyModel(props.model) : auto() ? prettyModel(auto()!) : "모델 고르기");
+  const label = () => (props.model ? prettyModel(props.model) : auto() ? prettyModel(auto()!) : t("모델 선택"));
   const effort = () => effortOf(props.thinking);
   const current = () => props.model || auto() || "";
   const ranked = () => rankModels(models() ?? []);
   const groups = () => ranked().latest;
   const PROVIDER: Record<string, string> = { "openai-codex": "OpenAI · ChatGPT 계정", openai: "OpenAI", anthropic: "Anthropic · Claude 계정", google: "Google" };
+  const provider = (id: string) => (PROVIDER[id] ? t(PROVIDER[id]) : id);
   const Item = (p: { m: string }) => (
     <button type="button" class="pop-item" onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
       <span class="pop-item-main">{prettyModel(p.m)}</span>
@@ -72,7 +74,7 @@ export function ModelPicker(props: {
   );
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title="모델과 생각 깊이">
+      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => setOpen(!open())} title={t("모델 · 추론 강도")}>
         <span class="model-name">{label()}</span>
         <Show when={current()}><span class="model-effort">{effort()}</span></Show>
         <Icon name="down" size={12} class="muted" />
@@ -82,27 +84,27 @@ export function ModelPicker(props: {
           <EffortSlider value={effort()} onChange={(id) => props.onChange(props.model, id)} />
           <div class="pop-sep" />
           <div class="pop-scroll">
-            <Show when={!loading()} fallback={<div class="pop-empty"><span class="spin sm" /> 모델 불러오는 중</div>}>
+            <Show when={!loading()} fallback={<div class="pop-empty"><span class="spin sm" />{t("모델 불러오는 중")}</div>}>
               <Show when={ranked().often.length}>
-                <div class="pop-label">자주 쓰는</div>
+                <div class="pop-label">{t("자주 씀")}</div>
                 <For each={ranked().often}>{(m) => <Item m={m} />}</For>
               </Show>
               <For each={groups()}>
-                {([provider, list]) => (
+                {([id, list]) => (
                   <>
-                    <div class="pop-label">{PROVIDER[provider] ?? provider}</div>
+                    <div class="pop-label">{provider(id)}</div>
                     <For each={list}>{(m) => <Item m={m} />}</For>
                   </>
                 )}
               </For>
               <Show when={ranked().older.length}>
                 <button type="button" class="pop-item pop-more" onClick={() => setShowOld(!showOld())}>
-                  <span class="pop-item-main">이전 모델 {ranked().older.length}개</span>
+                  <span class="pop-item-main">{t("이전 모델 {n}개", { n: ranked().older.length })}</span>
                   <Icon name={showOld() ? "down" : "chevron"} size={12} class="muted" />
                 </button>
                 <Show when={showOld()}><For each={ranked().older}>{(m) => <Item m={m} />}</For></Show>
               </Show>
-              <Show when={!groups().length && !ranked().often.length}><div class="pop-empty">모델 없음</div></Show>
+              <Show when={!groups().length && !ranked().often.length}><div class="pop-empty">{t("모델 없음")}</div></Show>
             </Show>
           </div>
         </div>
@@ -113,9 +115,9 @@ export function ModelPicker(props: {
 
 // ───────────── what a job may do without asking
 export const PERMISSIONS: { id: Permission; label: string; icon: string; desc: string }[] = [
-  { id: "ask", label: "매번 묻기", icon: "lock", desc: "고치기 전에 물어봐요" },
-  { id: "edits", label: "편집 허용", icon: "pencil", desc: "폴더 안은 바로 고쳐요" },
-  { id: "full", label: "전체 권한", icon: "shield", desc: "묻지 않고 다 해요" },
+  { id: "ask", label: "매번 묻기", icon: "lock", desc: "수정 전에 확인" },
+  { id: "edits", label: "편집 허용", icon: "pencil", desc: "폴더 안 파일은 바로 수정" },
+  { id: "full", label: "전체 권한", icon: "shield", desc: "확인 없이 모두 실행" },
 ];
 
 export function PermissionPicker(props: { value: Permission; onChange: (p: Permission) => void }) {
@@ -123,9 +125,9 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
   const cur = () => PERMISSIONS.find((p) => p.id === props.value) ?? PERMISSIONS[1];
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class={`chip perm-chip p-${cur().id}`} classList={{ on: open(), full: cur().id === "full" }} onClick={() => setOpen(!open())} title="묻지 않고 해도 되는 것">
-        <Icon name={cur().icon} size={13} />
-        {cur().label}
+      <button type="button" class={`chip perm-chip p-${cur().id}`} classList={{ on: open(), full: cur().id === "full" }} onClick={() => setOpen(!open())} title={t("권한")}>
+        <Icon name={cur().icon} size={14} />
+        {t(cur().label)}
       </button>
       <Show when={open()}>
         <div class="pop up left perm-pop" style={{ bottom: "calc(100% + 8px)", top: "auto" }}>
@@ -133,11 +135,11 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
             {(p) => (
               <button type="button" class={`perm-item p-${p.id}`} classList={{ on: p.id === cur().id }} onClick={() => (props.onChange(p.id), setOpen(false))}>
                 <span class="perm-title">
-                  <Icon name={p.icon} size={14} />
-                  {p.label}
+                  <Icon name={p.icon} size={16} />
+                  {t(p.label)}
                   <Show when={p.id === cur().id}><Icon name="check" size={14} class="perm-check" /></Show>
                 </span>
-                <span class="perm-desc">{p.desc}</span>
+                <span class="perm-desc">{t(p.desc)}</span>
               </button>
             )}
           </For>
@@ -147,31 +149,13 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
   );
 }
 
-/** 생각 깊이 as a slider with a stop per level: drag, click a stop, or arrow keys. */
+/** 추론 강도 as a segmented control, a cell per level: click one, or the arrow keys. */
 function EffortSlider(props: { value: string; onChange: (id: string) => void }) {
   const n = EFFORTS.length;
   const at = () => Math.max(0, EFFORTS.findIndex((e) => e.id === props.value));
-  const pct = (i: number) => (i / (n - 1)) * 100;
-  let track!: HTMLDivElement;
-  const from = (x: number) => {
-    const r = track.getBoundingClientRect();
-    const h = r.height;
-    return Math.round(Math.min(1, Math.max(0, (x - r.left - h / 2) / (r.width - h))) * (n - 1));
-  };
   const set = (i: number) => {
     const id = EFFORTS[Math.min(n - 1, Math.max(0, i))].id;
     if (id !== props.value) props.onChange(id);
-  };
-  const down = (e: PointerEvent) => {
-    e.preventDefault();
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-    el.focus();
-    set(from(e.clientX));
-    const move = (m: PointerEvent) => set(from(m.clientX));
-    const up = () => (el.removeEventListener("pointermove", move), el.removeEventListener("pointerup", up));
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
   };
   const key = (e: KeyboardEvent) => {
     if (ignoredKey(e) || !noModifiers(e)) return;
@@ -183,30 +167,16 @@ function EffortSlider(props: { value: string; onChange: (id: string) => void }) 
   return (
     <div class="eff">
       <div class="eff-head">
-        <span>생각 깊이</span>
-        <b>{EFFORTS[at()].label}</b>
+        <span>{t("추론 강도")}</span>
       </div>
-      <div
-        class="eff-slider"
-        role="slider"
-        tabindex="0"
-        aria-label="생각 깊이"
-        aria-valuemin={0}
-        aria-valuemax={n - 1}
-        aria-valuenow={at()}
-        aria-valuetext={EFFORTS[at()].label}
-        onPointerDown={down}
-        onKeyDown={key}
-      >
-        <div class="eff-track" ref={track}>
-          <div class="eff-fill" style={{ width: `calc(var(--eh) + (100% - var(--eh)) * ${pct(at()) / 100})` }} />
-          <For each={EFFORTS}>{(_, i) => <i class="eff-stop" classList={{ on: i() <= at() }} style={{ left: `calc(var(--eh) / 2 + (100% - var(--eh)) * ${pct(i()) / 100})` }} />}</For>
-          <div class="eff-thumb" style={{ left: `calc(var(--eh) / 2 + (100% - var(--eh)) * ${pct(at()) / 100})` }} />
-        </div>
-      </div>
-      <div class="eff-ends">
-        <span>{EFFORTS[0].label}</span>
-        <span>{EFFORTS[n - 1].label}</span>
+      <div class="eff-seg" role="radiogroup" tabindex="0" aria-label={t("추론 강도")} onKeyDown={key}>
+        <For each={EFFORTS}>
+          {(x, i) => (
+            <button type="button" role="radio" tabindex="-1" aria-checked={i() === at()} classList={{ on: i() === at() }} onClick={() => set(i())}>
+              {x.label}
+            </button>
+          )}
+        </For>
       </div>
     </div>
   );

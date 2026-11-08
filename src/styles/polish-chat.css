@@ -1,0 +1,597 @@
+/* Chat polish: the main chat, the composer, messages, fork and decision cards,
+   the model and permission menus, the quote button (docs/DESIGN.md §9.4, §9.5, §9.8). */
+
+/* ═════════════ composer: one clean box ═════════════ */
+.composer-wrap .composer {
+  border-color: var(--line);
+  box-shadow: var(--shadow-composer);
+}
+.composer-wrap .composer:focus-within {
+  border-color: var(--input);
+  box-shadow: var(--shadow-composer);
+}
+.composer-wrap .composer.drop {
+  border-color: var(--accent);
+}
+/* reading size, the same as the messages it sends */
+.composer-wrap .composer textarea {
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+}
+.composer-wrap:not(.slim) .composer textarea {
+  min-height: 42px;
+  padding: var(--s-12) var(--s-16) var(--s-4);
+}
+.composer-wrap:not(.slim) .composer.big textarea {
+  min-height: 68px;
+}
+.composer-wrap:not(.slim) .composer-bar {
+  min-height: 40px;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-8) var(--s-8);
+}
+.composer-wrap .composer-meta,
+.composer-wrap .composer-right {
+  gap: var(--s-4);
+}
+.composer-wrap .composer-right {
+  margin-right: 0;
+}
+.composer-wrap.slim .composer-right {
+  margin-right: var(--s-4);
+}
+/* + : a 28 ghost icon button */
+.composer-wrap .cbtn {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border-radius: var(--r-md);
+  color: var(--ink-3);
+}
+.composer-wrap .cbtn:hover,
+.composer-wrap .cbtn.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* chips in the bar: h 28, ghost, quiet until hovered */
+.composer-bar .chip {
+  height: var(--h-sm);
+  padding: 0 var(--s-8);
+  gap: var(--s-6);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+}
+.composer-bar .chip .icon {
+  color: var(--ink-3);
+}
+.composer-bar button.chip:hover,
+.composer-bar .chip.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* permission: neutral, except full access, which says so in red */
+.composer-bar .perm-chip.p-ask,
+.composer-bar .perm-chip.p-edits {
+  color: var(--ink-2);
+  background: transparent;
+}
+.composer-bar .perm-chip.p-ask .icon,
+.composer-bar .perm-chip.p-edits .icon {
+  color: var(--ink-3);
+}
+.composer-bar .perm-chip.p-full,
+.composer-bar .perm-chip.p-full .icon {
+  color: var(--bad-ink);
+  background: transparent;
+}
+.composer-bar .perm-chip.p-ask:hover,
+.composer-bar .perm-chip.p-edits:hover,
+.composer-bar .perm-chip.p-ask.on,
+.composer-bar .perm-chip.p-edits.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+.composer-bar .perm-chip.p-full:hover,
+.composer-bar .perm-chip.p-full.on {
+  background: var(--bad-soft);
+}
+/* model: name, then the effort a step quieter, then a 12 chevron */
+.composer-bar .model-chip .model-name {
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+.composer-bar .model-chip:hover .model-name,
+.composer-bar .model-chip.on .model-name {
+  color: var(--ink);
+}
+.composer-bar .model-chip .model-effort {
+  font-family: var(--font);
+  color: var(--ink-3);
+}
+.composer-bar .model-chip .icon {
+  margin-left: 0;
+  color: var(--ink-3);
+}
+/* send: a 28 circle; stop: the same circle in ink with a square */
+.composer-bar .send {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  margin-left: var(--s-4);
+}
+.composer-bar .send:hover:not(:disabled) {
+  transform: none;
+}
+.composer-bar .send:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.composer-bar .send:disabled {
+  background: var(--active);
+  color: var(--ink-4);
+}
+.composer-bar .send.stop,
+.composer-bar .send.stop:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--card);
+}
+.composer-bar .send.stop i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+/* thin (one row): the same controls, centred on the 44 row */
+.composer-wrap.slim .composer {
+  padding: 0 var(--s-8);
+  gap: var(--s-4);
+}
+.composer-wrap.slim .composer textarea {
+  padding: 8px var(--s-4) 10px;
+}
+.composer-wrap.slim .send {
+  margin-left: 0;
+}
+/* the tray under the box: one quiet line */
+.composer-wrap .ctray.open .ctray-in {
+  min-height: 40px;
+  padding: var(--s-2) var(--s-8);
+}
+
+/* + menu: a menu like the others */
+.plus-wrap .plus-menu {
+  left: -4px;
+  width: 320px;
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+.plus-wrap .plus-sec {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--s-8);
+  margin-top: var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.plus-wrap .plus-row {
+  height: var(--h-md);
+  gap: var(--s-8);
+  padding: 0 var(--s-8);
+  border-radius: var(--r-sm);
+}
+.plus-wrap .plus-row .icon {
+  flex: none;
+  color: var(--ink-3);
+}
+.plus-wrap .plus-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plus-wrap .plus-desc {
+  flex: none;
+  max-width: 45%;
+}
+
+/* "/" and "@" picker over the input */
+.composer .cpick-head {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+
+/* ═════════════ model menu (Linear / Raycast) ═════════════ */
+.pop.model-pop {
+  width: 296px;
+  padding: var(--s-4);
+  border: 0;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+.model-pop .pop-sep {
+  height: 1px;
+  margin: var(--s-4) calc(-1 * var(--s-4));
+  background: var(--line-soft);
+}
+.model-pop .pop-scroll {
+  max-height: min(320px, 50vh);
+}
+.model-pop .pop-label {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--s-8);
+  margin-top: var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+.model-pop .pop-scroll > .pop-label:first-child {
+  margin-top: 0;
+}
+.model-pop .pop-item {
+  min-height: var(--h-sm);
+  padding: 0 var(--s-8);
+  gap: var(--s-8);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.model-pop .pop-item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.model-pop .pop-item .icon {
+  flex: none;
+  color: var(--accent-text);
+}
+.model-pop .pop-more,
+.model-pop .pop-more .icon {
+  color: var(--ink-3);
+}
+.model-pop .pop-empty {
+  min-height: var(--h-md);
+  padding: 0 var(--s-8);
+  font-size: var(--fs-sm);
+}
+
+/* effort: a segmented control with a cell per level */
+.model-pop .eff {
+  padding: var(--s-4) var(--s-4) var(--s-6);
+}
+.model-pop .eff-head {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0 0 var(--s-4);
+  padding: 0 var(--s-4);
+}
+.model-pop .eff-head > span {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.eff-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-md);
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+  outline: none;
+}
+.eff-seg:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--line), 0 0 0 2px var(--focus);
+}
+.eff-seg button {
+  height: 24px;
+  padding: 0 var(--s-2);
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.eff-seg button:hover {
+  color: var(--ink);
+}
+.eff-seg button.on {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+  box-shadow: 0 0 0 1px var(--line);
+}
+:root[data-theme="dark"] .eff-seg button.on {
+  background: var(--active);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .eff-seg button.on {
+    background: var(--active);
+    box-shadow: none;
+  }
+}
+
+/* ═════════════ permission menu ═════════════ */
+.pop.perm-pop {
+  width: 264px;
+  padding: var(--s-4);
+  gap: 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+.perm-pop .perm-item,
+.perm-pop .perm-item.on {
+  gap: 0;
+  padding: var(--s-6) var(--s-8);
+  border-radius: var(--r-sm);
+  background: transparent;
+}
+.perm-pop .perm-item:hover,
+.perm-pop .perm-item.p-full:hover,
+.perm-pop .perm-item.p-edits.on:hover {
+  background: var(--hover);
+}
+.perm-pop .perm-title {
+  gap: var(--s-8);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink);
+}
+.perm-pop .perm-item .perm-title .icon {
+  color: var(--ink-3);
+}
+.perm-pop .perm-item.p-full .perm-title,
+.perm-pop .perm-item.p-full .perm-title .icon {
+  color: var(--bad-ink);
+}
+.perm-pop .perm-item .perm-check {
+  margin-left: auto;
+  color: var(--accent-text);
+}
+.perm-pop .perm-desc {
+  padding-left: 24px;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--ink-3);
+}
+
+/* ═════════════ messages: one reading size, even rhythm ═════════════ */
+.thread-inner .msg-text,
+.thread-inner .reply-line,
+.thread-inner .msg-user {
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+}
+.thread-inner .msg-text p {
+  margin: 0 0 var(--s-12);
+}
+.thread-inner .msg-text p:last-child {
+  margin-bottom: 0;
+}
+.thread-inner .msg-user {
+  padding: var(--s-8) var(--s-14);
+}
+.thread-inner .msg-from {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+/* the hover row under a message: 28 icon buttons, 14 icons */
+.msg-actions .msg-act {
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border-radius: var(--r-md);
+}
+.msg-actions .msg-time {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* the actions under a reply hang in the space before the next turn, so a turn
+   (ask + reply) reads as one block and turns sit 40 apart */
+.convo .reply-body > .reply-foot {
+  height: var(--h-sm);
+  min-height: var(--h-sm);
+  margin: calc(-1 * var(--s-8)) 0 calc(-1 * var(--s-32));
+}
+.convo .reply-body > .reply-foot .msg-actions {
+  height: var(--h-sm);
+}
+/* (the reply's own 12 gap before the hanging row, + 24 + 4 = 40) */
+.convo > .reply + .user-turn,
+.convo > .reply + .decision {
+  margin-top: var(--s-4);
+}
+/* notes in a reply (handed to a task, stopped, saved to memory) */
+.reply-body .reply-note {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.reply-body .reply-note b {
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+.reply-body .reply-note .icon {
+  color: var(--ink-3);
+}
+/* the request board: a count, then state words in their tone */
+.req-head .req-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+}
+.req-head .req-total {
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+
+/* ═════════════ fork cards: rows in one group card ═════════════ */
+.thread-inner .sub-group {
+  gap: 0;
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+}
+.thread-inner .sub-head {
+  height: var(--h-sm);
+  padding: 0 var(--s-8);
+  gap: var(--s-8);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.thread-inner .sub-head .icon {
+  color: var(--ink-3);
+}
+.thread-inner .sub-head b {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.sub-group .fork-card.compact {
+  min-height: var(--h-2xl);
+  padding: var(--s-6) var(--s-8);
+  gap: var(--s-10);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  box-shadow: none;
+}
+.sub-group .fork-card.compact:hover {
+  background: var(--hover);
+  box-shadow: none;
+}
+.sub-group .fork-card.compact:active {
+  transform: none;
+}
+.fork-card.compact .fork-title {
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--ink);
+}
+.fork-card.compact .fork-line {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+}
+.fork-card .fork-kids {
+  padding: 0;
+  background: transparent;
+  color: var(--ink-3);
+}
+.fork-card:hover .fork-go {
+  color: var(--ink-2);
+  transform: none;
+}
+
+/* ═════════════ decision card (§9.5) ═════════════ */
+.decision {
+  gap: var(--s-12);
+  padding: var(--s-16);
+  box-shadow: none;
+}
+.decision .decision-q {
+  gap: var(--s-8);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+}
+.decision .decision-q .icon {
+  margin-top: 4px;
+}
+.decision .decision-src {
+  justify-self: start;
+  margin-top: calc(-1 * var(--s-8));
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+}
+/* what the task said: plain text under the question, not a box in a box */
+.decision .decision-ctx > .blk:has(> .md) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.decision .decision-ctx .md {
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  color: var(--ink-2);
+}
+.decision .decision-ctx .md p {
+  margin: 0 0 var(--s-8);
+}
+.decision .decision-ctx .md > :last-child {
+  margin-bottom: 0;
+}
+.decision .decision-list {
+  gap: 0;
+  margin: 0 calc(-1 * var(--s-8));
+}
+.decision .decision-opt {
+  align-items: center;
+  min-height: var(--h-md);
+  padding: var(--s-4) var(--s-8);
+  gap: var(--s-10);
+  border-radius: var(--r-md);
+}
+.decision .decision-opt:has(.decision-note) {
+  align-items: flex-start;
+  padding: var(--s-6) var(--s-8);
+}
+.decision .decision-opt:has(.decision-note) .decision-n {
+  margin-top: 2px;
+}
+.decision .decision-opt.on {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.decision .decision-n {
+  width: 20px;
+  height: 20px;
+  margin-top: 0;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-2xs);
+}
+.decision .decision-label {
+  font-weight: var(--fw-regular);
+}
+.decision .decision-opt.on .decision-label {
+  font-weight: var(--fw-medium);
+}
+.decision .decision-note {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+}
+.decision .decision-foot {
+  margin-top: 0;
+}
+.decision .decision-send {
+  padding: 0 var(--s-10);
+}
+.decision .decision-send kbd {
+  font-size: var(--fs-2xs);
+}
+.decision .decision-login {
+  height: var(--h-sm);
+  padding: 0 var(--s-10);
+  border: 1px solid var(--input);
+  background: var(--card);
+}
+.decision .decision-login:hover {
+  background: var(--hover);
+}
+
+/* ═════════════ quote button over a selection ═════════════ */
+.quote-bar {
+  font-size: var(--fs-sm);
+}
+.quote-bar .icon {
+  color: var(--ink-3);
+}

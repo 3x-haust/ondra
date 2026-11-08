@@ -16,6 +16,7 @@ import { Icon } from "./Icon";
 import { UsageLine } from "./Usage";
 import { Markdown } from "./Markdown";
 import { MsgActions, UserMsg } from "./MsgActions";
+import { t as tr } from "../i18n";
 
 type Item =
   | { kind: "tools"; id: string; tools: (Entry & { kind: "tool" })[] }
@@ -102,7 +103,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
 /** A subagent's instructions come from its parent job, not from you. */
 const assigner = (t: Task) => {
   const p = t.parentId ? taskById(t.parentId) : undefined;
-  return p ? `${p.title}에서 맡긴 일` : undefined;
+  return p ? tr("{name}에서", { name: p.title }) : undefined;
 };
 
 /** Explanations drawn as pictures: they stay in view when the work folds. */
@@ -177,8 +178,8 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
         <Show when={work().length}>
           <div class="work-fold" classList={{ open: shown() }}>
             <button class="work-head" onClick={toggle} aria-expanded={shown()}>
-              <span>{long(took())} 동안 작업</span>
-              <Icon name="chevron" size={15} class="chev" />
+              <span>{tr("{d} 동안 작업", { d: long(took()) })}</span>
+              <Icon name="chevron" size={14} class="chev" />
             </button>
             <Show when={mounted()}>
               <div class="work-clip">
@@ -271,19 +272,19 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
       const n = shortName(t.tool);
       if (n && !seen.includes(n)) seen.push(n);
     }
-    return seen.length > 3 ? `${seen.slice(0, 3).join(", ")} 외 ${seen.length - 3}개` : seen.join(", ");
+    return seen.length > 3 ? tr("{names} 외 {n}개", { names: seen.slice(0, 3).join(", "), n: seen.length - 3 }) : seen.join(", ");
   };
   // "살펴봄 a.ts, b.ts", "파일 3개 수정함", "브라우저 5번 씀"
   const summary = () => {
     const done = !live();
-    if (fam() === "explore") return done ? "살펴봄" : "살펴보는 중";
+    if (fam() === "explore") return done ? tr("살펴봄") : tr("살펴보는 중");
     if (fam() === "edit") {
       const n = new Set(props.tools.map((t) => t.tool.target ?? t.id)).size;
-      return done ? `파일 ${n}개 수정함` : `파일 ${n}개 수정 중`;
+      return done ? tr("파일 {n}개 수정함", { n }) : tr("파일 {n}개 수정 중", { n });
     }
     // commands too, as Claude Code does ("Ran 5 shell commands")
-    if (fam() === "run") return done ? `명령 ${props.tools.length}개 실행함` : `명령 ${props.tools.length}개 중 실행 중`;
-    return done ? `브라우저 ${props.tools.length}번 씀` : `브라우저 쓰는 중`;
+    if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.length });
+    return done ? tr("브라우저 {n}번 씀", { n: props.tools.length }) : tr("브라우저 쓰는 중");
   };
   // what it touched; for commands and the browser, the one running now (or the last)
   const detail = () => (fam() === "explore" || fam() === "edit" ? names(props.tools) : shortName((live() ?? props.tools[props.tools.length - 1]).tool));
@@ -296,8 +297,8 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[] }) {
         </Show>
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
         <span class="tool-target">{detail()}</span>
-        <Show when={failed()}><span class="tool-fail">실패 {failed()}</span></Show>
-        <Icon name="chevron" size={13} class="tool-chev" />
+        <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
+        <Icon name="chevron" size={12} class="tool-chev" />
       </button>
       <Fold open={open()}>
         <div class="explore-body">
@@ -339,20 +340,20 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
           <span class="spin" />
         </Show>
         <span class="tool-verb" classList={{ shimmer: running() }}>
-          {t().note ? (running() ? "적는 중" : "기록했어요") : t().kind === "bash" ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? "")) : VERB[t().kind][running() ? 0 : 1]}
+          {t().note ? (running() ? tr("메모리에 쓰는 중") : tr("메모리에 저장함")) : tr(t().kind === "bash" ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? "")) : VERB[t().kind][running() ? 0 : 1])}
         </span>
         <span class="tool-target">{what()}</span>
         <Show when={t().add || t().del}>
           <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
         </Show>
-        <Show when={t().ok === false}><span class="tool-fail">실패</span></Show>
+        <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
         <span class="tool-time">{short((t().endedAt ?? now()) - props.e.at)}</span>
-        <Show when={canOpen()}><Icon name="chevron" size={13} class="tool-chev" /></Show>
+        <Show when={canOpen()}><Icon name="chevron" size={12} class="tool-chev" /></Show>
       </button>
       <Fold open={open() && !!t().note}>
         <div class="tool-note">
-          <Markdown text={t().text || "(내용 없음)"} />
-          <button class="btn sm ghost" onClick={() => t().detail && previewFile(t().detail!.split("\n")[0])}>파일 열기</button>
+          <Markdown text={t().text || tr("(내용 없음)")} />
+          <button class="btn sm ghost" onClick={() => t().detail && previewFile(t().detail!.split("\n")[0])}>{tr("파일 열기")}</button>
         </div>
       </Fold>
       <Fold open={open() && !t().note}>
@@ -360,9 +361,9 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
           <Show when={shell()} fallback={t().detail}>
             {(s) => (
               <>
-                {s().tail.trim() || (s().endedAt ? "출력 없음" : "출력 대기 중…")}
+                {s().tail.trim() || (s().endedAt ? tr("출력 없음") : tr("출력 대기 중…"))}
                 <Show when={s().endedAt}>
-                  <span class="exit" classList={{ bad: s().ok === false }}>{s().ok === false ? "실패" : "완료"} · {long((s().endedAt ?? 0) - s().startedAt)}</span>
+                  <span class="exit" classList={{ bad: s().ok === false }}>{s().ok === false ? tr("실패") : tr("완료")} · {long((s().endedAt ?? 0) - s().startedAt)}</span>
                 </Show>
               </>
             )}
@@ -381,8 +382,8 @@ function EntryView(props: { e: Entry; task: Task }) {
       <Match when={e.kind === "text" && e}>{(x) => <Markdown class="msg-text" text={x().text} />}</Match>
       <Match when={e.kind === "turn" && e}>
         {(x) => (
-          <Show when={x().usage} fallback={<div class="turn-sep">{long(x().ms)} 작업</div>}>
-            {(u) => <UsageLine u={u()} lead={x().ms ? `${long(x().ms)} 작업` : undefined} />}
+          <Show when={x().usage} fallback={<div class="turn-sep">{tr("{d} 동안 작업", { d: long(x().ms) })}</div>}>
+            {(u) => <UsageLine u={u()} lead={x().ms ? tr("{d} 동안 작업", { d: long(x().ms) }) : undefined} />}
           </Show>
         )}
       </Match>
@@ -410,8 +411,8 @@ function EntryView(props: { e: Entry; task: Task }) {
             <div class="sub-group">
               <div class="sub-head">
                 <Icon name="branch" size={13} />
-                <b>서브에이전트 {x().childIds.length}개</b>
-                <span>{busy() ? `${busy()}개 작업 중` : "모두 끝남"}</span>
+                <b>{tr("서브에이전트 {n}개", { n: x().childIds.length })}</b>
+                <span>{busy() ? tr("{n}개 진행 중", { n: busy() }) : tr("모두 완료")}</span>
               </div>
               <For each={x().childIds}>{(id) => <ForkCard id={id} compact />}</For>
             </div>
@@ -421,11 +422,11 @@ function EntryView(props: { e: Entry; task: Task }) {
       <Match when={e.kind === "handoff" && e}>
         {(x) => (
           <div class="handoff">
-            <div class="handoff-head"><Icon name="handoff" size={14} />세션 {x().leg}로 이어감</div>
+            <div class="handoff-head"><Icon name="handoff" size={14} />{tr("세션 {n}에서 계속", { n: x().leg })}</div>
             <Show when={x().handoff.did.length}>
               <ul><For each={x().handoff.did}>{(d) => <li>{d}</li>}</For></ul>
             </Show>
-            <div class="handoff-next">다음: {x().handoff.next}</div>
+            <div class="handoff-next">{tr("다음: {next}", { next: x().handoff.next })}</div>
           </div>
         )}
       </Match>
@@ -456,7 +457,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
     <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el, setStick)); }}>
       <Show when={!stick()}>
         <button class="jump-latest" onClick={() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })}>
-          <Icon name="down" size={13} />맨 아래로
+          <Icon name="down" size={14} />{tr("맨 아래로")}
         </button>
       </Show>
       <div class="thread-inner">
@@ -482,16 +483,16 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         <Show when={props.task.status === "queued"}>
           <div class="live-line muted queued-line">
             <Icon name="clock" size={14} />
-            <span>{queuePos() <= 1 ? "다음 차례예요" : `앞에 ${queuePos() - 1}개가 있어요`}</span>
+            <span>{queuePos() <= 1 ? tr("다음 차례") : tr("앞에 {n}개 대기", { n: queuePos() - 1 })}</span>
             <span class="spacer" />
-            <button class="btn sm" onClick={() => void startTask(props.task.id)}>지금 시작</button>
+            <button class="btn sm" onClick={() => void startTask(props.task.id)}>{tr("지금 시작")}</button>
           </div>
         </Show>
         {/* waiting on its subagents: their card above already shows that */}
         <Show when={working() && !liveText() && !toolRunning() && !state.tasks.some((k) => k.parentId === props.task.id && (k.status === "running" || k.status === "queued"))}>
           <div class="live-line">
             <span class="spin" />
-            <span class="shimmer">{props.task.now || "작업 중"}</span>
+            <span class="shimmer">{props.task.now || tr("작업 중")}</span>
           </div>
         </Show>
         {/* a question waiting on the user: last in the conversation, so it scrolls with it */}

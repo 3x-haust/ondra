@@ -4,6 +4,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { DiagramNode } from "../state/types";
 import { previewFile } from "../state/ui";
+import { t } from "../i18n";
 
 type Edge = { from: string; to: string; label?: string };
 
@@ -95,14 +96,14 @@ export function Diagram(props: { label?: string; nodes: DiagramNode[]; edges?: E
                   <div class={`dg-node ${n.state ?? ""}`} data-node={n.id}>
                     <div class="dg-top">
                       <b>{n.label}</b>
-                      <Show when={n.state === "new"}><span class="dg-tag new">새로</span></Show>
-                      <Show when={n.state === "changed"}><span class="dg-tag changed">바뀜</span></Show>
-                      <Show when={n.state === "gone"}><span class="dg-tag">없앰</span></Show>
-                      <Show when={n.by}><span class="dg-tag" title={n.by === "user" ? "내가 정한 것" : "AI가 스스로 정한 것"}>{n.by === "user" ? "요청" : "AI 판단"}</span></Show>
+                      <Show when={n.state === "new"}><span class="dg-tag new">{t("새로")}</span></Show>
+                      <Show when={n.state === "changed"}><span class="dg-tag changed">{t("바뀜")}</span></Show>
+                      <Show when={n.state === "gone"}><span class="dg-tag">{t("없앰")}</span></Show>
+                      <Show when={n.by}><span class="dg-tag" title={n.by === "user" ? t("요청한 것") : t("AI가 정한 것")}>{n.by === "user" ? t("요청") : t("AI 판단")}</span></Show>
                     </div>
                     <Show when={n.note}><div class="dg-note">{n.note}</div></Show>
                     <Show when={n.ref}>
-                      <button class="dg-ref" title="편집기에서 열기" onClick={() => openCode(n.ref!)}>{n.ref!.split("/").slice(-2).join("/")}</button>
+                      <button class="dg-ref" title={t("편집기에서 열기")} onClick={() => openCode(n.ref!)}>{n.ref!.split("/").slice(-2).join("/")}</button>
                     </Show>
                   </div>
                 )}

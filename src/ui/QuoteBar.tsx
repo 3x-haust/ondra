@@ -3,6 +3,7 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { composers } from "./Composer";
 import { Icon } from "./Icon";
+import { t } from "../i18n";
 
 const REPLY = ".msg-text, .reply-line, .reply-body";
 const MAX = 4000;
@@ -66,8 +67,8 @@ export function QuoteBar() {
             setAt(null);
           }}
         >
-          <Icon name="message" size={13} />
-          인용
+          <Icon name="message" size={14} />
+          {t("인용")}
         </button>
       )}
     </Show>

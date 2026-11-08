@@ -10,6 +10,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { previewFile } from "../state/ui";
 import { textW } from "./Charts";
 import { Icon } from "./Icon";
+import { t } from "../i18n";
 
 type Item = { label: string; note?: string; state?: "new" | "changed" | "gone" | "done" | "now" | "todo" | "off"; ref?: string };
 
@@ -17,14 +18,14 @@ const openCode = (ref?: string) => ref && /^[/~]/.test(ref) && previewFile(ref);
 /** a code location ("to", because "ref" is reserved in Solid) */
 const Ref = (p: { to?: string }) => (
   <Show when={p.to}>
-    <button class="vz-ref" title="앱에서 열기" onClick={() => openCode(p.to)}>{p.to!.split("/").slice(-2).join("/")}</button>
+    <button class="vz-ref" title={t("앱에서 열기")} onClick={() => openCode(p.to)}>{p.to!.split("/").slice(-2).join("/")}</button>
   </Show>
 );
 const Label = (p: { text?: string }) => <Show when={p.text}><div class="blk-label">{p.text}</div></Show>;
 const TAG: Partial<Record<NonNullable<Item["state"]>, string>> = { new: "새로", changed: "바뀜", gone: "없앰", off: "안 씀" };
 const Tag = (p: { state?: Item["state"] }) => (
   <Show when={p.state && TAG[p.state]}>
-    <span class={`dg-tag vz-tag s-${p.state}`}>{TAG[p.state!]}</span>
+    <span class={`dg-tag vz-tag s-${p.state}`}>{t(TAG[p.state!]!)}</span>
   </Show>
 );
 
@@ -42,11 +43,11 @@ export function Scope(props: { label?: string; in?: Item[]; out?: Item[] }) {
       <Label text={props.label} />
       <div class="vz-scope-cols">
         <div class="vz-scope-col in">
-          <div class="vz-scope-head"><Icon name="check" size={12} stroke={3} />하는 것</div>
+          <div class="vz-scope-head"><Icon name="check" size={12} stroke={3} />{t("하는 것")}</div>
           <For each={props.in ?? []}>{(i) => <ScopeItem i={i} />}</For>
         </div>
         <div class="vz-scope-col out">
-          <div class="vz-scope-head"><Icon name="x" size={12} stroke={3} />안 하는 것</div>
+          <div class="vz-scope-head"><Icon name="x" size={12} stroke={3} />{t("안 하는 것")}</div>
           <For each={props.out ?? []}>{(i) => <ScopeItem i={i} />}</For>
         </div>
       </div>
@@ -65,7 +66,7 @@ export function Bars(props: { label?: string; unit?: string; items: { label: str
     <div class="blk vz-bars">
       <div class="vz-bars-head">
         <Label text={props.label} />
-        <span class="vz-total">합계 {fmt(total(), props.unit)}</span>
+        <span class="vz-total">{t("합계 {v}", { v: fmt(total(), props.unit) })}</span>
       </div>
       <For each={items()}>
         {(i) => (
@@ -136,7 +137,7 @@ export function Tree(props: { label?: string; unit?: string; items: { path: stri
           <span class="vz-tree-name" classList={{ gone: p.n.state === "gone" }}>{p.n.name}{folder() ? "/" : ""}</span>
           <Tag state={p.n.state} />
           <Show when={p.n.note}><span class="vz-tree-note">{p.n.note}</span></Show>
-          <Show when={folder() && !open()}><span class="vz-tree-more">{count(p.n)}개</span></Show>
+          <Show when={folder() && !open()}><span class="vz-tree-more">{t("{n}개", { n: count(p.n) })}</span></Show>
           <span class="spacer" />
           <Show when={p.n.value !== undefined}>
             <span class="vz-tree-bar"><i style={{ width: `${((p.n.value ?? 0) / max()) * 100}%` }} /></span>
