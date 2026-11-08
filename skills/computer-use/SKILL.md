@@ -3,7 +3,7 @@ name: computer-use
 description: >
   Native Mac app automation that runs in the background on the user's own Mac.
   Read before operating Mac apps, clicking buttons, typing into fields or
-  capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 카카오톡·메신저 앱).
+  capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 메신저 앱).
   Covers how it stays in the background, observation, and what to try when an
   app ignores an action. An isolated
   macOS guest is an optional separate mode.
