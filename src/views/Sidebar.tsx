@@ -12,6 +12,7 @@ import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { ago, compact, now } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
+import { ProjectBadge } from "../ui/ProjectBadge";
 import { Fold } from "../ui/Fold";
 import { archiveTask, duplicateTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 
@@ -433,7 +434,7 @@ export function Sidebar() {
                         setFold(`p:${p.id}`, !open());
                       }}
                     >
-                      <Icon name="folder" size={14} class="sb-main-ic ic-folder" />
+                      <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={11} class="ic-chev" />
                     </span>
                     <span class="sb-title">{p.name}</span>
