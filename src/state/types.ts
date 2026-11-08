@@ -464,6 +464,8 @@ export interface Settings {
   /** "provider/id" for the captain; empty = the account's model */
   captainModel: string;
   theme: "system" | "dark" | "light";
+  /** UI language; "system" follows the Mac */
+  language?: "system" | "ko" | "en";
   /** Instructions imported from other tools (CLAUDE.md, AGENTS.md …) + the user's own. */
   instructions: string;
   /** Captain may save memories on its own when it notices repeats. */

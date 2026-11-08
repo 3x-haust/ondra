@@ -22,6 +22,7 @@ import {
 } from "../lib/native";
 import { ago, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
+import { t } from "../i18n";
 import { LoginSheet } from "./Login";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
@@ -36,11 +37,15 @@ import { setNotesFor } from "../engine/releaseNotes";
 function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
   return (
     <div class="stepper">
-      <button disabled={props.value <= props.min} onClick={() => props.onChange(props.value - 1)} aria-label="줄이기">−</button>
+      <button disabled={props.value <= props.min} onClick={() => props.onChange(props.value - 1)} aria-label={t("줄이기")}>−</button>
       <span>{props.value}</span>
-      <button disabled={props.value >= props.max} onClick={() => props.onChange(props.value + 1)} aria-label="늘리기">+</button>
+      <button disabled={props.value >= props.max} onClick={() => props.onChange(props.value + 1)} aria-label={t("늘리기")}>+</button>
     </div>
   );
+}
+
+function Switch_(props: { on: boolean; set: (on: boolean) => void }) {
+  return <button class="switch" classList={{ on: props.on }} role="switch" aria-checked={props.on} onClick={() => props.set(!props.on)}><i /></button>;
 }
 
 function Row(props: { title: string; desc?: string; children?: any }) {
@@ -59,35 +64,42 @@ function General() {
   const [editing, setEditing] = createSignal<SpaceId | "new" | null>(null);
   return (
     <>
-      <h2>일반</h2>
+      <h2>{t("일반")}</h2>
       <div class="set-group">
-        <Row title="테마">
+        <Row title={t("테마")}>
           <div class="seg">
             <For each={[["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as const}>
-              {([v, l]) => <button classList={{ on: state.settings.theme === v }} onClick={() => setState("settings", "theme", v)}>{l}</button>}
+              {([v, l]) => <button classList={{ on: state.settings.theme === v }} onClick={() => setState("settings", "theme", v)}>{t(l)}</button>}
             </For>
           </div>
         </Row>
-        <Row title="한 번에 하는 일">
+        <Row title={t("언어")}>
+          <div class="seg">
+            <For each={[["system", "시스템"], ["ko", "한국어"], ["en", "English"]] as const}>
+              {([v, l]) => <button classList={{ on: (state.settings.language ?? "system") === v }} onClick={() => setState("settings", "language", v)}>{v === "system" ? t(l) : l}</button>}
+            </For>
+          </div>
+        </Row>
+        <Row title={t("동시 작업 수")}>
           <Stepper value={state.settings.slots.light} min={1} max={10} onChange={(n) => setState("settings", "slots", "light", n)} />
         </Row>
-        <Row title="한 번에 하는 무거운 일" desc="빌드, 시뮬레이터, 앱 조작">
+        <Row title={t("무거운 작업 동시 수")} desc={t("빌드, 시뮬레이터, 앱 조작")}>
           <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
-        <Row title="일마다 따로 작업하기" desc="끝나면 확인하고 합쳐요">
-          <button class="switch" classList={{ on: state.settings.isolate }} role="switch" aria-checked={state.settings.isolate} onClick={() => setState("settings", "isolate", !state.settings.isolate)}><i /></button>
+        <Row title={t("작업마다 워크트리")}>
+          <Switch_ on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
         </Row>
-        <Row title="PR 지켜보기" desc="리뷰나 실패가 오면 이어서 고쳐요">
-          <button class="switch" classList={{ on: !!state.settings.watchPullRequests }} role="switch" aria-checked={!!state.settings.watchPullRequests} onClick={() => setState("settings", "watchPullRequests", !state.settings.watchPullRequests)}><i /></button>
+        <Row title={t("PR 리뷰 자동 대응")}>
+          <Switch_ on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
         </Row>
-        <Row title="GitHub에 쓰기" desc="끄면 일이 GitHub을 읽기만 해요">
-          <button class="switch" classList={{ on: state.settings.githubWrite !== false }} role="switch" aria-checked={state.settings.githubWrite !== false} onClick={() => setState("settings", "githubWrite", state.settings.githubWrite === false)}><i /></button>
+        <Row title={t("GitHub 쓰기 허용")}>
+          <Switch_ on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
         </Row>
-        <Row title="자동으로 기억">
-          <button class="switch" classList={{ on: state.settings.learn }} role="switch" aria-checked={state.settings.learn} onClick={() => setState("settings", "learn", !state.settings.learn)}><i /></button>
+        <Row title={t("메모리 자동 저장")}>
+          <Switch_ on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
-        <Row title="일이 띄운 앱은 뒤에" desc="쓰던 창을 그대로 둬요">
-          <button class="switch" classList={{ on: state.settings.focusGuard }} role="switch" aria-checked={state.settings.focusGuard} onClick={() => setState("settings", "focusGuard", !state.settings.focusGuard)}><i /></button>
+        <Row title={t("포커스 지키기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
+          <Switch_ on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
         </Row>
       </div>
 
