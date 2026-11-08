@@ -108,7 +108,7 @@ export function ReversePane(props: { t: Task }) {
 
   return (
     <div class="rv">
-      <Show when={bin()} fallback={<div class="pane-empty">{running() ? t(DOING[running()!.op]) : t("리버싱 기록 없음")}</div>}>
+      <Show when={bin()} fallback={<div class="pane-empty">{running() ? t(DOING[running()!.op]) : t("바이너리 분석 기록 없음")}</div>}>
         {(b) => (
           <>
             <Head b={b()} running={running()} bins={trace().bins} pick={(f) => (setPick(f), setChosen(undefined))} />
