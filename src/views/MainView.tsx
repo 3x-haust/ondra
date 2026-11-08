@@ -33,7 +33,7 @@ import { matchesShortcut, noModifiers, shortcutHint, shortcuts } from "../lib/sh
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, SidebarToggle, stateMeta } from "./Sidebar";
-import * as settingsView from "./Settings";
+import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
 
 /** "{task}에 전달했어요" with the task name in bold */
@@ -172,12 +172,8 @@ const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
 
 const isNoAccount = (err?: string) => !!err && (err === NO_ACCOUNT || err === t(NO_ACCOUNT));
 
-/** Settings › 계정 with 계정 추가 already started for this workspace (Settings' opener; the tab alone if it has none) */
-function addAccount() {
-  const open = (settingsView as unknown as { openAddAccount?: (space: string) => void }).openAddAccount;
-  if (open) open(state.space);
-  else setView({ name: "settings", tab: "accounts" });
-}
+/** Settings › 계정 with 계정 추가 already started for this workspace */
+const addAccount = () => openAddAccount(state.space);
 
 /** The app can't start, or this workspace has no account: said above the input until it is fixed.
  *  `quiet`: a no-account card in the chat already has the button, so the notice leaves its own out. */
