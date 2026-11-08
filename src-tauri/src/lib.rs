@@ -438,6 +438,8 @@ pub fn run() {
             git::git_pr,
             git::gh_pr_state,
             git::gh_pr_view,
+            git::gh_issues,
+            git::gh_issue,
             git::git_revert_file,
             tools::browser_stream_port,
             browser::shared_browser_open,

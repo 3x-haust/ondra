@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, Task } from "../state/types";
-import { handoffPrompt } from "./prompts";
+import { handoffPrompt, taskPrompt } from "./prompts";
 import { unread } from "./tasks";
 
 let n = 0;
@@ -60,5 +60,20 @@ describe("a session that ran long", () => {
     expect(prompt).toContain("Done when: resubmitted on both stores");
     expect(prompt).toContain("[>] Fix the chat");
     expect(prompt.match(/Only check\./g)).toHaveLength(1);
+  });
+});
+
+describe("a job started from a GitHub issue", () => {
+  it("is told to close the issue from its pull request", () => {
+    const t = job([], { issue: { n: 214, url: "https://github.com/acme/web/issues/214", title: "Login loops" }, legs: [] });
+
+    const prompt = taskPrompt(t);
+
+    expect(prompt).toContain("GitHub issue: #214 https://github.com/acme/web/issues/214");
+    expect(prompt).toContain("`Closes #214`");
+  });
+
+  it("says nothing about issues when it has none", () => {
+    expect(taskPrompt(job([], { legs: [] }))).not.toContain("GitHub issue");
   });
 });

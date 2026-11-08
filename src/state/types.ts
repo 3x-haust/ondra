@@ -163,6 +163,8 @@ export interface Task {
   error?: string;
   /** Imported from another tool's session. */
   origin?: { source: SourceId; path: string };
+  /** the GitHub issue this job was started from */
+  issue?: { n: number; url: string; title: string };
   /** Answered on the spot by the router; no agent ran yet. */
   answer?: boolean;
   /** Work in its own git worktree (undefined = the app setting). */

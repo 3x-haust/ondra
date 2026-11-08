@@ -1556,6 +1556,7 @@ export function createTask(f: {
   reach?: Task["reach"];
   /** a finished job this carries on: its branch is handed over */
   follows?: string;
+  issue?: Task["issue"];
 }): string {
   const id = uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
@@ -1591,6 +1592,7 @@ export function createTask(f: {
     shells: [],
     inbox: [],
     origin: f.origin,
+    ...(f.issue ? { issue: f.issue } : {}),
     isolate: f.isolate,
     // no model of its own: it runs on its account's model (each account picks its own)
     model: undefined,
