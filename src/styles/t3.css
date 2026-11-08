@@ -8835,3 +8835,87 @@ select.select.dev-space {
 .ctray:not(:has(.composer-under, .status-line)) {
   display: none;
 }
+
+/* ───────────── project badge: letters on a tint from the project's name ───────────── */
+.pbadge {
+  --pb: oklch(0.72 0.11 var(--pb-h, 250));
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--pb) 20%, transparent);
+  color: var(--pb);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  user-select: none;
+}
+:root[data-theme="light"] .pbadge {
+  --pb: oklch(0.52 0.13 var(--pb-h, 250));
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .pbadge {
+    --pb: oklch(0.52 0.13 var(--pb-h, 250));
+  }
+}
+.pbadge[data-hue="0"] { --pb-h: 250; }
+.pbadge[data-hue="1"] { --pb-h: 295; }
+.pbadge[data-hue="2"] { --pb-h: 340; }
+.pbadge[data-hue="3"] { --pb-h: 25; }
+.pbadge[data-hue="4"] { --pb-h: 70; }
+.pbadge[data-hue="5"] { --pb-h: 115; }
+.pbadge[data-hue="6"] { --pb-h: 160; }
+.pbadge[data-hue="7"] { --pb-h: 205; }
+.sb-proj-ic:has(> .pbadge) {
+  width: 18px;
+  height: 18px;
+}
+.sb-proj-ic > .pbadge {
+  grid-area: 1 / 1;
+  transition: opacity 0.15s var(--ease);
+}
+/* job header: "project / job" */
+.crumb-proj {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  max-width: 180px;
+  height: 26px;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.crumb-proj span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crumb-proj:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.crumb-sep {
+  color: var(--ink-4);
+  margin: 0 var(--s-2);
+  user-select: none;
+}
+.crumb-sep + h1 {
+  padding-left: var(--s-4);
+}
+.res-where {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+}
+.res-where .pbadge {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  font-size: 8px;
+}

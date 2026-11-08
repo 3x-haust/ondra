@@ -10,6 +10,7 @@ import { openTask, setJumpMsg, setView, toast, view } from "../state/ui";
 import { BlockView } from "../ui/Blocks";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
+import { ProjectBadge } from "../ui/ProjectBadge";
 import { anyPop, closePops } from "../ui/ModelPicker";
 import { SidebarToggle } from "./Sidebar";
 
@@ -219,7 +220,7 @@ export function ResultsView() {
                     <Show when={resultPreview(r)}>
                       <p class="res-prev">{resultPreview(r)}</p>
                     </Show>
-                    <span class="res-where">{where(r)}</span>
+                    <span class="res-where"><Show when={r.project}><ProjectBadge name={where(r)} /></Show>{where(r)}</span>
                   </div>
                 </>
               )}

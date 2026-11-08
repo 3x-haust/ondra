@@ -3,7 +3,7 @@ import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
 import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js";
-import { decisionFor, homeDir, state, taskById, updateTask } from "../state/store";
+import { decisionFor, homeDir, projectById, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { usesReverse } from "../engine/reverse";
@@ -18,6 +18,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
+import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
@@ -275,6 +276,17 @@ export function TaskView(props: { id: string }) {
                     <button class="icon-btn sm crumb-back" title={`${p().title}(으)로 돌아가기`} onClick={() => openTask(p().id)}>
                       <Icon name="chevron" size={14} />
                     </button>
+                  </>
+                )}
+              </Show>
+              <Show when={!task().parentId && task().project ? projectById(task().project!, task().space) : undefined}>
+                {(p) => (
+                  <>
+                    <button class="crumb-proj" title={`${p().name} 메인`} onClick={() => goMain(p().id)}>
+                      <ProjectBadge name={p().name} />
+                      <span>{p().name}</span>
+                    </button>
+                    <span class="crumb-sep">/</span>
                   </>
                 )}
               </Show>
