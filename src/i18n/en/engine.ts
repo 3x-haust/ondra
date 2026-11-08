@@ -98,7 +98,7 @@ export default {
   "되돌리기": "Undo",
 
   // memory.ts
-  "메모리 {n}개 저장": "Saved {n} memories",
+  "메모리 {n}개 저장": "Saved {n} memory|Saved {n} memories",
   "메모리 저장 · {text}": "Memory saved · {text}",
   "{what} · 이전 메모리 대체": "{what} · replaced the old one",
 
@@ -109,16 +109,16 @@ export default {
   "사이드챗이 끝났어요": "Side chat ended",
 
   // tidy.ts
-  "스킬 {n}": "Skills {n}",
-  "새 메모리 {n}": "New {n}",
-  "병합 {n}": "Merged {n}",
-  "내림 {n}": "Retired {n}",
-  "관련어 {n}": "Keywords {n}",
+  "스킬 {n}": "{n} skill|{n} skills",
+  "새 메모리 {n}": "{n} new memory|{n} new memories",
+  "병합 {n}": "{n} merged",
+  "내림 {n}": "{n} retired",
+  "관련어 {n}": "{n} keyword|{n} keywords",
   "메모리 정리 · {parts}": "Memory tidied · {parts}",
   "정리할 메모리가 없어요": "Nothing to tidy",
 
   // prWatch.ts
-  "리뷰·코멘트 {n}개": "{n} reviews/comments",
+  "리뷰·코멘트 {n}개": "{n} review or comment|{n} reviews and comments",
   "검사 실패": "checks failed",
   "PR #{num} · {parts}": "PR #{num} · {parts}",
 

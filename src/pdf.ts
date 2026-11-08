@@ -4,6 +4,28 @@ import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 import "./styles/pdf.css";
 import { bindPdfGestures, MAX_PDF_SCALE, MIN_PDF_SCALE, pdfScale } from "./lib/pdf-gestures";
+import { lang, t } from "./i18n";
+import { setState } from "./state/store";
+
+// The viewer sits in an iframe of the app: use the app's language (its <html lang>), else the Mac's.
+try {
+  const l = window.parent !== window ? window.parent.document.documentElement.lang : "";
+  if (l === "ko" || l === "en") setState("settings", "language", l);
+} catch {
+  // another origin: keep the Mac's language
+}
+document.documentElement.lang = lang();
+// pdf.html's own labels (written in Korean) in the app's language
+for (const el of document.querySelectorAll<HTMLElement>("[title], [aria-label]")) {
+  for (const a of ["title", "aria-label"]) {
+    const v = el.getAttribute(a);
+    if (v) el.setAttribute(a, t(v));
+  }
+}
+for (const el of document.querySelectorAll<HTMLElement>("option, #password-form button")) {
+  if (el.textContent) el.textContent = t(el.textContent);
+}
+document.querySelector("#status")!.textContent = t("불러오는 중");
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 // Vite emits these with their original names: PDF.js requests them by name.
@@ -105,7 +127,7 @@ container.addEventListener("keydown", (e) => {
 const source = new URLSearchParams(location.search).get("file");
 if (source) {
   const original = document.createElement("a");
-  original.textContent = "원본 보기";
+  original.textContent = t("원본 보기");
   original.href = source;
   document.querySelector("nav")!.append(original);
   const task = getDocument({
@@ -119,7 +141,7 @@ if (source) {
   task.onPassword = (updatePassword: (value: string) => void, reason: number) => {
     password.value = "";
     document.querySelector("#password-message")!.textContent = reason === PasswordResponses.INCORRECT_PASSWORD
-      ? "비밀번호가 맞지 않아요. 다시 입력해 주세요." : "PDF 비밀번호를 입력해 주세요.";
+      ? t("비밀번호가 맞지 않아요") : t("PDF 비밀번호");
     document.querySelector<HTMLFormElement>("#password-form")!.onsubmit = (e) => {
       e.preventDefault();
       const value = password.value;
@@ -133,7 +155,7 @@ if (source) {
     cancelled = true;
     password.value = "";
     passwordDialog.close();
-    status.textContent = "PDF 열기를 취소했어요. 원본 보기로 다시 열 수 있어요.";
+    status.textContent = t("PDF 열기를 취소했어요");
     void task.destroy();
   };
   document.querySelector<HTMLButtonElement>("#password-cancel")!.onclick = cancelPassword;
@@ -144,7 +166,7 @@ if (source) {
   }).catch(() => {
     if (cancelled) return;
     status.hidden = false;
-    status.textContent = "PDF를 열지 못했어요. 원본 보기로 다시 열어 주세요.";
+    status.textContent = t("PDF를 열지 못했어요 · 원본 보기로 열 수 있어요");
   });
   window.addEventListener("pagehide", () => {
     ready = false;
@@ -155,5 +177,5 @@ if (source) {
     void task.destroy();
   }, { once: true });
 } else {
-  status.textContent = "PDF 파일이 없어요";
+  status.textContent = t("PDF 파일이 없어요");
 }

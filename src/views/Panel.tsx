@@ -210,7 +210,7 @@ function Overview(props: { t: Task }) {
           <dt>{tr("계정")}</dt>
           <dd>
             <select class="select" value={t().accountId} onChange={(e) => updateTask(t().id, (x) => (x.accountId = e.currentTarget.value))}>
-              <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{a.label}</option>}</For>
+              <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{tr(a.label)}</option>}</For>
             </select>
             <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
           </dd>

@@ -508,3 +508,90 @@
 .settings-side .sb-row .icon {
   flex-shrink: 0;
 }
+
+/* ───────── round 2 */
+/* 공통 지침: a quiet "저장됨" that fades after an edit */
+.settings-inner .set-saved {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.settings-inner .set-saved.on {
+  opacity: 1;
+}
+
+/* workspace sheet: one label column as wide as its longest label */
+.sp-sheet .sp-form {
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--s-16);
+}
+.sp-sheet .sp-field {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.sp-sheet .sp-pick > span:not(.spacer):not(.muted) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* import: nothing found, with the one way forward */
+.settings-inner .imp-empty {
+  gap: var(--s-12);
+  padding-right: var(--s-8);
+}
+.settings-inner .imp-empty .btn.sm {
+  height: 28px;
+}
+
+/* skills: the line beside the name stays on one line */
+.settings-inner .sk-row .item-main p {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* tools: the unit over the numbers column */
+.settings-inner .tl-gtitle .tl-unit {
+  margin-right: var(--s-14);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-4);
+}
+
+/* hooks: each control with its name above */
+.settings-inner .hk-line {
+  align-items: flex-end;
+  gap: var(--s-12);
+}
+.settings-inner .hk-field {
+  display: grid;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.settings-inner .hk-field > span {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.settings-inner .hk-acts {
+  align-self: end;
+  height: 28px;
+}
+.settings-inner .hk-cmd::placeholder,
+.settings-inner .hk-matcher::placeholder {
+  font-family: var(--font);
+  color: var(--ink-4);
+}
+.settings-inner .switch:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.settings-inner .sp-folder.word {
+  font-family: var(--font);
+}
+/* a ghost action beside the page title lines up with the group edge, like 스킬's 추가 */
+.settings-inner .set-head > .btn.ghost {
+  margin-right: calc(-1 * var(--s-10));
+}

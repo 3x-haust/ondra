@@ -129,7 +129,8 @@ export function ToolsTab() {
       <div class="set-head">
         <h2>{t("도구")}</h2>
         <Show when={data()}>
-          <span class="tl-total">{t("도구 {n}개 · {tok} 토큰", { n: data()!.tools.filter((x) => x.active).length, tok: tokens(declared()) })}</span>
+          {/* every tool listed below; the tokens are what the tools in use add to each request */}
+          <span class="tl-total" title={t("켜진 도구가 요청마다 쓰는 토큰")}>{t("도구 {n}개 · {tok} 토큰", { n: data()!.tools.length, tok: tokens(declared()) })}</span>
         </Show>
         <button class="btn sm" disabled={data.loading} onClick={() => setForce((n) => n + 1)}>
           <Icon name="refresh" size={14} />{t("새로고침")}
@@ -142,12 +143,16 @@ export function ToolsTab() {
       <Show when={!data.error} fallback={<div class="set-group"><div class="empty-line">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</div></div>}>
         <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">{t("불러오는 중")}</div></div>}>
           <For each={groups()} fallback={<div class="set-group"><div class="empty-line">{t("결과 없음")}</div></div>}>
-            {(g) => (
+            {(g, i) => (
               <>
                 <div class="set-group-title tl-gtitle">
                   {t(g.title)}
                   <span class="tl-count">{g.rows.length}</span>
                   <Show when={g.hint}><span class="tl-ghint">{g.hint}</span></Show>
+                  <Show when={i() === 0}>
+                    <span class="spacer" />
+                    <span class="tl-unit">{t("토큰")}</span>
+                  </Show>
                 </div>
                 <div class="set-group tl-group">
                   <For each={g.rows}>
@@ -157,7 +162,7 @@ export function ToolsTab() {
                           <span class="tl-name">{r.name}</span>
                           <span class="tl-line" classList={{ en: !r.ko }} title={r.full}>{r.line}</span>
                           <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && r.source.replace(/^Ondra 확장 · |^확장 · /, "") !== r.name}><span class="tl-src">{t(r.source.replace(/^Ondra 확장 · |^확장 · /, ""))}</span></Show>
-                          <span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : undefined}>{r.off ? t("꺼짐") : r.found ? t("필요 시") : `${tokens(r.size)}`}</span>
+                          <span class="tl-size" title={r.off ? undefined : r.found ? t("필요할 때 찾아 써요") : t("{n} 토큰", { n: tokens(r.size) })}>{r.off ? t("꺼짐") : r.found ? t("필요 시") : `${tokens(r.size)}`}</span>
                         </button>
                         <div class="tl-more" classList={{ open: open() === r.key }}>
                           <div class="tl-more-in">

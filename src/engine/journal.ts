@@ -18,7 +18,7 @@ function entryOf(t: Task): JournalEntry {
   const left = t.plan.filter((p) => p.state !== "done").map((p) => p.text);
   const text = [
     (t.summary ?? t.now ?? "").trim().slice(0, 1200),
-    ...(t.unverified?.length ? [`확인 못 함: ${t.unverified.slice(0, 4).join(" · ")}`] : []),
+    ...(t.unverified?.length ? [`확인 안 됨: ${t.unverified.slice(0, 4).join(" · ")}`] : []),
     ...(left.length ? [`남은 것: ${left.slice(0, 5).join(" · ")}`] : []),
   ]
     .filter(Boolean)
@@ -38,7 +38,7 @@ function entryOf(t: Task): JournalEntry {
 
 function nowOf(t: Task): ProjectNow {
   const left = t.plan.filter((p) => p.state !== "done").map((p) => p.text);
-  const head = `${t.title} — ${outcomeOf(t) === "done" ? "끝남" : outcomeOf(t) === "failed" ? "실패" : "멈춤"}`;
+  const head = `${t.title} — ${outcomeOf(t) === "done" ? "완료" : outcomeOf(t) === "failed" ? "실패" : "일시정지"}`;
   const line = (t.summary ?? "").split("\n").find((l) => l.trim())?.trim().slice(0, 200) ?? "";
   return {
     text: [head, line, left.length ? `남은 것: ${left.slice(0, 4).join(" · ")}` : ""].filter(Boolean).join("\n").slice(0, 420),
