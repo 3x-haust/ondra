@@ -618,7 +618,7 @@
   --code-sep: color-mix(in lab, var(--code-surface) 96%, var(--code-fg));
 }
 :root[data-theme="dark"] {
-  --code-surface: #111113;
+  --code-surface: #0a0a0a;
   --code-fg: #fafafa;
   --add-base: #5ecc71;
   --del-base: #ff6762;
@@ -630,7 +630,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --code-surface: #111113;
+    --code-surface: #0a0a0a;
     --code-fg: #fafafa;
     --add-base: #5ecc71;
     --del-base: #ff6762;
@@ -1356,14 +1356,14 @@ body.resizing .panel {
   --card-shadow: none;
 }
 :root[data-theme="dark"] {
-  --canvas: #09090b;
-  --card-line: rgba(255, 255, 255, 0.08);
+  --canvas: #000;
+  --card-line: rgba(255, 255, 255, 0.07);
   --card-shadow: none;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #09090b;
-    --card-line: rgba(255, 255, 255, 0.08);
+    --canvas: #000;
+    --card-line: rgba(255, 255, 255, 0.07);
     --card-shadow: none;
   }
 }
@@ -1749,7 +1749,7 @@ body.resizing .panel {
 }
 /* 21 · dark: the frame sits a step below the cards */
 :root[data-theme="dark"] {
-  --canvas: #09090b;
+  --canvas: #141416;
   --card-line: rgba(255, 255, 255, 0.08);
 }
 :root[data-theme="dark"] .sb-row:hover {
@@ -1761,7 +1761,7 @@ body.resizing .panel {
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #09090b;
+    --canvas: #141416;
     --card-line: rgba(255, 255, 255, 0.08);
   }
   :root:not([data-theme="light"]) .sb-row:hover {
@@ -2082,19 +2082,19 @@ input[type="checkbox"] {
 }
 /* 32 · dark: frame, card and input are three distinct steps */
 :root[data-theme="dark"] {
-  --card: #1c1c1f;
-  --bg: #151517;
+  --card: #0e0e10;
+  --bg: #0e0e10;
 }
 :root[data-theme="dark"] .composer {
-  background: #1c1c1f;
+  background: #18181b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --card: #1c1c1f;
-    --bg: #151517;
+    --card: #0e0e10;
+    --bg: #0e0e10;
   }
   :root:not([data-theme="light"]) .composer {
-    background: #1c1c1f;
+    background: #18181b;
   }
 }
 /* 33 · short windows: the trays above the input shrink to one line */
@@ -2836,13 +2836,13 @@ input[type="checkbox"] {
 }
 :root[data-theme="dark"] {
   --cv-bg: #0b0b0d;
-  --cv-card: #1c1c1f;
+  --cv-card: #151518;
   --cv-dot: rgb(255 255 255 / 9%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --cv-bg: #0b0b0d;
-    --cv-card: #1c1c1f;
+    --cv-card: #151518;
     --cv-dot: rgb(255 255 255 / 9%);
   }
 }
@@ -5622,7 +5622,7 @@ div.queued {
 }
 .mg-node circle,
 .mg-node rect {
-  stroke: var(--bg, #151517);
+  stroke: var(--bg, #0e0e10);
   stroke-width: 2;
 }
 .mg-node.k-global circle {
@@ -5644,7 +5644,7 @@ div.queued {
   fill: var(--ink-2);
   font-size: 11px;
   paint-order: stroke;
-  stroke: var(--bg, #151517);
+  stroke: var(--bg, #0e0e10);
   stroke-width: 3px;
   pointer-events: none;
 }
