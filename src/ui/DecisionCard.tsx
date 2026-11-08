@@ -49,9 +49,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const [typed, setTyped] = createSignal("");
   let own!: HTMLInputElement;
   let list!: HTMLDivElement;
-  // one place to answer in your own words: inside a task the input below already takes it,
-  // elsewhere (Main) this card's own line does
-  const own_ = () => !props.d.ui && props.showTask !== false;
+  // one place to answer in your own words, in Main and in the task alike: the card's own line
+  const own_ = () => !props.d.ui;
   const count = () => props.d.options.length + (own_() ? 1 : 0);
   const select = (i: number) => {
     setSel(i);

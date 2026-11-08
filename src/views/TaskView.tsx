@@ -14,16 +14,15 @@ import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
 import { planCount, taskDiff } from "../state/progress";
 import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { ago, compact, Dot, IssueTag, long, now, statusLabel } from "../ui/bits";
+import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
-import { costDetail, jobCost } from "../ui/cost";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
-import { Transcript } from "../ui/Transcript";
+import { JobEnd, Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
@@ -354,15 +353,7 @@ export function TaskView(props: { id: string }) {
               footer={
                 <>
                   <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
-                  {/* the end of a task: its state and time; the token breakdown on hover */}
-                  <Show when={task().status === "done" && jobCost(task())}>
-                    {(c) => (
-                      <div class="job-cost" title={costDetail(c()) || undefined}>
-                        {task().worktree?.state === "open" ? tr("검토") : tr("완료")}
-                        {c().ms ? ` · ${long(c().ms)}` : ""}
-                      </div>
-                    )}
-                  </Show>
+                  <JobEnd t={task()} />
                 </>
               }
             />

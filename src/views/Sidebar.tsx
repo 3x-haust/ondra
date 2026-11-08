@@ -11,7 +11,7 @@ import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry 
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
-import { ago, compact, now } from "../ui/bits";
+import { ago, compact, newTaskOpen, now } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -374,7 +374,7 @@ export function Sidebar() {
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
+        <button class="icon-btn" classList={{ on: !!newTaskOpen() }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
           <Icon name="compose" size={16} />
         </button>
         <button class="icon-btn" data-shortcut="search" title={`${tr("검색")} ${shortcutHint("search")}`} aria-label={tr("검색")} onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
@@ -410,7 +410,7 @@ export function Sidebar() {
           onCleanup(() => (ro.disconnect(), mo.disconnect()));
         }}
       >
-        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} data-shortcut="main">
+        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() && !newTaskOpen() }} onClick={() => goMain()} data-shortcut="main">
           <Icon name="message" size={16} class="sb-main-ic" />
           <span class="sb-title">{tr("메인")}</span>
           <Show when={mainBusy()} fallback={<kbd class="sb-kbd">{shortcutHint("main")}</kbd>}>

@@ -19,7 +19,7 @@ export function BranchChip(props: { t: Task; active?: boolean }) {
     <button class="br-chip" classList={{ active: props.active, "m-review": bucket(props.t) === "review" }} onClick={() => openTask(props.t.id)}>
       <Glyph t={props.t} />
       <span class="br-chip-title">{props.t.title}</span>
-      <span class="br-chip-meta">{props.t.status === "waiting" ? tr("응답 필요") : since(props.t)}</span>
+      <span class="br-chip-meta" classList={{ review: props.t.status === "done" && props.t.worktree?.state === "open" }}>{props.t.status === "waiting" ? tr("응답 필요") : since(props.t)}</span>
     </button>
   );
 }
