@@ -15,13 +15,27 @@ export interface VizSpec<B = any> {
   render: (b: B) => JSX.Element;
   /** realistic examples: drawn in the gallery and checked in tests */
   examples: B[];
+  /**
+   * optional: keep what can be drawn and say what was left out and why (after
+   * json-render's catalog schemas, but forgiving: it drops, never rejects).
+   * render gets the checked block; the reasons are logged in dev.
+   */
+  check?: (b: B) => { block: B; dropped: string[] };
 }
 
 const specs = new Map<string, VizSpec>();
 
 export function defineViz<B>(spec: VizSpec<B>): VizSpec<B> {
   if (specs.has(spec.type)) throw new Error(`viz kind registered twice: ${spec.type}`);
-  specs.set(spec.type, spec as VizSpec);
+  const { check, render } = spec;
+  const draw = check
+    ? (b: B) => {
+        const r = check(b);
+        if (import.meta.env?.DEV && r.dropped.length) console.warn(`[viz] ${spec.type}: left out`, r.dropped);
+        return render(r.block);
+      }
+    : render;
+  specs.set(spec.type, { ...spec, render: draw } as VizSpec);
   return spec;
 }
 export const vizOf = (type: string): VizSpec | undefined => specs.get(type);
