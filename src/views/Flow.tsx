@@ -2,7 +2,7 @@
 // when main hands it out, runs as its own line (jobs running at once are lines
 // side by side) and joins the trunk again when merged. Subagents hang off their
 // job on a dotted twig. Newest on top. Lives in the right panel's 흐름 tab.
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { state, taskById, tasksIn } from "../state/store";
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, setHoverTask, view } from "../state/ui";
@@ -33,7 +33,10 @@ interface Row {
   t: Task;
   kid: boolean;
   y: number;
+  /** its height as drawn: at least `base`, taller when its text wraps */
   h: number;
+  /** ROW, SHORT or KID */
+  base: number;
 }
 
 export function Flow() {
@@ -79,25 +82,47 @@ export function Flow() {
 
   /** one line is enough: it is already in 할 일 above, or has not started */
   const brief = (t: Task) => bucket(t) === "you" || bucket(t) === "review" || t.status === "queued" || ended(t);
-  const rows = createMemo(() => {
-    const out: Row[] = [];
-    let y = 0;
+  // rows show all of their text: each one's drawn height, measured, places the rows below it
+  const [drawn, setDrawn] = createSignal<Record<string, number>>({});
+  const sizes = new ResizeObserver((es) => {
+    const next = { ...drawn() };
+    let changed = false;
+    for (const e of es) {
+      const el = e.target as HTMLElement;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      if (el.isConnected && h && next[el.dataset.k!] !== h) (next[el.dataset.k!] = h), (changed = true);
+    }
+    if (changed) setDrawn(next);
+  });
+  onCleanup(() => sizes.disconnect());
+  const keyOf = (t: Task, kid: boolean) => `${kid ? "k" : "r"}:${t.id}`;
+  /** the rows top to bottom; drawn once each, then only moved */
+  const order = createMemo(() => {
+    const out: { t: Task; kid: boolean; base: number; k: string }[] = [];
     for (const t of shown()) {
-      const h = brief(t) ? SHORT : ROW;
-      out.push({ t, kid: false, y, h });
-      y += h;
-      for (const k of kidsShown(t)) {
-        out.push({ t: k, kid: true, y, h: KID });
-        y += KID;
-      }
+      out.push({ t, kid: false, base: brief(t) ? SHORT : ROW, k: keyOf(t, false) });
+      for (const k of kidsShown(t)) out.push({ t: k, kid: true, base: KID, k: keyOf(k, true) });
     }
     return out;
   });
+  const rows = createMemo(() => {
+    const d = drawn();
+    let y = 0;
+    return order().map((o): Row => {
+      const h = Math.max(o.base, d[o.k] ?? o.base);
+      const r = { t: o.t, kid: o.kid, y, h, base: o.base };
+      y += h;
+      return r;
+    });
+  });
+  const placed = createMemo(() => new Map(rows().map((r, i) => [order()[i].k, r])));
+  const cyOf = (k: string) => ((r) => (r ? cy(r) : 0))(placed().get(k));
   const height = () => {
     const r = rows();
     return r.length ? r[r.length - 1].y + r[r.length - 1].h : 0;
   };
-  const cy = (r: Row) => r.y + (r.kid || r.h === SHORT ? r.h / 2 : 15);
+  /** the node sits beside the row's first line */
+  const cy = (r: Row) => r.y + (r.base === ROW ? 15 : r.base / 2);
 
   /** where a merged job joins the trunk: just above the first row older than its merge */
   const joinY = (t: Task) => {
@@ -174,24 +199,29 @@ export function Flow() {
         <svg class="g-lines" classList={{ dim: !!hoverTask() }} width={gutter()} height={Math.max(1, height())} aria-hidden="true">
           <line class="g-trunk" x1={TRUNK} y1={0} x2={TRUNK} y2={trunkEnd()} />
           <For each={paths()}>{(p) => <path class={p.cls} d={p.d} pathLength={p.cls.includes("twig") ? undefined : 1} />}</For>
-          <For each={rows()}>
+          <For each={order()}>
             {(r) => (
               <circle
                 class={`g-node ${r.t.status}`}
                 classList={{ unmerged: r.t.status === "done" && r.t.worktree?.state === "open", kid: r.kid, on: openId() === r.t.id }}
                 cx={r.kid ? laneX(r.t.parentId!) + 8 : laneX(r.t.id)}
-                cy={cy(r)}
+                cy={cyOf(r.k)}
                 r={r.kid ? 3 : 4.5}
               />
             )}
           </For>
         </svg>
-        <For each={rows()}>
+        <For each={order()}>
           {(r) => (
             <button
               class="g-row"
-              classList={{ kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
-              style={{ top: `${r.y}px`, height: `${r.h}px`, "padding-left": `${r.kid ? gutter() + 12 : gutter()}px` }}
+              classList={{ wrapped: (placed().get(r.k)?.h ?? 0) > r.base + 4, kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
+              ref={(el) => {
+                sizes.observe(el);
+                onCleanup(() => sizes.unobserve(el));
+              }}
+              data-k={r.k}
+              style={{ top: `${placed().get(r.k)?.y ?? 0}px`, "min-height": `${r.base}px`, "padding-left": `${r.kid ? gutter() + 12 : gutter()}px` }}
               onClick={() => openTask(r.t.id)}
               onMouseEnter={() => setHoverTask(r.kid ? r.t.parentId! : r.t.id)}
               onMouseLeave={() => setHoverTask(null)}
@@ -200,7 +230,7 @@ export function Flow() {
               <span class="g-line1">
                 <span class="g-name">{r.t.title}</span>
                 <Show when={!r.kid && r.t.browser && r.t.status === "running"}><Icon name="globe" size={11} class="g-badge" /></Show>
-                <Show when={!r.kid && r.h !== ROW && kidsOf(r.t).length}>
+                <Show when={!r.kid && r.base !== ROW && kidsOf(r.t).length}>
                   <span
                     class="g-kids"
                     role="button"
@@ -215,7 +245,7 @@ export function Flow() {
                 </Show>
                 <span class="g-meta">{meta(r.t)}</span>
               </span>
-              <Show when={!r.kid && r.h === ROW}>
+              <Show when={!r.kid && r.base === ROW}>
                 <span class="g-line2-wrap">
                   <span class="g-line2" classList={{ bad: r.t.status === "failed" }}>{sub(r.t)}</span>
                   <Show when={kidsOf(r.t).length}>
