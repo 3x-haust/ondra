@@ -164,6 +164,11 @@ export function addProject(space: SpaceId, folder: string, name?: string): strin
   for (const t of state.tasks) if (t.space === space && !t.project && projectFor(space, t.cwd) === unique) setState("tasks", (x) => x.id === t.id, "project", unique);
   return unique;
 }
+/** A project's shown name (its id and folder stay). */
+export function renameProject(id: string, name: string) {
+  const n = name.trim().slice(0, 40);
+  if (n) setState("projects", (p) => p.id === id, "name", n);
+}
 /** Delete a project: its jobs stay (under "그 밖의 일"), its chat goes; the folder itself is untouched. */
 export function removeProject(id: string) {
   const p = (state.projects ?? []).find((x) => x.id === id);

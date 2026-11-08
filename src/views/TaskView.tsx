@@ -9,11 +9,11 @@ import { addMemory } from "../engine/memory";
 import { usesReverse } from "../engine/reverse";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
-import { fsFiles, openInEditor, revealPath } from "../lib/native";
+import { fsFiles } from "../lib/native";
 import { planCount, taskDiff } from "../state/progress";
-import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
+import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
@@ -26,21 +26,20 @@ import { StatusLine, ContextRing } from "../ui/Usage";
 import { Transcript } from "../ui/Transcript";
 import { renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
+import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
 
-function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
-  const t = () => taskById(props.id)!;
-  const [open, setPop] = usePop();
-  const [sure, setSure] = createSignal(false);
-  const setOpen = (v: boolean) => (setPop(v), v || setSure(false));
-  const close = () => setOpen(false);
-  const live = () => t().status === "running" || t().status === "waiting";
+function MoreMenu(props: { id: string }) {
+  const [open, setOpen] = usePop();
   return (
     <div style={{ position: "relative" }}>
       <button
         class="icon-btn"
         classList={{ on: open() }}
         title={tr("더 보기")}
+        aria-label={tr("더 보기")}
+        aria-haspopup="menu"
+        aria-expanded={open()}
         onClick={(e) => {
           e.stopPropagation();
           setOpen(!open());
@@ -49,52 +48,7 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
         <Icon name="more" size={16} />
       </button>
       <Show when={open()}>
-        <div class="menu" style={{ top: "36px", right: "0" }} onClick={(e) => e.stopPropagation()}>
-          <Show when={t().status === "running"}>
-            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">{tr("일시정지|action")}</span></button>
-          </Show>
-          <Show when={t().status === "paused" || t().status === "failed"}>
-            <button onClick={() => (resumeTask(t().id), close())}><Icon name="play" size={14} class="muted" /><span class="row-title">{tr("다시 시작")}</span></button>
-          </Show>
-          <Show when={t().status !== "done"}>
-            <button onClick={() => (finishTask(t().id), close())}><Icon name="check" size={14} class="muted" /><span class="row-title">{tr("완료로 표시")}</span></button>
-          </Show>
-          <div class="menu-sep" />
-          <button onClick={() => (setRenaming(t().id), close())}><Icon name="pencil" size={14} class="muted" /><span class="row-title">{tr("이름 바꾸기")}</span></button>
-          <button onClick={() => (togglePin(t().id), close())}><Icon name="pin" size={14} class="muted" /><span class="row-title">{t().pinned ? tr("고정 해제") : tr("고정")}</span></button>
-          <button onClick={() => { const n = duplicateTask(t().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={14} class="muted" /><span class="row-title">{tr("다시 실행")}</span></button>
-          <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(t().id)); toast(tr("복사했어요")); close(); }}><Icon name="copy" size={14} class="muted" /><span class="row-title">{tr("Markdown으로 복사")}</span></button>
-          <div class="menu-sep" />
-          <button onClick={() => (openInEditor(expand(t().cwd)), close())}><Icon name="external" size={14} class="muted" /><span class="row-title">{tr("편집기에서 열기")}</span></button>
-          <button onClick={() => (revealPath(expand(t().cwd)), close())}><Icon name="folder" size={14} class="muted" /><span class="row-title">{tr("Finder에서 보기")}</span></button>
-          <button onClick={() => (props.openPanel("terminal"), close())}><Icon name="terminal" size={14} class="muted" /><span class="row-title">{tr("셸 열기")}</span></button>
-          <Show when={t().worktree?.state === "open" && !live()}>
-            <div class="menu-sep" />
-            <button onClick={() => (void mergeTask(t().id), close())}><Icon name="merge" size={14} class="muted" /><span class="row-title">{tr("병합")}</span></button>
-            <button onClick={() => (void discardTask(t().id), close())}><Icon name="x" size={14} class="muted" /><span class="row-title">{tr("변경 버리기")}</span></button>
-          </Show>
-          <div class="menu-sep" />
-          <Show
-            when={sure()}
-            fallback={
-              <>
-              <button onClick={() => (archiveTask(t().id), goMain(), close())}><Icon name="archive" size={14} class="muted" /><span class="row-title">{tr("보관")}</span></button>
-              <button class="danger" onClick={() => setSure(true)}><Icon name="trash" size={14} /><span class="row-title">{tr("삭제")}</span></button>
-            </>
-            }
-          >
-            <button
-              class="danger"
-              onClick={() => {
-                removeTask(t().id);
-                newTask();
-              }}
-            >
-              <Icon name="trash" size={14} />
-              <span class="row-title">{tr("삭제 확인")}</span>
-            </button>
-          </Show>
-        </div>
+        <TaskMenuPanel id={props.id} done={() => setOpen(false)} style={{ top: "36px", right: "0" }} />
       </Show>
     </div>
   );
@@ -385,7 +339,7 @@ export function TaskView(props: { id: string }) {
                   <Icon name="binary" size={16} />
                 </button>
               </Show>
-              <MoreMenu id={task().id} openPanel={openPanel} />
+              <MoreMenu id={task().id} />
               <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={`${tr("패널")} (⌘\\)`} onClick={togglePanel}>
                 <Icon name="panel" size={16} />
               </button>

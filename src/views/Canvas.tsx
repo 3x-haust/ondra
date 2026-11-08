@@ -23,6 +23,7 @@ import { planCount } from "../state/progress";
 import { Board } from "./Board";
 import { viewKey } from "../lib/shortcuts";
 import { t } from "../i18n";
+import { taskContextMenu } from "../ui/taskMenu";
 
 // ───────────── geometry
 
@@ -1000,6 +1001,7 @@ export function Canvas() {
                     style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => n.task && openTask(n.id)}
+                    onContextMenu={(e) => n.task && n.kind !== "more" && taskContextMenu(n.id)(e)}
                   >
                     {n.kind === "main" ? <MainCard /> : n.kind === "proj" ? <ProjCard n={node()} space={space()} /> : n.kind === "job" ? <JobCard n={node()} /> : n.kind === "more" ? <MoreCard n={node()} /> : <SubCard n={node()} />}
                   </div>

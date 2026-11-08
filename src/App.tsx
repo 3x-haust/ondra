@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createEffect, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
@@ -36,6 +36,7 @@ import { QuoteBar } from "./ui/QuoteBar";
 import { startUpdates } from "./engine/update";
 import { afterLaunch, notesFor } from "./engine/releaseNotes";
 import { ReleaseNotes } from "./ui/ReleaseNotes";
+import { ConfirmHost, ContextMenuHost } from "./ui/taskMenu";
 import { getVersion } from "@tauri-apps/api/app";
 import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
@@ -137,6 +138,19 @@ export default function App() {
   window.addEventListener("keydown", onKey);
   onCleanup(() => window.removeEventListener("keydown", onKey));
 
+  // toasts sit centred on the main pane, just above its composer and what is docked on it (or its foot)
+  const [toastAt, setToastAt] = createSignal<{ left: number; bottom: number }>();
+  const placeToast = () => {
+    const main = document.querySelector<HTMLElement>("main.main");
+    if (!main) return;
+    const r = main.getBoundingClientRect();
+    const box = [...main.querySelectorAll<HTMLElement>(".composer-wrap")].map((c) => c.getBoundingClientRect()).filter((c) => c.height && c.top > r.top + r.height / 2).pop();
+    setToastAt({ left: r.left + r.width / 2, bottom: innerHeight - (box ? box.top - 12 : r.bottom - 16) });
+  };
+  createEffect(on(toasts, (l) => l.length && placeToast()));
+  window.addEventListener("resize", placeToast);
+  onCleanup(() => window.removeEventListener("resize", placeToast));
+
   // a job that finishes or needs you while Ondra is in the background: tell the system
   const seen = new Map<string, string>();
   createEffect(() => {
@@ -192,7 +206,9 @@ export default function App() {
       <Lightbox />
       <VisualViewer />
       {/* one toast at a time (DESIGN.md §9.10): the newest shows; a kept one comes back after it */}
-      <div class="toasts" aria-live="polite">
+      <ContextMenuHost />
+      <ConfirmHost />
+      <div class="toasts" aria-live="polite" style={toastAt() ? { left: `${toastAt()!.left}px`, bottom: `${toastAt()!.bottom}px` } : undefined}>
         <For each={toasts().slice(-1)}>
           {(t) => (
             <div class={`toast ${t.tone}`} role={t.tone === "bad" ? "alert" : "status"} onMouseEnter={() => holdToast(t.id)} onMouseLeave={() => releaseToast(t.id)}>
