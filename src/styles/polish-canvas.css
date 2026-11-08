@@ -1415,3 +1415,71 @@
   flex: none;
   align-items: center;
 }
+
+/* ═════════════ round 6 ═════════════ */
+
+/* a discarded task's outcome in memory: muted like its glyph */
+.oc-discarded {
+  --oc: var(--ink-4);
+}
+
+/* memory search: a found piece gets the row for its words (up to three lines), its marks under them */
+.mt-list.searching .mt-row.t-memory {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 0;
+  padding-top: 3px;
+  padding-bottom: 4px;
+}
+.mt-list.searching .mt-row.t-memory .mt-chev {
+  height: 20px;
+}
+.mt-list.searching .mt-row.t-memory .mt-ic {
+  margin-top: 3px;
+}
+.mt-list.searching .mt-row.t-memory .mt-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mt-list.searching .mt-row.t-memory .mb {
+  flex-basis: 100%;
+  margin-left: 0;
+  /* under the words: past the chevron and the file mark */
+  padding-left: calc(14px + 13px + 12px);
+  line-height: 16px;
+}
+
+/* discarded on the canvas, the board and memory's task rows: the done check, muted (as in polish-task) */
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.done.discarded {
+  background: var(--active);
+  box-shadow: none;
+  color: var(--ink-3);
+}
+
+/* a card with nothing to show of the work: the status line sits right under the title */
+.cv-job .cv-live.w-none:has(> .cv-live-empty:empty) {
+  flex: none;
+  height: 0;
+  margin: var(--s-8) 0 0;
+  box-shadow: none;
+}
+
+/* a card's words, then the unchecked badge under them (it was cut off below the text before) */
+.cv-job .cv-live.w-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-6);
+}
+.cv-job .cv-live.w-summary .cv-text {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 0;
+}
+.cv-job .cv-live.w-summary .unverified-badge {
+  flex: none;
+}

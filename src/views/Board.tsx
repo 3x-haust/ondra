@@ -12,6 +12,8 @@ import { Icon } from "../ui/Icon";
 import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 import { openTaskMenu, taskMenuItems } from "../ui/taskMenu";
+import { discarded } from "../state/progress";
+import { DiscardGlyph } from "../ui/Review";
 
 /** about how wide the task menu is: enough to put it beside a card instead of on it */
 const MENU_W = 232;
@@ -42,8 +44,9 @@ const [showOld, setShowOld] = createSignal(false);
 
 const DAY = 86_400_000;
 
-/** Failed is its own column, never counted as needing a reply. */
+/** Failed is its own column, never counted as needing a reply. A discarded task sits under 완료 but reads 버림. */
 function stateOf(task: Task): string {
+  if (discarded(task)) return "done";
   if (task.status === "failed") return "failed";
   const kids = state.tasks.filter((k) => k.parentId === task.id);
   if (task.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
@@ -134,8 +137,8 @@ export function Board(props: { embedded?: boolean } = {}) {
 
   const cols = createMemo<Col[]>(() => {
     if (groupBy() === "state")
-      // 응답 필요 and 실패 only when something is in them; the other columns always stand
-      return STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) })).filter((c) => (c.id !== "failed" && c.id !== "you") || c.tasks.length);
+      // 대기 and 완료 always stand; the others only when something is in them
+      return STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) })).filter((c) => c.id === "queued" || c.id === "done" || c.tasks.length);
     // by the task's project, in the sidebar's order; tasks without one go last under 기타
     const by = new Map<string, Task[]>();
     for (const x of shown()) {
@@ -196,7 +199,7 @@ export function Board(props: { embedded?: boolean } = {}) {
                   <StateGlyph g={GLYPH[c.id]} />
                 </Show>
                 <span class="bcol-name">{groupBy() === "state" || !c.label ? t(c.label || "기타") : c.label}</span>
-                <span class="bcol-n">{c.tasks.length}</span>
+                <span class="bcol-n">{groupBy() === "state" && c.id === "done" ? c.tasks.filter((x) => !discarded(x)).length : c.tasks.length}</span>
                 <Show when={c.id === "done" && hiddenOld()}>
                   <button class="bcol-more" onClick={() => setShowOld(!showOld())}>{showOld() ? t("최근만") : t("이전 {n}개", { n: hiddenOld() })}</button>
                 </Show>
@@ -222,10 +225,12 @@ export function Board(props: { embedded?: boolean } = {}) {
 function Card(props: { t: Task; byProject: boolean }) {
   const job = () => props.t;
   const st = () => stateOf(job());
-  /** the state in the column's words (a paused task sits under 대기 but says 일시정지) */
-  const word = () => (st() === "queued" ? statusLabel[job().status] : STATE_WORD[st()]);
+  const gone = () => discarded(job());
+  /** the state in the column's words (a paused task sits under 대기 but says 일시정지, a discarded one under 완료 says 버림) */
+  const word = () => (gone() ? "버림" : st() === "queued" ? statusLabel[job().status] : STATE_WORD[st()]);
   const kids = () => state.tasks.filter((k) => k.parentId === job().id);
-  const diff = () => changes(job());
+  /** thrown away: nothing of it is left to count */
+  const diff = () => (gone() ? { add: 0, del: 0 } : changes(job()));
   const [talk, setTalk] = createSignal(false);
   const [msg, setMsg] = createSignal("");
   const [sent, setSent] = createSignal(0);
@@ -234,7 +239,7 @@ function Card(props: { t: Task; byProject: boolean }) {
   const line = (): string => {
     const d = decisionFor(job().id);
     if (d) return d.question;
-    if (job().status === "failed") return job().error ?? t("실패");
+    if (job().status === "failed" && !gone()) return job().error ?? t("실패");
     if (st() === "running") return job().now ? nowText(job().now) : t("시작하는 중");
     // the column (or the glyph) already says it's waiting: only a pause is worth a word
     if (st() === "queued") return job().status === "paused" ? t("일시정지") : "";
@@ -269,14 +274,18 @@ function Card(props: { t: Task; byProject: boolean }) {
       <Icon name={icon} size={14} />
     </button>
   );
-  const foot = () => !!(kids().length || diff().add || diff().del || sent());
+  /** under 완료 a discarded card says 버림 where its changes would be */
+  const goneWord = () => gone() && !props.byProject;
+  const foot = () => !!(kids().length || diff().add || diff().del || sent() || goneWord());
 
   return (
     <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} onContextMenu={cardMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
       <div class="bc-top">
-        <span class="bc-glyph" title={props.byProject ? undefined : t(word())}><Glyph t={job()} /></span>
+        <span class="bc-glyph" title={props.byProject ? undefined : t(word())}>
+          <Show when={gone()} fallback={<Glyph t={job()} />}><DiscardGlyph /></Show>
+        </span>
         {/* grouped by project, no column says the state: the card does */}
-        <Show when={props.byProject}><span class={`bc-state tone-${st()}`}>{t(word())}</span></Show>
+        <Show when={props.byProject}><span class={`bc-state tone-${gone() ? "discarded" : st()}`}>{t(word())}</span></Show>
         <IssueTag t={job()} />
         <Show when={!props.byProject}><span class="bc-proj">{projectOf(job())?.name ?? t("기타")}</span></Show>
         <span class="spacer" />
@@ -293,17 +302,18 @@ function Card(props: { t: Task; byProject: boolean }) {
               <Show when={diff().del}> <span class="del">−{diff().del}</span></Show>
             </span>
           </Show>
+          <Show when={goneWord()}><span class="bc-state tone-discarded">{t("버림")}</span></Show>
           <Show when={sent()}><span class="bc-sent">{t("보냄 {n}", { n: sent() })}</span></Show>
         </div>
       </Show>
 
       <div class="bc-acts">
-        <Show when={st() === "running" || st() === "you" || st() === "review" || st() === "queued"}>
+        <Show when={!gone() && (st() === "running" || st() === "you" || st() === "review" || st() === "queued")}>
           {act(t("메시지"), "message", () => (setTalk(!talk()), queueMicrotask(() => input?.focus())))}
         </Show>
         <Show when={st() === "running"}>{act(t("일시정지|action"), "pause", () => stopTask(job().id))}</Show>
-        <Show when={job().status === "paused"}>{act(t("다시 시작"), "play", () => resumeTask(job().id))}</Show>
-        <Show when={job().status === "failed"}>{act(t("다시 시도"), "refresh", () => resumeTask(job().id), true)}</Show>
+        <Show when={job().status === "paused" && !gone()}>{act(t("다시 시작"), "play", () => resumeTask(job().id))}</Show>
+        <Show when={job().status === "failed" && !gone()}>{act(t("다시 시도"), "refresh", () => resumeTask(job().id), true)}</Show>
         <Show when={job().status === "queued"}>{act(t("지금 시작"), "play", () => void startTask(job().id))}</Show>
         <Show when={st() === "review"}>{act(t("병합"), "merge", () => void mergeTask(job().id), true)}</Show>
         <Show when={st() === "you"}>{act(t("응답"), "arrow", () => openTask(job().id), true)}</Show>

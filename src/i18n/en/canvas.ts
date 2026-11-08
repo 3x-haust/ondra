@@ -316,4 +316,6 @@ export default {
   "비교·추이·구성": "Compare · trend · share",
   "관계·흐름·계층·지도": "Relations · flow · hierarchy · maps",
   "발표·업무 도식": "Slides · diagrams",
+  "버림": "Discarded",
+  "방금|inline": "just now",
 } satisfies Record<string, string>;

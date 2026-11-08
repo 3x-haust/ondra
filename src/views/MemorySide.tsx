@@ -12,8 +12,9 @@ import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
-import { Badges, base, citePath, learnedIn, OUTCOME, type Outcome, outcomeOf, stampOf, tilde } from "./memoryBits";
+import { agoIn, Badges, base, citePath, learnedIn, OUTCOME, type Outcome, outcomeOf, stampOf, tilde } from "./memoryBits";
 import { StateGlyph } from "./Board";
+import { DiscardGlyph } from "../ui/Review";
 import {
   byWeight,
   clock,
@@ -132,7 +133,7 @@ function PieceList(props: { list: Memory[]; onSel: (id: string) => void; limit?:
 
 /** finished jobs, newest first */
 /** how a finished task ended, drawn with the sidebar's glyph for that state */
-const OUTCOME_GLYPH: Record<Outcome, "done" | "failed" | "paused" | "inreview"> = { done: "done", failed: "failed", stopped: "paused", review: "inreview" };
+const OUTCOME_GLYPH: Record<Exclude<Outcome, "discarded">, "done" | "failed" | "paused" | "inreview"> = { done: "done", failed: "failed", stopped: "paused", review: "inreview" };
 
 function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; days?: boolean; limit?: number }) {
   const [all, setAll] = createSignal(false);
@@ -146,10 +147,16 @@ function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; d
             <Show when={head(e, i())}><div class="ms-day">{dayLabel(e.at, true)}</div></Show>
             <button class={`ms-entry oc-${outcomeOf(e)}`} onClick={() => props.onSel(entryId(e))} title={e.ask}>
               {/* the sidebar's glyph for how it ended (review: the blue ring with a dot) */}
-              <span class="ms-glyph" title={t(OUTCOME[outcomeOf(e)])}><StateGlyph g={OUTCOME_GLYPH[outcomeOf(e)]} /></span>
+              <span class="ms-glyph" title={t(OUTCOME[outcomeOf(e)])}>
+                {/* discarded: the done check, muted */}
+                <Show when={outcomeOf(e) !== "discarded"} fallback={<DiscardGlyph />}><StateGlyph g={OUTCOME_GLYPH[outcomeOf(e) as Exclude<Outcome, "discarded">]} /></Show>
+              </span>
               <span>{e.title || e.ask}</span>
               <Show when={e.learned?.length}><em class="ms-learn" title={t("배운 메모리")}>+{e.learned!.length}</em></Show>
-              <em>{props.days ? clock(e.at) : ago(e.at)}</em>
+              {/* a discarded task says so where the time would be, as in the sidebar */}
+              <Show when={outcomeOf(e) === "discarded"} fallback={<em>{props.days ? clock(e.at) : ago(e.at)}</em>}>
+                <em title={props.days ? clock(e.at) : ago(e.at)}>{t("버림")}</em>
+              </Show>
             </button>
           </>
         )}
@@ -605,7 +612,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
     [
       m().uses ? t("{n}번 사용", { n: m().uses }) : t("사용 안 함"),
       m().seen ? t("{n}번 반복", { n: m().seen! }) : "",
-      m().lastUsed ? t("마지막 사용 {when}", { when: ago(m().lastUsed!) }) : "",
+      m().lastUsed ? t("마지막 사용 {when}", { when: agoIn(m().lastUsed!) }) : "",
     ].filter(Boolean);
   return (
     <div class="md-in">
@@ -664,7 +671,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
         <dt>{t("생성")}</dt>
         <dd title={stampOf(m().createdAt)}>
           {ago(m().createdAt)}
-          <Show when={m().updatedAt && m().updatedAt! - m().createdAt > 60_000}><span class="md-sub"> · {t("수정 {when}", { when: ago(m().updatedAt!) })}</span></Show>
+          <Show when={m().updatedAt && m().updatedAt! - m().createdAt > 60_000}><span class="md-sub"> · {t("수정 {when}", { when: agoIn(m().updatedAt!) })}</span></Show>
         </dd>
       </dl>
       <Show when={m().cites?.length}>
