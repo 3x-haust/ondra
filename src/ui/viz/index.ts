@@ -2,3 +2,4 @@
 import "./chart";
 import "./stat";
 export { allViz, vizOf } from "./registry";
+import "./relation";
