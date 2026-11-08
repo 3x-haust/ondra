@@ -1380,3 +1380,47 @@
 .g-lines path.bad {
   stroke: var(--bad);
 }
+
+/* ═════════════ round 5 ═════════════ */
+
+/* discarded: the done check, muted, wherever the task's state shows */
+.st-icon.done.discarded,
+.graph .g-glyph.done.discarded {
+  background: var(--active);
+  box-shadow: none;
+  color: var(--ink-3);
+}
+.task-head .status-chip.discarded {
+  background: var(--active);
+  color: var(--ink-2);
+}
+.task-head .status-chip.discarded .st-icon {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+  color: var(--ink-3);
+}
+.bc.quiet .st-icon.discarded {
+  width: 14px;
+  height: 14px;
+}
+/* overview of a discarded task: what was thrown away, below the plain fact */
+.now-box .now-sub {
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--ink-3);
+}
+
+/* flow: 실패 reads red, like its branch */
+.graph .g-meta.m-bad {
+  color: var(--bad);
+  font-weight: var(--fw-medium);
+}
+
+/* context sheet › 대화: what the model counted beyond the messages listed reads quieter than they do */
+.cx-talk-rest .cx-talk-label {
+  color: var(--ink-3);
+}
+.cx-talk-rest .cx-talk-track i {
+  opacity: 0.45;
+}

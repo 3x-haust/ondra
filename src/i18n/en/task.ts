@@ -311,4 +311,14 @@ export default {
   "{name} 닫기": "Close {name}",
   "작업이 끝나면 만들 수 있어요": "Available when the task finishes",
   "메시지 보내기": "Message",
+  // round 5
+  "변경을 버렸어요": "Changes discarded",
+  "변경 사항 열기": "Open changes",
+  "파일 열기|panel": "Open files",
+  "브라우저 열기": "Open browser",
+  "작업 흐름 그림": "Draw the task flow",
+  "나머지|context": "Other",
+  "Ondra 확장|one": "Ondra extension",
+  "확장|one": "Extension",
+  "위 메시지에 없는 토큰": "Tokens not in the messages above",
 } satisfies Record<string, string>;

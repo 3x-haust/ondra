@@ -104,7 +104,7 @@ export interface Loaded {
   recalled: Memory[];
   recalledWhere: string;
   /** the skills agents can load, as Settings lists them (filled by the sheet) */
-  skills?: { name: string; description: string; path: string }[];
+  skills?: { name: string; description: string; path: string; own?: boolean }[];
 }
 
 const firstLine = (t: string) => t.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "").trim() ?? "";

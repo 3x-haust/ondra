@@ -85,6 +85,9 @@ export function planCount(plan: PlanStep[]) {
   return { done, total: plan.length, now, label: `${done}/${plan.length}` };
 }
 
+/** Its changes were thrown away and it isn't working on them again: it reads 버림, not 완료. */
+export const discarded = (t: Task) => t.worktree?.state === "discarded" && (t.status === "done" || t.status === "paused" || t.status === "failed");
+
 /** It has stopped working for good, or until someone starts it again. */
 export const ended = (t: Task) => t.status === "done" || t.status === "failed";
 

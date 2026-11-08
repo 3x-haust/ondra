@@ -12,7 +12,9 @@ import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
-import { rememberDiff } from "../state/progress";
+import { discarded, rememberDiff } from "../state/progress";
+import { discardTask } from "../engine/tasks";
+import { confirmAsk } from "./taskMenu";
 
 // ───────────── diff model ─────────────
 export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
@@ -285,6 +287,8 @@ export function ChangesPane(props: { t: Task; top?: any }) {
   return (
     <div class="review">
       {props.top}
+      {/* thrown away: its folder is the person's own checkout now, whose changes aren't the task's */}
+      <Show when={!discarded(props.t)}>
       <Show when={data()} fallback={<div class="pane-empty" />}>
         {(d) => (
           <Show when={d().isRepo} fallback={<WrittenFiles t={props.t} />}>
@@ -311,6 +315,7 @@ export function ChangesPane(props: { t: Task; top?: any }) {
             </Show>
           </Show>
         )}
+      </Show>
       </Show>
     </div>
   );
@@ -719,3 +724,17 @@ export function FilesPane(props: { t: Task }) {
 }
 
 export type { GitChanges };
+
+// ───────────── throwing a task's changes away ─────────────
+/** 버리기 asks once, with the same words everywhere (review bar, changes tab, ⋯ menu, /discard). */
+export const askDiscard = (t: Pick<Task, "id" | "title">) =>
+  confirmAsk({ title: tr("변경을 버릴까요?"), body: t.title, action: tr("버리기"), danger: true, run: () => void discardTask(t.id) });
+
+/** A discarded task's mark: the done check, muted. */
+export function DiscardGlyph(props: { class?: string }) {
+  return (
+    <span class={`sb-glyph st-icon sm done discarded ${props.class ?? ""}`} aria-hidden="true">
+      <Icon name="check" size={9} stroke={2.5} />
+    </span>
+  );
+}

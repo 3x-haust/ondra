@@ -5,23 +5,23 @@ import { nowText } from "../engine/describe";
 import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { accountById, homeDir, state, updateTask } from "../state/store";
+import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, type PanelTab } from "../state/ui";
-import { discardTask, gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
+import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
-import { ago, compact, now, priorityLabel, short, statusLabel } from "../ui/bits";
-import { ended, legTimes, planCount, workedMs } from "../state/progress";
+import { ago, compact, now, priorityLabel, short } from "../ui/bits";
+import { discarded, ended, legTimes, planCount, workedMs } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
-import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
+import { askDiscard, ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
@@ -34,7 +34,6 @@ export function BranchCard(props: { t: Task }) {
 }
 function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   const w = () => props.w;
-  const [sure, setSure] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const actionable = () => w().state === "open" && props.t.status !== "running" && props.t.status !== "queued";
   return (
@@ -44,12 +43,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
           <ShipMenu t={props.t} />
           <span class="bc-branch" title={w().branch}>{w().branch}</span>
           <span class="spacer" />
-          <Show
-            when={sure()}
-            fallback={<button class="btn sm ghost" onClick={() => setSure(true)}>{tr("버리기")}</button>}
-          >
-            <button class="btn sm danger" onClick={() => void discardTask(props.t.id)}>{tr("버리기 확인")}</button>
-          </Show>
+          <button class="btn sm ghost" onClick={() => askDiscard(props.t)}>{tr("버리기")}</button>
           <Show
             when={prOf(props.t)}
             fallback={
@@ -79,8 +73,8 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
       </Match>
       <Match when={w().state === "discarded"}>
         <div class="bc quiet">
-          <Icon name="x" size={14} />
-          <span>{tr("버림")}</span>
+          <DiscardGlyph />
+          <span>{tr("변경을 버렸어요")}</span>
         </div>
       </Match>
     </Switch>
@@ -171,23 +165,53 @@ function ShipMenu(props: { t: Task }) {
   );
 }
 
-/** A task's folder by name: 홈 for the home folder. */
-const folderName = (p: string) => {
+/** A task's folder by name, the way Memory names it: a known project by its name, the home
+ *  folder 홈, any other folder with the one it sits in ("ondra · 홈"), never a bare name that
+ *  reads like a project. */
+const folderName = (t: Task) => {
+  // filed under a project (as the sidebar shows it): that project's name
+  const own = t.project ? projectById(t.project, t.space) : undefined;
+  if (own) return own.name;
+  const p = homeDir(t);
+  const space = t.space;
   const full = tilde(expand(p)).replace(/\/+$/, "");
-  return full === "~" || !full ? tr("홈") : full.split("/").pop()!;
+  if (full === "~" || !full || /^\/(Users|home)\/[^/]+$/.test(full)) return tr("홈");
+  const proj = projectsIn(space).find((x) => tilde(expand(x.folder)).replace(/\/+$/, "") === full);
+  if (proj) return proj.name;
+  const parts = full.split("/");
+  const name = parts.pop()!;
+  const dir = parts.join("/");
+  const parent = dir === "~" || !dir || /^\/(Users|home)\/[^/]+$/.test(dir) ? tr("홈") : parts[parts.length - 1];
+  return parent ? `${name} · ${parent}` : name;
 };
 
 function Overview(props: { t: Task }) {
   const t = () => props.t;
   return (
     <div class="pane">
-      {/* a failed task's error is the card under its thread; the header already says 실패 */}
-      <Show when={t().status !== "failed"}>
-        <div class="now-box">
-          <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
-          <div class="now-text">{t().status === "done" ? t().summary || nowText(t().now) : t().status === "running" ? nowText(t().now) : tr(statusLabel[t().status])}</div>
-        </div>
-      </Show>
+      {/* what it is doing now, or what came of it. A state word alone (대기, 일시정지, 실패) is
+          already the header's pill; a failed task's error is the card under its thread */}
+      <Switch>
+        <Match when={discarded(t())}>
+          <div class="now-box">
+            <div class="pane-title">{tr("결과")}</div>
+            <div class="now-text">{tr("변경을 버렸어요")}</div>
+            <Show when={t().summary}><div class="now-sub">{t().summary}</div></Show>
+          </div>
+        </Match>
+        <Match when={t().status === "done"}>
+          <div class="now-box">
+            <div class="pane-title">{tr("결과")}</div>
+            <div class="now-text">{t().summary || nowText(t().now)}</div>
+          </div>
+        </Match>
+        <Match when={t().status === "running" && nowText(t().now)}>
+          <div class="now-box">
+            <div class="pane-title">{tr("지금")}</div>
+            <div class="now-text">{nowText(t().now)}</div>
+          </div>
+        </Match>
+      </Switch>
       <Show when={t().plan.length}>
         <div>
           <div class="pane-title">{tr("할 일")} <span class="pane-count">{planCount(t().plan).label}</span></div>
@@ -231,7 +255,7 @@ function Overview(props: { t: Task }) {
         <dl class="kv">
           <dt>{tr("폴더")}</dt>
           <dd>
-            <button class="kv-folder" onClick={() => revealPath(expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(homeDir(t()))}</button>
+            <button class="kv-folder" onClick={() => revealPath(expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(t())}</button>
           </dd>
           <Show when={t().status !== "done"}>
           <dt>{tr("우선순위")}</dt>
@@ -257,8 +281,8 @@ function Overview(props: { t: Task }) {
             </select>
             <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
           </dd>
-          {/* the header's time, in its precision; a task not started yet has none */}
-          <Show when={t().startedAt}>
+          {/* the header's time, in its precision; a task not started yet, or waiting its turn again, has none */}
+          <Show when={t().startedAt && t().status !== "queued"}>
             <dt>{ended(t()) ? tr("걸린 시간") : tr("진행 시간")}</dt>
             <dd class="muted">{short(workedMs(t(), now()))}</dd>
           </Show>

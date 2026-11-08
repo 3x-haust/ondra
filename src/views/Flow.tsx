@@ -9,6 +9,8 @@ import { ago, compact, now } from "../ui/bits";
 import { line, plain } from "../ui/ForkCard";
 import { Icon } from "../ui/Icon";
 import { bucket, changes, Glyph } from "./Sidebar";
+import { discarded } from "../state/progress";
+import { DiscardGlyph } from "../ui/Review";
 import { t as tr } from "../i18n";
 
 const openId = () => {
@@ -20,7 +22,7 @@ const openRoot = () => {
   while (t?.parentId) t = taskById(t.parentId);
   return t?.id;
 };
-const ended = (t: Task) => t.status === "done" && t.worktree?.state !== "open";
+const ended = (t: Task) => (t.status === "done" && t.worktree?.state !== "open") || discarded(t);
 const DAY = 86_400_000;
 
 // ───────────── the graph
@@ -122,7 +124,7 @@ export function Flow() {
       if (r.kid) continue;
       const t = r.t;
       const y = cy(r);
-      const tone = t.status === "failed" ? "bad" : t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
+      const tone = discarded(t) ? "past" : t.status === "failed" ? "bad" : t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
       const cls = `${tone} ${t.id === openRoot() ? "on" : ""} ${hoverTask() === t.id ? "hot" : ""}`;
       // off the trunk, up to the glyph's edge
       out.push({ d: `M${TRUNK} ${y} L${NODE - 7} ${y}`, cls });
@@ -135,6 +137,11 @@ export function Flow() {
           const ky = cy(k);
           out.push({ d: `M${NODE} ${ky - 5} Q${NODE} ${ky}, ${NODE + 5} ${ky}`, cls: `${cls} twig` });
         }
+        // a subagent that failed: the last bit of its twig in red
+        for (const k of ks.filter((k) => k.t.status === "failed")) {
+          const ky = cy(k);
+          out.push({ d: `M${NODE} ${ky - 5} Q${NODE} ${ky}, ${NODE + 5} ${ky}`, cls: `bad twig ${hoverTask() === t.id ? "hot" : ""}` });
+        }
       }
     }
     return out;
@@ -142,6 +149,7 @@ export function Flow() {
 
   /** the same words as the sidebar row */
   const meta = (t: Task) => {
+    if (discarded(t)) return tr("버림");
     if (t.status === "failed") return tr("실패");
     if (t.status === "waiting") return tr("응답 필요");
     if (bucket(t) === "review") return tr("검토");
@@ -179,7 +187,9 @@ export function Flow() {
         <For each={order()}>
           {(r) => (
             <span class="g-at" style={{ left: `${r.kid ? KID_X : NODE}px`, top: `${cyOf(r.k)}px` }}>
-              <Glyph t={r.t} class={`g-glyph${r.kid ? " kid" : ""}${openId() === r.t.id ? " on" : ""}`} />
+              <Show when={discarded(r.t)} fallback={<Glyph t={r.t} class={`g-glyph${r.kid ? " kid" : ""}${openId() === r.t.id ? " on" : ""}`} />}>
+                <DiscardGlyph class={`g-glyph${r.kid ? " kid" : ""}`} />
+              </Show>
             </span>
           )}
         </For>
@@ -215,7 +225,7 @@ export function Flow() {
                     {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                   </span>
                 </Show>
-                <span class="g-meta" classList={{ "m-review": bucket(r.t) === "review", "m-ask": r.t.status === "waiting" }}>{meta(r.t)}</span>
+                <span class="g-meta" classList={{ "m-review": bucket(r.t) === "review", "m-ask": r.t.status === "waiting", "m-bad": r.t.status === "failed" && !discarded(r.t) }}>{meta(r.t)}</span>
               </span>
               <Show when={!r.kid && r.base === ROW}>
                 <span class="g-line2-wrap">
