@@ -419,6 +419,8 @@ export interface ResultEntry {
   reply?: string;
   answers: { text: string; blocks: Block[] }[];
   at: number;
+  /** kept on top of the list */
+  pinned?: boolean;
 }
 
 export interface JournalEntry {

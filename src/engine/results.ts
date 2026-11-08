@@ -33,3 +33,36 @@ export const resultsIn = (space: SpaceId) => (state.results ?? []).filter((r) =>
 /** Plain text of a result, for search. */
 export const resultText = (r: ResultEntry) =>
   [r.title, r.reply ?? "", ...r.answers.map((a) => [a.text, ...a.blocks.map((b) => JSON.stringify(b))].join(" "))].join(" ");
+
+/** Take results out of the list; returns them so they can be put back. */
+export function removeResults(ids: string[]): ResultEntry[] {
+  const drop = new Set(ids);
+  const gone = (state.results ?? []).filter((r) => drop.has(r.id));
+  if (gone.length) setState("results", (l) => (l ?? []).filter((r) => !drop.has(r.id)));
+  return gone;
+}
+
+/** Put removed results back where they were (by time). */
+export function restoreResults(list: ResultEntry[]) {
+  if (!list.length) return;
+  const have = new Set((state.results ?? []).map((r) => r.id));
+  setState("results", (l) => [...(l ?? []), ...list.filter((r) => !have.has(r.id))].sort((a, b) => a.at - b.at).slice(-MAX));
+}
+
+export function pinResult(id: string, on: boolean) {
+  setState("results", (r) => r.id === id, "pinned", on || undefined);
+}
+
+/** The report as one plain line, for the list. */
+export const resultPreview = (r: ResultEntry) =>
+  [r.reply ?? "", ...r.answers.map((a) => a.text)]
+    .map((t) => t.replace(/^\s*(?:[-•*]|\d+\.)\s+/gm, ""))
+    .join(" ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[*_`#>|~]+/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** Everything in a result as text, to copy. */
+export const resultCopy = (r: ResultEntry) => [r.title, r.reply ?? "", ...r.answers.map((a) => a.text)].filter((s) => s.trim()).join("\n\n");
