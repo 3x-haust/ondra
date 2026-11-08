@@ -9,7 +9,7 @@ import { addMemory } from "../engine/memory";
 import { usesReverse } from "../engine/reverse";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, hadTab, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
 import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
@@ -224,7 +224,8 @@ export function TaskView(props: { id: string }) {
         onMount(() => {
           const x = task();
           if (isAlive(`t:${x.id}`)) void rawStats(`t:${x.id}`);
-          if (!panelOpen()) return;
+          // (first visit only: coming back shows the tab you left it on)
+          if (!panelOpen() || hadTab(x.id)) return;
           if (x.status === "done" && x.worktree?.state === "open" && panelTab() === "flow") showTool("changes");
           else if (x.browser && x.shot && x.status === "running" && panelTab() === "flow") showTool("browser");
         });
@@ -239,30 +240,12 @@ export function TaskView(props: { id: string }) {
                 <span class="strip-act"><Icon name="play" size={12} />{tr("다시 시작")}</span>
               </button>,
             );
-          const made = artifacts[task().id] ?? [];
-          if (made.length && !(panelOpen() && panelTab() === "artifacts"))
-            out.push(
-              <button class="strip" onClick={() => openPanel("artifacts")}>
-                <Icon name="inbox" size={14} />
-                <b>{tr("결과물 {n}개", { n: made.length })}</b>
-                <span class="rest">{made[0].name}</span>
-                <span class="strip-act">{tr("보기")}</span>
-              </button>,
-            );
-          if (bg().length)
-            out.push(
-              <button class="strip" onClick={() => openPanel("terminal")}>
-                <Icon name="terminal" size={14} />
-                <b>{tr("백그라운드")}</b>
-                <span class="rest"><code>{bg().map((s) => s.command.replace(/\s*&\s*$/, "")).join("  ·  ")}</code></span>
-                <Icon name="chevron" size={14} />
-              </button>,
-            );
+          // what it changed comes first and stays in sight in a short window (artifacts and background give way)
           // its work went into a pull request: nothing to merge here, just the PR and tidying up
           const pr = prOf(task());
           if (ready() && pr)
             out.push(
-              <div class="strip">
+              <div class="strip keep">
                 <Icon name="branch" size={14} />
                 <button class="link-btn" onClick={() => openPanel("pr")}>PR #{pr.n}</button>
                 <span class="rest" />
@@ -272,7 +255,7 @@ export function TaskView(props: { id: string }) {
           // the changes tab already has merge / discard
           else if (inReview() && !(panelOpen() && panelTab() === "changes"))
             out.push(
-              <div class="strip">
+              <div class="strip keep">
                 <Icon name="branch" size={14} />
                 <b>{tr("검토")}</b>
                 <span class="rest">
@@ -301,13 +284,32 @@ export function TaskView(props: { id: string }) {
           // not finished yet: just what it changed so far, no merge
           else if (!inReview() && task().worktree?.state === "open" && diff().files.length && !(panelOpen() && panelTab() === "changes"))
             out.push(
-              <button class="strip" onClick={() => openPanel("changes")}>
+              <button class="strip keep" onClick={() => openPanel("changes")}>
                 <Icon name="diff" size={14} />
                 <b>{tr("변경")}</b>
                 <span class="rest">
                   {tr("파일 {n}개", { n: diff().files.length })} <span class="add">+{diff().add}</span>{" "}
                   <span class="del">−{diff().del}</span>
                 </span>
+                <Icon name="chevron" size={14} />
+              </button>,
+            );
+          const made = artifacts[task().id] ?? [];
+          if (made.length && !(panelOpen() && panelTab() === "artifacts"))
+            out.push(
+              <button class="strip" onClick={() => openPanel("artifacts")}>
+                <Icon name="inbox" size={14} />
+                <b>{tr("결과물 {n}개", { n: made.length })}</b>
+                <span class="rest">{made[0].name}</span>
+                <span class="strip-act">{tr("보기")}</span>
+              </button>,
+            );
+          if (bg().length)
+            out.push(
+              <button class="strip" onClick={() => openPanel("terminal")}>
+                <Icon name="terminal" size={14} />
+                <b>{tr("백그라운드")}</b>
+                <span class="rest"><code>{bg().map((s) => s.command.replace(/\s*&\s*$/, "")).join("  ·  ")}</code></span>
                 <Icon name="chevron" size={14} />
               </button>,
             );
@@ -374,7 +376,8 @@ export function TaskView(props: { id: string }) {
               <span class="status-chip done">
                 <Icon name="check" size={12} />
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
-                <span class="faint">{ago(task().finishedAt ?? task().createdAt)}</span>
+                {/* merged: when it was merged (older tasks without mergedAt: when it finished) */}
+                <span class="faint">{ago((task().worktree?.state === "merged" ? (task() as Task & { mergedAt?: number }).mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
             <Show when={task().status !== "done" && !discarded(task())}>

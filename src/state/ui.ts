@@ -29,6 +29,8 @@ const leavingMain: (() => void)[] = [];
 export const onLeaveMain = (f: () => void) => void leavingMain.push(f);
 const setViewNow = (v: View) => {
   if (v.name !== "main") leavingMain.forEach((f) => f());
+  // the panel's tabs first, so the view opens on its own tab
+  enterPlace(v);
   setViewShown(v);
 };
 
@@ -107,6 +109,38 @@ export function closePanelTab(id: number) {
   setPtabs(rest);
   if (activeTab() === id) setActiveTab(rest[Math.min(i, rest.length - 1)].id);
 }
+
+// ── the panel's tabs follow you between places (Main, each task): every place comes back
+// on the tab it was left on; a tab that only makes sense for the last task (its browser page,
+// a file it opened) doesn't carry to the next one, and a place seen for the first time
+// keeps the tab you were on if it applies there, else Flow.
+type Place = string;
+const placeOf = (v: View): Place | null => (v.name === "task" ? v.id : v.name === "main" ? "main" : null);
+let place: Place | null = "main";
+const lastTab = new Map<Place, PanelTab>();
+/** What a tab is to a place: shown, kept out of sight for later (a task's tab on Main), or dropped.
+ *  The panel fills this in (it knows the tasks). */
+export type TabFit = "use" | "keep" | "drop";
+let tabFits: (place: Place, kind: PanelTab) => TabFit = () => "use";
+export const setTabFits = (f: typeof tabFits) => void (tabFits = f);
+/** The place was left on a tab before (it comes back on that one). */
+export const hadTab = (p: Place) => lastTab.has(p);
+/** Where the file preview was opened: it belongs there. */
+let previewAt: Place | null = null;
+export const previewPlace = () => previewAt;
+function enterPlace(v: View) {
+  const to = placeOf(v);
+  if (!to || to === place) return;
+  if (place) lastTab.set(place, panelTab());
+  place = to;
+  const cur = ptabs().find((t) => t.id === activeTab());
+  const keep = ptabs().filter((t) => t.kind === "new" || tabFits(to, t.kind) !== "drop");
+  if (keep.length !== ptabs().length) setPtabs(keep.length ? keep : [{ id: ++tabSeq, kind: "flow" }]);
+  const back = lastTab.get(to);
+  if (back && back !== "new" && tabFits(to, back) === "use") return setPanelTab(back);
+  if (cur && keep.includes(cur) && (cur.kind === "new" || tabFits(to, cur.kind) === "use")) return;
+  setPanelTab("flow");
+}
 /** File the panel should show: its diff (Changes) or its contents (Files). Path is relative to the task folder. */
 export const [panelFile, setPanelFile] = createSignal<{ path: string; mode: "diff" | "file"; n: number } | null>(null);
 let fileSeq = 0;
@@ -137,6 +171,7 @@ export function previewFile(path: string) {
     } catch {}
   }
   setPreviewPath(p.startsWith("~/") ? p : p);
+  previewAt = placeOf(view());
   openPanel("preview");
 }
 export const [paletteOpen, setPaletteOpen] = createSignal(false);

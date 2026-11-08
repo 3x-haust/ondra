@@ -2181,7 +2181,8 @@ input[type="checkbox"] {
   background: #1c1c1f;
 }
 :root[data-theme="dark"] .decision,
-:root[data-theme="dark"] .strips .strip {
+:root[data-theme="dark"] .strips .strip,
+:root[data-theme="dark"] .strips > .todos {
   background: #18181b;
 }
 @media (prefers-color-scheme: dark) {
@@ -2192,7 +2193,8 @@ input[type="checkbox"] {
     background: #1c1c1f;
   }
   :root:not([data-theme="light"]) .decision,
-  :root:not([data-theme="light"]) .strips .strip {
+  :root:not([data-theme="light"]) .strips .strip,
+  :root:not([data-theme="light"]) .strips > .todos {
     background: #18181b;
   }
 }
@@ -2210,8 +2212,8 @@ input[type="checkbox"] {
     max-height: none;
     overflow: visible;
   }
-  /* what you said while it worked always stays in sight */
-  .strips > :not(:first-child):not(.queued) {
+  /* what you said while it worked and what it changed always stay in sight */
+  .strips > :not(:first-child):not(.queued):not(.keep) {
     display: none;
   }
 }
