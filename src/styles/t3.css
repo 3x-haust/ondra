@@ -9003,3 +9003,34 @@ select.select.dev-space {
     animation: pop-in 0.12s var(--ease-drawer) both;
   }
 }
+
+/* a queued message being changed where it is */
+.queued-row.editing {
+  height: auto;
+  min-height: 32px;
+  align-items: flex-start;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.queued-row.editing > .icon {
+  margin-top: 4px;
+  color: var(--accent);
+}
+.queued-edit {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  padding: 2px 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: none;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.queued-acts.on {
+  opacity: 1;
+}

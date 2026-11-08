@@ -1802,6 +1802,12 @@ export function steerQueued(id: string, qid: string) {
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
   void tell(id, q.text, { now: true });
 }
+/** Change a queued message where it is; an emptied one is taken out. */
+export function editQueued(id: string, qid: string, text: string) {
+  const t = text.trim();
+  if (!t) return dropQueued(id, qid);
+  updateTask(id, (x) => (x.queue = (x.queue ?? []).map((y) => (y.id === qid ? { ...y, text: t } : y))));
+}
 export function dropQueued(id: string, qid: string) {
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
 }
