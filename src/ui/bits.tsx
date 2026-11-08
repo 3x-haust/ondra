@@ -69,11 +69,11 @@ export function short(ms: number) {
 
 /** 2분 14초, 1시간 4분 (2m 14s, 1h 4m) */
 export function long(ms: number) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return t("{n}초", { n: s });
-  const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 ? t("{m}분 {s}초", { m, s: s % 60 }) : t("{n}분", { n: m });
-  return t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 });
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return t("{n}초", { n: Math.max(1, sec) });
+  const m = Math.round(sec / 60);
+  if (m < 60) return t("{n}분", { n: m });
+  return m % 60 ? t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 }) : t("{n}시간", { n: m / 60 });
 }
 
 /** 방금, 3분 전, 2시간 전, 어제, 4일 전, then the date */

@@ -14,7 +14,7 @@ import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, mergeTask, resumeTask, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
 import { costDetail, jobCost } from "../ui/cost";
-import { ago, compact, IssueTag, now, statusLabel, tokens } from "../ui/bits";
+import { ago, compact, IssueTag, long, now, statusLabel, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
@@ -541,19 +541,10 @@ function statusText(task: Task): string {
 /** merged by Ondra: when (older tasks without mergedAt: when they finished) */
 const mergedAt = (task: Task) => (task.worktree?.state === "merged" && !discarded(task) ? (task.mergedAt ?? task.finishedAt) : undefined);
 
-/** how long something took, one way everywhere: minutes, seconds only under a minute */
-function took(ms: number): string {
-  const sec = Math.round(ms / 1000);
-  if (sec < 60) return t("{n}초", { n: Math.max(1, sec) });
-  const m = Math.round(sec / 60);
-  if (m < 60) return t("{n}분", { n: m });
-  return m % 60 ? t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 }) : t("{n}시간", { n: m / 60 });
-}
-
 /** a finished task's time and tokens: "19분 · 토큰 48K" */
 const tookLine = (task: Task) => {
   const c = jobCost(task);
-  return [c.ms ? took(c.ms) : "", c.total ? t("토큰 {n}", { n: tokens(c.total) }) : ""].filter(Boolean).join(" · ");
+  return [c.ms ? long(c.ms) : "", c.total ? t("토큰 {n}", { n: tokens(c.total) }) : ""].filter(Boolean).join(" · ");
 };
 
 /** when a finished task ended: merged, or (discarded, done, failed) finished */
