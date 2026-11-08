@@ -177,14 +177,15 @@
   font-weight: normal;
   font-size: 0.85em;
 }
-.mg-node.far {
+/* far and faded pieces step back by their shape; their names keep the one colour */
+.mg-node.far > :is(circle, rect) {
   opacity: 0.55;
 }
 .mg-node.far.dim,
 .mg-node.dim {
   opacity: 0.18;
 }
-.mg-node.faded:not(.dim) {
+.mg-node.faded:not(.dim) > :is(circle, rect) {
   opacity: 0.6;
 }
 .mg-node.sel circle,
@@ -841,7 +842,7 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-.ms-entry i {
+.ms-entry > i {
   flex: none;
   width: 6px;
   height: 6px;
@@ -850,12 +851,12 @@
   background: var(--oc, var(--ink-4));
   transform: rotate(45deg);
 }
-.ms-entry svg,
+.ms-entry > svg,
 .ms-file svg {
   flex: none;
   color: var(--ink-3);
 }
-.ms-entry span,
+.ms-entry > span:not(.ms-glyph),
 .ms-file span {
   flex: 1;
   min-width: 0;
@@ -1617,7 +1618,7 @@ button.md-kinds .chip:hover,
   font-weight: normal;
 }
 .mg-node.sel text {
-  fill: var(--ink);
+  fill: var(--ink-2);
 }
 /* what the shapes mean */
 .mg-legend {

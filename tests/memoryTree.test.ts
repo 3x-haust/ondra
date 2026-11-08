@@ -20,17 +20,24 @@ describe("project homes", () => {
     expect([...m.homes.values()].filter((h) => h.kind === "project").map((h) => h.path).sort()).toEqual(["/u/me/ondra", "/u/work/ondra"]);
     expect(hints(m)).toEqual(["ondra · me", "ondra · work"]);
   });
-  it("calls the home folder ~", () => {
+  it("calls the home folder 홈", () => {
     const m = buildModel({
       ...base,
       projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }],
       now: { "/Users/me/ondra": { text: "x", at: 1, taskId: "t", title: "t" } },
     });
-    expect(hints(m)).toEqual(["ondra · work", "ondra · ~"]);
+    expect(hints(m)).toEqual(["ondra · work", "ondra · 홈"]);
   });
   it("leaves unique names alone", () => {
     const m = buildModel({ ...base, projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }] });
     expect(labels(m)).toEqual(["ondra"]);
     expect(hints(m)).toEqual(["ondra"]);
+  });
+});
+
+describe("the home folder as a project", () => {
+  it("is named 홈, not ~", () => {
+    const m = buildModel({ ...base, projects: [], now: { "~": { text: "x", at: 1, taskId: "t", title: "t" } } });
+    expect(labels(m)).toEqual(["홈"]);
   });
 });

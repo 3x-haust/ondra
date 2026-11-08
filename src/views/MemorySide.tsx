@@ -12,7 +12,8 @@ import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
-import { Badges, base, citePath, learnedIn, OUTCOME, outcomeOf, stampOf, tilde } from "./memoryBits";
+import { Badges, base, citePath, learnedIn, OUTCOME, type Outcome, outcomeOf, stampOf, tilde } from "./memoryBits";
+import { StateGlyph } from "./Board";
 import {
   byWeight,
   clock,
@@ -130,6 +131,9 @@ function PieceList(props: { list: Memory[]; onSel: (id: string) => void; limit?:
 }
 
 /** finished jobs, newest first */
+/** how a finished task ended, drawn with the sidebar's glyph for that state */
+const OUTCOME_GLYPH: Record<Outcome, "done" | "failed" | "paused" | "inreview"> = { done: "done", failed: "failed", stopped: "paused", review: "inreview" };
+
 function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; days?: boolean; limit?: number }) {
   const [all, setAll] = createSignal(false);
   const shown = () => (all() ? props.list : props.list.slice(0, props.limit ?? 30));
@@ -141,7 +145,8 @@ function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; d
           <>
             <Show when={head(e, i())}><div class="ms-day">{dayLabel(e.at, true)}</div></Show>
             <button class={`ms-entry oc-${outcomeOf(e)}`} onClick={() => props.onSel(entryId(e))} title={e.ask}>
-              <i />
+              {/* the sidebar's glyph for how it ended (review: the blue ring with a dot) */}
+              <span class="ms-glyph" title={t(OUTCOME[outcomeOf(e)])}><StateGlyph g={OUTCOME_GLYPH[outcomeOf(e)]} /></span>
               <span>{e.title || e.ask}</span>
               <Show when={e.learned?.length}><em class="ms-learn" title={t("배운 메모리")}>+{e.learned!.length}</em></Show>
               <em>{props.days ? clock(e.at) : ago(e.at)}</em>
