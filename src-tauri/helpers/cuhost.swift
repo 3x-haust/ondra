@@ -11,15 +11,18 @@
 //
 // Background contract, enforced here, not papered over:
 //   - never activates an app, never brings a window to front;
-//   - never warps or draws the cursor, never posts to the global session
-//     (events go to the target pid only);
+//   - never warps the real cursor, never posts to the global session (events go
+//     to the target pid only); where it points is shown with its own small pointer
+//     drawn just above the target window;
 //   - launches apps hidden and without activation;
 //   - records the frontmost app, its front window id and mouse position BEFORE and
 //     AFTER every action and reports them, so the caller can verify nothing moved;
 //   - refuses event input while the user is working in the target app, and never
 //     reads or types into password fields.
-// If an action cannot be done this way, it returns an error; it never falls back
-// to foreground. This is the opposite of Codex's SyntheticAppFocusEnforcer /
+// When an app ignores an AX action, the helper clicks the element with pointer
+// events addressed to its window; when an app brings itself forward on a click, the
+// helper hands the front straight back to the user's app. It never falls back to
+// foreground. This is the opposite of Codex's SyntheticAppFocusEnforcer /
 // SystemFocusStealPreventer, which activate and then suppress/forge focus events.
 //
 // Build: src-tauri/helpers/build.sh (→ src-tauri/binaries/ondra-cuhost-<triple>).
@@ -667,9 +670,29 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
     case "press-action": // AX action by name, no events at all (preferred)
         let el = try elementFor()
         let name = (action["action"] as? String) ?? kAXPressAction
-        if AXUIElementPerformAction(el, name as CFString) != .success {
+        let count = max(1, min(2, (action["count"] as? Int) ?? 1))
+        let right = (action["button"] as? String) == "right"
+        let forcePointer = (action["pointer"] as? Bool) ?? false
+        let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
+        if count == 1 && !right && !forcePointer && AXUIElementPerformAction(el, name as CFString) == .success {
+            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            return ["via": "ax"]
+        }
+        if count == 1 && right && !forcePointer && axActions(el).contains(kAXShowMenuAction),
+           AXUIElementPerformAction(el, kAXShowMenuAction as CFString) == .success {
+            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            return ["via": "ax-menu"]
+        }
+        // The view ignores accessibility actions (custom rows, profile cards, …): click it
+        // with pointer events addressed to its window, still without moving the real cursor.
+        guard (action["fallbackClick"] as? Bool) ?? false else {
             throw ActError.message("AX_ACTION_FAILED", "AX action \(name) failed")
         }
+        if userActive(in: pid) { throw ActError.message("USER_ACTIVE", "the user is working in this app; nothing was sent") }
+        guard let (p, w) = spot else { throw ActError.message("NO_BOUNDS", "this element has no visible bounds to click") }
+        VirtualCursor.shared.show(at: p, window: w, click: true)
+        postClick(pid: pid, at: p, button: right ? .right : .left, count: count, window: w)
+        return ["via": "pointer"]
     case "set-value":
         let el = try elementFor()
         if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
@@ -678,6 +701,7 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         if AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, value as CFTypeRef) != .success {
             throw ActError.message("AX_SET_FAILED", "could not set value")
         }
+        if let (p, w) = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map) { VirtualCursor.shared.show(at: p, window: w, click: false) }
     case "focus": // make a field key without activating the app
         let el = try elementFor()
         _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
@@ -687,8 +711,23 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
             let el = try elementFor()
             if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
             _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
+            if !focusIsOn(el, pid: pid), let (p, w) = spot {
+                // some fields only take focus from a click: one addressed to the window, cursor untouched
+                postClick(pid: pid, at: p, button: .left, count: 1, window: w)
+                usleep(80_000)
+            }
+            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: false) }
             // Keys go to whatever has focus; only send them if focus really landed on the target.
-            if !focusIsOn(el, pid: pid) { throw ActError.message("FOCUS_UNVERIFIED", "keyboard focus is not on the target; nothing was typed") }
+            if !focusIsOn(el, pid: pid) {
+                if axSettable(el, kAXValueAttribute) {
+                    let current = axString(el, kAXValueAttribute) ?? ""
+                    if AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, (current + text) as CFTypeRef) == .success {
+                        return ["via": "value"]
+                    }
+                }
+                throw ActError.message("FOCUS_UNVERIFIED", "keyboard focus is not on the target; nothing was typed")
+            }
         } else {
             guard let f = focusedElement(pid: pid) else { throw ActError.message("NO_FOCUS", "no focused element; pass a ref") }
             if elementIsSecure(f) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
@@ -704,6 +743,7 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let (p, w) = try resolvePoint(action, pid: pid, map: map)
         let button: CGMouseButton = (action["button"] as? String) == "right" ? .right : .left
         let count = (action["count"] as? Int) ?? 1
+        VirtualCursor.shared.show(at: p, window: w, click: true)
         postClick(pid: pid, at: p, button: button, count: count, window: w)
     case "scroll":
         // Scroll wheel events posted to a background app carry no window and are
@@ -723,13 +763,154 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         }
         let (a, w) = try resolvePoint(fromSpec, pid: pid, map: map)
         let (b, _) = try resolvePoint(toSpec, pid: pid, map: map)
+        VirtualCursor.shared.show(at: a, window: w, click: false)
         let t0 = nowMs()
         let steps = postDrag(pid: pid, from: a, to: b, window: w)
+        VirtualCursor.shared.show(at: b, window: w, click: true)
         return ["dragSteps": steps, "dragMs": nowMs() - t0]
     default:
         throw ActError.message("BAD_ACTION", "unsupported kind \(kind)")
     }
     return [:]
+}
+
+/// Hardware input (the user's own mouse or keys) within the last `seconds`.
+func userInputSince(seconds: Double) -> Bool {
+    let types: [CGEventType] = [.mouseMoved, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .keyDown, .flagsChanged, .scrollWheel]
+    let idle = types.map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }.min() ?? .infinity
+    return idle <= seconds + 0.05
+}
+
+/// Make `pid` frontmost again after `from` activated itself. Public activation only.
+func giveFrontBack(to pid: pid_t, from target: pid_t) -> Bool {
+    guard let prev = NSRunningApplication(processIdentifier: pid) else { return false }
+    if #available(macOS 14.0, *), let source = NSRunningApplication(processIdentifier: target) {
+        _ = prev.activate(from: source, options: [])
+    }
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid { _ = prev.activate(options: []) }
+    for _ in 0..<25 {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+        CFRunLoopRunInMode(.defaultMode, 0.02, true)
+    }
+    return NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+}
+
+// ───────────────────────── virtual cursor ─────────────────────────
+// Shows where the agent points without touching the real cursor: a small pointer of
+// its own, drawn just above the target window (so the user's front windows still
+// cover it), gliding between points and pulsing once on a click. Click-through,
+// never key, never activates; it goes away a moment after the last action.
+
+final class PointerView: NSView {
+    let ring = CAShapeLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        ring.fillColor = NSColor.clear.cgColor
+        ring.strokeColor = NSColor.controlAccentColor.cgColor
+        ring.lineWidth = 2
+        ring.opacity = 0
+        let r: CGFloat = 12
+        ring.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
+        ring.position = CGPoint(x: 14, y: frame.height - 14)
+        layer?.addSublayer(ring)
+    }
+    required init?(coder: NSCoder) { nil }
+    override func draw(_ dirty: NSRect) {
+        // the tip sits at (14, h-14) so the click ring can centre on it
+        let tip = NSPoint(x: 14, y: bounds.height - 14)
+        let p = NSBezierPath()
+        p.move(to: tip)
+        p.line(to: NSPoint(x: tip.x, y: tip.y - 17))
+        p.line(to: NSPoint(x: tip.x + 4.2, y: tip.y - 13))
+        p.line(to: NSPoint(x: tip.x + 7.2, y: tip.y - 19.5))
+        p.line(to: NSPoint(x: tip.x + 9.8, y: tip.y - 18.3))
+        p.line(to: NSPoint(x: tip.x + 6.9, y: tip.y - 11.9))
+        p.line(to: NSPoint(x: tip.x + 12.2, y: tip.y - 11.9))
+        p.close()
+        p.lineJoinStyle = .round
+        NSColor.controlAccentColor.setFill()
+        p.fill()
+        NSColor.white.setStroke()
+        p.lineWidth = 1.5
+        p.stroke()
+    }
+    func pulse() {
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.4; scale.toValue = 1.0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.9; fade.toValue = 0
+        let g = CAAnimationGroup()
+        g.animations = [scale, fade]
+        g.duration = 0.35
+        g.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        ring.add(g, forKey: "pulse")
+    }
+}
+
+final class VirtualCursor {
+    static let shared = VirtualCursor()
+    private var panel: NSPanel?
+    private var view: PointerView?
+    private var hide: DispatchWorkItem?
+    private let size = NSSize(width: 44, height: 44)
+
+    func show(at point: CGPoint, window: EventWindow?, click: Bool) {
+        guard let w = window, shownAsIs(w) else { return }
+        DispatchQueue.main.async { self.place(point, above: w.id, click: click) }
+    }
+
+    /// On screen at its real size: not hidden, minimized or a Stage Manager thumbnail.
+    private func shownAsIs(_ w: EventWindow) -> Bool {
+        guard let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], w.id) as? [[String: Any]], let d = info.first,
+              (d[kCGWindowIsOnscreen as String] as? Bool) == true,
+              let b = d[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b) else { return false }
+        return nearlySame(r, w.frame, 4)
+    }
+
+    private func make() -> NSPanel {
+        let p = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
+                        backing: .buffered, defer: false)
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.ignoresMouseEvents = true
+        p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+        let v = PointerView(frame: NSRect(origin: .zero, size: size))
+        p.contentView = v
+        view = v
+        return p
+    }
+
+    private func place(_ point: CGPoint, above id: CGWindowID, click: Bool) {
+        let p = panel ?? make()
+        panel = p
+        // global top-left coordinates → AppKit's bottom-left, tip at the point
+        let primary = NSScreen.screens.first?.frame.height ?? CGDisplayBounds(CGMainDisplayID()).height
+        let origin = NSPoint(x: point.x - 14, y: primary - point.y - (size.height - 14))
+        if p.isVisible && p.alphaValue > 0 {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.18
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                p.animator().setFrameOrigin(origin)
+            }
+        } else {
+            p.setFrameOrigin(origin)
+            p.alphaValue = 1
+        }
+        p.order(.above, relativeTo: Int(id))
+        if click { view?.pulse() }
+        hide?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let p = self?.panel else { return }
+            NSAnimationContext.runAnimationGroup({ ctx in ctx.duration = 0.25; p.animator().alphaValue = 0 },
+                                                 completionHandler: { if p.alphaValue == 0 { p.orderOut(nil) } })
+        }
+        hide = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
 }
 
 // ───────────────────────── settle ─────────────────────────
@@ -881,9 +1062,21 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         let settleMs = settle(pid: pid_t(pidN))
         let actMs = nowMs() - t0
         let tree = observeTree(pid: pid_t(pidN), map: map)
-        let after = environment()
+        var after = environment()
+        var extra: [String: Any] = [:]
+        // Some apps bring themselves forward when clicked. Hand the front back to what
+        // the user had, right away, instead of failing an action that already happened.
+        if let was = before["frontmostPid"] as? Int, was != pidN, (after["frontmostPid"] as? Int) == pidN,
+           !userInputSince(seconds: (nowMs() - t0) / 1000) {
+            extra["selfActivated"] = true
+            extra["restored"] = giveFrontBack(to: pid_t(was), from: pid_t(pidN))
+            after = environment()
+        }
+        // The user's own mouse or keys during the action are theirs, not a broken contract.
+        if !backgroundPreserved(before, after), userInputSince(seconds: (nowMs() - t0) / 1000) { extra["userInput"] = true }
         var result: [String: Any] = ["actionMs": actMs, "settleMs": settleMs, "env": after, "envBefore": before,
                                       "backgroundPreserved": backgroundPreserved(before, after)]
+        for (k, v) in extra { result[k] = v }
         for (k, v) in info { result[k] = v }
         if let tree = tree { result["tree"] = tree } else { result["treeError"] = "NO_WINDOW" }
         return ok(id, result)
@@ -930,19 +1123,28 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.2.0")
+    print("ondra-cuhost 0.3.0")
     exit(0)
 }
 
 setbuf(stdout, nil)
 // Bound every AX call, so a hung target app cannot hang the helper (global timeout).
 AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
-while let line = readLine(strippingNewline: true) {
-    if line.isEmpty { continue }
-    guard let data = line.data(using: .utf8),
-          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-        emit(fail(nil, "BAD_JSON", "could not parse request"))
-        continue
+// Requests run on their own thread; the main thread only draws the virtual cursor.
+let worker = Thread {
+    while let line = readLine(strippingNewline: true) {
+        if line.isEmpty { continue }
+        guard let data = line.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            emit(fail(nil, "BAD_JSON", "could not parse request"))
+            continue
+        }
+        emit(handle(obj))
     }
-    emit(handle(obj))
+    exit(0)
 }
+worker.stackSize = 8 << 20
+worker.start()
+// No Dock icon, no menu bar, never activated: windows only for the pointer overlay.
+NSApplication.shared.setActivationPolicy(.accessory)
+NSApplication.shared.run()

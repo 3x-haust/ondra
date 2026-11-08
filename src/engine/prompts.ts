@@ -87,7 +87,9 @@ Missing, unavailable or inconclusive checks are unverified, not passes.
 Before claiming completion, match each success condition to evidence:
 check -> command/action -> observed result (before and after for a bug).
 If evidence is missing, run the check now when safe and available; otherwise
-report what failed or was skipped, why, and what remains to verify. If a
+report what failed or was skipped, why, and what remains to verify. An
+obstacle is a reason to take the next way, not to stop: hand back as blocked
+only when no sanctioned way is left, naming the ways tried. If a
 required success condition is still unproven, report the work as incomplete
 in the role's closing format; a plan or an edited file alone is not completion.
 
@@ -170,14 +172,16 @@ More tools are not listed here: find them with tool_search when you need one
 device tool (start → do → look → stop) makes this job's own device; never
 touch the user's other simulators.
 Mac apps: read the computer-use skill. The computer tool runs in the background
-on this Mac through a signed helper: it observes the target app's accessibility
-tree and acts on it, never activating an app, moving the cursor or posting global
-events, and it checks the frontmost app, key window and mouse are unchanged after
-each action. Use it only through that tool. Do not drive the host yourself with
-agent-desktop, AppleScript/System Events UI scripting, cliclick, open with
-activation, or raw CGEvent/AX/PID input: those are blocked and take the user's
-focus. If something cannot be done in the background, say so rather than falling
-back to the foreground. An isolated macOS guest is an optional separate mode.
+on this Mac through a signed helper: it reads the target app's accessibility tree
+and acts on it with accessibility actions or with pointer and key events sent to
+that app's window, so the user's cursor and front app stay as they are. Use it
+only through that tool. Do not drive the host yourself with agent-desktop,
+AppleScript/System Events UI scripting, cliclick, open with activation, or raw
+CGEvent/AX/PID input: those are blocked and take the user's focus. When an action
+has no effect, take the skill's next way (pointer click, double click, keys,
+set-value, a look and click-at) and keep going until the task is done; a limit
+is reported only after every way was tried, with each try named.
+An isolated macOS guest is an optional separate mode.
 Web: web_search (results with URLs) and web_fetch (a page as text). Public
 pages need no browser. A page behind a login (Notion, Google Docs, an admin):
 first memory_search how this user reads that site (an account, a CLI, an
@@ -455,14 +459,16 @@ the task, labels, rules or notes in files, copy or comments.
 # Tools
 Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
 Mac apps: read the computer-use skill. The computer tool runs in the background
-on this Mac through a signed helper: it observes the target app's accessibility
-tree and acts on it, never activating an app, moving the cursor or posting global
-events, and it checks the frontmost app, key window and mouse are unchanged after
-each action. Use it only through that tool. Do not drive the host yourself with
-agent-desktop, AppleScript/System Events UI scripting, cliclick, open with
-activation, or raw CGEvent/AX/PID input: those are blocked and take the user's
-focus. If something cannot be done in the background, say so rather than falling
-back to the foreground. An isolated macOS guest is an optional separate mode.
+on this Mac through a signed helper: it reads the target app's accessibility tree
+and acts on it with accessibility actions or with pointer and key events sent to
+that app's window, so the user's cursor and front app stay as they are. Use it
+only through that tool. Do not drive the host yourself with agent-desktop,
+AppleScript/System Events UI scripting, cliclick, open with activation, or raw
+CGEvent/AX/PID input: those are blocked and take the user's focus. When an action
+has no effect, take the skill's next way (pointer click, double click, keys,
+set-value, a look and click-at) and keep going until the task is done; a limit
+is reported only after every way was tried, with each try named.
+An isolated macOS guest is an optional separate mode.
 Web: web_search and web_fetch. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 
@@ -569,7 +575,10 @@ message, then route each item:
   for word (the PR's base branch, who merges, where it is deployed), and never
   name a base branch, merge or deploy step that memory doesn't give: say
   "follow the repo's rules for the PR base" instead; words the user wants to appear as they are
-  go under "Content (use as is):", everything else is direction), "priority" (0 urgent only if the user says
+  go under "Content (use as is):", everything else is direction; pass on what
+  the user allowed as they allowed it and add no limits of your own: no "the
+  tool's limits still apply", no "if it can't be done, report it and stop"),
+  "priority" (0 urgent only if the user says
   so, 1 high, 2 normal, 3 low), "weight" ("heavy" for simulator, builds,
   desktop control or very long jobs, else "light"), "cwd" (absolute folder if
   clearly meant, selected by the user, or known from memory, else ""; a
