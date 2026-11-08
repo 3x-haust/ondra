@@ -4,7 +4,8 @@ import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand }
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
-import type { SpaceId } from "../state/types";
+import type { Account, SpaceId } from "../state/types";
+import { emails, loadEmail } from "../state/limits";
 import { EFFORTS, prettyModel } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
@@ -12,6 +13,7 @@ import { engine, tilde } from "../engine/rpc";
 import {
   accountProviders,
   accountRemove,
+  inTauri,
   openPrivacySettings,
   pickFolder,
   requestAccessibility,
@@ -24,6 +26,7 @@ import { ago, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { LoginSheet } from "./Login";
+import { SHORTCUT_EXTRAS } from "./ShortcutSheet";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
 import { HooksTab } from "./Hooks";
@@ -116,19 +119,19 @@ function General() {
           <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
         <Row title={t("작업마다 워크트리")}>
-          <Switch_ on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
+          <Switch_ label={t("작업마다 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
         </Row>
         <Row title={t("PR 리뷰 자동 대응")}>
-          <Switch_ on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
+          <Switch_ label={t("PR 리뷰 자동 대응")} on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
         </Row>
         <Row title={t("GitHub에 쓰기")}>
-          <Switch_ on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
+          <Switch_ label={t("GitHub에 쓰기")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
         </Row>
         <Row title={t("메모리 자동 저장")}>
-          <Switch_ on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
+          <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
         <Row title={t("포커스 지키기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
-          <Switch_ on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
+          <Switch_ label={t("포커스 지키기")} on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
         </Row>
       </div>
 
@@ -158,7 +161,7 @@ function General() {
               <b>{t(s.label)}</b>
               <Show when={state.space === s.id}><span class="sp-now">{t("현재")}</span></Show>
               <span class="sp-folder" classList={{ word: !s.folder || s.folder === "~" }} title={s.folder}>{folderName(s.folder)}</span>
-              <span class="sp-n">{t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id).length })}</span>
+              <span class="sp-n">{t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}</span>
               <Icon name="chevron" size={14} class="sp-go" />
             </button>
           )}
@@ -395,6 +398,17 @@ function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
 // ───────────────── accounts
 const providerName = (p: string) =>
   /anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p;
+const servicesOf = (a: Account) => [...new Set(a.providers.map(providerName))];
+/** the name the person gave an account; "" when it still has a made-up one ("기본", "회사", "회사 2") */
+const ownLabel = (a: Account) => {
+  const made = ["기본", "계정", ...state.spaces.map((s) => s.label)].flatMap((l) => [l, t(l)]);
+  return a.label && !made.some((l) => a.label === l || a.label.startsWith(`${l} `)) ? a.label : "";
+};
+// TODO(merge): the shell group exports accountName() from ui/AccountPicker; use that one
+/** an account as people know it: provider + email, or the name they gave it */
+const accountName = (a: Account) => ownLabel(a) || [servicesOf(a).join(" · "), emails[a.id]].filter(Boolean).join(" · ") || t(a.label);
+/** signed in = the account has a provider login (the same test the account chip uses) */
+const signedIn = (a: Account) => a.providers.length > 0;
 
 function AccountRow(props: { id: string; onLogin: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
@@ -403,50 +417,62 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
   const [typed, setTyped] = createSignal<string>();
   const used = () => a().stats.input + a().stats.cacheRead + a().stats.cacheWrite + a().stats.output;
   const cache = () => Math.round((cacheShare(a()) ?? 0) * 100);
+  // provider + email until the person names it; clearing the name goes back to that
+  const made = () => state.spaces.find((s) => s.id === a().space)?.label ?? "계정";
+  const auto = () => accountName({ ...a(), label: made() });
+  const rename = (v: string) =>
+    updateAccount(props.id, (x) => (x.label = v.trim() && v.trim() !== auto() ? v.trim() : made()));
   return (
     <div class="acc-row">
       <div class="acc-line">
-        <span class="acc-name-wrap" data-v={typed() ?? t(a().label)}>
+        <For each={servicesOf(a())}>
+          {(p) => <span class="acc-logo" title={props.id === "default" ? t("{p} · 이 Mac의 기본 로그인", { p }) : p}><Logo name={p === "Claude" ? "claude" : p} size={14} /></span>}
+        </For>
+        <span class="acc-name-wrap" data-v={typed() ?? (ownLabel(a()) || auto())}>
           <input
             class="acc-name"
             size={1}
             aria-label={t("계정 이름")}
-            value={t(a().label)}
-            onInput={(e) => setTyped(e.currentTarget.value)}
-            onChange={(e) => (updateAccount(props.id, (x) => (x.label = e.currentTarget.value.trim() || x.label)), setTyped(undefined))}
+            title={accountName(a())}
+            placeholder={auto()}
+            value={ownLabel(a())}
+            onInput={(e) => setTyped(e.currentTarget.value || undefined)}
+            onChange={(e) => (rename(e.currentTarget.value), setTyped(undefined))}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           />
         </span>
-        <For each={[...new Set(a().providers.map(providerName))]} fallback={<span class="pill warn">{t("로그인 필요")}</span>}>
-          {(p) => (
-            <span class="pill svc" title={props.id === "default" ? t("{p} · 이 Mac의 기본 로그인", { p }) : p}>
-              <Logo name={p === "Claude" ? "claude" : p} size={14} />
-              {p}
-            </span>
-          )}
-        </For>
+        <Show when={!signedIn(a())}><span class="pill warn">{t("로그인 필요")}</span></Show>
         <span class="spacer" />
         <Show when={used()} fallback={<span class="acc-usage">{t("사용 기록 없음")}</span>}>
           <span class="acc-usage" title={t("캐시 적중률")}>
             <span class="cache-bar"><i style={{ width: `${cache()}%` }} /></span>
-            {t("캐시 {n}%", { n: cache() })}
-            <span>· {t("{n} 토큰", { n: tokens(used()) })}</span>
+            {t("캐시 {p}%", { p: cache() })}
+            <span>· {t("{k} 토큰", { n: used(), k: tokens(used()) })}</span>
           </span>
         </Show>
       </div>
-      <div class="acc-line">
-        <select class="select" aria-label={t("모델")} value={a().model} onChange={(e) => updateAccount(props.id, (x) => (x.model = e.currentTarget.value))}>
-          <option value="" disabled>{t("모델")}</option>
-          <For each={models() ?? (a().model ? [a().model] : [])}>{(m) => <option value={m}>{prettyModel(m)}</option>}</For>
-        </select>
-        <select class="select" aria-label={t("추론 강도")} title={t("추론 강도")} value={a().effort || "high"} onChange={(e) => updateAccount(props.id, (x) => (x.effort = e.currentTarget.value))}>
-          <For each={EFFORTS}>{(x) => <option value={x.id}>{t(EFFORT_LABEL[x.id] ?? x.label)}</option>}</For>
-        </select>
-        <select class="select" aria-label={t("워크스페이스")} title={t("워크스페이스")} value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
-          <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
-        </select>
+      <div class="acc-line acc-fields">
+        <label class="acc-field">
+          <span>{t("모델")}</span>
+          <select class="select" value={a().model} onChange={(e) => updateAccount(props.id, (x) => (x.model = e.currentTarget.value))}>
+            <option value="" disabled>{t("자동")}</option>
+            <For each={models() ?? (a().model ? [a().model] : [])}>{(m) => <option value={m}>{prettyModel(m)}</option>}</For>
+          </select>
+        </label>
+        <label class="acc-field">
+          <span>{t("추론 강도")}</span>
+          <select class="select" value={a().effort || "high"} onChange={(e) => updateAccount(props.id, (x) => (x.effort = e.currentTarget.value))}>
+            <For each={EFFORTS}>{(x) => <option value={x.id}>{t(EFFORT_LABEL[x.id] ?? x.label)}</option>}</For>
+          </select>
+        </label>
+        <label class="acc-field">
+          <span>{t("워크스페이스|one")}</span>
+          <select class="select" value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
+            <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
+          </select>
+        </label>
         <span class="spacer" />
-        <button class="btn sm" onClick={props.onLogin}>{a().providers.length ? t("서비스 추가") : t("로그인")}</button>
+        <button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{signedIn(a()) ? t("서비스 추가") : t("로그인")}</button>
         <Show when={props.id !== "default"}>
           <Show
             when={confirm()}
@@ -471,6 +497,8 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
 }
 
 async function refreshProviders() {
+  // outside the app there is no login to read: keep what the account chip shows
+  if (!inTauri) return;
   for (const a of state.accounts) {
     const providers = await accountProviders(a.id);
     updateAccount(a.id, (x) => (x.providers = providers));
@@ -481,6 +509,7 @@ function Accounts() {
   const [login, setLogin] = createSignal<string | null>(null);
   onMount(() => {
     refreshProviders();
+    for (const a of state.accounts) void loadEmail(a.id).catch(() => {});
     window.addEventListener("focus", refreshProviders);
     onCleanup(() => window.removeEventListener("focus", refreshProviders));
   });
@@ -647,27 +676,35 @@ function Permissions() {
 }
 
 // ───────────────── shortcuts
+/**
+ * The `?` sheet's groups, in its order: 일반 first with the keys that aren't commands
+ * (SHORTCUT_EXTRAS), then each command section, 설정 last.
+ * TODO(merge): the same grouping lives inside ShortcutSheet(); once the shell group exports it, use that.
+ */
+function shortcutGroups(): { title: string; rows: { label: string; keys: string }[] }[] {
+  const out = new Map<string, ShortcutCommand[]>();
+  for (const c of appCommands()) if (c.shortcut) out.set(c.section, [...(out.get(c.section) ?? []), c]);
+  const last = (s: string) => Number(s === t("설정"));
+  const sections = [...out].sort((a, b) => last(a[0]) - last(b[0]));
+  const general = t("일반");
+  const row = (c: ShortcutCommand) => ({ label: c.label, keys: shortcutLabel(c.shortcut!) });
+  return [
+    { title: general, rows: [...SHORTCUT_EXTRAS.map(([label, keys]) => ({ label: t(label), keys: t(keys) })), ...(out.get(general) ?? []).map(row)] },
+    ...sections.filter(([sec]) => sec !== general).map(([title, list]) => ({ title, rows: list.map(row) })),
+  ];
+}
+
 function Shortcuts() {
-  const groups = createMemo(() => {
-    const out = new Map<string, ShortcutCommand[]>();
-    for (const c of appCommands()) if (c.shortcut) out.set(c.section, [...(out.get(c.section) ?? []), c]);
-    return [...out];
-  });
+  const groups = createMemo(shortcutGroups);
   return (
     <>
       <h2>{t("단축키")}</h2>
-      <div class="set-group">
-        <Row title={t("단축키 힌트")}><kbd>{t("⌘ 길게")}</kbd></Row>
-        <Row title={t("어디서든 요청")}><kbd>⌥ Space</kbd></Row>
-        <Row title={t("단축키 목록")}><kbd>?</kbd></Row>
-        <Row title={t("종료")}><kbd>{t("⌘Q 길게")}</kbd></Row>
-      </div>
       <For each={groups()}>
-        {([section, list]) => (
+        {(g) => (
           <>
-            <GroupTitle title={t(section)} />
+            <GroupTitle title={g.title} />
             <div class="set-group">
-              <For each={list}>{(c) => <Row title={t(c.label)}><kbd>{shortcutLabel(c.shortcut!)}</kbd></Row>}</For>
+              <For each={g.rows}>{(r) => <Row title={r.label}><kbd>{r.keys}</kbd></Row>}</For>
             </div>
           </>
         )}

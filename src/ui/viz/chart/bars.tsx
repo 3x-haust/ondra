@@ -4,6 +4,7 @@ import { For } from "solid-js";
 import { scaleLinear } from "d3-scale";
 import { defineViz } from "../registry";
 import { series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { arr, barPath, clamp, isNum, normSeries, pareto, sharePct, stackSeries, str, toNum, waterfall } from "./math";
 import { AX, ChFrame, colorOf, cut, fmtC, fmtV, hover, MUTED, pct, TipBody, tw } from "./common";
 import { autoOrient, BandPlot, type Seg } from "./band";
@@ -64,7 +65,7 @@ function Grouped(props: { b: any; mode: "group" | "stack" | "percent" }) {
       fmt={mode === "percent" ? (v) => `${Math.round(v)}%` : undefined}
       legend={ss.length > 1 ? ss.map((s, k) => ({ label: s.label, color: colorOf(k, s.em, anyEm) })) : undefined}
       ends={ends}
-      rule={toNum(b.target) !== null ? { value: toNum(b.target)!, label: "목표" } : undefined}
+      rule={toNum(b.target) !== null ? { value: toNum(b.target)!, label: t("목표") } : undefined}
       tip={(c) => ({
         title: cats[c],
         rows: ss
@@ -77,7 +78,7 @@ function Grouped(props: { b: any; mode: "group" | "stack" | "percent" }) {
             label: single ? "" : s.label,
             value: mode === "percent" ? `${pct(((s.values[c] ?? 0) / (totals[c] || 1)) * 100)} · ${fmtV(s.values[c], unit)}` : fmtV(s.values[c], unit),
           })),
-        foot: mode !== "group" && ss.length > 1 ? `합계 ${fmtV(totals[c], unit)}` : undefined,
+        foot: mode !== "group" && ss.length > 1 ? t("합계 {v}", { v: fmtV(totals[c], unit) }) : undefined,
       })}
     />
   );
@@ -166,7 +167,7 @@ defineViz({
   when: "항목마다 기준(0)보다 얼마나 높고 낮은가 (증감, 손익, 편차)",
   render: (b: any) => {
     const items = arr<any>(b.items).filter((i) => i && isNum(toNum(i.value)));
-    const ps = items.map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), value: toNum(i.value)! }));
+    const ps = items.map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), value: toNum(i.value)! }));
     if (b.sort !== false) ps.sort((a, c) => c.value - a.value);
     const unit = unitOf(b);
     const sign = (v: number) => `${v > 0 ? "+" : ""}${fmtC(v, unit === "%" || unit === "%p" ? unit : undefined)}`;
@@ -340,9 +341,9 @@ defineViz({
         orient={orient}
         unit={unit}
         connectors
-        legend={[{ label: str(b.upLabel, "증가"), color: colorOf("up") }, { label: str(b.downLabel, "감소"), color: colorOf("down") }, { label: "합계", color: colorOf("total") }]}
+        legend={[{ label: str(b.upLabel, t("증가")), color: colorOf("up") }, { label: str(b.downLabel, t("감소")), color: colorOf("down") }, { label: t("합계"), color: colorOf("total") }]}
         ends={steps.map((s, c) => ({ cat: c, slot: 0, text: label(s), at: s.kind === "down" ? s.end : Math.max(s.start, s.end), below: s.kind === "down" }))}
-        tip={(c) => ({ title: steps[c].label, rows: [{ label: steps[c].kind === "total" ? "합계" : "변화", value: steps[c].kind === "total" ? fmtV(steps[c].value, unit) : `${steps[c].value > 0 ? "+" : ""}${fmtV(steps[c].value, unit)}` }], foot: steps[c].kind !== "total" ? `누적 ${fmtV(steps[c].end, unit)}` : undefined })}
+        tip={(c) => ({ title: steps[c].label, rows: [{ label: steps[c].kind === "total" ? t("합계") : t("변화"), value: steps[c].kind === "total" ? fmtV(steps[c].value, unit) : `${steps[c].value > 0 ? "+" : ""}${fmtV(steps[c].value, unit)}` }], foot: steps[c].kind !== "total" ? t("누적 {v}", { v: fmtV(steps[c].end, unit) }) : undefined })}
       />
     );
   },
@@ -381,9 +382,9 @@ defineViz({
         slots={1}
         orient="v"
         unit={unit}
-        right={{ values: ps.map((p) => p.cum), color: series(1), label: "누적 비율", rule: toNum(b.rule) ?? 80 }}
-        legend={[{ label: str(b.valueLabel, "건수"), color: series(0) }, { label: "누적 비율 (오른쪽 축)", color: series(1), dash: true }]}
-        tip={(c) => ({ title: ps[c].label, rows: [{ color: series(0), key: "box" as const, label: str(b.valueLabel, "건수"), value: fmtV(ps[c].value, unit) }, { color: series(1), label: "누적 비율", value: pct(ps[c].cum, 1) }] })}
+        right={{ values: ps.map((p) => p.cum), color: series(1), label: t("누적 비율"), rule: toNum(b.rule) ?? 80 }}
+        legend={[{ label: str(b.valueLabel, t("건수")), color: series(0) }, { label: t("누적 비율 (오른쪽 축)"), color: series(1), dash: true }]}
+        tip={(c) => ({ title: ps[c].label, rows: [{ color: series(0), key: "box" as const, label: str(b.valueLabel, t("건수")), value: fmtV(ps[c].value, unit) }, { color: series(1), label: t("누적 비율"), value: pct(ps[c].cum, 1) }] })}
       />
     );
   },

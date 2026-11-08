@@ -3,6 +3,7 @@
 // divider, team grid, key points and an equation (A + B = C).
 import { For, Index, Show } from "solid-js";
 import { num, withUnit } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { Card, Harvey, Mark, StatusMark, initials } from "./common";
 import { arr, cell, item, items, quarters, statusOf, statusWord, str, texts, toNum, type Status } from "./util";
@@ -85,13 +86,13 @@ defineViz<PCB>({
     const weighted = () => pros().some((p) => p.w) || cons().some((c) => c.w);
     const Side = (p: { kind: "pro" | "con"; list: ReturnType<typeof pros> }) => (
       <div class={`sl-pc-col ${p.kind}`}>
-        <div class="sl-pc-head"><Mark k={p.kind === "pro" ? "yes" : "no"} /><b>{p.kind === "pro" ? "장점" : "단점"}</b><Show when={weighted()}><span class="sl-note">{num(sum(p.list))}점</span></Show></div>
+        <div class="sl-pc-head"><Mark k={p.kind === "pro" ? "yes" : "no"} /><b>{p.kind === "pro" ? t("장점") : t("단점")}</b><Show when={weighted()}><span class="sl-note">{t("{n}점", { n: sum(p.list), v: num(sum(p.list)) })}</span></Show></div>
         <ul>
           <For each={p.list}>
             {(x) => (
               <li classList={{ em: !!x.em }}>
                 <span class="sl-pc-t"><b>{x.label}</b><Show when={x.note}><span class="sl-note">{x.note}</span></Show></span>
-                <Show when={x.w}><span class="sl-pc-w" title={`${x.w}점`}><Index each={Array.from({ length: Math.min(5, Math.round(x.w!)) })}>{() => <i />}</Index></span></Show>
+                <Show when={x.w}><span class="sl-pc-w" title={t("{n}점", { n: x.w!, v: num(x.w!) })}><Index each={Array.from({ length: Math.min(5, Math.round(x.w!)) })}>{() => <i />}</Index></span></Show>
               </li>
             )}
           </For>
@@ -101,7 +102,7 @@ defineViz<PCB>({
     return (
       <Card label={b.label} class="sl-pc">
         <Show when={weighted() && sum(pros()) + sum(cons()) > 0}>
-          <div class="sl-pc-bal" role="img" aria-label={`장점 ${sum(pros())}점, 단점 ${sum(cons())}점`}>
+          <div class="sl-pc-bal" role="img" aria-label={t("장점 {a}점, 단점 {b}점", { a: sum(pros()), b: sum(cons()) })}>
             <i class="pro" style={{ "flex-grow": sum(pros()) }} /><i class="con" style={{ "flex-grow": sum(cons()) }} />
           </div>
         </Show>
@@ -134,7 +135,7 @@ defineViz<HarveyB>({
       const it = item(x);
       return it ? { ...it, v: arr((x as Record<string, unknown>).v ?? (x as Record<string, unknown>).values) } : undefined;
     }).filter((r): r is NonNullable<typeof r> => !!r);
-    const WORD = ["없음", "낮음", "보통", "높음", "매우 높음"];
+    const WORD = ["없음", "낮음", "보통", "높음", "매우 높음|level"];
     return (
       <Card label={b.label} class="sl-harveyt">
         <div class="sl-scroll">
@@ -145,7 +146,7 @@ defineViz<HarveyB>({
                 {(r) => (
                   <tr classList={{ em: !!r.em }}>
                     <th>{r.label}</th>
-                    <Index each={cols()}>{(_, i) => { const q = quarters(r.v[i]); return <td class="c" title={q === undefined ? "" : WORD[q]}><Show when={q !== undefined}><Harvey q={q!} /></Show></td>; }}</Index>
+                    <Index each={cols()}>{(_, i) => { const q = quarters(r.v[i]); return <td class="c" title={q === undefined ? "" : t(WORD[q])}><Show when={q !== undefined}><Harvey q={q!} /></Show></td>; }}</Index>
                   </tr>
                 )}
               </For>
@@ -188,7 +189,7 @@ defineViz<ScoreB>({
       <Card label={b.label} class="sl-score">
         <div class="sl-scroll">
           <table class="sl-table">
-            <thead><tr><th>지표</th><th class="r">목표</th><th class="r">실적</th><th class="sl-bar">달성률</th><th>상태</th></tr></thead>
+            <thead><tr><th>{t("지표")}</th><th class="r">{t("목표")}</th><th class="r">{t("실적")}</th><th class="sl-bar">{t("달성률")}</th><th>{t("상태")}</th></tr></thead>
             <tbody>
               <For each={rows()}>
                 {(r) => (
@@ -238,19 +239,19 @@ defineViz<PriceB>({
       const o = (x ?? {}) as Record<string, unknown>;
       if (!it) return undefined;
       const p = o.price;
-      return { ...it, price: typeof p === "number" ? (p === 0 ? "무료" : `${num(p)}원`) : str(p), per: str(o.per) || (typeof p === "number" && p > 0 ? b.unit ?? "" : ""), features: texts(o.features ?? o.items), plus: str(o.plus) };
+      return { ...it, price: typeof p === "number" ? (p === 0 ? t("무료") : t("{v}원", { v: num(p) })) : str(p), per: str(o.per) || (typeof p === "number" && p > 0 ? b.unit ?? "" : ""), features: texts(o.features ?? o.items), plus: str(o.plus) };
     }).filter((t): t is NonNullable<typeof t> => !!t).slice(0, 5);
     return (
       <Card label={b.label} class="sl-price">
         <div class="sl-price-grid" style={{ "--n": tiers().length }}>
           <For each={tiers()}>
-            {(t) => (
-              <div class="sl-tier" classList={{ em: !!t.em }}>
-                <div class="sl-tier-head"><b>{t.label}</b><Show when={t.em}><span class="sl-tag t-new">추천</span></Show></div>
-                <div class="sl-tier-price"><span>{t.price}</span><Show when={t.per}><em>/{t.per}</em></Show></div>
-                <Show when={t.note}><p class="sl-note">{t.note}</p></Show>
-                <Show when={t.plus}><p class="sl-tier-plus">{t.plus}</p></Show>
-                <ul><For each={t.features}>{(f) => <li><Mark k="yes" />{f}</li>}</For></ul>
+            {(tier) => (
+              <div class="sl-tier" classList={{ em: !!tier.em }}>
+                <div class="sl-tier-head"><b>{tier.label}</b><Show when={tier.em}><span class="sl-tag t-new">{t("추천")}</span></Show></div>
+                <div class="sl-tier-price"><span>{tier.price}</span><Show when={tier.per}><em>/{tier.per}</em></Show></div>
+                <Show when={tier.note}><p class="sl-note">{tier.note}</p></Show>
+                <Show when={tier.plus}><p class="sl-tier-plus">{tier.plus}</p></Show>
+                <ul><For each={tier.features}>{(f) => <li><Mark k="yes" />{f}</li>}</For></ul>
               </div>
             )}
           </For>
@@ -296,7 +297,7 @@ defineViz<PersonaB>({
           </div>
           <div class="sl-persona-main">
             <Show when={b.quote}><blockquote class="sl-persona-q">{b.quote}</blockquote></Show>
-            <div class="sl-persona-two"><List name="목표" list={texts(b.goals)} /><List name="불편" list={texts(b.pains)} /></div>
+            <div class="sl-persona-two"><List name={t("목표|goals")} list={texts(b.goals)} /><List name={t("불편")} list={texts(b.pains)} /></div>
             <Show when={traits().length}>
               <div class="sl-traits">
                 <For each={traits()}>
@@ -364,7 +365,7 @@ defineViz<AgendaB>({
       return it ? { ...it, time: str((x as Record<string, unknown>)?.time) } : undefined;
     }).filter((x): x is NonNullable<typeof x> => !!x);
     return (
-      <Card label={b.label ?? "목차"} class="sl-agenda">
+      <Card label={b.label ?? t("목차|agenda")} class="sl-agenda">
         <ol>
           <For each={list()}>
             {(it, i) => (

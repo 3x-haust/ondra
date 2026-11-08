@@ -595,3 +595,78 @@
 .settings-inner .set-head > .btn.ghost {
   margin-right: calc(-1 * var(--s-10));
 }
+
+/* ───────── round 3 */
+/* tools: the row opens from anywhere but the switch; name, line and source sit in one button */
+.settings-inner .tl-head {
+  cursor: pointer;
+}
+.settings-inner .tl-open {
+  grid-column: 1 / 4;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+.settings-inner .tl-open:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+.settings-inner .tl-size .switch {
+  vertical-align: middle;
+}
+/* an open row's text lines up with the one-line description */
+.settings-inner .tl-more-in {
+  display: grid;
+  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) 76px;
+  column-gap: var(--s-12);
+  padding: 0 var(--s-14);
+}
+.settings-inner .tl-more-in p {
+  grid-column: 2;
+  padding: 0 0 var(--s-12);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* accounts: provider logo, then the name; each select with its name above */
+.settings-inner .acc-logo {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+.settings-inner .acc-logo + .acc-name-wrap {
+  margin-left: calc(-1 * var(--s-4));
+}
+.settings-inner .acc-name-wrap {
+  max-width: 360px;
+  min-width: 0;
+}
+.settings-inner .acc-name {
+  text-overflow: ellipsis;
+}
+.settings-inner .acc-name::placeholder {
+  color: var(--ink);
+  opacity: 1;
+}
+.settings-inner .acc-fields {
+  align-items: flex-end;
+  gap: var(--s-12);
+}
+.settings-inner .acc-field {
+  display: grid;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.settings-inner .acc-field > span {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.settings-inner .acc-fields .btn.sm,
+.settings-inner .acc-fields .icon-btn.sm {
+  align-self: flex-end;
+}

@@ -3,6 +3,7 @@
 import { createMemo, For, Show } from "solid-js";
 import { defineViz } from "../registry";
 import { Frame, series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { bits, bounds, cleanSets, exclusive, layoutCircles, regions, upset } from "./layout/sets";
 import { declutter } from "./layout/text";
 import { Empty, FS, FS_SM, Safe, fit, tw, val } from "./ui";
@@ -68,7 +69,7 @@ function Circles(b: SetsB & { euler: boolean }) {
           const tipFor = (mask: number) => {
             const inSets = names.filter((_, i) => mask & (1 << i));
             const v = data().excl.get(mask);
-            return `${v === undefined ? "–" : val(v, b.unit)}\n${inSets.length === 1 ? `${inSets[0]}만` : inSets.join(" ∩ ")}${inSets.length < names.length && inSets.length > 1 ? " (나머지 제외)" : ""}`;
+            return `${v === undefined ? "–" : val(v, b.unit)}\n${inSets.length === 1 ? t("{s}만", { s: inSets[0] }) : inSets.length < names.length ? t("{s} (나머지 제외)", { s: inSets.join(" ∩ ") }) : inSets.join(" ∩ ")}`;
           };
           return (
             <g>
@@ -202,7 +203,7 @@ function UpSet(b: SetsB) {
                   const h = (c.value / vmax) * (top - 24);
                   const members = names.map((_, i) => i).filter((i) => c.mask & (1 << i));
                   return (
-                    <g onMouseMove={(e) => tip.show(e, `${val(c.value, b.unit)}\n${c.sets.join(" ∩ ")}${c.sets.length < names.length ? "만" : ""}`)} onMouseLeave={tip.hide}>
+                    <g onMouseMove={(e) => tip.show(e, `${val(c.value, b.unit)}\n${c.sets.length < names.length ? t("{s}만", { s: c.sets.join(" ∩ ") }) : c.sets.join(" ∩ ")}`)} onMouseLeave={tip.hide}>
                       <rect x={cx(k()) - col / 2} y={0} width={col} height={top + 10 + names.length * ROW} fill="transparent" />
                       <path class="viz-mark" d={`M${cx(k()) - bw / 2},${top}V${top - h + Math.min(3, h)}q0,-${Math.min(3, h)} ${Math.min(3, h)},-${Math.min(3, h)}H${cx(k()) + bw / 2 - Math.min(3, h)}q${Math.min(3, h)},0 ${Math.min(3, h)},${Math.min(3, h)}V${top}Z`} fill={emAny && !c.em ? "var(--viz-muted)" : series(0)} />
                       <Show when={members.length > 1}>
@@ -219,7 +220,7 @@ function UpSet(b: SetsB) {
                 {(n, i) => {
                   const w = (u.totals[i()] / tmax) * (barW - 6);
                   return (
-                    <g onMouseMove={(e) => tip.show(e, `${val(u.totals[i()], b.unit)}\n${n} 전체`)} onMouseLeave={tip.hide}>
+                    <g onMouseMove={(e) => tip.show(e, `${val(u.totals[i()], b.unit)}\n${t("{s} 전체", { s: n })}`)} onMouseLeave={tip.hide}>
                       <rect class="rl-bar-set" x={barW - w} y={ry(i()) - 5} width={w} height={10} rx={2} />
                       <text class="rl-strong rl-sm" x={barW + nameW} y={ry(i())} dy="0.35em" text-anchor="end">{fit(n, nameW - 8, FS_SM, 500)}</text>
                     </g>

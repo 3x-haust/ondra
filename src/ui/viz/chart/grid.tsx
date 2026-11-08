@@ -5,9 +5,11 @@ import { defineViz } from "../registry";
 import { div, seq, series, useTip } from "../kit";
 import { arr, binOf, calendarCells, clamp, extent, foldParts, isNum, largestRemainder, parts, sharePct, str, thin, toNum, type Part } from "./math";
 import { AX, ChFrame, cut, fmtC, fmtV, hover, inkOn, MUTED, TipBody, tw } from "./common";
+import { t } from "../../../i18n";
+import { dayWord, monthWord, yearMonth } from "../words";
 
 const unitOf = (b: any) => str(b.unit) || undefined;
-const DOW = ["월", "화", "수", "목", "금", "토", "일"];
+
 
 // ───────────── calendar
 
@@ -49,17 +51,20 @@ defineViz({
                   const oy = band * bandH + 16;
                   const months = cal.months.filter((m) => m.week >= band * l.per && m.week < (band + 1) * l.per);
                   const mx = months.map((m) => 24 + (m.week - band * l.per) * l.cell);
-                  const mlab = months.map((m) => (m.month === 1 || (band === 0 && m === months[0]) ? `${m.year}.${m.month}` : `${m.month}월`));
-                  const keep = new Set(thin(mx.map((x, i) => x + tw(mlab[i], AX) / 2), mlab.map((s) => tw(s, AX)), 6));
+                  const mlab = () => months.map((m) => (m.month === 1 || (band === 0 && m === months[0]) ? yearMonth(m.year, m.month) : monthWord(m.month)));
+                  const keep = () => {
+                    const l = mlab();
+                    return new Set(thin(mx.map((x, i) => x + tw(l[i], AX) / 2), l.map((s) => tw(s, AX)), 6));
+                  };
                   return (
                     <>
                       <g class="viz-axis">
-                        <For each={months}>{(_, i) => <Show when={keep.has(i())}><text x={mx[i()]} y={oy - 5}>{mlab[i()]}</text></Show>}</For>
-                        <For each={[0, 2, 4]}>{(d) => <text x={0} y={oy + d * l.cell + l.cell / 2} dy="0.32em">{DOW[d]}</text>}</For>
+                        <For each={months}>{(_, i) => <Show when={keep().has(i())}><text x={mx[i()]} y={oy - 5}>{mlab()[i()]}</text></Show>}</For>
+                        <For each={[0, 2, 4]}>{(d) => <text x={0} y={oy + d * l.cell + l.cell / 2} dy="0.32em">{dayWord(d)}</text>}</For>
                       </g>
                       <For each={cal.cells.filter((c) => c.week >= band * l.per && c.week < (band + 1) * l.per)}>
                         {(c) => (
-                          <g class="viz-mark" {...hover(tip, () => <TipBody title={`${c.date} (${DOW[c.dow]})`} rows={[{ label: "", value: c.value === null ? "기록 없음" : fmtV(c.value, unit) }]} />)}>
+                          <g class="viz-mark" {...hover(tip, () => <TipBody title={`${c.date} (${dayWord(c.dow)})`} rows={[{ label: "", value: c.value === null ? t("기록 없음") : fmtV(c.value, unit) }]} />)}>
                             <rect x={24 + (c.week - band * l.per) * l.cell} y={oy + c.dow * l.cell} width={l.cell - 2} height={l.cell - 2} rx={2} fill={fillOf(c.value)} />
                           </g>
                         )}
@@ -69,9 +74,9 @@ defineViz({
                 }}
               </For>
               <g transform={`translate(${w - (STEPS + 1) * 14 - 50},${h - 14})`}>
-                <text class="ch-note" x={-6} y={5} dy="0.32em" text-anchor="end">적음</text>
+                <text class="ch-note" x={-6} y={5} dy="0.32em" text-anchor="end">{t("적음")}</text>
                 <For each={Array.from({ length: STEPS + 1 }, (_, i) => i)}>{(i) => <rect x={i * 14} y={0} width={11} height={11} rx={2} fill={i === 0 ? "var(--viz-grid)" : fillOf((i / STEPS) * max)} />}</For>
-                <text class="ch-note" x={(STEPS + 1) * 14 + 4} y={5} dy="0.32em">많음</text>
+                <text class="ch-note" x={(STEPS + 1) * 14 + 4} y={5} dy="0.32em">{t("많음")}</text>
               </g>
             </>
           );
@@ -197,7 +202,7 @@ defineViz({
     const rows = arr<any>(b.rows)
       .filter((r) => r && typeof r === "object")
       .slice(0, 30)
-      .map((r, k) => ({ label: str(r.label, `행 ${k + 1}`), values: columns.map((_, c) => toNum(arr(r.values)[c])) }));
+      .map((r, k) => ({ label: str(r.label, t("행 {n}", { n: k + 1 })), values: columns.map((_, c) => toNum(arr(r.values)[c])) }));
     const better = arr<any>(b.better).map((x) => str(x));
     const units = arr<any>(b.units).map((x) => str(x));
     const scale = str(b.scale, "col");
@@ -299,7 +304,7 @@ defineViz({
     });
     const cols = clamp(Math.round(toNum(b.cols) ?? Math.sqrt(cellsN)), 5, 40);
     const rowsN = Math.ceil(cellsN / cols);
-    const tipOf = (i: number) => <TipBody title={ps[i].label} rows={[{ color: color(i), key: "box", label: `${counts[i]}칸`, value: `${shares[i]}% · ${fmtV(ps[i].value, unit)}` }]} />;
+    const tipOf = (i: number) => <TipBody title={ps[i].label} rows={[{ color: color(i), key: "box", label: t("{n}칸", { n: counts[i] }), value: `${shares[i]}% · ${fmtV(ps[i].value, unit)}` }]} />;
     const tip = useTip();
     const side = (w: number) => w >= 440;
     const cell = (w: number) => clamp(Math.floor((side(w) ? w * 0.42 : w) / cols), 8, 22);
@@ -363,14 +368,14 @@ defineViz({
   render: (b: any) => {
     const total0 = toNum(b.total);
     let groups: { label: string; value: number }[] = parts(b.items).slice(0, 5);
-    if (!groups.length && isNum(toNum(b.value))) groups = [{ label: str(b.valueLabel, str(b.label, "해당")), value: toNum(b.value)! }];
+    if (!groups.length && isNum(toNum(b.value))) groups = [{ label: str(b.valueLabel, str(b.label, t("해당"))), value: toNum(b.value)! }];
     const sum = groups.reduce((n, g) => n + g.value, 0);
     const total = Math.max(total0 ?? sum, sum, 1);
     // at most 100 icons; past that one icon stands for several
     const per = total > 100 ? Math.ceil(total / 100) : 1;
     const icons = Math.ceil(total / per);
     const counts = per === 1 ? groups.map((g) => Math.round(g.value)) : largestRemainder([...groups.map((g) => g.value), total - sum], icons).slice(0, groups.length);
-    const unit = str(b.unit, "명");
+    const unit = str(b.unit, t("명"));
     const owner: number[] = [];
     counts.forEach((c, k) => {
       for (let j = 0; j < c; j++) owner.push(k);
@@ -384,30 +389,30 @@ defineViz({
       return [25, 20, 10, 5].find((k) => k <= fit && (icons > 25 || k <= icons) && !(k === 25 && icons % 25)) ?? fit;
     };
     const scale = (w: number) => (icons <= 20 && w >= 420 ? 1.3 : 1);
-    const legend = groups.length > 1 ? groups.map((g, k) => ({ label: `${g.label} ${fmtC(g.value)}${unit}`, color: series(k) })) : undefined;
-    const lead = groups.length === 1 ? `${fmtC(groups[0].value)}${unit} / ${fmtC(total)}${unit}` : "";
+    const legend = () => (groups.length > 1 ? groups.map((g, k) => ({ label: `${g.label} ${fmtC(g.value, unit)}`, color: series(k) })) : undefined);
+    const lead = () => (groups.length === 1 ? `${fmtC(groups[0].value, unit)} / ${fmtC(total, unit)}` : "");
     return (
       <ChFrame
         label={str(b.label)}
-        legend={legend}
+        legend={legend()}
         height={(w) => {
           const s = scale(w);
-          return Math.ceil(icons / perRow(w)) * (IH + GY) * s + (lead ? 34 : 0) + (per > 1 ? 20 : 0);
+          return Math.ceil(icons / perRow(w)) * (IH + GY) * s + (lead() ? 34 : 0) + (per > 1 ? 20 : 0);
         }}
       >
         {(w, h) => {
           const s = scale(w);
           const pr = perRow(w / s);
-          const top = lead ? 34 : 0;
+          const top = lead() ? 34 : 0;
           return (
             <>
-              <Show when={lead}><text class="ch-big" x={0} y={20} style={{ "font-size": "22px" }}>{lead}</text></Show>
+              <Show when={lead()}><text class="ch-big" x={0} y={20} style={{ "font-size": "22px" }}>{lead()}</text></Show>
               <g transform={`translate(0,${top}) scale(${s})`}>
                 <For each={Array.from({ length: icons }, (_, i) => i)}>
                   {(i) => {
                     const k = owner[i];
                     return (
-                      <g class="viz-mark" transform={`translate(${(i % pr) * (IW + GX)},${Math.floor(i / pr) * (IH + GY)})`} {...hover(tip, () => <TipBody title={k === undefined ? "나머지" : groups[k].label} rows={[{ label: "", value: k === undefined ? `${fmtC(total - sum)}${unit}` : `${fmtC(groups[k].value)}${unit} / ${fmtC(total)}${unit}` }]} />)}>
+                      <g class="viz-mark" transform={`translate(${(i % pr) * (IW + GX)},${Math.floor(i / pr) * (IH + GY)})`} {...hover(tip, () => <TipBody title={k === undefined ? t("나머지") : groups[k].label} rows={[{ label: "", value: k === undefined ? fmtC(total - sum, unit) : `${fmtC(groups[k].value, unit)} / ${fmtC(total, unit)}` }]} />)}>
                         <rect class="ch-hit" x={-2} y={-2} width={IW + 4} height={IH + 4} />
                         <path d={PERSON} fill={k === undefined ? "var(--viz-grid)" : series(k)} />
                       </g>
@@ -415,7 +420,7 @@ defineViz({
                   }}
                 </For>
               </g>
-              <Show when={per > 1}><text class="ch-note" x={0} y={h - 4}>{`아이콘 1개 = ${fmtC(per)}${unit}`}</text></Show>
+              <Show when={per > 1}><text class="ch-note" x={0} y={h - 4}>{t("아이콘 1개 = {v}", { v: fmtC(per, unit) })}</text></Show>
             </>
           );
         }}

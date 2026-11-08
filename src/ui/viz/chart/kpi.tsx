@@ -5,6 +5,7 @@ import { line } from "d3-shape";
 import { scaleLinear } from "d3-scale";
 import { defineViz } from "../registry";
 import { num, series } from "../kit";
+import { t } from "../../../i18n";
 import { arr, clamp, deltaNum, deltaTone, extent, isNum, str, toNum } from "./math";
 import { Arrow, ChFrame, Crosshair, fmtC, fmtV, makeX, makeY, pct, Spark, TipBody, tw, XTicks, YGrid, box } from "./common";
 
@@ -30,9 +31,9 @@ defineViz({
     const mas = arr<any>(b.ma).map(toNum).filter((n): n is number => n !== null && n > 1).slice(0, 2);
     const maVals = mas.map((n) => rows.map((_, i) => (i + 1 >= n ? rows.slice(i + 1 - n, i + 1).reduce((a, r) => a + r.c, 0) / n : null)));
     const maColor = (k: number) => series(k === 0 ? 2 : 6);
-    const legend = [{ label: "상승", color: UP }, { label: "하락", color: DOWN }, ...mas.map((n, k) => ({ label: `${n}일 이동평균`, color: maColor(k), dash: true }))];
+    const legend = () => [{ label: t("상승"), color: UP }, { label: t("하락"), color: DOWN }, ...mas.map((n, k) => ({ label: t("{n}일 이동평균", { n }), color: maColor(k), dash: true }))];
     return (
-      <ChFrame label={str(b.label)} height={(w) => clamp(w * 0.55, 240, 340) + (hasVol ? 70 : 0)} legend={legend}>
+      <ChFrame label={str(b.label)} height={(w) => clamp(w * 0.55, 240, 340) + (hasVol ? 70 : 0)} legend={legend()}>
         {(w, h) => {
           const volH = hasVol ? 56 : 0;
           const top = 8, bottom = 24;
@@ -100,11 +101,11 @@ defineViz({
                     <TipBody
                       title={r.x}
                       rows={[
-                        { label: "시가", value: fmtV(r.o, unit) },
-                        { label: "고가", value: fmtV(r.h, unit) },
-                        { label: "저가", value: fmtV(r.l, unit) },
-                        { color: col(r, i), key: "box", label: `종가 (${ch > 0 ? "+" : ""}${ch.toFixed(2)}%)`, value: fmtV(r.c, unit) },
-                        ...(r.v !== null ? [{ label: "거래량", value: fmtC(r.v) }] : []),
+                        { label: t("시가"), value: fmtV(r.o, unit) },
+                        { label: t("고가"), value: fmtV(r.h, unit) },
+                        { label: t("저가"), value: fmtV(r.l, unit) },
+                        { color: col(r, i), key: "box", label: t("종가 ({p})", { p: `${ch > 0 ? "+" : ""}${ch.toFixed(2)}%` }), value: fmtV(r.c, unit) },
+                        ...(r.v !== null ? [{ label: t("거래량"), value: fmtC(r.v) }] : []),
                       ]}
                     />
                   );
@@ -174,14 +175,14 @@ defineViz({
               const unit = str(it.unit) || undefined;
               const tgt = toNum(it.target);
               const trend = arr(it.trend).map(toNum);
-              const vText = v !== null ? fmtC(v) : str(it.value, "–");
+              const vText = () => (v !== null ? fmtC(v) : str(it.value, "–"));
               const prog = v !== null && tgt ? v / tgt : null;
               const lower = it.better === "down";
               return (
                 <div class="ch-kpi">
                   <div class="ch-kpi-label" title={str(it.label)}>{str(it.label)}</div>
                   <div class="ch-kpi-value">
-                    {vText}
+                    {vText()}
                     <Show when={unit}><small>{unit}</small></Show>
                   </div>
                   <Delta delta={it.delta} better={it.better} unit={str(it.deltaUnit) || undefined} vs={str(it.vs ?? b.vs) || undefined} />
@@ -191,7 +192,7 @@ defineViz({
                   <Show when={tgt !== null}>
                     <div class="ch-kpi-target">
                       <Show when={!lower}><span class="ch-meter"><i style={{ width: `${clamp((prog ?? 0) * 100, 0, 100)}%` }} /></span></Show>
-                      <span>목표 {lower ? "≤ " : ""}{fmtC(tgt!, unit)}{lower ? (v !== null && v <= tgt! ? " · 달성" : " · 미달") : ` · ${prog !== null ? pct(prog * 100) : "–"}`}</span>
+                      <span>{t("목표")} {lower ? "≤ " : ""}{fmtC(tgt!, unit)}{lower ? ` · ${v !== null && v <= tgt! ? t("달성") : t("미달")}` : ` · ${prog !== null ? pct(prog * 100) : "–"}`}</span>
                     </div>
                   </Show>
                 </div>
@@ -226,7 +227,7 @@ defineViz({
   render: (b: any) => {
     const items = arr<any>(b.items)
       .filter((i) => i && typeof i === "object")
-      .map((i, k) => ({ label: str(i.label, `목표 ${k + 1}`), v: toNum(i.value) ?? 0, t: toNum(i.target ?? i.total) ?? 100, unit: str(i.unit) || unitOf(b), note: str(i.note ?? i.due) }));
+      .map((i, k) => ({ label: str(i.label, t("목표 {n}", { n: k + 1 })), v: toNum(i.value) ?? 0, t: toNum(i.target ?? i.total) ?? 100, unit: str(i.unit) || unitOf(b), note: str(i.note ?? i.due) }));
     return (
       <div class="blk viz ch ch-goals">
         <Show when={str(b.label)}><div class="blk-label">{str(b.label)}</div></Show>
@@ -272,7 +273,7 @@ defineViz({
   render: (b: any) => {
     const v = toNum(b.value);
     const unit = unitOf(b);
-    const cmp = b.compare && typeof b.compare === "object" ? { label: str(b.compare.label, "이전"), value: toNum(b.compare.value) } : null;
+    const cmp = b.compare && typeof b.compare === "object" ? { label: str(b.compare.label, t("이전")), value: toNum(b.compare.value) } : null;
     const delta = b.delta ?? (v !== null && cmp?.value ? +(((v - cmp.value) / Math.abs(cmp.value)) * 100).toFixed(1) : null);
     const trend = arr(b.trend).map(toNum);
     return (
@@ -284,7 +285,7 @@ defineViz({
         </div>
         <div class="ch-big-row">
           <Delta delta={delta} better={b.better} unit={str(b.deltaUnit) || undefined} vs={cmp ? undefined : str(b.vs) || undefined} />
-          <Show when={cmp}><span class="ch-vs">{cmp!.label}{cmp!.value !== null ? ` ${fmtV(cmp!.value, unit)}` : ""} 대비</span></Show>
+          <Show when={cmp}><span class="ch-vs">{t("{c} 대비", { c: `${cmp!.label}${cmp!.value !== null ? ` ${fmtV(cmp!.value, unit)}` : ""}` })}</span></Show>
         </div>
         <Show when={trend.filter(isNum).length > 1}>
           <Spark values={trend} w={240} h={44} color="var(--viz-muted)" dot={series(0)} />
@@ -316,7 +317,7 @@ defineViz({
         const last = toNum(i.value) ?? (nums.length ? nums[nums.length - 1] : null);
         const first = nums.length ? nums[0] : null;
         const change = i.change !== undefined ? i.change : last !== null && first ? +(((last - first) / Math.abs(first)) * 100).toFixed(1) : null;
-        return { label: str(i.label, `항목 ${k + 1}`), values, last, change, unit: str(i.unit) || unitOf(b), better: i.better ?? b.better };
+        return { label: str(i.label, t("항목 {n}", { n: k + 1 })), values, last, change, unit: str(i.unit) || unitOf(b), better: i.better ?? b.better };
       });
     const all = extent(items.flatMap((i) => i.values));
     const shared = b.shared === true && all ? all : undefined;
@@ -327,9 +328,9 @@ defineViz({
           <thead>
             <tr>
               <th />
-              <th>{str(b.trendLabel, "추이")}</th>
-              <th>{str(b.valueLabel, "최근")}</th>
-              <th class="chg">{str(b.changeLabel, "변화")}</th>
+              <th>{str(b.trendLabel, t("추이"))}</th>
+              <th>{str(b.valueLabel, t("최근"))}</th>
+              <th class="chg">{str(b.changeLabel, t("변화"))}</th>
             </tr>
           </thead>
           <tbody>

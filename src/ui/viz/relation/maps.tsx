@@ -6,6 +6,7 @@ import { geoCentroid, geoEqualEarth, geoMercator, geoPath, type GeoProjection } 
 import { feature } from "topojson-client";
 import { defineViz } from "../registry";
 import { Frame, div, seq, series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { SIDO, SIDO_TILES, classify, countryKo, countryName, dotsIn, flowArc, lonLat, sidoCode } from "./layout/geo";
 import { arr, declutter, hash, isObj, toNum, toStr } from "./layout/text";
 import { Empty, FS_SM, Ramp, Safe, fit, onFillStyle, tw, val } from "./ui";
@@ -93,7 +94,7 @@ function scaleOf(vs: number[]) {
 
 /** maps overlap marks everywhere, so only three colours stay apart: the rest fold into "기타" grey */
 const gslot = (i: number) => (i < 0 ? 0 : i < 3 ? i : 8);
-const groupLegend = (gs: string[]) => [...gs.slice(0, 3).map((g, i) => ({ label: g, color: series(i) })), ...(gs.length > 3 ? [{ label: "기타", color: series(8) }] : [])];
+const groupLegend = (gs: string[]) => [...gs.slice(0, 3).map((g, i) => ({ label: g, color: series(i) })), ...(gs.length > 3 ? [{ label: t("기타"), color: series(8) }] : [])];
 
 interface MapB { label?: string; unit?: string; map?: string; items?: unknown; places?: unknown; links?: unknown; per?: number }
 
@@ -189,7 +190,7 @@ function Choropleth(b: MapB & { kind: MapKind }) {
                       d={path(f as any) ?? ""}
                       fill={d ? sc().color(d.value) : undefined}
                       style={d?.em ? { stroke: "var(--ink)", "stroke-width": "1.5px" } : undefined}
-                      onMouseMove={(e) => tip.show(e, d ? `${val(d.value, b.unit)}\n${featName(b.kind, f)}${d.note ? `\n${d.note}` : ""}` : `${featName(b.kind, f)}\n자료 없음`)}
+                      onMouseMove={(e) => tip.show(e, d ? `${val(d.value, b.unit)}\n${featName(b.kind, f)}${d.note ? `\n${d.note}` : ""}` : `${featName(b.kind, f)}\n${t("자료 없음")}`)}
                       onMouseLeave={tip.hide}
                     />
                   );
@@ -297,7 +298,7 @@ function KoreaTiles(b: MapB) {
                   const y = r * s + 1;
                   const v = d ? val(d.value, b.unit) : "";
                   return (
-                    <g class="rl-tile" onMouseMove={(e) => tip.show(e, d ? `${val(d.value, b.unit)}\n${SIDO[code][1]}${d.note ? `\n${d.note}` : ""}` : `${SIDO[code][1]}\n자료 없음`)} onMouseLeave={tip.hide}>
+                    <g class="rl-tile" onMouseMove={(e) => tip.show(e, d ? `${val(d.value, b.unit)}\n${SIDO[code][1]}${d.note ? `\n${d.note}` : ""}` : `${SIDO[code][1]}\n${t("자료 없음")}`)} onMouseLeave={tip.hide}>
                       <rect x={x} y={y} width={s - 2} height={s - 2} rx={4} fill={fillC} style={d?.em ? { stroke: "var(--ink)", "stroke-width": "2px" } : undefined} />
                       <text class="rl-in" style={d ? onFillStyle(fillC) : undefined} x={x + (s - 2) / 2} y={y + (s - 2) / 2 + (v && s >= 44 ? -7 : 0)} dy="0.35em" text-anchor="middle" font-weight="600">{SIDO[code][0]}</text>
                       <Show when={v && s >= 44}>

@@ -8,6 +8,7 @@ import {
 } from "./common";
 import { boxStats, clamp, ecdf, extent, histogram, jitter, kde, kdeRange, qq, swarm, thresholds, type BoxStats, type Pt } from "./math";
 import { rlognorm, rnorm } from "./sample";
+import { t } from "../../../i18n";
 
 type G = { label: string; values: number[]; em?: boolean };
 const legendOf = (gs: G[]) => gs.map((g, i) => ({ label: g.label, color: col(i) }));
@@ -35,7 +36,7 @@ function Histogram(b: HistB) {
       <Plot
         label={b.label} legend={many() ? data().names.map((n, i) => ({ label: n, color: col(i) })) : undefined}
         x={{ domain: [data().th[0], data().th[data().th.length - 1]], nice: false, title: b.x ?? (b.unit ? `(${b.unit})` : undefined) }}
-        y={{ domain: [0, ymax() * 1.05], title: b.y ?? (b.density ? "밀도" : "빈도") }}
+        y={{ domain: [0, ymax() * 1.05], title: b.y ?? (b.density ? t("밀도") : t("빈도")) }}
       >
         {(c) => (
           <g>
@@ -101,7 +102,7 @@ function Density(b: DensB) {
   });
   return (
     <Show when={gs().length}>
-      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} x={{ domain: [D().lo, D().hi], title: b.x ?? (b.unit ? `(${b.unit})` : undefined) }} y={{ domain: [0, D().ymax * 1.08], title: "밀도", fmt: (v) => fix(v) }}>
+      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} x={{ domain: [D().lo, D().hi], title: b.x ?? (b.unit ? `(${b.unit})` : undefined) }} y={{ domain: [0, D().ymax * 1.08], title: t("밀도"), fmt: (v) => fix(v) }}>
         {(c) => (
           <g>
             <For each={D().curves}>
@@ -166,7 +167,7 @@ function Ridgeline(b: RidgeB) {
                 const st = () => boxStats(g().values)!;
                 const on = () => !anyEm() || g().em;
                 return (
-                  <Tip tip={`${g().label}\n중앙값 ${withU(fix(st().median), b.unit)}\nn = ${st().n}`}>
+                  <Tip tip={`${g().label}\n${t("중앙값 {v}", { v: withU(fix(st().median), b.unit) })}\nn = ${st().n}`}>
                     <path d={d()} style={{ fill: "var(--viz-gap)" }} />
                     <path d={d()} style={{ fill: on() ? col(0) : "var(--viz-other)", "fill-opacity": on() ? 0.22 : 0.18 }} />
                     <path class="st-thin" d={ln()} style={{ stroke: on() ? col(0) : "var(--viz-other)", "stroke-width": 1.5 }} />
@@ -251,7 +252,7 @@ const domainOf = (gs: GroupIn[], pad = 0.06): [number, number] => extent(gs.flat
 const colorFor = (gs: GroupIn[], i: number) => (gs.some((g) => g.em) && !gs[i].em ? "var(--viz-other)" : col(0));
 const boxTip = (g: GroupIn, unit?: string) => {
   const s = g.stats!;
-  return `${g.label}\n중앙값 ${withU(fix(s.median), unit)}\nQ1–Q3 ${fix(s.q1)}–${fix(s.q3)}\n수염 ${fix(s.lo)}–${fix(s.hi)}${Number.isFinite(s.mean) ? `\n평균 ${fix(s.mean)}` : ""}${s.n ? `\nn = ${s.n}` : ""}${s.outliers.length ? `\n이상치 ${s.outliers.length}개` : ""}`;
+  return `${g.label}\n${t("중앙값 {v}", { v: withU(fix(s.median), unit) })}\nQ1–Q3 ${fix(s.q1)}–${fix(s.q3)}\n${t("수염 {v}", { v: `${fix(s.lo)}–${fix(s.hi)}` })}${Number.isFinite(s.mean) ? `\n${t("평균 {v}", { v: fix(s.mean) })}` : ""}${s.n ? `\nn = ${s.n}` : ""}${s.outliers.length ? `\n${t("이상치 {n}개", { n: s.outliers.length })}` : ""}`;
 };
 
 /** one box: whiskers, IQR box, median, outliers */
@@ -524,7 +525,7 @@ function Ecdf(b: EcdfB) {
   const F = (st: Pt[], x: number) => { let f = 0; for (const p of st) if (p[0] <= x) f = p[1]; return f; };
   return (
     <Show when={gs().length}>
-      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} x={{ domain: [D().lo, D().hi], title: b.x ?? (b.unit ? `(${b.unit})` : undefined) }} y={{ domain: [0, 1], nice: false, ticks: [0, 0.25, 0.5, 0.75, 1], fmt: (v) => `${Math.round(v * 100)}%`, title: "누적 비율" }}>
+      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} x={{ domain: [D().lo, D().hi], title: b.x ?? (b.unit ? `(${b.unit})` : undefined) }} y={{ domain: [0, 1], nice: false, ticks: [0, 0.25, 0.5, 0.75, 1], fmt: (v) => `${Math.round(v * 100)}%`, title: t("누적 비율") }}>
         {(c) => {
           const grid = () => Array.from({ length: 101 }, (_, i) => D().lo + ((D().hi - D().lo) * i) / 100);
           return (
@@ -533,7 +534,7 @@ function Ecdf(b: EcdfB) {
                 {(st, k) => <path class="st-line" style={{ stroke: col(k()) }} d={line<Pt>().curve(curveStepAfter).x((p) => c.X(p[0])).y((p) => c.Y(p[1]))([[D().lo, 0], ...st, [D().hi, 1]]) ?? ""} />}
               </For>
               <RefLines refs={refsOf(b.refs)} c={c} />
-              <Crosshair box={c} xs={grid().map((x) => c.X(x))} read={(i) => `${withU(fix(grid()[i]), b.unit)} 이하\n${gs().map((g, k) => `${g.label ? g.label + " " : ""}${Math.round(F(D().steps[k], grid()[i]) * 1000) / 10}%`).join("\n")}`} dots={(i) => D().steps.map((st, k) => ({ y: c.Y(F(st, grid()[i])), color: col(k) }))} />
+              <Crosshair box={c} xs={grid().map((x) => c.X(x))} read={(i) => `${t("{v} 이하", { v: withU(fix(grid()[i]), b.unit) })}\n${gs().map((g, k) => `${g.label ? g.label + " " : ""}${Math.round(F(D().steps[k], grid()[i]) * 1000) / 10}%`).join("\n")}`} dots={(i) => D().steps.map((st, k) => ({ y: c.Y(F(st, grid()[i])), color: col(k) }))} />
             </g>
           );
         }}
@@ -562,9 +563,9 @@ function Qq(b: QqB) {
   const yr = () => extent(D().flatMap((d) => d.pts.map((p) => p[1])), 0.05);
   return (
     <Show when={gs().length}>
-      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} height={(w) => clamp(Math.round(w * 0.7), 240, 420)} x={{ domain: xr(), title: "이론 분위수 (정규)", grid: true }} y={{ domain: yr(), title: `표본 분위수${b.unit ? ` (${b.unit})` : ""}` }}>
+      <Plot label={b.label} legend={gs().length > 1 ? legendOf(gs()) : undefined} height={(w) => clamp(Math.round(w * 0.7), 240, 420)} x={{ domain: xr(), title: t("이론 분위수 (정규)"), grid: true }} y={{ domain: yr(), title: `${t("표본 분위수")}${b.unit ? ` (${b.unit})` : ""}` }}>
         {(c) => {
-          const pts = () => D().flatMap((d, k) => d.pts.map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 3, color: col(k), tip: `${withU(fix(p[1]), b.unit)}\n이론 ${fix(p[0])}${gs()[k].label ? `\n${gs()[k].label}` : ""}` })));
+          const pts = () => D().flatMap((d, k) => d.pts.map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 3, color: col(k), tip: `${withU(fix(p[1]), b.unit)}\n${t("이론 {v}", { v: fix(p[0]) })}${gs()[k].label ? `\n${gs()[k].label}` : ""}` })));
           return (
             <g>
               <For each={D()}>

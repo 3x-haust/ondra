@@ -6,6 +6,7 @@ import { defineViz } from "../registry";
 import { series } from "../kit";
 import { arr, clamp, cumulate, dodge, extent, isNum, normSeries, parseTime, stackSeries, str, toNum, valueDomain, xKind, type Series } from "./math";
 import { box, ChFrame, colorOf, Crosshair, cut, FS, fmtV, inkOn, makeX, makeY, pct, TipBody, tw, XTicks, YGrid, type TipRow } from "./common";
+import { t } from "../../../i18n";
 
 type X = (string | number)[];
 let uid = 0;
@@ -40,9 +41,9 @@ export function xIndex(xs: X, v: unknown): number {
   });
   return best;
 }
-const targetOf = (t: unknown): { value: number; label: string } | null => {
-  if (isNum(t)) return { value: t, label: "목표" };
-  if (t && typeof t === "object" && isNum(toNum((t as any).value))) return { value: toNum((t as any).value)!, label: str((t as any).label, "목표") };
+const targetOf = (g: unknown): { value: number; label: string } | null => {
+  if (isNum(g)) return { value: g, label: t("목표") };
+  if (g && typeof g === "object" && isNum(toNum((g as any).value))) return { value: toNum((g as any).value)!, label: str((g as any).label, t("목표")) };
   return null;
 };
 
@@ -387,7 +388,7 @@ function StackPlot(props: { b: any; mode: "stack" | "percent" | "stream" }) {
                       label: s.label,
                       value: mode === "percent" ? `${pct(((s.values[i] ?? 0) / (totals[i] || 1)) * 100)} · ${fmtV(s.values[i], unit())}` : fmtV(s.values[i], unit()),
                     }))}
-                  foot={`합계 ${fmtV(totals[i], unit())}`}
+                  foot={t("합계 {v}", { v: fmtV(totals[i], unit()) })}
                 />
               )}
             />
@@ -465,8 +466,8 @@ defineViz({
     for (const [l, hh] of [[lo, hi], [lo2, hi2]] as const) if (lastA >= 0 && l[lastA] === null && l.some((v) => v !== null)) (l[lastA] = actual[lastA]), (hh[lastA] = actual[lastA]);
     const c = series(0);
     const bands = [
-      ...(lo2.some((v) => v !== null) ? [{ lo: lo2, hi: hi2, color: c, opacity: 0.1, label: str(b.band2, "95% 구간") }] : []),
-      ...(lo.some((v) => v !== null) ? [{ lo, hi, color: c, opacity: 0.2, label: str(b.band, "80% 구간") }] : []),
+      ...(lo2.some((v) => v !== null) ? [{ lo: lo2, hi: hi2, color: c, opacity: 0.1, label: str(b.band2, t("95% 구간")) }] : []),
+      ...(lo.some((v) => v !== null) ? [{ lo, hi, color: c, opacity: 0.2, label: str(b.band, t("80% 구간")) }] : []),
     ];
     const unit = str(b.unit) || undefined;
     return (
@@ -480,14 +481,14 @@ defineViz({
         ends="none"
         class="ch-fan"
         lines={[
-          { label: str(b.actualLabel, "실적"), values: actual, color: c },
-          { label: str(b.forecastLabel, "예측"), values: fc, color: c, dash: true },
+          { label: str(b.actualLabel, t("실적")), values: actual, color: c },
+          { label: str(b.forecastLabel, t("예측")), values: fc, color: c, dash: true },
         ]}
         bands={bands}
-        legend={[{ label: str(b.actualLabel, "실적"), color: c }, { label: str(b.forecastLabel, "예측"), color: c, dash: true }, ...bands.map((bd) => ({ label: bd.label!, color: `color-mix(in srgb, ${c} ${bd.opacity === 0.1 ? 22 : 40}%, transparent)` }))]}
+        legend={[{ label: str(b.actualLabel, t("실적")), color: c }, { label: str(b.forecastLabel, t("예측")), color: c, dash: true }, ...bands.map((bd) => ({ label: bd.label!, color: `color-mix(in srgb, ${c} ${bd.opacity === 0.1 ? 22 : 40}%, transparent)` }))]}
         extraTip={(i) => [
-          ...(lo[i] !== null && hi[i] !== null && i !== lastA ? [{ label: str(b.band, "80% 구간"), value: `${fmtV(lo[i], unit)} ~ ${fmtV(hi[i], unit)}` }] : []),
-          ...(lo2[i] !== null && hi2[i] !== null && i !== lastA ? [{ label: str(b.band2, "95% 구간"), value: `${fmtV(lo2[i], unit)} ~ ${fmtV(hi2[i], unit)}` }] : []),
+          ...(lo[i] !== null && hi[i] !== null && i !== lastA ? [{ label: str(b.band, t("80% 구간")), value: `${fmtV(lo[i], unit)} ~ ${fmtV(hi[i], unit)}` }] : []),
+          ...(lo2[i] !== null && hi2[i] !== null && i !== lastA ? [{ label: str(b.band2, t("95% 구간")), value: `${fmtV(lo2[i], unit)} ~ ${fmtV(hi2[i], unit)}` }] : []),
         ]}
       />
     );
@@ -516,10 +517,10 @@ defineViz({
   when: "값이 기준선보다 위였던 때와 아래였던 때, 그 크기",
   render: (b: any) => {
     const d = normSeries(b);
-    const s = d.series[0] ?? { label: "값", values: [] };
+    const s = d.series[0] ?? { label: t("값"), values: [] };
     const base = toNum(b.base) ?? 0;
     const unit = str(b.unit) || undefined;
-    const above = str(b.above, "기준 위"), below = str(b.below, "기준 아래");
+    const above = str(b.above, t("기준 위")), below = str(b.below, t("기준 아래"));
     const id = `ch-sd-${++uid}`;
     return (
       <ChFrame label={str(b.label)} height={(w) => clamp(w * 0.46, 200, 280)} legend={[{ label: above, color: "var(--viz-div-p2)" }, { label: below, color: "var(--viz-div-n2)" }]}>
@@ -606,7 +607,7 @@ function Burn(props: { b: any; mode: "up" | "down" }) {
   const b = props.b;
   const xs: X = arr<any>(b.x).map((v) => (isNum(v) ? v : str(v)));
   const n = Math.max(xs.length, arr(b.done).length, arr(b.remaining).length, arr(b.scope).length);
-  const x = xs.length >= n ? xs : Array.from({ length: n }, (_, i) => xs[i] ?? `${i + 1}일`);
+  const x = xs.length >= n ? xs : Array.from({ length: n }, (_, i) => xs[i] ?? t("{n}일|day", { n: i + 1 }));
   const at = (v: unknown, i: number) => toNum(arr(v)[i]);
   const unit = str(b.unit) || undefined;
   const scope = x.map((_, i) => at(b.scope, i));
@@ -628,10 +629,10 @@ function Burn(props: { b: any; mode: "up" | "down" }) {
     proj = x.map((_, i) => (i < lastMain ? null : Math.max(0, main[lastMain]! + pace * (i - lastMain))));
   }
   const lines: LS[] = [
-    ...(ideal ? [{ label: "계획", values: ideal, color: "var(--viz-muted)", dash: true, quiet: true } as LS] : []),
-    ...(props.mode === "up" && scope.some((v) => v !== null) ? [{ label: "전체 범위", values: scope, color: series(1) } as LS] : []),
-    { label: props.mode === "down" ? "남은 일" : "완료", values: main, color: series(0) },
-    ...(proj ? [{ label: "현재 속도", values: proj, color: series(0), dash: true, quiet: true } as LS] : []),
+    ...(ideal ? [{ label: t("계획"), values: ideal, color: "var(--viz-muted)", dash: true, quiet: true } as LS] : []),
+    ...(props.mode === "up" && scope.some((v) => v !== null) ? [{ label: t("전체 범위"), values: scope, color: series(1) } as LS] : []),
+    { label: props.mode === "down" ? t("남은 작업") : t("완료"), values: main, color: series(0) },
+    ...(proj ? [{ label: t("현재 속도"), values: proj, color: series(0), dash: true, quiet: true } as LS] : []),
   ];
   return <LinePlot label={str(b.label)} unit={unit} x={x} lines={lines} zero="always" events={b.events} ends="none" />;
 }

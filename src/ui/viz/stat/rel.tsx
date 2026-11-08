@@ -9,6 +9,7 @@ import { defineViz } from "../registry";
 import { arr, col, ell, fix, Nearest, Plot, RefLines, refsOf, ScaleKey, SEQ_STOPS, SM, str, Tip, tw, withU, type Ctx } from "./common";
 import { clamp, extent, hexbin, linreg, loess, logDomain, mean, placeLabels, sd, toNum, type Pt } from "./math";
 import { rnorm } from "./sample";
+import { t } from "../../../i18n";
 
 type P = { x: number; y: number; label?: string; em?: boolean };
 /** points from [[x,y]], [[x,y,"label"]] or [{x,y,label}] */
@@ -19,7 +20,7 @@ export function pointsOf(v: unknown): P[] {
 export function seriesOf(b: any, max = 8): { label: string; pts: P[] }[] {
   const s = arr<any>(b.series).filter((x) => x && typeof x === "object").map((x, i) => ({ label: str(x.label) || `${i + 1}`, pts: pointsOf(x.points ?? x.values) }));
   const one = pointsOf(b.points);
-  return (s.length ? s : one.length ? [{ label: str(b.name) || "관측치", pts: one }] : []).filter((x) => x.pts.length).slice(0, max);
+  return (s.length ? s : one.length ? [{ label: str(b.name) || t("관측치"), pts: one }] : []).filter((x) => x.pts.length).slice(0, max);
 }
 const xTitle = (b: any) => str(b.x) || undefined;
 const yTitle = (b: any) => str(b.y) || undefined;
@@ -57,7 +58,7 @@ function Scatter(b: ScatterB) {
     if (fit() === "none") return l;
     if (one()) {
       const f = fits()[0];
-      return [...l, { label: f.lin ? `선형 적합 · R² ${fix(f.lin.r2, 2)}` : "LOESS 평활", color: "var(--ink-2)", dash: false }];
+      return [...l, { label: f.lin ? t("선형 적합 · R² {v}", { v: fix(f.lin.r2, 2) }) : t("LOESS 평활"), color: "var(--ink-2)", dash: false }];
     }
     return S().map((s, i) => ({ label: fits()[i].lin ? `${s.label} · R² ${fix(fits()[i].lin!.r2, 2)}` : s.label, color: col(i) }));
   };
@@ -220,7 +221,7 @@ function Hexbin(b: HexB) {
   const pts = () => pointsOf(b.points);
   return (
     <Show when={pts().length}>
-      <Plot label={b.label} x={{ domain: extent(pts().map((p) => p.x), 0.02), title: xTitle(b) }} y={{ domain: extent(pts().map((p) => p.y), 0.02), title: yTitle(b) }} below={<ScaleKey stops={SEQ_STOPS} lo="적음" hi="많음" title="점 개수" />}>
+      <Plot label={b.label} x={{ domain: extent(pts().map((p) => p.x), 0.02), title: xTitle(b) }} y={{ domain: extent(pts().map((p) => p.y), 0.02), title: yTitle(b) }} below={<ScaleKey stops={SEQ_STOPS} lo={t("적음")} hi={t("많음")} title={t("점 개수")} />}>
         {(c) => {
           const r = () => clamp(b.radius ?? c.iw / 32, 5, 18);
           const bins = createMemo(() => hexbin(pts().map((p) => [c.X(p.x) - c.x0, c.Y(p.y) - c.y0]), r()));
@@ -235,7 +236,7 @@ function Hexbin(b: HexB) {
               <g clip-path={`url(#hx-${c.w})`}>
                 <For each={bins()}>
                   {(h) => (
-                    <Tip tip={`${h.n}개\n${fix(c.X.invert(h.x + c.x0))}, ${fix(c.Y.invert(h.y + c.y0))} 부근`}>
+                    <Tip tip={`${t("{n}개|points", { n: h.n })}\n${t("{v} 부근", { v: `${fix(c.X.invert(h.x + c.x0))}, ${fix(c.Y.invert(h.y + c.y0))}` })}`}>
                       <path transform={`translate(${h.x + c.x0},${h.y + c.y0})`} d={`M${hex()}Z`} style={{ fill: seq(Math.sqrt(h.n / mx())) }} />
                     </Tip>
                   )}
@@ -333,10 +334,10 @@ function Residual(b: ResB) {
   const m = () => mean(pts().map((p) => p.y));
   return (
     <Show when={pts().length}>
-      <Plot label={b.label} legend={[{ label: "잔차", color: col(0) }, { label: "|표준화 잔차| > 2", color: "var(--viz-bad)" }, { label: "LOESS 평활", color: "var(--ink-2)" }]} x={{ domain: extent(pts().map((p) => p.x), 0.04), title: str(b.x) || "적합값", grid: true }} y={{ domain: extent([...pts().map((p) => p.y), 0], 0.08), title: str(b.y) || "잔차" }}>
+      <Plot label={b.label} legend={[{ label: t("잔차"), color: col(0) }, { label: t("|표준화 잔차| > 2"), color: "var(--viz-bad)" }, { label: t("LOESS 평활"), color: "var(--ink-2)" }]} x={{ domain: extent(pts().map((p) => p.x), 0.04), title: str(b.x) || t("적합값"), grid: true }} y={{ domain: extent([...pts().map((p) => p.y), 0], 0.08), title: str(b.y) || t("잔차") }}>
         {(c) => {
           const smooth = createMemo(() => loess(pts().map((p) => [p.x, p.y]), 0.6));
-          const D = () => pts().map((p) => ({ x: c.X(p.x), y: c.Y(p.y), r: 3.5, out: Math.abs((p.y - m()) / s()) > 2, color: Math.abs((p.y - m()) / s()) > 2 ? "var(--viz-bad)" : col(0), tip: `잔차 ${fix(p.y)}\n적합값 ${fix(p.x)}${p.label ? `\n${p.label}` : ""}` }));
+          const D = () => pts().map((p) => ({ x: c.X(p.x), y: c.Y(p.y), r: 3.5, out: Math.abs((p.y - m()) / s()) > 2, color: Math.abs((p.y - m()) / s()) > 2 ? "var(--viz-bad)" : col(0), tip: `${t("잔차")} ${fix(p.y)}\n${t("적합값")} ${fix(p.x)}${p.label ? `\n${p.label}` : ""}` }));
           return (
             <g>
               <line class="st-ref-solid" style={{ stroke: "var(--ink-3)" }} x1={c.x0} x2={c.x0 + c.iw} y1={c.Y(0)} y2={c.Y(0)} />
@@ -380,12 +381,12 @@ function BlandAltman(b: BaB) {
   const u = () => (b.percent ? "%" : b.unit);
   return (
     <Show when={pts().length > 1}>
-      <Plot label={b.label} x={{ domain: extent(pts().map((p) => p.x), 0.05), title: `평균 (${str(b.a) || "A"} + ${str(b.b) || "B"}) / 2${b.unit ? ` (${b.unit})` : ""}` }} y={{ domain: extent([...pts().map((p) => p.y), hi(), lo(), 0], 0.12), title: `차이 ${str(b.a) || "A"} − ${str(b.b) || "B"}${u() ? ` (${u()})` : ""}` }} pad={(w) => ({ r: w > 460 ? 74 : 0 })}>
+      <Plot label={b.label} x={{ domain: extent(pts().map((p) => p.x), 0.05), title: `${t("평균")} (${str(b.a) || "A"} + ${str(b.b) || "B"}) / 2${b.unit ? ` (${b.unit})` : ""}` }} y={{ domain: extent([...pts().map((p) => p.y), hi(), lo(), 0], 0.12), title: `${t("차이")} ${str(b.a) || "A"} − ${str(b.b) || "B"}${u() ? ` (${u()})` : ""}` }} pad={(w) => ({ r: w > 460 ? 74 : 0 })}>
         {(c) => {
-          const D = () => pts().map((p) => ({ x: c.X(p.x), y: c.Y(p.y), r: 3.5, color: col(0), tip: `차이 ${withU(fix(p.y), u())}\n평균 ${withU(fix(p.x), b.unit)}` }));
+          const D = () => pts().map((p) => ({ x: c.X(p.x), y: c.Y(p.y), r: 3.5, color: col(0), tip: `${t("차이")} ${withU(fix(p.y), u())}\n${t("평균")} ${withU(fix(p.x), b.unit)}` }));
           const lines = () => [
             { v: hi(), name: "+1.96 SD", dash: true },
-            { v: md(), name: "평균 차이", dash: false },
+            { v: md(), name: t("평균 차이"), dash: false },
             { v: lo(), name: "−1.96 SD", dash: true },
           ];
           const wide = () => c.w > 460;

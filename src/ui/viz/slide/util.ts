@@ -2,6 +2,8 @@
 // math (label placement, trees, decision values, dates, lanes). No JSX, so
 // tests can import it.
 
+import { monthWord, yearWord } from "../words";
+
 /* ───────────── forgiving readers ───────────── */
 
 /** a list, or nothing: never throws on a string or an object */
@@ -263,7 +265,7 @@ export function dayTicks(lo: number, hi: number, maxTicks: number): { at: number
   for (const d of months) {
     const t = dateOf(d);
     if (t.getUTCMonth() % step) continue;
-    out.push({ at: d, label: t.getUTCMonth() === 0 ? `${t.getUTCFullYear()}년` : `${t.getUTCMonth() + 1}월` });
+    out.push({ at: d, label: t.getUTCMonth() === 0 ? yearWord(t.getUTCFullYear()) : monthWord(t.getUTCMonth() + 1) });
   }
   return out;
 }

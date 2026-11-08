@@ -6,6 +6,7 @@ import { arr, col, ColPlot, Dot, ell, fix, Nearest, Plot, RowPlot, SM, str, Tip,
 import { BoxMark, boxTip, groupsWithStats } from "./dist";
 import { extent, isNum, logDomain, pooled, pText, stars, toNum } from "./math";
 import { rnorm } from "./sample";
+import { t } from "../../../i18n";
 
 /** a bar rounded at its data end (4px), square at the baseline */
 export function barPath(x: number, y0: number, y1: number, w: number, r = 4): string {
@@ -68,7 +69,7 @@ function MeanErr(b: EbB & { brackets?: boolean }) {
           const colorOf = (i: EItem) => (items().some((x) => x.em) && !i.em ? "var(--viz-other)" : col(Math.max(0, L().groups.indexOf(i.group ?? ""))));
           const tip = (i: EItem) => {
             const iv = intervalOf(i, err());
-            return `${withU(fix(i.value), b.unit)}${iv ? `\n${ERR[err()]} ${fix(iv[0])} – ${fix(iv[1])}` : ""}\n${i.label}${i.group ? ` · ${i.group}` : ""}${i.n ? `\nn = ${i.n}` : ""}`;
+            return `${withU(fix(i.value), b.unit)}${iv ? `\n${t(ERR[err()])} ${fix(iv[0])} – ${fix(iv[1])}` : ""}\n${i.label}${i.group ? ` · ${i.group}` : ""}${i.n ? `\nn = ${i.n}` : ""}`;
           };
           // the top of each column's marks, for brackets
           const tops = () => L().cats.map((cat) => Math.min(c.y0 + c.ih, ...items().filter((i) => i.label === cat).map((i) => c.Y(Math.max(i.value, intervalOf(i, err())?.[1] ?? i.value)))));
@@ -223,7 +224,7 @@ interface ForestB { label?: string; x?: string; log?: boolean; null?: number; le
 function Forest(b: ForestB) {
   const items = () => arr<any>(b.items).filter((i) => i && [i.value, i.lo, i.hi].every((v) => isNum(toNum(v))) && (!b.log || (i.lo > 0 && i.value > 0))).map((i, k) => ({ label: str(i.label) || `${k + 1}`, value: +i.value, lo: +i.lo, hi: +i.hi, weight: num0(i.weight), n: num0(i.n), note: str(i.note) || (isNum(i.n) ? `n = ${i.n}` : undefined), em: !!i.em }));
   const pool = () => (b.pooled && [b.pooled.value, b.pooled.lo, b.pooled.hi].every(isNum) ? b.pooled : null);
-  const rows = () => [...items().map((i) => i.label), ...(pool() ? [pool()!.label ?? "전체"] : [])];
+  const rows = () => [...items().map((i) => i.label), ...(pool() ? [pool()!.label ?? t("전체|pooled")] : [])];
   const nul = () => (isNum(b.null) ? b.null : b.log ? 1 : 0);
   const all = () => [...items().flatMap((i) => [i.lo, i.hi]), ...(pool() ? [pool()!.lo, pool()!.hi] : []), nul()];
   const dom = (): [number, number] => (b.log ? logDomain(all()) : extent(all(), 0.06));
@@ -245,7 +246,7 @@ function Forest(b: ForestB) {
                   <Show when={pool()}><line class="st-ref" x1={c.X(pool()!.value)} x2={c.X(pool()!.value)} y1={c.y0} y2={c.y0 + c.ih} /></Show>
                   <For each={items()}>
                     {(i, k) => (
-                      <Tip tip={`${txt(i.value, i.lo, i.hi)}\n${i.label}${i.weight ? `\n가중치 ${fix(i.weight)}%` : ""}${i.n ? `\nn = ${i.n}` : ""}`}>
+                      <Tip tip={`${txt(i.value, i.lo, i.hi)}\n${i.label}${i.weight ? `\n${t("가중치 {v}", { v: `${fix(i.weight)}%` })}` : ""}${i.n ? `\nn = ${i.n}` : ""}`}>
                         <rect x={c.x0} y={c.rowY(k()) - c.band / 2} width={c.iw} height={c.band} fill="transparent" />
                         <line class="st-whisker" style={{ stroke: "var(--ink-2)" }} x1={Math.max(c.x0, c.X(i.lo))} x2={Math.min(c.x0 + c.iw, c.X(i.hi))} y1={c.rowY(k())} y2={c.rowY(k())} />
                         <rect x={c.X(i.value) - sq(i)} y={c.rowY(k()) - sq(i)} width={sq(i) * 2} height={sq(i) * 2} rx={1} style={{ fill: i.em ? col(1) : col(0) }} />
@@ -256,7 +257,7 @@ function Forest(b: ForestB) {
                     {(p) => {
                       const y = () => c.rowY(items().length);
                       return (
-                        <Tip tip={`${txt(p().value, p().lo, p().hi)}\n${p().label ?? "전체"}`}>
+                        <Tip tip={`${txt(p().value, p().lo, p().hi)}\n${p().label ?? t("전체|pooled")}`}>
                           <path d={`M${c.X(p().lo)},${y()}L${c.X(p().value)},${y() - 7}L${c.X(p().hi)},${y()}L${c.X(p().value)},${y() + 7}Z`} style={{ fill: "var(--ink-2)" }} />
                         </Tip>
                       );
@@ -301,7 +302,7 @@ defineViz<ForestB>({
 
 interface FunB { label?: string; x?: string; log?: boolean; pooled?: number; items?: { label?: string; value: number; se: number }[] }
 function Funnel(b: FunB) {
-  const items = () => arr<any>(b.items).filter((i) => i && isNum(toNum(i.value)) && toNum(i.se) > 0 && (!b.log || i.value > 0)).map((i, k) => ({ label: str(i.label) || `연구 ${k + 1}`, value: +i.value, se: +i.se }));
+  const items = () => arr<any>(b.items).filter((i) => i && isNum(toNum(i.value)) && toNum(i.se) > 0 && (!b.log || i.value > 0)).map((i, k) => ({ label: str(i.label) || t("연구 {n}", { n: k + 1 }), value: +i.value, se: +i.se }));
   // on a log axis (odds/risk ratios) the funnel is symmetric in log space
   const tx = (v: number) => (b.log ? Math.log(v) : v);
   const ux = (v: number) => (b.log ? Math.exp(v) : v);
@@ -310,9 +311,9 @@ function Funnel(b: FunB) {
   const xs = () => [...items().map((i) => i.value), ux(centre() - 1.96 * seMax()), ux(centre() + 1.96 * seMax())];
   return (
     <Show when={items().length}>
-      <Plot label={b.label} height={(w) => Math.min(360, Math.max(240, w * 0.6))} x={{ domain: b.log ? [Math.min(...xs()), Math.max(...xs())] : extent(xs(), 0.04), log: b.log, title: b.x, nice: !b.log }} y={{ domain: [seMax(), 0], title: "표준오차", nice: false, fmt: (v) => fix(v) }}>
+      <Plot label={b.label} height={(w) => Math.min(360, Math.max(240, w * 0.6))} x={{ domain: b.log ? [Math.min(...xs()), Math.max(...xs())] : extent(xs(), 0.04), log: b.log, title: b.x, nice: !b.log }} y={{ domain: [seMax(), 0], title: t("표준오차"), nice: false, fmt: (v) => fix(v) }}>
         {(c) => {
-          const pts = () => items().map((i) => ({ x: c.X(i.value), y: c.Y(i.se), color: col(0), tip: `${i.label}\n효과 ${fix(i.value)}\nSE ${fix(i.se)}` }));
+          const pts = () => items().map((i) => ({ x: c.X(i.value), y: c.Y(i.se), color: col(0), tip: `${i.label}\n${t("효과 {v}", { v: fix(i.value) })}\nSE ${fix(i.se)}` }));
           return (
             <g>
               <path style={{ fill: "var(--ink-3)", "fill-opacity": 0.06 }} d={`M${c.X(ux(centre()))},${c.Y(0)}L${c.X(ux(centre() - 1.96 * seMax()))},${c.Y(seMax())}L${c.X(ux(centre() + 1.96 * seMax()))},${c.Y(seMax())}Z`} />

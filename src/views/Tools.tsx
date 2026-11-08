@@ -2,7 +2,7 @@
 // started with what every job gets (built-in tools, Ondra's extensions, skills, MCP).
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import { engine, tilde } from "../engine/rpc";
-import { state } from "../state/store";
+import { setState, state } from "../state/store";
 import { tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
@@ -28,6 +28,26 @@ const KO: Record<string, string> = {
   device: "시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요",
 };
 
+/** What an open row says about the engine's own tools: a little more than the one line (keys for t()). */
+const KO_MORE: Record<string, string> = {
+  read: "텍스트 파일과 이미지(jpg, png, gif, webp, bmp)를 읽어요. 긴 파일은 나눠서 읽어요",
+  bash: "작업 폴더에서 셸 명령을 실행하고 출력을 받아요. 기본 시간 제한은 없어요",
+  edit: "파일에서 정확히 같은 부분을 찾아 바꿔요. 한 번에 여러 곳을 바꿀 수 있어요",
+  write: "파일을 새로 만들거나 덮어써요. 없는 폴더는 함께 만들어요",
+  grep: "파일 내용에서 정규식이나 글자를 찾아요. 파일 종류로 좁힐 수 있어요",
+  find: "글롭 패턴으로 파일을 찾아요 (예: **/*.ts)",
+  ls: "폴더 안 목록을 이름순으로 보여 줘요. 숨김 파일도 보여요",
+  powershell: "작업 폴더에서 PowerShell 명령을 실행하고 출력을 받아요",
+  memory: "작업하며 알게 된 것을 메모리에 저장하거나 바꿔요. 다음 작업이 참고해요",
+  memory_search: "저장된 메모리에서 지금 작업에 맞는 것을 찾아요",
+  memory_save: "작업하며 알게 된 것을 메모리에 저장하거나 바꿔요. 다음 작업이 참고해요",
+  memory_forget: "더는 맞지 않는 메모리를 지워요",
+  skill_search: "작업에 맞는 스킬을 찾아 그 안내를 읽어요",
+  web_search: "웹에서 검색하고 결과 목록을 받아요",
+  web_fetch: "웹 페이지를 받아 읽을 수 있는 글로 바꿔요",
+  device: "iOS 시뮬레이터와 Android 에뮬레이터를 켜고, 화면을 찍고, 누르고, 글자를 입력해요",
+};
+
 const hasHangul = (s: string) => /[가-힣]/.test(s);
 /** First sentence of a description, short. */
 export function firstSentence(s: string, max = 110): string {
@@ -38,6 +58,8 @@ export function firstSentence(s: string, max = 110): string {
 }
 /** A tool's one-liner: our Korean line, its own if it is Korean, else its English first sentence. */
 export const toolLine = (x: { name: string; description: string }) => (KO[x.name] ? t(KO[x.name]) : firstSentence(x.description || ""));
+/** An open row's text in the app's language: our longer line for the engine's own tools, else the tool's own words. */
+export const toolMore = (x: { name: string; description: string }) => (KO_MORE[x.name] ? t(KO_MORE[x.name]) : KO[x.name] ? t(KO[x.name]) : x.description);
 /** our own line (in the app's language) or a Korean description: shown at full strength */
 export const isKorean = (x: { name: string; description: string }) => !!KO[x.name] || hasHangul(x.description || "");
 
@@ -75,6 +97,8 @@ interface Row {
   size: number;
   off?: boolean;
   found?: boolean;
+  /** a tool jobs don't get by default: a switch in Settings adds it (state.settings.extraTools) */
+  optional?: boolean;
   full: string;
 }
 interface Group {
@@ -94,7 +118,8 @@ function groupsOf(c: EngineContext): Group[] {
     const s = toolSource(x);
     // deferred tools sit behind tool_search: declared only once a job looks for them
     const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
-    add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: !x.active && !found, found, full: x.description });
+    const optional = !x.active && !found;
+    add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: optional, found, optional, full: toolMore(x) });
   }
   for (const s of c.skills)
     add("스킬", { key: `s:${s.path}`, name: s.name, line: firstSentence(s.description), ko: hasHangul(s.description), source: skillSource(s.path), size: skillTokens(s), off: !s.modelInvocable, full: s.description });
@@ -119,10 +144,15 @@ export function ToolsTab() {
       .map((g) => ({ ...g, rows: g.rows.filter((r) => !k || `${r.name} ${r.line} ${r.full} ${r.source}`.toLowerCase().includes(k)) }))
       .filter((g) => g.rows.length);
   });
+  // the tools turned on here, on top of what every job gets
+  const extra = () => state.settings.extraTools ?? [];
+  const isOn = (r: Row) => !r.optional || extra().includes(r.name);
+  const turn = (name: string, on: boolean) =>
+    setState("settings", "extraTools", (l) => (on ? [...new Set([...(l ?? []), name])] : (l ?? []).filter((n) => n !== name)));
   const declared = () => {
     const c = data();
     if (!c) return 0;
-    return c.tools.filter((x) => x.active).reduce((n, x) => n + x.schemaTokens, 0);
+    return c.tools.filter((x) => x.active || extra().includes(x.name)).reduce((n, x) => n + x.schemaTokens, 0);
   };
   return (
     <>
@@ -138,7 +168,7 @@ export function ToolsTab() {
       </div>
       <label class="tl-search">
         <Icon name="search" size={14} />
-        <input placeholder={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+        <input placeholder={t("검색")} aria-label={t("도구 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
       </label>
       <Show when={!data.error} fallback={<div class="set-group"><div class="empty-line">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</div></div>}>
         <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">{t("불러오는 중")}</div></div>}>
@@ -157,13 +187,33 @@ export function ToolsTab() {
                 <div class="set-group tl-group">
                   <For each={g.rows}>
                     {(r) => (
-                      <div class="tl-row" classList={{ off: r.off, open: open() === r.key }}>
-                        <button class="tl-head" onClick={() => setOpen(open() === r.key ? null : r.key)} aria-expanded={open() === r.key}>
-                          <span class="tl-name">{r.name}</span>
-                          <span class="tl-line" classList={{ en: !r.ko }} title={r.full}>{r.line}</span>
-                          <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && r.source.replace(/^Ondra 확장 · |^확장 · /, "") !== r.name}><span class="tl-src">{t(r.source.replace(/^Ondra 확장 · |^확장 · /, ""))}</span></Show>
-                          <span class="tl-size" title={r.off ? undefined : r.found ? t("필요할 때 찾아 써요") : t("{n} 토큰", { n: tokens(r.size) })}>{r.off ? t("꺼짐") : r.found ? t("필요 시") : `${tokens(r.size)}`}</span>
-                        </button>
+                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key }}>
+                        <div class="tl-head" onClick={() => setOpen(open() === r.key ? null : r.key)}>
+                          <button class="tl-open" aria-expanded={open() === r.key}>
+                            <span class="tl-name">{r.name}</span>
+                            <span class="tl-line" classList={{ en: !r.ko }} title={r.full}>{r.line}</span>
+                            <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && r.source.replace(/^Ondra 확장 · |^확장 · /, "") !== r.name}><span class="tl-src">{t(r.source.replace(/^Ondra 확장 · |^확장 · /, ""))}</span></Show>
+                          </button>
+                          <Show
+                            when={r.optional}
+                            fallback={<span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : t("{k} 토큰", { n: r.size, k: tokens(r.size) })}>{r.found ? t("필요 시") : tokens(r.size)}</span>}
+                          >
+                            {/* off unless turned on here: then every job gets it */}
+                            <span class="tl-size">
+                              <button
+                                class="switch"
+                                classList={{ on: isOn(r) }}
+                                role="switch"
+                                aria-checked={isOn(r)}
+                                aria-label={r.name}
+                                title={isOn(r) ? t("{k} 토큰", { n: r.size, k: tokens(r.size) }) : t("꺼짐")}
+                                onClick={(e) => (e.stopPropagation(), turn(r.name, !isOn(r)))}
+                              >
+                                <i />
+                              </button>
+                            </span>
+                          </Show>
+                        </div>
                         <div class="tl-more" classList={{ open: open() === r.key }}>
                           <div class="tl-more-in">
                             <p class="selectable">{r.full}</p>

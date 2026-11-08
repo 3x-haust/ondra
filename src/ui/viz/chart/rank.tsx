@@ -7,6 +7,7 @@ import { defineViz } from "../registry";
 import { series, useTip } from "../kit";
 import { arr, barPath, clamp, dodge, extent, isNum, normSeries, ranksOf, str, toNum, valueDomain } from "./math";
 import { AX, ChFrame, colorOf, cut, fmtC, fmtV, hover, MUTED, TipBody, tw, type TipRow } from "./common";
+import { t } from "../../../i18n";
 
 const unitOf = (b: any) => str(b.unit) || undefined;
 
@@ -78,7 +79,7 @@ defineViz({
   when: "많은 항목의 크기를 막대보다 가볍게 순위대로 비교",
   render: (b: any) => {
     const ps = itemsOf(b)
-      .map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), value: toNum(i.value), em: !!(i.em ?? i.highlight) }))
+      .map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), value: toNum(i.value), em: !!(i.em ?? i.highlight) }))
       .filter((p): p is { label: string; value: number; em: boolean } => p.value !== null);
     if (b.sort !== false) ps.sort((a, c) => c.value - a.value);
     const unit = unitOf(b);
@@ -128,8 +129,8 @@ defineViz({
   title: "점 그래프 (클리블랜드)",
   when: "항목마다 여러 집단의 값을 한 줄 위의 점으로 비교",
   render: (b: any) => {
-    const names = arr<any>(b.series).map((s, k) => str(typeof s === "object" && s ? s.label : s, `계열 ${k + 1}`)).slice(0, 8);
-    const rows = itemsOf(b).map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), values: arr(i.values).map(toNum) }));
+    const names = arr<any>(b.series).map((s, k) => str(typeof s === "object" && s ? s.label : s, t("계열 {n}", { n: k + 1 }))).slice(0, 8);
+    const rows = itemsOf(b).map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), values: arr(i.values).map(toNum) }));
     const unit = unitOf(b);
     const ext = extent(rows.flatMap((r) => r.values));
     const dom = valueDomain(ext, b.zero ? "always" : "auto");
@@ -178,11 +179,11 @@ defineViz({
   when: "항목마다 이전 값에서 이후 값으로 얼마나, 어느 방향으로 바뀌었나",
   render: (b: any) => {
     const names = arr<any>(b.series).map((s) => str(s));
-    const from = str(b.from, names[0] || "이전"), to = str(b.to, names[1] || "이후");
+    const from = str(b.from, names[0] || t("이전")), to = str(b.to, names[1] || t("이후"));
     const rows = itemsOf(b)
       .map((i, k) => {
         const v = arr(i.values);
-        return { label: str(i.label, `항목 ${k + 1}`), a: toNum(i.before ?? i.from ?? v[0]), b: toNum(i.after ?? i.to ?? v[1]) };
+        return { label: str(i.label, t("항목 {n}", { n: k + 1 })), a: toNum(i.before ?? i.from ?? v[0]), b: toNum(i.after ?? i.to ?? v[1]) };
       })
       .filter((r): r is { label: string; a: number; b: number } => r.a !== null && r.b !== null);
     if (b.sort !== false) rows.sort((p, q) => q.b - q.a - (p.b - p.a));
@@ -204,7 +205,7 @@ defineViz({
             <circle class="ch-dot" cx={xs(rows[c].b)} cy={y} r={5} fill={cb} />
           </>
         )}
-        tip={(c) => ({ title: rows[c].label, rows: [{ color: ca, label: from, value: fmtV(rows[c].a, unit) }, { color: cb, label: to, value: fmtV(rows[c].b, unit) }], foot: `변화 ${sign(rows[c].b - rows[c].a)}` })}
+        tip={(c) => ({ title: rows[c].label, rows: [{ color: ca, label: from, value: fmtV(rows[c].a, unit) }, { color: cb, label: to, value: fmtV(rows[c].b, unit) }], foot: t("변화 {v}", { v: sign(rows[c].b - rows[c].a) }) })}
       />
     );
   },
@@ -232,7 +233,7 @@ defineViz({
   when: "항목마다 최소~최대 범위가 어디에 걸쳐 있나 (현재값 점 선택)",
   render: (b: any) => {
     const rows = itemsOf(b)
-      .map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), lo: toNum(i.min ?? i.lo), hi: toNum(i.max ?? i.hi), v: toNum(i.value) }))
+      .map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), lo: toNum(i.min ?? i.lo), hi: toNum(i.max ?? i.hi), v: toNum(i.value) }))
       .filter((r): r is { label: string; lo: number; hi: number; v: number | null } => r.lo !== null && r.hi !== null)
       .map((r) => (r.lo > r.hi ? { ...r, lo: r.hi, hi: r.lo } : r));
     const unit = unitOf(b);
@@ -243,7 +244,7 @@ defineViz({
         label={str(b.label)}
         cats={rows.map((r) => r.label)}
         domain={dom}
-        legend={hasV ? [{ label: "범위", color: "var(--viz-seq-2)" }, { label: str(b.valueLabel, "현재"), color: series(0) }] : undefined}
+        legend={hasV ? [{ label: t("범위"), color: "var(--viz-seq-2)" }, { label: str(b.valueLabel, t("현재")), color: series(0) }] : undefined}
         right={(c) => `${fmtC(rows[c].lo)}~${fmtC(rows[c].hi)}`}
         draw={(c, xs, y) => {
           const r = rows[c];
@@ -255,7 +256,7 @@ defineViz({
             </>
           );
         }}
-        tip={(c) => ({ title: rows[c].label, rows: [{ label: "최소", value: fmtV(rows[c].lo, unit) }, { label: "최대", value: fmtV(rows[c].hi, unit) }, ...(rows[c].v !== null ? [{ label: str(b.valueLabel, "현재"), value: fmtV(rows[c].v, unit) }] : [])] })}
+        tip={(c) => ({ title: rows[c].label, rows: [{ label: t("최소"), value: fmtV(rows[c].lo, unit) }, { label: t("최대"), value: fmtV(rows[c].hi, unit) }, ...(rows[c].v !== null ? [{ label: str(b.valueLabel, t("현재")), value: fmtV(rows[c].v, unit) }] : [])] })}
       />
     );
   },
@@ -284,7 +285,7 @@ defineViz({
   when: "각 지표가 목표 대비 어디쯤이고, 나쁨·보통·좋음 구간 중 어디에 있나",
   render: (b: any) => {
     const rows = itemsOf(b)
-      .map((i, k) => ({ label: str(i.label, `지표 ${k + 1}`), v: toNum(i.value), t: toNum(i.target), bands: arr(i.bands).map(toNum).filter(isNum).sort((a, c) => a - c), max: toNum(i.max), unit: str(i.unit) || unitOf(b), note: str(i.note) }))
+      .map((i, k) => ({ label: str(i.label, t("지표 {n}", { n: k + 1 })), v: toNum(i.value), t: toNum(i.target), bands: arr(i.bands).map(toNum).filter(isNum).sort((a, c) => a - c), max: toNum(i.max), unit: str(i.unit) || unitOf(b), note: str(i.note) }))
       .filter((r) => r.v !== null) as { label: string; v: number; t: number | null; bands: number[]; max: number | null; unit?: string; note: string }[];
     const tip = useTip();
     const RH = 44;
@@ -304,7 +305,7 @@ defineViz({
                 const edges = [0, ...r.bands.filter((v) => v < max), max];
                 const ticks = xs.ticks(3);
                 return (
-                  <g class="viz-mark" {...hover(tip, () => <TipBody title={r.label} rows={[{ label: "현재", value: fmtV(r.v, r.unit) }, ...(r.t !== null ? [{ label: "목표", value: fmtV(r.t, r.unit) }] : []), ...(r.bands.length ? [{ label: "구간", value: r.bands.map((v) => fmtC(v)).join(" / ") }] : [])]} />)}>
+                  <g class="viz-mark" {...hover(tip, () => <TipBody title={r.label} rows={[{ label: t("현재"), value: fmtV(r.v, r.unit) }, ...(r.t !== null ? [{ label: t("목표"), value: fmtV(r.t, r.unit) }] : []), ...(r.bands.length ? [{ label: t("구간"), value: r.bands.map((v) => fmtC(v)).join(" / ") }] : [])]} />)}>
                     <rect class="ch-hit" x={0} y={y - 6} width={w} height={RH} />
                     <text class="ch-cat" x={lw} y={y + 8} dy="0.32em" text-anchor="end" style={{ "font-weight": 500 }}>{cut(r.label, lw - 4, 12.5, 500)}</text>
                     <Show when={r.note}><text class="ch-note" x={lw} y={y + 23} dy="0.32em" text-anchor="end">{cut(r.note, lw - 4, 11.5)}</text></Show>
@@ -346,11 +347,11 @@ defineViz({
   when: "두 시점 사이에 항목마다 값이 오르고 내린 정도와 순서 변화",
   render: (b: any) => {
     const cols = arr<any>(b.x ?? b.series).map((s) => str(s));
-    const A = cols[0] || "이전", B = cols[1] || "이후";
+    const A = cols[0] || t("이전"), B = cols[1] || t("이후");
     const rows = itemsOf(b)
       .map((i, k) => {
         const v = arr(i.values);
-        return { label: str(i.label, `항목 ${k + 1}`), a: toNum(i.from ?? v[0]), b: toNum(i.to ?? v[1]), em: !!(i.em ?? i.highlight) };
+        return { label: str(i.label, t("항목 {n}", { n: k + 1 })), a: toNum(i.from ?? v[0]), b: toNum(i.to ?? v[1]), em: !!(i.em ?? i.highlight) };
       })
       .filter((r): r is { label: string; a: number; b: number; em: boolean } => r.a !== null && r.b !== null);
     const unit = unitOf(b);
@@ -380,7 +381,7 @@ defineViz({
               <text class="ch-panel-title" x={x1} y={12} text-anchor="middle">{cut(B, 120)}</text>
               <For each={rows.map((r, k) => ({ r, k })).sort((p, q) => Number(!anyEm || p.r.em) - Number(!anyEm || q.r.em))}>
                 {({ r, k }) => (
-                  <g class="viz-mark" {...hover(tip, () => <TipBody title={r.label} rows={[{ label: A, value: fmtV(r.a, unit) }, { label: B, value: fmtV(r.b, unit) }]} foot={`변화 ${r.b - r.a > 0 ? "+" : ""}${fmtV(r.b - r.a, unit)}`} />)}>
+                  <g class="viz-mark" {...hover(tip, () => <TipBody title={r.label} rows={[{ label: A, value: fmtV(r.a, unit) }, { label: B, value: fmtV(r.b, unit) }]} foot={t("변화 {v}", { v: `${r.b - r.a > 0 ? "+" : ""}${fmtV(r.b - r.a, unit)}` })} />)}>
                     <line x1={x0} x2={x1} y1={ys(r.a)} y2={ys(r.b)} stroke="transparent" stroke-width="12" />
                     <line class="ch-line" x1={x0} x2={x1} y1={ys(r.a)} y2={ys(r.b)} stroke={col(k)} />
                     <circle class="ch-dot" cx={x0} cy={ys(r.a)} r={4} fill={col(k)} />
@@ -453,7 +454,7 @@ defineViz({
                   const idx = ranks[k].map((_, i) => i);
                   const dd = line<number>().defined((i) => ranks[k][i] !== null).x(px).y((i) => py(ranks[k][i]!)).curve(curveMonotoneX)(idx) ?? "";
                   return (
-                    <g class="viz-mark" {...hover(tip, () => <TipBody title={s.label} rows={xl.map((l, i) => ({ label: l, value: ranks[k][i] !== null ? `${ranks[k][i]}위${b.rank || s.values[i] === null ? "" : ` · ${fmtV(s.values[i], unit)}`}` : "–" }))} />)}>
+                    <g class="viz-mark" {...hover(tip, () => <TipBody title={s.label} rows={xl.map((l, i) => ({ label: l, value: ranks[k][i] !== null ? `${t("{n}위", { n: ranks[k][i]! })}${b.rank || s.values[i] === null ? "" : ` · ${fmtV(s.values[i], unit)}`}` : "–" }))} />)}>
                       <path d={dd} fill="none" stroke="transparent" stroke-width="14" />
                       <path d={dd} class="ch-line" stroke={col(k)} style={{ "stroke-width": "2.5px" }} />
                       <For each={ranks[k]}>{(r, i) => <Show when={r !== null}><circle class="ch-dot" cx={px(i())} cy={py(r!)} r={4.5} fill={col(k)} /></Show>}</For>

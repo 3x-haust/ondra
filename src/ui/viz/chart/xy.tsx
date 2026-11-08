@@ -7,6 +7,7 @@ import { defineViz } from "../registry";
 import { series, useTip } from "../kit";
 import { arr, clamp, extent, placeBoxes, str, toNum, valueDomain } from "./math";
 import { ChFrame, cut, fmtC, fmtV, hover, makeY, MUTED, TipBody, tw, YGrid } from "./common";
+import { t } from "../../../i18n";
 
 /** x axis ticks under a plot with an axis title at the right end */
 function XAxis(props: { s: (v: number) => number; ticks: number[]; y: number; x0: number; x1: number; title?: string; fmt?: (v: number) => string }) {
@@ -34,18 +35,18 @@ defineViz({
     const groups = [...new Set(arr<any>(b.items).map((i) => str(i?.group)).filter(Boolean))];
     const pts = arr<any>(b.items)
       .filter((i) => i && typeof i === "object")
-      .map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), x: toNum(i.x), y: toNum(i.y), size: toNum(i.size) ?? 1, g: groups.indexOf(str(i.group)) }))
+      .map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), x: toNum(i.x), y: toNum(i.y), size: toNum(i.size) ?? 1, g: groups.indexOf(str(i.group)) }))
       .filter((p): p is { label: string; x: number; y: number; size: number; g: number } => p.x !== null && p.y !== null)
       .sort((p, q) => q.size - p.size);
     // past three groups colour stops telling them apart: the rest go grey
     const colorOf = (g: number) => (g < 0 ? series(0) : g < 3 ? series(g) : MUTED);
     const tip = useTip();
-    const xl = str(b.xLabel), yl = str(b.yLabel), sl = str(b.sizeLabel, "크기");
+    const xl = str(b.xLabel), yl = str(b.yLabel), sl = str(b.sizeLabel, t("크기"));
     return (
       <ChFrame
         label={str(b.label)}
         height={(w) => clamp(w * 0.62, 240, 380)}
-        legend={groups.length > 1 ? [...groups.slice(0, 3).map((g, k) => ({ label: g, color: series(k) })), ...(groups.length > 3 ? [{ label: "기타", color: MUTED }] : [])] : undefined}
+        legend={groups.length > 1 ? [...groups.slice(0, 3).map((g, k) => ({ label: g, color: series(k) })), ...(groups.length > 3 ? [{ label: t("기타"), color: MUTED }] : [])] : undefined}
       >
         {(w, h) => {
           const rMax = clamp(w * 0.055, 14, 32);

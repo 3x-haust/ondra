@@ -6,6 +6,7 @@ import { defineViz } from "../registry";
 import { series, status, useTip } from "../kit";
 import { arr, clamp, foldParts, isNum, largestRemainder, normSeries, parliamentSeats, parts, sharePct, stackSeries, str, toNum, type Part } from "./math";
 import { ChFrame, cut, fmtC, fmtV, hover, inkOn, MUTED, pct, TipBody, tw } from "./common";
+import { t } from "../../../i18n";
 
 const unitOf = (b: any) => str(b.unit) || undefined;
 const TAU = Math.PI * 2;
@@ -58,7 +59,7 @@ function PieChart(props: { b: any; hole: boolean }) {
             </For>
             <Show when={props.hole}>
               <text class="ch-big" x={cx} y={cy - 2} text-anchor="middle" style={{ "font-size": `${clamp(r * 0.24, 16, 24)}px` }}>{fmtC(total)}</text>
-              <text class="ch-muted" x={cx} y={cy + 16} text-anchor="middle">{cut(str(b.center, unit ? `합계 · ${unit}` : "합계"), inner * 1.7)}</text>
+              <text class="ch-muted" x={cx} y={cy + 16} text-anchor="middle">{cut(str(b.center, unit ? t("합계 · {u}", { u: unit }) : t("합계")), inner * 1.7)}</text>
             </Show>
             <For each={ps}>
               {(p, i) => (
@@ -127,7 +128,7 @@ defineViz({
     const ss = arr<any>(b.series)
       .filter((s) => s && typeof s === "object")
       .slice(0, 4)
-      .map((s, k) => ({ label: str(s.label, `계열 ${k + 1}`), values: axes.map((_, i) => toNum(arr(s.values)[i])) }));
+      .map((s, k) => ({ label: str(s.label, t("계열 {n}", { n: k + 1 })), values: axes.map((_, i) => toNum(arr(s.values)[i])) }));
     const max = (toNum(b.max) ?? 0) > 0 ? toNum(b.max)! : Math.max(1, ...ss.flatMap((s) => s.values.filter(isNum)));
     const unit = unitOf(b);
     const tip = useTip();
@@ -276,7 +277,7 @@ defineViz({
     const ps = arr<any>(b.items)
       .filter((i) => i && isNum(toNum(i.value)))
       .slice(0, 8)
-      .map((i, k) => ({ label: str(i.label, `항목 ${k + 1}`), value: toNum(i.value)! }));
+      .map((i, k) => ({ label: str(i.label, t("항목 {n}", { n: k + 1 })), value: toNum(i.value)! }));
     const max = (toNum(b.max) ?? 0) > 0 ? toNum(b.max)! : Math.max(1, ...ps.map((p) => p.value));
     const unit = unitOf(b);
     const tip = useTip();
@@ -295,7 +296,7 @@ defineViz({
                 const val = arc<any>()({ innerRadius: ri, outerRadius: ro, startAngle: 0, endAngle: sweep * clamp(p.value / max, 0, 1), cornerRadius: RING / 2 }) ?? "";
                 const text = `${p.label} ${unit === "%" ? pct(p.value) : fmtC(p.value)}`;
                 return (
-                  <g class="viz-mark" {...hover(tip, () => <TipBody title={p.label} rows={[{ label: "", value: fmtV(p.value, unit) }]} foot={b.max ? `최대 ${fmtV(max, unit)}` : undefined} />)}>
+                  <g class="viz-mark" {...hover(tip, () => <TipBody title={p.label} rows={[{ label: "", value: fmtV(p.value, unit) }]} foot={b.max ? t("최대 {v}", { v: fmtV(max, unit) }) : undefined} />)}>
                     <path d={track} transform={`translate(${cx},${cy})`} class="ch-track" />
                     <Show when={p.value > 0}><path d={val} transform={`translate(${cx},${cy})`} fill={series(0)} opacity={1 - k() * 0.08} /></Show>
                     <text class="ch-cat" x={cx - 8} y={cy - ro + RING / 2} dy="0.32em" text-anchor="end">{cut(text, cx - 10)}</text>
@@ -364,7 +365,7 @@ defineViz({
           const ty = (x: number, r: number) => cy - Math.cos(A(x)) * r;
           const fs = clamp(R * 0.34, 22, 40);
           return (
-            <g class="viz-mark" {...hover(tip, () => <TipBody title={str(b.label) || undefined} rows={[{ label: band?.label || "", value: fmtV(v, unit) }, ...(tgt !== null ? [{ label: "목표", value: fmtV(tgt, unit) }] : []), ...segs.map((s) => ({ color: s.color, key: "box" as const, label: s.label, value: `${fmtC(s.from)}~${fmtC(s.to)}` }))]} />)}>
+            <g class="viz-mark" {...hover(tip, () => <TipBody title={str(b.label) || undefined} rows={[{ label: band?.label || "", value: fmtV(v, unit) }, ...(tgt !== null ? [{ label: t("목표"), value: fmtV(tgt, unit) }] : []), ...segs.map((s) => ({ color: s.color, key: "box" as const, label: s.label, value: `${fmtC(s.from)}~${fmtC(s.to)}` }))]} />)}>
               <path d={track} transform={`translate(${cx},${cy})`} class="ch-track" />
               <path d={val} transform={`translate(${cx},${cy})`} fill={fill} />
               <For each={segs}>
@@ -428,14 +429,14 @@ defineViz({
                   const k = owner[i()];
                   const color = k === undefined ? "var(--viz-grid)" : series(k);
                   return (
-                    <g class="viz-mark" {...(k !== undefined ? hover(tip, () => <TipBody title={ps[k].label} rows={[{ color: series(k), key: "box", label: "", value: `${counts[k]}석 · ${pct((counts[k] / (total || 1)) * 100, 1)}` }]} />) : {})}>
+                    <g class="viz-mark" {...(k !== undefined ? hover(tip, () => <TipBody title={ps[k].label} rows={[{ color: series(k), key: "box", label: "", value: `${t("{n}석", { n: counts[k] })} · ${pct((counts[k] / (total || 1)) * 100, 1)}` }]} />) : {})}>
                       <circle cx={cx + s.x} cy={cy + s.y} r={Math.max(1.5, s.r)} fill={color} />
                     </g>
                   );
                 }}
               </For>
               <text class="ch-big" x={cx} y={cy - 8} text-anchor="middle" style={{ "font-size": `${clamp(R * 0.18, 16, 26)}px` }}>{total}</text>
-              <Show when={majority}><text class="ch-muted" x={cx} y={cy + 8} text-anchor="middle">과반 {majority}</text></Show>
+              <Show when={majority}><text class="ch-muted" x={cx} y={cy + 8} text-anchor="middle">{t("과반 {n}", { n: majority! })}</text></Show>
             </>
           );
         }}
