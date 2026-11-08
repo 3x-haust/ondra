@@ -12,6 +12,7 @@ import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
+import { rememberDiff } from "../state/progress";
 
 // ───────────── diff model ─────────────
 export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
@@ -73,6 +74,11 @@ export function useChanges(t: () => Task) {
     ([cwd, base]) => gitChanges(cwd, base),
   );
   createEffect(on(() => t().entries.filter((e) => e.kind === "tool" && e.tool.endedAt).length, () => refetch(), { defer: true }));
+  // what's shown here is what the sidebar, canvas and review bar count
+  createEffect(() => {
+    const d = data();
+    if (d?.isRepo) rememberDiff(t(), d.files);
+  });
   return [data, refetch] as const;
 }
 
@@ -315,7 +321,8 @@ function WrittenFiles(props: { t: Task }) {
   const files = createMemo(() => {
     const m = new Map<string, { path: string; add: number; del: number; note?: boolean }>();
     for (const e of props.t.entries) {
-      if (e.kind !== "tool" || (e.tool.kind !== "edit" && e.tool.kind !== "write") || e.tool.ok === false) continue;
+      // notes (now.md, memory) aren't changes: counted the same as everywhere else
+      if (e.kind !== "tool" || (e.tool.kind !== "edit" && e.tool.kind !== "write") || e.tool.ok === false || e.tool.note) continue;
       const path = (e.tool.detail ?? "").split("\n")[0];
       const cur = m.get(path) ?? { path, add: 0, del: 0, note: e.tool.note };
       cur.add += e.tool.add ?? 0;

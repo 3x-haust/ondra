@@ -137,7 +137,7 @@ function jobParts(id: string): Part[] {
   return [
     { title: t.parentId ? tr("서브에이전트 규칙") : tr("작업 규칙"), text: role ?? (t.parentId ? SUB_SYSTEM : TASK_SYSTEM) },
     ...rest.map((text) => ({
-      title: text === instructions() ? tr("공통 지침") : text === spaceRules(space) ? tr("워크스페이스 · {name}", { name: space.label }) : text.startsWith("# Memory") ? tr("메모리 (항상)") : firstLine(text),
+      title: text === instructions() ? tr("공통 지침") : text === spaceRules(space) ? tr("워크스페이스 · {name}", { name: tr(space.label) }) : text.startsWith("# Memory") ? tr("메모리 (항상)") : firstLine(text),
       text,
     })),
   ];
@@ -172,7 +172,7 @@ function chatParts(key: string): Part[] {
   return [
     { title: tr("메인 규칙"), text: CAPTAIN_SYSTEM },
     { title: tr("공통 지침"), text: instructions() },
-    { title: tr("워크스페이스 · {name}", { name: space.label }), text: spaceRules(space) },
+    { title: tr("워크스페이스 · {name}", { name: tr(space.label) }), text: spaceRules(space) },
     ...(proj ? [{ title: tr("프로젝트 · {name}", { name: proj.name }), text: projectRules(proj) }] : []),
   ].filter((p) => p.text);
 }

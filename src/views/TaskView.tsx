@@ -2,7 +2,7 @@
 import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
-import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show, untrack } from "solid-js";
+import { createEffect, createSignal, For, type JSX, on, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
@@ -11,7 +11,8 @@ import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
 import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
-import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
+import { fsFiles, openInEditor, revealPath } from "../lib/native";
+import { planCount, taskDiff } from "../state/progress";
 import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
@@ -99,17 +100,17 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
   );
 }
 
-/** The whole to-do list while it works (OmO-style): done, now, next. Folds to one line. */
+/** The whole to-do list while it works (OmO-style): done, now, next. One line until opened. */
 function Todos(props: { t: Task }) {
-  const [open, setOpen] = createSignal(true);
-  const done = () => props.t.plan.filter((p) => p.state === "done").length;
-  const cur = () => props.t.plan.find((p) => p.state === "now");
+  const [open, setOpen] = createSignal(false);
+  const count = () => planCount(props.t.plan);
+  const cur = () => props.t.plan[count().now] ?? props.t.plan.find((p) => p.state !== "done");
   return (
     <div class="todos" classList={{ closed: !open() }}>
       <button class="todos-head" onClick={() => { holdScroll(); setOpen(!open()); }} aria-expanded={open()}>
         <Icon name="list" size={14} />
         <b>{tr("할 일")}</b>
-        <span class="num">{done()}/{props.t.plan.length}</span>
+        <span class="num">{count().label}</span>
         <Show when={!open() && cur()}><span class="rest">{cur()!.text}</span></Show>
         <span class="spacer" />
         <Icon name="chevron" size={13} class={`todos-chev ${open() ? "on" : ""}`} />
@@ -227,10 +228,7 @@ export function TaskView(props: { id: string }) {
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
         createEffect(on(() => task().unread, (u) => u && updateTask(task().id, (x) => (x.unread = false))));
         const ready = () => task().worktree?.state === "open" && (task().status === "done" || task().status === "paused" || task().status === "failed");
-        const [diff] = createResource(
-          () => (ready() ? ([expand(task().cwd), task().worktree!.base] as const) : false),
-          ([cwd, base]) => gitChanges(cwd, base),
-        );
+        const diff = () => taskDiff(task());
         const [merging, setMerging] = createSignal(false);
         const openPanel = (tab: PanelTab) => showTool(tab);
         // with the panel already open, show what matters for this job
@@ -266,8 +264,8 @@ export function TaskView(props: { id: string }) {
             out.push(
               <button class="strip" onClick={() => openPanel("terminal")}>
                 <Icon name="terminal" size={14} />
-                <b>{tr("백그라운드 {n}개", { n: bg().length })}</b>
-                <span class="rest"><code>{bg().map((s) => s.command).join("  ·  ")}</code></span>
+                <b>{tr("백그라운드")}</b>
+                <span class="rest"><code>{bg().map((s) => s.command.replace(/\s*&\s*$/, "")).join("  ·  ")}</code></span>
                 <Icon name="chevron" size={14} />
               </button>,
             );
@@ -289,15 +287,11 @@ export function TaskView(props: { id: string }) {
                 <Icon name="branch" size={14} />
                 <b>{tr("검토")}</b>
                 <span class="rest">
-                  <Show when={diff()} fallback={tr("확인 중")}>
-                    {(d) => (
-                      <Show when={d().files.length} fallback={tr("변경 없음")}>
-                      <button class="link-btn" onClick={() => openPanel("changes")}>
-                        {tr("파일 {n}개", { n: d().files.length })} <span class="add">+{d().files.reduce((n, f) => n + f.add, 0)}</span>{" "}
-                        <span class="del">−{d().files.reduce((n, f) => n + f.del, 0)}</span>
-                      </button>
-                      </Show>
-                    )}
+                  <Show when={diff().files.length} fallback={tr("변경 없음")}>
+                    <button class="link-btn" onClick={() => openPanel("changes")}>
+                      {tr("파일 {n}개", { n: diff().files.length })} <span class="add">+{diff().add}</span>{" "}
+                      <span class="del">−{diff().del}</span>
+                    </button>
                   </Show>
                 </span>
                 <button class="btn sm ghost" onClick={() => void discardTask(task().id)}>{tr("버리기")}</button>
@@ -361,7 +355,7 @@ export function TaskView(props: { id: string }) {
               <IssueTag t={task()} />
             </nav>
             <Show when={task().status === "done" && task().unverified?.length}>
-              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("확인 안 됨 {n}", { n: task().unverified!.length })}</span>
+              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged">{tr("검토")}</span>
@@ -387,7 +381,7 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <Show when={usesReverse(task(), state.tasks)}>
-                <button class="icon-btn" classList={{ on: panelOpen() && panelTab() === "reverse" }} title={tr("리버싱")} onClick={() => showTool("reverse")}>
+                <button class="icon-btn" classList={{ on: panelOpen() && panelTab() === "reverse" }} title={tr("바이너리 분석")} onClick={() => showTool("reverse")}>
                   <Icon name="binary" size={16} />
                 </button>
               </Show>
@@ -444,7 +438,7 @@ export function TaskView(props: { id: string }) {
                     { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
                     { name: "changes", desc: tr("변경 사항"), icon: "diff", run: () => showTool("changes") },
                     { name: "files", desc: tr("파일"), icon: "file", run: () => showTool("files") },
-                    { name: "terminal", desc: tr("셸"), icon: "shell", run: () => showTool("terminal") },
+                    { name: "terminal", desc: tr("터미널"), icon: "shell", run: () => showTool("terminal") },
                     { name: "browser", desc: tr("브라우저"), icon: "globe", run: () => showTool("browser") },
                     { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
                     { name: "ask", desc: tr("권한: 매번 묻기"), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },

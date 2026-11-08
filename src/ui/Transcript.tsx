@@ -11,6 +11,7 @@ import { editTurn, startTask } from "../engine/tasks";
 import { describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView } from "./Blocks";
+import { withDiff } from "../state/progress";
 import { long, now, short } from "./bits";
 import { Icon } from "./Icon";
 import { UsageLine } from "./Usage";
@@ -88,7 +89,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
             {(g) => (
               <div class="blocks">
                 <For each={chunkLinks(g().blocks)}>
-                  {(c) => (Array.isArray(c) ? <div class="blk blk-links"><For each={c}>{(b) => <BlockView block={b} />}</For></div> : <BlockView block={c} />)}
+                  {(c) => (Array.isArray(c) ? <div class="blk blk-links"><For each={c}>{(b) => <BlockView block={b} />}</For></div> : <BlockView block={withDiff(c, props.task)} />)}
                 </For>
               </div>
             )}

@@ -3,6 +3,7 @@
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { anyPop, closePops } from "../ui/ModelPicker";
+import { taskDiff } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, state, taskById, tasksIn } from "../state/store";
 import { pickFolder } from "../lib/native";
 import type { Task } from "../state/types";
@@ -37,10 +38,7 @@ export function forkOrder(space: string): Task[] {
 }
 
 export function changes(t: Task) {
-  let add = 0;
-  let del = 0;
-  for (const e of t.entries) if (e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write")) (add += e.tool.add ?? 0), (del += e.tool.del ?? 0);
-  return { add, del };
+  return taskDiff(t);
 }
 
 const openId = () => {
