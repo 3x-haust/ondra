@@ -673,6 +673,7 @@ export async function discardTask(id: string) {
   updateTask(id, (x) => {
     x.worktree = { ...w, state: "discarded" };
     x.cwd = homeDir(x);
+    x.discardedAt = Date.now();
     push(x, { kind: "note", text: "변경을 버렸어요" });
   });
 }

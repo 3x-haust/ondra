@@ -91,6 +91,21 @@ export const stepState = (s: PlanStep, t: Task): PlanStep["state"] => (s.state =
 /** Its changes were thrown away and it isn't working on them again: it reads 버림, not 완료. */
 export const discarded = (t: Task) => t.worktree?.state === "discarded" && (t.status === "done" || t.status === "paused" || t.status === "failed");
 
+/** When it ended, as its 병합됨 / 버림 / 완료 time reads: merged → when it was merged, discarded → when
+ *  its changes were thrown away, else when it finished (older tasks lack the first two: their finish). */
+export const endTime = (t: Task) =>
+  (discarded(t) ? t.discardedAt : t.worktree?.state === "merged" ? t.mergedAt : undefined) ?? t.finishedAt ?? t.createdAt;
+
+/** When a paused task stopped: its last 일시정지 note (older records: the end of its last session). */
+export function pausedAt(t: Task): number | undefined {
+  if (t.status !== "paused") return undefined;
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "note" && e.text === "일시정지") return e.at;
+  }
+  return t.legs[t.legs.length - 1]?.endedAt;
+}
+
 /** It has stopped working for good, or until someone starts it again. */
 export const ended = (t: Task) => t.status === "done" || t.status === "failed";
 

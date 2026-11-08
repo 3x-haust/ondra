@@ -3,7 +3,7 @@
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
-import { taskDiff, discarded } from "../state/progress";
+import { taskDiff, discarded, endTime } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, renameProject, state, taskById, tasksIn } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
@@ -109,7 +109,7 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
   if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
   if (x.status === "running") return { text: x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "", tone: "live" };
   // merged: when it was merged (older tasks without mergedAt: when it finished)
-  return { text: ago((x.worktree?.state === "merged" ? x.mergedAt : undefined) ?? x.finishedAt ?? x.createdAt), tone: "done" };
+  return { text: ago(endTime(x)), tone: "done" };
 }
 
 // ───────────── one row per job (T3-style thread list)

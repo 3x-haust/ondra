@@ -14,7 +14,7 @@ import { sendSide } from "../engine/aside";
 import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
-import { discarded, planCount, stepState, taskDiff, workedMs } from "../state/progress";
+import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard } from "../ui/Review";
 import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
@@ -376,11 +376,12 @@ export function TaskView(props: { id: string }) {
               </Show>
               <IssueTag t={task()} />
             </nav>
-            <Show when={task().status === "done" && !discarded(task()) && task().unverified?.length}>
-              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
-            </Show>
+            {/* the state first, then what's left to check */}
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
+            </Show>
+            <Show when={task().status === "done" && !discarded(task()) && task().unverified?.length}>
+              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             {/* its changes were thrown away: the muted trash, 버림 · when it ended */}
             <Show when={discarded(task())}>
@@ -388,7 +389,7 @@ export function TaskView(props: { id: string }) {
                 <Glyph t={task()} />
                 {tr("버림")}
                 <span class="faint" aria-hidden="true">·</span>
-                <span class="faint">{inlineAgo(task().finishedAt ?? task().createdAt)}</span>
+                <span class="faint">{inlineAgo(endTime(task()))}</span>
               </span>
             </Show>
             <Show when={task().status === "done" && !discarded(task()) && task().worktree?.state !== "open"}>
@@ -397,7 +398,7 @@ export function TaskView(props: { id: string }) {
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
                 {/* "병합됨 · 방금": when it was merged (older tasks without mergedAt: when it finished) */}
                 <span class="faint" aria-hidden="true">·</span>
-                <span class="faint">{inlineAgo((task().worktree?.state === "merged" ? task().mergedAt : undefined) ?? task().finishedAt ?? task().createdAt)}</span>
+                <span class="faint">{inlineAgo(endTime(task()))}</span>
               </span>
             </Show>
             <Show when={task().status !== "done" && !discarded(task())}>
@@ -409,6 +410,15 @@ export function TaskView(props: { id: string }) {
                 {tr(statusLabel[task().status])}
                 <Show when={task().status === "running" && task().startedAt}>
                   <span class="faint">{compact(workedMs(task(), now()))}</span>
+                </Show>
+                {/* "일시정지 · 6분 전": since it paused */}
+                <Show when={pausedAt(task())}>
+                  {(at) => (
+                    <>
+                      <span class="faint" aria-hidden="true">·</span>
+                      <span class="faint">{inlineAgo(at())}</span>
+                    </>
+                  )}
                 </Show>
               </span>
             </Show>

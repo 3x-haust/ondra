@@ -9,7 +9,7 @@ import { ago, compact, now } from "../ui/bits";
 import { line, plain } from "../ui/ForkCard";
 import { Icon } from "../ui/Icon";
 import { bucket, changes, Glyph } from "./Sidebar";
-import { discarded } from "../state/progress";
+import { discarded, endTime } from "../state/progress";
 import { DiscardGlyph } from "../ui/Review";
 import { t as tr } from "../i18n";
 
@@ -35,6 +35,8 @@ const NODE = 27;
 const GUTTER = NODE + 15;
 /** a subagent's glyph, at the end of its twig */
 const KID_X = NODE + 11;
+/** room above and below a row whose text wraps (6px each side) */
+const WRAP_PAD = 12;
 
 
 interface Row {
@@ -56,7 +58,7 @@ export function Flow() {
       .sort((a, b) => b.createdAt - a.createdAt),
   );
   /** finished, merged and not from today: tucked away under "earlier" */
-  const old = (t: Task) => ended(t) && (t.finishedAt ?? t.createdAt) < now() - DAY && t.id !== openRoot();
+  const old = (t: Task) => ended(t) && endTime(t) < now() - DAY && t.id !== openRoot();
   const shown = () => roots().filter((t) => older() || !old(t));
   const hiddenCount = () => roots().filter(old).length;
 
@@ -71,19 +73,25 @@ export function Flow() {
 
   /** one line is enough: it is already in the to-do list above, or has not started */
   const brief = (t: Task) => bucket(t) === "you" || bucket(t) === "review" || t.status === "queued" || t.status === "paused" || ended(t);
-  // rows show all of their text: each one's drawn height, measured, places the rows below it
-  const [drawn, setDrawn] = createSignal<Record<string, number>>({});
+  // rows show all of their text. Each row's text block is measured (on first render, and again
+  // whenever it changes size: a new title, a narrower panel); a row whose text runs past its
+  // usual height gets room above and below it, and the rows under it move down by that much.
+  const [text, setText] = createSignal<Record<string, number>>({});
   const sizes = new ResizeObserver((es) => {
-    const next = { ...drawn() };
+    const next = { ...text() };
     let changed = false;
     for (const e of es) {
       const el = e.target as HTMLElement;
+      if (!el.isConnected) continue;
       const h = Math.ceil(el.getBoundingClientRect().height);
-      if (el.isConnected && h && next[el.dataset.k!] !== h) (next[el.dataset.k!] = h), (changed = true);
+      // a hidden panel measures 0: keep the last size
+      if (h && next[el.dataset.k!] !== h) (next[el.dataset.k!] = h), (changed = true);
     }
-    if (changed) setDrawn(next);
+    if (changed) setText(next);
   });
   onCleanup(() => sizes.disconnect());
+  /** the row's height for text this tall: its usual height, or the text plus room around it */
+  const fit = (base: number, h: number | undefined) => (h !== undefined && h > base + 4 ? h + WRAP_PAD : base);
   const keyOf = (t: Task, kid: boolean) => `${kid ? "k" : "r"}:${t.id}`;
   /** the rows top to bottom; drawn once each, then only moved */
   const order = createMemo(() => {
@@ -95,10 +103,10 @@ export function Flow() {
     return out;
   });
   const rows = createMemo(() => {
-    const d = drawn();
+    const d = text();
     let y = 0;
     return order().map((o): Row => {
-      const h = Math.max(o.base, d[o.k] ?? o.base);
+      const h = fit(o.base, d[o.k]);
       const r = { t: o.t, kid: o.kid, y, h, base: o.base };
       y += h;
       return r;
@@ -155,7 +163,7 @@ export function Flow() {
     if (bucket(t) === "review") return tr("검토");
     if (t.status === "queued") return tr("대기");
     if (t.status === "paused") return tr("일시정지");
-    if (t.status === "done") return ago(t.finishedAt ?? t.createdAt);
+    if (t.status === "done") return ago(endTime(t));
     return t.startedAt ? compact(now() - t.startedAt) : "";
   };
   const sub = (t: Task) => {
@@ -197,40 +205,25 @@ export function Flow() {
           {(r) => (
             <button
               class="g-row"
-              classList={{ wrapped: (placed().get(r.k)?.h ?? 0) > r.base + 4, kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
-              ref={(el) => {
-                sizes.observe(el);
-                onCleanup(() => sizes.unobserve(el));
-              }}
-              data-k={r.k}
+              classList={{ wrapped: (placed().get(r.k)?.h ?? 0) > r.base, kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
               style={{ top: `${placed().get(r.k)?.y ?? 0}px`, "min-height": `${r.base}px`, "padding-left": `${r.kid ? GUTTER + 12 : GUTTER}px` }}
               onClick={() => openTask(r.t.id)}
               onMouseEnter={() => setHoverTask(r.kid ? r.t.parentId! : r.t.id)}
               onMouseLeave={() => setHoverTask(null)}
               title={r.t.title}
             >
-              <span class="g-line1">
-                <span class="g-name">{r.t.title}</span>
-                <Show when={!r.kid && r.t.browser && r.t.status === "running"}><Icon name="globe" size={11} class="g-badge" /></Show>
-                <Show when={!r.kid && r.base !== ROW && kidsOf(r.t).length}>
-                  <span
-                    class="g-kids"
-                    role="button"
-                    aria-expanded={!!kidsShown(r.t).length}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
-                    }}
-                  >
-                    {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
-                  </span>
-                </Show>
-                <span class="g-meta" classList={{ "m-review": bucket(r.t) === "review", "m-ask": r.t.status === "waiting", "m-bad": r.t.status === "failed" && !discarded(r.t) }}>{meta(r.t)}</span>
-              </span>
-              <Show when={!r.kid && r.base === ROW}>
-                <span class="g-line2-wrap">
-                  <span class="g-line2" classList={{ bad: r.t.status === "failed" }}>{sub(r.t)}</span>
-                  <Show when={kidsOf(r.t).length}>
+              <span
+                class="g-in"
+                data-k={r.k}
+                ref={(el) => {
+                  sizes.observe(el);
+                  onCleanup(() => sizes.unobserve(el));
+                }}
+              >
+                <span class="g-line1">
+                  <span class="g-name">{r.t.title}</span>
+                  <Show when={!r.kid && r.t.browser && r.t.status === "running"}><Icon name="globe" size={11} class="g-badge" /></Show>
+                  <Show when={!r.kid && r.base !== ROW && kidsOf(r.t).length}>
                     <span
                       class="g-kids"
                       role="button"
@@ -243,8 +236,27 @@ export function Flow() {
                       {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                     </span>
                   </Show>
+                  <span class="g-meta" classList={{ "m-review": bucket(r.t) === "review", "m-ask": r.t.status === "waiting", "m-bad": r.t.status === "failed" && !discarded(r.t) }}>{meta(r.t)}</span>
                 </span>
-              </Show>
+                <Show when={!r.kid && r.base === ROW}>
+                  <span class="g-line2-wrap">
+                    <span class="g-line2" classList={{ bad: r.t.status === "failed" }}>{sub(r.t)}</span>
+                    <Show when={kidsOf(r.t).length}>
+                      <span
+                        class="g-kids"
+                        role="button"
+                        aria-expanded={!!kidsShown(r.t).length}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
+                        }}
+                      >
+                        {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
+                      </span>
+                    </Show>
+                  </span>
+                </Show>
+              </span>
             </button>
           )}
         </For>
