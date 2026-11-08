@@ -13,6 +13,15 @@ const job = () => { const v = view(); return v.name === "task" ? taskById(v.id) 
 const panelAvailable = () => view().name === "main" || view().name === "task";
 const visiblePanel = () => panelAvailable() && panelOpen();
 const input = () => document.querySelector<HTMLTextAreaElement>('main .composer textarea:not(:disabled)');
+/** after ⌘[ / ⌘]: back on Main or a task, the cursor is in its composer (as ⌘0 leaves it) */
+const step = (dir: -1 | 1) => {
+  if (!stepView(dir, exists)) return;
+  setTimeout(() => {
+    const v = view();
+    const id = v.name === "task" ? "task-input" : v.name === "main" ? (document.getElementById("new-task-input") ? "new-task-input" : "main-input") : null;
+    if (id) document.querySelector<HTMLTextAreaElement>(`#${id}:not(:disabled)`)?.focus();
+  }, 30);
+};
 const stepTab = (dir: number) => {
   const tabs = ptabs();
   const i = tabs.findIndex((t) => t.id === activeTab());
@@ -46,8 +55,8 @@ export function appCommands(): ShortcutCommand[] {
     command("results", "결과물", "이동", "inbox", () => setView({ name: "results" }), undefined, true),
     command("devices", "디바이스", "이동", "phone", () => setView({ name: "devices" }), undefined, true),
     command("settings", "설정", "이동", "gear", () => setView({ name: "settings" }), undefined, true),
-    command("back", "뒤로", "이동", "back", () => void stepView(-1, exists), () => canStep(-1), true),
-    command("forward", "앞으로", "이동", "arrow", () => void stepView(1, exists), () => canStep(1), true),
+    command("back", "뒤로", "이동", "back", () => step(-1), () => canStep(-1), true),
+    command("forward", "앞으로", "이동", "arrow", () => step(1), () => canStep(1), true),
     command("previousJob", "이전 작업", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1), true),
     command("nextJob", "다음 작업", "이동", "arrow", () => { const t = stepFork(state.space, 1); if (t) openTask(t.id); }, () => !!stepFork(state.space, 1), true),
     command("waiting", "다음 내 차례", "이동", "hand", () => { const t = nextWaiting(state.space); if (t) openTask(t.id); }, () => !!nextWaiting(state.space), true),

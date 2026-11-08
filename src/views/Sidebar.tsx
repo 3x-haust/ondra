@@ -334,15 +334,17 @@ function Head(props: { id: string; label: string; count?: number; on?: boolean; 
   );
 }
 
-/** finished tasks folded away under their group ("완료 3개", not counting discarded ones, which sit
- *  in the same fold and read 버림); the open one shows in place, so its fold opens */
+/** finished tasks folded away under their group; the count covers every row in the fold
+ *  ("완료 2 · 버림 1" when some were thrown away); the open one shows in place, so its fold opens */
 const [doneOpen, setDoneOpen] = createSignal<Record<string, boolean>>({});
 function DoneFold(props: { id: string; tasks: Task[] }) {
   const has = () => props.tasks.some((t) => t.id === openRoot());
   const open = () => doneOpen()[props.id] ?? has();
   const label = () => {
-    const n = props.tasks.filter((t) => !discarded(t)).length;
-    return n ? tr("완료 {n}개", { n }) : tr("버림 {n}개", { n: props.tasks.length });
+    const gone = props.tasks.filter(discarded).length;
+    const n = props.tasks.length - gone;
+    if (n && gone) return tr("완료 {n}개 · 버림 {m}개", { n, m: gone });
+    return n ? tr("완료 {n}개", { n }) : tr("버림 {n}개", { n: gone });
   };
   return (
     <Show when={props.tasks.length}>
@@ -450,27 +452,28 @@ export function Sidebar() {
           <kbd class="sb-kbd">{shortcutHint("results")}</kbd>
         </button>
         {/* tasks anywhere in this space that need a reply or a merge: a row of its own, not under one section */}
-        <Show when={needs()}>
+        {/* the row stays when nothing waits (greyed, no count), so nothing below it moves */}
           <button
             class="sb-row sb-main sb-todo"
-            classList={{ open: !!needsMenu() }}
-            aria-haspopup="menu"
-            aria-expanded={!!needsMenu()}
+            classList={{ open: !!needsMenu(), empty: !needs() }}
+            aria-haspopup={needs() > 1 ? "menu" : undefined}
+            aria-expanded={needs() > 1 ? !!needsMenu() : undefined}
+            aria-disabled={!needs()}
             onClick={(e) => {
               e.stopPropagation();
+              if (!needs()) return;
               if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
               if (needsMenu()) return setNeedsMenu(null);
               const r = e.currentTarget.getBoundingClientRect();
               setNeedsMenu({ x: r.right + 8, y: r.top - 4, keyboard: e.detail === 0 });
             }}
             data-shortcut="waiting"
-            title={`${tr("다음 내 차례")} ${shortcutHint("waiting")}`}
+            title={needs() ? `${tr("다음 내 차례")} ${shortcutHint("waiting")}` : undefined}
           >
             <Icon name="hand" size={16} class="sb-main-ic" />
             <span class="sb-title">{tr("내 차례")}</span>
-            <span class="sb-need">{needs()}</span>
+            <Show when={needs()}><span class="sb-need">{needs()}</span></Show>
           </button>
-        </Show>
         <Head id="projects" label={tr("프로젝트")} count={projectsIn(state.space).length}>
           <Show when={projectsIn(state.space).length}>
             <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
