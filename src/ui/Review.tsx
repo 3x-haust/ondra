@@ -2,12 +2,12 @@
 // Diffs are parsed into files → hunks → lines with old/new line numbers, shown
 // as collapsible cards with sticky headers. Files is a searchable tree; a file
 // opens in a numbered viewer and can flip to its diff.
-import { createEffect, createMemo, createResource, createSignal, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
-import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath } from "../state/ui";
+import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { fileSrc, pdfSrc, fsFiles, fsRead, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
+import { fileSrc, pdfSrc, fsFiles, fsRead, fsWrite, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
@@ -404,11 +404,14 @@ function tree(paths: string[]): Node {
 }
 
 const IMG = /\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
+const Editor = lazy(() => import("./Editor").then((m) => ({ default: m.Editor })));
 
 function Viewer(props: { root: string; path: string; changed?: DiffFile; startDiff: boolean; back: () => void }) {
   const full = () => `${props.root}/${props.path}`;
-  const [mode, setMode] = createSignal<"file" | "diff">(props.startDiff && props.changed ? "diff" : "file");
-  const [text] = createResource(
+  const [mode, setMode] = createSignal<"file" | "diff" | "edit">(props.startDiff && props.changed ? "diff" : "file");
+  const [dirty, setDirty] = createSignal(false);
+  let editor: { save: () => void } | undefined;
+  const [text, { refetch }] = createResource(
     () => (IMG.test(props.path) ? null : full()),
     async (p) => {
       try {
@@ -424,6 +427,30 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
     ([code, path]) => tokenize(code, langOf(path)),
   );
   const [dir, name] = split(props.path);
+  /** what the file looked like on disk when opened: a save over someone else's change asks first */
+  let seen = 0;
+  createEffect(() => {
+    const m = (text() as { modified?: number } | undefined)?.modified;
+    if (m && mode() !== "edit") seen = m;
+  });
+  const write = async (body: string, force = false): Promise<boolean> => {
+    try {
+      seen = await fsWrite(full(), body, force ? undefined : seen);
+      toast("저장했어요");
+      return true;
+    } catch (e) {
+      if (String(e).includes("CHANGED")) {
+        toast("그사이 파일이 바뀌었어요", "bad", { label: "덮어쓰기", run: () => void write(body, true).then((ok) => ok && setDirty(false)) });
+      } else toast(`저장하지 못했어요: ${String(e)}`, "bad");
+      return false;
+    }
+  };
+  const close = () => {
+    setDirty(false);
+    setMode("file");
+    void refetch();
+  };
+  const leave = () => (dirty() ? toast("저장하지 않은 변경이 있어요", "info", { label: "버리고 닫기", run: close }) : close());
   return (
     <div class="fv">
       <div class="fv-head">
@@ -432,17 +459,36 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
           <span class="dv-dir">{dir}</span>
           <span class="dv-name">{name}</span>
         </span>
+        <Show when={dirty()}><i class="fv-dirty" title="저장하지 않은 변경" /></Show>
         <span class="spacer" />
-        <Show when={props.changed}>
-          <div class="seg sm">
-            <button classList={{ on: mode() === "file" }} onClick={() => setMode("file")}>파일</button>
-            <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>변경</button>
-          </div>
+        <Show
+          when={mode() === "edit"}
+          fallback={
+            <>
+              <Show when={props.changed}>
+                <div class="seg sm">
+                  <button classList={{ on: mode() === "file" }} onClick={() => setMode("file")}>파일</button>
+                  <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>변경</button>
+                </div>
+              </Show>
+              <Show when={text()?.text != null}>
+                <button class="icon-btn sm" title="여기서 고치기" onClick={() => setMode("edit")}><Icon name="pencil" size={13} /></button>
+              </Show>
+            </>
+          }
+        >
+          <button class="btn sm" disabled={!dirty()} title="저장 (⌘S)" onClick={() => editor?.save()}>저장</button>
+          <button class="btn sm ghost" title="그만 고치기" onClick={leave}>닫기</button>
         </Show>
-        <button class="icon-btn sm" title="에디터에서 열기" onClick={() => openInEditor(full())}><Icon name="external" size={13} /></button>
+        <button class="icon-btn sm" title="VS Code 같은 편집기에서 열기" onClick={() => openInEditor(full())}><Icon name="external" size={13} /></button>
         <button class="icon-btn sm" title="Finder에서 보기" onClick={() => revealPath(full())}><Icon name="folder" size={13} /></button>
       </div>
-      <div class="fv-body">
+      <div class="fv-body" classList={{ editing: mode() === "edit" }}>
+        <Show when={mode() !== "edit"} fallback={
+          <Suspense fallback={<div class="pane-empty"><span class="spin" /></div>}>
+            <Editor path={props.path} text={text()?.text ?? ""} onSave={(b) => write(b)} onDirty={setDirty} ref={(api) => (editor = api)} />
+          </Suspense>
+        }>
         <Show
           when={mode() === "file"}
           fallback={<DiffCard f={props.changed!} root={props.root} open toggle={() => setMode("file")} />}
@@ -468,6 +514,7 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
               )}
             </Show>
           </Show>
+        </Show>
         </Show>
       </div>
     </div>
