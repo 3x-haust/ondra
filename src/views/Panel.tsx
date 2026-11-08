@@ -2,7 +2,6 @@
 // (git diff of its folder), terminal (every command it ran, live, plus a shell
 // of your own in the same folder), and its browser, live.
 import { Fold } from "../ui/Fold";
-import { prettyModel } from "../ui/ModelPicker";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { accountById, homeDir, state, updateTask } from "../state/store";
@@ -14,8 +13,10 @@ import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
-import { long, now, priorityLabel, short, statusLabel } from "../ui/bits";
+import { ago, long, now, priorityLabel, short, statusLabel } from "../ui/bits";
+import { planCount } from "../state/progress";
 import { Icon } from "../ui/Icon";
+import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
@@ -84,6 +85,44 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   );
 }
 
+/** Open a pull request from the job's branch and show it. */
+async function makePr(t: Task) {
+  const url = await gitPr(expand(t.cwd), t.title, `${t.ask}\n\n— Ondra`, await gitEnv(t));
+  if (url.startsWith("http")) void openUrl(url);
+  return url;
+}
+const prDone = (u: string) => (u ? tr("PR을 열었어요 · {url}", { url: u }) : tr("PR을 열었어요"));
+
+/** No pull request yet: the next step, when the job has a branch to open one from. */
+function NoPr(props: { t: Task }) {
+  const [busy, setBusy] = createSignal(false);
+  const can = () => props.t.worktree?.state === "open" && props.t.status !== "running" && props.t.status !== "queued";
+  return (
+    <div class="pane-empty">
+      <span>{tr("PR 없음")}</span>
+      <Show when={can()}>
+        <button
+          class="btn sm"
+          disabled={busy()}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              toast(prDone(String((await makePr(props.t)) ?? "")));
+            } catch (e) {
+              toast(e instanceof Error ? e.message : String(e), "bad");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Icon name="pr" size={14} />
+          {busy() ? tr("PR 만드는 중") : tr("PR 만들기")}
+        </button>
+      </Show>
+    </div>
+  );
+}
+
 /** Commit / push / open a PR from the job's branch (like the git menu of Codex or Conductor). */
 function ShipMenu(props: { t: Task }) {
   const [open, setOpen] = createSignal(false);
@@ -119,19 +158,7 @@ function ShipMenu(props: { t: Task }) {
           <button onClick={() => void run(tr("푸시 중"), async () => gitPush(cwd(), await gitEnv(props.t)), (b) => tr("{branch} 푸시했어요", { branch: b }))}>
             <Icon name="push" size={14} class="muted" /><span class="row-title">{tr("푸시")}</span><span class="row-hint">origin</span>
           </button>
-          <button
-            onClick={() =>
-              void run(
-                tr("PR 만드는 중"),
-                async () => {
-                  const url = await gitPr(cwd(), props.t.title, `${props.t.ask}\n\n— Ondra`, await gitEnv(props.t));
-                  if (url.startsWith("http")) void openUrl(url);
-                  return url;
-                },
-                (u) => (u ? tr("PR을 열었어요 · {url}", { url: u }) : tr("PR을 열었어요")),
-              )
-            }
-          >
+          <button onClick={() => void run(tr("PR 만드는 중"), () => makePr(props.t), prDone)}>
             <Icon name="pr" size={14} class="muted" /><span class="row-title">{tr("PR 만들기")}</span><span class="row-hint">gh</span>
           </button>
         </div>
@@ -150,7 +177,7 @@ function Overview(props: { t: Task }) {
       </div>
       <Show when={t().plan.length}>
         <div>
-          <div class="pane-title">{tr("계획")}</div>
+          <div class="pane-title">{tr("할 일")} <span class="pane-count">{planCount(t().plan).label}</span></div>
           {/* the same marks as the to-do list under the job */}
           <ol class="todos-list plan-list">
             <For each={t().plan}>
@@ -170,14 +197,15 @@ function Overview(props: { t: Task }) {
       </Show>
       <Show when={t().legs.length > 1}>
         <div>
-          <div class="pane-title">{tr("세션 {n}개", { n: t().legs.length })}</div>
+          <div class="pane-title" title={tr("컨텍스트가 차면 새 세션에서 이어 가요")}>{tr("세션 {n}개", { n: t().legs.length })}</div>
           <div class="legs">
             <For each={t().legs}>
               {(l, i) => (
                 <div class="leg" classList={{ live: !l.endedAt && t().status === "running" }}>
                   <span class="leg-n">{i() + 1}</span>
                   <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? t().now : "—"}</span>
-                  <span class="leg-time">{short((l.endedAt ?? now()) - l.startedAt)}</span>
+                  {/* when each began, oldest first; how long it ran on hover */}
+                  <span class="leg-time" title={short((l.endedAt ?? t().legs[i() + 1]?.startedAt ?? t().finishedAt ?? now()) - l.startedAt)}>{ago(l.startedAt)}</span>
                 </div>
               )}
             </For>
@@ -199,15 +227,15 @@ function Overview(props: { t: Task }) {
               </For>
             </div>
           </dd>
-          <dt>{tr("종류")}</dt>
+          <dt>{tr("크기")}</dt>
           <dd>
             <div class="seg">
-              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>{tr("일반|weight")}</button>
-              <button classList={{ on: t().weight === "heavy" }} onClick={() => setWeight(t().id, "heavy")}>{tr("무거운 작업")}</button>
+              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>{tr("보통|size")}</button>
+              <button classList={{ on: t().weight === "heavy" }} onClick={() => setWeight(t().id, "heavy")}>{tr("큼")}</button>
             </div>
           </dd>
           </Show>
-          <dt>{tr("계정")}</dt>
+          <dt>{tr("계정|one")}</dt>
           <dd>
             <select class="select" value={t().accountId} onChange={(e) => updateTask(t().id, (x) => (x.accountId = e.currentTarget.value))}>
               <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{tr(a.label)}</option>}</For>
@@ -479,20 +507,21 @@ function ArtifactsPane(props: { t: Task }) {
 }
 
 const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?: boolean }[] = [
-  { kind: "flow", label: "흐름", icon: "branch", keys: shortcutHint("flow") },
-  { kind: "side", label: "사이드챗", icon: "message", keys: shortcutHint("side") },
-  { kind: "artifacts", label: "결과물", icon: "box", keys: shortcutHint("artifacts"), job: true },
+  { kind: "flow", label: "작업 흐름", icon: "branch", keys: shortcutHint("flow") },
+  { kind: "side", label: "옆 대화", icon: "message", keys: shortcutHint("side") },
+  { kind: "artifacts", label: "결과물", icon: "inbox", keys: shortcutHint("artifacts"), job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: shortcutHint("changes"), job: true },
   { kind: "pr", label: "PR", icon: "pr", keys: shortcutHint("pr"), job: true },
   { kind: "issues", label: "이슈", icon: "issue" },
-  { kind: "terminal", label: "셸", icon: "shell", keys: shortcutHint("terminal"), job: true },
+  { kind: "terminal", label: "터미널", icon: "shell", keys: shortcutHint("terminal"), job: true },
   { kind: "files", label: "파일", icon: "file", keys: shortcutHint("files"), job: true },
   { kind: "browser", label: "브라우저", icon: "globe", keys: shortcutHint("browser") },
-  { kind: "overview", label: "정보", icon: "list", keys: shortcutHint("overview"), job: true },
-  { kind: "reverse", label: "리버싱", icon: "binary", job: true },
+  { kind: "overview", label: "작업 정보", icon: "list", keys: shortcutHint("overview"), job: true },
+  { kind: "reverse", label: "바이너리 분석", icon: "binary", job: true },
   { kind: "preview", label: "미리보기", icon: "monitor" },
 ];
-const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "plus" };
+// the empty tab has no icon of its own: a "+" there would read as a second add button
+const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "" };
 
 /** The empty tab: the tools you can open here. */
 function NewTab(props: { t?: Task }) {
@@ -506,7 +535,7 @@ function NewTab(props: { t?: Task }) {
             <span class="nt-label">{tr(x.label)}</span>
             <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">{tr("열림")}</span></Show>
             <Show when={x.job && !props.t} fallback={<Show when={x.keys}><kbd class="nt-keys">{x.keys}</kbd></Show>}>
-              <span class="nt-hint">{tr("작업 필요")}</span>
+              <span class="nt-hint">{tr("작업에서만")}</span>
             </Show>
           </button>
         )}
@@ -557,33 +586,40 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
       }),
     ),
   );
-  // tabs show in full; when they don't all fit, the others keep just their icon (never a cut-off label)
-  const [tight, setTight] = createSignal(false);
+  // tabs always show in full; the ones that don't fit go into the menu at the end
+  // (the active tab always stays in the strip)
+  const widths = new Map<number, number>();
+  const [over, setOver] = createSignal<number[]>([]);
+  const [more, setMore] = usePop();
   onMount(() => {
     const fit = () => {
       const strip = bar?.parentElement;
       if (!strip) return;
-      const add = strip.querySelector<HTMLElement>(".ptab-add")?.offsetWidth ?? 28;
-      // each tab's width with its label and close button showing, whatever it shows now
-      let need = 0;
-      for (const tab of bar.querySelectorAll<HTMLElement>(".ptab")) {
-        const label = tab.querySelector<HTMLElement>(".ptab-label");
-        const folded = !!label && label.offsetWidth === 0;
-        need += tab.offsetWidth + 2 + (label ? label.scrollWidth - label.offsetWidth : 0) + (folded ? 6 + 22 : 0);
+      // a hidden tab keeps the width it had when it last showed
+      for (const el of bar.querySelectorAll<HTMLElement>(".ptab")) if (el.offsetWidth) widths.set(Number(el.dataset.id), el.offsetWidth);
+      const list = ptabs();
+      const w = (id: number) => (widths.get(id) ?? 120) + 2;
+      const add = strip.querySelector<HTMLElement>(".ptab-add")?.offsetWidth ?? 0;
+      const room = strip.clientWidth - 16 - add - 4;
+      if (list.reduce((n, x) => n + w(x.id), 0) <= room) return setOver([]);
+      let left = room - 32 - w(activeTab());
+      let full = false;
+      const hide: number[] = [];
+      for (const x of list) {
+        if (x.id === activeTab()) continue;
+        if (!full && w(x.id) <= left) left -= w(x.id);
+        else (full = true), hide.push(x.id);
       }
-      setTight(need + add + 16 > strip.clientWidth);
+      setOver(hide);
     };
     const ro = new ResizeObserver(fit);
     ro.observe(bar.parentElement!);
-    // a tab's own size changes too (fonts, language, the badge)
-    const later = () =>
-      requestAnimationFrame(() => {
-        bar.querySelectorAll<HTMLElement>(".ptab").forEach((el) => ro.observe(el));
-        fit();
-      });
-    createEffect(on([() => ptabs().length, activeTab, lang], later));
+    createEffect(on([() => ptabs().map((x) => `${x.id}:${x.kind}`).join(), activeTab], () => requestAnimationFrame(fit)));
+    // another language: every tab is measured again
+    createEffect(on(lang, () => (widths.clear(), setOver([]), requestAnimationFrame(fit)), { defer: true }));
     onCleanup(() => ro.disconnect());
   });
+  const hidden = () => ptabs().filter((x) => over().includes(x.id));
   // drag the left edge to resize; remembered per machine
   const KEY = "ondra.jobW";
   try {
@@ -623,7 +659,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-resize" onPointerDown={drag} />
       <div class="panel-bar" data-tauri-drag-region>
-        <div class="ptabs" ref={bar} classList={{ tight: tight() }}>
+        <div class="ptabs" ref={bar} role="tablist">
           <span class="tab-ind" classList={{ on: ind().on }} style={{ transform: `translateX(${ind().x}px)`, width: `${ind().w}px` }} />
           <For each={ptabs()}>
             {(x) => {
@@ -631,9 +667,11 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               return (
                 <div
                   class="ptab"
-                  classList={{ on: activeTab() === x.id }}
+                  classList={{ on: activeTab() === x.id, over: over().includes(x.id) }}
+                  data-id={x.id}
                   role="tab"
                   tabindex="0"
+                  aria-label={tr(tool().label)}
                   aria-selected={activeTab() === x.id}
                   data-shortcut={x.kind}
                   title={`${tr(tool().label)}${tool().keys ? ` (${tool().keys})` : ""}`}
@@ -645,7 +683,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   onClick={() => setActiveTab(x.id)}
                   onAuxClick={(e) => e.button === 1 && closePanelTab(x.id)}
                 >
-                  <Icon name={tool().icon} size={14} />
+                  <Show when={tool().icon}><Icon name={tool().icon} size={14} /></Show>
                   <span class="ptab-label">{tr(tool().label)}</span>
                   <Show when={x.kind === "terminal" && running()}><span class="badge">{running()}</span></Show>
                   <Show when={x.kind === "browser" && props.t?.browser && props.t?.status === "running"}><span class="screen-live" /></Show>
@@ -666,9 +704,49 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
             }}
           </For>
         </div>
-        <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`${tr("새 탭")} (${shortcutHint("newTab")})`} onClick={newPanelTab}>
-          <Icon name="plus" size={14} />
-        </button>
+        <Show when={hidden().length}>
+          <div class="ptab-more">
+            <button
+              class="icon-btn sm"
+              classList={{ on: more() }}
+              title={tr("탭 {n}개 더", { n: hidden().length })}
+              aria-label={tr("탭 {n}개 더", { n: hidden().length })}
+              aria-haspopup="menu"
+              aria-expanded={more()}
+              onClick={(e) => (e.stopPropagation(), setMore(!more()))}
+            >
+              <Icon name="down" size={14} />
+            </button>
+            <Show when={more()}>
+              <div class="menu ptab-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                <For each={hidden()}>
+                  {(x) => (
+                    <button role="menuitem" onClick={() => (setActiveTab(x.id), setMore(false))}>
+                      <Show when={toolOf(x.kind).icon}><Icon name={toolOf(x.kind).icon} size={14} class="muted" /></Show>
+                      <span class="row-title">{tr(toolOf(x.kind).label)}</span>
+                      <Show when={x.kind === "terminal" && running()}><span class="badge">{running()}</span></Show>
+                      <span
+                        class="ptab-menu-x"
+                        role="button"
+                        title={tr("탭 닫기")}
+                        aria-label={tr("탭 닫기")}
+                        onClick={(e) => (e.stopPropagation(), closePanelTab(x.id), hidden().length || setMore(false))}
+                      >
+                        <Icon name="x" size={12} />
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </Show>
+        {/* an empty tab is already open: + would only go back to it */}
+        <Show when={!ptabs().some((x) => x.kind === "new")}>
+          <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`${tr("새 탭")} (${shortcutHint("newTab")})`} aria-label={tr("새 탭")} onClick={newPanelTab}>
+            <Icon name="plus" size={14} />
+          </button>
+        </Show>
         <span class="spacer" data-tauri-drag-region />
       </div>
       <div class="panel-body">
@@ -695,7 +773,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                 <Match when={tab() === "overview"}><Overview t={t()} /></Match>
                 <Match when={tab() === "changes"}><ChangesPane t={t()} top={t().worktree ? <BranchCard t={t()} /> : undefined} /></Match>
                 <Match when={tab() === "pr"}>
-                  <Show when={prOf(t())?.url} keyed fallback={<div class="pane-empty">{tr("PR 없음")}</div>}>
+                  <Show when={prOf(t())?.url} keyed fallback={<NoPr t={t()} />}>
                     {(_url) => <PrPane t={t()} />}
                   </Show>
                 </Match>

@@ -8,6 +8,7 @@ import { projectById, state, taskById } from "../state/store";
 import type { ResultEntry } from "../state/types";
 import { openTask, setJumpMsg, setView, toast, view } from "../state/ui";
 import { BlockView } from "../ui/Blocks";
+import { withDiff } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -284,7 +285,7 @@ export function ResultsView() {
                             </Show>
                             <Show when={a.blocks.length}>
                               <div class="blocks">
-                                <For each={a.blocks}>{(b) => <BlockView block={b} />}</For>
+                                <For each={a.blocks}>{(b) => <BlockView block={withDiff(b, taskById(r.taskId))} />}</For>
                               </div>
                             </Show>
                           </>

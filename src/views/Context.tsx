@@ -16,8 +16,8 @@ import { t } from "../i18n";
 
 type Seg = "engine" | "ondra" | "files" | "skills" | "tools" | "talk";
 const SEG_LABEL: Record<Seg, string> = {
-  engine: "기본 프롬프트",
-  ondra: "Ondra 지침",
+  engine: "기본 지침",
+  ondra: "내 지침",
   files: "지시 파일",
   skills: "스킬",
   tools: "도구",
@@ -91,7 +91,18 @@ const ROLE: Record<string, string> = {
   custom: "알림",
   system: "시스템 변경",
 };
-const roleOf = (m: CtxMessage) => (m.role === "toolResult" && m.toolName ? `${t("도구 결과")} · ${m.toolName}` : ROLE[m.role] ? t(ROLE[m.role]) : m.role);
+/** a tool's output in plain words, by what the tool does */
+const RESULT: Record<string, string> = {
+  bash: "실행 결과",
+  read: "읽은 파일",
+  edit: "수정 결과",
+  write: "쓴 파일",
+  grep: "검색 결과",
+  find: "검색 결과",
+  ls: "폴더 목록",
+};
+const roleOf = (m: CtxMessage) =>
+  m.role === "toolResult" ? t(RESULT[m.toolName ?? ""] ?? "도구 결과") : ROLE[m.role] ? t(ROLE[m.role]) : t("기타");
 
 function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?: number }) {
   const groups = createMemo(() => {
@@ -220,55 +231,53 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
       </div>
 
       <div class="cx-parts">
-        <Part title={t("시스템 프롬프트")} size={systemTotal()} of={total()} open>
-          <Show when={!c().forced} fallback={<Pre text={c().systemPrompt} />}>
-            <Part nested seg="engine" title={t("기본 프롬프트")} size={segs().engine} of={total()}>
-              <For each={engineSections()}>
+        <Show when={!c().forced} fallback={
+          <Part seg="engine" title={t("기본 지침")} size={systemTotal()} of={total()}>
+            <Pre text={c().systemPrompt} />
+          </Part>
+        }>
+          <Part seg="engine" title={t("기본 지침")} size={segs().engine} of={total()}>
+            <For each={engineSections()}>
+              {(s) => (
+                <Part nested title={ENGINE_SECTION[s.name] ? t(ENGINE_SECTION[s.name]) : t("기타")} size={s.tokens}>
+                  <Pre text={s.text} />
+                </Part>
+              )}
+            </For>
+          </Part>
+          <Part seg="ondra" title={t("내 지침")} size={segs().ondra} of={total()} meta={props.data.parts.length ? `${props.data.parts.length}` : undefined}>
+            <For each={props.data.parts} fallback={<p class="cx-empty">{t("없음")}</p>}>
+              {(p) => (
+                <Part nested title={p.title} size={c().appendSystemPrompt.find((a) => a.text === p.text)?.tokens}>
+                  <Pre text={p.text} />
+                </Part>
+              )}
+            </For>
+          </Part>
+          <Part seg="files" title={t("지시 파일")} size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || undefined}>
+            <For each={c().contextFiles} fallback={<p class="cx-empty">{t("없음")}</p>}>
+              {(f) => (
+                <Part nested title={tilde(f.path)} size={f.tokens}>
+                  <Pre text={f.content} />
+                </Part>
+              )}
+            </For>
+          </Part>
+          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={c().skills.length ? `${c().skills.length}` : undefined}>
+            <div class="cx-list">
+              <For each={c().skills} fallback={<p class="cx-empty">{t("없음")}</p>}>
                 {(s) => (
-                  <Part nested title={ENGINE_SECTION[s.name] ? t(ENGINE_SECTION[s.name]) : s.name} meta={s.name} size={s.tokens}>
-                    <Pre text={s.text} />
-                  </Part>
+                  <div class="cx-li" classList={{ off: !s.modelInvocable }}>
+                    <b>{s.name}</b>
+                    <span title={s.description}>{firstSentence(s.description, 90)}</span>
+                    <em>{skillSource(s.path)}</em>
+                    <small>{tokens(skillTokens(s))}</small>
+                  </div>
                 )}
               </For>
-            </Part>
-            <Part nested seg="ondra" title={t("Ondra 지침")} size={segs().ondra} of={total()} meta={t("{n}개", { n: props.data.parts.length })}>
-              <For each={props.data.parts} fallback={<p class="cx-empty">{t("없음")}</p>}>
-                {(p) => (
-                  <Part nested title={p.title} size={c().appendSystemPrompt.find((a) => a.text === p.text)?.tokens}>
-                    <Pre text={p.text} />
-                  </Part>
-                )}
-              </For>
-            </Part>
-            <Part nested seg="files" title={t("지시 파일")} size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || t("없음")}>
-              <For each={c().contextFiles} fallback={<p class="cx-empty">{t("없음")}</p>}>
-                {(f) => (
-                  <Part nested title={tilde(f.path)} size={f.tokens}>
-                    <Pre text={f.content} />
-                  </Part>
-                )}
-              </For>
-            </Part>
-            <Part nested seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={t("{n}개 · 이름과 설명", { n: c().skills.length })}>
-              <div class="cx-list">
-                <For each={c().skills} fallback={<p class="cx-empty">{t("없음")}</p>}>
-                  {(s) => (
-                    <div class="cx-li" classList={{ off: !s.modelInvocable }}>
-                      <b>{s.name}</b>
-                      <span title={s.description}>{firstSentence(s.description, 90)}</span>
-                      <em>{skillSource(s.path)}</em>
-                      <small>{tokens(skillTokens(s))}</small>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Part>
-          </Show>
-        </Part>
-
-        <Part title={t("메모리")} meta={`${props.data.recalled.length}`}>
-          <MemoryList list={props.data.recalled} empty={t("없음")} onOpen={openMemory} />
-        </Part>
+            </div>
+          </Part>
+        </Show>
 
         <Part seg="tools" title={t("도구")} size={segs().tools} of={total()} meta={`${activeTools().length}`}>
           <div class="cx-list">
@@ -286,6 +295,10 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
         </Part>
 
         <Part seg="talk" title={t("대화")} size={segs().talk} of={total()} meta={t("메시지 {n}개", { n: c().messages.length })} open={c().messages.length > 0}>
+          {/* memory goes in with a message, so it is part of the conversation */}
+          <Part nested title={t("메모리")} meta={`${props.data.recalled.length}`}>
+            <MemoryList list={props.data.recalled} empty={t("없음")} onOpen={openMemory} />
+          </Part>
           <Talk list={c().messages} total={segs().talk} live={props.data.live} known={props.known?.tokens} />
         </Part>
       </div>

@@ -78,22 +78,51 @@
   box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink-3);
 }
-/* too many to show in full: the others keep just their icon, the active one keeps its name */
-.panel-bar .ptabs.tight .ptab:not(.on) {
-  min-width: 28px;
-  width: 28px;
-  padding: 0;
-  justify-content: center;
-  gap: 0;
-}
-.panel-bar .ptabs.tight .ptab:not(.on) .ptab-label {
-  display: block;
-  max-width: 0;
-}
-.panel-bar .ptabs.tight .ptab:not(.on) .ptab-x,
-.panel-bar .ptabs.tight .ptab:not(.on) .badge,
-.panel-bar .ptabs.tight .ptab:not(.on) .screen-live {
+/* too many to show: the rest wait in the menu at the end of the strip */
+.panel-bar .ptab.over {
   display: none;
+}
+.panel-bar .ptab-more {
+  position: relative;
+  flex: none;
+}
+.panel-bar .ptab-more > .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.panel-bar .ptab-menu {
+  top: 32px;
+  right: 0;
+  min-width: 200px;
+}
+.ptab-menu .badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-2xs);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-3);
+}
+.ptab-menu .ptab-menu-x {
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-xs);
+  color: var(--ink-3);
+  opacity: 0;
+}
+.ptab-menu button:hover .ptab-menu-x,
+.ptab-menu button:focus-visible .ptab-menu-x {
+  opacity: 1;
+}
+.ptab-menu .ptab-menu-x:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 .panel-bar .ptab-add {
   width: 28px;
@@ -106,7 +135,8 @@
 .panel-body .review > .pane-empty,
 .panel-body .files .pane-empty,
 .panel-body .iss > .pane-empty,
-.panel-body .apane > .pane-empty {
+.panel-body .apane > .pane-empty,
+.panel-body .rv > .pane-empty {
   flex: 1;
   min-height: 160px;
   display: flex;
@@ -1020,12 +1050,93 @@
 .files .ft-st.D {
   color: var(--bad-ink);
 }
-/* narrow window: the project name gives way before the task title does */
+/* narrow header: the project crumb goes away whole (never cut to "o."), then the title truncates */
+.task-head {
+  container-type: inline-size;
+}
 .task-head .crumbs > .crumb-proj {
-  flex: 0 4 auto;
-  min-width: 28px;
+  flex: none;
 }
 .task-head .crumbs > h1 {
   flex: 0 1 auto;
   min-width: 48px;
+}
+@container (max-width: 560px) {
+  .task-head .crumbs > .crumb-proj,
+  .task-head .crumbs > .crumb-sep {
+    display: none;
+  }
+}
+/* short window: the to-do line stays reachable under the first tray (it opens on click) */
+@media (max-height: 800px) {
+  .task-view .strips > .todos {
+    display: block;
+  }
+}
+
+/* ───────────── flow: the sidebar's status glyphs on the branches ───────────── */
+.graph .g-glyph {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  pointer-events: none;
+}
+.graph .g-glyph.kid {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+}
+.graph .g-glyph i {
+  width: 6px;
+  height: 6px;
+}
+.graph .g-glyph.kid i {
+  width: 4px;
+  height: 4px;
+}
+.graph .g-glyph.paused i {
+  width: 4px;
+  height: 4px;
+}
+.graph .g-glyph.queued {
+  box-shadow: none;
+  border: 1.5px dashed var(--ink-4);
+}
+.graph .g-glyph.waiting,
+.graph .g-glyph.failed {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.graph .g-glyph.waiting {
+  color: var(--warn);
+}
+.graph .g-glyph.failed {
+  color: var(--bad);
+}
+.graph .g-glyph.waiting i,
+.graph .g-glyph.failed i {
+  background: currentColor;
+}
+.graph .g-glyph.done {
+  background: var(--accent-soft);
+  box-shadow: none;
+  color: var(--accent-text);
+}
+.graph .g-glyph.done.unmerged {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+}
+.graph .g-glyph .spin {
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+}
+.graph .g-glyph.kid .spin {
+  width: 12px;
+  height: 12px;
+}
+.graph .g-glyph.kid .icon {
+  width: 8px;
+  height: 8px;
 }

@@ -19,6 +19,7 @@ import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, SidebarToggle } from "./Sidebar";
+import { planCount } from "../state/progress";
 import { Board } from "./Board";
 import { viewKey } from "../lib/shortcuts";
 import { t } from "../i18n";
@@ -282,7 +283,7 @@ function Activity(props: { t: Task }) {
           <For each={job().plan}>{(s) => <i class={s.state} />}</For>
         </div>
       </Show>
-      <Show when={sub()}><span class="cv-act-step">{cur() + 1}/{job().plan.length} · {sub()}</span></Show>
+      <Show when={sub()}><span class="cv-act-step">{planCount(job().plan).label} · {sub()}</span></Show>
       <p class="cv-act-head">{head()}</p>
       {/* newest first in the DOM: the feed stacks from the bottom and drops whole rows that don't fit */}
       <div class="cv-act-feed">
@@ -399,9 +400,7 @@ function StatusRow(props: { t: Task }) {
   const tn = () => tone(props.t);
   const kids = () => state.tasks.filter((k) => k.parentId === props.t.id);
   const step = () => {
-    const p = props.t.plan;
-    const i = p.findIndex((x) => x.state === "now");
-    return p.length ? `${i < 0 ? p.filter((x) => x.state === "done").length : i + 1}/${p.length}` : "";
+    return props.t.plan.length ? planCount(props.t.plan).label : "";
   };
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
   return (

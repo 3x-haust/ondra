@@ -31,6 +31,18 @@ const TRUNK = 11;
 /** where every job's node sits, one step off the trunk */
 const NODE = 27;
 const GUTTER = NODE + 15;
+/** a subagent's glyph, at the end of its twig */
+const KID_X = NODE + 11;
+
+/** the status glyph's shape, as the sidebar draws it: what the row needs, not only its status */
+const glyph = (t: Task) => {
+  if (t.status === "failed") return "failed";
+  if (bucket(t) === "you") return "waiting";
+  if (bucket(t) === "review") return "done unmerged";
+  if (t.status === "running") return "running";
+  if (t.status === "paused" || t.status === "queued") return t.status;
+  return "done";
+};
 
 interface Row {
   t: Task;
@@ -121,13 +133,13 @@ export function Flow() {
       const y = cy(r);
       const tone = t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
       const cls = `${tone} ${t.id === openRoot() ? "on" : ""} ${hoverTask() === t.id ? "hot" : ""}`;
-      // off the trunk
-      out.push({ d: `M${TRUNK} ${y} L${NODE - 5} ${y}`, cls });
+      // off the trunk, up to the glyph's edge
+      out.push({ d: `M${TRUNK} ${y} L${NODE - 7} ${y}`, cls });
       // subagents hang below on a thin twig
       const ks = rows().filter((k) => k.kid && k.t.parentId === t.id);
       if (ks.length) {
         const last = cy(ks[ks.length - 1]);
-        out.push({ d: `M${NODE} ${y + 5} L${NODE} ${last - 5} Q${NODE} ${last}, ${NODE + 5} ${last}`, cls: `${cls} twig` });
+        out.push({ d: `M${NODE} ${y + 7} L${NODE} ${last - 5} Q${NODE} ${last}, ${NODE + 5} ${last}`, cls: `${cls} twig` });
         for (const k of ks.slice(0, -1)) {
           const ky = cy(k);
           out.push({ d: `M${NODE} ${ky - 5} Q${NODE} ${ky}, ${NODE + 5} ${ky}`, cls: `${cls} twig` });
@@ -168,18 +180,22 @@ export function Flow() {
         <svg class="g-lines" classList={{ dim: !!hoverTask() }} width={GUTTER} height={Math.max(1, height())} aria-hidden="true">
           <line class="g-trunk" x1={TRUNK} y1={0} x2={TRUNK} y2={trunkEnd()} />
           <For each={paths()}>{(p) => <path class={p.cls} d={p.d} />}</For>
-          <For each={order()}>
-            {(r) => (
-              <circle
-                class={`g-node ${r.t.status}`}
-                classList={{ unmerged: r.t.status === "done" && r.t.worktree?.state === "open", kid: r.kid, on: openId() === r.t.id }}
-                cx={r.kid ? NODE + 8 : NODE}
-                cy={cyOf(r.k)}
-                r={r.kid ? 3 : 4.5}
-              />
-            )}
-          </For>
         </svg>
+        {/* the same status glyphs as the sidebar */}
+        <For each={order()}>
+          {(r) => (
+            <span
+              class={`g-glyph st-icon sm ${glyph(r.t)}`}
+              classList={{ kid: r.kid, on: openId() === r.t.id }}
+              style={{ left: `${r.kid ? KID_X : NODE}px`, top: `${cyOf(r.k)}px` }}
+              aria-hidden="true"
+            >
+              <Show when={glyph(r.t) === "running"} fallback={<Show when={glyph(r.t).startsWith("done")} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
+                <span class="spin" />
+              </Show>
+            </span>
+          )}
+        </For>
         <For each={order()}>
           {(r) => (
             <button
@@ -203,13 +219,13 @@ export function Flow() {
                   <span
                     class="g-kids"
                     role="button"
-                    title={tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
+                    aria-expanded={!!kidsShown(r.t).length}
                     onClick={(e) => {
                       e.stopPropagation();
                       setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
                     }}
                   >
-                    {tr("서브 {n}", { n: kidsOf(r.t).length })}
+                    {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                   </span>
                 </Show>
                 <span class="g-meta">{meta(r.t)}</span>
@@ -221,13 +237,13 @@ export function Flow() {
                     <span
                       class="g-kids"
                       role="button"
-                      title={tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
+                      aria-expanded={!!kidsShown(r.t).length}
                       onClick={(e) => {
                         e.stopPropagation();
                         setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
                       }}
                     >
-                      {tr("서브 {n}", { n: kidsOf(r.t).length })}
+                      {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                     </span>
                   </Show>
                 </span>
