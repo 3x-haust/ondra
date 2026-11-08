@@ -51,7 +51,7 @@ export function appCommands(): ShortcutCommand[] {
     command("previousJob", "이전 작업", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1), true),
     command("nextJob", "다음 작업", "이동", "arrow", () => { const t = stepFork(state.space, 1); if (t) openTask(t.id); }, () => !!stepFork(state.space, 1), true),
     command("waiting", "다음 내 차례", "이동", "hand", () => { const t = nextWaiting(state.space); if (t) openTask(t.id); }, () => !!nextWaiting(state.space), true),
-    ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? { code: `Digit${i + 1}`, meta: true } : undefined, run: () => switchSpace(s.id) })),
+    ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? { code: `Digit${i + 1}`, meta: true } : undefined, inInput: true, run: () => switchSpace(s.id) })),
     // the panel and every tab it can show, in one section
     command("panel", "패널 열기·닫기", "패널", "panel", togglePanel, panelAvailable, true),
     command("flow", "작업 흐름", "패널", "branch", () => openPanel("flow"), panelAvailable, true),
