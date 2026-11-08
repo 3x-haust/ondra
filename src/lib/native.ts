@@ -345,6 +345,16 @@ export const gitPush = (cwd: string, env: Env = []) => call<string>("git_push", 
 /** a pull request's state, checks, comments and reviews as the space sees it (raw JSON, see prWatch.ts) */
 export const ghPrState = (url: string, env: Env = []) => call<string>("gh_pr_state", { url, env }, "");
 /** everything the PR view shows, diff included (raw JSON, see prView.ts) */
+/** Issues of the folder's repo for a GitHub search (JSON array as text). */
+export const ghIssues = (cwd: string, search: string, env: Env = []) =>
+  call<string>("gh_issues", { cwd, search, env }, JSON.stringify([
+    { number: 214, title: "로그인 후 대시보드로 가지 않아요", state: "OPEN", labels: [{ name: "bug", color: "d73a4a" }], assignees: [{ login: "me" }], author: { login: "mina" }, updatedAt: new Date(Date.now() - 3.6e6).toISOString(), url: "https://github.com/acme/web/issues/214" },
+    { number: 209, title: "요금제 페이지에 연간 결제 추가", state: "OPEN", labels: [{ name: "feature", color: "a2eeef" }, { name: "billing", color: "5319e7" }], assignees: [], author: { login: "jun" }, updatedAt: new Date(Date.now() - 8.6e7).toISOString(), url: "https://github.com/acme/web/issues/209" },
+    { number: 198, title: "다크 모드에서 표 테두리가 안 보여요", state: "OPEN", labels: [{ name: "design", color: "fbca04" }], assignees: [], author: { login: "me" }, updatedAt: new Date(Date.now() - 2.6e8).toISOString(), url: "https://github.com/acme/web/issues/198" },
+  ]));
+/** One issue with body and comments (JSON as text). */
+export const ghIssue = (cwd: string, number: number, env: Env = []) =>
+  call<string>("gh_issue", { cwd, number, env }, JSON.stringify({ number, title: "로그인 후 대시보드로 가지 않아요", state: "OPEN", body: "로그인하면 `/login`에 그대로 머물러요.\n\n- 크롬, 사파리 둘 다\n- 새로고침하면 대시보드로 가요", labels: [{ name: "bug", color: "d73a4a" }], assignees: [], author: { login: "mina" }, url: `https://github.com/acme/web/issues/${number}`, comments: [] }));
 export const ghPrView = (url: string, env: Env = []) => call<string>("gh_pr_view", { url, env }, "");
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });

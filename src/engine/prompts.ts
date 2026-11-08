@@ -836,11 +836,20 @@ function gitNote(t: Task): string[] {
   ];
 }
 
+/** A job started from a GitHub issue: its PR closes the issue, and the issue hears back in its own thread. */
+function issueNote(t: Task): string[] {
+  const i = t.issue;
+  if (!i) return [];
+  return [
+    `GitHub issue: #${i.n} ${i.url}. If you open a pull request for it, put \`Closes #${i.n}\` in the body so merging closes the issue. Comment on the issue only if the user asks you to.`,
+  ];
+}
+
 export function taskPrompt(t: Task): string {
   const parent = t.parentId ? state.tasks.find((x) => x.id === t.parentId) : undefined;
   const parts = parent
     ? [`# Sub-task: ${t.title}`, `For the fork: ${parent.title}`, `Folder: ${t.cwd}`, "", t.ask]
-    : [`# Task: ${t.title}`, `Project: ${t.topic}`, `Folder: ${t.cwd}`, ...gitNote(t), "", t.ask];
+    : [`# Task: ${t.title}`, `Project: ${t.topic}`, `Folder: ${t.cwd}`, ...gitNote(t), ...issueNote(t), "", t.ask];
   parts.push(...followed(t));
   parts.push(...earlierSteps(t));
   parts.push(...relatedLines(t));

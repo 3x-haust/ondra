@@ -280,6 +280,38 @@ pub async fn gh_pr_view(url: String, env: Option<Vec<(String, String)>>) -> Resu
     .map_err(|e| e.to_string())?
 }
 
+/// Issues of the repo the folder belongs to (gh finds it from the git remote),
+/// with a GitHub search such as `is:open assignee:@me`. A JSON array.
+#[tauri::command]
+pub async fn gh_issues(cwd: String, search: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let search = if search.trim().is_empty() { "is:open".to_string() } else { search };
+        run(
+            &cwd,
+            "gh",
+            &["issue", "list", "--limit", "100", "--search", &search, "--json", "number,title,state,labels,assignees,author,updatedAt,url"],
+            &env.unwrap_or_default(),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// One issue with its body and comments, for reading it and handing it to a job.
+#[tauri::command]
+pub async fn gh_issue(cwd: String, number: u64, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run(
+            &cwd,
+            "gh",
+            &["issue", "view", &number.to_string(), "--json", "number,title,state,body,labels,assignees,author,url,comments"],
+            &env.unwrap_or_default(),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 const PR_DIFF_MAX: usize = 1_500_000;
 
 fn pr_json(url: &str, env: &[(String, String)], fields: &str, with_diff: bool) -> Result<String, String> {

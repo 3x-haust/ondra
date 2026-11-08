@@ -8,7 +8,7 @@ import {
   Monitor, MoreHorizontal, PanelLeft,
   PanelRight, Pause, Play, Plus, RefreshCw, Route, Search, Settings, Shield,
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
-  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, Minus, Maximize, LayoutGrid, Binary,
+  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, Minus, Maximize, LayoutGrid, Binary, CircleDot,
 } from "lucide-solid";
 
 const map: Record<string, Component<any>> = {
@@ -22,7 +22,7 @@ const map: Record<string, Component<any>> = {
   spark: Sparkles, stop: Square, terminal: SquareTerminal, shell: Terminal, trash: Trash2, video: Video,
   tools: Wrench, x: X, bolt: Zap, skill: Puzzle, memory: Bookmark, compose: SquarePen, back: ArrowLeft,
   done: CircleCheck, merge: GitMerge, clip: Paperclip, open: FolderOpen, copy: Copy, pencil: Pencil, lock: Lock, unlock: LockOpen,
-  pin: Pin, archive: Archive, push: ArrowUpFromLine, commit: GitCommitHorizontal, compact: Minimize2, bell: Bell, duplicate: CopyPlus, slash: Slash, at: AtSign, binary: Binary,
+  pin: Pin, archive: Archive, push: ArrowUpFromLine, commit: GitCommitHorizontal, compact: Minimize2, bell: Bell, duplicate: CopyPlus, slash: Slash, at: AtSign, binary: Binary, issue: CircleDot,
 };
 
 export function Icon(props: { name: string; size?: number; class?: string; stroke?: number }) {

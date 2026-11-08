@@ -20,7 +20,7 @@ export type View =
 
 export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
-export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse";
+export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse" | "issues";
 
 const [view, setViewNow] = createSignal<View>({ name: "main" });
 export { view };

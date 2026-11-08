@@ -20,6 +20,7 @@ import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
 import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
+import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
 
@@ -474,6 +475,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "artifacts", label: "결과물", icon: "box", keys: shortcutHint("artifacts"), job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: shortcutHint("changes"), job: true },
   { kind: "pr", label: "PR", icon: "pr", keys: shortcutHint("pr"), job: true },
+  { kind: "issues", label: "이슈", icon: "issue" },
   { kind: "terminal", label: "셸", icon: "shell", keys: shortcutHint("terminal"), job: true },
   { kind: "files", label: "파일", icon: "file", keys: shortcutHint("files"), job: true },
   { kind: "browser", label: "브라우저", icon: "globe", keys: shortcutHint("browser") },
@@ -662,6 +664,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               <BrowserView embedded />
             </div>
           </Match>
+          <Match when={tab() === "issues"}><IssuesPane t={props.t} /></Match>
           <Match when={needsJob()}><div class="pane-empty">열린 일 없음</div></Match>
           <Match when={props.t}>
             {(t) => (
