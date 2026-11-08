@@ -6,6 +6,9 @@ description: >
   capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력).
   Defines the background contract, observation and safe recovery. An isolated
   macOS guest is an optional separate mode.
+metadata:
+  ondra-tools: 'computer'
+  ondra-commands: '\bagent-desktop\b'
 ---
 
 # Computer use

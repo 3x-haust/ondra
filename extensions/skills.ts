@@ -1,6 +1,6 @@
 // Skill metadata stays in this process; only search matches reach the model.
 import { readFileSync } from "node:fs";
-import { loadSkills, stripFrontmatter, type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
+import { loadSkills, parseFrontmatter, stripFrontmatter, type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const words = (text: string) => text.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
@@ -73,6 +73,129 @@ export function skillHint(skills: Skill[], query: string, limit = 3): string {
   ].join("\n");
 }
 
+// ───────────── the router: offer a skill when the work enters its domain
+//
+// Besides the words of each user message, a skill can name what the work looks
+// like in its domain, as frontmatter metadata (each value one regular expression):
+//   metadata:
+//     ondra-commands: '\bagent-browser\b'      a shell command it runs
+//     ondra-writes: '\.github/workflows/'        a file it edits or writes
+//     ondra-reads: '\.xcodeproj/'                a file it reads
+//     ondra-urls: 'figma\.com/(design|file)'     a link in a message or a fetch
+//     ondra-tools: 'computer,device'             a tool it calls
+// The first time one matches, the tool's result says which skill fits and
+// where it is. A skill already read is never offered again until the
+// conversation is compacted.
+
+export interface Triggers {
+  commands?: RegExp;
+  writes?: RegExp;
+  reads?: RegExp;
+  urls?: RegExp;
+  tools?: string[];
+}
+
+const regex = (v: unknown) => {
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  try {
+    return new RegExp(v, "i");
+  } catch {
+    return undefined;
+  }
+};
+
+/** A skill's triggers from its frontmatter metadata (unknown or broken values are skipped). */
+export function triggersOf(front: Record<string, unknown>): Triggers {
+  const m = (front.metadata ?? {}) as Record<string, unknown>;
+  const tools = typeof m["ondra-tools"] === "string" ? (m["ondra-tools"] as string).split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+  return { commands: regex(m["ondra-commands"]), writes: regex(m["ondra-writes"]), reads: regex(m["ondra-reads"]), urls: regex(m["ondra-urls"]), tools };
+}
+
+const URL_RE = /https?:\/\/[^\s)>\]"']+/g;
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** Why a tool call puts the work in a skill's domain, or undefined. */
+export function toolMatch(t: Triggers, tool: string, input: Record<string, unknown>): string | undefined {
+  if (t.tools?.includes(tool)) return `uses ${tool}`;
+  const path = str(input.path) || str(input.file_path);
+  if (tool === "bash" && t.commands?.test(str(input.command))) return "runs a command of its domain";
+  if ((tool === "edit" || tool === "write") && path && t.writes?.test(path)) return `edits ${path}`;
+  if (tool === "read" && path && t.reads?.test(path)) return `reads ${path}`;
+  const url = str(input.url) || (tool === "bash" ? ((str(input.command).match(URL_RE) ?? [])[0] ?? "") : "");
+  if (url && t.urls?.test(url)) return `opens ${url}`;
+  return undefined;
+}
+
+export class SkillRouter {
+  /** skills whose SKILL.md this conversation has read */
+  readonly loaded = new Set<string>();
+  /** skills already pointed out, by words or by tool */
+  private saidWords = new Set<string>();
+  private saidTool = new Set<string>();
+  constructor(
+    readonly skills: Skill[],
+    readonly triggers: Map<string, Triggers>,
+  ) {}
+
+  private usable = () => this.skills.filter((s) => !s.disableModelInvocation);
+
+  /** a new conversation, or one compacted: what was read may be gone */
+  reset() {
+    this.loaded.clear();
+    this.saidWords.clear();
+    this.saidTool.clear();
+  }
+
+  /** The model read a file: if it is a skill, that skill is in context now. */
+  noteRead(path: string) {
+    const s = this.skills.find((x) => x.filePath === path || path.endsWith(`/${x.name}/SKILL.md`));
+    if (s) this.loaded.add(s.name);
+  }
+
+  /** Skills that fit a user message: by a link it carries, and by its words. */
+  forMessage(text: string, limit = 3): Skill[] {
+    const out: Skill[] = [];
+    const urls = text.match(URL_RE) ?? [];
+    for (const s of this.usable()) if (urls.some((u) => this.triggers.get(s.name)?.urls?.test(u))) out.push(s);
+    for (const { skill } of rank(this.usable(), text).filter((r) => r.named || r.unique || r.strong >= 2)) if (!out.includes(skill)) out.push(skill);
+    const fresh = out.filter((s) => !this.loaded.has(s.name) && !this.saidWords.has(s.name)).slice(0, limit);
+    for (const s of fresh) this.saidWords.add(s.name);
+    return fresh;
+  }
+
+  /** The skill a tool call steps into, once per skill, if it isn't read yet. */
+  forTool(tool: string, input: Record<string, unknown>): { skill: Skill; why: string } | undefined {
+    if (tool === "read") this.noteRead(str(input.path) || str(input.file_path));
+    for (const s of this.usable()) {
+      if (this.loaded.has(s.name) || this.saidTool.has(s.name)) continue;
+      const t = this.triggers.get(s.name);
+      const why = t && toolMatch(t, tool, input);
+      if (why) {
+        this.saidTool.add(s.name);
+        return { skill: s, why };
+      }
+    }
+    return undefined;
+  }
+}
+
+const line = (s: Skill) => `- ${s.name}: ${s.description.replace(/\s+/g, " ").slice(0, 200)} (${s.filePath})`;
+
+/** The hidden note for a user message's skills. */
+export function messageHint(fit: Skill[], first: boolean): string {
+  if (!fit.length) return "";
+  return [
+    first ? "# Skills for this task (skill_search on the task)" : "# Skills for this message",
+    ...fit.map(line),
+    "Read the SKILL.md of each one that fits before you act, and follow it. Search again when the work moves to another domain.",
+  ].join("\n");
+}
+
+/** The note added to a tool's result when the work steps into a skill's domain. */
+export const toolHint = (s: Skill, why: string) =>
+  `\n[skill] This step ${why}, which is ${s.name}'s domain: ${s.description.replace(/\s+/g, " ").slice(0, 160)}\nRead ${s.filePath} and follow it before going on, unless you already have.`;
+
 export default function (pi: ExtensionAPI) {
   if (!process.env.ONDRA_SKILL_PATHS) return;
   const skillPaths: unknown = JSON.parse(process.env.ONDRA_SKILL_PATHS);
@@ -99,12 +222,32 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // A job's first message (fresh or after a handoff): search the skills with the task's own words
-  // and hand the model the ones that fit, so it doesn't depend on remembering to search.
+  const triggers = new Map<string, Triggers>();
+  for (const s of skills) {
+    try {
+      triggers.set(s.name, triggersOf(parseFrontmatter(readFileSync(s.filePath, "utf8")).frontmatter));
+    } catch {
+      /* a skill without readable frontmatter still matches by its words */
+    }
+  }
+  const router = new SkillRouter(skills, triggers);
+  pi.on("session_start", () => router.reset());
+  pi.on("session_compact", () => router.reset());
+
+  // Every user message: a job's first (fresh or after a handoff) by the task's own
+  // words, a later one by its own; skills it already has are left out.
   pi.on("before_agent_start", (event) => {
-    const query = event.messageType === "user" && typeof event.prompt === "string" ? taskQuery(event.prompt) : undefined;
-    const hint = query ? skillHint(skills, query) : "";
+    if (event.messageType !== "user" || typeof event.prompt !== "string") return;
+    const task = taskQuery(event.prompt);
+    const hint = messageHint(router.forMessage((task ?? event.prompt).slice(0, 4000)), !!task);
     if (hint) return { message: { customType: "ondra-skills", content: hint, display: false } };
+  });
+
+  // While working: a command, file, link or tool of a skill's domain points to that skill.
+  pi.on("tool_result", (event) => {
+    const hit = router.forTool(event.toolName, (event.input ?? {}) as Record<string, unknown>);
+    if (!hit || event.isError) return;
+    return { content: [...(event.content ?? []), { type: "text" as const, text: toolHint(hit.skill, hit.why) }] };
   });
 
   // Input transforms also run for steer/follow-up. Extension commands cannot
@@ -114,6 +257,7 @@ export default function (pi: ExtensionAPI) {
     const skill = command && skills.find((s) => s.name === command[1]);
     if (!skill) return { action: "continue" };
     const body = stripFrontmatter(readFileSync(skill.filePath, "utf8"));
+    router.loaded.add(skill.name);
     const args = command?.[2]?.trim();
     return { action: "transform", text: `Skill: ${skill.name}\nLocation: ${skill.filePath}\nResolve relative references from: ${skill.baseDir}\n\n${body}${args ? `\n\n${args}` : ""}` };
   });

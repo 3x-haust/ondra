@@ -6,6 +6,9 @@ description: >
   then shut down and delete what you made. Use when a task says simulator,
   emulator, iPhone, Android, 앱 화면, 시뮬레이터, 에뮬레이터, or needs the mobile app
   checked. The user watches and can drive the same device in the app's 디바이스 hub.
+metadata:
+  ondra-tools: 'device'
+  ondra-commands: '\b(xcrun simctl|adb|idb|maestro)\b'
 ---
 
 # Device use

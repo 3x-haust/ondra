@@ -7,6 +7,8 @@ description: >
   choosing the browser, the shared browser (your own tab, shared logins),
   signing in from the macOS keychain, live streaming to the app window, recordings
   as evidence, and how to report with visual-report blocks.
+metadata:
+  ondra-commands: '\bagent-browser\b'
 ---
 
 # Browser use

@@ -10,6 +10,9 @@ description: >-
   actual target, inspect machine code, test hypotheses with real tools, and
   preserve reproducible evidence. Never substitute a visual clone for analysis.
 compatibility: Ondra bundles ondra-binary (radare2 and native r2ghidra) for static 64-bit ARM/x86 Mach-O, ELF and PE analysis without user-installed tools or runtimes. Dynamic work needs a compatible isolated host and permission. The optional debugger calibration still needs Python 3 and Xcode Command Line Tools.
+metadata:
+  ondra-commands: '\b(ondra-binary|otool|radare2|r2ghidra|objdump|class-dump|jtool2?|llvm-objdump|dyld_info)\b|\b(nm|strings) -'
+  ondra-reads: '\.(dylib|so|exe|dll|o|a)$|/Contents/MacOS/'
 ---
 
 # Reverse engineering
