@@ -551,7 +551,7 @@ export function MainView() {
                 <Icon name="x" size={16} />
               </button>
             </header>
-            <NewTask project={d().project} onProject={(id) => setDrafting({ project: id })} />
+            <NewTask project={d().project} onProject={(id) => setDrafting({ ...drafting()!, project: id })} />
           </>
         )}
       </Show>

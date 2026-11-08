@@ -22,7 +22,10 @@ describe("a run that ends leaves nothing spinning", () => {
     expect(done).toMatchObject({ endedAt: 5, ok: true });
     expect(cut.endedAt).toBe(9);
     expect(cut.ok).toBeUndefined();
+    expect(cut.stopped).toBe(true);
+    expect(done.stopped).toBeUndefined();
     expect(t.shells[0].endedAt).toBe(9);
+    expect(t.shells[0].stopped).toBe(true);
   });
 
   it("on pause", () => {

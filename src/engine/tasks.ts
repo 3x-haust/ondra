@@ -316,8 +316,8 @@ const keepsRunning = (cmd: string) =>
  * stopped, it neither passed nor failed.
  */
 export function closeOpen(t: Task, at = Date.now()) {
-  for (const s of t.shells) if (!s.endedAt) s.endedAt = at;
-  for (const e of t.entries) if (e.kind === "tool" && !e.tool.endedAt) e.tool.endedAt = at;
+  for (const s of t.shells) if (!s.endedAt) (s.endedAt = at), (s.stopped = true);
+  for (const e of t.entries) if (e.kind === "tool" && !e.tool.endedAt) (e.tool.endedAt = at), (e.tool.stopped = true);
 }
 
 const screenshotIn = (cmd: string) => cmd.match(/\bscreenshot\b(?:\s+--\S+)*\s+(["']?)(\/[^"'\s]+\.(?:png|jpe?g))\1/)?.[2];

@@ -88,6 +88,8 @@ export interface ToolCall {
   del?: number;
   ok?: boolean;
   endedAt?: number;
+  /** Cut off when the run ended (paused, failed, stopped): neither passed nor failed. */
+  stopped?: boolean;
   /** For bash: id of the Shell holding live output. */
   shellId?: string;
   /** An edit/write to a notes file (now.md, context/, memory): shown as "기록", not as code. */
@@ -115,6 +117,8 @@ export interface Shell {
   startedAt: number;
   endedAt?: number;
   ok?: boolean;
+  /** Cut off when the run ended, not finished on its own. */
+  stopped?: boolean;
   /** Last ~3 KB of output (live while it runs). */
   tail: string;
   /** Left running on purpose: dev server, watcher, `&`, tail -f… */
