@@ -39,7 +39,8 @@ const inOwnProject = (x: { project?: string }) => {
   return v.name === "main" && !!x.project && v.project === x.project;
 };
 
-export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
+/** `crumb: false`: the task's row is already in sight right above (a project's task strip), so no crumb */
+export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: boolean }) {
   const t = () => taskById(props.d.taskId);
   // what to choose from: the pictures sent with the question, else what the job
   // said and showed since the user last spoke (the reasoning behind the question)
@@ -139,7 +140,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
           <Show when={loginUrl()}>{(u) => <span class="muted">{u().replace(/^https?:\/\/(www\.)?/, "").split("?")[0]}</span>}</Show>
         </button>
       </Show>
-      <Show when={props.showTask !== false && t()}>
+      <Show when={props.showTask !== false && props.crumb !== false && t()}>
         {(x) => (
           <button class="decision-src" onClick={() => openTask(x().id)}>
             {/* where it runs: its project (badge and name), the topic only when it has none;
