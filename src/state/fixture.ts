@@ -168,6 +168,12 @@ export function fixture(base: AppState): AppState {
       { id: "c3", at: m(1), space: "work", from: "me", text: "다음 주 배포 일정 정리해 줘" },
       { id: "c4", at: m(1), space: "work", from: "captain", reply: "", routes: [{ kind: "answer", text: "다음 주는 **화요일 오전**에 스테이징, **목요일 오후**에 운영 배포예요. 로그인 수정이 합쳐져야 목요일에 같이 나가요.", blocks: [] }] },
     ],
+    results: [
+      { id: "r_logo", taskId: "t6", space: "work", project: "ondra", title: "로고 색 바꾸기", reply: "로고를 파란색으로 바꿨어요.", answers: [{ text: "앱 아이콘과 메뉴 막대 아이콘 둘 다 **#2F6BFF**로 맞췄어요. 어두운 화면에서도 대비가 4.8:1이라 잘 보여요.", blocks: [] }], at: m(300) },
+      { id: "r_readme", taskId: "t3", space: "work", project: "ondra", title: "README 정리", reply: "README에서 오래된 설치 안내를 빼고 지금 쓰는 방법만 남겼어요.", answers: [{ text: "- 설치: DMG 하나로 끝나요\n- 빠진 것: 예전 CLI 설치, 베타 신청 링크\n- 새로 쓴 것: 업데이트 방법", blocks: [{ type: "files", files: [{ path: "README.md", add: 12, del: 10 }] }] }], at: m(190) },
+      { id: "r_re", taskId: "t_re", space: "work", project: "ondra", title: "보안 입력 판별 분석", reply: "", answers: [{ text: "ondra-cuhost는 접근성 요소의 **role**과 **subrole**을 문자열로 비교해서 비밀번호 칸을 알아봐요. `AXSecureTextField`면 입력을 막아요.", blocks: [{ type: "metric", label: "읽은 함수", value: "549" }] }], at: m(34) },
+      { id: "r_price", taskId: "t1a", space: "work", project: "acme", title: "요금제 표 문구 점검", reply: "요금제 표에서 틀린 가격 두 곳을 찾았어요.", answers: [{ text: "프로 요금제 연간 가격이 표와 결제 화면에서 달라요. 표를 결제 화면 값으로 맞추면 돼요.", blocks: [] }], at: m(1500), pinned: true },
+    ],
     memory: [{ id: "m1", text: "블로그 글은 반말로 쓴다", scope: "space", space: "work", source: "ondra", createdAt: m(15), uses: 2 }],
   };
 }
