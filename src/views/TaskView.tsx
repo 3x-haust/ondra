@@ -385,9 +385,9 @@ export function TaskView(props: { id: string }) {
                   commands={[
                     btwCommand(() => `task:${task().id}`),
                     drawCommand(() => task().id),
-                    { name: "remember", desc: tr("프로젝트 메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
+                    { name: "remember", desc: homeDir(task()) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
                     // what the task's state allows, as in its ⋯ menu
-                    ...(task().status === "running" || task().status === "waiting" ? [{ name: "stop", desc: tr("일시정지|action"), icon: "pause", run: () => stopTask(task().id) }] : []),
+                    ...(task().status === "running" || task().status === "waiting" ? [{ name: "pause", desc: tr("일시정지|action"), icon: "pause", run: () => stopTask(task().id) }] : []),
                     ...(task().status === "paused" || task().status === "failed" ? [{ name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) }] : []),
                     ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
                     ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),

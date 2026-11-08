@@ -1375,3 +1375,8 @@
   font-family: inherit;
   font-size: var(--fs-sm);
 }
+
+/* a failed task's line in Flow */
+.g-lines path.bad {
+  stroke: var(--bad);
+}

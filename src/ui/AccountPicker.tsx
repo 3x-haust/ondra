@@ -85,6 +85,7 @@ export function AccountPicker(props: {
       <button
         class="st-acc"
         classList={{ on: open() }}
+        aria-label={accountName(props.accountId)}
         title={[accountName(props.accountId), auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
         onClick={(e) => toggle(e.currentTarget)}
       >
