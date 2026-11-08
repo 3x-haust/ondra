@@ -3,9 +3,10 @@ import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
 import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js";
-import { decisionFor, homeDir, taskById, updateTask } from "../state/store";
+import { decisionFor, homeDir, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
+import { usesReverse } from "../engine/reverse";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
 import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
@@ -319,6 +320,11 @@ export function TaskView(props: { id: string }) {
             </Show>
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
+              <Show when={usesReverse(task(), state.tasks)}>
+                <button class="icon-btn" classList={{ on: panelOpen() && panelTab() === "reverse" }} title="리버싱" onClick={() => showTool("reverse")}>
+                  <Icon name="binary" size={16} />
+                </button>
+              </Show>
               <MoreMenu id={task().id} openPanel={openPanel} />
               <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title="패널 (⌘\)" onClick={togglePanel}>
                 <Icon name="panel" size={16} />

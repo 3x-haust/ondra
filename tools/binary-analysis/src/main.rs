@@ -157,6 +157,87 @@ const FUNCTION_LIMIT: usize = 300;
 const FUNCTION_PREVIEW: usize = 200;
 const OP_LIMIT: usize = 300;
 const CODE_LINE_LIMIT: usize = 400;
+const SECTION_LIMIT: usize = 200;
+
+// ───────────── the trace Ondra draws from
+// Run by an Ondra job, every operation also appends what it started and what it
+// found to `$APP_ARTIFACTS_DIR/.reverse/trace.jsonl`, for the job's 리버싱 view.
+// It is never printed, so the model's output stays as bounded as before. The
+// view keeps more than the printed summary (every function, longer listings)
+// but still within these caps.
+const TRACE_FUNCTIONS: usize = 200_000;
+const TRACE_OPS: usize = 4_000;
+const TRACE_LINES: usize = 3_000;
+
+fn now_ms() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis())
+}
+
+fn file_name(p: &Path) -> String {
+    p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned())
+}
+
+fn trace_file() -> Option<PathBuf> {
+    let dir = PathBuf::from(env::var_os("APP_ARTIFACTS_DIR").filter(|d| !d.is_empty())?).join(".reverse");
+    fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("trace.jsonl"))
+}
+
+/// One line per event; a failed write never fails the analysis.
+fn trace(event: Value) {
+    let Some(path) = trace_file() else { return };
+    let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).mode(0o600).open(path) else { return };
+    let mut line = serde_json::to_string(&event).unwrap_or_default();
+    line.push('\n');
+    let _ = f.write_all(line.as_bytes());
+}
+
+fn target_view(bin: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for k in ["class", "arch", "bits", "os", "machine", "lang", "stripped", "baddr", "compiler", "endian", "bintype"] {
+        if !bin[k].is_null() { out.insert(k.into(), bin[k].clone()); }
+    }
+    Value::Object(out)
+}
+
+/// What the 리버싱 view needs from a result, kept compact.
+fn view(operation: &str, data: &Value) -> Value {
+    match operation {
+        "inspect" => json!({"sections": data["sections"]}),
+        "functions" => {
+            let list: Vec<Value> = data.as_array().map(|l| l.iter().take(TRACE_FUNCTIONS)
+                .map(|f| json!([f["name"], f["addr"], f["size"]])).collect()).unwrap_or_default();
+            json!({"functions": list})
+        }
+        "disassemble" => {
+            let all = data["ops"].as_array().cloned().unwrap_or_default();
+            let ops: Vec<Value> = all.iter().take(TRACE_OPS).map(|o| {
+                let mut v = json!({"a": o["addr"], "b": o["bytes"], "d": o["disasm"], "t": o["type"]});
+                if !o["jump"].is_null() { v["j"] = o["jump"].clone(); }
+                if !o["fail"].is_null() { v["f"] = o["fail"].clone(); }
+                v
+            }).collect();
+            json!({"name": data["name"], "addr": data["addr"], "size": data["size"], "ops": ops, "totalOps": all.len()})
+        }
+        "decompile" => {
+            let code = data["code"].as_str().unwrap_or("");
+            // the line each character starts on, to place the decompiler's address annotations
+            let mut starts = vec![0usize];
+            starts.extend(code.char_indices().filter(|(_, c)| *c == '\n').map(|(i, _)| i + 1));
+            let total = starts.len();
+            let mut lines: Vec<Vec<u64>> = vec![Vec::new(); total.min(TRACE_LINES)];
+            for a in data["annotations"].as_array().into_iter().flatten() {
+                if a["type"] != "offset" { continue; }
+                let (Some(start), Some(addr)) = (a["start"].as_u64(), a["offset"].as_u64()) else { continue };
+                let line = starts.partition_point(|s| *s <= start as usize).saturating_sub(1);
+                if let Some(l) = lines.get_mut(line) { if !l.contains(&addr) && l.len() < 16 { l.push(addr); } }
+            }
+            let kept: String = code.split_inclusive('\n').take(TRACE_LINES).collect();
+            json!({"code": kept, "lines": lines, "totalLines": total})
+        }
+        _ => Value::Null,
+    }
+}
 
 fn bound(operation: &str, named: bool, mut data: Value) -> Value {
     match operation {
@@ -202,7 +283,7 @@ fn bound(operation: &str, named: bool, mut data: Value) -> Value {
     }
 }
 
-fn analyze(args: Args) -> Result<Value, String> {
+fn analyze(args: Args, seq: &str) -> Result<Value, String> {
     let root = resources()?;
     let input = fs::canonicalize(&args.input).map_err(|e| format!("Input: {e}"))?;
     let mut source = open_input(&input)?;
@@ -244,6 +325,13 @@ fn analyze(args: Args) -> Result<Value, String> {
         _ => unreachable!(),
     };
     let mut data = match command { Some(ref c) => engine(&root, &scratch.0, &args.arch, c)?, None => info.clone() };
+    if args.operation == "inspect" {
+        // the sections place code in the file: names, addresses, sizes, permissions
+        if let Ok(Value::Array(list)) = engine(&root, &scratch.0, &args.arch, "iSj") {
+            data["sections"] = list.iter().take(SECTION_LIMIT)
+                .map(|x| json!({"name": x["name"], "vaddr": x["vaddr"], "vsize": x["vsize"], "perm": x["perm"]})).collect();
+        }
+    }
     if let Some(needle) = &args.name {
         let needle = needle.to_lowercase();
         let matches: Vec<Value> = data.as_array().map(|list| list.iter()
@@ -260,10 +348,16 @@ fn analyze(args: Args) -> Result<Value, String> {
         _ => false,
     };
     if !complete { return Err(format!("No complete {} result: {data}", args.operation)); }
+    let sha256 = format!("{:x}", hasher.finalize());
+    trace(json!({
+        "t": "done", "seq": seq, "at": now_ms(), "op": args.operation, "file": file_name(&input),
+        "sha256": sha256, "size": size, "target": target_view(bin), "address": args.address,
+        "filter": args.name, "view": view(&args.operation, &data),
+    }));
     let data = bound(&args.operation, args.name.is_some(), data);
     Ok(json!({
         "engine": {"radare2": "6.2.6", "r2ghidra": "6.2.6"},
-        "operation": args.operation, "input": input, "sha256": format!("{:x}", hasher.finalize()),
+        "operation": args.operation, "input": input, "sha256": sha256,
         "size": size, "target": bin, "address": args.address, "data": data,
         "executedTarget": false,
         "pseudocode": args.operation == "decompile"
@@ -275,9 +369,16 @@ fn main() {
     if args == ["--help"] || args == ["-h"] { println!("{HELP}"); return; }
     if args == ["--version"] { println!("ondra-binary 0.1.0 (radare2 6.2.6, r2ghidra 6.2.6)"); return; }
     let args = parse(&args).unwrap_or_else(|e| { eprintln!("{e}"); std::process::exit(2) });
-    match analyze(args) {
+    let seq = format!("{}-{}", std::process::id(), now_ms());
+    let op = args.operation.clone();
+    trace(json!({"t": "start", "seq": seq, "at": now_ms(), "op": op, "file": file_name(&args.input), "address": args.address, "filter": args.name}));
+    match analyze(args, &seq) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
-        Err(e) => { eprintln!("Analysis incomplete: {e}"); std::process::exit(1); }
+        Err(e) => {
+            trace(json!({"t": "fail", "seq": seq, "at": now_ms(), "op": op, "error": e}));
+            eprintln!("Analysis incomplete: {e}");
+            std::process::exit(1);
+        }
     }
 }
 

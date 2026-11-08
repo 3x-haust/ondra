@@ -378,6 +378,7 @@ pub fn run() {
             store::memory_sources,
             store::memory_folder,
             store::artifacts_list,
+            store::reverse_trace,
             store::state_save,
             store::artifacts_dir,
             store::pick_folder,

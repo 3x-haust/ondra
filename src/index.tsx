@@ -8,6 +8,7 @@ import "./styles/t3.css";
 import "./styles/memory-tree.css";
 import "./styles/context.css";
 import "./styles/viz.css";
+import "./styles/reverse.css";
 import App from "./App";
 import { Capture } from "./views/Capture";
 import { VizGallery } from "./views/VizGallery";

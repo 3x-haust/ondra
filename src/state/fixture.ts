@@ -86,6 +86,18 @@ export function fixture(base: AppState): AppState {
         shells: [], inbox: [],
       },
       {
+        id: "t_re", space: "work", topic: "ondra", title: "보안 입력 판별 분석", ask: "ondra-cuhost가 비밀번호 칸을 어떻게 알아보는지 바이너리에서 확인", cwd: "~/01_Project/01_Projects/ondra",
+        status: "done", priority: 2, weight: "light", accountId: "default", createdAt: m(40), startedAt: m(40), finishedAt: m(34), now: "판별 함수 확인", summary: "role·subrole 문자열 비교로 보안 입력을 알아봐요.",
+        plan: [], legs: [{ startedAt: m(40), endedAt: m(34) }],
+        entries: [
+          { id: "r1", at: m(40), kind: "user", text: "ondra-cuhost가 비밀번호 칸을 어떻게 알아보는지 바이너리에서 확인" },
+          { id: "r2", at: m(39), kind: "tool", tool: { name: "bash", kind: "bash", target: "ondra-binary functions ondra-cuhost --name secure", detail: "ondra-binary functions ondra-cuhost --name secure", ok: true, endedAt: m(38.9) } },
+          { id: "r3", at: m(38), kind: "tool", tool: { name: "bash", kind: "bash", target: "ondra-binary decompile ondra-cuhost --address 0x10000632c", detail: "ondra-binary decompile ondra-cuhost --address 0x10000632c", ok: true, endedAt: m(37.8) } },
+          { id: "r4", at: m(34), kind: "text", text: "`isSecure`가 role과 subrole을 문자열로 비교해서 보안 입력을 알아봐요." },
+        ],
+        shells: [], inbox: [],
+      },
+      {
         id: "t2", space: "work", topic: "블로그", title: "4월 회고 초안", ask: "4월 회고 초안 써 줘", cwd: "~/blog", status: "waiting", priority: 2, weight: "light", accountId: "default",
         createdAt: m(15), startedAt: m(15), now: "초안 완료, 게시 확인 대기", plan: [], legs: [{ startedAt: m(39) }],
         entries: [

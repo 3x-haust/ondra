@@ -1,0 +1,449 @@
+/* ───────────── 리버싱: what the analysis has read (right panel) ───────────── */
+.rv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-12);
+  height: 100%;
+  min-height: 0;
+  padding: var(--s-12) var(--s-16) var(--s-16);
+  overflow: hidden;
+}
+.rv-head {
+  display: grid;
+  gap: var(--s-4);
+}
+.rv-file {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  min-width: 0;
+}
+.rv-file b {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.rv-bins {
+  display: inline-flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+.rv-bins button {
+  padding: 0 var(--s-8);
+  height: 22px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.rv-bins button.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+.rv-live {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.rv-live-at {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink);
+}
+.rv-live-t {
+  margin-left: auto;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the map: the code by address, one cell per slice, filled by how far it was read */
+.rv-map {
+  display: grid;
+  gap: var(--s-6);
+}
+.rv-secs {
+  display: flex;
+  height: 16px;
+  font-size: var(--fs-2xs);
+  line-height: 16px;
+  color: var(--ink-4);
+  overflow: hidden;
+}
+.rv-sec {
+  flex: none;
+  min-width: 0;
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+}
+.rv-sec.few {
+  background: repeating-linear-gradient(90deg, transparent 0 3px, color-mix(in oklab, var(--ink-4) 18%, transparent) 3px 4px);
+}
+.rv-sec:first-child {
+  border-left-color: transparent;
+  padding-left: 0;
+}
+.rv-grid {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 1;
+  cursor: crosshair;
+}
+.rv-cell {
+  transition: fill var(--dur-slow) var(--ease);
+}
+.rv-cell.d0 {
+  fill: color-mix(in oklab, var(--ink-4) 7%, transparent);
+}
+.rv-cell.d1 {
+  fill: color-mix(in oklab, var(--accent) 24%, transparent);
+}
+.rv-cell.d2 {
+  fill: color-mix(in oklab, var(--accent) 38%, transparent);
+}
+.rv-cell.d3 {
+  fill: color-mix(in oklab, var(--accent) 68%, transparent);
+}
+.rv-cell.d4 {
+  fill: var(--accent);
+}
+.rv-cell-ring,
+.rv-cell-live,
+.rv-cell-hover {
+  fill: none;
+  pointer-events: none;
+}
+.rv-cell-ring {
+  stroke: var(--ink);
+  stroke-width: 0.12;
+}
+.rv-cell-live {
+  stroke: var(--warn);
+  stroke-width: 0.16;
+}
+.rv-cell-hover {
+  stroke: var(--ink-2);
+  stroke-width: 0.08;
+}
+.rv-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  min-height: 18px;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.rv-sw {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--s-4);
+  border-radius: 2px;
+  vertical-align: 0;
+}
+.rv-sw.d1 {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+}
+.rv-sw.d2 {
+  background: color-mix(in oklab, var(--accent) 38%, transparent);
+}
+.rv-sw.d3 {
+  background: color-mix(in oklab, var(--accent) 68%, transparent);
+}
+.rv-sw.d4 {
+  background: var(--accent);
+}
+.rv-addr {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.rv-hover-fn {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the trail: each operation in order, from the first */
+.rv-trail {
+  display: flex;
+  align-items: center;
+  flex: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 1px 0;
+}
+.rv-trail-sep {
+  flex: none;
+  width: 8px;
+  height: 1px;
+  background: var(--line);
+}
+.rv-step {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-6);
+  height: 26px;
+  padding: 0 var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--card);
+  font-size: var(--fs-xs);
+  line-height: 24px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+.rv-step:not(:disabled):hover {
+  border-color: var(--accent-line);
+  color: var(--ink);
+}
+.rv-step:disabled {
+  cursor: default;
+}
+.rv-step.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--ink);
+}
+.rv-step.live {
+  border-color: var(--warn);
+  color: var(--ink);
+}
+.rv-step.fail {
+  color: var(--bad);
+  border-color: color-mix(in oklab, var(--bad) 40%, transparent);
+}
+.rv-step-t {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+.rv-step-op {
+  font-weight: var(--fw-medium);
+}
+.rv-step-d {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+
+/* the function in focus */
+.rv-none {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.rv-fn {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+}
+.rv-fn-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  min-width: 0;
+  font-size: var(--fs-xs);
+}
+.rv-fn-head b {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.rv-calls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+  max-height: 56px;
+  overflow: auto;
+  font-size: var(--fs-xs);
+}
+.rv-calls-k {
+  color: var(--ink-4);
+  margin: 0 var(--s-2) 0 var(--s-4);
+}
+.rv-calls-k:first-child {
+  margin-left: 0;
+}
+.rv-chip {
+  height: 22px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rv-chip:disabled {
+  cursor: default;
+}
+.rv-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--s-8);
+}
+.rv-split.both {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+.rv-asm,
+.rv-code {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--code-bg);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  container-type: inline-size;
+}
+.rv-asm-body {
+  position: relative;
+  min-width: max-content;
+}
+.rv-jumps {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.rv-jump {
+  fill: none;
+  stroke: var(--ink-4);
+  stroke-width: 1.25;
+  transition: opacity var(--dur-fast), stroke-width var(--dur-fast);
+}
+.rv-jump.cond {
+  stroke: var(--accent);
+}
+.rv-jump.back {
+  stroke: var(--warn);
+}
+.rv-jump.hot {
+  stroke-width: 2;
+}
+.rv-jump.dim {
+  opacity: 0.22;
+}
+.rv-op {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+  height: 20px;
+  padding: 0 var(--s-10) 0 var(--g);
+  white-space: nowrap;
+  cursor: default;
+}
+.rv-op.hov {
+  background: var(--hover);
+}
+.rv-op.lit {
+  background: var(--accent-soft);
+}
+.rv-op-a {
+  flex: none;
+  width: 6ch;
+  color: var(--ink-4);
+}
+.rv-op-b {
+  flex: none;
+  width: 8ch;
+  color: var(--ink-4);
+}
+@container (max-width: 420px) {
+  .rv-op-b {
+    display: none;
+  }
+}
+.rv-op-d {
+  color: var(--ink-2);
+}
+.rv-tk.mn {
+  color: var(--ink);
+}
+.rv-tk.reg {
+  color: var(--ink-2);
+}
+.rv-tk.num {
+  color: var(--warn-ink);
+}
+.rv-tk.sym {
+  color: var(--accent);
+}
+.rv-op.t-call .rv-tk.mn,
+.rv-op.t-ucall .rv-tk.mn {
+  color: var(--accent);
+}
+.rv-op.t-cjmp .rv-tk.mn,
+.rv-op.t-jmp .rv-tk.mn {
+  color: var(--warn-ink);
+}
+.rv-op.t-ret .rv-tk.mn {
+  color: var(--ink-3);
+}
+.rv-tk.go {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.rv-tk.go:hover {
+  text-decoration: underline;
+}
+.rv-line {
+  display: flex;
+  gap: var(--s-10);
+  padding: 0 var(--s-10);
+  line-height: 20px;
+  white-space: pre;
+  cursor: default;
+}
+.rv-line:hover {
+  background: var(--hover);
+}
+.rv-line.lit {
+  background: var(--accent-soft);
+}
+.rv-ln {
+  flex: none;
+  width: 3ch;
+  text-align: right;
+  color: var(--ink-4);
+  user-select: none;
+}
+.rv-more {
+  padding: var(--s-6) var(--s-10);
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}

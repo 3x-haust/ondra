@@ -695,6 +695,63 @@ pub fn artifacts_list(app: AppHandle, worker_id: String) -> Vec<ArtifactFile> {
     out
 }
 
+#[derive(serde::Serialize)]
+pub struct TraceChunk {
+    text: String,
+    end: u64,
+}
+
+/// The reverse-engineering trace `ondra-binary` keeps in a job's artifacts folder,
+/// from byte `from` on (whole lines only), so the 리버싱 view reads only what is new.
+#[tauri::command]
+pub async fn reverse_trace(app: AppHandle, worker_id: String, from: u64) -> TraceChunk {
+    let path = std::path::PathBuf::from(artifacts_dir(app, worker_id)).join(".reverse/trace.jsonl");
+    tauri::async_runtime::spawn_blocking(move || read_lines_from(&path, from)).await.unwrap_or(TraceChunk { text: String::new(), end: from })
+}
+
+const TRACE_CHUNK: u64 = 32 * 1024 * 1024;
+
+fn read_lines_from(path: &std::path::Path, from: u64) -> TraceChunk {
+    use std::io::{Read, Seek, SeekFrom};
+    let empty = |end| TraceChunk { text: String::new(), end };
+    let Ok(mut f) = std::fs::File::open(path) else { return empty(0) };
+    let len = f.metadata().map_or(0, |m| m.len());
+    // a shorter file is a new trace: read it from the start
+    let from = if from > len { 0 } else { from };
+    if f.seek(SeekFrom::Start(from)).is_err() {
+        return empty(from);
+    }
+    let mut buf = Vec::new();
+    if f.take(TRACE_CHUNK).read_to_end(&mut buf).is_err() {
+        return empty(from);
+    }
+    // a line still being written waits for the next read
+    let whole = buf.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+    buf.truncate(whole);
+    TraceChunk { text: String::from_utf8_lossy(&buf).into_owned(), end: from + whole as u64 }
+}
+
+#[cfg(test)]
+mod trace_tests {
+    use super::read_lines_from;
+
+    #[test]
+    fn reads_whole_new_lines_only() {
+        let path = std::env::temp_dir().join(format!("ondra-trace-{}.jsonl", std::process::id()));
+        std::fs::write(&path, "{\"a\":1}\n{\"b\":2}\n{\"c\"").unwrap();
+        let first = read_lines_from(&path, 0);
+        assert_eq!(first.text, "{\"a\":1}\n{\"b\":2}\n");
+        assert_eq!(first.end, 16);
+        std::fs::write(&path, "{\"a\":1}\n{\"b\":2}\n{\"c\":3}\n").unwrap();
+        assert_eq!(read_lines_from(&path, first.end).text, "{\"c\":3}\n");
+        // replaced by a shorter trace: start over
+        std::fs::write(&path, "{\"d\":4}\n").unwrap();
+        assert_eq!(read_lines_from(&path, 40).text, "{\"d\":4}\n");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(read_lines_from(&path, 0).end, 0);
+    }
+}
+
 #[cfg(test)]
 mod terminal_tests {
     use super::shell_script;
