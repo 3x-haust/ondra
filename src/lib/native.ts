@@ -240,6 +240,8 @@ export interface FileText {
 }
 export const fsRead = (path: string) =>
   call<FileText>("fs_read", { path }, { text: "import { restore } from './auth/session';\n\nexport async function guard(to) {\n  await restore();\n  return to;\n}\n", size: 80, binary: false });
+/** Save edited text; rejects with "CHANGED" when the file moved on since `expect` (its modified time when read). Resolves to the new modified time. */
+export const fsWrite = (path: string, text: string, expect?: number) => call<number>("fs_write", { path, text, expect: expect ?? null }, Date.now());
 export const pickFiles = (prompt: string) => call<string[]>("pick_files", { prompt }, []);
 
 // ───────────────────────── accounts ─────────────────────────

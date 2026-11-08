@@ -145,6 +145,26 @@ mod repo_tests {
     }
 }
 
+/// Save text the user edited. Refused when the file changed on disk since it was
+/// opened (`expect` = the `modified` it was read with), so a job's edit isn't lost.
+fn write(path: &str, text: &str, expect: Option<u64>) -> Result<u64, String> {
+    let meta = std::fs::metadata(path).map_err(|_| "파일이 없어요".to_string())?;
+    let now = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64);
+    if let Some(e) = expect {
+        if e != 0 && now != 0 && e != now {
+            return Err("CHANGED".into());
+        }
+    }
+    std::fs::write(path, text).map_err(|e| e.to_string())?;
+    let after = std::fs::metadata(path).ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
+    Ok(after.map_or(0, |d| d.as_millis() as u64))
+}
+
+#[tauri::command]
+pub async fn fs_write(path: String, text: String, expect: Option<u64>) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || write(&path, &text, expect)).await.map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn fs_read(path: String) -> Result<FileText, String> {
     tauri::async_runtime::spawn_blocking(move || read(&path)).await.map_err(|e| e.to_string())?
@@ -169,6 +189,11 @@ mod tests {
         assert_eq!(t.text.as_deref(), Some("one\ntwo\n"));
         assert!(read(&root.join("b.bin").display().to_string()).unwrap().binary);
         assert!(read(&root.join("nope").display().to_string()).is_err());
+        let a = root.join("src/a.ts").display().to_string();
+        let m = read(&a).unwrap().modified;
+        let m2 = write(&a, "three\n", Some(m)).unwrap();
+        assert_eq!(read(&a).unwrap().text.as_deref(), Some("three\n"));
+        assert_eq!(write(&a, "stale\n", Some(m2.saturating_sub(5_000))).unwrap_err(), "CHANGED");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
