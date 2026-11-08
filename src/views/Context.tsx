@@ -1,21 +1,24 @@
 // What the model actually receives for a job or a chat: a bar of how the
 // context window fills up, then each part to open and read.
+import { enabledTools } from "../engine/agentTools";
 import { createMemo, createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { tilde } from "../engine/rpc";
 import { kindLabel, kindOf } from "../engine/memory";
 import { setMemoryFocus, setView } from "../state/ui";
-import type { Memory } from "../state/types";
+import type { Block, Memory } from "../state/types";
 import { ctxShare, tokens } from "../ui/bits";
 import { ctx as ctxNow } from "../state/ctx";
 import { inTauri } from "../lib/native";
 import { inChat } from "../engine/captain";
 import { state, taskById } from "../state/store";
+import { fsRead, skillList } from "../lib/native";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { type CtxMessage, estimate, type Loaded, loadChat, loadJob } from "./contextData";
 import { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
+import { parseSkill } from "./SkillsTab";
 import { t } from "../i18n";
 
 type Seg = "engine" | "ondra" | "files" | "skills" | "tools" | "talk";
@@ -37,10 +40,53 @@ const ENGINE_SECTION: Record<string, string> = {
 };
 
 const pct = (n: number, of: number) => (of ? Math.min(100, (n / of) * 100) : 0);
+/** whole percents, as everywhere else: 10%, <1% */
 const share = (n: number, of: number) => {
   const p = of ? (n / of) * 100 : 0;
-  return p >= 10 ? `${Math.round(p)}%` : p >= 0.1 ? `${p.toFixed(1)}%` : "0%";
+  return p <= 0 ? "0%" : p < 1 ? "<1%" : `${Math.round(p)}%`;
 };
+
+/** Split `total` in proportion to `parts`, in whole numbers that add up to it exactly. */
+export function apportion(parts: number[], total: number): number[] {
+  const sum = parts.reduce((a, b) => a + b, 0);
+  if (!sum || total <= 0) return parts.map(() => 0);
+  const exact = parts.map((v) => (v * total) / sum);
+  const out = exact.map(Math.floor);
+  let rest = total - out.reduce((a, b) => a + b, 0);
+  for (const i of exact.map((_, i) => i).sort((a, b) => exact[b] - out[b] - (exact[a] - out[a]))) {
+    if (rest <= 0) break;
+    out[i]++;
+    rest--;
+  }
+  return out;
+}
+
+/** A message's opening as plain words: no markdown marks, one line. */
+export function plainPreview(text: string): string {
+  return text
+    .replace(/```[\w-]*\n?/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+\.\s+)/gm, "")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|[^\w*])[*_]([^*_\s][^*_]*?)[*_](?=[^\w*]|$)/g, "$1$2")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+/**
+ * The skills agents can load, as Settings › 스킬 lists them: the bundled ones and the user's.
+ */
+async function settingsSkills(): Promise<{ name: string; description: string; path: string }[]> {
+  const files = await skillList().catch(() => []);
+  const bundled = await Promise.all(
+    files.map(async (f) => ({ name: f.name, path: f.path, description: parseSkill((await fsRead(f.path).catch(() => ({ text: "" }))).text ?? "").description ?? "" })),
+  );
+  return [...bundled, ...state.skills.filter((s) => s.enabled).map((s) => ({ name: s.name, path: s.path, description: s.description }))];
+}
 
 /** A part that opens to show what is inside; an empty one is a plain row. */
 function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: string; seg?: Seg; children?: JSX.Element; open?: boolean; nested?: boolean; empty?: boolean }) {
@@ -108,11 +154,17 @@ const RESULT: Record<string, string> = {
   grep: "검색 결과",
   find: "검색 결과",
   ls: "폴더 목록",
+  card: "카드",
 };
 const roleOf = (m: CtxMessage) =>
   m.role === "toolResult" ? t(RESULT[m.toolName ?? ""] ?? "도구 결과") : ROLE[m.role] ? t(ROLE[m.role]) : t("기타");
 
-function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?: number }) {
+function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; onOpen: (m: Memory) => void }) {
+  // each message's size is an estimate: scaled with the rest of the sheet so the rows add up to 대화
+  const scale = () => {
+    const raw = props.list.reduce((n, m) => n + m.tokens, 0);
+    return raw ? props.total / raw : 1;
+  };
   const groups = createMemo(() => {
     const g = new Map<string, { label: string; n: number; tokens: number }>();
     for (const m of props.list) {
@@ -122,19 +174,38 @@ function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?:
       x.tokens += m.tokens;
       g.set(label, x);
     }
-    return [...g.values()].sort((a, b) => b.tokens - a.tokens);
+    const list = [...g.values()].sort((a, b) => b.tokens - a.tokens);
+    const sized = apportion(list.map((x) => x.tokens), props.total);
+    return list.map((x, i) => ({ ...x, tokens: sized[i] }));
   });
   const heavy = createMemo(() => [...props.list].sort((a, b) => b.tokens - a.tokens).slice(0, 8));
+  const [memOpen, setMemOpen] = createSignal(false);
   return (
-    <Show
-      when={props.list.length}
-      fallback={
-        <p class="cx-empty">
-          {props.known ? tokens(props.known) : t("없음")}
-        </p>
-      }
-    >
+    <>
       <div class="cx-talk">
+        {/* memory goes in with a message: a row of the conversation like the others */}
+        <button
+          class="cx-talk-row cx-talk-mem"
+          classList={{ open: memOpen() }}
+          disabled={!props.recalled.length}
+          aria-expanded={props.recalled.length ? memOpen() : undefined}
+          onClick={() => setMemOpen(!memOpen())}
+        >
+          <span class="cx-talk-label">
+            {t("메모리")}
+            <Show when={props.recalled.length}><Icon name="chevron" size={12} class="cx-chev" /></Show>
+          </span>
+          <span class="cx-talk-n">{t("{n}개", { n: props.recalled.length })}</span>
+          <span />
+          <span />
+        </button>
+        <Show when={props.recalled.length}>
+          <Fold open={memOpen()}>
+            <div class="cx-talk-mems">
+              <MemoryList list={props.recalled} empty={t("없음")} onOpen={props.onOpen} />
+            </div>
+          </Fold>
+        </Show>
         <For each={groups()}>
           {(g) => (
             <div class="cx-talk-row">
@@ -146,19 +217,21 @@ function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?:
           )}
         </For>
       </div>
-      <div class="cx-sub-title">{t("가장 큰 항목")}</div>
-      <div class="cx-heavy">
-        <For each={heavy()}>
-          {(m) => (
-            <div class="cx-heavy-row" classList={{ bad: m.isError }}>
-              <span class="cx-heavy-role">{roleOf(m)}</span>
-              <span class="cx-heavy-text selectable">{m.preview || t("(내용 없음)")}</span>
-              <span class="cx-heavy-size">{tokens(m.tokens)}</span>
-            </div>
-          )}
-        </For>
-      </div>
-    </Show>
+      <Show when={props.list.length}>
+        <div class="cx-sub-title">{t("가장 큰 항목")}</div>
+        <div class="cx-heavy">
+          <For each={heavy()}>
+            {(m) => (
+              <div class="cx-heavy-row" classList={{ bad: m.isError }}>
+                <span class="cx-heavy-role">{roleOf(m)}</span>
+                <span class="cx-heavy-text selectable">{plainPreview(m.preview) || t("(내용 없음)")}</span>
+                <span class="cx-heavy-size">{tokens(Math.round(m.tokens * scale()))}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </>
   );
 }
 
@@ -166,9 +239,10 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
   const c = () => props.data.ctx;
   const sec = (name: string) => c().sections.find((s) => s.name === name)?.tokens ?? 0;
   const engineSections = () => c().sections.filter((s) => !["addendum", "project_context", "skills"].includes(s.name));
-  const activeTools = () => c().tools.filter((t) => t.active);
-  /** skills whose text is in the prompt (none when they are only searched for) */
-  const loadedSkills = () => (sec("skills") > 0 ? c().skills.filter((s) => s.modelInvocable) : []);
+  const activeTools = () => enabledTools(c());
+  /** the skills Settings lists; agents search them, so their text is in the prompt only when the engine put it there */
+  const loadedSkills = () => props.data.skills ?? [];
+  const inPrompt = (name: string) => (sec("skills") > 0 ? c().skills.find((s) => s.name === name && s.modelInvocable) : undefined);
   const counted = createMemo(() => {
     const s: Record<Seg, number> = {
       engine: engineSections().reduce((n, x) => n + x.tokens, 0),
@@ -191,8 +265,10 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
     const sum = Object.values(s).reduce((a, b) => a + b, 0);
     const r = real();
     if (!r || !sum) return s;
-    const k = r / sum;
-    return Object.fromEntries(Object.entries(s).map(([key, v]) => [key, Math.round(v * k)])) as Record<Seg, number>;
+    // whole numbers that add up to the total exactly
+    const keys = Object.keys(s) as Seg[];
+    const sized = apportion(keys.map((key) => s[key]), r);
+    return Object.fromEntries(keys.map((key, i) => [key, sized[i]])) as Record<Seg, number>;
   });
   const total = () => real() || Object.values(segs()).reduce((a, b) => a + b, 0);
   const win = () => props.known?.window || c().contextUsage?.contextWindow || 0;
@@ -229,7 +305,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           </For>
         </div>
         <div class="cx-legend">
-          <For each={order}>
+          <For each={order.filter((k) => segs()[k] > 0)}>
             {(k) => (
               <span class="cx-leg">
                 <i class={`cx-key k-${k}`} />
@@ -278,11 +354,11 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
             <div class="cx-list">
               <For each={loadedSkills()}>
                 {(s) => (
-                  <div class="cx-li" classList={{ off: !s.modelInvocable }}>
+                  <div class="cx-li">
                     <b>{s.name}</b>
                     <span title={s.description}>{firstSentence(s.description, 90)}</span>
                     <em>{skillSource(s.path)}</em>
-                    <small>{tokens(skillTokens(s))}</small>
+                    <small>{inPrompt(s.name) ? tokens(skillTokens(inPrompt(s.name)!)) : ""}</small>
                   </div>
                 )}
               </For>
@@ -305,16 +381,29 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           </div>
         </Part>
 
-        <Part seg="talk" title={t("대화")} size={segs().talk} of={total()} meta={t("메시지 {n}개", { n: c().messages.length })} open={c().messages.length > 0}>
-          {/* memory goes in with a message, so it is part of the conversation */}
-          <Part nested seg="talk" title={t("메모리")} meta={`${props.data.recalled.length}`} empty={!props.data.recalled.length}>
-            <MemoryList list={props.data.recalled} empty={t("없음")} onOpen={openMemory} />
-          </Part>
-          <Talk list={c().messages} total={segs().talk} live={props.data.live} known={props.known?.tokens} />
+        <Part
+          seg="talk"
+          title={t("대화")}
+          size={segs().talk}
+          of={total()}
+          meta={t("메시지 {n}개", { n: c().messages.length })}
+          open={c().messages.length > 0}
+          empty={!c().messages.length && !props.data.recalled.length}
+        >
+          <Talk list={c().messages} total={segs().talk} recalled={props.data.recalled} onOpen={openMemory} />
         </Part>
       </div>
     </>
   );
+}
+
+/** A card in a few words: its takeaway, its title, or what it lists. */
+function cardLine(b: Block): string {
+  const x = b as Block & { title?: unknown; files?: { path?: string }[] };
+  if (b.say) return b.say;
+  if (typeof x.title === "string" && x.title) return x.title;
+  if (Array.isArray(x.files)) return x.files.map((f) => f.path ?? "").filter(Boolean).join(", ");
+  return b.type;
 }
 
 /** The sheet. `agent` is "t:<job id>" or "captain:<chat key>". */
@@ -328,7 +417,15 @@ function ownTalk(agent: string): CtxMessage[] {
     return [
       ...(x.entries.some((e) => e.kind === "user") ? [] : [m("user", x.ask)]),
       ...x.entries.flatMap((e) =>
-        e.kind === "user" ? [m("user", e.text)] : e.kind === "text" ? [m("assistant", e.text)] : e.kind === "tool" ? [m("toolResult", e.tool.detail || e.tool.target, TOOL[e.tool.kind])] : [],
+        e.kind === "user"
+          ? [m("user", e.text)]
+          : e.kind === "text"
+            ? [m("assistant", e.text)]
+            : e.kind === "tool"
+              ? [m("toolResult", e.tool.detail || e.tool.target, TOOL[e.tool.kind])]
+              : e.kind === "block"
+                ? [{ ...m("toolResult", JSON.stringify(e.block), "card"), preview: cardLine(e.block) }]
+                : [],
       ),
     ];
   }
@@ -342,8 +439,11 @@ function ownTalk(agent: string): CtxMessage[] {
 export function ContextSheet(props: { agent: string; accountId: string; known?: { tokens: number; window: number }; onClose: () => void }) {
   const [n, setN] = createSignal(0);
   const [data] = createResource(() => ({ n: n() }), async () => {
-    const d = await (props.agent.startsWith("t:") ? loadJob(props.agent.slice(2)) : loadChat(props.agent.replace(/^captain:/, ""), props.accountId));
-    return inTauri ? d : { ...d, ctx: { ...d.ctx, messages: ownTalk(props.agent) } };
+    const [d, skills] = await Promise.all([
+      props.agent.startsWith("t:") ? loadJob(props.agent.slice(2)) : loadChat(props.agent.replace(/^captain:/, ""), props.accountId),
+      settingsSkills(),
+    ]);
+    return inTauri ? { ...d, skills } : { ...d, skills, ctx: { ...d.ctx, messages: ownTalk(props.agent) } };
   });
   // the same number the input's strip shows, kept current while the sheet is open
   const known = () => {

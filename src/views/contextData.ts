@@ -5,7 +5,7 @@ import { skillPaths } from "../engine/skillPick";
 import { mainTools, restartIfStale } from "../engine/captain";
 import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
-import { accountEnv, WORKER_TOOLS } from "../engine/tasks";
+import { accountEnv, workerTools } from "../engine/tasks";
 import { CAPTAIN_SYSTEM, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
 import { applying, inSpace, isLive, recall } from "../engine/memory";
 import { modelFor } from "../engine/models";
@@ -103,6 +103,8 @@ export interface Loaded {
   /** memory recalled into the first message (job) or the last message (chat) */
   recalled: Memory[];
   recalledWhere: string;
+  /** the skills agents can load, as Settings lists them (filled by the sheet) */
+  skills?: { name: string; description: string; path: string }[];
 }
 
 const firstLine = (t: string) => t.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "").trim() ?? "";
@@ -124,7 +126,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
     "--thinking",
     t.thinking || "high",
     ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
-    ...WORKER_TOOLS,
+    ...workerTools(),
   ];
   const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t.space))]];
   return { cwd: expand(t.cwd || homeDir(t) || "~"), args, env };
@@ -218,7 +220,7 @@ let toolsCache: EngineContext | null = null;
 export async function loadWorkerTools(force = false): Promise<EngineContext> {
   if (toolsCache && !force) return toolsCache;
   const paths = await skillPaths(state.spaces[0]?.id ?? state.space);
-  const args = ["--no-skills", ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...WORKER_TOOLS];
+  const args = ["--no-skills", ...(await workerExtensions()).flatMap((e) => ["--extension", e]), ...workerTools()];
   const acc = state.accounts[0];
   // the app's door too, so the memory tools register as they do in a job
   const env: Env = [...(await workerEnv("tools", state.spaces[0]?.id)), ...(acc ? await accountEnv(acc.id) : []), ["ONDRA_SKILL_PATHS", JSON.stringify(paths)]];

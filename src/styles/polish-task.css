@@ -1322,3 +1322,56 @@
 .panel-body .pane > div > .kv {
   margin-top: 0;
 }
+
+/* overview: the folder by name in the body font; it opens in Finder */
+.panel-body .kv dd .kv-folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.panel-body .kv dd .kv-folder:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--ink-4);
+  text-underline-offset: 3px;
+}
+
+/* context sheet › 대화: memory is a row like the others, its pieces open under it */
+.cx-talk-mem {
+  width: 100%;
+  min-height: 20px;
+  text-align: left;
+  color: var(--ink);
+  border-radius: var(--r-xs);
+}
+.cx-talk-mem .cx-talk-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+.cx-talk-mem .cx-chev {
+  transition: transform var(--dur) var(--ease);
+}
+.cx-talk-mem.open .cx-chev {
+  transform: rotate(90deg);
+}
+.cx-talk-mem:not(:disabled):hover .cx-talk-label {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-4);
+  text-underline-offset: 3px;
+}
+.cx-talk-mem:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.cx-talk-mems {
+  padding: var(--s-2) 0 var(--s-6) var(--s-8);
+}
+/* the biggest messages read as text, not code */
+.cx-heavy .cx-heavy-text {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+}
