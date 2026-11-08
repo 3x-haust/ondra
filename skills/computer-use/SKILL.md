@@ -48,16 +48,30 @@ instructions.
    apply the delta to your last tree; request `full` to rebuild the baseline.
 3. `act {input}` performs one action and re-observes **in the same call**:
    `click` (an element id), `set-value`, `type` (into an element, or the focused
-   field), `press` (a key with modifiers), `scroll`, or `click-at` (window pixels
-   from a `look`). Prefer element ids over coordinates. An accepted action is not
-   proof the UI changed: inspect the returned observation.
+   field), `press` (a key with modifiers), `scroll` (an element id, or pixels),
+   `click-at` (pixels), or `drag` (`from`/`to`: both element ids, or both pixels).
+   Pixels are those of the latest `look` of the window; they are refused without a
+   look (`NEEDS_LOOK`) or once the window moved (`WINDOW_MOVED`) — look again.
+   Prefer element ids over coordinates. An accepted action is not proof the UI
+   changed: inspect the returned observation. `effect: no_change` means the tree
+   did not change, so the action probably did nothing; some views ignore
+   background drags (text selection, native sliders) — use `set-value` or keys.
 4. `look {full?}` captures a PNG of the target app's key window — only when you
    need pixels (a canvas, an image, a control missing from the tree). Image-only
    models cannot verify visual-only controls; report that rather than guessing.
+   A `staged` look (Stage Manager thumbnail) is not to scale: use element ids.
 5. Use ids only from the current observation. Re-observe after the UI changes; do
    not reuse a stale id or guess coordinates. On a timeout or cancellation the
    outcome is unknown — re-observe before retrying; never blindly repeat a send,
    purchase or deletion.
+
+Long lists show only their visible rows; `offscreen` counts the rest — scroll to
+reveal them. `selection` shows a text element's selected text.
+
+If an action returns `USER_ACTIVE`, the user is working in that app: nothing was
+sent. Wait, observe, keep their changes, then continue. Password fields are
+refused (`SECURE_FIELD`): ask the user to fill them. `FOCUS_UNVERIFIED` means
+focus did not land on the field, so nothing was typed.
 
 Reuse an unchanged observation instead of re-capturing. Return changed structured
 text when it is enough, and include an image only when it is needed for the next

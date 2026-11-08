@@ -6,7 +6,7 @@ import { createComputerRuntime, registerComputerGuest, type ComputerRuntimeJob }
 import { connectComputerNative } from "./lib/computer-native";
 import { ComputerTransportError } from "./lib/computer-transport";
 import { createComputerEvaluation, type ComputerEvaluation } from "./lib/computer-evaluation";
-import { ComputerHostHelper, ComputerHostSession } from "./lib/computer-host";
+import { ComputerHostHelper, ComputerHostSession, type HostImage } from "./lib/computer-host";
 
 export type ComputerInput = {
   action: "start" | "observe" | "look" | "act" | "stop";
@@ -20,7 +20,7 @@ type ComputerContext = { model?: { provider?: string; id?: string; input: readon
 type ComputerContent = { type: "text"; text: string } | { type: "image"; mimeType: "image/png"; data: string };
 
 const end = {
-  type: "object", additionalProperties: false, description: "drag end: {ref} or {x, y} screen look pixel; both ends the same kind",
+  type: "object", additionalProperties: false, description: "drag end: {ref} or {x, y} pixel of the latest look; both ends the same kind",
   properties: { ref: { type: "string" }, x: { type: "integer", minimum: 0 }, y: { type: "integer", minimum: 0 } },
 };
 // Flat JSON Schema keeps the same contract across tool-calling providers.
@@ -36,15 +36,15 @@ const parameters = {
       properties: {
         kind: { type: "string", enum: ["click", "set-value", "type", "press", "scroll", "drag", "click-at"] },
         epoch: { type: "string", description: "Latest observation epoch; for coordinate actions, the frame of the latest screen look" },
-        ref: { type: "string", description: "Current eN reference (click, set-value, type, scroll)" },
+        ref: { type: "string", description: "Current element id (click, set-value, type, scroll)" },
         value: { type: "string", description: "set-value: replacement text" },
         text: { type: "string", description: "type: text to insert at ref, or into the focused field when ref is omitted" },
         key: { type: "string", description: "press: single letter/digit, return, escape, tab, space, delete, arrow or f1–f12" },
         modifiers: { type: "array", items: { type: "string", enum: ["cmd", "ctrl", "alt", "shift"] }, maxItems: 4, uniqueItems: true },
         direction: { type: "string", enum: ["up", "down", "left", "right"], description: "scroll direction" },
         amount: { type: "integer", minimum: 1, maximum: 50, description: "scroll: lines, default 3" },
-        x: { type: "integer", minimum: 0, description: "click-at/scroll: pixel x in the screen look image" },
-        y: { type: "integer", minimum: 0, description: "click-at/scroll: pixel y in the screen look image" },
+        x: { type: "integer", minimum: 0, description: "click-at/scroll: pixel x in the latest look image" },
+        y: { type: "integer", minimum: 0, description: "click-at/scroll: pixel y in the latest look image" },
         from: end,
         to: end,
         button: { type: "string", enum: ["left", "right"] },
@@ -215,7 +215,7 @@ export default function (pi: any) {
     }
   }
 
-  function renderImage(image: { mimeType: "image/png"; data: string; width: number; height: number }, full: boolean, ctx?: ComputerContext) {
+  function renderImage(image: HostImage, full: boolean, ctx?: ComputerContext) {
     const bytes = Buffer.from(image.data, "base64");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (lastImage?.sha256 !== sha256) {
@@ -228,9 +228,13 @@ export default function (pi: any) {
     const model = JSON.stringify([ctx?.model?.provider, ctx?.model?.id, ctx?.model?.input]);
     const unchanged = !full && sentImage?.sha256 === sha256 && sentImage.model === model;
     const imageIncluded = supported && !unchanged;
+    // Host looks are actionable: click-at/scroll/drag take pixels of this image, unless
+    // Stage Manager handed us a thumbnail that is not to scale.
+    const actionable = image.frame !== undefined && !image.staged;
     const metadata = {
       kind: unchanged ? "unchanged" : "full", ...lastImage, width: image.width, height: image.height,
-      actionable: false, imageIncluded,
+      actionable, imageIncluded,
+      ...(image.staged ? { note: "Stage Manager shows this window as a thumbnail; the image is not to scale. Use element refs, not pixels." } : {}),
       ...(!supported ? { error: "MODEL_IMAGE_UNSUPPORTED", note: "Current model cannot inspect images. Use structured observe; visual-only controls are unsupported." } : {}),
     };
     const content: ComputerContent[] = [{ type: "text", text: JSON.stringify(metadata) }];
@@ -302,9 +306,9 @@ export default function (pi: any) {
     name: "computer", label: "Computer", exposure: "deferred", executionMode: "sequential",
     description: [
       "Operate one Mac app in the background on the user's own Mac. Never activates an app, moves the cursor or posts global events; it checks the frontmost app, key window and mouse are unchanged after each action. If an action cannot be done in the background it fails — report that, never fall back to the foreground or to host desktop commands.",
-      "start {app} launches the app without activation and observes it. observe {full?} refreshes the accessibility tree. look {full?} captures a PNG of the target app's own key window (never the whole screen), only when you need pixels. act {input} performs one action, then re-observes in the same call: click (an element ref), set-value, type (ref, or the focused field without ref), press, scroll, or click-at (x/y in the latest look). stop ends the session.",
-      "Observations are full, delta or unchanged. Apply delta set/remove paths to the base_epoch tree; unchanged keeps it. Always adopt the new epoch. Element refs are stable ids local to the current epoch; re-observe for fresh refs after the UI changes. Request observe full=true to rebuild the baseline.",
-      "Action delivery is not application-level success. Inspect the following observation. Unknown results must not be blindly retried. Stale refs cannot authorize actions.",
+      "start {app} launches the app without activation and observes it. observe {full?} refreshes the accessibility tree. look {full?} captures a PNG of the target app's own key window (never the whole screen), only when you need pixels. act {input} performs one action, then re-observes in the same call: click (an element ref), set-value, type (ref, or the focused field without ref), press, scroll (ref, or x/y), click-at (x/y), or drag (from/to: both refs, or both x/y). x/y are pixels of the latest look and are refused if there was no look or the window moved since; prefer refs. Password fields are refused. stop ends the session.",
+      "Observations are full, delta or unchanged. Apply delta set/remove paths to the base_epoch tree; unchanged keeps it. Always adopt the new epoch. Element refs are stable ids local to the current epoch; re-observe for fresh refs after the UI changes. Request observe full=true to rebuild the baseline. Children scrolled out of view are left out and counted in offscreen; scroll to reveal them.",
+      "Action delivery is not application-level success. Inspect the following observation; effect no_change means the tree did not change, so the action probably had no effect (some views ignore background drags — prefer set-value or keys there). Unknown results must not be blindly retried. Stale refs cannot authorize actions. USER_ACTIVE means the user is working in that app: wait and observe, do not retry at once.",
       "look returns image content only to image-capable models and saves a private PNG in the job artifacts directory. Identical images are omitted unless full=true or the model/context resets.",
       "Prefer refs over coordinates. Text output is limited to 50 KiB; oversized observations are saved as artifacts and their refs invalidated. An isolated macOS guest VM is an optional separate mode, not the default.",
     ].join("\n"),

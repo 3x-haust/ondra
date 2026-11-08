@@ -8,6 +8,7 @@ set -e
 here="$(cd "$(dirname "$0")" && pwd)"
 arch="$(uname -m)"
 case "$arch" in arm64) triple=aarch64-apple-darwin ;; *) triple=x86_64-apple-darwin ;; esac
+mkdir -p "$here/../binaries"
 
 build() {
   name="$1"; src="$2"; ents="$3"
