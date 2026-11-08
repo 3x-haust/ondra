@@ -1080,13 +1080,6 @@
   max-width: 360px;
   transform-origin: left top;
 }
-.needs-menu .row-hint {
-  flex: none;
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* the workspace switcher: the attention dot sits right after its tab's name */
 .app .sidebar .space-seg button {
@@ -1307,13 +1300,13 @@
 }
 
 /* 내 차례 popover: the state word in its tone, like the sidebar row (review in the accent) */
-.needs-menu .needs-word.ask {
+.needs-menu .needs-word.tone-ask {
   color: var(--warn-ink);
 }
-.needs-menu .needs-word.bad {
+.needs-menu .needs-word.tone-bad {
   color: var(--bad-ink);
 }
-.needs-menu .needs-word.review {
+.needs-menu .needs-word.tone-review {
   color: var(--accent-text);
 }
 .needs-menu .needs-word {
@@ -1391,4 +1384,37 @@
 .app .sidebar .sb-row:hover .sb-kids,
 .app .sidebar .sb-row:focus-within .sb-kids {
   display: inline-flex;
+}
+
+/* 내 차례 popover: glyph · title · state · project, the state words and the projects each in a column */
+.needs-menu.ctx-menu {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  align-content: start;
+  gap: 0 var(--s-8);
+}
+.needs-menu.ctx-menu button {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.needs-menu .row-title {
+  margin-right: var(--s-4);
+}
+.needs-menu .needs-word,
+.needs-menu .needs-where {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.needs-menu .needs-where {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+.needs-menu .needs-where::before {
+  content: "·";
+  margin-right: var(--s-4);
+  color: var(--ink-4);
 }

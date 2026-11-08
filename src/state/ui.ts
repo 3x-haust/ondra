@@ -22,8 +22,15 @@ export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "ski
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
 export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse" | "issues";
 
-const [view, setViewNow] = createSignal<View>({ name: "main" });
+const [view, setViewShown] = createSignal<View>({ name: "main" });
 export { view };
+// what lives only on Main (the new-task screen) closes when you go anywhere else
+const leavingMain: (() => void)[] = [];
+export const onLeaveMain = (f: () => void) => void leavingMain.push(f);
+const setViewNow = (v: View) => {
+  if (v.name !== "main") leavingMain.forEach((f) => f());
+  setViewShown(v);
+};
 
 // Where you have been, for ⌘[ and ⌘]: each move to another place is kept; moving
 // within one place (another result, another settings tab) replaces it.
