@@ -527,11 +527,6 @@
     transform: scaleX(0);
   }
 }
-@keyframes draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-}
 @keyframes node-in {
   from {
     opacity: 0;
@@ -539,33 +534,6 @@
   }
 }
 /* working: a soft halo breathing out of the dot */
-@keyframes halo {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 55%, transparent);
-  }
-  70%,
-  100% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--live) 0%, transparent);
-  }
-}
-@keyframes ask-ping {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.25);
-  }
-}
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .tone-live .sb-dot,
   .g-node.running {
@@ -650,7 +618,7 @@
   --code-sep: color-mix(in lab, var(--code-surface) 96%, var(--code-fg));
 }
 :root[data-theme="dark"] {
-  --code-surface: #0a0a0a;
+  --code-surface: #111113;
   --code-fg: #fafafa;
   --add-base: #5ecc71;
   --del-base: #ff6762;
@@ -662,7 +630,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --code-surface: #0a0a0a;
+    --code-surface: #111113;
     --code-fg: #fafafa;
     --add-base: #5ecc71;
     --del-base: #ff6762;
@@ -933,28 +901,7 @@
   height: 36px;
   border-radius: var(--r-sm);
 }
-/* 10 · needs-you: same size, same hue family in both themes, a gentle blink like T3 */
-:root[data-theme="dark"] {
-  --warn: #fbbf24;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --warn: #fbbf24;
-  }
-}
-@keyframes status-pulse {
-  0%,
-  40% {
-    opacity: 1;
-  }
-  50%,
-  90% {
-    opacity: 0.45;
-  }
-  100% {
-    opacity: 1;
-  }
-}
+/* 10 · needs-you: same size, same hue family in both themes */
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
     animation: none;
@@ -1014,11 +961,6 @@
 /* 16 · separators stay grey */
 .usage-line > span + span::before {
   background: var(--ink-4);
-}
-/* 17 · spinners: a faint full ring and a bright arc in both themes */
-.spin {
-  border-color: color-mix(in srgb, var(--ink) 12%, transparent);
-  border-top-color: var(--accent);
 }
 /* 19, 20 · popovers: a check for the current choice; one label style */
 .perm-check {
@@ -1411,18 +1353,18 @@ body.resizing .panel {
   --gut: 8px;
   --card-r: 12px;
   --card-line: rgba(0, 0, 0, 0.07);
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px -6px rgba(0, 0, 0, 0.06);
+  --card-shadow: none;
 }
 :root[data-theme="dark"] {
-  --canvas: #000;
-  --card-line: rgba(255, 255, 255, 0.07);
-  --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --canvas: #09090b;
+  --card-line: rgba(255, 255, 255, 0.08);
+  --card-shadow: none;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #000;
-    --card-line: rgba(255, 255, 255, 0.07);
-    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02);
+    --canvas: #09090b;
+    --card-line: rgba(255, 255, 255, 0.08);
+    --card-shadow: none;
   }
 }
 .app {
@@ -1754,15 +1696,6 @@ body.resizing .panel {
   color: var(--accent);
 }
 /* 15 · needs-you dot breathes, never looks disabled */
-@keyframes status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
 @media (prefers-reduced-motion: no-preference) {
   .tone-ask .sb-dot {
     animation: none;
@@ -1814,9 +1747,9 @@ body.resizing .panel {
   background: var(--card);
   box-shadow: 0 0 0 1px var(--card-line), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-/* 21 · dark: the frame is a shade lighter than the cards */
+/* 21 · dark: the frame sits a step below the cards */
 :root[data-theme="dark"] {
-  --canvas: #141416;
+  --canvas: #09090b;
   --card-line: rgba(255, 255, 255, 0.08);
 }
 :root[data-theme="dark"] .sb-row:hover {
@@ -1828,7 +1761,7 @@ body.resizing .panel {
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --canvas: #141416;
+    --canvas: #09090b;
     --card-line: rgba(255, 255, 255, 0.08);
   }
   :root:not([data-theme="light"]) .sb-row:hover {
@@ -2147,21 +2080,21 @@ input[type="checkbox"] {
 .jump-latest:hover {
   color: var(--ink);
 }
-/* 32 · dark: card, input and frame are three distinct steps */
+/* 32 · dark: frame, card and input are three distinct steps */
 :root[data-theme="dark"] {
-  --card: #0e0e10;
-  --bg: #0e0e10;
+  --card: #1c1c1f;
+  --bg: #151517;
 }
 :root[data-theme="dark"] .composer {
-  background: #18181b;
+  background: #1c1c1f;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --card: #0e0e10;
-    --bg: #0e0e10;
+    --card: #1c1c1f;
+    --bg: #151517;
   }
   :root:not([data-theme="light"]) .composer {
-    background: #18181b;
+    background: #1c1c1f;
   }
 }
 /* 33 · short windows: the trays above the input shrink to one line */
@@ -2903,13 +2836,13 @@ input[type="checkbox"] {
 }
 :root[data-theme="dark"] {
   --cv-bg: #0b0b0d;
-  --cv-card: #151518;
+  --cv-card: #1c1c1f;
   --cv-dot: rgb(255 255 255 / 9%);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --cv-bg: #0b0b0d;
-    --cv-card: #151518;
+    --cv-card: #1c1c1f;
     --cv-dot: rgb(255 255 255 / 9%);
   }
 }
@@ -5689,7 +5622,7 @@ div.queued {
 }
 .mg-node circle,
 .mg-node rect {
-  stroke: var(--bg, #0e0e10);
+  stroke: var(--bg, #151517);
   stroke-width: 2;
 }
 .mg-node.k-global circle {
@@ -5711,7 +5644,7 @@ div.queued {
   fill: var(--ink-2);
   font-size: 11px;
   paint-order: stroke;
-  stroke: var(--bg, #0e0e10);
+  stroke: var(--bg, #151517);
   stroke-width: 3px;
   pointer-events: none;
 }
@@ -7906,11 +7839,6 @@ textarea { resize: none !important; field-sizing: content; }
 .shimmer {
   color: var(--ink-3);
 }
-@keyframes shimmer-sweep {
-  from { background-position: 100% 0; }
-  to { background-position: 0% 0; }
-}
-
 /* Codex order: the verb leads in the line's ink, the name follows quieter */
 .tool-row .tool-verb { order: 1; color: var(--ink-2); }
 .tool-row .tool-target { order: 2; color: var(--ink-4); }

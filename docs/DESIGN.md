@@ -1,218 +1,477 @@
-# Ondra 디자인 시스템
+# Ondra design
 
-**바탕은 T3 Code의 디자인 시스템이에요** (zinc 무채색, 36px 행 + 9px 상태 점, 상단 바의 알약 탭,
-16px 둥근 입력창, Pierre 코드 테마). 브랜드 색만 Ondra 파랑으로 바꿨어요. 모양 규칙은 `src/styles/t3.css`에 있어요.
+How Ondra looks, moves and talks. The values live in `src/styles/tokens.css`; this page is the reason behind them.
+They were drawn from Linear, T3 Code, Cursor, Codex, Claude and gitsu, then fitted to Ondra.
 
-토큰은 `src/styles/tokens.css` 한 곳에만 있어요. 화면 코드(`core.css`, `app.css`, TSX)는
-토큰만 써요. 숫자(px, hex, rgba)를 직접 쓰지 않는 게 규칙이에요. 예외는 1px 선(hairline)과
-레이아웃 고정 폭(목록·패널·입력창 폭도 토큰이에요)뿐이에요.
+## 1. Principles
 
----
-
-## 1. 원칙
-
-1. **내용이 주인공.** 화면에서 제일 큰 건 대화예요. 크롬(버튼, 테두리, 배경 면)은 최대한 조용하게 둬요.
-2. **색은 하나.** 브랜드 색은 파랑(`--accent`) 하나뿐이에요. 나머지 색은 상태 점에만 써요 (T3와 같은 짝).
-   - 하늘(`--live`): 일하는 중 (점이 숨 쉬듯 번져요)
-   - 주황(`--warn`): 답이 필요함 (점이 살짝 뛰어요). 글자는 `--warn-ink`
-   - 초록 링(`--ok`): 끝났고 확인을 기다림
-   - 빨강(`--bad`): 멈춤
-   - 회색: 대기(빈 링), 끝남(옅은 점)
-3. **끝난 일은 접는다.** 작업 과정(도구 호출, 중간 말)은 끝나면 "N분 동안 작업 ›" 한 줄로 접혀요. 펼치면 다 보여요.
-4. **익숙하게.** 목록 · 메인 · 패널. 왼쪽은 T3처럼 최신순 한 줄 목록, 상태는 점 색으로만 말해요.
-5. **로고 없음.** 화면 안에 로고 마크를 쓰지 않아요. 답변 옆 아바타도 없어요. 앱 아이콘은 나중에 따로 정해요.
-6. **자동은 없어요.** 모델·생각 깊이·권한은 언제나 눈에 보이는 값 하나예요 (기본 생각 깊이 `high`, 기본 권한 "편집 허용").
+1. **The work is the loudest thing on screen.** Navigation, tabs and headers step back once you have arrived. Linear's wording: "Don't compete for attention you haven't earned," and the 2026 refresh made the sidebar "a few notches dimmer".
+2. **Structure is felt, not seen.** Use hairlines at 5–8% alpha, few separators, and spacing to group things. Remove a divider wherever spacing already does its job.
+3. **One accent. Color means state.** There is one brand color, used for the main action, selection, focus and "working". Every other hue marks a state (needs you, failed, done, diff). No gradients, glows or tinted chrome.
+4. **Dense but calm.** Rows are 32px, controls 28–32px, icons 14–16px, on a 4px grid. Things stay quiet through low contrast in the chrome, not through extra air.
+5. **No helper text.** A label, a value, a control. If a setting needs a paragraph to explain it, rename it or rethink it. Put details in a tooltip or not at all.
+6. **A still screen.** Motion only for state changes the person caused or must notice: folds, panels, popovers, new items. Nothing loops (see §11).
+7. **Plain, soft Korean.** Short "~요" sentences, verbs on buttons, no internal terms (§12).
+8. **No logo, no "AI look".** No Ondra mark in the UI, no sparkles, no glowing or animated accents, no gradient-for-show.
+9. **GitHub is the record.** Anything from GitHub (issues, PRs, labels, checks) shows GitHub's own data and words, the way gitsu keeps GitHub as the system of record.
 
 ---
 
-## 2. 토큰
+## 2. Color
 
-### 색 (라이트 / 다크 둘 다 정의)
+### 2.1 What the references use
 
-| 역할 | 토큰 | 쓰는 곳 |
+| Role | Linear light / dark | T3 Code light / dark | gitsu light / dark | Codex light / dark | Claude light / dark | Cursor light / dark |
+|---|---|---|---|---|---|---|
+| Page | `#ffffff` / `#08090a` | zinc-25 `oklch(99.2% 0 0)` ≈ `#fcfcfc` / `#000` | `#ffffff` / `#09090b` | `#ffffff` / `#212121` (surface) | `#ffffff` / `#2c2c2a` (bg-000) | `#f7f7f4` / `#14120b` |
+| Panel / sidebar | `#f9f8f9` / `#0f1011` (bg-panel) | zinc-50 `#fafafa` / card | `#fafafa` / `#18181b` | — | `#f8f8f6` / `#1f1f1e` (bg-100) | `#f2f1ed` / `#1b1913` (card) |
+| Raised / tertiary | `#f4f2f4` / `#232326` | white / `#191a1d` (accent) | `#f4f4f5` / `#27272a` | `#f3f3f3` / `#414141` | `#f4f4f1` / `#171716` | `#ebeae5` / `#201e18` |
+| Border | `#e9e8ea` / `#23252a`; translucent `#0000000d`, `#00000014` / `#ffffff0d`, `#ffffff14` | zinc-200 `#e4e4e7` / `rgb(255 255 255 / 8%)` | `#e4e4e7` / `#ffffff1a` | `#0000000d` light, `#00000026` heavy / `#ffffff0d`, `#fff3` | — | fg at 10% / 20% |
+| Text 1 | `#282a30` / `#f7f8f8` | zinc-900 `#18181b` / `#f1f3f7` | `#09090b` / `#fafafa` | `#0d0d0d` / `#dfdfdf` | `#121212` / `#f8f8f6` | `#26251e` / `#edecec` |
+| Text 2 | `#3c4149` / `#d0d6e0` | — | — / `#d4d4d9` (feature text) | `#5d5d5d` / `#aaa`, `#cdcdcd` | `#373734` / `#c3c2b7` | fg 60% |
+| Text 3 | `#6f6e77` / `#8a8f98` | zinc-500 `#71717a` / `#a3a3a3` | `#71717b` / `#9f9fa9` | `#8f8f8f` / `#afafaf` | `#7b7974` / `#97958c` | fg 40% |
+| Text 4 | `#86848d` / `#62666d` | — | `#a1a1aa` (faint) / `#71717b` | — | — | — |
+| Accent | `#7170ff` (accent), brand `#5e6ad2` | `oklch(0.488 0.217 264)` / `oklch(0.571 0.21 264)` | `#5059ff`, hover `#4a52ee`, pressed `#434be0`; dark text `#6d75ff` | info `#3a83f7` / `#63a8f8`; primary button is ink `#0d0d0d` / `#f9f9f9` | clay `#d97757`, blue-450 for links | `#f54e00` |
+
+What they share: neutral (zinc or warm gray) surfaces, a single cool accent (Cursor and Claude use warm ones), 8–10% alpha borders in dark mode, and text tiers made from opacity or gray steps. Linear's 2026 refresh moved its default themes "from a cool, blue-ish palette toward a warmer gray". The person asked for the UI to look like gitsu, so Ondra takes gitsu's zinc family and its indigo, with Linear's translucent hover and border steps.
+
+### 2.2 Ondra tokens: light
+
+| Token | Value | Use | Source |
+|---|---|---|---|
+| `--canvas` | `#f4f4f5` | Window frame behind the cards, and the sidebar | zinc-100 = gitsu `--muted` |
+| `--bg` | `#fcfcfc` | Main and panel cards (the page) | T3 zinc-25 (Ondra keeps "no pure white page") |
+| `--card` | `#ffffff` | Composer, popovers, dialogs, toasts | gitsu `--card` |
+| `--bubble` | `#f4f4f5` | User message | gitsu `--secondary` |
+| `--muted` | `#fafafa` | Chip and track fills | gitsu `--sidebar` |
+| `--hover` | `rgba(9, 9, 11, 0.05)` | Hover on any transparent control | Codex ghost hover `#0000000d` |
+| `--active` | `rgba(9, 9, 11, 0.08)` | Pressed, open menu row | Linear `--color-border-translucent-strong #00000014` |
+| `--row-selected` | `#ffffff` | Current sidebar row | T3 `--sidebar-row-selected` |
+| `--row-selected-shadow` | `inset 0 0 0 1px rgba(9, 9, 11, 0.06)` | Edge of the selected row | Ondra |
+| `--line` | `#e4e4e7` | Borders | |
+| `--line-soft` | `#f0f0f1` | Separators inside groups | Linear `--color-line-tertiary #f0f0f0` |
+| `--input` | `#d4d4d8` | Input borders | T3 zinc-300 |
+| `--code-bg` | `#f4f4f5` | Inline code, code blocks | muted |
+| `--ink` | `#18181b` | Primary text | T3 zinc-900 |
+| `--ink-2` | `#3f3f46` | Secondary text | zinc-700, Ondra |
+| `--ink-3` | `#71717a` | Meta, labels, icons |; gitsu `#71717b` |
+| `--ink-4` | `#a1a1aa` | Placeholder and disabled only, never text people must read | gitsu `--color-faint` |
+| `--accent` | `#5059ff` | Main action fill, selection, working | gitsu `--brand` |
+| `--accent-hover` | `#4a52ee` | | gitsu `--brand-hover` |
+| `--accent-press` (new) | `#434be0` | | gitsu `--brand-pressed` |
+| `--accent-text` (new) | `#5059ff` | Accent used as text or icon | gitsu `--brand-text` |
+| `--accent-soft` | `rgba(80, 89, 255, 0.08)` | Selected chip, soft fills | gitsu `--brand-tint #5059ff14` |
+| `--accent-line` | `rgba(80, 89, 255, 0.32)` | Accent borders | Ondra (same alpha as today) |
+| `--accent-ink` | `#ffffff` | Text on accent | |
+| `--focus` | `rgba(80, 89, 255, 0.40)` | Focus ring | gitsu `--ring: var(--brand)` |
+| `--ok` | `#16a34a` | Checks passed, PR open | gitsu `--success` |
+| `--ok-ink` | `#15803d` | Text on ok-soft | Tailwind green-700, inferred from gitsu's green family |
+| `--warn` | `#d97706` | Needs you | gitsu `--warning #d97708` |
+| `--warn-ink` | `#b45309` | | unchanged |
+| `--bad` | `#dc2626` | Failed | unchanged; gitsu's `#e40014` is the sRGB fallback of the same red-600 |
+| `--bad-ink` | `#b91c1c` | | unchanged |
+| `--ok-soft` / `--warn-soft` / `--bad-soft` | tone at 8% | Pill and banner fills | T3 badge `bg-success/8` |
+| `--diff-add` / `--diff-del` | `rgba(16,185,129,0.10)` / `rgba(239,68,68,0.08)` | Diff lines | unchanged; Cursor uses 8% / 6% |
+
+### 2.3 Ondra tokens: dark
+
+| Token | Value | Source |
 |---|---|---|
-| 페이지 | `--bg` | 본문 배경 |
-| 사이드바 | `--sidebar` | 사이드바, 패널, 접힌 그룹 바탕 |
-| 카드 | `--card` | 포크 카드, 입력창, 팝오버 |
-| 말풍선 | `--bubble` | 사용자 메시지 |
-| 옅은 면 | `--muted` | 칩, 첨부 |
-| 호버 / 눌림 | `--hover`, `--active` | 모든 투명 버튼 |
-| 선택된 행 | `--row-selected` (+ `--row-selected-shadow`) | 사이드바 현재 위치 |
-| 선 | `--line`, `--line-soft`, `--input` | 테두리, 구분선, 입력 테두리 |
-| 글자 | `--ink` > `--ink-2` > `--ink-3` > `--ink-4` | 본문 > 보조 > 메타 > 자리표시 |
-| 브랜드 | `--accent`, `--accent-hover`, `--accent-soft`, `--accent-line`, `--accent-ink` | 보내기, 진행, 포커스 링 |
-| 상태 | `--ok`, `--warn`, `--bad` (+ `-soft`) | 상태 아이콘, 배지 |
-| 그림자 | `--shadow-card`, `--shadow-composer`, `--shadow-pop` | 카드, 입력창, 팝오버 |
-| 고정 | `--white`, `--scrim` | 스위치 손잡이, 오버레이 |
+| `--canvas` | `#09090b` | gitsu `--background` (zinc-950) |
+| `--bg` | `#151517` | gitsu's card frames `bg-[#151517]` |
+| `--card` | `#1c1c1f` | Linear `--color-bg-secondary` |
+| `--bubble` | `#232326` | Linear `--color-bg-tertiary` |
+| `--muted` | `rgba(255, 255, 255, 0.03)` | T3 `--muted` |
+| `--hover` | `rgba(255, 255, 255, 0.05)` | Linear `--color-bg-translucent #ffffff0d` |
+| `--active` | `rgba(255, 255, 255, 0.08)` | Linear `#ffffff14` |
+| `--row-selected` | `rgba(255, 255, 255, 0.07)` | T3 `--sidebar-row-selected` (7%) |
+| `--row-selected-shadow` | `none` | |
+| `--line` | `rgba(255, 255, 255, 0.08)` |, Linear `#ffffff14` |
+| `--line-soft` | `rgba(255, 255, 255, 0.05)` | Linear `#ffffff0d` |
+| `--input` | `rgba(255, 255, 255, 0.15)` | gitsu `--input #ffffff26` |
+| `--code-bg` | `#111113` | unchanged (sits just below `--bg`) |
+| `--ink` | `#f4f4f5` | zinc-100; gitsu's `#fafafa` toned down to keep "no pure white text" |
+| `--ink-2` | `#d4d4d9` | gitsu `--color-feature-text` |
+| `--ink-3` | `#9f9fa9` | gitsu `--color-dark-fg-muted` |
+| `--ink-4` | `#71717b` | gitsu `--color-dark-fg-subtle` |
+| `--accent` | `#5059ff` | Fills stay the same in both themes, as in gitsu |
+| `--accent-hover` | `#5e66ff` | Ondra (one step lighter, because hover lightens on dark) |
+| `--accent-press` | `#4a52ee` | |
+| `--accent-text` | `#6d75ff` | gitsu dark `--brand-text` |
+| `--accent-soft` | `rgba(80, 89, 255, 0.14)` | gitsu dark `--brand-tint #5059ff24` |
+| `--accent-line` | `rgba(109, 117, 255, 0.40)` | Ondra |
+| `--accent-ink` | `#ffffff` | gitsu `--primary-foreground` |
+| `--focus` | `rgba(109, 117, 255, 0.50)` | gitsu `--ring: var(--brand-text)` |
+| `--ok` / `--ok-ink` | `#26c55f` / `#26c55f` | gitsu dark `--success` |
+| `--warn` / `--warn-ink` | `#f99c00` / `#fbbf24` | gitsu dark `--warning`; ink unchanged |
+| `--bad` / `--bad-ink` | `#ff6568` / `#ff6568` | gitsu dark `--destructive` |
+| `--ok-soft` / `--warn-soft` / `--bad-soft` | tone at 16% | T3 badge `dark:bg-success/16` |
+| `--scrim` | `rgba(0, 0, 0, 0.6)` | unchanged |
 
-### 글자
+### 2.4 State colors (one meaning each)
 
-| 토큰 | 크기 | 쓰는 곳 |
+| State (Korean label) | Glyph color | Notes |
 |---|---|---|
-| `--fs-2xs` | 11 | 배지 숫자, 카운터 |
-| `--fs-xs` | 12 | 시간, 메타, 섹션 이름 |
-| `--fs-sm` | 13 | 칩, 도구 줄, 보조 설명 |
-| `--fs-md` | 14 | UI 기본 (사이드바, 버튼, 메뉴) |
-| `--fs-lg` | 16 | 읽는 글 (메시지, 답변) |
-| `--fs-xl` | 22 | 설정 페이지 제목 |
-| `--fs-2xl` | 30 | 빈 화면 한 줄 |
-| `--fs-code` | 12.5 | 모노 글꼴 (경로, 명령) |
+| 진행 중 (working) | `--accent-text` | `--live` becomes the accent. A separate sky blue next to the indigo would be one hue too many. |
+| 답 필요 (needs you) | `--warn` | `--ask` points at `--warn`. Indigo now belongs to the accent. |
+| 대기 (queued) | `--ink-4` | |
+| 멈춤 (paused) | `--ink-3` | |
+| 실패 (failed) | `--bad` | |
+| 끝남 (done) | `--accent-text` check on `--accent-soft` | Matches today's DESIGN.md (green stays for diffs and passing checks) |
+| GitHub: PR open / merged / closed | `--ok` / `#8250df` (GitHub's merged purple, used only on the PR glyph) / `--ink-3` | GitHub's own convention, per principle 9 |
 
-- 굵기: `--fw-regular` 400, `--fw-medium` 500, `--fw-strong` 600. 그 외 굵기는 안 써요.
-- 줄 간격: `--lh-tight` 1.35 (두 줄 행), `--lh-ui` 1.5 (UI), `--lh-read` 1.75 (읽는 글).
-- 모노는 경로·명령·코드에만 써요. 설명문이나 자리표시에는 쓰지 않아요.
+---
 
-### 간격
+## 3. Typography
 
-2px 단위로 16까지, 그 위는 4·8 단위: `--s-2 4 6 8 10 12 14 16 20 24 28 32 40 48 64 80`.
+### 3.1 What the references use
 
-- 행 안 아이콘–글자: `--s-8` ~ `--s-10`
-- 카드 안쪽: `--s-12` ~ `--s-16`
-- 대화 메시지 사이: 26 (`.convo`), 작업 줄 사이: `--s-16`
+- Linear: Inter Variable with `"cv01","ss03"`; text-regular 15px/1.6/-0.011em, small 14px/1.5/-0.013em, mini 13px/1.5/-0.01em, micro 12px/1.4, tiny 10px; weights 400/510/590/680. Inter Display is used for headings.
+- T3 Code: `-apple-system, BlinkMacSystemFont, "Inter Variable"`; UI at Tailwind `text-sm` (14px), plus `2xs` 11px and `3xs` 10px for metadata.
+- Codex: UI defaults to 13px (`var(--font-ui-size, 13px)`) and code to 12px (`var(--font-code-size, 12px)`), on a 12/14/16/18 scale.
+- gitsu: system sans for the UI, Geist Variable for display; `text-sm` 14px is its most common class.
+- Cursor: CursorGothic; mono is Berkeley Mono or cursorMono.
 
-### 모서리
+### 3.2 Ondra scale
 
-| 토큰 | 값 | 쓰는 곳 |
+Latin apps sit at 13–14px. Hangul fills more of the em box, so Pretendard reads larger at the same size. Ondra already tuned its scale (commit `fb062ea`: 14.5px left Pretendard's glyphs below the middle of the line in WebKit, and 15.5px fixed it). **Keep the sizes.** The density comes from row heights and spacing, not from smaller text. Line heights move to whole pixels on a 2px rhythm.
+
+Family: `"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif` (unchanged). Mono: `ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace` (unchanged).
+
+| Token | Size | Line height | Weight | Tracking | Use |
+|---|---|---|---|---|---|
+| `--fs-2xs` | 12.5px | 16px | 500 | 0 | Counters, kbd, badges |
+| `--fs-xs` | 13.5px | 18px | 400 / 500 | -0.003em | Meta, timestamps, section labels, tooltips |
+| `--fs-sm` | 14.5px | 20px | 400 / 500 | -0.006em | Chips, tabs, menu items, tool rows |
+| `--fs-md` | 15.5px | 22px | 400 / 500 | -0.006em | UI default: sidebar rows, buttons, inputs, list rows |
+| `--fs-lg` | 16.5px | 26px | 400 | -0.008em | Reading: messages, answers, PR bodies (Linear's reading line height is 1.6) |
+| `--fs-xl` | 22px | 28px | 600 | -0.02em | Page titles (settings, empty main) |
+| `--fs-2xl` | 30px | 36px | 600 | -0.03em | The one hero line, rarely |
+| `--fs-code` | 14px | 20px | 400 | 0 | Code, paths, diffs |
+
+Rules:
+- Use only three weights: 400, 500, 600. Do not use 700.
+- Use `font-variant-numeric: tabular-nums` on counts, times, `+n −m`, token numbers and percentages.
+- Use mono only for code, paths, branch names and commands. Never for labels, placeholders or numbers in prose.
+- Korean has no capitals, so section labels use weight and color instead: `--fs-xs`, 500, `--ink-3`. Latin acronyms (PR, CI) stay as they are.
+- Line clamp: list titles 1 line, card titles 2 lines, then an ellipsis.
+- Check the new pixel line heights against the centering problem that `fb062ea` fixed before shipping them.
+
+---
+
+## 4. Spacing
+
+Base unit 4px, as in Tailwind's `--spacing: .25rem` used by T3 Code, gitsu and Codex (`--spacing: 4px`).
+
+| Token | px | Typical use |
 |---|---|---|
-| `--r-bar` | 2 | 진행 막대 눈금 |
-| `--r-xs` | 4 | 칩 속 작은 버튼 |
-| `--r-sm` | 6 | 메뉴 항목, 경로 조각 |
-| `--r-md` | 8 | 버튼, 입력, 목록 행 |
-| `--r-lg` | 10 | 사이드바 행, 세그먼트 |
-| `--r-xl` | 14 | 카드 (포크, 알림, 결과, 스트립) |
-| `--r-2xl` | 22 | 입력창, 사용자 말풍선 |
-| `--r-pill` | 999 | 상태 칩, 배지, 시작 제안 |
+| `--s-2` | 2 | Optical nudges only, tab-strip gap |
+| `--s-4` | 4 | Menu padding, icon-to-count, chip gap |
+| `--s-6` | 6 | Icon-to-label in small controls |
+| `--s-8` | 8 | Icon-to-label in rows, card gutter (`--gut`), button gap |
+| `--s-10` | 10 | Row horizontal padding |
+| `--s-12` | 12 | Card padding (dense), list padding |
+| `--s-16` | 16 | Panel inset, card padding (roomy), section gap |
+| `--s-20` | 20 | Dialog padding |
+| `--s-24` | 24 | Between settings groups, between turns |
+| `--s-32` | 32 | Page top padding |
+| `--s-48`, `--s-64` | 48, 64 | Empty-state offsets only |
 
-### 높이
+Retire `--s-14`, `--s-28`, `--s-40` and `--s-80`. Keep them as aliases until no CSS uses them.
 
-`--h-2xs` 20 · `--h-xs` 24 · `--h-sm` 28 · `--h-md` 32 · `--h-lg` 36 · `--h-xl` 40 · `--h-2xl` 48.
-아이콘 버튼과 보내기 버튼은 `--h-md`(32), 칩과 답 버튼은 `--h-sm`(28)이에요.
-
-### 레이아웃 폭
-
-`--sidebar-w` 288 왼쪽 · `--head-h` 52 머리 · 일 패널 기본 560 (끌어서 380–980, 변경·파일·브라우저 탭은 화면의 46%까지 넓어짐) · `--chat-w` 768 대화·입력창 · `--traffic-w` 84 창 버튼 자리.
-
-### 움직임
-
-- 곡선: `--ease` (색·호버), `--ease-drawer` `cubic-bezier(.32,.72,0,1)` (미끄러지거나 튀어나오는 것, T3와 같음), `--ease-spring` (점·체크의 작은 튕김).
-- 시간: `--dur-fast` 0.12s 호버 · `--dur` 0.16s 펼치기 · `--dur-slow` 0.26s 등장 · `--dur-drawer` 0.36s 패널.
-- 들어올 때: 패널은 오른쪽에서 밀려 들어와요(처음 열 때만, 일을 바꿀 땐 안쪽만 바뀜). 탭 바닥 알약은 고른 탭으로 미끄러져요. 탭·일을 바꾸면 내용이 6px 아래서 떠올라요. 목록 행은 28ms씩 차례로, 메시지는 하나씩 떠올라요. 메뉴는 열린 쪽에서 살짝 커지며 나와요.
-- 흐름 그래프는 선이 그려지고 점이 튀어나와요. 한도 막대는 왼쪽부터 차요. diff에서 바뀐 글자는 강조색이 천천히 들어와요.
-- 계속 움직이는 것: 일하는 점(번지는 고리), 답 필요 점(살짝 뜀), 진행 중 줄의 반짝 글자, 스피너. 그 외엔 멈춰 있어요.
-- `prefers-reduced-motion`이면 전부 꺼져요.
-
-### 층
-
-`--z-pop` 40 (메뉴, 팝오버) · `--z-overlay` 60 (팔레트, 시트) · `--z-toast` 80.
+Layout constants (unchanged unless noted): `--head-h` 52px (T3 `--workspace-topbar-height: 52px`), `--sidebar-w` 264px, `--panel-w` 440px default and resizable, `--chat-w` 736px (T3 `--chat-content-max-width: 46rem`), `--traffic-w` 84px, `--gut` 8px.
 
 ---
 
-## 3. 기능별 화면
+## 5. Radii
 
-### 3.1 셸: 목록 · 가운데 · 패널
-**가운데는 메인 또는 고른 일이에요.** 왼쪽 목록에서 일을 누르면 가운데가 그 일의 대화로 스르륵 바뀌고(오른쪽에서 들어옴), 메인을 누르면 메인이 왼쪽에서 돌아와요. 오른쪽은 브라우저처럼 탭을 여닫는 도구 패널이에요.
+| Token | Value | Use | Reference |
+|---|---|---|---|
+| `--r-bar` | 2px | Progress ticks | |
+| `--r-xs` | 4px | Kbd, inline code, tiny buttons inside chips | Linear `--radius-4`; T3 kbd `rounded` |
+| `--r-sm` | 6px | Menu items, tooltips, count badges | T3 `--radius-md` (radius − 2); Linear `--radius-6` |
+| `--r-md` | 8px | Buttons, inputs, sidebar rows, tabs | T3 `--control-radius: .5rem`; Linear `--radius-8` |
+| `--r-lg` | 10px | Popovers, menus, toasts | Codex `--radius-lg: 10px` (today this token is 8px, the same as `--r-md`) |
+| `--r-xl` | 12px | Cards, main and panel shells (`--card-r`), settings groups | T3 `--radius-xl`; Linear `--radius-12` |
+| `--r-2xl` | 16px | Composer, dialogs, board columns | T3 dialog `--radius-2xl`; Codex `--radius-2xl: 16px`; gitsu columns (inferred) |
+| `--r-pill` | 999px | Status pills, label chips, send button | |
 
-- **왼쪽**: 메인 한 줄 + "일" 목록. 행 36px, 9px 상태 점 + 제목 + 오른쪽 메타. ⌘B로 접으면 폭이 줄며 미끄러져 들어가요.
-- **가운데 · 일**: 머리(제목 · 상태 · ⋯ · 패널 버튼) + 대화 + 입력창. 일하는 동안엔 도구 줄·중간 말이 다 보이고, 끝나면 Codex처럼 "N분 동안 작업 ›" 한 줄로 접히는 모습이 보여요. 남는 건 마지막 요약(끝에 쓴 답과 결과 블록), 바꾼 파일 칩, 사용량 한 줄. 펴면 전체 과정이 부드럽게 열려요. 메인 대화는 접지 않아요.
-- **패널**: 3.9 참고. ⌘\\ 또는 머리 오른쪽 버튼으로 열고 닫아요. 가운데를 밀어내며 들어오고 나가요.
-- 창이 1200px보다 좁으면 패널을 열 때 왼쪽이 비켜요.
-- 움직임은 틀(사이드바 · 가운데 전환 · 패널 · 탭 · 접기)에만 있어요. 그래프, 목록, 메시지 같은 내용은 그냥 나타나요.
-
-### 3.2 키보드
-- ⌘0 메인 · ⌘B 왼쪽 접기/펴기 · ⌘⇧[ / ⌘⇧] 이전/다음 일 · ⌘. 나를 기다리는 다음 일.
-- 열린 일에 질문이 있고 입력창이 비어 있으면 1–9로 바로 답해요(버튼에 번호가 보여요).
-- ⌘K 찾기(끝난 일도 나와요) · ⌘\ 패널 열기/닫기 · ⌘T 새 탭(패널이 열려 있을 때) · ⌃⇧G 변경 사항 · ⌃` 터미널 · ⌘P 파일 · esc 패널 닫기(없으면 메인으로) · ⌘, 설정.
-
-### 3.3 일의 대화 아래
-- 결정 카드(질문 + 번호 붙은 답 버튼) → 멈춤 알림 → 입력창. 입력창 위 트레이(따로 떨어진 카드)에 백그라운드 · 계획 · 합칠 준비 스트립.
-- 서브에이전트를 열면 머리에 ‹ 돌아가기와 자기 이름만, 첫 메시지 위에 "○○에서 맡긴 일"이라고 적어요.
-
-### 3.4 메인의 메시지
-- 사용자 메시지: 오른쪽 회색 말풍선(`--bubble`, `--r-2xl`). 호버하면 시간과 복사.
-- 메인의 답: **아바타 없이** 본문 글자 그대로. 한 줄 대답 → 바로 답한 내용(마크다운, 블록) → 메모 줄("기억했어요 · …", "…에 전달했어요") → 시작한 일 칩. 복사는 호버할 때만.
-- 생각 중: "생각하는 중" 반짝 글자. 실패: 회색 글자 + 경고 아이콘 + "다시 보내기" 알약.
-
-### 3.5 일의 대화
-- 대화는 **턴** 단위:
-  - 사용자 메시지
-  - 끝난 턴: "N분 동안 작업 ›" (아래 구분선) → 마지막 답 → 서브에이전트 그룹·블록 → 바뀐 파일 칩 → 복사
-  - 진행 중인 턴: 과정이 펼쳐져 보이고, 도구 줄은 연속되면 "파일 2개 읽음 · 검색 1회"로 묶여요.
-- 서브에이전트 그룹: `--sidebar` 바탕 상자 + "서브에이전트 N개 · M개 작업 중" + compact 카드.
-- 일이 진행 중이고 입력이 비어 있으면 맨 아래 보내기 버튼이 멈추기(■)가 돼요.
-
-### 3.6 입력창 (Composer)
-- 카드 + `--r-2xl`(16) + `--shadow-composer`(T3: 0 1px 2px). 포커스되면 테두리 `--input` + 3px `--accent-soft` 링.
-- 아래 막대: [+ 첨부] [권한 칩] ……… [모델 칩 · 생각 깊이] [보내기]. 폴더 칩은 없어요.
-- 입력창 바로 아래 오른쪽: 계정 한도 막대 (5시간 · 주간, 쓴 % · 다시 차는 때). 80%가 넘으면 빨강.
-- **권한**: 매번 묻기 / 편집 허용 / 전체 권한. 엔진 확장(`extensions/permissions.ts`)이 실제로 막고, 물어볼 땐 질문 카드가 떠요. 일하는 중에 바꿔도 바로 적용돼요.
-- 파일을 창에 끌어다 놓으면 점선 테두리와 "여기에 놓으면 첨부돼요"가 나와요.
-- Enter 보내기, Shift+Enter 줄바꿈 (줄바꿈이 생기면 힌트를 보여 줘요).
-
-### 3.7 모델 선택
-- 칩: 모델 이름 + 생각 깊이(모노, 늘 보임).
-- 팝오버: "생각 깊이" 세그먼트 `low · medium · high · xhigh · max` (다섯 칸 같은 너비, 글자 가운데) → 제공자별 모델 목록. 고른 항목엔 체크. "자동"은 없어요.
-- 메인 입력창에서 고르면 새 포크 기본값이 되고, 포크 화면에서 고르면 그 포크에 바로 적용돼요.
-
-### 3.8 메뉴 · 팝오버
-
-- 팝오버는 한 번에 하나만 열려요(`usePop`). 다른 걸 열면 앞의 것이 닫히고, Esc는 팝오버만 닫아요. 화면을 옮기지 않아요.
-- 우클릭 메뉴와 ⋯ 메뉴는 같은 항목, 같은 문구예요. 메뉴가 열린 줄은 강조돼요.
-- `--card`, `--r-xl`, `--shadow-pop`, 안쪽 여백 `--s-4`. 항목은 `--h-md`, `--r-sm`. 위험한 항목은 빨간 글자, 구분선 위에 따로.
-
-### 3.9 오른쪽 패널
-- **브라우저처럼 탭.** 맨 위 52px 바에 열린 탭들(아이콘 + 이름 + ×), 그 옆 **+** 새 탭, 오른쪽 끝에 패널 닫기. 고른 탭 뒤 카드가 미끄러져 따라가요.
-- 새 탭은 "도구" 목록이에요: 흐름 ⌘\\ · 변경 사항 ⌃⇧G · 터미널 ⌃` · 파일 ⌘P · 브라우저 · 정보. 일이 필요한 도구는 일을 고르기 전엔 흐리게 보여요.
-- 이미 열린 도구를 다시 부르면 그 탭으로 가요. 마지막 탭을 닫으면 패널이 닫혀요.
-- 탭은 가운데에서 고른 일을 따라가요(변경·파일·터미널은 지금 그 일의 것).
-- **흐름**은 일 없이도 열려요. 줄을 누르면 가운데가 그 일로 바뀌어요.
-- 파일: 작업 폴더 트리 + 검색, 바뀐 파일 표시. 누르면 줄 번호 보기, 파일/변경 전환.
-- 개요: 브랜치 카드(브랜치 이름 모노, 설명, 버리기·합치기), 폴더, 계정, 사용량.
-- 변경: 파일 목록 + 펼치면 diff. **코드 색은 Pierre 테마**(T3 Code와 같음, Shiki로 칠함). 줄 바탕은 코드 면에 추가색 10%(다크 16%)만 섞고, 왼쪽 2px 선으로 추가/삭제를 표시해요. 지운 줄과 더한 줄이 짝이면 그 안에서 바뀐 글자만 진하게.
-- 파일 보기와 대화 속 코드 블록도 같은 테마예요.
-
-### 3.9.1 대화에 남는 것
-- 답마다 아래에 한 줄: 입력 토큰 · 캐시 % · 출력 토큰 · 그때의 5시간/주간 한도. 기록이라 나중에 봐도 그대로예요.
-
-### 3.10 설정
-- 작업 화면 위에 뜨는 큰 판(`--r-2xl`, `--scrim` 위). 왼쪽 탭 목록, 오른쪽 위 ✕, esc나 바깥을 누르면 닫혀요.
-- 내용: 제목 `--fs-xl`, 설명, 그룹 카드(행 사이 구분선). 계정마다 캐시 막대.
-- 행: 이름 + 설명 / 오른쪽에 컨트롤(세그먼트, 스테퍼, 스위치, 입력).
-
-### 3.11 팔레트 · 토스트 · 시트
-- 팔레트: 화면 위쪽 1/5에 뜨는 카드, `--scrim` 위. 검색 입력 + 결과 목록, 키보드로 이동.
-- 토스트: 아래 가운데, 3초. 되돌리기 같은 동작은 글자 버튼.
+Nest radii: the inner radius equals the outer radius minus the padding (T3 uses `calc(var(--radius-lg) - 1px)` for inner rings).
 
 ---
 
-## 4. 상태 아이콘 (한 가지 모양)
+## 6. Borders, shadows, elevation
 
-| 상태 | 모양 |
-|---|---|
-| 진행 중 | 파랑 스피너 |
-| 답 필요 | 주황 고리 + 점 |
-| 대기 | 회색 빈 고리 |
-| 멈춤 | 회색 고리 + 작은 점 |
-| 실패 | 빨강 고리 + 점 |
-| 끝남 | 옅은 파랑 원 + 파랑 체크 (초록은 diff의 +에만) |
+Borders do the work. Shadows only lift things that float above the page. Linear's light shadows are 6–9% black and its dark ones 20–35%. T3 drops the card shadow in dark mode entirely.
 
-목록 줄, 서브에이전트, 칩, 입력창의 받는 일 칩, 서브에이전트 카드 모두 `StatusIcon` 하나를 써요. 초록은 diff의 추가 줄에만 써요.
+| Level | What | Fill | Edge | Shadow |
+|---|---|---|---|---|
+| 0 | Canvas: window frame and sidebar | `--canvas` | none | none |
+| 1 | Main and panel shells | `--bg` | 1px `--card-line` | **none** (change: today light mode uses `0 1px 2px …, 0 4px 16px -6px …`) |
+| 2 | Inline raised: composer, cards in content, user bubble | `--card` / `--bubble` | 1px `--line` (no border on the bubble) | composer only: `--shadow-composer` |
+| 3 | Floating: menus, popovers, tooltips, toasts | `--card` | 1px `--line` (dark: inside the shadow ring) | `--shadow-pop` |
+| 4 | Modal: dialogs, settings sheet, palette | `--card` | 1px `--line` | `--shadow-pop` + `--scrim` behind |
+
+Shadow values:
+
+| Token | Light | Dark | Source |
+|---|---|---|---|
+| `--shadow-card` | `none` | `none` | dark; Ondra for light |
+| `--shadow-composer` | `0 1px 2px rgba(0,0,0,0.05)` | `0 14px 32px -18px rgba(0,0,0,0.75)` | T3 `--shadow-composer`, `--shadow-composer-dark` (unchanged) |
+| `--shadow-pop` | `0 3px 12px rgba(0,0,0,0.09), 0 0 0 1px rgba(0,0,0,0.06)` | `0 7px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08)` | Linear `--shadow-medium` light `0 3px 12px #00000017`, `--shadow-high` dark `0 7px 32px #00000059` |
+
+Do not use backdrop blur or glass on popovers. T3 uses `dropdown-glass` with a 12–16px blur. Ondra uses solid fills: they are calmer and cheaper in a Tauri webview.
 
 ---
 
-## 5. 글 (UI 문구)
+## 7. Density
 
-- "~요" 말투, 짧게. 상태 줄에 브랜치 이름·커밋 해시·id·경로를 넣지 않아요 (에이전트 프롬프트로 막고, 화면에서도 한 번 더 걸러요).
-- 명사로 끝내지 않아요. ("완료" ✗ → "끝났어요" ○)
-- 버튼은 동사: 합치기, 버리기, 다시 보내기, 이어서 하기.
-- 내부 이름(captain, task, route)은 화면에 안 나와요. 화면 이름은 **메인 / 포크 / 서브에이전트**.
-- 이모지 안 써요. 느낌표는 인사에만.
+One density. Heights:
+
+| Element | Height | Reference |
+|---|---|---|
+| Sidebar job row | 32px (today 36px) | T3 sidebar menu button `h-8` |
+| Sidebar child row (subagent) | 28px (today 30px) | T3 `h-7` |
+| List row, one line | 32px | Linear `--button-height: 32px` family |
+| List row, two lines | 48px | inferred from Codex threads |
+| Menu item | 28px | T3 `sm:min-h-7` |
+| Button sm / md | 28 / 32px | T3 `sm:h-7` / `sm:h-8` |
+| Icon button sm / md | 28 / 32px | T3 `icon-sm` / `icon` |
+| Input | 32px | T3 input `sm:h-7.5` ≈ 30px, rounded to the grid |
+| Panel tab | 28px | Linear: compact tabs that don't span the width |
+| Settings row | 44px | gitsu settings rows, inferred |
+| Header bar | 52px minus `--gut` | |
 
 ---
 
-## 6. 하지 말 것
+## 8. Iconography
 
-- 토큰 밖의 숫자 (`13.5px`, `#3a3a3a`, `border-radius: 7px`)
-- 답변 옆 아바타, 말풍선 꼬리, 그라데이션 버튼
-- 같은 정보 두 번 보여 주기 (예: 진행 줄과 도구 줄이 같은 말)
-- 쓸 일이 드문 버튼을 헤더에 꺼내 두기 (⋯ 메뉴로)
-- 빨간 큰 글씨 에러 (회색 문장 + 다시 시도 버튼으로)
+- Library: lucide (`lucide-solid`, already installed). T3 Code uses lucide as well.
+- Stroke: **1.5px absolute** everywhere (`strokeWidth={1.5}` with `absoluteStrokeWidth`). Today the codebase mixes 1, 1.2, 1.5, 2 and 2.5. Linear's refresh redrew its icons smaller and quieter.
+- Sizes: 14px in 28px controls, meta rows and chips; 16px in 32px controls, sidebar rows and menus (T3 `size-4`); 20px only for the empty-state glyph. Nothing larger.
+- Color: `--ink-3` at rest, `--ink` on hover or when active. Icons are never colored, except status glyphs and the GitHub PR state.
+- Linear's refresh cut icon use: "reduces icon usage, scales their sizes down". Ondra does the same. A row gets an icon only if the icon carries meaning (state, file type, tool). Section headers and menu items without a clear glyph get none.
+- Product marks (GitHub, agent CLIs) appear only in integration rows, monochrome `--ink-3`, 16px. Ondra's own logo never appears.
+- **Status glyph (14px, static).** This replaces the spinner and pulsing dots. Shapes follow Linear and gitsu issue states:
+  - 대기: 1.5px dashed ring, `--ink-4`
+  - 진행 중: 1.5px ring in `--accent-text`, with a filled pie for progress (half when the progress is unknown). Static.
+  - 답 필요: 1.5px ring in `--warn` + 6px center dot
+  - 멈춤: 1.5px ring in `--ink-3` + 4px center dot
+  - 실패: 1.5px ring in `--bad` + 6px center dot
+  - 끝남: filled `--accent-soft` circle + 9px check in `--accent-text`
+
+---
+
+## 9. Components
+
+All measurements are in px. "Hover" means `background: var(--hover)` unless stated otherwise. Every control shows focus as `outline: 2px solid var(--focus); outline-offset: 1px`.
+
+### 9.1 Sidebar rows
+- Row: height 32, padding 0 10, gap 8, radius `--r-md`. T3 uses `--sidebar-row-content-inset: .625rem` and `--sidebar-control-gap: .5rem`.
+- Leading slot 16 wide, holding the status glyph (14) centered. Every label starts at the same x.
+- Title: `--fs-md` 400, `--ink-2`. Unread: 500 weight and `--ink`. Past or settled: `--ink-3`.
+- Trailing meta: `--fs-xs`, `--ink-3`, tabular, short Korean time ("3분", "2시간", "어제"). On hover, the meta is swapped for at most 2 icon buttons (24px, 14px icons). Codex shows only the age on the right.
+- Hover: `--hover` with title `--ink`. Selected: `--row-selected` + `--row-selected-shadow`, title `--ink`.
+- Section label: height 28, padding 0 10, `--fs-xs` 500 `--ink-3`, optional count chip (§9.7). No rule lines between sections. Spacing alone separates them (top margin 12).
+- In dark mode the sidebar sits on `--canvas` and its text runs one step dimmer than the main card (`--ink-3` for settled rows). This is Linear's "dimmer sidebar".
+
+### 9.2 Tabs (right panel, browser-like)
+- Strip: height `--head-h − --gut`, padding 0 8, gap 2, scrolls horizontally with a 16px edge fade.
+- Tab: height 28, padding 0 10 0 8, gap 6, radius `--r-md`, min 72, max 180. Icon 14, label `--fs-sm` 500, 1 line.
+- Inactive: transparent, `--ink-3`. Hover: `--hover`, `--ink-2`. Active: light `--card` + 1px `--line`; dark `--active`, no border; label `--ink`.
+- Close button: 16, radius `--r-xs`. It shows only on hover and on the active tab, and is always there to keyboard focus.
+- New tab "+": 28 square ghost icon button. Linear moved to "smaller, icon-only tabs" in its tab bar. Ondra keeps labels, because Korean tool names are short.
+- Segmented control (inside a pane): track `--muted` + 1px `--line`, radius `--r-md`, padding 2. Cells share the width equally. Selected cell: `--card`, 1px `--line` (dark: `--active`), text `--ink`.
+
+### 9.3 Buttons
+
+| Variant | Fill | Border | Text / icon | Hover | Pressed |
+|---|---|---|---|---|---|
+| Primary | `--accent` | 1px `--accent` | `--accent-ink` | `--accent-hover` | `--accent-press` |
+| Secondary | `--card` (dark: `rgba(255,255,255,0.03)`) | 1px `--input` | `--ink` / icon `--ink-3` | `--hover` over the fill | `--active` |
+| Ghost | transparent | none | `--ink-2` / icon `--ink-3` | `--hover`, text `--ink` | `--active` |
+| Ghost danger | transparent | none | `--ink-2` | text `--bad-ink` | `--bad-soft` |
+| Danger (only inside confirm dialogs) | `--bad` | 1px `--bad` | `#fff` | 90% fill | |
+
+- Sizes: sm h 28, padding 0 10, gap 6, `--fs-sm` 500, icon 14. md h 32, padding 0 12, gap 8, `--fs-md` 500, icon 16. These follow T3 `sm` and `default` and Linear `--button-padding: 0 10px / 0 12px`.
+- Icon button: square 28 or 32, radius `--r-md`, ghost style, 14 or 16 icon. It always has a tooltip with its name and shortcut.
+- Pressed feedback: `transform: scale(0.98)` over 120ms (T3 uses `active:scale-[0.97]`). Not on buttons that open menus.
+- Disabled: opacity 0.5, no hover. T3 uses 0.64; 0.5 reads as clearly off on Ondra's lighter surfaces.
+- No inset highlights, gradients or colored shadows on any button.
+- One primary per view. Composer send, 합치기 and confirm are the only primaries.
+
+### 9.4 Inputs and composer
+
+**Input**
+- h 32, padding 0 10, radius `--r-md`, `--fs-md`. Fill `--card` (dark: `rgba(255,255,255,0.03)`), border 1px `--input`, placeholder `--ink-4`.
+- Focus: border `--accent-line`, ring `0 0 0 3px var(--accent-soft)`.
+- Inline search in a list or panel: no border, h 28, leading 14 search icon in `--ink-4`, bottom hairline `--line-soft`. Like T3's menu search `border-b border-border/70`.
+- Error: border `--bad-line`. The message goes in a toast or the field's own row, never as red text below the field.
+
+**Composer**
+- Card `--card`, radius `--r-2xl`, border 1px `--line` (focus: `--input`), shadow `--shadow-composer`. Max width `--chat-w`.
+- Padding 12 14 8. Textarea `--fs-lg`/26, 1 line minimum, grows to 40% of the window height, then scrolls.
+- Bottom bar, h 32: left `+` (28 ghost icon) and the permission chip; right the model chip (name + effort, `--fs-sm`) and send. Codex and T3 put the model on the right and the context on the left.
+- Send: 28 circle, `--accent` fill, 14 arrow-up in `--accent-ink`. Empty: `--muted` fill, icon `--ink-4`. Running: the same button becomes stop (square glyph, `--ink` fill, `--card` icon).
+- Chips in the bar: h 28, padding 0 8, radius `--r-md`, ghost, 14 icon + `--fs-sm`, chevron 12.
+- Trays above the composer (plan, background, ready-to-merge): separate cards, radius `--r-xl`, 8 apart, one line each.
+- Placeholder: one short line ("무엇을 할까요?"). No feature list in the placeholder and nothing under the composer except the usage line.
+
+### 9.5 Cards
+- `--card` (light) or `--bg`-on-`--canvas` (shells). 1px `--line`, radius `--r-xl`, padding 12 (dense) or 16, no shadow.
+- Header row h 28: title `--fs-md` 500 `--ink`, meta right `--fs-xs` `--ink-3`.
+- **Work-item card** (board, issue, PR), after gitsu:
+  - Line 1 (`--fs-xs`, `--ink-3`): status glyph 14 · `#65` · `›` parent title (truncated). Assignee avatars 20 on the right.
+  - Line 2: title `--fs-md` 500 `--ink`, 2-line clamp.
+  - Optional line: sub-issue progress (12 ring + `2/7`, tabular).
+  - Footer, gap 8: priority glyph 14 · label chips (§9.7) · `+n` overflow.
+  - Gap between lines 6, padding 12, radius `--r-xl`, fill `--card` on a column of `--muted` (dark: `#232326` on `#1c1c1f`).
+
+### 9.6 Lists and rows
+- One-line row: h 32, padding 0 12, gap 10, radius `--r-md` when the list has an inset; full-bleed rows have no radius.
+- Two-line row: h 48, title `--fs-md` + meta line `--fs-xs` `--ink-3`.
+- No separators between rows. Hover `--hover`, selected `--row-selected` (light) or `--active` (dark).
+- Trailing meta: `--fs-xs` `--ink-3`, tabular. Hover actions replace the meta (never shift the title).
+- Group header: h 28, `--fs-xs` 500 `--ink-3`, count chip, chevron 12 when foldable. Folding animates (§11).
+- Keyboard: ↑↓ moves, Enter opens, the row under the keyboard gets `--hover`.
+
+### 9.7 Badges, status pills, label chips
+
+| Kind | Size | Shape | Fill / border | Text | Reference |
+|---|---|---|---|---|---|
+| Count badge | h 18, min-w 18, padding 0 5 | `--r-sm` | transparent, 1px `--line` | `--fs-2xs` 500 `--ink-3`, tabular | gitsu column count chip; T3 badge `sm:h-4.5` |
+| Status pill | h 22, padding 0 8, gap 6 | pill | tone `-soft` | `--fs-xs` 500, tone `-ink`, 6px dot | T3 badge tones `bg-*/8`, `dark:bg-*/16` |
+| Label chip (GitHub label) | h 22, padding 0 8, gap 6 | pill | transparent, 1px `--line` | `--fs-xs` `--ink-2`, 8px dot in the label's GitHub color | gitsu label chips, without the glow on `agent-working` |
+| Kbd | h 18, min-w 18, padding 0 4 | `--r-xs` | `rgba(ink, 0.07)` | `--fs-2xs` 500 `--ink-3`, sans | T3 `bg-foreground/[0.07]` |
+| Diff count | inline | none | none | `+12` `--ok-ink`, `−3` `--bad-ink`, tabular | |
+
+Tones: neutral (`--muted`/`--ink-2`), accent, ok, warn, bad. Never two pills for the same fact on one row.
+
+### 9.8 Menus and popovers
+- Surface: `--card`, 1px `--line`, radius `--r-lg`, padding 4, shadow `--shadow-pop`, min width 200, max height 60vh with scroll.
+- Item: h 28, padding 0 8, gap 8, radius `--r-sm`, `--fs-sm`. Icon 16 `--ink-3` (optional), shortcut right-aligned in `--fs-xs` `--ink-4`, check 14 at the right for the current choice. Highlighted: `--hover`. T3 menu items: `min-h-7 rounded-sm px-2 gap-2`.
+- Section label: h 24, padding 0 8, `--fs-xs` 500 `--ink-3`.
+- Separator: 1px `--line-soft`, margin 4 −4.
+- Danger items: `--bad-ink` text, last, after a separator.
+- Only one popover open at a time. Esc closes the popover only. The right-click menu and the ⋯ menu share items and wording.
+- Motion: opens with opacity 0→1 and scale 0.98→1 from the anchor side, 140ms `--ease-drawer`; closes with opacity only, 100ms. T3 uses `scale-98` with a 200ms opacity.
+
+### 9.9 Dialogs
+- `--scrim` behind. Panel `--card`, 1px `--line`, radius `--r-2xl`, shadow `--shadow-pop`. Width 420 (confirm) or 560 (form). T3 uses `rounded-2xl`.
+- Padding 20. Title `--fs-lg` 600 `--ink`, phrased as the question ("이 일을 버릴까요?"). Body at most one line, `--fs-md` `--ink-2`, or nothing.
+- Footer: right-aligned, gap 8, cancel (secondary) then the action (primary, or danger when it destroys work). Enter runs the action and Esc cancels.
+- No ✕ when a cancel button exists.
+- Motion: opacity + scale 0.98→1, 200ms `--ease-drawer` (T3 `duration-200 … data-starting-style:scale-98`). The scrim fades in over 160ms.
+
+### 9.10 Toasts
+- Bottom center, 16 above the window edge, one at a time (a new one replaces the old one).
+- `--card`, 1px `--line`, radius `--r-lg`, shadow `--shadow-pop`, padding 8 12, min h 36, max width 420.
+- One line, `--fs-sm` `--ink`, optional 14 glyph (status tone) on the left, optional single text action on the right in `--accent-text` 500 ("되돌리기").
+- Errors use the same toast with a `--bad` glyph. No red background, no large red text.
+- Stays 3s (6s if it has an action). Hovering pauses it.
+- Motion: in with translateY(8px)→0 + opacity, 180ms `--ease-drawer`; out with opacity, 120ms.
+
+### 9.11 Tooltips
+- `--card`, 1px `--line`, radius `--r-sm`, padding 4 8, shadow `0 2px 8px rgba(0,0,0,0.08)` (dark `0 4px 16px rgba(0,0,0,0.4)`), `--fs-xs` `--ink`, max width 280. T3 tooltips are `rounded-md text-xs`.
+- Content: the name of the thing + kbd. Never repeat a label that is already visible. Never use a tooltip to explain a feature.
+- Delay: 500ms on the first one, 0 while moving between neighbors, hide at once.
+
+### 9.12 Empty states
+- Centered in the pane, max width 280, offset slightly above center (−8% of the height).
+- Optional 20px line icon in `--ink-4`, with no tile or frame. T3 draws a 36px bordered tile; Ondra drops it.
+- Title: `--fs-md` 500 `--ink-2`, one short line ("아직 없어요", "바뀐 파일이 없어요").
+- At most one action, secondary sm ("새 일 시작"). No description paragraph and no sample prompts.
+- Where a copyable next step exists, offer it as the action. gitsu's empty "Agent working" filter shows a ready prompt with a Copy prompt button.
+
+### 9.13 Settings rows
+- Page title `--fs-xl` 600. Group title `--fs-sm` 600 `--ink`, 24 above and 8 below.
+- Group: `--card`, 1px `--line`, radius `--r-xl`. Rows are divided by 1px `--line-soft`. gitsu settings use the same bordered list.
+- Row: min h 44, padding 0 14, gap 12. Optional leading 16 icon. Label `--fs-md` `--ink`. Control right-aligned. A current value (when it isn't the control) goes right in `--ink-3`.
+- **No description line under the label.** If a row cannot be understood without one, rename it. The rare exception is a consequence the person must know before switching (data deletion). That gets one line, `--fs-xs` `--ink-3`, at most 40 characters.
+- Switch: 30×18 track, 14 thumb, 2 inset. Off: `--input` track. On: `--accent`. T3 switch: `--thumb-size` 16 → w 30. The thumb slides in 160ms `--ease`.
+- Disclosure row ("설치 안 된 9개 보기"): `--ink-3`, 12 chevron, folds open (§11).
+
+### 9.14 Code and diff views
+- Theme: Pierre (as T3 Code, via Shiki). Unchanged.
+- Code block: `--code-bg`, radius `--r-md`, padding 10 12, `--fs-code`/20, horizontal scroll, no wrap by default. A copy icon button (24) appears on hover, top right.
+- Inline code: `--code-bg`, radius `--r-xs`, padding 1 4, 0.92em.
+- File view: line numbers `--ink-4`, tabular, right-aligned in a 44 gutter. Current line `--hover`.
+- Diff file header: h 36, padding 0 12, sticky. 12 chevron, path in mono `--fs-sm` (folder in `--ink-3`, file name in `--ink`), `+n −m` on the right. The whole header toggles the fold.
+- Diff lines: added `--diff-add`, removed `--diff-del`, and a 2px left bar in `--ok` or `--bad`. Word-level marks use the `-strong` tokens. Hunk header: h 28, `--muted`, `--fs-xs` `--ink-3` mono. Cursor's product diff uses 8% and 6% backgrounds; Ondra's 10% and 8% stay because Pierre's code colors sit on top.
+- Changed-files list: 32 rows, file glyph 14, path, `+n −m`, and a fixed-width 40px bar (green/red proportion).
+
+### 9.15 Board (job board and GitHub board)
+- Columns: `--muted` fill (dark `#1c1c1f`), radius `--r-2xl`, padding 8, gap 8, width 300.
+- Column header: h 32, `--fs-xs` 500 `--ink-2`, count badge, `+` icon button on the right. gitsu draws this as uppercase `IN PROGRESS 4`; Korean uses weight instead.
+- Cards: §9.5 work-item card, 8 apart.
+- Quick-filter row above the board: pills h 28, padding 0 10, gap 6, radius `--r-md`, 14 icon + `--fs-sm` 500. Off: `--muted`, `--ink-2`. On: `--accent-soft`, `--accent-text`. gitsu fills the active pill with a brand gradient; Ondra uses a flat soft fill.
+
+---
+
+## 10. Header bars
+- One layout everywhere, because Linear's refresh fixed actions "moving around unpredictably". Left: title (`--fs-md` 500, rename in place) + status pill. Right, in fixed order: context actions (at most 2 ghost icon buttons) · ⋯ menu · panel toggle.
+- Rarely used actions go in ⋯. Branch names, ids and paths are not shown in the header.
+
+---
+
+## 11. Motion
+
+Allowed: state changes the person caused or must notice. Forbidden: anything decorative or looping.
+
+| Token | Value | Use |
+|---|---|---|
+| `--dur-fast` | 120ms | Hover, color, press scale |
+| `--dur` | 160ms | Fold, chevron rotate, switch thumb, popover close |
+| `--dur-slow` | 220ms (today 260) | Content entering: a new message, a new list item, toasts |
+| `--dur-drawer` | 280ms (today 360) | Sidebar collapse, panel open/close, center view swap |
+| `--ease` | `cubic-bezier(0.2, 0, 0, 1)` | Color, fold, small moves |
+| `--ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` | Anything that slides or pops in (T3 `--ease-drawer`) |
+| `--ease-spring` | **remove** | No overshoot anywhere |
+
+References: Cursor `--duration: .14s`, `--duration-slow: .25s`; Linear `--duration: .18s`, `--transition-duration: .1s`; gitsu default 150ms `cubic-bezier(.4,0,.2,1)`.
+
+Rules:
+1. Folds animate height with `grid-template-rows: 0fr → 1fr` (`--dur`, `--ease`) and the chevron rotates in step. Never pop open.
+2. Panels and the sidebar slide with `--dur-drawer` `--ease-drawer`. The content inside them does not move.
+3. New items fade in (opacity, plus 4px translateY for messages) over `--dur-slow`. No staggered lists.
+4. Popovers, dialogs and toasts follow §9.8 to §9.10.
+5. **Nothing loops.** No spinners, pulsing or breathing dots, shimmer text, animated gradients, drawn graph lines, or "highlight fading in" on diffs. "Working" is a static glyph plus real content: the live tool line, the text being written, the terminal tail. The one `infinite` animation left in the CSS (`.spin` in `core.css`, `rot 0.75s linear infinite`) is replaced by the static status glyph. The unused `halo`, `ask-ping` and `shimmer` keyframes in `t3.css` are deleted.
+6. Under `prefers-reduced-motion: reduce`, durations drop to 0, except opacity fades, which keep 120ms.
+7. gitsu's marketing site has hero rise-ins, a cursor spotlight ring, grain and spring "stickers". None of them come into Ondra.
+
+---
+
+## 12. Copy tone
+
+Rules:
+1. "~요" endings, short. One sentence per surface at most.
+2. Buttons are verbs: 합치기, 버리기, 다시 보내기, 이어서 하기, 준비하기.
+3. No helper text under labels. If a label needs one, the label is wrong.
+4. No internal or technical terms in the UI: stdin, JSON, stderr, exit code, guest, engine, asset, worktree, captain, task id. Say what happens to the person.
+5. No "AI", no "성공적으로", no "~되었습니다", "~하십시오" or "~합니다".
+6. Never explain how the product works inside. Say only the result or the next step.
+7. Errors say what didn't happen and offer one way forward. They don't name the cause unless the person can act on it.
+8. Numbers are fine and often better than words ("3개", "64 GB").
+9. No parentheses that explain things. No exclamation marks, except in a greeting.
+
+Bad → good (the first nine are real strings from Ondra today, or the examples given for this redesign):
+
+| # | Where | Bad | Good |
+|---|---|---|---|
+| 1 | Hooks, field help | 표준 입력으로 JSON을 받아요: event, cwd, tool, input (도구 입력)… | *(no help text; field label only)* 실행할 명령 |
+| 2 | Computer setup, status | 아직 준비하지 않았어요 별도 macOS 안의 앱만 조작해요. 이 Mac의 열린 창과 로그인은 사용하지 않아요. | 아직 준비 전이에요 · [준비하기] |
+| 3 | Permission option "매번 묻기" | 파일을 고치거나 명령을 실행하기 전에 매번 물어봐요. 읽기는 묻지 않아요. | 매번 묻기 *(label only; tooltip if any: 고치기 전에 물어봐요)* |
+| 4 | Permission option "편집 허용" | 작업 폴더 안의 파일은 묻지 않고 고쳐요. 명령과 폴더 밖은 물어봐요. | 편집 허용 |
+| 5 | Settings, "PR 지켜보기" | 일이 연 PR에 리뷰가 달리거나 검사가 실패하거나 충돌이 나면 그 일이 이어서 처리해요 | PR 지켜보기 *(switch only)* |
+| 6 | Settings, copies | 프로젝트 폴더라면 일마다 복사본을 만들어 서로 덮어쓰지 않아요. 끝나면 확인하고 합쳐요 | 일마다 따로 작업하기 |
+| 7 | Hooks, blocking mode | 0이 아닌 값으로 끝나면 그 호출을 막고, stderr를 이유로 알려줘요. | 실패하면 막기 |
+| 8 | Computer setup, unavailable | 이 환경에서는 준비할 수 없어요. 컴퓨터 실행 자산이 포함된 macOS 앱이 필요해요. | 이 버전에서는 쓸 수 없어요 |
+| 9 | Computer setup, install | 4코어 · 메모리 8 GiB · 디스크 64 GiB로 새로 설치해요. 다운로드는 하지 않아요. 앱을 종료하면 게스트도 종료되고, 다음에 앱을 열면 같은 게스트를 다시 사용해요. | 새로 설치해요 · 64 GB · [설치] |
+| 10 | Computer setup, busy | 작업을 먼저 일시정지해 주세요. 시작·복구는 게스트를 재부팅해요. 연결한 뒤 해당 작업의 '다시 시작'을 눌러 새 엔진으로 진행해 주세요. | 먼저 일을 멈춰 주세요 |
+| 11 | Login, paste field | 브라우저가 다른 기기에 있으면, 로그인 후 마지막 주소를 여기에 붙여 넣어 주세요 | *(placeholder)* 로그인한 뒤 주소 붙여넣기 |
+| 12 | Generic success | 작업이 성공적으로 완료되었습니다. | 끝났어요 |
+| 13 | Generic error | 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오. | 안 됐어요 · [다시 하기] |
+| 14 | Empty list | 표시할 항목이 없습니다. 새 작업을 생성하여 시작하세요. | 아직 없어요 |
+| 15 | Loading | AI가 분석 중입니다… | 보는 중이에요 |
+| 16 | GitHub write switched off | Agent writes are turned off in Settings → MCP server. | GitHub 쓰기가 꺼져 있어요 · [켜기] |
+| 17 | Offline | 네트워크 연결이 끊어져 변경 사항을 저장할 수 없습니다. 연결을 확인해 주세요. | 오프라인이에요. 연결되면 다시 저장할게요 |

@@ -425,13 +425,14 @@ button.chip:hover,
 .dot.done {
   background: var(--accent);
 }
+/* "working": a still ring with a half-filled centre (no spinning; DESIGN.md §8) */
 .spin {
   width: 13px;
   height: 13px;
+  padding: 2px;
   border-radius: 50%;
-  border: 1.75px solid var(--accent-soft);
-  border-top-color: var(--accent);
-  animation: rot 0.75s linear infinite;
+  border: 1.5px solid var(--accent-text);
+  background: conic-gradient(var(--accent-text) 0 50%, transparent 0) content-box;
   flex-shrink: 0;
   display: inline-block;
 }
@@ -442,7 +443,8 @@ button.chip:hover,
 .spin.xs {
   width: 10px;
   height: 10px;
-  border-width: 1.5px;
+  padding: 1.5px;
+  border-width: 1.25px;
 }
 @keyframes rot {
   to {
@@ -452,14 +454,6 @@ button.chip:hover,
 .shimmer {
   color: var(--ink-3);
 }
-@keyframes shimmer {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: 0 0;
-  }
-}
 .pulse {
   width: 7px;
   height: 7px;
@@ -467,14 +461,6 @@ button.chip:hover,
   background: var(--accent);
   box-shadow: 0 0 0 0 var(--accent-line);
   animation: none;
-}
-@keyframes pulse {
-  70% {
-    box-shadow: 0 0 0 6px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
 }
 /* one status glyph for forks and subagents */
 .st-icon {

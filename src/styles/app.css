@@ -380,11 +380,6 @@
   background: var(--accent);
   animation: none;
 }
-@keyframes blink {
-  50% {
-    opacity: 0.3;
-  }
-}
 .screen-body {
   aspect-ratio: 16 / 10;
   display: grid;
