@@ -83,6 +83,60 @@ fn read(path: &str) -> Result<FileText, String> {
     Ok(FileText { text: (!binary).then(|| String::from_utf8_lossy(&bytes).into_owned()), size, binary, modified })
 }
 
+/// One line that matched a search across the folder.
+#[derive(Serialize)]
+pub struct Hit {
+    path: String,
+    line: usize,
+    text: String,
+}
+
+const MAX_HITS: usize = 500;
+
+/// Every line in the folder's files that contains `query` (case-insensitive),
+/// like an editor's find in files. Binary and very large files are skipped.
+fn grep(cwd: &str, query: &str) -> Vec<Hit> {
+    let q = query.to_lowercase();
+    let mut out = Vec::new();
+    if q.trim().is_empty() {
+        return out;
+    }
+    for rel in list(cwd) {
+        let path = Path::new(cwd).join(&rel);
+        let Ok(meta) = std::fs::metadata(&path) else { continue };
+        if meta.len() > MAX_READ {
+            continue;
+        }
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        if bytes.iter().take(8000).any(|b| *b == 0) {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        for (i, line) in text.lines().enumerate() {
+            if line.to_lowercase().contains(&q) {
+                let mut t = line.trim().to_string();
+                if t.len() > 240 {
+                    let mut end = 240;
+                    while !t.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    t.truncate(end);
+                }
+                out.push(Hit { path: rel.clone(), line: i + 1, text: t });
+                if out.len() >= MAX_HITS {
+                    return out;
+                }
+            }
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn fs_grep(cwd: String, query: String) -> Vec<Hit> {
+    tauri::async_runtime::spawn_blocking(move || grep(&cwd, &query)).await.unwrap_or_default()
+}
+
 #[tauri::command]
 pub async fn fs_files(cwd: String) -> Vec<String> {
     tauri::async_runtime::spawn_blocking(move || list(&cwd)).await.unwrap_or_default()
@@ -189,6 +243,9 @@ mod tests {
         assert_eq!(t.text.as_deref(), Some("one\ntwo\n"));
         assert!(read(&root.join("b.bin").display().to_string()).unwrap().binary);
         assert!(read(&root.join("nope").display().to_string()).is_err());
+        let hits = grep(&root.display().to_string(), "TWO");
+        assert_eq!(hits.len(), 1);
+        assert_eq!((hits[0].path.as_str(), hits[0].line), ("src/a.ts", 2));
         let a = root.join("src/a.ts").display().to_string();
         let m = read(&a).unwrap().modified;
         let m2 = write(&a, "three\n", Some(m)).unwrap();

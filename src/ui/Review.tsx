@@ -7,7 +7,7 @@ import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { fileSrc, pdfSrc, fsFiles, fsRead, fsWrite, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
+import { fileSrc, pdfSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
@@ -406,7 +406,7 @@ function tree(paths: string[]): Node {
 const IMG = /\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
 const Editor = lazy(() => import("./Editor").then((m) => ({ default: m.Editor })));
 
-function Viewer(props: { root: string; path: string; changed?: DiffFile; startDiff: boolean; back: () => void }) {
+function Viewer(props: { root: string; path: string; changed?: DiffFile; startDiff: boolean; back: () => void; line?: number }) {
   const full = () => `${props.root}/${props.path}`;
   const [mode, setMode] = createSignal<"file" | "diff" | "edit">(props.startDiff && props.changed ? "diff" : "file");
   const [dirty, setDirty] = createSignal(false);
@@ -500,10 +500,10 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
                   when={t().text !== null}
                   fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? "바이너리 파일이에요." : "파일이 커서 여기선 열지 않아요.")}</div>}
                 >
-                  <div class="code">
+                  <div class="code" ref={(el) => props.line && queueMicrotask(() => el.querySelector(".code-row.hit")?.scrollIntoView({ block: "center" }))}>
                     <For each={lines()}>
                       {(l, i) => (
-                        <div class="code-row">
+                        <div class="code-row" classList={{ hit: props.line === i() + 1 }}>
                           <span class="dv-num">{i() + 1}</span>
                           <CodeText text={l} toks={fileToks()?.[i()]} />
                         </div>
@@ -521,6 +521,20 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
   );
 }
 
+/** the found text with each match marked */
+function mark(text: string, needle: string): JSX.Element {
+  const low = text.toLowerCase();
+  const n = needle.toLowerCase();
+  const out: JSX.Element[] = [];
+  let at = 0;
+  for (let i = low.indexOf(n); i >= 0 && n; i = low.indexOf(n, i + n.length)) {
+    out.push(text.slice(at, i), <mark>{text.slice(i, i + n.length)}</mark>);
+    at = i + n.length;
+  }
+  out.push(text.slice(at));
+  return <>{out}</>;
+}
+
 export function FilesPane(props: { t: Task }) {
   const root = () => expand(props.t.cwd);
   const [list, { refetch }] = createResource(root, (r) => fsFiles(r));
@@ -528,7 +542,20 @@ export function FilesPane(props: { t: Task }) {
   const changed = createMemo(() => new Map(parsePatch(changes()?.patch ?? "").map((f) => [f.path, f])));
   const [q, setQ] = createSignal("");
   const [open, setOpen] = createSignal<Set<string>>(new Set());
-  const [sel, setSel] = createSignal<{ path: string; diff: boolean } | null>(null);
+  const [sel, setSel] = createSignal<{ path: string; diff: boolean; line?: number } | null>(null);
+  /** search file names, or what's inside the files (find in files) */
+  const [inside, setInside] = createSignal(false);
+  const [needle, setNeedle] = createSignal("");
+  let wait: ReturnType<typeof setTimeout> | undefined;
+  const [found] = createResource(
+    () => (inside() && needle().trim().length >= 2 ? [root(), needle().trim()] as const : false),
+    ([r, n]) => fsGrep(r, n),
+  );
+  const foundByFile = createMemo(() => {
+    const m = new Map<string, { line: number; text: string }[]>();
+    for (const h of found() ?? []) m.set(h.path, [...(m.get(h.path) ?? []), h]);
+    return [...m];
+  });
   createEffect(
     on(panelFile, (pf) => {
       if (!pf || pf.mode !== "file") return;
@@ -589,10 +616,58 @@ export function FilesPane(props: { t: Task }) {
           <>
             <div class="ft-search">
               <Icon name="search" size={13} />
-              <input placeholder="파일 찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+              <input
+                placeholder={inside() ? "파일 안에서 찾기" : "파일 찾기"}
+                value={inside() ? needle() : q()}
+                onInput={(e) => {
+                  const v = e.currentTarget.value;
+                  if (!inside()) return setQ(v);
+                  clearTimeout(wait);
+                  wait = setTimeout(() => setNeedle(v), 250);
+                }}
+                onKeyDown={(e) => inside() && e.key === "Enter" && (clearTimeout(wait), setNeedle(e.currentTarget.value))}
+              />
+              <div class="seg sm ft-mode">
+                <button classList={{ on: !inside() }} onClick={() => setInside(false)}>이름</button>
+                <button classList={{ on: inside() }} onClick={() => setInside(true)}>내용</button>
+              </div>
               <button class="icon-btn sm" title="새로고침" onClick={() => refetch()}><Icon name="refresh" size={13} /></button>
             </div>
-            <Show when={list()} fallback={<div class="pane-empty"><span class="spin" /></div>}>
+            <Show when={inside()}>
+              <div class="ft grep">
+                <Show when={needle().trim().length >= 2} fallback={<div class="pane-empty">두 글자 이상 적어 주세요</div>}>
+                  <Show when={!found.loading} fallback={<div class="pane-empty"><span class="spin" /></div>}>
+                    <Show when={foundByFile().length} fallback={<div class="pane-empty">"{needle().trim()}"이 들어간 곳이 없어요</div>}>
+                      <div class="grep-count">{(found() ?? []).length >= 500 ? "500곳 넘게" : `${(found() ?? []).length}곳`} · 파일 {foundByFile().length}개</div>
+                      <For each={foundByFile()}>
+                        {([path, hits]) => {
+                          const [dir, name] = split(path);
+                          return (
+                            <div class="grep-file">
+                              <div class="grep-head" title={path}>
+                                <Icon name="file" size={13} class="ft-ic" />
+                                <span class="ft-name">{name}</span>
+                                <span class="ft-dir">{dir}</span>
+                                <span class="grep-n">{hits.length}</span>
+                              </div>
+                              <For each={hits}>
+                                {(h) => (
+                                  <button class="grep-row" onClick={() => setSel({ path, diff: false, line: h.line })}>
+                                    <span class="dv-num">{h.line}</span>
+                                    <span class="grep-text">{mark(h.text, needle().trim())}</span>
+                                  </button>
+                                )}
+                              </For>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </Show>
+                  </Show>
+                </Show>
+              </div>
+            </Show>
+            <Show when={!inside() && list()} fallback={<Show when={!inside()}><div class="pane-empty"><span class="spin" /></div></Show>}>
               <div class="ft">
                 <Show
                   when={q().trim()}
@@ -623,7 +698,7 @@ export function FilesPane(props: { t: Task }) {
           </>
         }
       >
-        {(s) => <Viewer root={root()} path={s.path} changed={changed().get(s.path)} startDiff={s.diff} back={() => setSel(null)} />}
+        {(s) => <Viewer root={root()} path={s.path} changed={changed().get(s.path)} startDiff={s.diff} line={s.line} back={() => setSel(null)} />}
       </Show>
     </div>
   );

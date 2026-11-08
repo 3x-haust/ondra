@@ -399,6 +399,7 @@ pub fn run() {
             fs::fs_repos,
             fs::fs_read,
             fs::fs_write,
+            fs::fs_grep,
             fs::save_paste,
             fs::clipboard_files,
             fs::save_download,

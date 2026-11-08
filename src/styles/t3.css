@@ -9290,3 +9290,77 @@ select.select.dev-space {
 .keysheet-row kbd {
   flex: none;
 }
+/* files: find in files */
+.ft-mode {
+  flex: none;
+}
+.ft.grep {
+  padding-bottom: var(--s-16);
+}
+.grep-count {
+  padding: var(--s-4) var(--s-12) var(--s-8);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.grep-file + .grep-file {
+  margin-top: var(--s-8);
+}
+.grep-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-height: var(--h-sm);
+  padding: 0 var(--s-12);
+  font-size: var(--fs-sm);
+}
+.grep-head .ft-name {
+  color: var(--ink);
+}
+.grep-head .ft-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grep-n {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.grep-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  width: 100%;
+  min-height: 26px;
+  padding: var(--s-2) var(--s-12) var(--s-2) var(--s-16);
+  text-align: left;
+  border-radius: var(--r-sm);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.grep-row:hover {
+  background: var(--hover);
+}
+.grep-row .dv-num {
+  flex: none;
+  min-width: 3ch;
+  text-align: right;
+}
+.grep-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  color: var(--ink-2);
+}
+.grep-text mark {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--warn) 32%, transparent);
+  border-radius: 2px;
+}
+.code-row.hit {
+  background: color-mix(in oklab, var(--warn) 16%, transparent);
+}
