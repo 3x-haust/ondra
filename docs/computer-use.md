@@ -15,8 +15,10 @@ using only **public** APIs:
   element has a stable `id`; later observations are a JSON **delta** since the
   last tree, or `unchanged`.
 - **Act** with AX first — `AXUIElementPerformAction` and settable-attribute writes
-  need no events at all — falling back to **pid-targeted** `CGEventPostToPid` for
-  keys, text, scroll and coordinate clicks. Never the global session.
+  need no events at all; scrolling sets the scroll area's AX scroll bar — falling
+  back to **pid-targeted** `CGEventPostToPid` for keys, text, coordinate clicks and
+  drags. Mouse events are built with the public `NSEvent` mouse-event initializer
+  so they carry the target window. Never the global session.
 - **Capture** the target app's own key window with ScreenCaptureKit
   (`SCScreenshotManager`), only when the model asks (`look`). Never the whole
   screen.
@@ -47,35 +49,41 @@ involved.
 ### Measured (on the user's Mac, 2026‑11‑08, macOS 26 / arm64)
 
 Measured with the helper driving apps the test launched (TextEdit, Calculator and
-a tiny built AppKit app), while the user's browser stayed frontmost throughout.
+a tiny built AppKit app with a drag pad, two text fields and a 300-row table),
+while the user's terminal stayed frontmost throughout. "Before" is the previous
+helper on the same apps.
 
-| App (window) | AX tree bytes | ≈ tokens/observation | observe median | act median (act+re-observe) |
-|---|---:|---:|---:|---:|
-| Tiny test app | 969 B | ~240 | 6 ms | ~75–165 ms |
-| Calculator | 6.9 KB | ~1,700 | ~65 ms | 77 ms (AXPress, pure AX) |
-| TextEdit (document) | ~19 KB | ~4,700 | ~67 ms | 63 ms |
-| TextEdit (Open panel, large) | ~42 KB | ~10,400 | ~550 ms | — |
+| App (window) | AX tree bytes before → after | observe median before → after | act median before → after |
+|---|---:|---:|---:|
+| Test app (300-row table) | 90.5 KB → 3.0 KB | 114 ms → 24 ms | — |
+| Calculator | 7.1 KB → 3.4 KB | 9 ms → 9 ms | 91–98 ms → 53–56 ms (AXPress + re-observe) |
+| TextEdit (new document) | 7.6 KB → 5.6 KB | 11 ms → — | — → 85 ms (type + re-observe) |
 
-- **Window-only `look`**: e.g. 312×237 → 6.3 KB PNG; 911×448 → 134 KB PNG. Never
-  a full-screen capture.
-- **Background invariant**: `backgroundPreserved = true` on every launch and
-  action; frontmost app and mouse position identical before vs after the whole
-  run (`frontmostThroughout` = the user's browser).
-- **Vs Codex, where measurable**: one round trip per step vs Codex's mandatory
-  separate `get_app_state` each turn; AX-first actions touch no input queue;
-  delta-only observations keep later steps near Calculator/test-app sizes. Codex's
-  own metrics (`time_to_first_get_app_state`, `time_to_first_write`) are internal
-  and not externally measurable here. Absolute token costs depend on the app's
-  tree size for both tools.
+- **Drag** (test app, 10 drags, ~260 px): events posted in a median **142 ms**
+  (12 eased steps), 177 ms with settling, 225 ms per tool round trip including the
+  re-observed delta. The app saw the exact down/up points and never became active.
+- **Where the bytes went**: offscreen table rows are left out and counted
+  (`offscreen: 293`), and ids are 8-character hashes instead of path strings.
+- **Background invariant**: 20 actions across the three apps, frontmost app, front
+  window id and mouse position identical before and after every one, and at the
+  start and end of the run. (The previous check compared window titles and
+  flagged a terminal's animated title as a focus change.)
+- **Window-only `look`**: the AX key window, never the whole screen.
 
-### Not yet in background mode
+### Limits in background mode
 
-- **Drag** is not implemented in the helper yet (the other actions are).
+- **Stage Manager**: a background window parked in the strip is captured as a small
+  skewed thumbnail. `look` marks it `staged` and not actionable; use element refs.
+- **Views that poll the real mouse button** ignore background drags: TextEdit's
+  text selection did not change (`effect: no_change`), while a double-click still
+  selected a word. Prefer `set-value` or keys there.
+- Scroll wheel events are not used (a background app drops them); scroll areas
+  without a settable scroll bar or page action report `SCROLL_UNAVAILABLE`.
 - **App-level hidden windows**: a fully hidden app exposes no Accessibility tree,
   so host mode launches without activation (window behind the user's front app)
-  rather than hidden. ScreenCaptureKit can still capture an occluded window.
-- Fully offscreen/minimized windows and multi-window targeting are minimal (key
-  or largest window).
+  rather than hidden.
+- Fully offscreen/minimized windows and multi-window targeting are minimal (the AX
+  key window).
 
 ---
 
