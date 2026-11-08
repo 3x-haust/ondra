@@ -6,7 +6,6 @@ import { state } from "../state/store";
 import { tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { estimate, loadWorkerTools, type CtxTool, type EngineContext } from "./contextData";
-import { ComputerSetupPanel } from "./ComputerSetup";
 
 /** One line in plain Korean for the engine's own tools. */
 const KO: Record<string, string> = {
@@ -126,7 +125,6 @@ export function ToolsTab() {
   return (
     <>
       <h2>도구</h2>
-      <ComputerSetupPanel />
       <div class="tl-bar">
         <label class="tl-search">
           <Icon name="search" size={14} />
