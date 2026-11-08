@@ -50,6 +50,73 @@ export function nowText(now: string | undefined): string {
   return now;
 }
 
+/**
+ * The quiet lines Ondra writes into a task's thread (kind "note"), as `t()` keys with
+ * their names in {x}. Tasks store them in Korean with the names filled in; `noteText()`
+ * matches them back. `was` lists older wordings still found in saved tasks.
+ */
+const NOTE_FORMS: { key: string; was?: string[] }[] = [
+  { key: "메모리 저장 · {text}", was: ["기억함 · {text}"] },
+  { key: "이전 작업의 리뷰가 그대로 유효해요", was: ["앞의 일에서 받은 리뷰가 그대로 유효해요"] },
+  { key: "작업 전용 브랜치 {b}에서 시작해요" },
+  { key: "{into}에 병합했어요", was: ["{into}에 합쳤어요"] },
+  { key: "워크트리 정리 · 변경은 PR에 있어요", was: ["작업 폴더를 정리했어요. 변경은 PR에 있어요"] },
+  { key: "{into} 병합됨 · 워크트리 정리", was: ["{into}이 합쳐져서 작업 폴더를 정리했어요"] },
+  { key: "{into}에 이미 반영됨 · 워크트리 정리", was: ["{into}에 이미 들어가서 작업 폴더를 정리했어요"] },
+  { key: "재시도 {a}/{m}" },
+  { key: "연결이 끊겼어요 · 다시 연결되면 이어서 해요", was: ["연결이 끊겼어요. 다시 연결되면 이어서 해요"] },
+  { key: "모델 변경 → {m}" },
+  { key: "모델 → {m}" },
+  { key: "끝내기 전에 확인 · {what}" },
+  { key: '"{title}" 작업의 결과와 브랜치를 이어받아 시작해요', was: ['"{title}" 일의 결과와 브랜치를 이어받아 새로 시작해요'] },
+  { key: '"{title}" 작업의 결과를 이어받아 시작해요', was: ['"{title}" 일의 결과를 이어받아 새로 시작해요'] },
+  { key: '브랜치 {b}는 "{title}" 작업으로 넘어갔어요', was: ['브랜치 {b}는 "{title}" 일로 넘어갔어요'] },
+  { key: '"{title}" 작업으로 넘어가요', was: ['"{title}" 일로 넘어가요'] },
+];
+/** what "끝내기 전에 확인 · …" lists (stored Korean → its key) */
+const PROOF_PARTS: Record<string, string> = {
+  "리뷰": "리뷰|proof",
+  "리뷰 지적": "리뷰 지적|proof",
+  "증거": "증거|proof",
+  "증거 안 맞음": "증거 안 맞음|proof",
+  "남은 작업 있음": "남은 작업 있음|proof",
+  "아직 할 일이 남음": "남은 작업 있음|proof",
+};
+const formRe = (f: string) => ({ keys: [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]), re: new RegExp(`^${escape(f).replace(/\{\w+\}/g, "([\\s\\S]+?)")}$`) });
+const NOTE_RES = NOTE_FORMS.flatMap(({ key, was = [] }) => [key, ...was].map((f) => ({ key, ...formRe(f) })));
+
+/**
+ * A note in a task's thread in the app's language. Notes are stored in Korean
+ * ("변경을 버렸어요", "main에 병합했어요"); older wordings read as today's in
+ * Korean too. A line that isn't one of Ondra's stays as written.
+ */
+export function noteText(text: string): string {
+  for (const { key, keys, re } of NOTE_RES) {
+    const m = text.match(re);
+    if (!m) continue;
+    const vars: Record<string, string> = {};
+    keys.forEach((k, i) => (vars[k] = m[i + 1]));
+    if (vars.what) vars.what = vars.what.split(" · ").map((p) => (PROOF_PARTS[p] ? t(PROOF_PARTS[p]) : p)).join(" · ");
+    return t(key, vars);
+  }
+  // a bar would read as t()'s context mark
+  return text.includes("|") ? text : t(text);
+}
+
+/**
+ * A title that fits in `max` characters, cut where a word ends with "…" (never
+ * mid-word unless one word is longer than half of it).
+ */
+export function cutTitle(s: string, max = 40): string {
+  const x = s.replace(/\s+/g, " ").trim();
+  const chars = [...x];
+  if (chars.length <= max) return x;
+  const head = chars.slice(0, max - 1).join("");
+  const at = chars[max - 1] === " " ? head.length : head.lastIndexOf(" ");
+  const cut = at >= head.length / 2 ? head.slice(0, at) : head;
+  return `${cut.replace(/[\s,.;:·…\-–—(/]+$/, "")}…`;
+}
+
 /** The part of a command that matters: no `cd …`, env settings, `date`, echo. */
 function core(cmd: string): string {
   const parts = cmd.split(/\s*(?:&&|;|\n)\s*/).map((p) => p.trim()).filter(Boolean);

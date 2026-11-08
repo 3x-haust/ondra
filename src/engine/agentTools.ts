@@ -118,12 +118,17 @@ export const skillTokens = (s: { name: string; description: string; path: string
 
 /**
  * The tools an agent has turned on: the ones it declares to the model, plus the
- * ones switched on in Settings › 도구 (`state.settings.extraTools`). Tools a job only
- * finds on demand and tools left off are not counted. Settings' header and the
- * context sheet both count this.
+ * ones switched on in Settings › 도구 (`state.settings.extraTools`), less the MCP tools
+ * switched off there ("-name"). Tools a job only finds on demand and tools left off
+ * are not counted. Settings' header and the context sheet both count this.
  */
 export const enabledTools = <T extends Pick<CtxTool, "name" | "active">>(c: { tools: T[] }, extra: readonly string[] = state.settings.extraTools ?? []): T[] =>
-  c.tools.filter((x) => x.active || extra.includes(x.name));
+  c.tools.filter((x) => !isOff(x.name, extra) && (x.active || extra.includes(x.name)));
+
+/** An MCP tool can be switched off for jobs (the engine leaves it out); other tools can't. */
+export const canSwitchOff = (name: string) => /^mcp__[\w.:-]+$/.test(name);
+/** switched off in Settings › 도구: kept in extraTools as "-name" */
+export const isOff = (name: string, extra: readonly string[] = state.settings.extraTools ?? []) => canSwitchOff(name) && extra.includes(`-${name}`);
 
 /** Tokens the enabled tools add to every request. */
 export const enabledToolTokens = (c: Pick<EngineContext, "tools">, extra?: readonly string[]) =>

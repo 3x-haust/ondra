@@ -6,7 +6,7 @@ import { tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { loadWorkerTools, type EngineContext } from "./contextData";
-import { enabledToolTokens, enabledTools, firstSentence, isKorean, skillSource, skillTokens, toolLine, toolMore, toolSource } from "../engine/agentTools";
+import { canSwitchOff, enabledToolTokens, enabledTools, firstSentence, isKorean, isOff, skillSource, skillTokens, toolLine, toolMore, toolSource } from "../engine/agentTools";
 
 // the lines and counts live in engine/agentTools (the context sheet reads them too)
 export { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolMore, toolSource } from "../engine/agentTools";
@@ -24,7 +24,9 @@ interface Row {
   found?: boolean;
   /** a tool jobs don't get by default: a switch in Settings adds it (state.settings.extraTools) */
   optional?: boolean;
-  /** a tool (has a switch, locked on unless optional); skills don't */
+  /** an MCP tool every job gets: a switch in Settings leaves it out ("-name" in extraTools) */
+  mcp?: boolean;
+  /** a tool (a switch when optional or MCP, else a lock); skills have neither */
   tool?: boolean;
   full: string;
 }
@@ -46,7 +48,7 @@ function groupsOf(c: EngineContext): Group[] {
     // deferred tools sit behind tool_search: declared only once a job looks for them
     const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
     const optional = !x.active && !found;
-    add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: optional, found, optional, tool: true, full: toolMore(x) });
+    add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: optional, found, optional, mcp: !optional && canSwitchOff(x.name), tool: true, full: toolMore(x) });
   }
   for (const s of c.skills)
     add("스킬", { key: `s:${s.path}`, name: s.name, line: firstSentence(s.description), ko: hasHangul(s.description), source: skillSource(s.path), size: skillTokens(s), off: !s.modelInvocable, full: s.description });
@@ -73,9 +75,13 @@ export function ToolsTab() {
   });
   // the tools turned on here, on top of what every job gets
   const extra = () => state.settings.extraTools ?? [];
-  const isOn = (r: Row) => !r.optional || extra().includes(r.name);
-  const turn = (name: string, on: boolean) =>
-    setState("settings", "extraTools", (l) => (on ? [...new Set([...(l ?? []), name])] : (l ?? []).filter((n) => n !== name)));
+  const isOn = (r: Row) => (r.optional ? extra().includes(r.name) : r.mcp ? !isOff(r.name, extra()) : true);
+  // an optional tool is listed by name when on; an MCP tool by "-name" when off
+  const turn = (r: Row, on: boolean) => {
+    const entry = r.mcp ? `-${r.name}` : r.name;
+    const add = r.mcp ? !on : on;
+    setState("settings", "extraTools", (l) => (add ? [...new Set([...(l ?? []), entry])] : (l ?? []).filter((n) => n !== entry)));
+  };
   const toggle = (key: string) => {
     // selecting text in an open row doesn't fold it
     if (window.getSelection()?.toString()) return;
@@ -130,19 +136,22 @@ export function ToolsTab() {
                           <span class="tl-src">{srcOf(r, g)}</span>
                           <span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : t("{k} 토큰", { n: r.size, k: tokens(r.size) })}>{r.found ? t("필요 시") : tokens(r.size)}</span>
                           <span class="tl-sw">
-                            <Show when={r.tool}>
+                            <Show when={r.tool && (r.optional || r.mcp)}>
                               <button
                                 class="switch"
                                 classList={{ on: isOn(r) }}
                                 role="switch"
                                 aria-checked={isOn(r)}
                                 aria-label={r.name}
-                                disabled={!r.optional}
-                                title={r.optional ? undefined : t("항상 켜짐")}
-                                onClick={(e) => (e.stopPropagation(), turn(r.name, !isOn(r)))}
+                                onClick={(e) => (e.stopPropagation(), turn(r, !isOn(r)))}
                               >
                                 <i />
                               </button>
+                            </Show>
+                            <Show when={r.tool && !r.optional && !r.mcp}>
+                              <span class="tl-lock" title={t("항상 켜짐")} aria-label={t("항상 켜짐")} role="img">
+                                <Icon name="lock" size={14} />
+                              </span>
                             </Show>
                           </span>
                         </div>

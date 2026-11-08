@@ -6,7 +6,7 @@ import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { Account, SpaceId } from "../state/types";
-import { loadEmail } from "../state/limits";
+import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { EFFORTS, prettyModel } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
@@ -23,7 +23,7 @@ import {
   spaceGitIdentity,
   spaceTools,
 } from "../lib/native";
-import { ago, tokens } from "../ui/bits";
+import { ago, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { LoginSheet } from "./Login";
@@ -408,6 +408,14 @@ const ownLabel = (a: Account) => {
 /** signed in = the account has a provider login (the same test the account chip uses) */
 const signedIn = (a: Account) => a.providers.length > 0;
 
+/** "2시간" / "3일": how long until a plan window starts over */
+const resetIn = (ms: number) => {
+  const m = Math.max(0, Math.round(ms / 60_000));
+  if (m < 60) return t("{m}분", { m });
+  const h = Math.round(m / 60);
+  return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
+};
+
 /** what the per-account sign-in button says; its sheet carries the same title */
 const loginWord = (a: Account) => (signedIn(a) ? "로그인 추가" : "로그인");
 
@@ -418,6 +426,10 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
   const [typed, setTyped] = createSignal<string>();
   const used = () => a().stats.input + a().stats.cacheRead + a().stats.cacheWrite + a().stats.output;
   const cache = () => Math.round((cacheShare(a()) ?? 0) * 100);
+  // the plan windows the composer shows (5시간 / 주간), only while signed in
+  onMount(() => signedIn(a()) && void refreshLimits(props.id));
+  const windows = () => (signedIn(a()) ? usageOf(props.id, now()) : []);
+  const credits = () => (signedIn(a()) ? creditsOf(props.id) : undefined);
   // provider + email until the person names it; clearing the name goes back to that
   const made = () => state.spaces.find((s) => s.id === a().space)?.label ?? "계정";
   const auto = () => accountName({ ...a(), label: made() });
@@ -444,13 +456,22 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         </span>
         <Show when={!signedIn(a())}><span class="pill warn">{t("로그인 필요")}</span></Show>
         <span class="spacer" />
-        <Show when={used()} fallback={<span class="acc-usage">{t("사용 기록 없음")}</span>}>
-          <span class="acc-usage" title={t("캐시 적중률")}>
-            <span class="cache-bar"><i style={{ width: `${cache()}%` }} /></span>
-            {t("캐시 {p}%", { p: cache() })}
-            <span>· {t("{k} 토큰", { n: used(), k: tokens(used()) })}</span>
-          </span>
-        </Show>
+        <span class="acc-usage">
+          <For each={windows()}>
+            {(l) => (
+              <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={[t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) }), ...(l.resetsAt ? [t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) })] : [])].join(" · ")}>
+                <span class="acc-lim-name">{windowLabel(l.window)}</span>
+                <span class="acc-lim-num">{Math.round(l.used)}%</span>
+              </span>
+            )}
+          </For>
+          <Show when={credits()}>
+            {(c) => <span class="acc-stat" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
+          </Show>
+          <Show when={used()} fallback={<Show when={!windows().length}><span class="acc-stat">{t("사용 기록 없음")}</span></Show>}>
+            <span class="acc-stat" title={t("{k} 토큰", { n: used(), k: tokens(used()) })}>{t("캐시 적중 {p}%", { p: cache() })}</span>
+          </Show>
+        </span>
       </div>
       <div class="acc-line acc-fields">
         <label class="acc-field">

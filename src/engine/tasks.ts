@@ -2,7 +2,7 @@
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
 import { isNetError, waitOnline } from "./net";
-import { describeCommand } from "./describe";
+import { cutTitle, describeCommand } from "./describe";
 import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
@@ -221,6 +221,16 @@ export function workerTools(extra: readonly string[] | undefined = state.setting
   return ["--extension", "builtin:tool-search", "--tools", ["+tool_search", ...names.map((n) => `+${n}`)].join(",")];
 }
 
+/**
+ * The MCP tools switched off in Settings › 도구 (kept in `extraTools` as "-name"), as the engine's denylist: they aren't
+ * registered at all (not declared, not found through tool_search). Only MCP tools can
+ * be switched off; the engine's own and Ondra's stay.
+ */
+export function offTools(extra: readonly string[] | undefined = state.settings.extraTools): string[] {
+  const names = [...new Set((extra ?? []).filter((n) => n.startsWith("-")).map((n) => n.slice(1).trim()).filter((n) => /^mcp__[\w.:-]+$/.test(n)))];
+  return names.length ? ["--exclude-tools", names.join(",")] : [];
+}
+
 /** A quiet line in a job's transcript (from outside the event stream, e.g. a tool). */
 export function pushNote(id: string, text: string) {
   updateTask(id, (t) => void push(t, { kind: "note", text }));
@@ -300,8 +310,14 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
 const keepsRunning = (cmd: string) =>
   /(&\s*$|&\s*disown|\bnohup\b|--watch\b|\bwatch\b|tail\s+-f|\b(dev|serve|start)\s*$|\bvite\b(?!\s+build)|tauri dev|next dev)/.test(cmd);
 
-function closeShells(t: Task) {
-  for (const s of t.shells) if (!s.endedAt) s.endedAt = Date.now();
+/**
+ * The run is over (done, failed, paused or stopped): its shells and the tool calls
+ * still open end now, so nothing spins. A call closed here has no `ok`: it was
+ * stopped, it neither passed nor failed.
+ */
+export function closeOpen(t: Task, at = Date.now()) {
+  for (const s of t.shells) if (!s.endedAt) s.endedAt = at;
+  for (const e of t.entries) if (e.kind === "tool" && !e.tool.endedAt) e.tool.endedAt = at;
 }
 
 const screenshotIn = (cmd: string) => cmd.match(/\bscreenshot\b(?:\s+--\S+)*\s+(["']?)(\/[^"'\s]+\.(?:png|jpe?g))\1/)?.[2];
@@ -389,7 +405,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         // the job this carries on was reviewed and this one changed no code since: that review still holds
         const before = review && !had && !editedCode(t) ? reviewedBefore(t) : undefined;
         if (before) {
-          push(t, { kind: "note", text: "앞의 일에서 받은 리뷰가 그대로 유효해요" });
+          push(t, { kind: "note", text: "이전 작업의 리뷰가 그대로 유효해요" });
           const jobId = t.id;
           const message = `(Ondra) The job this carries on was already reviewed ("${before.title}") and its findings were fixed there; you haven't changed code since. That review covers this: don't start another one, go on with the next step.`;
           run.refused = message;
@@ -432,7 +448,7 @@ function spawnChild(parent: Task, title: string, ask: string, review = false): T
     space: parent.space,
     ...(parent.reach?.length ? { reach: parent.reach } : {}),
     topic: parent.topic,
-    title: title.trim().slice(0, 40) || "서브에이전트",
+    title: cutTitle(title) || "서브에이전트",
     ask,
     cwd: parent.cwd,
     status: "queued",
@@ -599,7 +615,7 @@ export async function mergeTask(id: string): Promise<boolean> {
     updateTask(id, (x) => {
       x.worktree = { ...w, state: "merged", into };
       x.cwd = homeDir(x);
-      push(x, { kind: "note", text: `${into}에 합쳤어요` });
+      push(x, { kind: "note", text: `${into}에 병합했어요` });
       if (x.status !== "done") {
         x.status = "done";
         x.plan = closePlan(x.plan);
@@ -642,7 +658,7 @@ export async function closeWorktree(id: string) {
   updateTask(id, (x) => {
     x.worktree = { ...w, state: "discarded" };
     x.cwd = homeDir(x);
-    push(x, { kind: "note", text: "작업 폴더를 정리했어요. 변경은 PR에 있어요" });
+    push(x, { kind: "note", text: "워크트리 정리 · 변경은 PR에 있어요" });
   });
 }
 
@@ -736,6 +752,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       t.thinking || effortFor(account.id) || "high",
       ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
       ...workerTools(),
+      ...offTools(),
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);
@@ -754,7 +771,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     }
     // the command the restart cut off (not a time limit: commands have none unless given one)
     const cut = fresh.shells.filter((s) => !s.endedAt && !s.background).pop()?.command.replace(/\s+/g, " ").slice(0, 160);
-    if (resume) updateTask(id, (x) => closeShells(x));
+    if (resume) updateTask(id, (x) => closeOpen(x));
     // answers it already acted on before the restart aren't news
     const handled = new Set(fresh.entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text));
     const fresh2 = unread(fresh);
@@ -813,7 +830,7 @@ function fail(id: string, message: string) {
   markDead(agentOf(id));
   setLive(id, "");
   updateTask(id, (t) => {
-    closeShells(t);
+    closeOpen(t);
     t.status = "failed";
     t.unread = true;
     t.error = explain(message);
@@ -1072,7 +1089,7 @@ async function carryOnWhenOnline(id: string, run: Run, agent: string, err: strin
   run.netTries = (run.netTries ?? 0) + 1;
   updateTask(id, (x) => {
     x.now = "연결 기다리는 중";
-    if (run.netTries === 1) push(x, { kind: "note", text: "연결이 끊겼어요. 다시 연결되면 이어서 해요" });
+    if (run.netTries === 1) push(x, { kind: "note", text: "연결이 끊겼어요 · 다시 연결되면 이어서 해요" });
   });
   await waitOnline(run.netTries);
   // stopped, removed or restarted while it waited
@@ -1320,7 +1337,7 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
     return {
-      label: "아직 할 일이 남음",
+      label: "남은 작업 있음",
       ask: "끝냈다고 했는데 요약이 앞으로 할 일이에요. 그 일을 지금 끝내고 done으로 끝내 줘. 지금 할 수 없으면 무엇이 막혔는지 사용자에게 묻거나, 못 한 걸 unverified에 적고 요약은 실제로 한 것만 적어 줘.",
     };
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
@@ -1391,7 +1408,7 @@ function finish(id: string, summary: string, run?: Run) {
     const open = [...(run?.unverified ?? []), ...broken];
     t.unverified = run && !t.parentId ? (open.length ? open : proven ? undefined : ["증거 없이 끝났어요"]) : undefined;
     t.finishedAt = Date.now();
-    closeShells(t);
+    closeOpen(t);
     const leg = t.legs[t.legs.length - 1];
     if (leg && !leg.endedAt) leg.endedAt = Date.now();
   });
@@ -1431,7 +1448,7 @@ async function dropEmptyBranch(id: string) {
     updateTask(id, (x) => {
       x.cwd = homeDir(x);
       x.worktree = { ...w, state: "merged", into };
-      push(x, { kind: "note", text: pr ? `${into}이 합쳐져서 작업 폴더를 정리했어요` : `${into}에 이미 들어가서 작업 폴더를 정리했어요` });
+      push(x, { kind: "note", text: pr ? `${into} 병합됨 · 워크트리 정리` : `${into}에 이미 반영됨 · 워크트리 정리` });
     });
     return;
   }
@@ -1580,7 +1597,7 @@ export function createTask(f: {
     id,
     space: f.space,
     topic,
-    title: f.title.trim().slice(0, 40) || "작업",
+    title: cutTitle(f.title) || "작업",
     ask: f.ask,
     ...(f.branch ? { branch: f.branch } : {}),
     ...(f.after?.length ? { after: f.after } : {}),
@@ -1600,7 +1617,7 @@ export function createTask(f: {
     legs: [],
     entries: [
       { id: uid("e"), at: Date.now(), kind: "user", text: f.display ?? f.ask },
-      ...(prev ? [{ id: uid("e"), at: Date.now(), kind: "note" as const, text: `"${prev.title}" 일의 결과${prev.worktree?.state === "open" ? "와 브랜치" : ""}를 이어받아 새로 시작해요` }] : []),
+      ...(prev ? [{ id: uid("e"), at: Date.now(), kind: "note" as const, text: `"${prev.title}" 작업의 결과${prev.worktree?.state === "open" ? "와 브랜치" : ""}를 이어받아 시작해요` }] : []),
     ],
     shells: [],
     inbox: [],
@@ -1628,7 +1645,7 @@ function takeBranch(id: string, prevId: string) {
   });
   updateTask(prevId, (x) => {
     x.worktree = undefined;
-    push(x, { kind: "note", text: `브랜치 ${w.branch}는 "${taskById(id)?.title ?? ""}" 일로 넘어갔어요` });
+    push(x, { kind: "note", text: `브랜치 ${w.branch}는 "${taskById(id)?.title ?? ""}" 작업으로 넘어갔어요` });
   });
 }
 
@@ -1642,7 +1659,7 @@ export function handOn(prevId: string, nextId: string) {
   if (!prev || finished(prev)) return;
   updateTask(prevId, (x) => {
     x.handedOn = nextId;
-    push(x, { kind: "note", text: `"${taskById(nextId)?.title ?? ""}" 일로 넘어가요` });
+    push(x, { kind: "note", text: `"${taskById(nextId)?.title ?? ""}" 작업으로 넘어가요` });
   });
   if ((prev.status === "running" || prev.status === "waiting") && isAlive(agentOf(prevId))) {
     void tell(
@@ -1699,7 +1716,7 @@ export function createAnswer(f: { space: Task["space"]; question: string; text: 
     id,
     space: f.space,
     topic,
-    title: (f.title?.trim() || (first.length > 28 ? `${first.slice(0, 28)}…` : first) || "질문").slice(0, 40),
+    title: cutTitle(f.title?.trim() || cutTitle(first, 29) || "질문"),
     ask: f.question,
     cwd: spaceById(f.space).folder || "~",
     status: "done",
@@ -1934,7 +1951,7 @@ export function pauseTask(id: string) {
   updateTask(id, (t) => {
     t.status = "paused";
     t.now = "일시정지됨";
-    closeShells(t);
+    closeOpen(t);
     push(t, { kind: "note", text: "일시정지" });
   });
   for (const k of activeKids(id)) pauseTask(k.id);
