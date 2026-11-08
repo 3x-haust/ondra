@@ -44,6 +44,16 @@ describe("resuming a task resumes the subagents its pause stopped", () => {
     expect(get("grandkid").status).toBe("queued");
   });
 
+  it("records when a task and the subagents its pause stopped left paused", () => {
+    setState("tasks", [job(), job({ id: "kid", parentId: "job" })]);
+    pauseTask("job");
+    expect(get("job").resumedAt).toBeUndefined();
+    const before = Date.now();
+    resumeTask("job");
+    expect(get("job").resumedAt).toBeGreaterThanOrEqual(before);
+    expect(get("kid").resumedAt).toBeGreaterThanOrEqual(before);
+  });
+
   it("a subagent resumed on its own stops waiting for the fork", () => {
     setState("tasks", [job(), job({ id: "kid", parentId: "job" })]);
     pauseTask("job");

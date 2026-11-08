@@ -114,6 +114,7 @@ export default {
   "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",
   "{into} 병합됨 · 워크트리 정리": "{into} merged · worktree removed",
   "{into}에 이미 반영됨 · 워크트리 정리": "Already in {into} · worktree removed",
+  "변경 버림": "Changes discarded",
   "변경을 버렸어요": "Changes discarded",
   "컨텍스트 압축 중": "Compacting context",
   "재시도 {a}/{m}": "Retry {a}/{m}",

@@ -615,7 +615,7 @@ export function MainView() {
                 <div class="thread proj-empty">
                   <div class="thread-inner convo">
                     <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
-                    <For each={asks()}>{(d) => <DecisionCard d={d} />}</For>
+                    <For each={asks()}>{(d) => <DecisionCard d={d} crumb={!stripShows(p().id, d.taskId, true)} />}</For>
                     <Picks project={p().id} />
                   </div>
                 </div>
@@ -660,7 +660,7 @@ export function MainView() {
               )}
             </For>
             {/* what the jobs of this chat are asking: answered here, no need to open the job */}
-            <For each={asks()}>{(d) => <DecisionCard d={d} />}</For>
+            <For each={asks()}>{(d) => <DecisionCard d={d} crumb={!(project() && stripShows(project()!.id, d.taskId))} />}</For>
           </div>
         </div>
         <div class="dock">
@@ -686,6 +686,11 @@ const projectTasks = (project: string) =>
 
 /** a long list folded or open, per project, while the app runs */
 const [stripOpen, setStripOpen] = createSignal<Record<string, boolean>>({});
+/** the project's strip shows this task's row (`all`: nothing said yet, the whole list shows) */
+const stripShows = (project: string, taskId: string, all = false) => {
+  const list = projectTasks(project);
+  return list.some((x) => x.id === taskId) && (all || list.length <= 3 || !!stripOpen()[project]);
+};
 
 /**
  * A project's tasks above its conversation. Up to three are rows; more fold into one line like

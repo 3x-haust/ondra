@@ -1970,7 +1970,7 @@ export function pauseTask(id: string) {
 /** The subagents a task's own pause stopped go back in line with it (and theirs with them). */
 function resumeKids(id: string) {
   for (const k of childrenOf(id).filter((k) => k.pausedBy === id && k.status === "paused")) {
-    updateTask(k.id, (x) => requeue(x));
+    updateTask(k.id, (x) => (requeue(x), (x.resumedAt = Date.now())));
     resumeKids(k.id);
   }
 }
@@ -1983,7 +1983,7 @@ export function stopTask(id: string) {
 
 export function resumeTask(id: string) {
   // resumed on its own: it no longer waits for the fork that paused it
-  updateTask(id, (t) => (requeue(t), (t.pausedBy = undefined)));
+  updateTask(id, (t) => (requeue(t), (t.pausedBy = undefined), (t.resumedAt = Date.now())));
   resumeKids(id);
 }
 export const finishTask = (id: string) => {

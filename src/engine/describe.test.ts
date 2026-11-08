@@ -59,12 +59,14 @@ describe("noteText", () => {
     expect(noteText("main에 병합했어요")).toBe("main에 병합 · 워크트리 정리");
     expect(noteText("main에 합쳤어요")).toBe("main에 병합 · 워크트리 정리");
     expect(noteText('브랜치 feat/a는 "로그인 고치기" 일로 넘어갔어요')).toBe('브랜치 feat/a는 "로그인 고치기" 작업으로 넘어갔어요');
+    expect(noteText("변경을 버렸어요")).toBe("변경 버림");
     expect(noteText("기억함 · pnpm만 써요")).toBe("메모리에 저장 · pnpm만 써요");
     expect(noteText("메모리 저장 · pnpm만 써요")).toBe("메모리에 저장 · pnpm만 써요");
     expect(noteText("끝내기 전에 확인 · 아직 할 일이 남음")).toBe("확인 필요 · 남은 작업 있음");
     expect(noteText("모델 → openai-codex/gpt-5.6-terra · xhigh")).toBe("모델 → GPT-5.6 Terra · 매우 높음");
     setState("settings", "language", "en");
     expect(noteText("변경을 버렸어요")).toBe("Changes discarded");
+    expect(noteText("변경 버림")).toBe("Changes discarded");
     expect(noteText("일시정지")).toBe("Paused");
     expect(noteText("main에 병합 · 워크트리 정리")).toBe("Merged into main · worktree removed");
     expect(noteText("main에 병합했어요")).toBe("Merged into main · worktree removed");

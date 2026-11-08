@@ -245,5 +245,6 @@ export default {
   "계정 없음|notice": "No account",
   "작업 내용": "Describe the task",
   "일시정지 · {d} 뒤 다시 시작": "Paused · resumed {d} later",
+  "일시정지 · 다시 시작함": "Paused · resumed",
   "메모리에 저장|note": "Saved to memory",
 } satisfies Record<string, string>;

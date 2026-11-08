@@ -20,6 +20,7 @@ import { Markdown } from "./Markdown";
 import { MsgActions, UserMsg } from "./MsgActions";
 import { AnsweredCard, answerOf } from "./DecisionCard";
 import { costDetail, jobCost } from "./cost";
+import { Glyph } from "../views/Sidebar";
 import { t as tr } from "../i18n";
 
 type Item =
@@ -138,7 +139,7 @@ const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence"
  * closing summary stays (the answer text and result blocks it ended with); the
  * fold can be opened. Errors never fold.
  */
-function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; tail?: JSX.Element }) {
+function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; end?: boolean }) {
   const [shown, setShown] = createSignal(false);
   const [mounted, setMounted] = createSignal(false);
   const body = () => props.turn.body;
@@ -219,9 +220,13 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
         <Show when={report()}>
           <Markdown class="msg-text" text={report()} />
         </Show>
-        {props.tail}
-        <Show when={answer() || report() || props.turn.usage}>
-          <div class="reply-foot">
+        {/* the end of the job: one row with the end line ("19분 동안 작업"), the answer's actions on hover,
+            then the notes (병합, 버림, 메모리); an action row with nothing shown takes no room */}
+        <Show when={answer() || report() || props.turn.usage || props.end}>
+          <div class="reply-foot" classList={{ end: !!props.end, newest: !!props.last && !after().length }}>
+            <Show when={props.end}>
+              <JobEndLine t={props.task} />
+            </Show>
             <Show when={answer() || report()}>
               <MsgActions
                 text={answer() || report()}
@@ -326,8 +331,10 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
         </Show>
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
         <span class="tool-target">{detail()}</span>
-        <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
-        <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped)}><span class="tool-stopped">{tr("중단됨")}</span></Show>
+        <span class="tool-end">
+          <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
+          <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped)}><span class="tool-stopped">{tr("중단됨")}</span></Show>
+        </span>
         <Icon name="chevron" size={12} class="tool-chev" />
       </button>
       <Fold open={open()}>
@@ -349,19 +356,6 @@ function shortName(t: ToolCall) {
   }
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
 }
-
-// what a call was, for one that stopped before it finished ("테스트 · 중단됨")
-const NOUN: Record<ToolCall["kind"], string> = {
-  read: "읽기",
-  search: "찾기",
-  edit: "수정",
-  write: "만들기",
-  bash: "명령",
-  browser: "브라우저",
-  desktop: "앱 조작",
-  test: "테스트",
-  other: "도구",
-};
 
 function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean }) {
   const t = () => props.e.tool;
@@ -389,17 +383,20 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
             ? running() ? tr("메모리에 쓰는 중") : cut() ? tr("메모리") : tr("메모리에 저장함")
             : t().kind === "bash"
               ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? ""))
-              : tr(cut() ? NOUN[t().kind] : VERB[t().kind][running() ? 0 : 1])}
+              : tr(VERB[t().kind][running() ? 0 : 1])}
         </span>
         <span class="tool-target">{what()}</span>
-        <Show when={t().add || t().del}>
-          <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
-        </Show>
-        <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
-        <Show when={cut()} fallback={<span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>}>
-          <span class="tool-stopped">{tr("중단됨")}</span>
-        </Show>
-        <Show when={canOpen()}><Icon name="chevron" size={12} class="tool-chev" /></Show>
+        {/* one trailing column on every row: the time (on hover), the counts, or 중단됨 end at the same edge */}
+        <span class="tool-end">
+          <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
+          <Show when={cut()} fallback={<span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>}>
+            <span class="tool-stopped">{tr("중단됨")}</span>
+          </Show>
+          <Show when={t().add || t().del}>
+            <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
+          </Show>
+        </span>
+        <Icon name="chevron" size={12} class={canOpen() ? "tool-chev" : "tool-chev none"} />
       </button>
       <Fold open={open() && !!t().note}>
         <div class="tool-note">
@@ -425,15 +422,41 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   );
 }
 
-/** How long a pause lasted: from its note to the first work after it (what the task said or ran),
- *  or undefined while it hasn't run since. */
-function resumedAfter(task: Task, id: string, at: number): number | undefined {
+const isPause = (e: Entry) => e.kind === "note" && e.text === "일시정지";
+
+/**
+ * A pause the task has come back from: "over" once it left paused (it isn't paused now, or paused
+ * again later), and how long it lasted when the task records when it left: the next message or work
+ * after the note, or the time it was resumed. undefined while this is the pause it is in.
+ */
+export function pauseSpan(task: Pick<Task, "entries" | "status" | "resumedAt">, id: string): { over: boolean; ms?: number } | undefined {
   const es = task.entries;
   const i = es.findIndex((x) => x.id === id);
   if (i < 0) return undefined;
-  const next = es.slice(i + 1).find((x) => x.kind !== "user" && x.kind !== "note");
-  return next ? Math.max(0, next.at - at) : undefined;
+  const at = es[i].at;
+  const later = es.slice(i + 1);
+  const again = later.find(isPause);
+  const over = task.status !== "paused" || !!again;
+  if (!over) return undefined;
+  const ends = [
+    later.find((x) => x.kind !== "note")?.at,
+    task.resumedAt !== undefined && task.resumedAt >= at && (!again || task.resumedAt <= again.at) ? task.resumedAt : undefined,
+  ].filter((x): x is number => x !== undefined && (!again || x <= again.at));
+  return { over, ms: ends.length ? Math.max(0, Math.min(...ends) - at) : undefined };
 }
+
+/** what a note is about, as its icon: 버림, 병합, 메모리, 모델 ... */
+function noteIcon(text: string): string {
+  if (/^변경(을)? 버(림|렸어요)$/.test(text)) return "trash";
+  if (/ 병합|에 이미 반영됨|합쳤어요|합쳐져서|들어가서/.test(text)) return "merge";
+  if (/^워크트리 정리 · |^작업 폴더를 정리/.test(text)) return "pr";
+  if (/^(기억함|메모리에? 저장) · /.test(text)) return "memory";
+  if (text.startsWith("모델")) return "refresh";
+  return "dot";
+}
+
+/** the sidebar's paused glyph (ring and dot), for a pause in the thread */
+const PAUSED = { id: "", status: "paused" } as Task;
 
 function EntryView(props: { e: Entry; task: Task }) {
   const e = props.e;
@@ -449,23 +472,28 @@ function EntryView(props: { e: Entry; task: Task }) {
         )}
       </Match>
       {/* a pause it has come back from: history, with how long it stayed paused */}
-      <Match when={e.kind === "note" && e.text === "일시정지" && props.task.status !== "paused" && e}>
-        {(x) => (
-          <div class="note past">
-            <Icon name="pause" size={13} />
-            <span>
-              {resumedAfter(props.task, x().id, x().at) !== undefined
-                ? tr("일시정지 · {d} 뒤 다시 시작", { d: short(resumedAfter(props.task, x().id, x().at)!) })
-                : noteText(x().text)}
-            </span>
-          </div>
-        )}
+      <Match when={e.kind === "note" && isPause(e) && e}>
+        {(x) => {
+          const span = () => pauseSpan(props.task, x().id);
+          return (
+            <div class="note pause-note" classList={{ past: !!span() }}>
+              <Glyph t={PAUSED} class="note-glyph" />
+              <span>
+                {span()?.ms !== undefined
+                  ? tr("일시정지 · {d} 뒤 다시 시작", { d: short(span()!.ms!) })
+                  : span()
+                    ? tr("일시정지 · 다시 시작함")
+                    : noteText(x().text)}
+              </span>
+            </div>
+          );
+        }}
       </Match>
       <Match when={e.kind === "note" && e}>
         {(x) => (
           <div class="note">
-            <Icon name={/^(기억함|메모리에? 저장) · /.test(x().text) ? "memory" : x().text.startsWith("모델") ? "refresh" : "dot"} size={13} />
-            {noteText(x().text)}
+            <Icon name={noteIcon(x().text)} size={14} />
+            <span>{noteText(x().text)}</span>
           </div>
         )}
       </Match>
@@ -525,16 +553,23 @@ function EntryView(props: { e: Entry; task: Task }) {
   );
 }
 
-/** The line a finished task ends on: "19분 동안 작업" (in review or merged alike), what it used on hover. */
-export function JobEnd(props: { t: Task }) {
+/** a finished task ends on a line saying how long it worked (in review or merged alike) */
+const hasEnd = (t: Task) => t.status === "done" && !!jobCost(t).ms;
+
+/** The line a finished task ends on: "19분 동안 작업", what it used on hover. */
+function JobEndLine(props: { t: Task }) {
   const c = () => jobCost(props.t);
   return (
-    <Show when={props.t.status === "done" && c().ms}>
-      <div class="job-cost" title={costDetail(c()) || undefined}>
-        {tr("{d} 동안 작업", { d: short(c().ms) })}
-      </div>
-    </Show>
+    <div class="job-cost" title={costDetail(c()) || undefined}>
+      {tr("{d} 동안 작업", { d: short(c().ms) })}
+    </div>
   );
+}
+
+/** The thread draws its own end line now, right after the answer and before the notes under it;
+ *  kept so a view that still places one doesn't show it twice. */
+export function JobEnd(_props: { t: Task }) {
+  return null;
 }
 
 export function Transcript(props: { task: Task; agentId: string; footer?: JSX.Element }) {
@@ -554,6 +589,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
     return e?.kind === "error" && e.text === props.task.error ? [...es.slice(0, at), ...es.slice(at + 1)] : es;
   });
   const list = createMemo(() => turns(shownEntries()));
+  /** nothing was recorded but its summary: that is the answer the thread ends on */
+  const summaryOnly = () => !props.task.entries.some((e) => e.kind !== "user") && props.task.status === "done" && !!props.task.summary;
   const liveText = () => live[props.agentId] ?? "";
   const working = () => props.task.status === "running";
   /** all its work is over: only then do turns fold */
@@ -588,11 +625,15 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
               task={props.task}
               open={!settled()}
               last={i() === list().length - 1}
+              end={i() === list().length - 1 && !summaryOnly() && hasEnd(props.task)}
             />
           )}
         </For>
-        <Show when={!props.task.entries.some((e) => e.kind !== "user") && props.task.status === "done" && props.task.summary}>
+        <Show when={summaryOnly()}>
           <Markdown class="msg-text" text={props.task.summary!} />
+          <Show when={hasEnd(props.task)}>
+            <div class="reply-foot end newest"><JobEndLine t={props.task} /></div>
+          </Show>
         </Show>
         <Show when={liveText()}>
           <Markdown class="msg-text" text={liveText()} />
