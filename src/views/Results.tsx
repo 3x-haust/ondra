@@ -221,7 +221,7 @@ export function ResultsView() {
                       {/* under a day's header only the time; pinned rows have no day header */}
                       <span class="res-time">{r.pinned ? whenOf(r.at) : timeOf(r.at)}</span>
                       <span class="res-acts">
-                        <button class="res-act" title={r.pinned ? t("고정 해제") : t("고정")} aria-label={r.pinned ? t("고정 해제") : t("고정")} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
+                        <button class="res-act" classList={{ on: r.pinned }} title={r.pinned ? t("고정 해제") : t("고정")} aria-label={r.pinned ? t("고정 해제") : t("고정")} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
                           <Icon name="pin" size={14} />
                         </button>
                         <button class="res-act" title={t("삭제")} aria-label={t("삭제")} onClick={(e) => (e.stopPropagation(), remove([r.id]))}>

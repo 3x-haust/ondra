@@ -63,7 +63,7 @@ function SpacePick(props: { d: Device }) {
           value={deviceSpace(props.d) ?? ""}
           onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
         >
-          <option value="">{t("모든 워크스페이스")}</option>
+          <option value="">{t("전체")}</option>
           <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
         </select>
       </label>

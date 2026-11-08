@@ -2,7 +2,7 @@
 // by project. Cards act in place: pause, start now, merge, and "메시지" sends a
 // change to a task without opening it, so several can be steered one after another.
 import { nowText } from "../engine/describe";
-import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { decisionFor, projectsIn, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
@@ -109,8 +109,13 @@ export function BoardGroup() {
 
 /** 새 작업: the same new-task screen as the sidebar and ⌘N, preset to `project` when one is in focus. */
 export function NewTask(props: { project?: () => string | undefined }) {
+  /** the project it is preset to, named in the tooltip */
+  const name = () => {
+    const id = props.project?.();
+    return id ? projectsIn(state.space).find((p) => p.id === id)?.name : undefined;
+  };
   return (
-    <button class="btn sm new-task-btn" onClick={() => void import("./MainView").then((m) => m.startNewTask(props.project?.()))}>
+    <button class="btn sm new-task-btn" title={name() ? t("{name}에 새 작업", { name: name()! }) : undefined} onClick={() => void import("./MainView").then((m) => m.startNewTask(props.project?.()))}>
       <Icon name="plus" size={14} />
       {t("새 작업")}
     </button>
@@ -129,7 +134,8 @@ export function Board(props: { embedded?: boolean } = {}) {
 
   const cols = createMemo<Col[]>(() => {
     if (groupBy() === "state")
-      return STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) })).filter((c) => c.id !== "failed" || c.tasks.length);
+      // 응답 필요 and 실패 only when something is in them; the other columns always stand
+      return STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) })).filter((c) => (c.id !== "failed" && c.id !== "you") || c.tasks.length);
     // by the task's project, in the sidebar's order; tasks without one go last under 기타
     const by = new Map<string, Task[]>();
     for (const x of shown()) {
@@ -146,6 +152,19 @@ export function Board(props: { embedded?: boolean } = {}) {
         tasks: list.sort((a, b) => ORDER.indexOf(stateOf(a)) - ORDER.indexOf(stateOf(b))),
       }));
   });
+
+  // columns that run past an edge get a soft fade there, so the board reads as scrollable
+  const [edge, setEdge] = createSignal({ l: false, r: false });
+  const watch = (el: HTMLDivElement) => {
+    const check = () => setEdge({ l: el.scrollLeft > 1, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
+    el.addEventListener("scroll", check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true });
+    queueMicrotask(check);
+    onCleanup(() => (ro.disconnect(), mo.disconnect()));
+  };
 
   return (
     <div class="view board-view" classList={{ embedded: props.embedded }}>
@@ -168,7 +187,7 @@ export function Board(props: { embedded?: boolean } = {}) {
           </div>
         }
       >
-      <div class="board" classList={{ project: groupBy() === "project" }}>
+      <div class="board" ref={watch} classList={{ project: groupBy() === "project", "fade-l": edge().l, "fade-r": edge().r }}>
         <For each={cols()}>
           {(c) => (
             <section class="bcol" classList={{ empty: !c.tasks.length }}>
@@ -235,18 +254,19 @@ function Card(props: { t: Task; byProject: boolean }) {
     input?.focus();
   };
 
+  // icons in the top row, where the time is: the state word and the title stay in view
   const act = (label: string, icon: string, run: () => void, primary = false): JSX.Element => (
     <button
       class="bc-act"
       classList={{ primary }}
       title={label}
+      aria-label={label}
       onClick={(e) => {
         e.stopPropagation();
         run();
       }}
     >
       <Icon name={icon} size={14} />
-      <span>{label}</span>
     </button>
   );
   const foot = () => !!(kids().length || diff().add || diff().del || sent());
@@ -281,8 +301,9 @@ function Card(props: { t: Task; byProject: boolean }) {
         <Show when={st() === "running" || st() === "you" || st() === "review" || st() === "queued"}>
           {act(t("메시지"), "message", () => (setTalk(!talk()), queueMicrotask(() => input?.focus())))}
         </Show>
-        <Show when={st() === "running"}>{act(t("일시정지"), "pause", () => stopTask(job().id))}</Show>
-        <Show when={job().status === "paused" || job().status === "failed"}>{act(t("다시 시작"), "play", () => resumeTask(job().id))}</Show>
+        <Show when={st() === "running"}>{act(t("일시정지|action"), "pause", () => stopTask(job().id))}</Show>
+        <Show when={job().status === "paused"}>{act(t("다시 시작"), "play", () => resumeTask(job().id))}</Show>
+        <Show when={job().status === "failed"}>{act(t("다시 시도"), "refresh", () => resumeTask(job().id), true)}</Show>
         <Show when={job().status === "queued"}>{act(t("지금 시작"), "play", () => void startTask(job().id))}</Show>
         <Show when={st() === "review"}>{act(t("병합"), "merge", () => void mergeTask(job().id), true)}</Show>
         <Show when={st() === "you"}>{act(t("응답"), "arrow", () => openTask(job().id), true)}</Show>
@@ -299,7 +320,7 @@ function Card(props: { t: Task; byProject: boolean }) {
         >
           <input
             ref={input}
-            placeholder={job().status === "running" ? t("작업 중에 말하기") : t("이어서 말하기")}
+            placeholder={job().status === "running" ? t("작업 중에 말하기") : job().status === "queued" ? t("메시지 보내기") : t("이어서 말하기")}
             value={msg()}
             onInput={(e) => setMsg(e.currentTarget.value)}
             onKeyDown={(e) => {

@@ -298,7 +298,7 @@
 }
 .cv-ask-opt {
   height: 28px;
-  padding: 0 var(--s-10);
+  padding: 0 var(--s-8);
   border: 1px solid var(--input);
   border-radius: var(--r-md);
   font-size: var(--fs-xs);
@@ -310,14 +310,22 @@
 .cv-ask-opt:hover {
   background: color-mix(in srgb, var(--ink) 5%, var(--card));
 }
-.cv-ask-opt.primary {
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  background: var(--accent);
+.cv-ask-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-width: 0;
 }
-.cv-ask-opt.primary:hover {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
+.cv-ask-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cv-ask-rec {
+  flex: none;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--accent-text);
 }
 .cv-ask-opt:active {
   transform: scale(0.98);
@@ -677,10 +685,20 @@
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   font-family: inherit;
 }
+/* columns share the width; under the minimum they scroll, with a fade at the edge that has more */
 .board {
-  grid-auto-columns: minmax(220px, 1fr);
+  grid-auto-columns: minmax(172px, 1fr);
   gap: var(--s-8);
   padding: 0 var(--s-16) var(--s-16);
+  --fade-l: 0px;
+  --fade-r: 0px;
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+}
+.board.fade-l {
+  --fade-l: 40px;
+}
+.board.fade-r {
+  --fade-r: 40px;
 }
 .board-empty {
   margin: 12vh auto 0;
@@ -807,18 +825,25 @@
 .bc-sent {
   color: var(--accent-text);
 }
+/* on hover the time in the top row turns into the card's actions (icons, named in the tooltip) */
 .bc-acts {
   right: var(--s-8);
-  top: var(--s-8);
-  border-radius: var(--r-md);
-  background: var(--card);
-  box-shadow: var(--shadow-pop);
+  top: 7px;
+  gap: 2px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  background: var(--bd-card);
+  box-shadow: none;
+}
+.bcard:hover .bc-when,
+.bcard:focus-within .bc-when {
+  visibility: hidden;
 }
 .bc-act {
-  gap: var(--s-4);
+  justify-content: center;
+  width: 24px;
   height: 24px;
-  padding: 0 var(--s-6);
-  font-size: var(--fs-xs);
+  padding: 0;
 }
 .bc-act .icon {
   color: var(--ink-3);
@@ -1382,10 +1407,6 @@
 .bcol-add {
   margin-left: auto;
   color: var(--ink-3);
-}
-/* six columns by state (a failed one joined): narrower columns so all fit at 1440 */
-.board:not(.project):has(> .bcol:nth-child(6)) {
-  grid-auto-columns: minmax(176px, 1fr);
 }
 
 /* ── memory: a finished task's row carries the sidebar's glyph */

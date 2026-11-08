@@ -1616,6 +1616,8 @@ button.md-kinds .chip:hover,
 .mg-node .mg-n {
   fill: var(--ink-4);
   font-weight: normal;
+  /* never under the 11px floor the names keep */
+  font-size: 1em;
 }
 .mg-node.sel text {
   fill: var(--ink-2);

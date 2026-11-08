@@ -577,35 +577,54 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     return (!!props.graph.focus && n.ring <= 1 && memCount() <= 36) || z >= 1.8;
   };
   const labelOf = (n: GNode) => (n.kind === "memory" || n.kind === "entry" ? (n.label.length > 22 ? `${n.label.slice(0, 22)}…` : n.label) : n.label);
+  /** the name in less room: a project told apart by its folder is just the folder; long names are cut */
+  const shortOf = (n: GNode) => n.hint ?? (labelOf(n).length > 12 ? `${labelOf(n).slice(0, 11)}…` : labelOf(n));
   // names never sit on top of each other: the more important one wins, the other fades out
   const FS: Partial<Record<GNode["kind"], number>> = { global: 12, space: 12, project: 12, folder: 12, past: 12, topics: 12, topic: 11, memory: 11, file: 11, entry: 12 };
   /** a name never reads smaller than 11px on screen: zoomed out, it keeps its size (and more of them hide) */
   const MIN_PX = 11;
   const fsOf = (n: GNode) => Math.max(FS[n.kind] ?? 11, MIN_PX / view().z);
   const textW = (t: string, fs: number) => [...t].reduce((w, c) => w + (c.charCodeAt(0) > 0x2e80 ? 1 : 0.58), 0) * fs;
+  /**
+   * The names that fit, each "full" or "short", under its node or (when under is taken) over it.
+   * A name that would cover another is first moved over its node, then shortened (a project told
+   * apart by its folder keeps just the folder: "01_Projects", "홈"; a hub drops its count), and only
+   * hidden when none of that fits. Hovered, it shows whole; its tooltip names it either way.
+   */
   const labelOn = createMemo(() => {
     tick();
     const rank = (n: GNode) => (n.id === props.sel || n.id === props.hover ? 0 : near()?.has(n.id) ? 1 : isHub(n.kind) ? 2 : 3);
     const cands = props.graph.nodes.filter(showLabel).sort((a, b) => rank(a) - rank(b) || b.r - a.r);
     const placed: number[][] = [];
-    const on = new Set<string>();
+    const on = new Map<string, { short: boolean; up: boolean }>();
+    const free = (n: GNode, box: number[]) =>
+      !placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3]) &&
+      // nor across another node
+      !props.graph.nodes.some((o) => {
+        const ob = o.id !== n.id && bodies.get(o.id);
+        return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
+      });
     for (const n of cands) {
       const b = bodies.get(n.id);
       if (!b) continue;
-      const fs = fsOf(n);
-      const w = textW(labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
-      const box = [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
       // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
       if (n.kind === "file" && rank(n) > 1) continue;
-      if (rank(n) > 0 && placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3])) continue;
-      // nor across another node
-      if (rank(n) > 0 && props.graph.nodes.some((o) => {
-        const ob = o.id !== n.id && bodies.get(o.id);
-        return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
-      })) continue;
-      placed.push(box);
-      on.add(n.id);
+      const fs = fsOf(n);
+      const boxOf = (text: string, up: boolean) => {
+        const w = textW(text, fs) / 2 + 2;
+        return up ? [b.x - w, b.y - n.r - 4 - fs, b.x + w, b.y - n.r - 1] : [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
+      };
+      const whole = labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : "");
+      const tries: { short: boolean; up: boolean }[] = [{ short: false, up: false }, { short: false, up: true }];
+      if (shortOf(n) !== whole) tries.push({ short: true, up: false }, { short: true, up: true });
+      const fit = rank(n) === 0 ? tries[0] : tries.find((x) => free(n, boxOf(x.short ? shortOf(n) : whole, x.up)));
+      if (!fit) continue;
+      placed.push(boxOf(fit.short ? shortOf(n) : whole, fit.up));
+      on.set(n.id, fit);
     }
+    // two projects of one name read alike: when one is down to its folder, so is the other ("01_Projects", "홈")
+    const cut = new Set(props.graph.nodes.filter((n) => n.hint && on.get(n.id)?.short).map((n) => n.label));
+    for (const n of props.graph.nodes) if (n.hint && cut.has(n.label) && on.has(n.id) && n.id !== props.hover) on.set(n.id, { ...on.get(n.id)!, short: true });
     return on;
   });
   const nodeIds = createMemo(() => props.graph.nodes.map((n) => n.id));
@@ -671,11 +690,14 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
                           <rect class={`oc-${n().entry ? outcomeOf(n().entry!) : "done"}`} x={-n().r} y={-n().r} width={n().r * 2} height={n().r * 2} rx={2.5} transform="rotate(45)" />
                         </Match>
                       </Switch>
-                      <Show when={n().kind === "project" && n().path}><title>{tilde(n().path!)}</title></Show>
-                      <text y={n().r + fsOf(n())} text-anchor="middle" style={{ "font-size": `${fsOf(n())}px` }} classList={{ off: !labelOn().has(n().id) }}>
-                        {labelOf(n())}
-                        <Show when={n().hint}><tspan class="mg-hint"> · {n().hint}</tspan></Show>
-                        <Show when={isHub(n().kind) && n().count}><tspan class="mg-n"> {n().count}</tspan></Show>
+                      {/* the name on hover, also when it's hidden or shortened for room */}
+                      <title>{n().kind === "project" && n().path ? `${homeName(n())}\n${tilde(n().path!)}` : n().hint ? homeName(n()) : n().label}</title>
+                      <text y={labelOn().get(n().id)?.up ? -n().r - 4 - fsOf(n()) * 0.25 : n().r + fsOf(n())} text-anchor="middle" style={{ "font-size": `${fsOf(n())}px` }} classList={{ off: !labelOn().has(n().id) }}>
+                        <Show when={!labelOn().get(n().id)?.short} fallback={shortOf(n())}>
+                          {labelOf(n())}
+                          <Show when={n().hint}><tspan class="mg-hint"> · {n().hint}</tspan></Show>
+                          <Show when={isHub(n().kind) && n().count}><tspan class="mg-n"> {n().count}</tspan></Show>
+                        </Show>
                       </text>
                     </g>
                   )}
