@@ -1297,31 +1297,6 @@
   min-width: 0;
 }
 
-/* the paused bar above the input: the same glyph as the sidebar row (ring and dot) */
-.dock .strip > .lucide-pause {
-  display: none;
-}
-.dock .strip:has(> .lucide-pause)::before {
-  content: "";
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--ink-3);
-  background: radial-gradient(circle, var(--ink-3) 0 2px, transparent 2.5px);
-}
-
-/* the failure card under the thread: 다시 시도 is the main action (primary, small), as on the canvas */
-.dock .notice.bad > .btn.sm:not(.primary) {
-  flex: none;
-  background: var(--accent);
-  border-color: transparent;
-  color: var(--accent-ink);
-}
-.dock .notice.bad > .btn.sm:not(.primary):hover {
-  background: var(--accent-hover);
-}
-
 /* work lines: one trailing column, so the counts, the time (on hover) and 중단됨 end at the same edge
    on every row; rows that don't open keep the chevron's room */
 .tool-row > .tool-end {

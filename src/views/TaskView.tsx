@@ -25,7 +25,7 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
-import { JobEnd, Transcript } from "../ui/Transcript";
+import { Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
@@ -252,7 +252,7 @@ export function TaskView(props: { id: string }) {
           if (task().status === "paused" && !discarded(task()))
             out.push(
               <button class="strip" onClick={() => resumeTask(task().id)}>
-                <Icon name="pause" size={14} />
+                <Glyph t={task()} />
                 <b>{tr("일시정지")}</b>
                 <span class="strip-act"><Icon name="play" size={12} />{tr("다시 시작")}</span>
               </button>,
@@ -432,7 +432,6 @@ export function TaskView(props: { id: string }) {
               footer={
                 <>
                   <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
-                  <JobEnd t={task()} />
                 </>
               }
             />
@@ -442,7 +441,7 @@ export function TaskView(props: { id: string }) {
                   <div class="notice bad">
                     <Icon name="alert" size={16} />
                     <div class="notice-body"><b>{tr("작업 실패")}</b><p class="selectable">{task().error}</p></div>
-                    <button class="btn sm" onClick={() => resumeTask(task().id)}>{tr("다시 시도")}</button>
+                    <button class="btn primary sm" onClick={() => resumeTask(task().id)}><Icon name="refresh" size={14} />{tr("다시 시도")}</button>
                   </div>
                 </Show>
                 <Composer
