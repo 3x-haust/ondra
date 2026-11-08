@@ -139,6 +139,42 @@ export function systemInput(command: string, cwd = ""): string | undefined {
   return undefined;
 }
 
+const GH_WRITES: Record<string, RegExp> = {
+  issue: /^(create|new|close|reopen|edit|comment|delete|lock|unlock|pin|unpin|transfer|develop)$/,
+  pr: /^(create|new|merge|close|reopen|edit|comment|review|ready|lock|unlock)$/,
+  release: /^(create|new|delete|edit|upload|delete-asset)$/,
+  repo: /^(create|new|delete|edit|rename|fork|archive|unarchive|sync|set-default)$/,
+  label: /^(create|edit|delete|clone)$/,
+  project: /^(create|close|copy|delete|edit|field-create|field-delete|item-add|item-archive|item-create|item-delete|item-edit|link|unlink|mark-template)$/,
+  workflow: /^(run|enable|disable)$/,
+  run: /^(cancel|rerun|delete)$/,
+  gist: /^(create|new|edit|delete|rename|clone)$/,
+  secret: /^(set|delete|remove)$/,
+  variable: /^(set|delete|remove)$/,
+  cache: /^(delete)$/,
+};
+
+/**
+ * A `gh` command that changes something on GitHub: comments, issues, PRs, merges,
+ * releases, labels, `gh api` with a writing method or fields. Reading stays free.
+ */
+export function githubWrite(command: string): string | undefined {
+  let hit: string | undefined;
+  visitShellCommands(command, ([executable, ...args]) => {
+    if (basename(executable) !== "gh") return;
+    const words = args.filter((a) => !a.startsWith("-"));
+    const [group, sub] = words;
+    if (group === "api") {
+      const method = args.find((a, i) => /^(-X|--method)$/.test(args[i - 1] ?? "") || /^--method=/.test(a))?.replace(/^--method=/, "").toUpperCase();
+      const fields = args.some((a) => /^(-f|-F|--field|--raw-field|--input)$/.test(a) || /^--(raw-)?field=/.test(a));
+      if ((method && method !== "GET") || (!method && fields)) hit ??= `gh api ${method ?? "POST"}`;
+      return;
+    }
+    if (group && sub && GH_WRITES[group]?.test(sub)) hit ??= `gh ${group} ${sub}`;
+  });
+  return hit;
+}
+
 const UDID = /\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\b/gi;
 
 /**
@@ -228,6 +264,15 @@ export default function (pi: any) {
       // A permission choice cannot turn a host action into an isolated action.
       const steal = focusSteal(String(event.input?.command ?? ""));
       if (steal) return { block: true, reason: `${steal.what}는 차단했어요. ${HOST_POLICY}` };
+      // the user turned GitHub writes off: reading issues and PRs still works
+      if (process.env.ONDRA_GITHUB_WRITE === "0") {
+        const gh = githubWrite(String(event.input?.command ?? ""));
+        if (gh)
+          return {
+            block: true,
+            reason: `GitHub 쓰기가 꺼져 있어요 (\`${gh}\`). 읽기만 하고, GitHub에 남길 내용은 결과에 적어 사용자에게 넘기세요.`,
+          };
+      }
       // in every mode: another space's (or the user's, or another job's) device is off-limits
       const mine = jobDevices();
       const other = mine && foreignDevice(String(event.input?.command ?? ""), mine);
