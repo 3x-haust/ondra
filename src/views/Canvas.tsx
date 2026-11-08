@@ -11,7 +11,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openTask, setView } from "../state/ui";
-import { decide, tell } from "../engine/tasks";
+import { decide, resumeTask, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
 import { costDetail, costShort, jobCost } from "../ui/cost";
 import { compact, IssueTag, now, statusLabel } from "../ui/bits";
@@ -19,7 +19,7 @@ import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
-import { discarded, planCount } from "../state/progress";
+import { discarded, planCount, stepState } from "../state/progress";
 import { DiscardGlyph } from "../ui/Review";
 import { Board, BoardGroup, cardMenu, Kids, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
@@ -46,6 +46,8 @@ interface Node {
   project?: Project | { id: string; name: string; folder: string };
   /** on a "more" node: how many finished jobs it folds */
   count?: number;
+  /** of `count`, the discarded ones */
+  gone?: number;
 }
 interface Edge {
   from: string;
@@ -119,7 +121,7 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
       y += rowH + GAP.job;
     }
     if (done.length) {
-      nodes.push({ id: `more:${p.id}`, kind: "more", x: X.job, y, w: W.job, h: H.more, project: p, count: done.length });
+      nodes.push({ id: `more:${p.id}`, kind: "more", x: X.job, y, w: W.job, h: H.more, project: p, count: done.length, gone: done.filter(discarded).length });
       y += H.more + GAP.job;
     }
     const shownAny = jobs.length || done.length;
@@ -511,13 +513,13 @@ function statusText(task: Task): string {
 function StatusRow(props: { t: Task }) {
   const tn = () => tone(props.t);
   /** where it is in its plan, while it isn't finished: 진행 중 · 2/4 */
-  const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan).label : "");
+  const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan) : undefined);
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
   return (
     <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }}>
       <span class="cv-status-text">
         {t(statusText(props.t))}
-        <Show when={step()}><span class="cv-step" title={t("계획 단계")}> · {step()}</span></Show>
+        <Show when={step()}>{(p) => <span class="cv-step"> · {t("할 일 {done}/{all}", { done: p().done, all: p().total })}</span>}</Show>
       </span>
       <Kids t={props.t} class="cv-meta" />
       <span class="spacer" />
@@ -585,10 +587,18 @@ function ProjCard(props: { n: Node; space: string }) {
 /** A project's finished jobs (or a job's finished subagents), folded into one line. */
 function MoreCard(props: { n: Node }) {
   const open = () => unfolded().includes(props.n.project!.id);
+  /** it counts every task it folds: discarded ones apart (완료 2 · 버림 1) */
+  const label = () => {
+    const n = props.n.count ?? 0;
+    if (props.n.task) return t("완료된 서브에이전트 {n}개", { n });
+    const gone = props.n.gone ?? 0;
+    if (!gone) return t("완료된 작업 {n}개", { n });
+    return n > gone ? t("완료 {n}개 · 버림 {m}개", { n: n - gone, m: gone }) : t("버린 작업 {n}개", { n: gone });
+  };
   return (
     <div class="cv-more-row" classList={{ open: open() }} title={open() ? t("접기") : t("펼치기")}>
       <Icon name="chevron" size={12} class={`cv-more-chev${open() ? " open" : ""}`} />
-      <span>{props.n.task ? t("완료된 서브에이전트 {n}개", { n: props.n.count ?? 0 }) : t("완료된 작업 {n}개", { n: props.n.count ?? 0 })}</span>
+      <span>{label()}</span>
     </div>
   );
 }
@@ -641,6 +651,12 @@ function Drawer(props: { t: Task; onClose: () => void }) {
       <header class="cv-dr-head">
         <StatusGlyph t={job()} />
         <span class="cv-dr-title" title={job().title}>{job().title}</span>
+        <Show when={job().status === "failed" && !discarded(job())}>
+          <button class="btn primary sm cv-dr-retry" onClick={() => void resumeTask(job().id)}>
+            <Icon name="refresh" size={14} />
+            {t("다시 시도")}
+          </button>
+        </Show>
         <button class="btn sm cv-dr-open" title={t("작업 열기 (⏎)")} onClick={() => openTask(job().id)}>{t("열기")}</button>
         <button class="icon-btn sm" title={t("닫기 (Esc)")} aria-label={t("닫기")} onClick={props.onClose}>
           <Icon name="x" size={14} />
@@ -685,7 +701,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             <ol class="cv-dr-plan">
               <For each={job().plan}>
                 {(p) => (
-                  <li class={`p-${p.state}`}>
+                  <li class={`p-${stepState(p, job())}`}>
                     <i />
                     <span>{p.text}</span>
                   </li>
@@ -778,10 +794,9 @@ export function Canvas() {
   const [sel, setSel] = createSignal<string>();
   const [drag, setDrag] = createSignal<{ id: string; x: number; y: number } | null>(null);
   const [grid, setGrid] = createSignal(true);
-  const [hover, setHover] = createSignal<string>();
   /** the line a card sits on: everything above it and everything under it */
   const lineage = createMemo(() => {
-    const id = hover() ?? sel();
+    const id = sel();
     if (!id) return null;
     const keep = new Set<string>([id]);
     const up = new Map(graph().edges.map((e) => [e.to, e.from]));
@@ -1165,7 +1180,7 @@ export function Canvas() {
             onPointerDown={onBgDown}
             style={{ "background-position": `${pan().x}px ${pan().y}px`, "background-size": `${20 * zoom()}px ${20 * zoom()}px` }}
           >
-            <div class="cv-world" style={{ transform: `translate(${pan().x}px, ${pan().y}px) scale(${zoom()})` }}>
+            <div class="cv-world" style={{ transform: `translate(${pan().x}px, ${pan().y}px) scale(${zoom()})`, "--cv-z": String(zoom()) }}>
               <svg class="cv-edges" width="1" height="1">
                 <defs>
                   <marker id="cv-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -1189,8 +1204,6 @@ export function Canvas() {
                   <div
                     class={`cv-node cv-${n.kind}${node().task ? ` t-${tone(node().task!)}` : ""}`}
                     classList={{ sel: sel() === n.id, dragging: drag()?.id === n.id, dim: dim(n.id) }}
-                    onPointerEnter={() => setHover(n.id)}
-                    onPointerLeave={() => setHover(undefined)}
                     style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => (n.kind === "proj" ? goMain(n.project!.id === "_" ? undefined : n.project!.id) : n.task && openTask(n.id))}

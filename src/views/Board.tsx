@@ -156,6 +156,12 @@ export function Board(props: { embedded?: boolean } = {}) {
       }));
   });
 
+  /** a column counts every card it lists: 완료 2 · 버림 1 when discarded ones sit under 완료 */
+  const doneCount = (c: Col) => {
+    const gone = groupBy() === "state" && c.id === "done" ? c.tasks.filter(discarded).length : 0;
+    return gone ? t("{n} · 버림 {m}", { n: c.tasks.length - gone, m: gone }) : String(c.tasks.length);
+  };
+
   // columns that run past an edge get a soft fade there, so the board reads as scrollable
   const [edge, setEdge] = createSignal({ l: false, r: false });
   const watch = (el: HTMLDivElement) => {
@@ -199,7 +205,7 @@ export function Board(props: { embedded?: boolean } = {}) {
                   <StateGlyph g={GLYPH[c.id]} />
                 </Show>
                 <span class="bcol-name">{groupBy() === "state" || !c.label ? t(c.label || "기타") : c.label}</span>
-                <span class="bcol-n">{groupBy() === "state" && c.id === "done" ? c.tasks.filter((x) => !discarded(x)).length : c.tasks.length}</span>
+                <span class="bcol-n">{doneCount(c)}</span>
                 <Show when={c.id === "done" && hiddenOld()}>
                   <button class="bcol-more" onClick={() => setShowOld(!showOld())}>{showOld() ? t("최근만") : t("이전 {n}개", { n: hiddenOld() })}</button>
                 </Show>

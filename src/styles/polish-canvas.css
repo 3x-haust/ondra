@@ -1483,3 +1483,37 @@
 .cv-job .cv-live.w-summary .unverified-badge {
   flex: none;
 }
+
+/* ── canvas: a card's meta (state · to-dos, subagents, task counts, folds) never reads below ~11px on
+   screen: zoomed out, it grows in card space by the zoom (up to a cap, so a far zoom-out stays tidy) */
+.cv-world .cv-node .cv-status,
+.cv-world .cv-node .cv-when,
+.cv-world .cv-node .cv-diff {
+  font-size: clamp(var(--fs-xs), calc(11px / var(--cv-z, 1)), 15px);
+}
+.cv-world .cv-more-row {
+  font-size: clamp(var(--fs-sm), calc(11.5px / var(--cv-z, 1)), 15.5px);
+}
+
+/* ── memory tree: a piece's name comes first; its "2번 사용" tag shows only where it fits beside a
+   readable name (it wraps onto a hidden second line otherwise; the row's tooltip and the detail say it) */
+.mt-row.t-memory {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  row-gap: 12px;
+  height: 26px;
+  padding-top: 3px;
+  overflow: hidden;
+}
+.mt-row.t-memory > .mt-chev,
+.mt-row.t-memory > .mt-ic {
+  height: 20px;
+}
+.mt-row.t-memory .mt-name {
+  flex: 1 1 0;
+  min-width: min(7.5em, 50%);
+  line-height: 20px;
+}
+.mt-row.t-memory > .mb {
+  height: 20px;
+}
