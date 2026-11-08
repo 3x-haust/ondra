@@ -27,7 +27,7 @@ import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
-import { Badges, outcomeOf, stampOf, tilde } from "./memoryBits";
+import { agoIn, Badges, outcomeOf, stampOf, tilde } from "./memoryBits";
 import { Detail } from "./MemorySide";
 import {
   buildGraph,
@@ -184,7 +184,7 @@ export function MemoryView() {
   });
   const tidyTitle = () => {
     const x = state.memoryTidy;
-    return x ? `${t("마지막 정리 {when}", { when: ago(x.at) })}${x.cursor ? `\n${t("{when}까지 학습", { when: stampOf(x.cursor) })}` : ""}` : t("정리");
+    return x ? `${t("마지막 정리 {when}", { when: agoIn(x.at) })}${x.cursor ? `\n${t("{when}까지 학습", { when: stampOf(x.cursor) })}` : ""}` : t("정리");
   };
   // the folder of what's selected: a space's own <folder>/.ondra/memory, else the app's
   const openFolder = async () => {
@@ -910,7 +910,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
   };
   return (
     <aside class="mt">
-      <div class="mt-list" ref={list} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
+      <div class="mt-list" classList={{ searching: props.searching }} ref={list} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
         <For each={props.model.roots} fallback={<div class="mt-none">{t("없음")}</div>}>{(n) => <Row n={n} depth={0} />}</For>
       </div>
       <form class="mt-add" onSubmit={(e) => (e.preventDefault(), addHere())}>

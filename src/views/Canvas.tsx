@@ -19,11 +19,12 @@ import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
-import { planCount } from "../state/progress";
+import { discarded, planCount } from "../state/progress";
+import { DiscardGlyph } from "../ui/Review";
 import { Board, BoardGroup, cardMenu, Kids, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
-import { t } from "../i18n";
+import { lang, t } from "../i18n";
 
 // ───────────── geometry
 
@@ -64,6 +65,7 @@ const subFolded = (k: Task) => k.status === "done" && !k.pinned;
 /** failed · live = working now · ask = needs a reply · review = done, branch not merged · idle · done.
  *  Failed is its own state: never counted or drawn as needing a reply. */
 function tone(t: Task): string {
+  if (discarded(t)) return "done";
   if (t.status === "failed") return "failed";
   const kids = state.tasks.filter((k) => k.parentId === t.id);
   if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "ask";
@@ -97,9 +99,10 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
       let rowH = 0;
       row.forEach((t, c) => {
         const x = X.job + c * (W.job + GAP.col);
-        nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h: H.job, task: t });
+        const h = jobHeight(t);
+        nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h, task: t });
         edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
-        let ky = y + H.job + GAP.sub;
+        let ky = y + h + GAP.sub;
         const kids = state.tasks.filter((k) => k.parentId === t.id);
         const kidsDone = kids.filter(subFolded);
         for (const k of open.includes(t.id) ? kids : kids.filter((k) => !subFolded(k))) {
@@ -203,9 +206,77 @@ const same = (a: string, b: string) => {
   return n(a) === n(b);
 };
 
-/** +8 −3, plain */
+/** a body that only repeats the title, or that the title is a cut of ("…" at its end) */
+const echoes = (body: string, title: string) => {
+  if (same(body, title)) return true;
+  const cut = title.match(/^(.*?)\s*(?:…|\.\.\.)$/)?.[1];
+  const n = (s: string) => s.replace(/\s+/g, " ").trim();
+  return !!cut && n(cut).length > 0 && n(body).startsWith(n(cut));
+};
+
+/** what a card shows of a job that isn't running or asking: its error, summary or ask (when it says more than the title) */
+const bodyText = (job: Task) => {
+  const body = job.error || job.summary || job.ask;
+  return body && !echoes(body, job.title) ? body : "";
+};
+
+/** finished with checks it couldn't do (a discarded task's checks no longer matter) */
+const unchecked = (job: Task) => job.status === "done" && !discarded(job) && !!job.unverified?.length;
+
+/** a card that only says something in words (not running, not asking, no screenshot): it takes the height of its words */
+const quiet = (job: Task) =>
+  job.status !== "running" && !(job.status === "waiting" && decisionFor(job.id)) && !(job.shot && lastToolOf(job)?.kind === "browser");
+
+function lastToolOf(job: Task) {
+  for (let i = job.entries.length - 1; i >= 0; i--) {
+    const e = job.entries[i];
+    if (e.kind === "tool") return e.tool;
+  }
+  return undefined;
+}
+
+/** the height a quiet card's words take, measured with the card's own styles (kept per text and language) */
+const heights = new Map<string, number>();
+let probe: HTMLDivElement | undefined;
+/** measured again once the canvas is on screen and once its fonts have loaded */
+const [measured, remeasure] = createSignal(0, { equals: false });
+if (typeof document !== "undefined" && document.fonts) {
+  const again = () => (heights.clear(), remeasure(0));
+  void document.fonts.ready.then(again);
+  // a font used for the first time loads later than `ready`: words take another width then
+  document.fonts.addEventListener("loadingdone", again);
+}
+function measure(title: string, body: string, badge: boolean): number {
+  measured();
+  const key = `${lang()}\u0000${title}\u0000${body}\u0000${badge}`;
+  const had = heights.get(key);
+  if (had) return had;
+  if (typeof document === "undefined" || !document.querySelector(".canvas-view")) return H.job;
+  if (!probe) {
+    probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+  }
+  // inside the view, so the card picks up the same rules it will on the canvas
+  document.querySelector(".canvas-view")!.appendChild(probe);
+  probe.innerHTML = `<div class="cv-node cv-job" style="position:static;width:${W.job}px;height:auto"><div class="cv-head"><span class="cv-stg"><span class="sb-glyph st-icon sm"></span></span><span class="cv-title"></span></div><div class="cv-live w-${body ? "summary" : "none"}">${body ? '<p class="cv-text"></p>' : '<div class="cv-live-empty"></div>'}${badge ? '<span class="unverified-badge">0</span>' : ""}</div><div class="cv-status"><span class="cv-status-text">x</span></div></div>`;
+  probe.querySelector(".cv-title")!.textContent = title;
+  if (body) probe.querySelector(".cv-text")!.textContent = body;
+  const h = Math.min(H.job, Math.ceil((probe.firstElementChild as HTMLElement).getBoundingClientRect().height));
+  probe.remove();
+  if (h > 0) heights.set(key, h);
+  return h > 0 ? h : H.job;
+}
+
+/** a job card's height: the full card for work that moves, the height of its words for the rest */
+function jobHeight(job: Task): number {
+  if (!quiet(job)) return H.job;
+  return measure(job.title, bodyText(job), unchecked(job));
+}
+
+/** +8 −3, plain (nothing for a discarded task: its changes are gone) */
 function Diff(props: { t: Task }) {
-  const d = () => changes(props.t);
+  const d = () => (discarded(props.t) ? { add: 0, del: 0 } : changes(props.t));
   return (
     <Show when={d().add || d().del}>
       <span class="cv-diff">
@@ -344,13 +415,7 @@ function Activity(props: { t: Task }) {
  */
 function Live(props: { t: Task }) {
   const job = () => props.t;
-  const lastTool = () => {
-    for (let i = job().entries.length - 1; i >= 0; i--) {
-      const e = job().entries[i];
-      if (e.kind === "tool") return e.tool;
-    }
-    return undefined;
-  };
+  const lastTool = () => lastToolOf(job());
   const shell = () => {
     const open = job().shells.filter((s) => !s.endedAt && !s.background);
     return open[open.length - 1] ?? (lastTool()?.kind === "bash" || lastTool()?.kind === "test" ? job().shells[job().shells.length - 1] : undefined);
@@ -365,9 +430,8 @@ function Live(props: { t: Task }) {
       return "none";
     }
     if (job().shot && lastTool()?.kind === "browser") return "browser";
-    // a body that only repeats the title (a queued task's ask, word for word) says nothing
-    const body = job().error || job().summary || job().ask;
-    return body && same(body, job().title) ? "none" : body ? "summary" : "none";
+    // a body that only repeats the title (a queued task's ask, word for word, or the title is its cut) says nothing
+    return bodyText(job()) ? "summary" : "none";
   };
   return (
     <div class={`cv-live w-${what()}`}>
@@ -404,8 +468,8 @@ function Live(props: { t: Task }) {
           </div>
         </Match>
         <Match when={what() === "summary"}>
-          <p class="cv-text" classList={{ muted: !job().summary && !job().error }}>{job().error || job().summary || job().ask}</p>
-          <Show when={job().status === "done" && job().unverified?.length}>
+          <p class="cv-text" classList={{ muted: !job().summary && !job().error }}>{bodyText(job())}</p>
+          <Show when={unchecked(job())}>
             <span class="unverified-badge" title={job().unverified!.join("\n")}>{t("{n}개 확인 안 됨", { n: job().unverified!.length })}</span>
           </Show>
         </Match>
@@ -431,13 +495,14 @@ const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요
 function StatusGlyph(props: { t: Task }) {
   return (
     <span class="cv-stg" title={t(statusText(props.t))}>
-      <Glyph t={props.t} />
+      <Show when={discarded(props.t)} fallback={<Glyph t={props.t} />}><DiscardGlyph /></Show>
     </span>
   );
 }
 
 /** The state of a card in words (the same words as the sidebar and the board). */
 function statusText(task: Task): string {
+  if (discarded(task)) return "버림";
   if (task.status === "failed") return statusLabel.failed;
   const tn = tone(task);
   return tn === "idle" ? statusLabel[task.status] : STATUS[tn];
@@ -449,7 +514,7 @@ function StatusRow(props: { t: Task }) {
   const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan).label : "");
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
   return (
-    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" }}>
+    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }}>
       <span class="cv-status-text">
         {t(statusText(props.t))}
         <Show when={step()}><span class="cv-step" title={t("계획 단계")}> · {step()}</span></Show>
@@ -563,7 +628,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
     }
     return { text: text || job().result || job().summary || job().error || "", proof: proof.filter((x) => x.kind === "file" || x.kind === "shot" || x.kind === "link") };
   });
-  const d = () => changes(job());
+  const d = () => (discarded(job()) ? { add: 0, del: 0 } : changes(job()));
   const [msg, setMsg] = createSignal("");
   const say = () => {
     const m = msg().trim();
@@ -663,8 +728,8 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           <section>
             <h4>{t("변경")}</h4>
             <div class="cv-dr-diff">
-              <span class="add">+{d().add}</span>
-              <span class="del">−{d().del}</span>
+              <Show when={d().add}><span class="add">+{d().add}</span></Show>
+              <Show when={d().del}><span class="del">−{d().del}</span></Show>
             </div>
           </section>
         </Show>
@@ -697,6 +762,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 export function Canvas() {
   const space = () => state.space;
   const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
+  onMount(() => remeasure(0));
   /** jobs side by side: the arrangement that shows the most at a readable size */
   const maxCols = createMemo(() => bestCols(space(), unfolded(), vpSize()));
   const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
@@ -847,10 +913,18 @@ export function Canvas() {
     let y: number;
     if ((b.y1 - b.y0) * z <= ah) y = INSET.top + (ah - (b.y1 - b.y0) * z) / 2 - b.y0 * z;
     else {
-      // too tall: from the top, moved down only as far as the cards that need the person
+      // too tall: from the top, moved down only as far as the cards that need the person:
+      // a reply, then failed, then running work, as many of those as fit together
       y = INSET.top - b.y0 * z;
-      const need = ns.filter((n) => n.task && tone(n.task) === "ask");
-      const keep = need.length ? need : ns.filter((n) => n.task && tone(n.task) === "live");
+      let keep: Node[] = [];
+      for (const tn of ["ask", "failed", "live"]) {
+        const more = ns.filter((n) => n.task && n.kind !== "more" && tone(n.task) === tn);
+        if (!more.length) continue;
+        const next = [...keep, ...more];
+        const nb = boxOf(next);
+        if (keep.length && (nb.y1 - nb.y0) * z > ah) break;
+        keep = next;
+      }
       const k = keep.length ? boxOf(keep) : undefined;
       if (k) {
         const over = (k.y1 * z + y) - (INSET.top + ah);
@@ -860,7 +934,11 @@ export function Canvas() {
       // subagent or a folded pill, whose task would be out of view) that no other card
       // crosses, with the gap above it (up to the inset) and nothing of the card before
       const want = (INSET.top - y) / z;
-      const clear = (s: number) => !ns.some((n) => n.y < s && n.y + n.h > s);
+      const parent = (n: Node) => (n.kind === "sub" ? n.task?.parentId : n.kind === "more" && n.task ? n.task.id : undefined);
+      // no card crosses the line, and no subagent below it has its task above it
+      const clear = (s: number) =>
+        !ns.some((n) => n.y < s && n.y + n.h > s) &&
+        !ns.some((n) => n.y >= s && parent(n) && (byId().get(parent(n)!)?.y ?? s) < s);
       const starts = [...new Set([b.y0, ...ns.filter((n) => n.kind === "job" || n.kind === "proj").map((n) => n.y)])].filter(clear).sort((p, q) => p - q);
       const s = starts.find((v) => v >= want && (!k || v <= k.y0)) ?? [...starts].reverse().find((v) => v <= want) ?? b.y0;
       const above = ns.filter((n) => n.y + n.h <= s).map((n) => n.y + n.h);

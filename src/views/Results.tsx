@@ -8,7 +8,7 @@ import { projectById, state, taskById } from "../state/store";
 import type { ResultEntry } from "../state/types";
 import { openTask, setJumpMsg, setView, toast, view } from "../state/ui";
 import { BlockView } from "../ui/Blocks";
-import { withDiff } from "../state/progress";
+import { discarded, withDiff } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -38,7 +38,11 @@ export function ResultsView() {
   let listEl: HTMLDivElement | undefined;
   let searchEl: HTMLInputElement | undefined;
 
-  const all = createMemo(() => resultsIn(state.space));
+  /** a discarded task's work is gone: its result isn't listed */
+  const all = createMemo(() => resultsIn(state.space).filter((r) => {
+    const task = taskById(r.taskId);
+    return !task || !discarded(task);
+  }));
   /** the project of the task a result came from (as the sidebar files it); none: 기타 */
   const projectOf = (r: ResultEntry) => {
     const task = taskById(r.taskId);

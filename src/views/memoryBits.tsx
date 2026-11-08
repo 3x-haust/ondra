@@ -4,22 +4,31 @@ import { Show } from "solid-js";
 import { expand } from "../engine/rpc";
 import { userOwned } from "../engine/memory";
 import { state } from "../state/store";
+import { discarded } from "../state/progress";
 import type { JournalEntry, Memory } from "../state/types";
 import { Icon } from "../ui/Icon";
+import { ago } from "../ui/bits";
 import { lang, t } from "../i18n";
 
 export const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 export const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
 /** shown with t() */
-export const OUTCOME: Record<Outcome, string> = { done: "완료", failed: "실패", stopped: "중단", review: "검토" };
-export type Outcome = JournalEntry["outcome"] | "review";
-/** how a finished job ended, as it stands now: a job still waiting to be merged is in review, not done */
+export const OUTCOME: Record<Outcome, string> = { done: "완료", failed: "실패", stopped: "중단", review: "검토", discarded: "버림" };
+export type Outcome = JournalEntry["outcome"] | "review" | "discarded";
+/** how a finished job ended, as it stands now: a job still waiting to be merged is in review, one whose changes were thrown away is 버림 */
 export function outcomeOf(e: JournalEntry): Outcome {
-  if (e.outcome !== "done") return e.outcome;
   const task = state.tasks.find((x) => x.id === e.taskId);
+  if (task && discarded(task)) return "discarded";
+  if (e.outcome !== "done") return e.outcome;
   return task?.status === "done" && task.worktree?.state === "open" ? "review" : "done";
 }
+
+/** a relative time inside a phrase ("edited just now"): lower case in English */
+export const agoIn = (at: number) => {
+  const s = ago(at);
+  return s === t("방금") ? t("방금|inline") : s;
+};
 
 /** "11월 5일 14:32" / "Nov 5, 14:32" (year added when it isn't this year) */
 export function stampOf(at: number) {
