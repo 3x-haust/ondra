@@ -3,8 +3,9 @@ name: computer-use
 description: >
   Native Mac app automation that runs in the background on the user's own Mac.
   Read before operating Mac apps, clicking buttons, typing into fields or
-  capturing native app windows. Defines the background contract, observation and
-  safe recovery. An isolated macOS guest is an optional separate mode.
+  capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력).
+  Defines the background contract, observation and safe recovery. An isolated
+  macOS guest is an optional separate mode.
 ---
 
 # Computer use

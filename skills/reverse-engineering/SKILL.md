@@ -4,7 +4,9 @@ description: >-
   Evidence-driven reverse engineering of owned or authorized binaries and apps.
   Use for 리버싱, 역공학, 바이너리 분석, 정적 분석, 동적 분석, 디스어셈블,
   디컴파일, 디버깅, reverse engineering, disassembly, decompilation, Mach-O,
-  ELF, PE, Ghidra, LLDB, GDB, Frida, or investigating REA claims. Identify the
+  ELF, PE, Ghidra, LLDB, GDB, Frida, or investigating REA claims, and for how
+  another app, tool, protocol or file format works inside (어떻게 동작하는지,
+  동작 방식, 내부 구조, 어떻게 구현했는지, 프로토콜·패킷 분석). Identify the
   actual target, inspect machine code, test hypotheses with real tools, and
   preserve reproducible evidence. Never substitute a visual clone for analysis.
 compatibility: Ondra bundles ondra-binary (radare2 and native r2ghidra) for static 64-bit ARM/x86 Mach-O, ELF and PE analysis without user-installed tools or runtimes. Dynamic work needs a compatible isolated host and permission. The optional debugger calibration still needs Python 3 and Xcode Command Line Tools.

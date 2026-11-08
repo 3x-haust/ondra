@@ -1,6 +1,6 @@
 ---
 name: visual-report
-description: How to report progress and results inside Ondra. Read before your first message in any task — Ondra draws these blocks instead of showing raw text.
+description: How to report progress and results inside Ondra. Read before your first message in any task — Ondra draws these blocks instead of showing raw text. Also for reports, charts, graphs and diagrams (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화) — its More charts catalog lists every figure type.
 ---
 
 # Visual report

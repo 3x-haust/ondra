@@ -8,12 +8,22 @@ import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { engine, expand } from "./rpc";
 
 const SKILL_DISCOVERY = `# Skills
-Before starting work, use skill_search with the task's keywords (or a named
-skill), then read and follow the matching SKILL.md before acting. Search
-again when the work changes or needs another workflow. No catalog in context
-does not mean no skill applies; try alternate keywords when a search misses.
-Read only selected skills, not every result. Resolve their reference files
-relative to the returned baseDir. If read is not loaded, find it with tool_search.`;
+Skills hold the workflow for a whole domain: use them without being asked.
+A job's first message lists the skills skill_search found for its task. Use
+skill_search with the task's keywords (or a named skill) whenever the work
+enters a domain, then read and follow the matching SKILL.md before acting:
+- a binary, an app, a protocol or file format, "how does X do it", "어떻게
+  동작하는지" → reverse-engineering
+- a Mac app on this machine → computer-use; a site or web app → browser-use;
+  iOS or Android → device-use
+- research with sources, a survey or comparison → deep-research
+- a report, chart or diagram → visual-report and its "More charts" catalog
+- a supplied design (Figma) → mimikyu; a new look → web-design
+- tests or CI → test-ci; a goal to finish completely → goal-loop
+No catalog in context does not mean no skill applies; try alternate keywords
+when a search misses. Read only selected skills, not every result. Resolve
+their reference files relative to the returned baseDir. If read is not
+loaded, find it with tool_search.`;
 
 const CODING_WORK = `# Coding work
 Apply these defaults to coding tasks without a skill or command. Scale the
