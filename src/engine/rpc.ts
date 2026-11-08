@@ -1,6 +1,7 @@
 // Plumbing for engine processes in `--mode rpc` (JSON lines over stdio).
 import { createSignal } from "solid-js";
 import { agentAlive, agentSend, engineInfo, onEvent, type EngineInfo } from "../lib/native";
+import { t } from "../i18n";
 
 export interface AgentHandlers {
   event: (ev: any) => void;
@@ -89,11 +90,11 @@ export function request(agentId: string, command: Record<string, unknown>, timeo
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       waiting.delete(id);
-      reject(new Error(`엔진이 ${Math.round(timeoutMs! / 1000)}초 동안 답하지 않았어요 (${command.type})`));
+      reject(new Error(t("{s}초 동안 응답이 없어요 ({cmd})", { s: Math.round(timeoutMs! / 1000), cmd: String(command.type) })));
     }, timeoutMs);
     waiting.set(id, (ev) => {
       clearTimeout(timer);
-      ev.success === false ? reject(new Error(ev.error ?? `${command.type} 실패`)) : resolve(ev.data);
+      ev.success === false ? reject(new Error(ev.error ?? t("{cmd} 실패", { cmd: String(command.type) }))) : resolve(ev.data);
     });
     // a prompt that lands while the engine is still busy (just after stop, a late
     // event) waits its turn instead of failing
@@ -109,10 +110,10 @@ export function request(agentId: string, command: Record<string, unknown>, timeo
 /** Provider errors → a sentence the user can act on. */
 export function explain(message: string): string {
   const m = message.match(/'([^']+)' model is not supported/i);
-  if (m) return `이 계정에서 쓸 수 없는 모델: ${m[1]}`;
-  if (/rate limit|usage limit|429|quota/i.test(message)) return `사용 한도 도달 — ${message.slice(0, 90)}`;
-  if (/unauthori[sz]ed|invalid.*token|401|403|log ?in/i.test(message)) return "로그인이 필요해요. 설정 › 계정에서 로그인해 주세요.";
-  if (/no (api key|credentials)|not configured/i.test(message)) return "연결된 계정이 없어요. 설정 › 계정에서 로그인해 주세요.";
+  if (m) return t("이 계정에서 쓸 수 없는 모델 · {m}", { m: m[1] });
+  if (/rate limit|usage limit|429|quota/i.test(message)) return t("사용 한도 도달 · {msg}", { msg: message.slice(0, 90) });
+  if (/unauthori[sz]ed|invalid.*token|401|403|log ?in/i.test(message)) return t("로그인이 필요해요 · 설정 › 계정");
+  if (/no (api key|credentials)|not configured/i.test(message)) return t("연결된 계정이 없어요 · 설정 › 계정");
   return message.replace(/\s+/g, " ").slice(0, 220);
 }
 

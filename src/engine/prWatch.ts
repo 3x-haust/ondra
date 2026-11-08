@@ -1,6 +1,7 @@
 // Watching the pull requests jobs opened: what is new since the job last
 // heard, and the message that hands it over. Pure; tasks.ts does the polling.
 import type { PrWatch } from "../state/types";
+import { t } from "../i18n";
 
 export interface PrNote {
   id: string;
@@ -104,6 +105,6 @@ const quote = (s: string) => s.split("\n").map((l) => `  > ${l}`).join("\n");
 /** Short line shown in place of the long message when it starts a new job. */
 export function wakeTitle(url: string, n: PrNews): string {
   const num = url.match(/\/pull\/(\d+)/)?.[1] ?? "";
-  const parts = [n.notes.length ? `리뷰·코멘트 ${n.notes.length}개` : "", n.failed.length ? "검사 실패" : "", n.conflict ? "충돌" : ""].filter(Boolean);
-  return `PR #${num}에 ${parts.join(", ")}`;
+  const parts = [n.notes.length ? t("리뷰·코멘트 {n}개", { n: n.notes.length }) : "", n.failed.length ? t("검사 실패") : "", n.conflict ? t("충돌") : ""].filter(Boolean);
+  return t("PR #{num} · {parts}", { num, parts: parts.join(", ") });
 }

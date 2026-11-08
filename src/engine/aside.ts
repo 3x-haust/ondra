@@ -16,6 +16,7 @@ import { prose } from "./fences";
 import { modelFor } from "./models";
 import { engine, expand, explain, isAlive, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { accountEnv, NO_ACCOUNT, spaceAccount } from "./tasks";
+import { t as tr } from "../i18n";
 
 // ───────────── btw
 
@@ -157,7 +158,7 @@ async function logsOf(space: SpaceId): Promise<string> {
 /** This space's account; never another space's (none: NO_ACCOUNT). */
 function accountFor(space: SpaceId) {
   const a = spaceAccount(space);
-  if (!a) throw new Error(NO_ACCOUNT);
+  if (!a) throw new Error(tr(NO_ACCOUNT));
   return a;
 }
 
@@ -187,7 +188,7 @@ export async function askBtw(scope: string, question: string, files: string[] = 
   if (!q) return;
   const att = files.length ? { files } : {};
   const space = (scope.startsWith("main:") ? scope.slice(5).split("~")[0] : taskById(scope.slice(5))?.space ?? state.space) as SpaceId;
-  const cant = !engine.checked || !engine.ready ? "엔진을 찾을 수 없어요" : !spaceAccount(space) ? NO_ACCOUNT : "";
+  const cant = !engine.checked || !engine.ready ? tr("에이전트를 실행할 수 없어요") : !spaceAccount(space) ? tr(NO_ACCOUNT) : "";
   if (cant) {
     setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, ...att, answer: "", pending: false, error: cant }]);
     return void setBtwAt(btwList().length - 1);
@@ -206,7 +207,7 @@ export async function askBtw(scope: string, question: string, files: string[] = 
           text += ev.assistantMessageEvent.delta;
           patch(id, { answer: text });
         }
-        if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") err = String(ev.message.errorMessage ?? "모델 오류");
+        if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") err = String(ev.message.errorMessage ?? tr("모델 오류"));
         if (ev.type === "agent_settled") resolve();
       },
       exit() {
@@ -231,7 +232,7 @@ export async function askBtw(scope: string, question: string, files: string[] = 
       : q;
     await request(agent, { type: "prompt", message: btwPrompt(scope, shown, logs) });
     await done;
-    patch(id, { answer: prose(text) || text, pending: false, error: !text.trim() ? explain(err || "답이 비어 있어요") : undefined });
+    patch(id, { answer: prose(text) || text, pending: false, error: !text.trim() ? explain(err || tr("응답이 비어 있어요")) : undefined });
   } catch (e) {
     patch(id, { pending: false, error: explain(e instanceof Error ? e.message : String(e)) });
   } finally {
@@ -283,13 +284,13 @@ async function ensureSide(space: SpaceId) {
         const last = sideOf(space).slice(-1)[0];
         if (last?.pending) setState("side", (m) => m.id === last.id, "text", prose(t));
       }
-      if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") sideErr.set(space, String(ev.message.errorMessage ?? "모델 오류"));
+      if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") sideErr.set(space, String(ev.message.errorMessage ?? tr("모델 오류")));
       if (ev.type === "agent_settled") sideSettled.get(space)?.();
     },
     exit() {
       sideAttached.delete(space);
       markDead(agent);
-      sideErr.set(space, stderrOf(agent).split("\n").filter(Boolean).pop() ?? "사이드챗 세션이 끝났어요");
+      sideErr.set(space, stderrOf(agent).split("\n").filter(Boolean).pop() ?? tr("사이드챗이 끝났어요"));
       sideSettled.get(space)?.();
     },
   });
@@ -348,7 +349,7 @@ export async function sendSide(space: SpaceId, text: string) {
     await done;
     const out = prose(sideText.get(space) ?? "") || (sideText.get(space) ?? "");
     const err = sideErr.get(space);
-    setState("side", (m) => m.id === reply.id, { text: out, pending: false, error: !out.trim() ? explain(err || "답이 비어 있어요") : undefined, at: Date.now() });
+    setState("side", (m) => m.id === reply.id, { text: out, pending: false, error: !out.trim() ? explain(err || tr("응답이 비어 있어요")) : undefined, at: Date.now() });
   } catch (e) {
     setState("side", (m) => m.id === reply.id, { pending: false, error: explain(e instanceof Error ? e.message : String(e)) });
   } finally {
@@ -370,7 +371,7 @@ export function clearSide(space: SpaceId) {
 
 /** One question, one answer, no tools, nothing kept (for small helper asks). */
 export async function oneShot(space: SpaceId, cwd: string, prompt: string): Promise<string> {
-  if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없어요");
+  if (!engine.checked || !engine.ready) throw new Error(tr("에이전트를 실행할 수 없어요"));
   const acc = accountFor(space);
   const agent = `ask:${uid("a")}`;
   let text = "";
@@ -379,7 +380,7 @@ export async function oneShot(space: SpaceId, cwd: string, prompt: string): Prom
     listen(agent, {
       event(ev) {
         if (ev.type === "message_update" && ev.assistantMessageEvent?.type === "text_delta") text += ev.assistantMessageEvent.delta;
-        if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") err = String(ev.message.errorMessage ?? "모델 오류");
+        if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") err = String(ev.message.errorMessage ?? tr("모델 오류"));
         if (ev.type === "agent_settled") resolve();
       },
       exit() {

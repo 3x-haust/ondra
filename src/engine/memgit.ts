@@ -8,6 +8,7 @@ import { loaded, setState, state } from "../state/store";
 import type { Memory, SpaceId } from "../state/types";
 import { placeOf } from "./memory";
 import { toast } from "../state/ui";
+import { t } from "../i18n";
 
 const QUIET_MS = 20_000;
 const [version, setVersion] = createSignal(0);
@@ -52,7 +53,7 @@ export async function restoreMemoryAt(sha: string, space: SpaceId = state.space)
     list = JSON.parse(raw);
     if (!Array.isArray(list) || !list.every((m) => m && typeof m.id === "string" && typeof m.text === "string")) throw 0;
   } catch {
-    toast("그 버전을 읽지 못했어요", "bad");
+    toast(t("그 버전을 읽지 못했어요"), "bad");
     return 0;
   }
   await save();

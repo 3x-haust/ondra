@@ -5,6 +5,7 @@
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
+import { t } from "../i18n";
 
 const EVERY = 3600_000;
 /** coming back to the app checks again once this long has passed */
@@ -48,14 +49,14 @@ export async function checkUpdate(manual = false) {
   setAvailable(next?.version ?? null);
   setStatus(next ? "idle" : "latest");
   if (!next) {
-    if (manual) toast("최신 버전이에요");
+    if (manual) toast(t("최신 버전이에요"));
     return;
   }
   const ok = await prepare(next.version);
   if (!ok || (next.version === shown && !manual)) return;
   shown = next.version;
   if (notice) dropToast(notice);
-  notice = toast(`새 버전 ${next.version} 준비됐어요`, "info", { label: "다시 시작", run: () => void installNow() }, { ms: 12_000 });
+  notice = toast(t("{v} 업데이트 준비됨", { v: next.version }), "info", { label: t("다시 시작"), run: () => void installNow() }, { ms: 12_000 });
 }
 
 export async function installNow() {
@@ -68,7 +69,7 @@ export async function installNow() {
   } catch (e) {
     setStatus("idle");
     setProgress(null);
-    toast(`업데이트하지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
+    toast(t("업데이트하지 못했어요 · {why}", { why: e instanceof Error ? e.message : String(e) }), "bad");
   }
 }
 
