@@ -1,7 +1,6 @@
-// The flow, drawn like a git graph: main is the trunk; every job branches off it
-// when main hands it out, runs as its own line (jobs running at once are lines
-// side by side) and joins the trunk again when merged. Subagents hang off their
-// job on a dotted twig. Newest on top. Lives in the right panel's 흐름 tab.
+// The flow: main is the trunk and every job is a short branch off it, newest on
+// top, coloured by what it needs. Subagents hang off their job on a dotted twig.
+// Lives in the right panel's 흐름 tab.
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { state, taskById, tasksIn } from "../state/store";
 import type { Task } from "../state/types";
@@ -27,7 +26,10 @@ const DAY = 86_400_000;
 const ROW = 46;
 const SHORT = 32;
 const KID = 28;
-const TRUNK = 13;
+const TRUNK = 11;
+/** where every job's node sits, one step off the trunk */
+const NODE = 27;
+const GUTTER = NODE + 15;
 
 interface Row {
   t: Task;
@@ -52,25 +54,6 @@ export function Flow() {
   const shown = () => roots().filter((t) => older() || !old(t));
   const hiddenCount = () => roots().filter(old).length;
 
-  // lanes: a job keeps its lane from the moment it starts until it is merged
-  const lanes = createMemo(() => {
-    const ends: number[] = [];
-    const lane = new Map<string, number>();
-    for (const t of [...shown()].sort((a, b) => a.createdAt - b.createdAt)) {
-      if (t.status === "queued") continue;
-      const end = ended(t) ? (t.finishedAt ?? t.createdAt) : Infinity;
-      let i = ends.findIndex((e) => e < t.createdAt);
-      if (i < 0) i = ends.push(end) - 1;
-      else ends[i] = end;
-      lane.set(t.id, i);
-    }
-    return { lane, count: Math.max(1, ends.length) };
-  });
-  const gap = () => (lanes().count > 4 ? 10 : 13);
-  // the newest lane sits next to the trunk, so a new branch crosses nothing
-  const laneX = (id: string) => (lanes().lane.has(id) ? TRUNK + gap() * (lanes().count - lanes().lane.get(id)!) : TRUNK);
-  const gutter = () => TRUNK + gap() * lanes().count + 12;
-
   const kidsOf = (t: Task) => state.tasks.filter((k) => k.parentId === t.id).sort((a, b) => a.createdAt - b.createdAt);
   const kidsShown = (t: Task) => {
     const k = kidsOf(t);
@@ -81,7 +64,7 @@ export function Flow() {
   };
 
   /** one line is enough: it is already in 할 일 above, or has not started */
-  const brief = (t: Task) => bucket(t) === "you" || bucket(t) === "review" || t.status === "queued" || ended(t);
+  const brief = (t: Task) => bucket(t) === "you" || bucket(t) === "review" || t.status === "queued" || t.status === "paused" || ended(t);
   // rows show all of their text: each one's drawn height, measured, places the rows below it
   const [drawn, setDrawn] = createSignal<Record<string, number>>({});
   const sizes = new ResizeObserver((es) => {
@@ -124,44 +107,29 @@ export function Flow() {
   /** the node sits beside the row's first line */
   const cy = (r: Row) => r.y + (r.base === ROW ? 15 : r.base / 2);
 
-  /** where a merged job joins the trunk: just above the first row older than its merge */
-  const joinY = (t: Task) => {
-    const f = t.finishedAt ?? t.createdAt;
-    const r = rows().find((x) => !x.kid && x.t.createdAt <= f);
-    return r ? Math.max(2, r.y - 4) : 2;
-  };
-
-  /** the trunk reaches the lowest fork (each job leaves it a little below its row) */
+  /** the trunk reaches the last job */
   const trunkEnd = () => {
-    const tops = rows().filter((r) => !r.kid && r.t.status !== "queued").map((r) => cy(r) + 14);
-    const last = rows()[rows().length - 1];
-    return Math.max(last ? cy(last) : 0, ...tops);
+    const last = rows().filter((r) => !r.kid).pop();
+    return last ? cy(last) : 0;
   };
   const paths = createMemo(() => {
     const out: { d: string; cls: string }[] = [];
     for (const r of rows()) {
       if (r.kid) continue;
       const t = r.t;
-      const x = laneX(t.id);
       const y = cy(r);
-      if (t.status === "queued") continue;
-      const tone = ended(t) ? "past" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
+      const tone = t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
       const cls = `${tone} ${t.id === openRoot() ? "on" : ""} ${hoverTask() === t.id ? "hot" : ""}`;
       // off the trunk
-      out.push({ d: `M${TRUNK} ${y + 14} C${TRUNK} ${y + 4}, ${x} ${y + 10}, ${x} ${y}`, cls });
-      // its own line, up to where it joins the trunk again (or to the top while it lives)
-      if (ended(t)) {
-        const j = joinY(t);
-        out.push({ d: `M${x} ${y} L${x} ${j + 12} C${x} ${j + 4}, ${TRUNK} ${j + 8}, ${TRUNK} ${j}`, cls });
-      } else out.push({ d: `M${x} ${y} L${x} 0`, cls });
+      out.push({ d: `M${TRUNK} ${y} L${NODE - 5} ${y}`, cls });
       // subagents hang below on a thin twig
       const ks = rows().filter((k) => k.kid && k.t.parentId === t.id);
       if (ks.length) {
         const last = cy(ks[ks.length - 1]);
-        out.push({ d: `M${x} ${y + 5} L${x} ${last - 5} Q${x} ${last}, ${x + 5} ${last}`, cls: `${cls} twig` });
+        out.push({ d: `M${NODE} ${y + 5} L${NODE} ${last - 5} Q${NODE} ${last}, ${NODE + 5} ${last}`, cls: `${cls} twig` });
         for (const k of ks.slice(0, -1)) {
           const ky = cy(k);
-          out.push({ d: `M${x} ${ky - 5} Q${x} ${ky}, ${x + 5} ${ky}`, cls: `${cls} twig` });
+          out.push({ d: `M${NODE} ${ky - 5} Q${NODE} ${ky}, ${NODE + 5} ${ky}`, cls: `${cls} twig` });
         }
       }
     }
@@ -187,7 +155,7 @@ export function Flow() {
   };
 
   return (
-    <div class="graph" classList={{ "has-jobs": !!roots().length }} style={{ "--gutter": `${gutter()}px` }}>
+    <div class="graph" classList={{ "has-jobs": !!roots().length }} style={{ "--gutter": `${GUTTER}px` }}>
       <button class="g-main" data-shortcut="main" onClick={() => goMain()} title="메인에게 말하기 (⌘0)" style={{ "--trunk": `${TRUNK}px` }}>
         <span class="g-main-node" style={{ left: `${TRUNK - 5}px` }} />
         <span class="g-name">메인</span>
@@ -196,15 +164,15 @@ export function Flow() {
         </Show>
       </button>
       <div class="g-body" style={{ height: `${height()}px` }}>
-        <svg class="g-lines" classList={{ dim: !!hoverTask() }} width={gutter()} height={Math.max(1, height())} aria-hidden="true">
+        <svg class="g-lines" classList={{ dim: !!hoverTask() }} width={GUTTER} height={Math.max(1, height())} aria-hidden="true">
           <line class="g-trunk" x1={TRUNK} y1={0} x2={TRUNK} y2={trunkEnd()} />
-          <For each={paths()}>{(p) => <path class={p.cls} d={p.d} pathLength={p.cls.includes("twig") ? undefined : 1} />}</For>
+          <For each={paths()}>{(p) => <path class={p.cls} d={p.d} />}</For>
           <For each={order()}>
             {(r) => (
               <circle
                 class={`g-node ${r.t.status}`}
                 classList={{ unmerged: r.t.status === "done" && r.t.worktree?.state === "open", kid: r.kid, on: openId() === r.t.id }}
-                cx={r.kid ? laneX(r.t.parentId!) + 8 : laneX(r.t.id)}
+                cx={r.kid ? NODE + 8 : NODE}
                 cy={cyOf(r.k)}
                 r={r.kid ? 3 : 4.5}
               />
@@ -221,7 +189,7 @@ export function Flow() {
                 onCleanup(() => sizes.unobserve(el));
               }}
               data-k={r.k}
-              style={{ top: `${placed().get(r.k)?.y ?? 0}px`, "min-height": `${r.base}px`, "padding-left": `${r.kid ? gutter() + 12 : gutter()}px` }}
+              style={{ top: `${placed().get(r.k)?.y ?? 0}px`, "min-height": `${r.base}px`, "padding-left": `${r.kid ? GUTTER + 12 : GUTTER}px` }}
               onClick={() => openTask(r.t.id)}
               onMouseEnter={() => setHoverTask(r.kid ? r.t.parentId! : r.t.id)}
               onMouseLeave={() => setHoverTask(null)}
@@ -268,13 +236,13 @@ export function Flow() {
         </For>
       </div>
       <Show when={hiddenCount()}>
-        <button class="g-older" style={{ "padding-left": `${TRUNK - 3}px` }} onClick={() => setOlder(!older())}>
+        <button class="g-older" style={{ "padding-left": `${TRUNK - 4}px` }} onClick={() => setOlder(!older())}>
           <span class="g-older-dot" />
           {older() ? "이전 일 접기" : `이전 ${hiddenCount()}개 보기`}
         </button>
       </Show>
       <Show when={!roots().length}>
-        <p class="g-empty" style={{ "padding-left": `${gutter()}px` }}>일 없음</p>
+        <p class="g-empty" style={{ "padding-left": `${GUTTER}px` }}>일 없음</p>
       </Show>
     </div>
   );
