@@ -2,6 +2,7 @@
 // Diffs are parsed into files → hunks → lines with old/new line numbers, shown
 // as collapsible cards with sticky headers. Files is a searchable tree; a file
 // opens in a numbered viewer and can flip to its diff.
+import { confirmDiscard } from "./taskMenu";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
@@ -13,8 +14,6 @@ import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
 import { discarded, rememberDiff } from "../state/progress";
-import { discardTask } from "../engine/tasks";
-import { confirmAsk } from "./taskMenu";
 
 // ───────────── diff model ─────────────
 export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
@@ -727,8 +726,7 @@ export type { GitChanges };
 
 // ───────────── throwing a task's changes away ─────────────
 /** 버리기 asks once, with the same words everywhere (review bar, changes tab, ⋯ menu, /discard). */
-export const askDiscard = (t: Pick<Task, "id" | "title">) =>
-  confirmAsk({ title: tr("변경을 버릴까요?"), body: t.title, action: tr("버리기"), danger: true, run: () => void discardTask(t.id) });
+export const askDiscard = (t: Pick<Task, "id" | "title">) => confirmDiscard(t.id);
 
 /** A discarded task's mark: the done check, muted. */
 export function DiscardGlyph(props: { class?: string }) {
