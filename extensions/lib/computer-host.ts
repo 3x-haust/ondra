@@ -27,6 +27,8 @@ export type HostEnv = {
   frontmostApp: string | null;
   frontmostPid: number;
   frontmostKeyWindow?: string;
+  /** CGWindowID of the frontmost app's front window; compared instead of the title when present. */
+  frontmostWindowId?: number;
   mouse: { x: number; y: number };
 };
 export type HostResult = Record<string, unknown>;
@@ -52,10 +54,28 @@ export class HostHelperError extends Error {
 /** The background invariant: frontmost app, key window and mouse must be unchanged. */
 export function backgroundPreserved(before: HostEnv | undefined, after: HostEnv | undefined): boolean {
   if (!before || !after) return false;
-  return before.frontmostPid === after.frontmostPid &&
-    (before.frontmostKeyWindow ?? null) === (after.frontmostKeyWindow ?? null) &&
+  // A window title can change on its own (a terminal spinner); the window id cannot.
+  const keySame = before.frontmostWindowId !== undefined && after.frontmostWindowId !== undefined
+    ? before.frontmostWindowId === after.frontmostWindowId
+    : (before.frontmostKeyWindow ?? null) === (after.frontmostKeyWindow ?? null);
+  return before.frontmostPid === after.frontmostPid && keySame &&
     before.mouse.x === after.mouse.x && before.mouse.y === after.mouse.y;
 }
+
+export type HostFrame = { x: number; y: number; width: number; height: number };
+export type HostImage = {
+  mimeType: "image/png"; data: string; width: number; height: number;
+  /** The captured window's frame; coordinate actions use pixels of this image. */
+  frame?: HostFrame;
+  /** Stage Manager strip thumbnail: not to scale, so its pixels must not be used as coordinates. */
+  staged?: boolean;
+};
+
+type Point = { x: number; y: number };
+const pixel = (v: unknown, name: string): number => {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw new Error(`${name} must be a non-negative integer pixel`);
+  return v;
+};
 
 function validateNode(node: unknown, depth: number): HostNode {
   if (depth > 200) throw new Error("Host tree too deep");
@@ -237,27 +257,33 @@ export class ComputerHostSession {
     });
   }
 
-  async look(signal?: AbortSignal): Promise<{ mimeType: "image/png"; data: string; width: number; height: number }> {
+  async look(signal?: AbortSignal): Promise<HostImage> {
     return this.guard(async () => {
       const r = await this.helper.request("look", { pid: this.requirePid() }, signal);
       const image = r.image;
       if (!isRecord(image) || image.mimeType !== "image/png" || typeof image.data !== "string") throw new Error("Malformed host image");
-      return { mimeType: "image/png", data: image.data, width: Number(image.width) || 0, height: Number(image.height) || 0 };
+      const frame = isRecord(r.frame) && ["x", "y", "width", "height"].every(k => typeof (r.frame as Record<string, unknown>)[k] === "number")
+        ? r.frame as HostFrame : undefined;
+      return { mimeType: "image/png", data: image.data, width: Number(image.width) || 0, height: Number(image.height) || 0,
+        ...(frame ? { frame } : {}), ...(r.staged === true ? { staged: true } : {}) };
     });
   }
 
   /** One action, then re-observe, in a single helper round trip. Refuses to proceed if the action moved the foreground. */
   async act(action: { kind: string; epoch: string; ref?: string } & Record<string, unknown>, signal?: AbortSignal): Promise<HostResult> {
     return this.guard(async () => {
-      const before = this.obs.currentEpoch();
-      const translated = this.translate(action, before);
+      // Refs are checked against the epoch the caller observed, not the latest one.
+      const translated = this.translate(action, String(action.epoch));
       const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
       if (r.backgroundPreserved === false) {
         this.obs.invalidate();
         throw new Error("Action changed the foreground or cursor; this cannot be done in the background");
       }
       const snapshot = r.tree !== undefined ? this.obs.accept(r.tree, false) : undefined;
-      return { action: { ok: true, outcome: "verified" }, actionMs: r.actionMs, env: r.env,
+      // Delivery is not success: an unchanged tree after the action means it probably did nothing.
+      const effect = snapshot ? (snapshot.kind === "unchanged" ? "no_change" : "changed") : "unknown";
+      return { action: { ok: true, outcome: "verified", effect }, actionMs: r.actionMs, env: r.env,
+        ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}),
         ...(snapshot ? { observation: snapshot } : { observationError: "NO_WINDOW" }) };
     });
   }
@@ -269,8 +295,26 @@ export class ComputerHostSession {
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
       case "type": return action.ref !== undefined ? { kind: "type", ref: ref(), text: String(action.text ?? "") } : { kind: "type", text: String(action.text ?? "") };
       case "press": return { kind: "press", key: String(action.key), modifiers: action.modifiers ?? [] };
-      case "click-at": return { kind: "click-at", x: Number(action.x), y: Number(action.y), button: action.button ?? "left", count: action.count ?? 1 };
-      case "scroll": return { kind: "scroll", x: Number(action.x ?? 0), y: Number(action.y ?? 0), direction: String(action.direction ?? "down"), amount: Number(action.amount ?? 3) };
+      // Coordinates are pixels of the latest look of this window; the helper refuses
+      // them if there was no look or the window moved since.
+      case "click-at": return { kind: "click-at", x: pixel(action.x, "x"), y: pixel(action.y, "y"), button: action.button ?? "left", count: action.count ?? 1 };
+      case "scroll": {
+        const where = action.ref !== undefined ? { ref: ref() } : { x: pixel(action.x, "x"), y: pixel(action.y, "y") };
+        return { kind: "scroll", ...where, direction: String(action.direction ?? "down"), amount: Number(action.amount ?? 3) };
+      }
+      case "drag": {
+        const end = (value: unknown, name: string): { ref: string } | Point => {
+          if (!isRecord(value)) throw new Error(`drag ${name} must be {ref} or {x, y}`);
+          if (value.ref !== undefined) {
+            if (value.x !== undefined || value.y !== undefined) throw new Error(`drag ${name} takes either ref or x/y`);
+            return { ref: this.obs.resolve(epoch, String(value.ref)) };
+          }
+          return { x: pixel(value.x, `${name}.x`), y: pixel(value.y, `${name}.y`) };
+        };
+        const from = end(action.from, "from"), to = end(action.to, "to");
+        if (("ref" in from) !== ("ref" in to)) throw new Error("drag ends must be the same kind: both refs or both pixels");
+        return { kind: "drag", from, to };
+      }
       default: throw new Error(`Action ${action.kind} is not supported in background host mode`);
     }
   }
