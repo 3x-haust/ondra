@@ -97,15 +97,15 @@ describe("a new job lands in the right project", () => {
 
   it("a brief that only mentions a project doesn't move work into it", async () => {
     const out = await applyRoutes("home", [{
-      kind: "new", title: "카카오톡 에이전트 도구", cwd: "/p/kakaotalk-agent",
-      project: { name: "카카오톡 제어", folder: "/p/kakaotalk-agent" },
-      task: "카카오톡 읽기 도구를 만들어요. Ondra 자체 수정이나 배포는 범위가 아니에요.",
-    }], "카카오톡 에이전트 만들어줘");
+      kind: "new", title: "메모 정리 도구", cwd: "/p/notes-agent",
+      project: { name: "메모 정리", folder: "/p/notes-agent" },
+      task: "메모 앱 정리 도구를 만들어요. Ondra 자체 수정이나 배포는 범위가 아니에요.",
+    }], "메모 정리 도구 만들어줘");
     expect(taskById((out[0] as { taskId: string }).taskId)!.project).not.toBe("ondra");
   });
 
   it("a folder outside every project stays out, whatever the topic says", async () => {
-    const out = await applyRoutes("home", [{ kind: "new", title: "카카오톡 실검증", topic: "ondra", cwd: "/p/kakaotalk-agent", task: "검증해요" }], "검증해줘");
+    const out = await applyRoutes("home", [{ kind: "new", title: "메모 도구 검증", topic: "ondra", cwd: "/p/notes-agent", task: "검증해요" }], "검증해줘");
     expect(taskById((out[0] as { taskId: string }).taskId)!.project).not.toBe("ondra");
   });
 
