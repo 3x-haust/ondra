@@ -53,8 +53,7 @@ export function titleOf(text: string, max = 80): string {
  *  when the changes were thrown away (older tasks without those: when it finished). */
 export function endedAt(x: Task): number | undefined {
   const w = x.worktree?.state;
-  // discardedAt is new on Task: read it loosely until every tree has it on the type
-  const at = w === "merged" ? x.mergedAt : w === "discarded" ? (x as Task & { discardedAt?: number }).discardedAt : undefined;
+  const at = w === "merged" ? x.mergedAt : w === "discarded" ? x.discardedAt : undefined;
   return at ?? x.finishedAt;
 }
 
