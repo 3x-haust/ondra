@@ -11,6 +11,7 @@ import { applying, inSpace, isLive, recall } from "../engine/memory";
 import { modelFor } from "../engine/models";
 import { homeDir, spaceById, state, taskById } from "../state/store";
 import type { Memory, SpaceId } from "../state/types";
+import { t as tr } from "../i18n";
 
 export interface SourceInfo {
   path: string;
@@ -108,7 +109,7 @@ const firstLine = (t: string) => t.split("\n").find((l) => l.trim())?.replace(/^
 
 /** Name each appended part by matching it to what Ondra would send now. */
 function label(texts: string[], known: Part[]): Part[] {
-  return texts.map((text) => known.find((k) => k.text === text) ?? { title: firstLine(text).slice(0, 60) || "추가 지시", text });
+  return texts.map((text) => known.find((k) => k.text === text) ?? { title: firstLine(text).slice(0, 60) || tr("추가 지시"), text });
 }
 
 // ───────────── a job
@@ -134,9 +135,9 @@ function jobParts(id: string): Part[] {
   const space = spaceById(t.space);
   const [role, ...rest] = taskSystem(t);
   return [
-    { title: t.parentId ? "하위 일 규칙" : "일 규칙", text: role ?? (t.parentId ? SUB_SYSTEM : TASK_SYSTEM) },
+    { title: t.parentId ? tr("서브에이전트 규칙") : tr("작업 규칙"), text: role ?? (t.parentId ? SUB_SYSTEM : TASK_SYSTEM) },
     ...rest.map((text) => ({
-      title: text === instructions() ? "공통 지시" : text === spaceRules(space) ? `공간 · ${space.label}` : text.startsWith("# Memory") ? "기억 (항상)" : firstLine(text),
+      title: text === instructions() ? tr("공통 지침") : text === spaceRules(space) ? tr("워크스페이스 · {name}", { name: space.label }) : text.startsWith("# Memory") ? tr("메모리 (항상)") : firstLine(text),
       text,
     })),
   ];
@@ -144,7 +145,7 @@ function jobParts(id: string): Part[] {
 
 export async function loadJob(id: string): Promise<Loaded> {
   const t = taskById(id);
-  if (!t) throw new Error("일을 찾을 수 없어요");
+  if (!t) throw new Error(tr("작업을 찾을 수 없어요"));
   const { ctx, live } = await liveOr(`t:${id}`, async () => {
     const a = await jobArgs(id);
     return probe(a.cwd, a.args, a.env).catch(async () => probe(engine.info.home, a.args, a.env));
@@ -169,10 +170,10 @@ function chatParts(key: string): Part[] {
   const space = spaceById(spOf(key));
   const proj = projectOf(key);
   return [
-    { title: "메인 대화 규칙", text: CAPTAIN_SYSTEM },
-    { title: "공통 지시", text: instructions() },
-    { title: `공간 · ${space.label}`, text: spaceRules(space) },
-    ...(proj ? [{ title: `프로젝트 · ${proj.name}`, text: projectRules(proj) }] : []),
+    { title: tr("메인 규칙"), text: CAPTAIN_SYSTEM },
+    { title: tr("공통 지침"), text: instructions() },
+    { title: tr("워크스페이스 · {name}", { name: space.label }), text: spaceRules(space) },
+    ...(proj ? [{ title: tr("프로젝트 · {name}", { name: proj.name }), text: projectRules(proj) }] : []),
   ].filter((p) => p.text);
 }
 
@@ -210,7 +211,7 @@ export async function loadChat(key: string, accountId: string): Promise<Loaded> 
   };
 }
 
-// ───────────── what agents can use (Settings › 도구)
+// ───────────── what agents can use (Settings › Tools)
 
 let toolsCache: EngineContext | null = null;
 /** A fresh engine with what every job gets: extensions, skills, the first account. */

@@ -1,0 +1,1031 @@
+/* ═════════════ task view and its right panel (DESIGN §9.2, §9.14, §10) ═════════════ */
+
+/* ───────────── right panel: browser-like tab strip (§9.2) ───────────── */
+.panel .panel-bar {
+  height: calc(var(--head-h) - var(--gut));
+  gap: var(--s-2);
+  padding: 0 var(--s-8);
+}
+.panel-bar .ptabs {
+  gap: var(--s-2);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.panel-bar .ptab {
+  flex: 0 0 auto;
+  min-width: 72px;
+  max-width: 180px;
+  height: 28px;
+  gap: var(--s-6);
+  padding: 0 var(--s-6) 0 var(--s-8);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+  box-shadow: none;
+  background: transparent;
+}
+.panel-bar .ptab:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.panel-bar .ptab.on {
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .panel-bar .ptab.on {
+  background: var(--active);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .panel-bar .ptab.on {
+    background: var(--active);
+    box-shadow: none;
+  }
+}
+.panel-bar .ptab .icon {
+  opacity: 1;
+  color: var(--ink-3);
+}
+.panel-bar .ptab.on .icon {
+  color: var(--ink-2);
+}
+.panel-bar .ptab-label {
+  flex: 0 1 auto;
+  max-width: 140px;
+}
+.panel-bar .ptab-x {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.panel-bar .ptab-x:focus-visible {
+  opacity: 1;
+}
+.panel-bar .ptab .badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-2xs);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-3);
+}
+/* too many to show in full: the others keep just their icon, the active one keeps its name */
+.panel-bar .ptabs.tight .ptab:not(.on) {
+  min-width: 28px;
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+}
+.panel-bar .ptabs.tight .ptab:not(.on) .ptab-label {
+  display: block;
+  max-width: 0;
+}
+.panel-bar .ptabs.tight .ptab:not(.on) .ptab-x,
+.panel-bar .ptabs.tight .ptab:not(.on) .badge,
+.panel-bar .ptabs.tight .ptab:not(.on) .screen-live {
+  display: none;
+}
+.panel-bar .ptab-add {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+
+/* empty pane: centered, a little above the middle (§9.12) */
+.panel-body > .pane-empty,
+.panel-body .review > .pane-empty,
+.panel-body .files .pane-empty,
+.panel-body .iss > .pane-empty,
+.panel-body .apane > .pane-empty {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-12);
+  padding: var(--s-24) var(--s-16) 8%;
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  text-align: center;
+}
+
+.panel-body > .pane-empty,
+.panel-body > .review {
+  min-height: 100%;
+}
+.files > .ft {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* a static "running" glyph: ring + half pie, no motion (§8) */
+.tk-run {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+  background: conic-gradient(var(--accent-text) 0 50%, transparent 50% 100%);
+  -webkit-mask: radial-gradient(circle, #000 0 3.5px, transparent 3.6px 4.4px, #000 4.5px);
+  mask: radial-gradient(circle, #000 0 3.5px, transparent 3.6px 4.4px, #000 4.5px);
+}
+
+/* ───────────── changes: diff cards like a code review tool (§9.14) ───────────── */
+.panel-body .review {
+  gap: var(--s-8);
+  padding: var(--s-12);
+}
+.review .rv-bar {
+  height: 28px;
+  gap: var(--s-8);
+  padding: 0 var(--s-4);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.review .rv-bar .link-btn {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.review .rv-bar .link-btn:hover {
+  color: var(--ink);
+}
+.rv-files {
+  gap: var(--s-8);
+}
+.dv-file {
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: none;
+}
+.dv-file .dv-head {
+  height: 36px;
+  gap: var(--s-8);
+  padding: 0 var(--s-8) 0 var(--s-12);
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  background: var(--card);
+}
+.dv-file .dv-head:hover {
+  background: color-mix(in srgb, var(--card) 95%, var(--ink) 5%);
+}
+.dv-head .chev {
+  flex: none;
+  color: var(--ink-3);
+}
+.dv-head .dv-st {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+}
+.dv-head .dv-dir {
+  color: var(--ink-3);
+}
+.dv-head .dv-name {
+  color: var(--ink);
+  font-weight: var(--fw-regular);
+}
+.dv-head .dv-count {
+  flex: none;
+  gap: var(--s-4);
+  font-size: var(--fs-xs);
+}
+/* the share of added and removed lines, fixed width */
+.dv-bar {
+  flex: none;
+  width: 40px;
+  height: 4px;
+  display: flex;
+  gap: 1px;
+  border-radius: var(--r-bar);
+  overflow: hidden;
+  background: var(--line-soft);
+}
+.dv-bar i {
+  display: block;
+  min-width: 2px;
+}
+.dv-bar i.a {
+  background: var(--ok);
+}
+.dv-bar i.d {
+  background: var(--bad);
+}
+.dv-head .dv-open {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+}
+.dv-file .dv-body {
+  font-size: var(--fs-code);
+  line-height: 20px;
+}
+.dv-file .dv-hunk {
+  height: 28px;
+  align-items: center;
+  gap: var(--s-8);
+  padding: 0 var(--s-12);
+  background: var(--muted);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.dv-file .dv-hunk:first-child {
+  border-top: 0;
+}
+.dv-file .dv-hunk-where {
+  color: var(--ink-3);
+}
+.dv-file .dv-row {
+  grid-template-columns: 44px 44px 20px minmax(0, 1fr);
+}
+.dv-file .dv-row .dv-num {
+  padding-right: var(--s-10);
+  color: var(--ink-4);
+}
+.dv-file .dv-sign {
+  text-align: center;
+}
+.dv-file .dv-row.add {
+  background: var(--diff-add);
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+.dv-file .dv-row.del {
+  background: var(--diff-del);
+  box-shadow: inset 2px 0 0 var(--bad);
+}
+.dv-file .dv-row.add .dv-num {
+  color: var(--ok-ink);
+}
+.dv-file .dv-row.del .dv-num {
+  color: var(--bad-ink);
+}
+.dv-file .dv-row.add .dv-sign {
+  color: var(--ok-ink);
+}
+.dv-file .dv-row.del .dv-sign {
+  color: var(--bad-ink);
+}
+.dv-file .dv-row.add .em {
+  background: var(--diff-add-strong);
+}
+.dv-file .dv-row.del .em {
+  background: var(--diff-del-strong);
+}
+.dv-file .dv-note {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.dv-file .dv-note.link-btn:hover {
+  color: var(--ink);
+}
+
+/* written files (not a git folder): 32px rows */
+.review .written-row {
+  height: 32px;
+  gap: var(--s-8);
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+}
+
+/* ───────────── files: tree, find in files, file view (§9.14) ───────────── */
+.files .ft-search {
+  height: 36px;
+  gap: var(--s-8);
+  padding: 0 var(--s-8) 0 var(--s-12);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  box-shadow: none;
+}
+.files .ft-search > .icon {
+  color: var(--ink-4);
+}
+.files .ft-search input {
+  font-size: var(--fs-md);
+}
+.files .ft-row {
+  height: 28px;
+  gap: var(--s-6);
+  font-size: var(--fs-sm);
+}
+.files .ft-row .ft-ic {
+  color: var(--ink-3);
+}
+.fv .fv-head {
+  height: 36px;
+  gap: var(--s-4);
+  padding: 0 var(--s-8);
+  background: var(--card);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+}
+.fv .fv-head .dv-path {
+  margin-left: var(--s-4);
+}
+.fv .fv-head .dv-dir {
+  color: var(--ink-3);
+}
+.fv .fv-head .btn {
+  font-family: var(--font);
+}
+.fv .fv-head .seg {
+  font-family: var(--font);
+}
+.fv .code {
+  font-size: var(--fs-code);
+  line-height: 20px;
+}
+.fv .code-row {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+.fv .code-row .dv-num {
+  padding-right: var(--s-12);
+  color: var(--ink-4);
+}
+.fv .code-row:hover {
+  background: var(--hover);
+}
+.fv .code-row.hit {
+  background: var(--accent-soft);
+}
+.fv-body > .dv-file {
+  margin: var(--s-12);
+}
+
+/* the task's branch above its changes: one row, Git menu · branch · discard · merge */
+.bc {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-height: 44px;
+  padding: var(--s-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+}
+.bc-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.bc .btn .icon {
+  flex: none;
+}
+.bc.quiet {
+  min-height: 32px;
+  padding: 0 var(--s-4);
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+
+/* ───────────── PR tab: gitsu-style header card (§9.5), then checks, talk, files ───────────── */
+.panel-body .prv {
+  gap: var(--s-16);
+}
+.prv-card {
+  display: grid;
+  gap: var(--s-6);
+  padding: var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  min-width: 0;
+}
+.prv-line1 {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 24px;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.prv-card .prv-num {
+  margin: 0;
+  flex: none;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.prv-state {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+.prv-state.open {
+  color: var(--ok);
+}
+.prv-state.merged {
+  color: var(--merged);
+}
+.prv-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  border-radius: var(--r-xs);
+}
+.prv-crumb:hover,
+.prv-crumb:hover .prv-num {
+  color: var(--ink);
+}
+.prv-crumb-sep {
+  color: var(--ink-4);
+}
+.prv-crumb-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prv-fresh {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.prv-line1 .icon-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.prv-card .prv-title {
+  font-size: var(--fs-md);
+  line-height: 22px;
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.prv-card .prv-branches {
+  justify-self: start;
+}
+.prv-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-8);
+  margin-top: var(--s-2);
+  min-width: 0;
+}
+.prv-foot .pill {
+  height: 22px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+}
+.prv-foot .pill.ok {
+  color: var(--ok-ink);
+}
+.prv-foot .pill.bad {
+  color: var(--bad-ink);
+}
+.prv-foot .pill.merged {
+  background: color-mix(in srgb, var(--merged) 12%, transparent);
+  color: var(--merged);
+}
+.prv-checks-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.prv-checks-sum .icon {
+  flex: none;
+}
+.prv-checks-sum.ok .icon {
+  color: var(--ok);
+}
+.prv-checks-sum.bad .icon {
+  color: var(--bad);
+}
+.prv-checks-sum .prv-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0 3px;
+  background: var(--accent-text);
+}
+.prv-diff {
+  display: inline-flex;
+  gap: var(--s-4);
+  font-size: var(--fs-xs);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.prv .prv-label {
+  height: 28px;
+  padding: 0 var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.prv .prv-sum {
+  font-size: var(--fs-xs);
+}
+.prv .prv-sec {
+  gap: var(--s-4);
+}
+.prv .prv-check {
+  min-height: 32px;
+}
+.prv .prv-dot {
+  background: var(--accent-text);
+}
+.prv .prv-err {
+  font-weight: var(--fw-regular);
+}
+.prv .prv-check:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* ───────────── issues tab: gitsu's list (GITSU §4.3) ───────────── */
+.iss .iss-filters {
+  flex-wrap: nowrap;
+  gap: var(--s-6);
+  padding: var(--s-12) var(--s-12) var(--s-8);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.iss .iss-filters::-webkit-scrollbar {
+  display: none;
+}
+.iss .iss-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 28px;
+  padding: 0 var(--s-10);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.iss .iss-pill .icon {
+  color: var(--ink-3);
+}
+.iss .iss-pill:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.iss .iss-pill.on {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.iss .iss-pill.on .icon {
+  color: var(--accent-text);
+}
+.iss .iss-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: 36px;
+  margin: 0;
+  padding: 0 var(--s-8) 0 var(--s-16);
+  border-bottom: 1px solid var(--line-soft);
+}
+.iss .iss-search > .icon {
+  flex: none;
+  color: var(--ink-4);
+}
+.iss .iss-search input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: var(--fs-md);
+  color: var(--ink);
+}
+.iss .iss-search input::placeholder {
+  color: var(--ink-4);
+}
+.iss .iss-list {
+  padding: var(--s-8) var(--s-8) var(--s-16);
+}
+.iss-group + .iss-group {
+  margin-top: var(--s-8);
+}
+.iss-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+  text-align: left;
+}
+.iss-group-head:hover {
+  background: var(--hover);
+}
+.iss-chev {
+  color: var(--ink-3);
+  transform: rotate(90deg);
+  transition: transform var(--dur) var(--ease);
+}
+.iss-group-head.folded .iss-chev {
+  transform: none;
+}
+.iss-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.iss .iss-row {
+  position: relative;
+  gap: var(--s-8);
+  height: 32px;
+  min-height: 32px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+}
+.iss .iss-st {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ok);
+}
+.iss .iss-st.closed {
+  color: var(--ink-3);
+}
+.iss .iss-st.working {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+.iss .iss-n {
+  min-width: 36px;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.iss .iss-title {
+  font-size: var(--fs-md);
+  color: var(--ink);
+}
+.iss .iss-label {
+  height: 22px;
+  max-width: 112px;
+  gap: var(--s-6);
+  padding: 0 var(--s-8);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.iss .iss-label i {
+  width: 8px;
+  height: 8px;
+}
+.iss .iss-age {
+  min-width: 0;
+  font-size: var(--fs-xs);
+}
+/* hover: the actions take the meta's place, the title keeps its width (§9.6) */
+.iss .iss-acts {
+  position: absolute;
+  right: var(--s-4);
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin: 0;
+  padding-left: var(--s-16);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.iss .iss-row:hover .iss-acts,
+.iss .iss-row:focus-within .iss-acts,
+.iss .iss-item.open .iss-acts {
+  opacity: 1;
+  pointer-events: auto;
+}
+.iss .iss-row:hover .iss-meta,
+.iss .iss-row:focus-within .iss-meta,
+.iss .iss-item.open .iss-meta {
+  visibility: hidden;
+}
+.iss .iss-acts .btn {
+  height: 24px;
+  padding: 0 var(--s-8);
+}
+.iss .iss-acts .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+.iss .iss-body {
+  padding: var(--s-4) var(--s-12) var(--s-12) calc(var(--s-8) + 16px + var(--s-8));
+}
+.iss .iss-by {
+  display: flex;
+  gap: var(--s-8);
+  margin: 0 0 var(--s-6);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.iss .iss-by b {
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+.iss .iss-md {
+  font-size: var(--fs-sm);
+}
+.iss .iss-empty {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* ───────────── task header: project / title #issue · status (§10) ───────────── */
+.task-head {
+  gap: var(--s-8);
+}
+.task-head .crumbs {
+  gap: var(--s-4);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.task-head .crumb-proj {
+  flex: none;
+  height: 28px;
+  gap: var(--s-6);
+  padding: 0 var(--s-6);
+  margin-left: calc(-1 * var(--s-6));
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+}
+.task-head .crumb-sep {
+  flex: none;
+  margin: 0;
+  color: var(--ink-4);
+  font-size: var(--fs-md);
+}
+.task-head .crumb-sep + h1,
+.task-head .crumbs h1 {
+  padding: 0 0 0 var(--s-2);
+  min-width: 0;
+  line-height: 22px;
+}
+.task-head .crumb-back {
+  flex: none;
+  transform: rotate(180deg);
+}
+.task-head .title-edit {
+  height: 28px;
+  min-width: 160px;
+  padding: 0 var(--s-8);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  outline: 0;
+}
+/* #214: GitHub's number, quiet, opens the issue */
+.task-head .issue-tag {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--s-6);
+  margin-left: var(--s-2);
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: var(--fw-regular) var(--fs-sm) / 24px var(--font);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.task-head .issue-tag:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.task-head .status-chip {
+  flex: none;
+  height: 22px;
+  gap: var(--s-6);
+  padding: 0 var(--s-8);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+.task-head .status-chip + .status-chip {
+  margin-left: 0;
+}
+.task-head .status-chip .faint {
+  font-weight: var(--fw-regular);
+  opacity: 0.75;
+}
+.task-head .status-chip .st-icon {
+  margin-left: -2px;
+}
+.task-head .status-chip .dot {
+  margin-left: 0;
+}
+
+/* ───────────── new tab: the tools as a plain list (§9.6) ───────────── */
+.panel-body .nt {
+  gap: 0;
+  padding: var(--s-12) var(--s-8);
+}
+.panel-body .nt-head {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--s-12);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.panel-body .nt-row {
+  height: 32px;
+  gap: var(--s-10);
+  padding: 0 var(--s-8) 0 var(--s-12);
+  border-radius: var(--r-md);
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+.panel-body .nt-row:not(:disabled):hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.panel-body .nt-row .icon {
+  color: var(--ink-3);
+}
+.panel-body .nt-row:disabled {
+  box-shadow: none;
+  color: var(--ink-4);
+}
+.panel-body .nt-open {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.panel-body .nt-keys {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-family: var(--font);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: 18px;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+.panel-body .nt-hint {
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+
+/* ───────────── overview ───────────── */
+.panel-body .pane {
+  gap: var(--s-24);
+}
+.panel-body .pane-title {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.panel-body .kv {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--s-4) var(--s-16);
+}
+.panel-body .kv dt {
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  line-height: 32px;
+}
+.panel-body .kv dd {
+  min-height: 32px;
+}
+
+/* ───────────── shell tab ───────────── */
+.term-pane .term-sub {
+  height: 44px;
+  padding: 0 var(--s-8) 0 var(--s-16);
+}
+.term-pane .term-count {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.term-pane .shells-past {
+  height: 28px;
+}
+.term-pane .shells-past .sb-older-chev {
+  transition: transform var(--dur) var(--ease);
+}
+.term-pane .shells-past.open .sb-older-chev {
+  transform: rotate(90deg);
+}
+.shells-past-list {
+  display: grid;
+  gap: var(--s-8);
+}
+.term-pane .shell-tag {
+  height: 20px;
+  padding: 0 var(--s-6);
+  border: 0;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--line);
+  background: transparent;
+  font-family: var(--font);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.term-pane .shell-state {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+}
+.fv .code-row .dv-code {
+  padding-left: calc(var(--s-8) + 2ch);
+}
+/* changed files in the tree: the letter says it, the folder stays plain */
+.files .ft-row.touched .ft-name,
+.files .ft-row.dir.touched .ft-name {
+  color: var(--ink);
+}
+.files .ft-st {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.files .ft-st.A {
+  color: var(--ok-ink);
+}
+.files .ft-st.D {
+  color: var(--bad-ink);
+}
+/* narrow window: the project name gives way before the task title does */
+.task-head .crumbs > .crumb-proj {
+  flex: 0 4 auto;
+  min-width: 28px;
+}
+.task-head .crumbs > h1 {
+  flex: 0 1 auto;
+  min-width: 48px;
+}

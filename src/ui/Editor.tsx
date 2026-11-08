@@ -12,14 +12,14 @@ import { tags as t } from "@lezer/highlight";
 
 // colors come from the app's own tokens, so the editor follows light and dark
 const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "12.5px", color: "var(--ink)", backgroundColor: "transparent" },
+  "&": { height: "100%", fontSize: "var(--fs-code)", color: "var(--ink)", backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "20px" },
-  ".cm-content": { caretColor: "var(--accent)", padding: "6px 0" },
+  ".cm-content": { caretColor: "var(--accent)", padding: "8px 0" },
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "1.5px" },
   ".cm-gutters": { backgroundColor: "transparent", color: "var(--ink-4)", border: "none" },
-  ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 12px", minWidth: "3ch" },
-  ".cm-activeLine": { backgroundColor: "color-mix(in oklab, var(--ink) 4%, transparent)" },
+  ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 12px", minWidth: "3ch" },
+  ".cm-activeLine": { backgroundColor: "var(--hover)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--ink-2)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "color-mix(in oklab, var(--accent) 28%, transparent) !important" },
   ".cm-selectionMatch": { backgroundColor: "color-mix(in oklab, var(--accent) 14%, transparent)" },
@@ -29,11 +29,11 @@ const theme = EditorView.theme({
   ".cm-foldPlaceholder": { backgroundColor: "var(--hover)", border: "none", color: "var(--ink-3)" },
   ".cm-panels": { backgroundColor: "var(--card)", color: "var(--ink)", borderColor: "var(--line)" },
   ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--line)" },
-  ".cm-panel.cm-search": { padding: "6px 10px", fontFamily: "inherit", fontSize: "12px" },
-  ".cm-panel.cm-search input, .cm-panel.cm-search button": { fontFamily: "inherit", fontSize: "12px" },
-  ".cm-textfield": { background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "6px", color: "var(--ink)", padding: "3px 6px" },
-  ".cm-button": { backgroundImage: "none", background: "var(--hover)", border: "none", borderRadius: "6px", color: "var(--ink-2)", padding: "3px 8px" },
-  ".cm-tooltip": { backgroundColor: "var(--card)", border: "1px solid var(--line)", borderRadius: "8px" },
+  ".cm-panel.cm-search": { padding: "8px 12px", fontFamily: "inherit", fontSize: "var(--fs-xs)" },
+  ".cm-panel.cm-search input, .cm-panel.cm-search button": { fontFamily: "inherit", fontSize: "var(--fs-xs)" },
+  ".cm-textfield": { background: "var(--bg)", border: "1px solid var(--line)", borderRadius: "var(--r-sm)", color: "var(--ink)", padding: "4px 8px" },
+  ".cm-button": { backgroundImage: "none", background: "var(--hover)", border: "none", borderRadius: "var(--r-sm)", color: "var(--ink-2)", padding: "4px 8px" },
+  ".cm-tooltip": { backgroundColor: "var(--card)", border: "1px solid var(--line)", borderRadius: "var(--r-lg)" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { backgroundColor: "var(--accent-soft)", color: "var(--ink)" },
 });
 

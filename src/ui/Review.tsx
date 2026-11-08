@@ -11,6 +11,7 @@ import { fileSrc, pdfSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, type Git
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
+import { t as tr } from "../i18n";
 
 // ───────────── diff model ─────────────
 export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
@@ -153,7 +154,7 @@ function HunkView(props: { h: Hunk; toks?: (Tok[] | undefined)[]; annot?: (l: Li
   return (
     <>
       <div class="dv-hunk">
-        <span class="dv-hunk-at">{props.h.lines.find((l) => l.new)?.new ?? props.h.lines[0]?.old}번째 줄</span>
+        <span class="dv-hunk-at">{props.h.head.match(/^@@[^@]*@@/)?.[0] ?? props.h.head}</span>
         <Show when={props.h.where}><span class="dv-hunk-where">{props.h.where}</span></Show>
       </div>
       <For each={props.h.lines}>
@@ -192,8 +193,8 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
   return (
     <section class="dv-file" classList={{ open: props.open }} ref={props.ref}>
       <header class="dv-head" onClick={props.toggle}>
-        <Icon name="chevron" size={14} class="chev" />
-        <span class={`dv-st ${props.f.status}`} title={STATUS[props.f.status]}>{props.f.status}</span>
+        <Icon name="chevron" size={12} class="chev" />
+        <span class={`dv-st ${props.f.status}`} title={tr(STATUS[props.f.status])}>{props.f.status}</span>
         <span class="dv-path" title={props.f.path}>
           <span class="dv-dir">{dir}</span>
           <span class="dv-name">{name}</span>
@@ -202,18 +203,24 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
           <Show when={props.f.add}><span class="add">+{props.f.add}</span></Show>
           <Show when={props.f.del}><span class="del">−{props.f.del}</span></Show>
         </span>
+        <Show when={props.f.add + props.f.del}>
+          <span class="dv-bar" aria-hidden="true">
+            <Show when={props.f.add}><i class="a" style={{ flex: props.f.add }} /></Show>
+            <Show when={props.f.del}><i class="d" style={{ flex: props.f.del }} /></Show>
+          </span>
+        </Show>
         {props.badge}
         <Show when={!props.remote}>
         <button
           class="dv-open"
-          title="파일 보기"
+          title={tr("파일 보기")}
           onClick={(e) => {
             e.stopPropagation();
             setPanelTab("files");
             setPanelFile({ path: props.f.path, mode: "file", n: Date.now() });
           }}
         >
-          <Icon name="file" size={13} />
+          <Icon name="file" size={14} />
         </button>
         </Show>
       </header>
@@ -221,13 +228,13 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
         <div class="dv-body">
           <Show
             when={!props.f.binary}
-            fallback={<div class="dv-note">바이너리 파일</div>}
+            fallback={<div class="dv-note">{tr("바이너리 파일")}</div>}
           >
             <Show
               when={!big() || force()}
               fallback={
                 <button class="dv-note link-btn" onClick={() => setForce(true)}>
-                  바뀐 줄이 {props.f.add + props.f.del}개라 접어 뒀어요 · 펼치기
+                  {tr("{n}줄 변경 · 펼치기", { n: props.f.add + props.f.del })}
                 </button>
               }
             >
@@ -272,24 +279,24 @@ export function ChangesPane(props: { t: Task; top?: any }) {
   return (
     <div class="review">
       {props.top}
-      <Show when={data()} fallback={<div class="pane-empty"><span class="spin" /></div>}>
+      <Show when={data()} fallback={<div class="pane-empty" />}>
         {(d) => (
           <Show when={d().isRepo} fallback={<WrittenFiles t={props.t} />}>
             <div class="rv-bar">
-              <span class="rv-count">{d().files.length}개 파일</span>
+              <span class="rv-count">{tr("파일 {n}개", { n: d().files.length })}</span>
               <span class="add">+{totals()[0]}</span>
               <span class="del">−{totals()[1]}</span>
               <span class="spacer" />
               <Show when={files().length}>
                 <button class="link-btn" onClick={() => setClosed(allOpen() ? new Set(files().map((f) => f.path)) : new Set())}>
-                  {allOpen() ? "모두 접기" : "모두 펼치기"}
+                  {allOpen() ? tr("모두 접기") : tr("모두 펼치기")}
                 </button>
               </Show>
-              <button class="icon-btn sm" title="새로고침" onClick={() => refetch()}>
-                <Icon name="refresh" size={13} />
+              <button class="icon-btn sm" title={tr("새로고침")} onClick={() => refetch()}>
+                <Icon name="refresh" size={14} />
               </button>
             </div>
-            <Show when={files().length} fallback={<div class="pane-empty">아직 바뀐 파일이 없어요.</div>}>
+            <Show when={files().length} fallback={<div class="pane-empty">{tr("변경 없음")}</div>}>
               <div class="rv-files">
                 <For each={files()}>
                   {(f) => <DiffCard f={f} root={expand(props.t.cwd)} open={isOpen(f.path)} toggle={() => toggle(f.path)} ref={(el) => refs.set(f.path, el)} />}
@@ -318,13 +325,13 @@ function WrittenFiles(props: { t: Task }) {
     return [...m.values()];
   });
   return (
-    <Show when={files().length} fallback={<div class="pane-empty">바뀐 파일 없음</div>}>
-      <div class="rv-bar"><span class="rv-count">이 일이 쓴 파일 {files().length}개</span></div>
+    <Show when={files().length} fallback={<div class="pane-empty">{tr("변경 없음")}</div>}>
+      <div class="rv-bar"><span class="rv-count">{tr("작업이 쓴 파일 {n}개", { n: files().length })}</span></div>
       <div class="written">
         <For each={files()}>
           {(f) => (
             <button class="written-row" onClick={() => previewFile(f.path)} title={f.path}>
-              <Icon name={f.note ? "memory" : "file"} size={13} class="muted" />
+              <Icon name={f.note ? "memory" : "file"} size={14} class="muted" />
               <span class="written-name">{f.path.split("/").pop()}</span>
               <span class="written-dir">{f.path.split("/").slice(-3, -1).join("/")}</span>
               <span class="spacer" />
@@ -350,14 +357,14 @@ export function PreviewPane() {
   const dir = () => full().split("/").slice(0, -1).join("/");
   const name = () => full().split("/").pop() ?? "";
   return (
-    <Show when={path()} fallback={<div class="pane-empty">미리 볼 파일 없음</div>}>
+    <Show when={path()} fallback={<div class="pane-empty">{tr("미리 볼 파일 없음")}</div>}>
       <div class="pv">
         <Show when={kind() !== "code"}>
           <div class="fv-head">
             <span class="dv-path" title={full()}><span class="dv-dir">{dir().replace(/^\/Users\/[^/]+/, "~")}/</span><span class="dv-name">{name()}</span></span>
             <span class="spacer" />
-            <button class="btn sm ghost" title="VS Code 같은 편집기에서 열기" onClick={() => openInEditor(full())}><Icon name="external" size={13} />편집기</button>
-            <button class="btn sm ghost" title="Finder에서 보기" onClick={() => revealPath(full())}><Icon name="folder" size={13} />Finder</button>
+            <button class="btn sm ghost" title={tr("편집기에서 열기")} onClick={() => openInEditor(full())}><Icon name="external" size={14} />{tr("편집기")}</button>
+            <button class="btn sm ghost" title={tr("Finder에서 보기")} onClick={() => revealPath(full())}><Icon name="folder" size={14} />Finder</button>
           </div>
         </Show>
         <div class="pv-body">
@@ -436,12 +443,12 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
   const write = async (body: string, force = false): Promise<boolean> => {
     try {
       seen = await fsWrite(full(), body, force ? undefined : seen);
-      toast("저장했어요");
+      toast(tr("저장했어요"));
       return true;
     } catch (e) {
       if (String(e).includes("CHANGED")) {
-        toast("그사이 파일이 바뀌었어요", "bad", { label: "덮어쓰기", run: () => void write(body, true).then((ok) => ok && setDirty(false)) });
-      } else toast(`저장하지 못했어요: ${String(e)}`, "bad");
+        toast(tr("그사이 파일이 바뀌었어요"), "bad", { label: tr("덮어쓰기"), run: () => void write(body, true).then((ok) => ok && setDirty(false)) });
+      } else toast(tr("저장하지 못했어요 · {err}", { err: String(e) }), "bad");
       return false;
     }
   };
@@ -450,16 +457,16 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
     setMode("file");
     void refetch();
   };
-  const leave = () => (dirty() ? toast("저장하지 않은 변경이 있어요", "info", { label: "버리고 닫기", run: close }) : close());
+  const leave = () => (dirty() ? toast(tr("저장하지 않은 변경이 있어요"), "info", { label: tr("버리고 닫기"), run: close }) : close());
   return (
     <div class="fv">
       <div class="fv-head">
-        <button class="icon-btn sm" title="목록으로" onClick={props.back}><Icon name="back" size={14} /></button>
+        <button class="icon-btn sm" title={tr("목록")} onClick={props.back}><Icon name="back" size={14} /></button>
         <span class="dv-path" title={props.path}>
           <span class="dv-dir">{dir}</span>
           <span class="dv-name">{name}</span>
         </span>
-        <Show when={dirty()}><i class="fv-dirty" title="저장하지 않은 변경" /></Show>
+        <Show when={dirty()}><i class="fv-dirty" title={tr("저장 안 됨")} /></Show>
         <span class="spacer" />
         <Show
           when={mode() === "edit"}
@@ -467,25 +474,25 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
             <>
               <Show when={props.changed}>
                 <div class="seg sm">
-                  <button classList={{ on: mode() === "file" }} onClick={() => setMode("file")}>파일</button>
-                  <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>변경</button>
+                  <button classList={{ on: mode() === "file" }} onClick={() => setMode("file")}>{tr("파일")}</button>
+                  <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>{tr("변경")}</button>
                 </div>
               </Show>
               <Show when={text()?.text != null}>
-                <button class="icon-btn sm" title="여기서 고치기" onClick={() => setMode("edit")}><Icon name="pencil" size={13} /></button>
+                <button class="icon-btn sm" title={tr("편집")} onClick={() => setMode("edit")}><Icon name="pencil" size={14} /></button>
               </Show>
             </>
           }
         >
-          <button class="btn sm" disabled={!dirty()} title="저장 (⌘S)" onClick={() => editor?.save()}>저장</button>
-          <button class="btn sm ghost" title="그만 고치기" onClick={leave}>닫기</button>
+          <button class="btn sm primary" disabled={!dirty()} title="⌘S" onClick={() => editor?.save()}>{tr("저장")}</button>
+          <button class="btn sm ghost" onClick={leave}>{tr("닫기")}</button>
         </Show>
-        <button class="icon-btn sm" title="VS Code 같은 편집기에서 열기" onClick={() => openInEditor(full())}><Icon name="external" size={13} /></button>
-        <button class="icon-btn sm" title="Finder에서 보기" onClick={() => revealPath(full())}><Icon name="folder" size={13} /></button>
+        <button class="icon-btn sm" title={tr("편집기에서 열기")} onClick={() => openInEditor(full())}><Icon name="external" size={14} /></button>
+        <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => revealPath(full())}><Icon name="folder" size={14} /></button>
       </div>
       <div class="fv-body" classList={{ editing: mode() === "edit" }}>
         <Show when={mode() !== "edit"} fallback={
-          <Suspense fallback={<div class="pane-empty"><span class="spin" /></div>}>
+          <Suspense fallback={<div class="pane-empty" />}>
             <Editor path={props.path} text={text()?.text ?? ""} onSave={(b) => write(b)} onDirty={setDirty} ref={(api) => (editor = api)} />
           </Suspense>
         }>
@@ -494,11 +501,11 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
           fallback={<DiffCard f={props.changed!} root={props.root} open toggle={() => setMode("file")} />}
         >
           <Show when={!IMG.test(props.path)} fallback={<div class="fv-img"><img src={fileSrc(full())} alt={name} /></div>}>
-            <Show when={text()} fallback={<div class="pane-empty"><span class="spin" /></div>}>
+            <Show when={text()} fallback={<div class="pane-empty" />}>
               {(t) => (
                 <Show
                   when={t().text !== null}
-                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? "바이너리 파일이에요." : "파일이 커서 여기선 열지 않아요.")}</div>}
+                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? tr("바이너리 파일") : tr("파일이 너무 커요"))}</div>}
                 >
                   <div class="code" ref={(el) => props.line && queueMicrotask(() => el.querySelector(".code-row.hit")?.scrollIntoView({ block: "center" }))}>
                     <For each={lines()}>
@@ -595,8 +602,8 @@ export function FilesPane(props: { t: Task }) {
         onClick={() => (rp.n.dir ? toggle(rp.n.path) : setSel({ path: rp.n.path, diff: false }))}
         title={rp.n.path}
       >
-        <Show when={rp.n.dir} fallback={<Icon name="file" size={13} class="ft-ic" />}>
-          <Icon name="chevron" size={13} class={`ft-ic chev ${open().has(rp.n.path) ? "on" : ""}`} />
+        <Show when={rp.n.dir} fallback={<Icon name="file" size={14} class="ft-ic" />}>
+          <Icon name="chevron" size={12} class={`ft-ic chev ${open().has(rp.n.path) ? "on" : ""}`} />
         </Show>
         <span class="ft-name">{rp.n.name}</span>
         <Show when={changed().get(rp.n.path)}>{(f) => <span class={`ft-st ${f().status}`}>{f().status}</span>}</Show>
@@ -615,9 +622,9 @@ export function FilesPane(props: { t: Task }) {
         fallback={
           <>
             <div class="ft-search">
-              <Icon name="search" size={13} />
+              <Icon name="search" size={14} />
               <input
-                placeholder={inside() ? "파일 안에서 찾기" : "파일 찾기"}
+                placeholder={inside() ? tr("내용 검색") : tr("파일 검색")}
                 value={inside() ? needle() : q()}
                 onInput={(e) => {
                   const v = e.currentTarget.value;
@@ -628,24 +635,24 @@ export function FilesPane(props: { t: Task }) {
                 onKeyDown={(e) => inside() && e.key === "Enter" && (clearTimeout(wait), setNeedle(e.currentTarget.value))}
               />
               <div class="seg sm ft-mode">
-                <button classList={{ on: !inside() }} onClick={() => setInside(false)}>이름</button>
-                <button classList={{ on: inside() }} onClick={() => setInside(true)}>내용</button>
+                <button classList={{ on: !inside() }} onClick={() => setInside(false)}>{tr("이름")}</button>
+                <button classList={{ on: inside() }} onClick={() => setInside(true)}>{tr("내용")}</button>
               </div>
-              <button class="icon-btn sm" title="새로고침" onClick={() => refetch()}><Icon name="refresh" size={13} /></button>
+              <button class="icon-btn sm" title={tr("새로고침")} onClick={() => refetch()}><Icon name="refresh" size={14} /></button>
             </div>
             <Show when={inside()}>
               <div class="ft grep">
-                <Show when={needle().trim().length >= 2} fallback={<div class="pane-empty">두 글자 이상 적어 주세요</div>}>
-                  <Show when={!found.loading} fallback={<div class="pane-empty"><span class="spin" /></div>}>
-                    <Show when={foundByFile().length} fallback={<div class="pane-empty">"{needle().trim()}"이 들어간 곳이 없어요</div>}>
-                      <div class="grep-count">{(found() ?? []).length >= 500 ? "500곳 넘게" : `${(found() ?? []).length}곳`} · 파일 {foundByFile().length}개</div>
+                <Show when={needle().trim().length >= 2} fallback={<div class="pane-empty">{tr("두 글자 이상")}</div>}>
+                  <Show when={!found.loading} fallback={<div class="pane-empty" />}>
+                    <Show when={foundByFile().length} fallback={<div class="pane-empty">{tr("결과 없음")}</div>}>
+                      <div class="grep-count">{(found() ?? []).length >= 500 ? tr("500곳 이상") : tr("{n}곳", { n: (found() ?? []).length })} · {tr("파일 {n}개", { n: foundByFile().length })}</div>
                       <For each={foundByFile()}>
                         {([path, hits]) => {
                           const [dir, name] = split(path);
                           return (
                             <div class="grep-file">
                               <div class="grep-head" title={path}>
-                                <Icon name="file" size={13} class="ft-ic" />
+                                <Icon name="file" size={14} class="ft-ic" />
                                 <span class="ft-name">{name}</span>
                                 <span class="ft-dir">{dir}</span>
                                 <span class="grep-n">{hits.length}</span>
@@ -667,23 +674,23 @@ export function FilesPane(props: { t: Task }) {
                 </Show>
               </div>
             </Show>
-            <Show when={!inside() && list()} fallback={<Show when={!inside()}><div class="pane-empty"><span class="spin" /></div></Show>}>
+            <Show when={!inside() && list()} fallback={<Show when={!inside()}><div class="pane-empty" /></Show>}>
               <div class="ft">
                 <Show
                   when={q().trim()}
                   fallback={
-                    <Show when={t().kids.length} fallback={<div class="pane-empty">파일이 없어요.</div>}>
+                    <Show when={t().kids.length} fallback={<div class="pane-empty">{tr("파일 없음")}</div>}>
                       <For each={t().kids}>{(k) => <Row n={k} depth={0} />}</For>
                     </Show>
                   }
                 >
-                  <Show when={hits().length} fallback={<div class="pane-empty">"{q()}"에 맞는 파일이 없어요.</div>}>
+                  <Show when={hits().length} fallback={<div class="pane-empty">{tr("결과 없음")}</div>}>
                     <For each={hits()}>
                       {(p) => {
                         const [dir, name] = split(p);
                         return (
                           <button class="ft-row" onClick={() => setSel({ path: p, diff: false })} title={p}>
-                            <Icon name="file" size={13} class="ft-ic" />
+                            <Icon name="file" size={14} class="ft-ic" />
                             <span class="ft-name">{name}</span>
                             <span class="ft-dir">{dir}</span>
                             <Show when={changed().get(p)}>{(f) => <span class={`ft-st ${f().status}`}>{f().status}</span>}</Show>

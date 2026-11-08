@@ -6,6 +6,7 @@
 //   git      → branches as lanes with their commits and merges
 import { createMemo, For, Show } from "solid-js";
 import { previewFile } from "../state/ui";
+import { t } from "../i18n";
 
 const openRef = (ref?: string) => {
   if (!ref) return;
@@ -53,7 +54,7 @@ export function Diff(props: { label?: string; path: string; ref?: string; note?:
             </Show>
           )}
         </For>
-        <Show when={rows().length > MAX}><div class="wk-gap">{rows().length - MAX}줄 더</div></Show>
+        <Show when={rows().length > MAX}><div class="wk-gap">{t("{n}줄 더", { n: rows().length - MAX })}</div></Show>
       </div>
     </div>
   );
@@ -71,9 +72,9 @@ export function Tests(props: {
     <div class="blk wk-tests">
       <Label text={props.label} />
       <div class="wk-tests-sum" classList={{ bad: total().fail > 0 }}>
-        <b>{total().fail ? `${total().fail}개 실패` : "모두 통과"}</b>
-        <span>통과 {total().pass}</span>
-        <Show when={total().skip}><span>건너뜀 {total().skip}</span></Show>
+        <b>{total().fail ? t("{n}개 실패", { n: total().fail }) : t("모두 통과")}</b>
+        <span>{t("통과 {n}", { n: total().pass })}</span>
+        <Show when={total().skip}><span>{t("건너뜀 {n}", { n: total().skip })}</span></Show>
       </div>
       <div class="wk-suites">
         <For each={props.suites}>
@@ -88,8 +89,8 @@ export function Tests(props: {
                   <Show when={s.skip}><i class="s" style={{ flex: s.skip }} /></Show>
                 </span>
                 <span class="wk-suite-n">
-                  <Show when={s.fail}><b class="wk-del">실패 {s.fail}</b></Show>
-                  <span>{n}개</span>
+                  <Show when={s.fail}><b class="wk-del">{t("실패 {n}", { n: s.fail! })}</b></Show>
+                  <span>{t("{n}개", { n })}</span>
                   <Show when={s.ms !== undefined}><span class="wk-ms">{ms(s.ms!)}</span></Show>
                 </span>
               </div>
@@ -126,7 +127,7 @@ export function Options(props: { label?: string; criteria: string[]; options: { 
           {(o) => (
             <div class="wk-opt-head" classList={{ chosen: !!o.chosen }}>
               <b>{o.name}</b>
-              <Show when={o.chosen}><span class="wk-chosen">고름</span></Show>
+              <Show when={o.chosen}><span class="wk-chosen">{t("선택")}</span></Show>
               <Show when={o.note}><span class="wk-opt-note">{o.note}</span></Show>
             </div>
           )}
@@ -180,8 +181,8 @@ export function Trace(props: { label?: string; unit?: string; spans: { id: strin
               <span class="wk-span-name" classList={{ slow: r.s.id === slow(), err: !!r.s.error }} style={{ "padding-left": `${r.depth * 14}px` }} title={r.s.label}>
                 <span class="wk-span-label">{r.s.label}</span>
                 <Show when={services().length > 1 && r.s.service}><span class="wk-svc">{r.s.service}</span></Show>
-                <Show when={r.s.id === slow()}><span class="wk-tag-slow">가장 오래</span></Show>
-                <Show when={r.s.error}><span class="wk-tag-err">오류</span></Show>
+                <Show when={r.s.id === slow()}><span class="wk-tag-slow">{t("가장 느림")}</span></Show>
+                <Show when={r.s.error}><span class="wk-tag-err">{t("오류")}</span></Show>
               </span>
               <div class="wk-lane">
                 <i
@@ -243,7 +244,7 @@ export function Git(props: { label?: string; commits: { id: string; branch: stri
                   <span class={`wk-branch lane-${g().branches.indexOf(c.branch) % 6}`}>{c.branch}</span>
                 </Show>
                 <Show when={c.tag}><span class="wk-tag">{c.tag}</span></Show>
-                <Show when={c.state === "new"}><span class="wk-new">새로</span></Show>
+                <Show when={c.state === "new"}><span class="wk-new">{t("새 커밋")}</span></Show>
                 <span class="wk-msg">{c.msg}</span>
                 <code class="wk-sha">{c.id.slice(0, 7)}</code>
               </div>

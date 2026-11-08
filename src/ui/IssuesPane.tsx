@@ -11,6 +11,7 @@ import { ago } from "./bits";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
+import { t } from "../i18n";
 
 type Label = { name: string; color?: string };
 type Issue = {
@@ -26,11 +27,11 @@ type Issue = {
 type Full = Issue & { body?: string; comments?: { author?: { login: string }; body: string; createdAt?: string }[] };
 
 const FILTERS = [
-  { id: "open", label: "열린 것", q: "is:open" },
-  { id: "mine", label: "내 것", q: "is:open assignee:@me" },
-  { id: "authored", label: "내가 쓴 것", q: "is:open author:@me" },
-  { id: "working", label: "일 중", q: "" },
-  { id: "recent", label: "최근", q: "sort:updated-desc" },
+  { id: "open", label: "열림", icon: "issue", q: "is:open" },
+  { id: "mine", label: "내 이슈", icon: "at", q: "is:open assignee:@me" },
+  { id: "authored", label: "내가 작성", icon: "pencil", q: "is:open author:@me" },
+  { id: "working", label: "작업 중", icon: "play", q: "" },
+  { id: "recent", label: "최근", icon: "clock", q: "sort:updated-desc" },
 ] as const;
 
 /** the folder whose repo we show: the open job's, else the project in view, else the space's first */
@@ -55,6 +56,7 @@ export function IssuesPane(props: { t?: Task }) {
   const [filter, setFilter] = createSignal<(typeof FILTERS)[number]["id"]>("open");
   const [typed, setTyped] = createSignal("");
   const [open, setOpen] = createSignal<number | null>(null);
+  const [folded, setFolded] = createSignal<Set<string>>(new Set());
   const search = () => typed().trim() || FILTERS.find((f) => f.id === filter())!.q || "is:open";
   const [list, { refetch }] = createResource(
     () => (where() ? { ...where()!, q: search() } : false),
@@ -67,21 +69,40 @@ export function IssuesPane(props: { t?: Task }) {
     const all = list() ?? [];
     return filter() === "working" && !typed().trim() ? all.filter((i) => jobsByIssue().has(i.url)) : all;
   };
+  // grouped like gitsu's list: what an agent works on first, then open, then closed
+  const groups = createMemo(() => {
+    const g: { id: string; label: string; items: Issue[] }[] = [
+      { id: "working", label: "작업 중", items: [] },
+      { id: "open", label: "열림", items: [] },
+      { id: "closed", label: "닫힘", items: [] },
+    ];
+    for (const i of shown()) g[jobsByIssue().has(i.url) && i.state === "OPEN" ? 0 : i.state === "OPEN" ? 1 : 2].items.push(i);
+    return g.filter((x) => x.items.length);
+  });
+  const fold = (id: string) =>
+    setFolded((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
   return (
     <div class="iss">
       <div class="iss-filters">
         <For each={FILTERS}>
           {(f) => (
             <button class="iss-pill" classList={{ on: filter() === f.id && !typed().trim() }} onClick={() => (setTyped(""), setFilter(f.id))}>
-              {f.label}
+              <Icon name={f.icon} size={14} />
+              {t(f.label)}
             </button>
           )}
         </For>
       </div>
-      <div class="ft-search iss-search">
-        <Icon name="search" size={13} />
+      <div class="iss-search">
+        <Icon name="search" size={14} />
         <input
-          placeholder="필터  is:open label:bug"
+          placeholder={t("필터")}
+          title="is:open label:bug @me no:assignee"
+          spellcheck={false}
           value={typed()}
           onChange={(e) => setTyped(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -89,21 +110,34 @@ export function IssuesPane(props: { t?: Task }) {
             if (e.key === "Enter") setTyped(e.currentTarget.value);
           }}
         />
-        <button class="icon-btn sm" title="새로고침" onClick={() => refetch()}><Icon name="refresh" size={13} /></button>
+        <button class="icon-btn sm" title={t("새로고침")} onClick={() => refetch()}><Icon name="refresh" size={14} /></button>
       </div>
-      <Show when={where()} fallback={<div class="pane-empty">프로젝트를 고르면 이슈가 보여요</div>}>
+      <Show when={where()} fallback={<div class="pane-empty">{t("프로젝트 없음")}</div>}>
         <Show
           when={!list.error}
-          fallback={<div class="pane-empty">이슈를 못 불러왔어요<button class="btn sm" onClick={() => refetch()}>다시 하기</button></div>}
+          fallback={<div class="pane-empty">{t("이슈를 불러오지 못했어요")}<button class="btn sm" onClick={() => refetch()}>{t("다시 시도")}</button></div>}
         >
-          <Show when={list()} fallback={<div class="pane-empty"><span class="spin" /></div>}>
+          <Show when={list()} fallback={<div class="pane-empty">{t("불러오는 중")}</div>}>
             <Show
               when={shown().length}
-              fallback={<div class="pane-empty">{filter() === "working" && !typed().trim() ? "맡긴 이슈가 없어요" : "이슈가 없어요"}</div>}
+              fallback={<div class="pane-empty">{filter() === "working" && !typed().trim() ? t("작업 중인 이슈 없음") : t("이슈 없음")}</div>}
             >
               <div class="iss-list">
-                <For each={shown()}>
-                  {(i) => <Row i={i} where={where()!} open={open() === i.number} toggle={() => setOpen(open() === i.number ? null : i.number)} />}
+                <For each={groups()}>
+                  {(g) => (
+                    <div class="iss-group">
+                      <button class="iss-group-head" classList={{ folded: folded().has(g.id) }} onClick={() => fold(g.id)} aria-expanded={!folded().has(g.id)}>
+                        <Icon name="chevron" size={12} class="iss-chev" />
+                        <span>{t(g.label)}</span>
+                        <span class="iss-count">{g.items.length}</span>
+                      </button>
+                      <Fold open={!folded().has(g.id)}>
+                        <For each={g.items}>
+                          {(i) => <Row i={i} where={where()!} open={open() === i.number} toggle={() => setOpen(open() === i.number ? null : i.number)} />}
+                        </For>
+                      </Fold>
+                    </div>
+                  )}
                 </For>
               </div>
             </Show>
@@ -142,14 +176,24 @@ function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>;
       isolate: state.settings.isolate,
       issue: { n: i.number, url: i.url, title: i.title },
     });
-    toast(`#${i.number}을 일로 맡겼어요`, "info", { label: "열기", run: () => openTask(id) });
+    toast(t("#{n} 작업을 만들었어요", { n: i.number }), "info", { label: t("열기"), run: () => openTask(id) });
+  };
+  const start = () => {
+    const j = job();
+    if (j) openTask(j.id);
+    else void hand();
   };
   return (
     <div class="iss-item" classList={{ open: props.open }}>
       <div class="iss-row" role="button" tabindex="0" onClick={props.toggle} onKeyDown={(e) => e.key === "Enter" && props.toggle()}>
-        <span class="iss-st" classList={{ closed: props.i.state !== "OPEN", working: !!job() }} />
+        <Show
+          when={job() && props.i.state === "OPEN"}
+          fallback={<span class="iss-st" classList={{ closed: props.i.state !== "OPEN" }}><Icon name={props.i.state === "OPEN" ? "issue" : "done"} size={14} /></span>}
+        >
+          <span class="iss-st working" title={t("작업 중")}><span class="tk-run" /></span>
+        </Show>
         <span class="iss-n">#{props.i.number}</span>
-        <span class="iss-title">{props.i.title}</span>
+        <span class="iss-title" title={props.i.title}>{props.i.title}</span>
         <span class="iss-meta">
           <For each={props.i.labels.slice(0, 2)}>
             {(l) => (
@@ -162,29 +206,22 @@ function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>;
           <Show when={props.i.labels.length > 2}><span class="iss-more">+{props.i.labels.length - 2}</span></Show>
           <span class="iss-age">{props.i.updatedAt ? ago(Date.parse(props.i.updatedAt)) : ""}</span>
         </span>
+        <span class="iss-acts" onClick={(e) => e.stopPropagation()}>
+          <button class="btn sm" onClick={start}>{job() ? t("작업 보기") : t("작업 만들기")}</button>
+          <button class="icon-btn sm" title={t("GitHub에서 열기")} onClick={() => void openUrl(props.i.url)}><Icon name="external" size={14} /></button>
+        </span>
       </div>
       <Fold open={props.open}>
         <div class="iss-body">
-          <div class="iss-acts">
-            <Show
-              when={job()}
-              fallback={<button class="btn sm primary" onClick={() => void hand()}>일로 맡기기</button>}
-            >
-              {(j) => <button class="btn sm" onClick={() => openTask(j().id)}>맡긴 일 보기</button>}
-            </Show>
-            <button class="btn sm ghost" onClick={() => openUrl(props.i.url)}><Icon name="external" size={13} />GitHub</button>
-            <span class="iss-by">{props.i.author?.login}</span>
+          <div class="iss-by">
+            <Show when={props.i.author?.login}>{(a) => <b>{a()}</b>}</Show>
+            <Show when={full()?.comments?.length}>{(n) => <span>{t("댓글 {n}개", { n: n() })}</span>}</Show>
           </div>
-          <Show when={full()} fallback={<div class="iss-loading"><span class="spin" /></div>}>
+          <Show when={full()} fallback={<p class="iss-empty">{t("불러오는 중")}</p>}>
             {(f) => (
-              <>
-                <Show when={f().body?.trim()} fallback={<p class="iss-empty">본문 없음</p>}>
-                  <Markdown class="iss-md" text={f().body!} />
-                </Show>
-                <Show when={f().comments?.length}>
-                  <div class="iss-comments">댓글 {f().comments!.length}개</div>
-                </Show>
-              </>
+              <Show when={f().body?.trim()} fallback={<p class="iss-empty">{t("본문 없음")}</p>}>
+                <Markdown class="iss-md" text={f().body!} />
+              </Show>
             )}
           </Show>
         </div>

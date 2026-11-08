@@ -4,6 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { onCleanup, onMount } from "solid-js";
 import { onEvent, ptyClose, ptyResize, ptyWrite } from "../lib/native";
+import { t } from "../i18n";
 
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
@@ -45,7 +46,7 @@ export function Xterm(props: {
     const unData = await onEvent<{ id: string; data: string }>("pty:data", (p) => p.id === props.id && term.write(p.data));
     const unExit = await onEvent<{ id: string; code: number | null }>("pty:exit", (p) => {
       if (p.id !== props.id) return;
-      term.write("\r\n\x1b[2m[종료됨]\x1b[0m\r\n");
+      term.write(`\r\n\x1b[2m[${t("종료됨")}]\x1b[0m\r\n`);
       props.onExit?.(p.code);
     });
     term.onData((d) => ptyWrite(props.id, d));
