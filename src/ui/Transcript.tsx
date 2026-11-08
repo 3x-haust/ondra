@@ -464,7 +464,7 @@ function EntryView(props: { e: Entry; task: Task }) {
       <Match when={e.kind === "note" && e}>
         {(x) => (
           <div class="note">
-            <Icon name={x().text.startsWith("기억함") ? "memory" : x().text.startsWith("모델") ? "refresh" : "dot"} size={13} />
+            <Icon name={/^(기억함|메모리에? 저장) · /.test(x().text) ? "memory" : x().text.startsWith("모델") ? "refresh" : "dot"} size={13} />
             {noteText(x().text)}
           </div>
         )}
