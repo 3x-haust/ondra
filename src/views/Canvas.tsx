@@ -557,7 +557,7 @@ const tookLine = (task: Task) => {
 };
 
 /** when its changes were thrown away (older tasks without discardedAt: when they finished) */
-const discardedAt = (task: Task) => (discarded(task) ? ((task as Task & { discardedAt?: number }).discardedAt ?? task.finishedAt) : undefined);
+const discardedAt = (task: Task) => (discarded(task) ? (task.discardedAt ?? task.finishedAt) : undefined);
 
 /** when a finished task ended: merged, discarded, or (done, failed) finished */
 const endedAt = (task: Task) =>

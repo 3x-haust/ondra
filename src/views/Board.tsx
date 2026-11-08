@@ -274,7 +274,7 @@ function Card(props: { t: Task; byProject: boolean }) {
     if (st() === "paused") return "";
     // merged: when it was merged; discarded: when it was thrown away (older tasks: when they finished)
     const merged = job().worktree?.state === "merged" && !gone() ? job().mergedAt : undefined;
-    const thrown = gone() ? (job() as Task & { discardedAt?: number }).discardedAt : undefined;
+    const thrown = gone() ? job().discardedAt : undefined;
     return ago(thrown ?? merged ?? job().finishedAt ?? job().startedAt ?? job().createdAt);
   };
   const say = () => {
