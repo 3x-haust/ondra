@@ -1,6 +1,5 @@
-/* Design tokens. Neutral zinc greys after T3 Code, with Ondra's blue as the one accent; colour otherwise
-   only for state (needs you, failed, done). Easy on the eyes: no pure white
-   page, no pure black text, a deep-sea dark mode. */
+/* Design tokens (docs/DESIGN.md). Zinc greys with one indigo accent; colour otherwise
+   only for state. Borders over shadows, no pure white page, no pure white text. */
 :root {
   color-scheme: light;
   --bg: #fcfcfc;
@@ -8,43 +7,46 @@
   --sidebar: #fafafa;
   --card: #ffffff;
   --muted: #fafafa;
-  --hover: #ededf0;
-  --active: #ececee;
+  --hover: rgba(9, 9, 11, 0.05);
+  --active: rgba(9, 9, 11, 0.08);
   --row-selected: #ffffff;
-  --row-selected-shadow: inset 0 0 0 1px rgba(228, 228, 231, 0.7);
+  --row-selected-shadow: inset 0 0 0 1px rgba(9, 9, 11, 0.06);
   --line: #e4e4e7;
-  --line-soft: #ededf0;
+  --line-soft: #f0f0f1;
   --input: #d4d4d8;
   --code-bg: #f4f4f5;
   --ink: #18181b;
   --ink-2: #3f3f46;
   --ink-3: #71717a;
-  --ink-4: #7d7d85;
-  --accent: #1f6fd8;
-  --accent-hover: #1a61c2;
-  --accent-soft: rgba(31, 111, 216, 0.08);
-  --accent-line: rgba(31, 111, 216, 0.32);
+  --ink-4: #a1a1aa; /* placeholder and disabled only */
+  --accent: #5059ff;
+  --accent-hover: #4a52ee;
+  --accent-soft: rgba(80, 89, 255, 0.08);
+  --accent-line: rgba(80, 89, 255, 0.32);
   --accent-ink: #ffffff;
+  --accent-press: #434be0;
+  --accent-text: #5059ff; /* the accent as text or icon */
+  --merged: #8250df;
   --primary: var(--accent);
   --primary-ink: var(--accent-ink);
-  --focus: rgba(31, 111, 216, 0.35);
-  /* state: T3-style dots — working sky, needs-you amber, asking indigo, done emerald, failed red */
-  --live: #0ea5e9;
-  --ask: #6366f1;
-  --ok: #10b981;
-  --ok-ink: #047857;
-  --warn: #f59e0b;
+  --focus: rgba(80, 89, 255, 0.4);
+  /* state: one accent for working and done, amber for needs-you, red for failed */
+  --live: var(--accent-text);
+  --ask: var(--warn);
+  --ok: #16a34a;
+  --ok-ink: #15803d;
+  --warn: #d97706;
   --warn-ink: #b45309;
   --bad: #dc2626;
   --bad-ink: #b91c1c;
-  --ok-soft: rgba(16, 185, 129, 0.08);
-  --warn-soft: rgba(245, 158, 11, 0.08);
+  --ok-soft: rgba(22, 163, 74, 0.08);
+  --warn-soft: rgba(217, 119, 6, 0.08);
   --bad-soft: rgba(239, 68, 68, 0.06);
   --bad-line: rgba(239, 68, 68, 0.22);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card: none;
   --shadow-composer: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.06);
-  --hero-glow: rgba(31, 111, 216, 0.06);
+  --shadow-pop: 0 3px 12px rgba(0, 0, 0, 0.09), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --hero-glow: transparent;
   --diff-add: rgba(16, 185, 129, 0.1);
   --diff-del: rgba(239, 68, 68, 0.08);
   --diff-add-strong: rgba(16, 185, 129, 0.2);
@@ -66,6 +68,13 @@
   --lh-tight: 1.35;
   --lh-ui: 1.5;
   --lh-read: 1.65;
+  --lh-2xs: 16px;
+  --lh-xs: 18px;
+  --lh-sm: 20px;
+  --lh-md: 22px;
+  --lh-lg: 26px;
+  --lh-xl: 28px;
+  --lh-2xl: 36px;
   --tracking: -0.006em;
   --tracking-tight: -0.03em;
 
@@ -92,7 +101,7 @@
   --r-xs: 4px; /* tiny buttons inside chips */
   --r-sm: 6px; /* rows inside menus, crumbs */
   --r-md: 8px; /* buttons, inputs, list rows */
-  --r-lg: 8px; /* segmented controls */
+  --r-lg: 10px; /* segmented controls */
   --r-xl: 12px; /* cards: fork, result, notice, strips */
   --r-2xl: 16px; /* composer, user bubble */
   --r-pill: 999px;
@@ -105,6 +114,10 @@
   --h-lg: 36px;
   --h-xl: 40px;
   --h-2xl: 48px;
+  --h-row: 32px;
+  --h-row-kid: 28px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
 
   /* ── layout ── */
   --panel-w: 440px;
@@ -116,11 +129,11 @@
   /* ── motion ── */
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* things that slide or pop in */
-  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1); /* small overshoot: dots, pills, checks */
+  --ease-spring: var(--ease); /* no overshoot anywhere */
   --dur-fast: 0.12s; /* hover, colour */
   --dur: 0.16s; /* open, rotate, move */
-  --dur-slow: 0.26s; /* entering content */
-  --dur-drawer: 0.36s; /* panels */
+  --dur-slow: 0.22s; /* entering content */
+  --dur-drawer: 0.28s; /* panels */
 
   /* ── layers ── */
   --z-pop: 40;
@@ -139,48 +152,51 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #000000;
-  --bubble: #18181a;
-  --sidebar: #0d0d0d;
-  --card: #0d0d0d;
+  --bg: #151517;
+  --bubble: #232326;
+  --sidebar: #19191c;
+  --card: #1c1c1f;
   --muted: rgba(255, 255, 255, 0.03);
-  --hover: rgba(255, 255, 255, 0.06);
-  --active: rgba(255, 255, 255, 0.1);
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.08);
   --row-selected: rgba(255, 255, 255, 0.07);
   --row-selected-shadow: none;
   --line: rgba(255, 255, 255, 0.08);
   --line-soft: rgba(255, 255, 255, 0.05);
-  --input: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.15);
   --code-bg: #111113;
-  --ink: #f1f3f7;
-  --ink-2: #c7c9ce;
-  --ink-3: #a3a3a3;
-  --ink-4: #78787d;
-  --accent: #4d9cf0;
-  --accent-hover: #69adf3;
-  --accent-soft: rgba(77, 156, 240, 0.13);
-  --accent-line: rgba(77, 156, 240, 0.36);
-  --accent-ink: #04111f;
+  --ink: #f4f4f5;
+  --ink-2: #d4d4d9;
+  --ink-3: #9f9fa9;
+  --ink-4: #71717b;
+  --accent: #5059ff;
+  --accent-hover: #5e66ff;
+  --accent-soft: rgba(80, 89, 255, 0.14);
+  --accent-line: rgba(109, 117, 255, 0.4);
+  --accent-ink: #ffffff;
+  --accent-press: #4a52ee;
+  --accent-text: #6d75ff;
+  --merged: #a371f7;
   --scrim: rgba(0, 0, 0, 0.6);
   --primary: var(--accent);
   --primary-ink: var(--accent-ink);
-  --focus: rgba(77, 156, 240, 0.45);
-  --live: rgba(125, 211, 252, 0.8);
-  --ask: rgba(165, 180, 252, 0.9);
-  --ok: rgba(110, 231, 183, 0.9);
-  --ok-ink: #34d399;
-  --warn: rgba(252, 211, 77, 0.9);
+  --focus: rgba(109, 117, 255, 0.5);
+  --live: var(--accent-text);
+  --ask: var(--warn);
+  --ok: #26c55f;
+  --ok-ink: #26c55f;
+  --warn: #f99c00;
   --warn-ink: #fbbf24;
-  --bad: rgba(252, 165, 165, 0.9);
-  --bad-ink: #f87171;
-  --ok-soft: rgba(16, 185, 129, 0.14);
-  --warn-soft: rgba(245, 158, 11, 0.14);
+  --bad: #ff6568;
+  --bad-ink: #ff6568;
+  --ok-soft: rgba(38, 197, 95, 0.16);
+  --warn-soft: rgba(249, 156, 0, 0.16);
   --bad-soft: rgba(239, 68, 68, 0.1);
   --bad-line: rgba(239, 68, 68, 0.26);
   --shadow-card: none;
   --shadow-composer: 0 14px 32px -18px rgba(0, 0, 0, 0.75);
-  --shadow-pop: 0 20px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  --hero-glow: rgba(77, 156, 240, 0.06);
+  --shadow-pop: 0 7px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --hero-glow: transparent;
   --diff-add: rgba(16, 185, 129, 0.12);
   --diff-del: rgba(239, 68, 68, 0.12);
   --diff-add-strong: rgba(16, 185, 129, 0.22);
@@ -190,48 +206,51 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #000000;
-    --bubble: #18181a;
-    --sidebar: #0d0d0d;
-    --card: #0d0d0d;
+    --bg: #151517;
+    --bubble: #232326;
+    --sidebar: #19191c;
+    --card: #1c1c1f;
     --muted: rgba(255, 255, 255, 0.03);
-    --hover: rgba(255, 255, 255, 0.06);
-    --active: rgba(255, 255, 255, 0.1);
+    --hover: rgba(255, 255, 255, 0.05);
+    --active: rgba(255, 255, 255, 0.08);
     --row-selected: rgba(255, 255, 255, 0.07);
     --row-selected-shadow: none;
     --line: rgba(255, 255, 255, 0.08);
     --line-soft: rgba(255, 255, 255, 0.05);
-    --input: rgba(255, 255, 255, 0.14);
+    --input: rgba(255, 255, 255, 0.15);
     --code-bg: #111113;
-    --ink: #f1f3f7;
-    --ink-2: #c7c9ce;
-    --ink-3: #a3a3a3;
-    --ink-4: #78787d;
-    --accent: #4d9cf0;
-    --accent-hover: #69adf3;
-    --accent-soft: rgba(77, 156, 240, 0.13);
-    --accent-line: rgba(77, 156, 240, 0.36);
-    --accent-ink: #04111f;
+    --ink: #f4f4f5;
+    --ink-2: #d4d4d9;
+    --ink-3: #9f9fa9;
+    --ink-4: #71717b;
+    --accent: #5059ff;
+    --accent-hover: #5e66ff;
+    --accent-soft: rgba(80, 89, 255, 0.14);
+    --accent-line: rgba(109, 117, 255, 0.4);
+    --accent-ink: #ffffff;
+    --accent-press: #4a52ee;
+    --accent-text: #6d75ff;
+    --merged: #a371f7;
     --scrim: rgba(0, 0, 0, 0.6);
     --primary: var(--accent);
     --primary-ink: var(--accent-ink);
-    --focus: rgba(77, 156, 240, 0.45);
-    --live: rgba(125, 211, 252, 0.8);
-    --ask: rgba(165, 180, 252, 0.9);
-    --ok: rgba(110, 231, 183, 0.9);
-    --ok-ink: #34d399;
-    --warn: rgba(252, 211, 77, 0.9);
+    --focus: rgba(109, 117, 255, 0.5);
+    --live: var(--accent-text);
+    --ask: var(--warn);
+    --ok: #26c55f;
+    --ok-ink: #26c55f;
+    --warn: #f99c00;
     --warn-ink: #fbbf24;
-    --bad: rgba(252, 165, 165, 0.9);
-    --bad-ink: #f87171;
-    --ok-soft: rgba(16, 185, 129, 0.14);
-    --warn-soft: rgba(245, 158, 11, 0.14);
+    --bad: #ff6568;
+    --bad-ink: #ff6568;
+    --ok-soft: rgba(38, 197, 95, 0.16);
+    --warn-soft: rgba(249, 156, 0, 0.16);
     --bad-soft: rgba(239, 68, 68, 0.1);
     --bad-line: rgba(239, 68, 68, 0.26);
     --shadow-card: none;
     --shadow-composer: 0 14px 32px -18px rgba(0, 0, 0, 0.75);
-    --shadow-pop: 0 20px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    --hero-glow: rgba(77, 156, 240, 0.06);
+    --shadow-pop: 0 7px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --hero-glow: transparent;
     --diff-add: rgba(16, 185, 129, 0.12);
     --diff-del: rgba(239, 68, 68, 0.12);
     --diff-add-strong: rgba(16, 185, 129, 0.22);
