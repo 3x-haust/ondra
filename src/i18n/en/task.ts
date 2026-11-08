@@ -133,7 +133,8 @@ export default {
   "자동": "Auto",
   "걸린 시간": "Took",
   "진행 시간": "Running for",
-  "시작 전": "Not started",
+  "홈": "Home",
+  "이어서 작업": "Continued",
   "가져온 곳": "Imported from",
 
   // shell
@@ -304,6 +305,7 @@ export default {
   "쓴 파일": "File written",
   "검색 결과": "Search results",
   "폴더 목록": "Folder listing",
+  "카드": "Card",
   // round 3
   "실행 기록": "Runs",
   "{name} 닫기": "Close {name}",

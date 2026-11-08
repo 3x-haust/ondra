@@ -84,3 +84,35 @@ export function planCount(plan: PlanStep[]) {
   const now = plan.findIndex((p) => p.state === "now");
   return { done, total: plan.length, now, label: `${done}/${plan.length}` };
 }
+
+/** It has stopped working for good, or until someone starts it again. */
+export const ended = (t: Task) => t.status === "done" || t.status === "failed";
+
+/**
+ * How long a task worked, one way for the header, the overview and its sessions:
+ * from its start to its end (a running or waiting one: to `at`). A task that
+ * stopped without an end time ends where its last session or entry did.
+ */
+export function workSpan(t: Task, at: number): { start: number; end: number } | null {
+  if (!t.startedAt) return null;
+  const last = t.legs[t.legs.length - 1];
+  const live = t.status === "running" || t.status === "waiting";
+  const end = t.finishedAt ?? (live ? at : last?.endedAt ?? t.entries[t.entries.length - 1]?.at ?? at);
+  return { start: t.startedAt, end: Math.max(t.startedAt, end) };
+}
+
+export const workedMs = (t: Task, at: number) => {
+  const s = workSpan(t, at);
+  return s ? s.end - s.start : 0;
+};
+
+/** Each session's part of that time, so the sessions never add up to more than the whole. */
+export function legTimes(t: Task, at: number): number[] {
+  const s = workSpan(t, at);
+  return t.legs.map((l, i) => {
+    if (!s) return 0;
+    const from = Math.max(l.startedAt, s.start);
+    const to = Math.min(l.endedAt ?? t.legs[i + 1]?.startedAt ?? s.end, s.end);
+    return Math.max(0, to - from);
+  });
+}

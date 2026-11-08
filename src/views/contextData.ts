@@ -103,6 +103,8 @@ export interface Loaded {
   /** memory recalled into the first message (job) or the last message (chat) */
   recalled: Memory[];
   recalledWhere: string;
+  /** the skills agents can load, as Settings lists them (filled by the sheet) */
+  skills?: { name: string; description: string; path: string }[];
 }
 
 const firstLine = (t: string) => t.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "").trim() ?? "";

@@ -12,9 +12,9 @@ import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/
 import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
-import { planCount, taskDiff } from "../state/progress";
+import { planCount, taskDiff, workedMs } from "../state/progress";
 import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
+import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -322,12 +322,13 @@ export function TaskView(props: { id: string }) {
             </Show>
             <Show when={task().status !== "done"}>
               <span class={`status-chip ${task().status}`}>
-                <Show when={task().status === "running"} fallback={<Dot status={task().status} />}>
+                {/* the same glyph as the task's row in the sidebar (실패: the red one) */}
+                <Show when={task().status === "running"} fallback={<Glyph t={task()} />}>
                   <StatusIcon t={task()} size="sm" />
                 </Show>
                 {tr(statusLabel[task().status])}
                 <Show when={task().status === "running" && task().startedAt}>
-                  <span class="faint">{compact(now() - task().startedAt!)}</span>
+                  <span class="faint">{compact(workedMs(task(), now()))}</span>
                 </Show>
               </span>
             </Show>

@@ -14,8 +14,8 @@ import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
-import { ago, compact, long, now, priorityLabel, short, statusLabel } from "../ui/bits";
-import { planCount } from "../state/progress";
+import { ago, compact, now, priorityLabel, short, statusLabel } from "../ui/bits";
+import { ended, legTimes, planCount, workedMs } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
@@ -171,14 +171,23 @@ function ShipMenu(props: { t: Task }) {
   );
 }
 
+/** A task's folder by name: 홈 for the home folder. */
+const folderName = (p: string) => {
+  const full = tilde(expand(p)).replace(/\/+$/, "");
+  return full === "~" || !full ? tr("홈") : full.split("/").pop()!;
+};
+
 function Overview(props: { t: Task }) {
   const t = () => props.t;
   return (
     <div class="pane">
-      <div class="now-box">
-        <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
-        <div class="now-text">{t().status === "done" ? t().summary || nowText(t().now) : t().status === "running" ? nowText(t().now) : tr(statusLabel[t().status])}</div>
-      </div>
+      {/* a failed task's error is the card under its thread; the header already says 실패 */}
+      <Show when={t().status !== "failed"}>
+        <div class="now-box">
+          <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
+          <div class="now-text">{t().status === "done" ? t().summary || nowText(t().now) : t().status === "running" ? nowText(t().now) : tr(statusLabel[t().status])}</div>
+        </div>
+      </Show>
       <Show when={t().plan.length}>
         <div>
           <div class="pane-title">{tr("할 일")} <span class="pane-count">{planCount(t().plan).label}</span></div>
@@ -207,12 +216,10 @@ function Overview(props: { t: Task }) {
               {(l, i) => (
                 <div class="leg" classList={{ live: !l.endedAt && t().status === "running" }}>
                   <span class="leg-n">{i() + 1}</span>
-                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? nowText(t().now) : "—"}</span>
-                  {/* how long each ran (the running one: so far); when it began on hover */}
+                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 && t().status === "running" ? nowText(t().now) : tr("이어서 작업")}</span>
+                  {/* how long each ran, as part of the task's own time; when it began on hover */}
                   <span class="leg-time" title={ago(l.startedAt)}>
-                    {!l.endedAt && t().status === "running" && i() === t().legs.length - 1
-                      ? compact(now() - l.startedAt)
-                      : short((l.endedAt ?? t().legs[i() + 1]?.startedAt ?? t().finishedAt ?? now()) - l.startedAt)}
+                    <Show when={legTimes(t(), now())[i()] >= 1000}>{short(legTimes(t(), now())[i()])}</Show>
                   </span>
                 </div>
               )}
@@ -224,7 +231,7 @@ function Overview(props: { t: Task }) {
         <dl class="kv">
           <dt>{tr("폴더")}</dt>
           <dd>
-            <button class="path link" onClick={() => revealPath(expand(homeDir(t())))} title={homeDir(t())}>{tilde(expand(homeDir(t())))}</button>
+            <button class="kv-folder" onClick={() => revealPath(expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(homeDir(t()))}</button>
           </dd>
           <Show when={t().status !== "done"}>
           <dt>{tr("우선순위")}</dt>
@@ -250,8 +257,11 @@ function Overview(props: { t: Task }) {
             </select>
             <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
           </dd>
-          <dt>{t().status === "done" ? tr("걸린 시간") : tr("진행 시간")}</dt>
-          <dd class="muted">{t().startedAt ? long((t().finishedAt ?? now()) - t().startedAt!) : tr("시작 전")}</dd>
+          {/* the header's time, in its precision; a task not started yet has none */}
+          <Show when={t().startedAt}>
+            <dt>{ended(t()) ? tr("걸린 시간") : tr("진행 시간")}</dt>
+            <dd class="muted">{short(workedMs(t(), now()))}</dd>
+          </Show>
           <Show when={t().origin}>
             <dt>{tr("가져온 곳")}</dt>
             <dd class="muted"><span class="path">{tilde(t().origin!.path)}</span></dd>
