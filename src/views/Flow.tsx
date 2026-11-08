@@ -122,7 +122,7 @@ export function Flow() {
       if (r.kid) continue;
       const t = r.t;
       const y = cy(r);
-      const tone = t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
+      const tone = t.status === "failed" ? "bad" : t.status === "queued" ? "wait" : ended(t) ? "past" : t.status === "paused" ? "rest" : bucket(t) === "you" ? "warn" : bucket(t) === "review" ? "ready" : "live";
       const cls = `${tone} ${t.id === openRoot() ? "on" : ""} ${hoverTask() === t.id ? "hot" : ""}`;
       // off the trunk, up to the glyph's edge
       out.push({ d: `M${TRUNK} ${y} L${NODE - 7} ${y}`, cls });

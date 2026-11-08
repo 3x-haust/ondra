@@ -437,7 +437,7 @@ export function JobEnd(props: { t: Task }) {
   return (
     <Show when={props.t.status === "done" && c().ms}>
       <div class="job-cost" title={costDetail(c()) || undefined}>
-        {props.t.worktree?.state === "open" ? tr("{d} 동안 작업", { d: long(c().ms) }) : `${tr("완료")} · ${long(c().ms)}`}
+        {props.t.worktree?.state === "open" ? tr("{d} 동안 작업", { d: short(c().ms) }) : `${tr("완료")} · ${short(c().ms)}`}
       </div>
     </Show>
   );
