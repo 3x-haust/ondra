@@ -458,12 +458,22 @@
 .bar.bad i {
   background: var(--bad);
 }
+/* before / after: the labels take what they need (전, Before) and never break;
+   the rows share columns so the bars start at the same x */
+.cmp {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(48px, auto);
+  gap: var(--s-6) var(--s-10);
+}
 .cmp-row {
   display: grid;
-  grid-template-columns: 24px 1fr 70px;
-  gap: var(--s-10);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   font-size: var(--fs-sm);
+}
+.cmp-row > :first-child {
+  white-space: nowrap;
 }
 .cmp-row .v {
   text-align: right;

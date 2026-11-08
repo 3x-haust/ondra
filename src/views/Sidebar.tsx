@@ -338,7 +338,7 @@ export function Sidebar() {
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
+        <button class="icon-btn" data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
           <Icon name="compose" size={16} />
         </button>
         <button class="icon-btn" data-shortcut="search" title={`${tr("검색")} ${shortcutHint("search")}`} aria-label={tr("검색")} onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>

@@ -49,7 +49,10 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const [typed, setTyped] = createSignal("");
   let own!: HTMLInputElement;
   let list!: HTMLDivElement;
-  const count = () => props.d.options.length + (props.d.ui ? 0 : 1);
+  // one place to answer in your own words: inside a task the input below already takes it,
+  // elsewhere (Main) this card's own line does
+  const own_ = () => !props.d.ui && props.showTask !== false;
+  const count = () => props.d.options.length + (own_() ? 1 : 0);
   const select = (i: number) => {
     setSel(i);
     if (i === props.d.options.length) own?.focus();
@@ -130,7 +133,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
             </button>
           )}
         </For>
-        <Show when={!props.d.ui}>
+        <Show when={own_()}>
           <form
             class="decision-opt decision-own"
             classList={{ on: sel() === props.d.options.length }}
@@ -144,7 +147,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
             <input
               ref={own}
               class="decision-input"
-              placeholder={tr("직접 입력")}
+              placeholder={tr("다른 답")}
+              aria-label={tr("다른 답")}
               onFocus={() => setSel(props.d.options.length)}
               onInput={(e) => setTyped(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -169,9 +173,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
       {/* answers whatever is selected, a choice or what was typed: it belongs to the card, not a row */}
       <Show when={!props.d.ui}>
         <div class="decision-foot">
-          <button class="decision-send" classList={{ ready: ready() }} type="button" onClick={() => submit()} disabled={!ready()}>
-            {tr("보내기")}
-            <kbd>↵</kbd>
+          <button class="btn sm decision-send" type="button" onClick={() => submit()} disabled={!ready()} title="↵">
+            {tr("응답")}
           </button>
         </div>
       </Show>

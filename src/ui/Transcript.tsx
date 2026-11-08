@@ -348,7 +348,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[] }) {
           <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
         </Show>
         <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
-        <span class="tool-time">{short((t().endedAt ?? now()) - props.e.at)}</span>
+        <span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>
         <Show when={canOpen()}><Icon name="chevron" size={12} class="tool-chev" /></Show>
       </button>
       <Fold open={open() && !!t().note}>
