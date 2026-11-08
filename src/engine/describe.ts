@@ -67,13 +67,13 @@ const NOTE_FORMS: { key: string; was?: string[] }[] = [
   { key: "연결이 끊겼어요 · 다시 연결되면 이어서 해요", was: ["연결이 끊겼어요. 다시 연결되면 이어서 해요"] },
   { key: "모델 변경 → {m}" },
   { key: "모델 → {m}" },
-  { key: "끝내기 전에 확인 · {what}" },
+  { key: "확인 필요 · {what}", was: ["끝내기 전에 확인 · {what}"] },
   { key: '"{title}" 작업의 결과와 브랜치를 이어받아 시작해요', was: ['"{title}" 일의 결과와 브랜치를 이어받아 새로 시작해요'] },
   { key: '"{title}" 작업의 결과를 이어받아 시작해요', was: ['"{title}" 일의 결과를 이어받아 새로 시작해요'] },
   { key: '브랜치 {b}는 "{title}" 작업으로 넘어갔어요', was: ['브랜치 {b}는 "{title}" 일로 넘어갔어요'] },
   { key: '"{title}" 작업으로 넘어가요', was: ['"{title}" 일로 넘어가요'] },
 ];
-/** what "끝내기 전에 확인 · …" lists (stored Korean → its key) */
+/** what "확인 필요 · …" lists (stored Korean → its key) */
 const PROOF_PARTS: Record<string, string> = {
   "리뷰": "리뷰|proof",
   "리뷰 지적": "리뷰 지적|proof",
@@ -82,6 +82,26 @@ const PROOF_PARTS: Record<string, string> = {
   "남은 작업 있음": "남은 작업 있음|proof",
   "아직 할 일이 남음": "남은 작업 있음|proof",
 };
+/** effort ids as their words (t() keys), as the model picker shows them */
+const EFFORT_WORDS: Record<string, string> = { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최대" };
+
+/** "openai-codex/gpt-5.6-terra" → "GPT-5.6 Terra", the name the model picker shows */
+export function modelName(m: string): string {
+  const id = m.split("/").pop() || m;
+  return id
+    .split("-")
+    .map((p, i) => (i === 0 && /^(gpt|o\d)/i.test(p) ? p.toUpperCase() : /^\d/.test(p) || !p ? p : p[0].toUpperCase() + p.slice(1)))
+    .join(" ")
+    .replace(/^GPT (\d)/, "GPT-$1")
+    .replace(/^Claude (\w+) (\d+) (\d+)/, "Claude $1 $2.$3");
+}
+
+/** a model note's "{m}" as stored ("gpt-5.6-terra · high") → "GPT-5.6 Terra · 높음" */
+const modelPart = (m: string) => {
+  const [id, effort] = m.split(" · ");
+  return [modelName(id.trim()), ...(effort ? [EFFORT_WORDS[effort.trim()] ? t(EFFORT_WORDS[effort.trim()]) : effort] : [])].join(" · ");
+};
+
 const formRe = (f: string) => ({ keys: [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]), re: new RegExp(`^${escape(f).replace(/\{\w+\}/g, "([\\s\\S]+?)")}$`) });
 const NOTE_RES = NOTE_FORMS.flatMap(({ key, was = [] }) => [key, ...was].map((f) => ({ key, ...formRe(f) })));
 
@@ -96,6 +116,7 @@ export function noteText(text: string): string {
     if (!m) continue;
     const vars: Record<string, string> = {};
     keys.forEach((k, i) => (vars[k] = m[i + 1]));
+    if (vars.m && key.startsWith("모델")) vars.m = modelPart(vars.m);
     if (vars.what) vars.what = vars.what.split(" · ").map((p) => (PROOF_PARTS[p] ? t(PROOF_PARTS[p]) : p)).join(" · ");
     return t(key, vars);
   }

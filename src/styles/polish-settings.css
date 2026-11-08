@@ -740,9 +740,41 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-.settings-inner .acc-lim-num {
-  color: var(--ink-2);
+
+/* ───────── round 6 */
+/* accounts: "5시간 41% 사용 · 주간 100% 사용 · 크레딧 12.5" by the name, cache hit by the sign-in button;
+   when the row is narrow whole items drop (cache first, then the plan windows), never a word inside one */
+.settings-inner .acc-row {
+  container-type: inline-size;
 }
-.settings-inner .acc-lim.hot .acc-lim-num {
+.settings-inner .acc-usage {
+  gap: var(--s-6);
+}
+.settings-inner .acc-usage > * + *::before {
+  content: "·";
+  margin-right: var(--s-6);
+  color: var(--ink-4);
+}
+.settings-inner .acc-lim.hot {
   color: var(--warn-ink);
+}
+.settings-inner .acc-fields .acc-cache {
+  align-self: flex-end;
+  align-items: center;
+  height: 28px;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+@container (max-width: 560px) {
+  .settings-inner .acc-fields .acc-cache {
+    display: none;
+  }
+}
+@container (max-width: 520px) {
+  .settings-inner .acc-usage .acc-lim {
+    display: none;
+  }
+  .settings-inner .acc-usage .acc-lim + :not(.acc-lim)::before {
+    display: none;
+  }
 }

@@ -197,6 +197,7 @@ export default {
   // tools
   "켜진 도구 {n}개 · {tok} 토큰": "{n} tool on · {tok} tokens|{n} tools on · {tok} tokens",
   "켜진 도구가 요청마다 쓰는 토큰": "Tokens the tools in use add to each request",
+  "켜짐 {on} · 전체 {n}": "{on} on · {n} total",
   "토큰": "Tokens",
   "새로고침": "Refresh",
   "검색": "Search",

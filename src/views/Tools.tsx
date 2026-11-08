@@ -82,6 +82,8 @@ export function ToolsTab() {
     const add = r.mcp ? !on : on;
     setState("settings", "extraTools", (l) => (add ? [...new Set([...(l ?? []), entry])] : (l ?? []).filter((n) => n !== entry)));
   };
+  // a group counts the way the header does: the tools on (sent with every request) of all it lists
+  const counted = (g: Group) => ({ tools: g.rows.some((r) => r.tool), on: g.rows.filter((r) => r.tool && isOn(r) && !r.found).length });
   const toggle = (key: string) => {
     // selecting text in an open row doesn't fold it
     if (window.getSelection()?.toString()) return;
@@ -113,7 +115,9 @@ export function ToolsTab() {
               <>
                 <div class="set-group-title tl-gtitle">
                   {t(g.title)}
-                  <span class="tl-count">{g.rows.length}</span>
+                  <span class="tl-count" title={counted(g).on < g.rows.length ? t("켜짐 {on} · 전체 {n}", { on: counted(g).on, n: g.rows.length }) : undefined}>
+                    {counted(g).tools && counted(g).on < g.rows.length ? `${counted(g).on}/${g.rows.length}` : g.rows.length}
+                  </span>
                   <Show when={g.hint}><span class="tl-ghint">{g.hint}</span></Show>
                   <Show when={i() === 0}>
                     <span class="spacer" />

@@ -119,7 +119,7 @@ export default {
   "연결이 끊겼어요 · 다시 연결되면 이어서 해요": "Connection lost · resumes when it's back",
   "모델 변경 → {m}": "Model changed → {m}",
   "모델 → {m}": "Model → {m}",
-  "끝내기 전에 확인 · {what}": "Checked before finishing · {what}",
+  "확인 필요 · {what}": "Still to check: {what}",
   "리뷰|proof": "review",
   "리뷰 지적|proof": "review findings",
   "증거|proof": "evidence",
