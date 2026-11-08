@@ -311,7 +311,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
         <span class="tool-target">{detail()}</span>
         <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
-        <Show when={props.stopped && open_()}><span class="tool-stopped">{tr("중단됨")}</span></Show>
+        <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped)}><span class="tool-stopped">{tr("중단됨")}</span></Show>
         <Icon name="chevron" size={12} class="tool-chev" />
       </button>
       <Fold open={open()}>
@@ -351,7 +351,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   const t = () => props.e.tool;
   const shell = () => (t().shellId ? props.shells.find((s) => s.id === t().shellId) : undefined);
   /** never finished, and the task stopped working: not running any more */
-  const cut = () => !t().endedAt && !!props.stopped;
+  const cut = () => !!t().stopped || (!t().endedAt && !!props.stopped);
   const running = () => !t().endedAt && !props.stopped;
   const what = () => shortName(t());
   const [open, setOpen] = createSignal(false);
@@ -398,7 +398,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
               <>
                 {s().tail.trim() || (s().endedAt ? tr("출력 없음") : tr("출력 대기 중…"))}
                 <Show when={s().endedAt}>
-                  <span class="exit" classList={{ bad: s().ok === false }}>{s().ok === false ? tr("실패") : tr("완료")} · {long((s().endedAt ?? 0) - s().startedAt)}</span>
+                  <span class="exit" classList={{ bad: s().ok === false, cut: !!s().stopped }}>{s().stopped ? tr("중단됨") : s().ok === false ? tr("실패") : tr("완료")} · {long((s().endedAt ?? 0) - s().startedAt)}</span>
                 </Show>
               </>
             )}
