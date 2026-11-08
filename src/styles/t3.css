@@ -3406,13 +3406,6 @@ input[type="checkbox"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cv-dr-acts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-6);
-  padding: 0 var(--s-16) var(--s-12);
-  border-bottom: 1px solid var(--line-soft);
-}
 .cv-dr-body {
   flex: 1;
   min-height: 0;

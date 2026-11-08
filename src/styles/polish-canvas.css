@@ -1773,3 +1773,87 @@
     padding: var(--s-12) var(--s-10);
   }
 }
+
+/* ═════════════ round 10 ═════════════ */
+
+/* ── canvas: paused is its own state. The card steps back like a queued one; its meter part and
+   minimap mark are the muted ink a step darker than queued */
+.cv-node.t-paused:not(:hover, .sel) {
+  box-shadow: 0 0 0 1px var(--line-soft);
+}
+.cv-node.t-paused .cv-head .cv-title {
+  color: var(--ink-2);
+}
+.cv-node.t-paused:is(:hover, .sel) .cv-head .cv-title {
+  color: var(--ink);
+}
+.cv-edge.t-paused path {
+  stroke: color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.cv-proj-meter i.t-paused,
+.cv-mini rect.t-paused {
+  background: var(--ink-3);
+  fill: var(--ink-3);
+}
+
+/* ── canvas: a running card's steps, newest first from the top under what it's on; a row that
+   doesn't fit (the oldest) drops out whole, and the room left sits under the rows */
+.cv-world .cv-node .cv-act-feed {
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-content: flex-start;
+  justify-content: flex-start;
+}
+
+/* ── canvas: a subagent card is as tall as its title and state line */
+.cv-world .cv-sub .cv-status {
+  margin-top: auto;
+  padding-top: var(--s-4);
+}
+
+/* ── canvas: what a finished card couldn't check sits in its state line, after the state */
+.cv-world .cv-node .cv-status .unverified-badge {
+  flex: none;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-sm);
+}
+
+/* ── side sheet: the title has its own row (two lines at most); the actions sit at its right when
+   it fits there, on the row under it otherwise */
+.cv-dr-head {
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--s-8);
+  row-gap: var(--s-4);
+}
+.cv-dr-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-8);
+  padding: 3px 0;
+}
+.cv-dr-name .cv-stg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+}
+.cv-dr-head .cv-dr-title {
+  flex: 0 1 auto;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.cv-dr-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  margin-left: auto;
+}

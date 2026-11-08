@@ -7,7 +7,7 @@ import { decisionFor, projectsIn, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
-import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
+import { ago, compact, IssueTag, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
@@ -43,14 +43,16 @@ const [showOld, setShowOld] = createSignal(false);
 
 const DAY = 86_400_000;
 
-/** Failed is its own column, never counted as needing a reply. A discarded task sits under 완료 but reads 버림. */
+/** Failed and paused are columns of their own (never counted as needing a reply or as queued).
+ *  A discarded task sits under 완료 but reads 버림. */
 function stateOf(task: Task): string {
   if (discarded(task)) return "done";
   if (task.status === "failed") return "failed";
   const kids = state.tasks.filter((k) => k.parentId === task.id);
   if (task.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   if (task.status === "running") return "running";
-  if (task.status === "queued" || task.status === "paused") return "queued";
+  if (task.status === "paused") return "paused";
+  if (task.status === "queued") return "queued";
   if (task.status === "done" && task.worktree?.state === "open") return "review";
   return "done";
 }
@@ -58,18 +60,19 @@ function stateOf(task: Task): string {
 const STATES: { id: string; label: string; tone: string }[] = [
   { id: "queued", label: "대기", tone: "idle" },
   { id: "running", label: "진행 중", tone: "live" },
+  { id: "paused", label: "일시정지", tone: "paused" },
   { id: "you", label: "응답 필요", tone: "ask" },
   { id: "failed", label: "실패", tone: "failed" },
   { id: "review", label: "검토", tone: "review" },
   { id: "done", label: "완료", tone: "done" },
 ];
-const ORDER = ["you", "failed", "review", "running", "queued", "done"];
+const ORDER = ["you", "failed", "review", "running", "paused", "queued", "done"];
 /** a card's state in words (the column's word when grouped by state) */
 const STATE_WORD: Record<string, string> = Object.fromEntries(STATES.map((s) => [s.id, s.label]));
 /** the project a task is filed under, by the same name the sidebar shows (none: 기타) */
 const projectOf = (task: Task) => projectsIn(task.space).find((p) => p.id === task.project);
 /** a column's mark: the glyph the sidebar draws for a task in that state */
-const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", failed: "failed", running: "running", queued: "queued", review: "inreview", done: "done" };
+const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", failed: "failed", running: "running", paused: "paused", queued: "queued", review: "inreview", done: "done" };
 
 /** a task in each state, for drawing that state's glyph where there is no one task */
 const SAMPLE: Record<string, Partial<Task>> = {
@@ -144,8 +147,12 @@ export function Board(props: { embedded?: boolean } = {}) {
 
   const cols = createMemo<Col[]>(() => {
     if (groupBy() === "state")
-      // 대기 and 완료 always stand; the others only when something is in them
-      return STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) })).filter((c) => c.id === "queued" || c.id === "done" || c.tasks.length);
+    {
+      // 대기 and 완료 always stand (an empty 대기 gives way to 일시정지); the others only when something is in them
+      const all = STATES.map((s) => ({ ...s, tasks: shown().filter((x) => stateOf(x) === s.id) }));
+      const paused = all.some((c) => c.id === "paused" && c.tasks.length);
+      return all.filter((c) => c.tasks.length || c.id === "done" || (c.id === "queued" && !paused));
+    }
     // by the task's project, in the sidebar's order; tasks without one go last under 기타
     const by = new Map<string, Task[]>();
     for (const x of shown()) {
@@ -239,8 +246,8 @@ function Card(props: { t: Task; byProject: boolean }) {
   const job = () => props.t;
   const st = () => stateOf(job());
   const gone = () => discarded(job());
-  /** the state in the column's words (a paused task sits under 대기 but says 일시정지, a discarded one under 완료 says 버림) */
-  const word = () => (gone() ? "버림" : st() === "queued" ? statusLabel[job().status] : STATE_WORD[st()]);
+  /** the state in the column's words (a discarded one sits under 완료 but says 버림) */
+  const word = () => (gone() ? "버림" : STATE_WORD[st()]);
   const kids = () => state.tasks.filter((k) => k.parentId === job().id);
   /** thrown away: nothing of it is left to count */
   const diff = () => (gone() ? { add: 0, del: 0 } : changes(job()));
@@ -252,18 +259,23 @@ function Card(props: { t: Task; byProject: boolean }) {
   const line = (): string => {
     const d = decisionFor(job().id);
     if (d) return d.question;
-    if (job().status === "failed" && !gone()) return job().error ?? t("실패");
+    if (job().status === "failed" && !gone()) return job().error ?? "";
     if (st() === "running") return job().now ? nowText(job().now) : t("시작하는 중");
-    // the column (or the glyph) already says it's waiting: only a pause is worth a word
-    if (st() === "queued") return job().status === "paused" ? t("일시정지") : "";
-    return job().summary || (job().now ? nowText(job().now) : "");
+    // the column (or the state word) already says it's queued or paused
+    if (st() === "queued" || st() === "paused") return "";
+    const body = job().summary || (job().now ? nowText(job().now) : "");
+    // a line that only says the state again says nothing
+    return body.trim() === t(word()) ? "" : body;
   };
   const when = () => {
     if (st() === "running" && job().startedAt) return compact(now() - job().startedAt!);
     if (st() === "queued") return ago(job().createdAt);
-    // merged: when it was merged (older tasks without mergedAt: when they finished)
+    // paused: the task's own header says since when; a bare time here would read as something else
+    if (st() === "paused") return "";
+    // merged: when it was merged; discarded: when it was thrown away (older tasks: when they finished)
     const merged = job().worktree?.state === "merged" && !gone() ? job().mergedAt : undefined;
-    return ago(merged ?? job().finishedAt ?? job().startedAt ?? job().createdAt);
+    const thrown = gone() ? (job() as Task & { discardedAt?: number }).discardedAt : undefined;
+    return ago(thrown ?? merged ?? job().finishedAt ?? job().startedAt ?? job().createdAt);
   };
   const say = () => {
     const m = msg().trim();
@@ -304,7 +316,7 @@ function Card(props: { t: Task; byProject: boolean }) {
         <IssueTag t={job()} />
         <Show when={!props.byProject}><span class="bc-proj">{projectOf(job())?.name ?? t("기타")}</span></Show>
         <span class="spacer" />
-        <span class="bc-when">{when()}</span>
+        <Show when={when()}><span class="bc-when">{when()}</span></Show>
       </div>
       <span class="bc-title">{job().title}</span>
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
@@ -323,7 +335,7 @@ function Card(props: { t: Task; byProject: boolean }) {
       </Show>
 
       <div class="bc-acts">
-        <Show when={!gone() && (st() === "running" || st() === "you" || st() === "review" || st() === "queued")}>
+        <Show when={!gone() && (st() === "running" || st() === "you" || st() === "review" || st() === "queued" || st() === "paused")}>
           {act(t("메시지"), "message", () => (setTalk(!talk()), queueMicrotask(() => input?.focus())))}
         </Show>
         <Show when={st() === "running"}>{act(t("일시정지|action"), "pause", () => stopTask(job().id))}</Show>
