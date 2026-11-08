@@ -2477,6 +2477,11 @@ body {
   color: var(--ink-2);
   border-radius: var(--r-md);
 }
+/* a row whose text wraps gets room above and below it */
+.g-row.wrapped {
+  padding-top: var(--s-6);
+  padding-bottom: var(--s-6);
+}
 .g-row:hover,
 .g-row.hot {
   background: var(--hover);
@@ -2495,16 +2500,15 @@ body {
 }
 .g-line1 {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--s-6);
   min-width: 0;
 }
+/* the whole title and line show, wrapping, never cut short */
 .g-name {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .g-row.you .g-name {
   color: var(--ink);
@@ -2542,9 +2546,7 @@ body {
 .g-line2 {
   font-size: var(--fs-xs);
   color: var(--ink-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .g-line2.bad {
   color: var(--bad);
@@ -2650,7 +2652,7 @@ body {
 }
 .g-line2-wrap {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--s-6);
   min-width: 0;
 }
