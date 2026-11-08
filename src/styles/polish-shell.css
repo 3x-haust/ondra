@@ -1238,3 +1238,127 @@
   white-space: nowrap;
   color: var(--ink-3);
 }
+
+/* ═════════════ round 3 ═════════════ */
+
+/* the status glyph (Glyph from Sidebar.tsx) looks the same wherever a task's state shows:
+   sidebar, ⌘K, 내 차례, board, canvas, flow. 14px, static (§8). Review is a ring with a dot
+   in the accent, never a check and never green. */
+.sb-glyph.st-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+.sb-glyph.st-icon i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.sb-glyph.st-icon .spin {
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+}
+.sb-glyph.st-icon.queued {
+  border: 1.5px dashed var(--ink-4);
+}
+.sb-glyph.st-icon.queued i {
+  display: none;
+}
+.sb-glyph.st-icon.paused {
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.sb-glyph.st-icon.paused i {
+  width: 4px;
+  height: 4px;
+  background: var(--ink-3);
+}
+.sb-glyph.st-icon.waiting,
+.sb-glyph.st-icon.failed,
+.sb-glyph.st-icon.inreview {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.sb-glyph.st-icon.waiting {
+  color: var(--warn);
+}
+.sb-glyph.st-icon.failed {
+  color: var(--bad);
+}
+.sb-glyph.st-icon.inreview {
+  color: var(--accent-text);
+}
+.sb-glyph.st-icon.waiting i,
+.sb-glyph.st-icon.failed i {
+  background: currentColor;
+}
+.sb-glyph.st-icon.inreview i {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+.sb-glyph.st-icon.done {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* 내 차례 popover: the state word in its tone, like the sidebar row (review in the accent) */
+.needs-menu .needs-word.ask {
+  color: var(--warn-ink);
+}
+.needs-menu .needs-word.bad {
+  color: var(--bad-ink);
+}
+.needs-menu .needs-word.review {
+  color: var(--accent-text);
+}
+.needs-menu .needs-word {
+  font-weight: var(--fw-medium);
+}
+
+/* done folds under each project: the disclosure lines up with the job rows above it */
+.app .sidebar .sb-proj-jobs .sb-older {
+  width: 100%;
+  padding-left: var(--s-8);
+}
+.app .sidebar .sb-done-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* the devices view without one device picked: its section reads as the place you're in */
+.app .sidebar .sb-head.on {
+  border-radius: var(--r-md);
+  background: var(--row-selected);
+  box-shadow: var(--row-selected-shadow);
+}
+.app .sidebar .sb-head.on .sb-head-btn {
+  color: var(--ink);
+}
+.app .sidebar .sb-head.on .icon-btn.xs {
+  opacity: 1;
+}
+
+/* ⌘K: a task's state word in the tone its sidebar row uses */
+.palette-item .hint {
+  margin-left: auto;
+}
+.palette-item .hint + .hint-keys {
+  margin-left: var(--s-8);
+}
+.palette-item .hint.tone-ask {
+  color: var(--warn-ink);
+  font-weight: var(--fw-medium);
+}
+.palette-item .hint.tone-bad {
+  color: var(--bad-ink);
+  font-weight: var(--fw-medium);
+}
+.palette-item .hint.tone-review {
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}

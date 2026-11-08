@@ -75,6 +75,8 @@ export interface ShortcutCommand {
   section: string;
   icon: string;
   shortcut?: Shortcut;
+  /** keys shown for a command the table can't match (the `?` sheet) */
+  keys?: string;
   inInput?: boolean;
   enabled?: () => boolean;
   run: () => void;
