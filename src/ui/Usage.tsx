@@ -1,12 +1,12 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
 import { openPanel } from "../state/ui";
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
-import { tokens, now } from "./bits";
+import { ctxShare, tokens, now } from "./bits";
 import { state } from "../state/store";
 import { ContextSheet } from "../views/Context";
 import { t } from "../i18n";
@@ -87,15 +87,43 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     void loadEmail(props.accountId);
   });
   const list = () => limitsShown(props.accountId);
+  // the one source for how full the context is: the strip, its tooltip and the sheet all read it
   const c = () => (props.agent ? ctx[props.agent] : undefined);
-  /** the share of the window, worked out the same way as the context sheet */
-  const pct = () => { const x = c(); return x ? (x.window ? (x.tokens / x.window) * 100 : x.percent) : 0; };
   const [ctxOpen, setCtxOpen] = createSignal(false);
   // with no account and nothing measured yet there is nothing to show: no empty strip
   const any = () => !!state.accounts.some((a) => a.id === props.accountId) || !!c() || !!props.shells || !!props.branch;
+  // one line, never cut: when it doesn't fit, whole items go, least needed first
+  let line: HTMLDivElement | undefined;
+  const fit = () => {
+    const el = line;
+    if (!el || !el.isConnected) return;
+    el.classList.add("st-measure");
+    el.querySelectorAll(".st-drop").forEach((x) => x.classList.remove("st-drop"));
+    const over = () => el.scrollWidth > el.clientWidth + 1;
+    const drop = (sel: string, one = false) => {
+      const xs = [...el.querySelectorAll(sel)].reverse();
+      for (const x of xs) {
+        if (!over()) return;
+        x.classList.add("st-drop");
+        if (!one) xs.forEach((y) => y.classList.add("st-drop"));
+      }
+    };
+    for (const sel of [".st-br", ".st-sh", ".st-used", ".st-cache", ".st-credits"]) drop(sel);
+    drop(".st-lim", true);
+    el.classList.remove("st-measure");
+  };
+  const watch = (el: HTMLDivElement) => {
+    line = el;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    const mo = new MutationObserver(fit);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    queueMicrotask(fit);
+    onCleanup(() => (ro.disconnect(), mo.disconnect()));
+  };
   return (
     <Show when={any()}>
-    <div class="status-line">
+    <div class="status-line" ref={watch}>
       <Show when={state.accounts.find((a) => a.id === props.accountId)}>
         {(a) => <AccountPicker accountId={a().id} space={props.space ?? a().space} onPick={props.onAccount} running={props.running} />}
       </Show>
@@ -107,21 +135,21 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         )}
       </For>
       <Show when={creditsOf(props.accountId)}>
-        {(c) => <span class="st-lim st-credits" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: c() })}</span>}
+        {(c) => <span class="st-lim st-credits" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
       </Show>
       <Show when={props.agent}>
         <button
           class="st-ctx"
-          classList={{ hot: pct() >= 70 }}
+          classList={{ hot: !!c()?.window && c()!.tokens / c()!.window >= 0.7 }}
           title={c() ? t("컨텍스트 {a} / {b}", { a: tokens(c()!.tokens), b: tokens(c()!.window) }) : t("컨텍스트")}
           onClick={() => setCtxOpen(true)}
         >
           <Show when={c()} fallback={t("컨텍스트")}>
-            {(x) => <>{tokens(x().tokens)} ({pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%)</>}
+            {(x) => <>{tokens(x().tokens)} ({ctxShare(x().tokens, x().window)})</>}
           </Show>
         </button>
         <Show when={ctxOpen()}>
-          <ContextSheet agent={props.agent!} accountId={props.accountId} known={c() ? { tokens: c()!.tokens, window: c()!.window } : undefined} onClose={() => setCtxOpen(false)} />
+          <ContextSheet agent={props.agent!} accountId={props.accountId} onClose={() => setCtxOpen(false)} />
         </Show>
       </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>

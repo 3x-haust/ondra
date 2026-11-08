@@ -105,7 +105,7 @@ function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
     <div class="blk blk-evidence">
       <div class="blk-label">
         {t("증거 {n}개", { n: props.items.length })}
-        {props.unverified?.length ? ` · ${t("미확인 {n}개", { n: props.unverified.length })}` : ""}
+        {props.unverified?.length ? ` · ${t("{n}개 확인 안 됨", { n: props.unverified.length })}` : ""}
       </div>
       <For each={props.items}>
         {(e) => (
@@ -128,7 +128,7 @@ function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
         {(u) => (
           <div class="ev-row todo">
             <span class="ev-mark">?</span>
-            <span class="ev-kind">{t("미확인")}</span>
+            <span class="ev-kind">{t("확인 안 됨")}</span>
             <span class="ev-note">{u}</span>
           </div>
         )}

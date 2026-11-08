@@ -6,7 +6,7 @@
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
-import { usePop } from "./ModelPicker";
+import { placePop, usePop } from "./ModelPicker";
 import { asQuote } from "./quote";
 import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
@@ -108,6 +108,8 @@ export function Composer(props: {
   plus?: PlusItem[];
   /** the chat this input belongs to: each keeps its own unsent text */
   draftKey?: string;
+  /** its menus open below it when there is room (an input near the top of the screen) */
+  popDown?: boolean;
 }) {
   const [text, setText] = createSignal("");
   const [plusOpen, setPlusOpen] = usePop();
@@ -264,6 +266,20 @@ export function Composer(props: {
     el.setSelectionRange(next.length, next.length);
     grow();
   };
+  // every menu that opens from this input (+, project, permission, model, account) goes where
+  // there is room for it, never over the control that opened it
+  onMount(() => {
+    const mo = new MutationObserver((list) => {
+      for (const m of list)
+        for (const n of m.addedNodes) {
+          if (!(n instanceof HTMLElement)) continue;
+          const pops = n.matches(".pop, .plus-menu") ? [n] : [...n.querySelectorAll<HTMLElement>(".pop, .plus-menu")];
+          pops.forEach(placePop);
+        }
+    });
+    mo.observe(wrap, { childList: true, subtree: true });
+    onCleanup(() => mo.disconnect());
+  });
   onMount(() => {
     const me = { root: wrap, quote };
     composers.add(me);
@@ -339,7 +355,7 @@ export function Composer(props: {
 
   return (
     // one size, focused or not: leaving the input never moves the thread or hides the chips
-    <div class="composer-wrap" ref={wrap}>
+    <div class="composer-wrap" ref={wrap} data-pops={props.popDown ? "down" : undefined}>
       <Show when={props.top}>
         <div class="strips">{props.top}</div>
       </Show>
@@ -542,13 +558,6 @@ export function Composer(props: {
                 class="plus-menu"
                 role="menu"
                 onClick={(e) => e.stopPropagation()}
-                ref={(el) =>
-                  // fits in the room above it (under the top bar), scrolling the rest
-                  queueMicrotask(() => {
-                    const top = el.parentElement?.getBoundingClientRect().top ?? 0;
-                    el.style.maxHeight = `${Math.max(160, Math.min(420, top - 10 - 60))}px`;
-                  })
-                }
               >
                 <For each={plusItems()}>
                   {(it, i) => (

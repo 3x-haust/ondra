@@ -7,10 +7,14 @@ import { tilde } from "../engine/rpc";
 import { kindLabel, kindOf } from "../engine/memory";
 import { setMemoryFocus, setView } from "../state/ui";
 import type { Memory } from "../state/types";
-import { tokens } from "../ui/bits";
+import { ctxShare, tokens } from "../ui/bits";
+import { ctx as ctxNow } from "../state/ctx";
+import { inTauri } from "../lib/native";
+import { inChat } from "../engine/captain";
+import { state, taskById } from "../state/store";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
-import { type CtxMessage, type Loaded, loadChat, loadJob } from "./contextData";
+import { type CtxMessage, estimate, type Loaded, loadChat, loadJob } from "./contextData";
 import { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
 import { t } from "../i18n";
 
@@ -178,7 +182,8 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
     if (c().forced) s.engine = c().systemPromptTokens;
     return s;
   });
-  const real = () => c().contextUsage?.tokens ?? (props.data.live ? null : props.known?.tokens ?? null);
+  // the input's strip and this sheet read one number: what the engine last reported for this conversation
+  const real = () => props.known?.tokens ?? c().contextUsage?.tokens ?? null;
   // the parts are estimates; when the model's own count is known, the total is that number
   // (the same one the status line shows) and each part keeps its share of it
   const segs = createMemo(() => {
@@ -190,7 +195,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
     return Object.fromEntries(Object.entries(s).map(([key, v]) => [key, Math.round(v * k)])) as Record<Seg, number>;
   });
   const total = () => real() || Object.values(segs()).reduce((a, b) => a + b, 0);
-  const win = () => c().contextUsage?.contextWindow || props.known?.window || 0;
+  const win = () => props.known?.window || c().contextUsage?.contextWindow || 0;
   // the bar is the whole window: each part takes its share, the rest stays empty
   const scale = () => Math.max(win(), total()) || 1;
   const order: Seg[] = ["engine", "ondra", "files", "skills", "tools", "talk"];
@@ -208,7 +213,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
         <div class="cx-big">
           <b>{tokens(total())}</b>
           <Show when={win()}><span>/ {tokens(win())}</span></Show>
-          <Show when={win()}><span class="cx-big-note">{share(total(), win())}</span></Show>
+          <Show when={win()}><span class="cx-big-note">{ctxShare(total(), win())}</span></Show>
           <span class="spacer" />
           <Show when={real() !== null && real() !== undefined}>
             <span class="cx-real">{t("마지막 요청 {n}", { n: tokens(real()!) })}</span>
@@ -313,11 +318,38 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
 }
 
 /** The sheet. `agent` is "t:<job id>" or "captain:<chat key>". */
+/** Without the engine (the preview build) the probe's sample talk stands in: show this conversation's own. */
+function ownTalk(agent: string): CtxMessage[] {
+  const m = (role: string, text: string, toolName?: string): CtxMessage => ({ role, tokens: estimate(text), preview: text.replace(/\s+/g, " ").slice(0, 160), toolName });
+  if (agent.startsWith("t:")) {
+    const x = taskById(agent.slice(2));
+    if (!x) return [];
+    const TOOL: Record<string, string> = { read: "read", search: "grep", edit: "edit", write: "write", bash: "bash", test: "bash" };
+    return [
+      ...(x.entries.some((e) => e.kind === "user") ? [] : [m("user", x.ask)]),
+      ...x.entries.flatMap((e) =>
+        e.kind === "user" ? [m("user", e.text)] : e.kind === "text" ? [m("assistant", e.text)] : e.kind === "tool" ? [m("toolResult", e.tool.detail || e.tool.target, TOOL[e.tool.kind])] : [],
+      ),
+    ];
+  }
+  const key = agent.replace(/^captain:/, "");
+  return state.captain
+    .filter((x) => inChat(x, key) && !x.pending)
+    .map((x) => (x.from === "me" ? m("user", x.text ?? "") : m("assistant", [x.reply, ...(x.routes ?? []).map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n"))))
+    .filter((x) => x.preview);
+}
+
 export function ContextSheet(props: { agent: string; accountId: string; known?: { tokens: number; window: number }; onClose: () => void }) {
   const [n, setN] = createSignal(0);
-  const [data] = createResource(() => ({ n: n() }), () =>
-    props.agent.startsWith("t:") ? loadJob(props.agent.slice(2)) : loadChat(props.agent.replace(/^captain:/, ""), props.accountId),
-  );
+  const [data] = createResource(() => ({ n: n() }), async () => {
+    const d = await (props.agent.startsWith("t:") ? loadJob(props.agent.slice(2)) : loadChat(props.agent.replace(/^captain:/, ""), props.accountId));
+    return inTauri ? d : { ...d, ctx: { ...d.ctx, messages: ownTalk(props.agent) } };
+  });
+  // the same number the input's strip shows, kept current while the sheet is open
+  const known = () => {
+    const x = ctxNow[props.agent];
+    return x ? { tokens: x.tokens, window: x.window } : props.known;
+  };
   const key = (e: KeyboardEvent) => {
     if (e.key === "Escape" && !ignoredKey(e) && noModifiers(e)) {
       e.preventDefault();
@@ -340,7 +372,7 @@ export function ContextSheet(props: { agent: string; accountId: string; known?: 
           <div class="sheet-body cx-body">
             <Show when={!data.error} fallback={<p class="cx-error">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</p>}>
               <Show when={data()} fallback={<div class="cx-wait">{t("불러오는 중")}</div>}>
-                <View data={data()!} known={props.known} onClose={props.onClose} />
+                <View data={data()!} known={known()} onClose={props.onClose} />
               </Show>
             </Show>
           </div>

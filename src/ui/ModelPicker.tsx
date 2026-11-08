@@ -46,6 +46,49 @@ export function usePop(): [() => boolean, (v: boolean) => void] {
   return [() => openPop() === me, (v) => setOpenPop(v ? me : null)];
 }
 
+/** The nearest box that clips what is inside it (a scroller), else the window. */
+function clipBox(el: HTMLElement) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const o = getComputedStyle(p);
+    if (/(auto|scroll|hidden|clip)/.test(`${o.overflowY}${o.overflowX}`)) {
+      const r = p.getBoundingClientRect();
+      return { top: Math.max(0, r.top), bottom: Math.min(innerHeight, r.bottom) };
+    }
+  }
+  return { top: 0, bottom: innerHeight };
+}
+
+/**
+ * Place a popover beside the box it is positioned against: on the side it
+ * was drawn for when it fits there, else on the side with more room, scrolling
+ * if even that is short. It never covers its control.
+ */
+export function placePop(el: HTMLElement) {
+  // what it is positioned against: its picker, or the input's edge for the composer's menus
+  const host = (el.offsetParent as HTMLElement | null) ?? el.parentElement;
+  if (!host || !el.isConnected) return;
+  const a = host.getBoundingClientRect();
+  const box = clipBox(host);
+  const gap = 6;
+  const above = a.top - box.top - gap - 4;
+  const below = box.bottom - a.bottom - gap - 4;
+  el.style.maxHeight = "";
+  const h = el.offsetHeight;
+  const r = el.getBoundingClientRect();
+  // a screen can ask its menus to drop down (the new-task form); otherwise the side it was drawn for
+  const prefer = el.closest<HTMLElement>("[data-pops]")?.dataset.pops;
+  const wasUp = prefer === "down" ? false : prefer === "up" ? true : r.bottom <= a.top + 1;
+  const up = wasUp ? h <= above || above >= below : !(h <= below || below >= above);
+  el.style.top = up ? "auto" : `calc(100% + ${gap}px)`;
+  el.style.bottom = up ? `calc(100% + ${gap}px)` : "auto";
+  el.classList.toggle("up", up);
+  const room = Math.floor(up ? above : below);
+  if (h > room) {
+    el.style.maxHeight = `${Math.max(120, room)}px`;
+    el.style.overflowY = "auto";
+  }
+}
+
 export function ModelPicker(props: {
   accountId: string;
   model: string;
@@ -172,7 +215,7 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
         {t(cur().label)}
       </button>
       <Show when={open()}>
-        <div class="pop up left perm-pop" style={{ bottom: "calc(100% + 8px)", top: "auto" }}>
+        <div class="pop up left perm-pop">
           <For each={PERMISSIONS}>
             {(p) => (
               <button type="button" class={`perm-item p-${p.id}`} classList={{ on: p.id === cur().id }} onClick={() => (props.onChange(p.id), setOpen(false))}>

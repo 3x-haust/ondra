@@ -17,7 +17,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago, compact, midTrim, now, statusLabel } from "../ui/bits";
+import { ago, compact, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -26,7 +26,7 @@ import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { noModifiers, shortcutHint } from "../lib/shortcuts";
+import { matchesShortcut, noModifiers, shortcutHint, shortcuts } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
@@ -252,7 +252,8 @@ function AccountModel(props: { accountId: string; up?: boolean }) {
 
 // ───────────── new task
 /** The sidebar's 새 작업: a blank task to write, in a project picked here. Any move elsewhere ends it. */
-const [drafting, setDrafting] = createSignal<{ project?: string } | null>(null);
+const drafting = newTaskOpen;
+const setDrafting = setNewTaskOpen;
 export function startNewTask() {
   const v = view();
   const project = v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined;
@@ -316,12 +317,13 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
     openTask(id);
   };
   return (
-    <div class="page hero-page new-task">
+    <div class="page hero-page new-task-page">
       <div class="hero">
         <Composer
           id="new-task-input"
           draftKey={`new:${state.space}`}
           big
+          popDown
           autofocus
           placeholder={t("새 작업")}
           files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
@@ -404,9 +406,9 @@ export function MainView() {
         btwCommand(() => `main:${key()}`),
         { name: "side", desc: t("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
         { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
-        { name: "ask", desc: t("권한: 매번 묻기"), icon: "lock", run: () => setState("settings", "permission", "ask") },
-        { name: "edits", desc: t("권한: 편집 허용"), icon: "pencil", run: () => setState("settings", "permission", "edits") },
-        { name: "full", desc: t("권한: 전체 권한"), icon: "shield", run: () => setState("settings", "permission", "full") },
+        { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
+        { name: "edits", desc: t("권한: {name}", { name: t("편집 허용") }), icon: "pencil", run: () => setState("settings", "permission", "edits") },
+        { name: "full", desc: t("권한: {name}", { name: t("전체 권한") }), icon: "shield", run: () => setState("settings", "permission", "full") },
         { name: "remember", desc: t("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
         { name: "memory", desc: t("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
         { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
@@ -434,6 +436,13 @@ export function MainView() {
   };
   window.addEventListener("keydown", esc);
   onCleanup(() => window.removeEventListener("keydown", esc));
+  // going to Main while a new task is open (its sidebar row, ⌘0, the palette) lands on Main: the
+  // view is already "main", so nothing else would close the draft
+  const toMain = (e: Event) => drafting() && (e.target as Element | null)?.closest?.('[data-shortcut="main"]') && setDrafting(null);
+  const mainKey = (e: KeyboardEvent) => drafting() && matchesShortcut(e, shortcuts.main) && setDrafting(null);
+  window.addEventListener("click", toMain, true);
+  window.addEventListener("keydown", mainKey, true);
+  onCleanup(() => (window.removeEventListener("click", toMain, true), window.removeEventListener("keydown", mainKey, true)));
 
   return (
     <div class="view main-view">
@@ -592,7 +601,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const counts = () => ORDER.map((st) => [st, listed().filter((t) => t.status === st).length] as const).filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
   const doing = (t: Task) => {
-    const s = (t.status === "waiting" ? t.now : t.intent || t.now || "").trim();
+    const s = (t.status === "waiting" ? tr(t.now ?? "") : t.intent || tr(t.now ?? "")).trim();
     return s && s !== t.title ? s : "";
   };
   const working = () => listed().filter((t) => t.status === "running");
@@ -609,7 +618,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const stepNow = (r: Req) => {
     const t = focus(r);
     if (!t) return "";
-    const s = (t.status === "waiting" ? t.now : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
+    const s = (t.status === "waiting" ? tr(t.now ?? "") : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
     return s.trim();
   };
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
@@ -653,7 +662,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                           <Show when={r.state !== "done" && stepNow(r)}>{(n) => <span class="req-step-now">{n()}</span>}</Show>
                           <Show when={r.state !== "done" && steps(r)}>
                             {(st) => (
-                              <span class="req-steps" title={t("할 일 {done}/{all} 완료", { done: st().done, all: st().all })}>
+                              <span class="req-steps" title={t("할 일 {done}/{n} 완료", { done: st().done, n: st().all })}>
                                 <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
                                 {t("할 일 {done}/{all}", { done: st().done, all: st().all })}
                               </span>
@@ -662,7 +671,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                         </>
                       }
                     >
-                      <span class="req-steps" title={t("작업 {done}/{all} 완료", { done: r.tasks.filter((x) => x.status === "done").length, all: r.tasks.length })}>
+                      <span class="req-steps" title={t("작업 {done}/{n} 완료", { done: r.tasks.filter((x) => x.status === "done").length, n: r.tasks.length })}>
                         {r.tasks.filter((x) => x.status === "done").length}/{r.tasks.length}
                       </span>
                     </Show>

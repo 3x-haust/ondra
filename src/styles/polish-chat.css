@@ -630,7 +630,6 @@
   height: 40px;
   min-height: 40px;
   padding: 0 var(--s-8);
-  overflow: hidden;
 }
 .ctray .composer-status .status-line {
   flex-wrap: nowrap;
@@ -638,20 +637,6 @@
 }
 .ctray .composer-status .status-line .st-lim {
   flex: none;
-}
-/* narrow: "used" goes first, then the credits; the context number always stays */
-.composer-wrap .ctray .ctray-in {
-  container: tray / inline-size;
-}
-@container tray (max-width: 560px) {
-  .status-line .st-used {
-    display: none;
-  }
-}
-@container tray (max-width: 400px) {
-  .status-line .st-credits {
-    display: none;
-  }
 }
 
 /* key chips in the "/" and + menus (not "(⌘J)" in the text) */
@@ -721,8 +706,8 @@
 .main-view .req-board .req-list {
   position: absolute;
   top: calc(100% - var(--s-2));
-  left: var(--s-24);
-  right: var(--s-24);
+  left: calc(var(--s-24) - var(--s-10));
+  right: calc(var(--s-24) - var(--s-10));
   margin: 0;
   max-height: min(320px, 50vh);
   box-shadow: var(--shadow-pop);
@@ -770,7 +755,7 @@
 }
 
 /* new task: the input centred like an empty Main, with its project and permission */
-.new-task .hero {
+.new-task-page .hero {
   padding-bottom: 14vh;
 }
 .composer-bar .proj-chip .icon {
@@ -873,4 +858,103 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ═════════════ round 3 ═════════════ */
+
+/* the strip under the input: one line that drops whole items when narrow (Usage.tsx fit),
+   so nothing is clipped and the account menu can open out of it */
+.composer-wrap .ctray .ctray-in,
+.composer-wrap .ctray .composer-status,
+.composer-wrap .ctray .status-line {
+  overflow: visible;
+}
+.status-line .st-drop {
+  display: none !important;
+}
+.status-line.st-measure > * {
+  flex: none !important;
+}
+
+/* the card's own answer line: a choice like the others (same ink), a text field once you're in it */
+.decision .decision-own,
+.decision .decision-own .decision-input {
+  cursor: text;
+}
+.decision .decision-own .decision-input::placeholder {
+  color: var(--ink-2);
+  opacity: 1;
+}
+.decision .decision-own:hover .decision-input::placeholder {
+  color: var(--ink);
+}
+.decision .decision-own .decision-input:focus::placeholder {
+  color: var(--ink-4);
+}
+
+/* review, the sidebar's mark: a blue ring with a dot, and the word in blue */
+.st-icon.inreview {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+  color: var(--accent-text);
+}
+.st-icon.inreview i {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+.st-icon.done {
+  color: var(--accent-text);
+}
+.br-chip-meta.review,
+.fork-card.review .fork-time {
+  color: var(--accent-text);
+}
+
+/* effort: each level gets the width its name needs (매우 높음 / Extra high), the rest shared out, names centred */
+.model-pop .eff-seg {
+  grid-auto-columns: auto;
+}
+.model-pop .eff-seg button {
+  height: 26px;
+  padding: 0 var(--s-8);
+  overflow: visible;
+}
+
+/* the strip's open list lines up with its head: same edges, the dots under "작업" */
+.main-view .req-board .req-list .req-row {
+  padding-left: 5px;
+}
+.main-view .req-board .req-list .req-job {
+  padding-left: calc(5px + 7px + var(--s-10));
+}
+
+/* the + menu opens from the input's edge like the other menus, so it never covers what is being typed */
+.composer .composer-bar .plus-wrap {
+  position: static;
+}
+.composer .composer-bar .plus-wrap .plus-menu {
+  left: 0;
+}
+
+/* "맨 아래로": a small round button beside the reading column (in its gutter), never over the text;
+   when the column fills the pane it sits in the column's own side padding */
+.thread > .jump-latest {
+  float: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  gap: 0;
+  margin: 0 max(1px, calc(50% - var(--chat-w) / 2 - 12px)) -22px auto;
+  top: calc(100% - 36px);
+  border-radius: 50%;
+  color: var(--ink-3);
+  box-shadow: var(--shadow-pop);
+}
+.thread > .jump-latest:hover {
+  color: var(--ink);
+  background: var(--card);
 }

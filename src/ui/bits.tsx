@@ -37,6 +37,9 @@ export function IssueTag(props: { t: Task }) {
   );
 }
 
+/** The sidebar's 새 작업 screen, open in the main pane (its project, if one is picked). MainView owns it; the sidebar highlights it. */
+export const [newTaskOpen, setNewTaskOpen] = createSignal<{ project?: string } | null>(null);
+
 const [tick, setTick] = createSignal(Date.now());
 setInterval(() => setTick(Date.now()), 1000);
 /** Current time, updated every second. */
@@ -62,7 +65,7 @@ export function long(ms: number) {
   return t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 });
 }
 
-/** 방금, 3분 전, 2시간 전, 4일 전, then the date */
+/** 방금, 3분 전, 2시간 전, 어제, 4일 전, then the date */
 export function ago(at?: number) {
   if (!at) return "";
   const m = Math.max(0, Math.round((now() - at) / 60_000));
@@ -71,6 +74,7 @@ export function ago(at?: number) {
   const h = Math.floor(m / 60);
   if (h < 24) return t("{n}시간 전", { n: h });
   const d = Math.floor(h / 24);
+  if (d === 1) return t("어제|ago");
   return d < 30 ? t("{n}일 전", { n: d }) : new Date(at).toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
 
@@ -97,9 +101,20 @@ export function compact(ms: number): string {
   return t("{n}일째", { n: Math.floor(h / 24) });
 }
 
+/** A time of day: 오후 10:37 / 10:37 PM. */
+export function clock(at: number) {
+  return new Date(at).toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
+}
+
 /** 오후 7:04 (today) or 9월 27일 오전 4:49, in the app's language. */
 export function stamp(at: number) {
   const d = new Date(at);
-  const time = d.toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
+  const time = clock(at);
   return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString(locale(), { month: lang() === "en" ? "short" : "long", day: "numeric" })} ${time}`;
+}
+
+/** How full a context window is, one way everywhere (the input's strip, the context sheet): 0.4%, 5.2%, 11% */
+export function ctxShare(used: number, of: number) {
+  const p = of ? (used / of) * 100 : 0;
+  return p >= 10 ? `${Math.round(p)}%` : p >= 0.1 ? `${p.toFixed(1)}%` : "0%";
 }

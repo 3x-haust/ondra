@@ -20,6 +20,7 @@ export default {
   "{n}분 전": "{n}m ago",
   "{n}시간 전": "{n}h ago",
   "{n}일 전": "{n}d ago",
+  "어제|ago": "yesterday",
   "{d} 동안 작업": "Worked for {d}",
   // a running task's time so far (past times say "전" / "ago")
   "방금 시작": "Just started",
@@ -30,7 +31,7 @@ export default {
 
   // cost
   "토큰 {n}": "{n} tokens",
-  "토큰 {n} (새 입력 {i} · 캐시 {c} · 출력 {o})": "{n} tokens ({i} input · {c} cached · {o} output)",
+  "토큰 {n} (입력 {i} · 캐시 {c} · 출력 {o})": "{n} tokens ({i} input · {c} cached · {o} output)",
   "서브에이전트 {n}개 포함": "Includes {n} subagent|Includes {n} subagents",
 
   // main chat
@@ -58,14 +59,15 @@ export default {
   "작업 흐름 열기": "Open flow",
   "메모리 열기": "Open memory",
   "설정 열기": "Open settings",
+  "권한: {name}": "Permission: {name}",
   "메모리에 저장": "Save to memory",
   "설정": "Settings",
 
   // request board
   "작업 {n}|board": "Tasks {n}",
   "할 일 {done}/{all}": "To-dos {done}/{all}",
-  "할 일 {done}/{all} 완료": "{done} of {all} to-dos done",
-  "작업 {done}/{all} 완료": "{done} of {all} tasks done",
+  "할 일 {done}/{n} 완료": "{done} of {n} to-do done|{done} of {n} to-dos done",
+  "작업 {done}/{n} 완료": "{done} of {n} task done|{done} of {n} tasks done",
 
   // new task
   "프로젝트|one": "Project",
@@ -73,7 +75,7 @@ export default {
 
   // usage strip under the input
   "사용|used": "used",
-  "크레딧 {n}|left": "{n} credits",
+  "크레딧 {n}|left": "{n} credit|{n} credits",
 
   // quick question and side chat
   "짧은 질문": "Quick question",
@@ -183,8 +185,8 @@ export default {
   "화면": "Screen",
   "링크": "Link",
   "증거 {n}개": "Evidence {n}",
-  "미확인 {n}개": "{n} unverified",
-  "미확인": "Unverified",
+  "{n}개 확인 안 됨": "{n} unverified",
+  "확인 안 됨": "Unverified",
   "실행 기록과 일치": "Matches what ran",
   "파일 있음": "File exists",
   "열어 본 페이지": "Page was opened",

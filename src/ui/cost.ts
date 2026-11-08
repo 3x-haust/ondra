@@ -47,7 +47,7 @@ export const costShort = (c: JobCost) => [c.ms ? long(c.ms) : "", c.total ? t("�
 export const costDetail = (c: JobCost) =>
   [
     c.total
-      ? t("토큰 {n} (새 입력 {i} · 캐시 {c} · 출력 {o})", { n: tokens(c.total), i: tokens(c.input + c.cacheWrite), c: tokens(c.cacheRead), o: tokens(c.output) })
+      ? t("토큰 {n} (입력 {i} · 캐시 {c} · 출력 {o})", { n: tokens(c.total), i: tokens(c.input + c.cacheWrite), c: tokens(c.cacheRead), o: tokens(c.output) })
       : "",
     c.kids ? t("서브에이전트 {n}개 포함", { n: c.kids }) : "",
   ]

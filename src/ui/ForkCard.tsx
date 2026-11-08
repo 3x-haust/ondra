@@ -6,16 +6,19 @@ import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { compact, long, now, statusLabel, ago } from "./bits";
 import { Icon } from "./Icon";
+import { glyphOf } from "../views/Sidebar";
 import { costDetail, jobCost } from "./cost";
 import { t as tr } from "../i18n";
 
+/** A task's status glyph, the sidebar's shapes (glyphOf): review is the blue ring with a dot, never a check. */
 export function StatusIcon(props: { t: Task; size?: "sm" | "md" }) {
+  const g = () => glyphOf(props.t);
   return (
-    <span class={`st-icon ${props.t.status} ${props.size ?? "md"}`} classList={{ unmerged: props.t.status === "done" && props.t.worktree?.state === "open" }}>
+    <span class={`st-icon ${g()} ${props.size ?? "md"}`}>
       <Show
-        when={props.t.status === "running"}
+        when={g() === "running"}
         fallback={
-          <Show when={props.t.status === "done"} fallback={<i />}>
+          <Show when={g() === "done"} fallback={<i />}>
             <Icon name="check" size={props.size === "sm" ? 10 : 12} stroke={2.75} />
           </Show>
         }
@@ -45,7 +48,7 @@ export function line(t: Task): string {
   if (t.status === "waiting") return state.decisions.find((d) => d.taskId === t.id)?.question ?? tr("응답 대기 중");
   if (t.status === "queued") return tr("대기 중");
   if (t.status === "paused") return tr("일시정지");
-  return plain(t.now || "") || tr("시작하는 중");
+  return plain(tr(t.now ?? "")) || tr("시작하는 중");
 }
 
 export function ForkCard(props: { id: string; compact?: boolean }) {
@@ -60,14 +63,14 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
   };
   const time = () => {
     const x = t()!;
-    if (x.status === "done") return ago(x.finishedAt ?? x.createdAt);
+    if (x.status === "done") return glyphOf(x) === "inreview" ? tr("검토") : ago(x.finishedAt ?? x.createdAt);
     if (x.status === "running") return compact(now() - (x.startedAt ?? x.createdAt));
     return tr(statusLabel[x.status]);
   };
   return (
     <Show when={t()} fallback={<div class="fork-card gone">{tr("삭제된 작업")}</div>}>
       {(x) => (
-        <button class={`fork-card ${x().status}`} classList={{ compact: props.compact }} onClick={() => openTask(x().id)}>
+        <button class={`fork-card ${x().status}`} classList={{ compact: props.compact, review: glyphOf(x()) === "inreview" }} onClick={() => openTask(x().id)}>
           <StatusIcon t={x()} />
           <span class="fork-main">
             <span class="fork-title">{x().title}</span>

@@ -17,6 +17,7 @@ import { Icon } from "./Icon";
 import { UsageLine } from "./Usage";
 import { Markdown } from "./Markdown";
 import { MsgActions, UserMsg } from "./MsgActions";
+import { costDetail, jobCost } from "./cost";
 import { t as tr } from "../i18n";
 
 type Item =
@@ -435,6 +436,19 @@ function EntryView(props: { e: Entry; task: Task }) {
   );
 }
 
+/** The line a finished task ends on: "완료 · 19분", what it used on hover. While its changes wait for
+ *  review it isn't done yet (the review bar below says so): only how long it worked. */
+export function JobEnd(props: { t: Task }) {
+  const c = () => jobCost(props.t);
+  return (
+    <Show when={props.t.status === "done" && c().ms}>
+      <div class="job-cost" title={costDetail(c()) || undefined}>
+        {props.t.worktree?.state === "open" ? tr("{d} 동안 작업", { d: long(c().ms) }) : `${tr("완료")} · ${long(c().ms)}`}
+      </div>
+    </Show>
+  );
+}
+
 export function Transcript(props: { task: Task; agentId: string; footer?: JSX.Element }) {
   let scroller!: HTMLDivElement;
   const list = createMemo(() => turns(props.task.entries));
@@ -457,8 +471,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   return (
     <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el, setStick)); }}>
       <Show when={!stick()}>
-        <button class="jump-latest" onClick={() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })}>
-          <Icon name="down" size={14} />{tr("맨 아래로")}
+        <button class="jump-latest" title={tr("맨 아래로")} aria-label={tr("맨 아래로")} onClick={() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })}>
+          <Icon name="down" size={14} />
         </button>
       </Show>
       <div class="thread-inner">
@@ -493,7 +507,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         <Show when={working() && !liveText() && !toolRunning() && !state.tasks.some((k) => k.parentId === props.task.id && (k.status === "running" || k.status === "queued"))}>
           <div class="live-line">
             <span class="spin" />
-            <span class="shimmer">{props.task.now || tr("작업 중")}</span>
+            <span class="shimmer">{props.task.now ? tr(props.task.now) : tr("작업 중")}</span>
           </div>
         </Show>
         {/* a question waiting on the user: last in the conversation, so it scrolls with it */}
