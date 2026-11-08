@@ -3,7 +3,7 @@
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
-import { taskDiff } from "../state/progress";
+import { taskDiff, discarded } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, renameProject, state, taskById, tasksIn } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
@@ -78,7 +78,7 @@ export function glyphOf(x: Task): "failed" | "waiting" | "inreview" | "running" 
 export function Glyph(props: { t: Task; class?: string }) {
   const g = () => glyphOf(props.t);
   return (
-    <span class={`sb-glyph st-icon sm ${g()} ${props.class ?? ""}`} aria-hidden="true">
+    <span class={`sb-glyph st-icon sm ${g()} ${discarded(props.t) ? "discarded" : ""} ${props.class ?? ""}`} aria-hidden="true">
       <Show when={g() === "running"} fallback={<Show when={g() === "done"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
         <span class="spin" />
       </Show>
@@ -91,6 +91,7 @@ export function Glyph(props: { t: Task; class?: string }) {
 export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "ask" | "review" | "idle" | "live" | "done" } {
   const b = bucket(x);
   if (x.status === "failed") return { text: tr("실패"), tone: "bad" };
+  if (discarded(x)) return { text: tr("버림"), tone: "idle" };
   if (x.status === "waiting" || (b === "you" && !kid)) return { text: tr("응답 필요"), tone: "ask" };
   if (b === "review") return { text: tr("검토"), tone: "review" };
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };

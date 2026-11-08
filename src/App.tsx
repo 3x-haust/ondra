@@ -166,7 +166,7 @@ export default function App() {
     }
   });
   createEffect(() => {
-    setTrayCount(state.tasks.filter((t) => t.status === "running").length, state.decisions.length);
+    setTrayCount(state.tasks.filter((t) => t.status === "running" && !t.parentId).length, state.decisions.length);
   });
   createEffect(() => {
     void setFocusGuard(state.settings.focusGuard);
