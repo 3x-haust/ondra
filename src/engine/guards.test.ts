@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
 import { commandKind } from "./commandKind";
-import { ghTouched, isCodeFile, reviewFound } from "./proof";
+import { ghTouched, isCodeFile, reviewFound, riskyChange } from "./proof";
 import { closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
 
 describe("commandKind", () => {
@@ -111,5 +111,15 @@ describe("waitsOnUser", () => {
     expect(waitsOnUser("`fix/x`를 직접 푸시하고 PR을 병합해 주세요. 기다릴게요.")).toBe(true);
     expect(waitsOnUser("병합 완료를 알려주시면 이어갈게요.")).toBe(true);
     expect(waitsOnUser("타입 검사를 돌렸고 통과했어요.")).toBe(false);
+  });
+});
+
+describe("riskyChange", () => {
+  it("asks for a review only for security, money or data loss", () => {
+    expect(riskyChange(["/repo/src/auth/login.ts"])).toBe(true);
+    expect(riskyChange(["/repo/src/billing.ts"])).toBe(true);
+    expect(riskyChange(["/repo/db/migrations/002.sql"])).toBe(true);
+    expect(riskyChange(["/repo/src/a.ts", "/repo/src/b.ts", "/repo/src/c.ts", "/repo/src/d.ts", "/repo/src/e.ts", "/repo/src/f.ts"])).toBe(false);
+    expect(riskyChange(["/repo/src/engine/session.ts", "/repo/src-tauri/src/remote/handoff.rs"])).toBe(false);
   });
 });

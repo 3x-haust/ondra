@@ -179,3 +179,11 @@ export function promisesLater(summary: string): boolean {
   const last = summary.trim().split(/(?<=[.!?。])\s+/).pop() ?? "";
   return /(할게요|할께요|하겠(습니다|어요)|할\s*예정|예정이에요|예정입니다|드릴게요|볼게요|올릴게요|낼게요)\s*[.!。]?$/.test(last.trim());
 }
+
+/**
+ * A change worth a review: it touches security, money or data that can be lost.
+ * Size alone isn't risk, and "session" (Ondra's agent sessions) isn't auth.
+ */
+export function riskyChange(paths: Iterable<string>): boolean {
+  return [...paths].some((p) => /auth|login|token|secret|password|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
+}
