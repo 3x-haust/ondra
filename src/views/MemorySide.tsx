@@ -2,7 +2,7 @@
 // is going on in a project, a file), a folder's summary, the overview, or the
 // saved versions of the memory as a timeline.
 import { createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js";
-import { evergreen, faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, strength, updateMemory, userOwned } from "../engine/memory";
+import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, updateMemory, userOwned } from "../engine/memory";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
 import { fsRead, openInEditor, revealPath } from "../lib/native";
 import { setState, state } from "../state/store";
@@ -170,7 +170,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
     if (pa && M.homes.has(pa[1])) return { type: "past" as const, home: pa[1], title: t("지난 메모리"), last: t("지난 메모리") };
     if (ts && M.homes.has(ts[1])) return { type: "topics" as const, home: ts[1], title: t("주제"), last: t("주제") };
     if (topic) return { type: "topic" as const, home: undefined, title: topic.label, last: t("주제") };
-    if (home) return { type: "home" as const, home: home.parent, title: home.label, last: home.kind === "global" ? t("모든 작업") : home.kind === "space" ? t("워크스페이스") : t("프로젝트"), path: home.path };
+    if (home) return { type: "home" as const, home: home.parent, title: home.label, last: home.kind === "global" ? t("전체 공통") : home.kind === "space" ? t("워크스페이스|one") : t("프로젝트|one"), path: home.path };
     return { type: "all" as const, home: undefined, title: t("메모리"), last: "" };
   });
   const all = () => info().type === "all";
@@ -237,7 +237,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
       >
         <Stats
           items={[
-            { n: live().length, label: t("사용 중") },
+            { n: live().length, label: t("적용 중") },
             { n: past().length, label: t("지난") },
             { n: props.model.journal.length, label: t("작업 기록"), go: props.model.journal.length ? () => props.onSel(JOURNAL) : undefined },
             { n: live().filter((m) => m.paths?.length).length, label: t("경로 규칙") },
@@ -246,11 +246,11 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
         />
       </Show>
       <Show when={nows().length}>
-        <H>{t("지금")}</H>
+        <H>{t("최근")}</H>
         <div class="ms-list">
           <For each={nows()}>
             {(n) => (
-              <button class="ms-now" onClick={() => props.onSel(nowId(n.folder))} title={n.now.text}>
+              <button class="ms-now" onClick={() => props.onSel(nowId(n.folder))} title={`${tilde(n.folder)}\n${n.now.text}`}>
                 <Icon name="clock" size={14} />
                 <span>
                   <b>{props.model.homes.get(n.home)?.label ?? base(n.folder)}</b>
@@ -396,7 +396,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
           { n: list().length, label: t("작업") },
           { n: n("done"), label: t("완료"), tone: "ok" },
           { n: n("failed"), label: t("실패"), tone: n("failed") ? "bad" : "" },
-          { n: list().reduce((x, e) => x + (e.learned?.length ?? 0), 0), label: t("배운 메모리") },
+          { n: list().reduce((x, e) => x + (e.learned?.length ?? 0), 0), label: t("배운 것") },
         ]}
       />
       <Show when={list().length} fallback={<Empty>{t("없음")}</Empty>}>
@@ -528,7 +528,7 @@ function Globs(props: { m: Memory }) {
         class="mp-glob-add"
         placeholder={list().length ? "+" : t("+ 경로")}
         value={v()}
-        size={Math.max(4, v().length + 1)}
+        size={Math.max((list().length ? 1 : t("+ 경로").length) + 3, v().length + 1)}
         onInput={(e) => setV(e.currentTarget.value)}
         onBlur={add}
         onKeyDown={(e) => {
@@ -578,10 +578,16 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const folder = () => ({ id: folderOf(home(), m()), label: m().invalidAt ? t("지난 메모리") : t(kindLabel(kindOf(m()))) });
   const linked = () => (m().links ?? []).map((l) => props.model.memById.get(l)).filter((x): x is Memory => !!x);
   const chain = createMemo(() => chainOf(props.model, m()));
-  const homeLabel = () => props.model.homes.get(home())?.label ?? t("워크스페이스");
+  const homeLabel = () => props.model.homes.get(home())?.label ?? t("워크스페이스|one");
   const entry = () => learnedIn(m());
   const task = () => (m().taskId ? state.tasks.find((t) => t.id === m().taskId) : undefined);
-  const fresh = () => Math.round(strength(m()) * 100);
+  /** "2번 사용 · 1번 반복 · 마지막 사용 3분 전", the parts that apply */
+  const use = () =>
+    [
+      m().uses ? t("{n}번 사용", { n: m().uses }) : t("사용 안 함"),
+      m().seen ? t("{n}번 반복", { n: m().seen! }) : "",
+      m().lastUsed ? t("마지막 사용 {when}", { when: ago(m().lastUsed!) }) : "",
+    ].filter(Boolean);
   return (
     <div class="md-in">
       <Crumbs model={props.model} home={home()} trail={[folder()]} last={t("메모리")} onSel={props.onSel} />
@@ -596,13 +602,9 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
       <div class="md-kinds">
         <For each={KINDS}>{(k) => <button class={`chip mk-${k.id}`} classList={{ on: kindOf(m()) === k.id }} onClick={() => setMemory(m().id, { kind: k.id })}><i />{t(k.label)}</button>}</For>
       </div>
-      <Stats
-        items={[
-          { n: m().uses, label: t("사용") },
-          { n: m().seen ?? 0, label: t("반복") },
-          { n: m().lastUsed ? ago(m().lastUsed) : "–", label: t("마지막 사용") },
-        ]}
-      />
+      <p class="md-use">
+        <For each={use()}>{(x) => <span>{x}</span>}</For>
+      </p>
       <dl class="mp">
         <dt>{t("중요도")}</dt>
         <dd><Importance m={m()} /></dd>
@@ -610,15 +612,8 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
         <dd><Owner m={m()} /></dd>
         <dt>{t("경로")}</dt>
         <dd><Globs m={m()} /></dd>
-        <Show when={isLive(m()) && !evergreen(m())}>
-          <dt>{t("선명도")}</dt>
-          <dd class="md-freshrow" classList={{ low: faded(m()) }}>
-            <span class="md-fresh"><i style={{ width: `${fresh()}%` }} /></span>
-            <em>{fresh()}%</em>
-          </dd>
-        </Show>
         <dt>{t("적용 범위")}</dt>
-        <dd title={m().project ? tilde(m().project!) : undefined}>{m().scope === "global" ? t("모든 작업") : homeLabel()}</dd>
+        <dd title={m().project ? tilde(m().project!) : undefined}>{m().scope === "global" ? t("전체 공통") : homeLabel()}</dd>
         <Show when={m().from}>
           <dt>{t("출처")}</dt>
           <dd><button class="md-file" onClick={() => previewFile(m().from!)} title={m().from}>{base(m().from!)}</button></dd>
@@ -752,7 +747,7 @@ function msgParts(msg: string): { text: string; tone: string }[] {
   const back = /^되돌림\s*·\s*(\w+)/.exec(msg);
   if (back) return [{ text: t("되돌림"), tone: "back" }, { text: back[1].slice(0, 7), tone: "sha" }];
   const count = /^기억\s+(\d+)개$/.exec(msg);
-  if (count) return [{ text: t("메모리 {n}개", { n: count[1] }), tone: "" }];
+  if (count) return [{ text: t("메모리 {n}개", { n: Number(count[1]) }), tone: "" }];
   const s = msg.replace(/^기억\s+/, "");
   return s.split(" · ").map((p) => ({
     text: p.replace(/^(바뀜|내림|지움|정리)/, (w) => t(w)),

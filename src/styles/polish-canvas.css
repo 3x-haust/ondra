@@ -254,10 +254,15 @@
   font-size: var(--fs-xs);
   line-height: 18px;
 }
+/* the steps read at a glance: the verb in body ink, its target a step quieter */
 .cv-act-row {
   gap: var(--s-6);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   line-height: 20px;
+  color: var(--ink-2);
+  animation: none;
+}
+.cv-act-row .icon {
   color: var(--ink-3);
 }
 .cv-act-row .tg,
@@ -266,7 +271,7 @@
 }
 .cv-act-row.open,
 .cv-act-row.open .tg {
-  color: var(--ink-2);
+  color: var(--ink);
 }
 .cv-act-row.bad .lb {
   color: var(--bad-ink);
@@ -460,24 +465,17 @@
   stroke-width: 1;
 }
 
-.cv-retidy {
-  top: var(--s-12);
-  height: 32px;
-  padding: 0 var(--s-12) 0 var(--s-10);
+/* 다시 정렬 sits in the header (only while cards are out of line) */
+.head .cv-retidy {
+  position: static;
+  translate: none;
+  z-index: auto;
   border: 0;
   border-radius: var(--r-md);
-  background: var(--cv-card);
-  box-shadow: 0 0 0 1px var(--line);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--ink-2);
+  gap: var(--s-6);
 }
-.cv-retidy .icon {
+.head .cv-retidy .icon {
   color: var(--ink-3);
-}
-.cv-retidy:hover {
-  color: var(--ink);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
 /* ── canvas: the drawer a picked task opens */
@@ -976,6 +974,177 @@
   font-size: var(--fs-md);
 }
 .dev-wait {
-  color: rgb(255 255 255 / 55%);
+  color: var(--ink-3);
   font-size: var(--fs-xs);
+}
+/* a screen not drawn yet: a quiet panel, not a black slab */
+.dev-screen,
+.dev-frame {
+  background: color-mix(in srgb, var(--ink) 5%, var(--card));
+}
+
+/* ═════════════ round 2 ═════════════ */
+
+/* ── canvas / board header: 새 작업 drops a field under the button */
+.new-task {
+  position: relative;
+  flex: none;
+}
+.new-task-btn {
+  gap: var(--s-6);
+}
+.new-task-btn .icon {
+  color: var(--ink-3);
+}
+.new-task-btn.on {
+  background: var(--active);
+}
+.new-task-pop {
+  position: absolute;
+  top: calc(100% + var(--s-6));
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  width: 380px;
+  max-width: calc(100vw - 64px);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-12);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in 140ms var(--ease);
+}
+.new-task-pop input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.new-task-pop input::placeholder {
+  color: var(--ink-4);
+}
+.canvas-view .head {
+  gap: var(--s-8);
+}
+.canvas-view .board-sum {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* the board under the canvas header: no bar of its own, columns start right away */
+.canvas-view > .board-view.embedded .board {
+  padding-top: 0;
+}
+
+/* ── canvas: an empty workspace */
+.cv-empty {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-8);
+  padding: 0 0 8vh;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+.cv-empty .icon {
+  color: var(--ink-4);
+}
+
+/* ── canvas: finished tasks folded into one row, the count in the phrase */
+.cv-more-row span {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── board: a column per project carries the folder mark */
+.bcol-ic {
+  flex: none;
+  color: var(--ink-3);
+}
+
+/* ── memory: how a piece has been used, one line */
+.md-use {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 20px;
+  color: var(--ink-3);
+}
+.md-use span + span::before {
+  content: "·";
+  margin: 0 var(--s-6);
+  color: var(--ink-4);
+}
+
+/* ── devices: who may use a device, labelled */
+.dev-space-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+/* the devices list is open (no one device): its sidebar header reads as the current place */
+.sb-head:has([data-shortcut="devices"].on):not(:has(+ .fold .sb-row.on)) .sb-head-btn {
+  color: var(--ink);
+}
+.sb-head:not(:has(+ .fold .sb-row.on)) [data-shortcut="devices"].on {
+  color: var(--ink);
+  background: var(--active);
+}
+.dev-info .dev-acts {
+  flex-wrap: wrap;
+  row-gap: var(--s-6);
+}
+/* in a running device's card the picker takes its own line above the buttons */
+.dev-info .dev-space-pick {
+  flex-basis: 100%;
+}
+.dev-space-pick .dev-space {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ── results: 작업 열기 says what it does; narrow (a panel beside it), the list steps back */
+.res-open {
+  margin-right: var(--s-4);
+}
+.res-view {
+  container-type: inline-size;
+}
+@container (max-width: 820px) {
+  .res-list {
+    width: 232px;
+  }
+  .res-doc {
+    padding-inline: var(--s-20);
+  }
+  .res-top {
+    margin-inline: calc(var(--s-20) * -1);
+    padding-inline: var(--s-20);
+  }
+  .res-top {
+    flex-wrap: wrap;
+    row-gap: var(--s-8);
+  }
+  .res-top-l {
+    flex-basis: 100%;
+  }
+}
+@container (max-width: 560px) {
+  .res-list {
+    display: none;
+  }
 }

@@ -17,7 +17,7 @@ import { oneShot } from "./aside";
 import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
 import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, userOwned } from "./memory";
-import { pathsExist, skillSave } from "../lib/native";
+import { inTauri, pathsExist, skillSave } from "../lib/native";
 import { projectById, setState, spaceById, state } from "../state/store";
 import type { Memory, MemoryKind, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
@@ -27,6 +27,10 @@ const EVERY_MS = 6 * 60 * 60_000;
 const KIND_IDS = new Set<MemoryKind>(KINDS.map((k) => k.id));
 const [running, setRunning] = createSignal(false);
 export const tidying = running;
+/** a model call that never answers (no engine, a stuck agent) gives up instead of holding 정리 forever */
+const WAIT_MS = inTauri ? 4 * 60_000 : 4_000;
+const within = <T,>(p: Promise<T>, ms = WAIT_MS) =>
+  Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
 
 
 const learnable = (t: Task, seen: Set<string>, cursor: number) =>
@@ -146,6 +150,7 @@ export async function tidyMemory(force = false, only?: SpaceId) {
   setRunning(true);
   const total = { merged: 0, retired: 0, learned: 0, keyed: 0, skills: 0 };
   const touched: string[] = [];
+  let failed = 0;
   try {
     // 0. notes other tools keep in the folders become pieces too (one structure)
     const notes = only ? (await findNotes()).filter((n) => n.space === only) : undefined;
@@ -178,20 +183,22 @@ export async function tidyMemory(force = false, only?: SpaceId) {
       const needs = jobs.length || list.some((m) => !m.keys?.length) || (force && list.length > 1);
       if (!needs) continue;
       try {
-        const raw = await oneShot(sp.id, sp.folder, prompt(sp.id, list, jobs));
+        const raw = await within(oneShot(sp.id, sp.folder, prompt(sp.id, list, jobs)));
         const plan = (readFences(raw, "tidy").items[0] ?? {}) as Plan;
         const n = apply(plan, list, jobs);
         for (const k of Object.keys(n) as (keyof typeof n)[]) total[k] += n[k];
         touched.push(...jobs.map((t) => t.id));
         for (const t of jobs) reached = Math.max(reached, t.finishedAt ?? 0);
       } catch {
-        /* this space waits for the next pass */
+        // this space waits for the next pass
+        failed++;
       }
     }
     total.skills = await growSkills(only);
     // one space tidied: the others keep their turn (the timer and the cursor of jobs not yet learned from)
     setState("memoryTidy", { at: only ? (last?.at ?? 0) : Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: only ? cursor : reached });
-    if (force) {
+    if (force && failed) toast(tr("정리하지 못했어요"), "bad", { label: tr("다시 시도"), run: () => void tidyMemory(true, only) });
+    else if (force) {
       const parts = [total.skills && tr("스킬 {n}", { n: total.skills }), total.learned && tr("새 메모리 {n}", { n: total.learned }), total.merged && tr("병합 {n}", { n: total.merged }), total.retired && tr("내림 {n}", { n: total.retired }), total.keyed && tr("관련어 {n}", { n: total.keyed })].filter(Boolean);
       toast(parts.length ? tr("메모리 정리 · {parts}", { parts: parts.join(" · ") }) : tr("정리할 메모리가 없어요"));
     }
