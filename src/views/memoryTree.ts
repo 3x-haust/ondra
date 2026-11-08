@@ -17,6 +17,8 @@ export interface Home {
   id: string;
   kind: HomeKind;
   label: string;
+  /** the parent folder, when another project home has the same name ("ondra · 01_Projects") */
+  hint?: string;
   parent?: string;
   space?: SpaceId;
   path?: string;
@@ -33,6 +35,8 @@ export interface TreeNode {
   id: string;
   type: RowType;
   label: string;
+  /** shown muted after the label: tells two folders with the same name apart */
+  hint?: string;
   home: string;
   kind?: MemoryKind;
   memory?: Memory;
@@ -103,9 +107,17 @@ export function dayLabel(at: number, withMonth = false) {
   if (k === dayKey(Date.now() - 86_400_000)) return t("어제");
   return d.toLocaleDateString(locale(), withMonth ? { month: "short", day: "numeric", weekday: "short" } : { day: "numeric", weekday: "short" });
 }
-export const clock = (t: number) => {
-  const d = new Date(t);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** a time of day: "오후 10:37" / "10:37 PM" (the same as Results and the chat) */
+export const clock = (t: number) => new Date(t).toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
+/** a home's name in plain text, with what tells it apart from a namesake */
+export const homeName = (h: { label: string; hint?: string }) => (h.hint ? `${h.label} · ${h.hint}` : h.label);
+/** the folder a path sits in, as a short name ("01_Projects", "~" for the home folder) */
+const parentName = (p: string) => {
+  const parts = p.replace(/\/+$/, "").split("/");
+  parts.pop();
+  const dir = parts.join("/");
+  if (!dir || dir === "~" || /^\/Users\/[^/]+$/.test(dir) || /^\/home\/[^/]+$/.test(dir)) return "~";
+  return parts[parts.length - 1];
 };
 
 /** what matters more first, then newest */
@@ -167,7 +179,10 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     for (const f of p.files) if (!seenFile.has(f)) seenFile.add(f), projHome(p.project).files.push(f);
   for (const s of inp.files?.bySpace ?? [])
     for (const f of s.files) if (!seenFile.has(f)) seenFile.add(f), fileHome(f, spaceHome(s.space)).files.push(f);
-  // two folders with the same name keep the project's name; the path (a tooltip) tells them apart
+  // two folders with the same name: each shows the folder it sits in, muted ("ondra · 01_Projects")
+  const byLabel = new Map<string, Home[]>();
+  for (const h of homes.values()) if (h.kind === "project") byLabel.set(h.label, [...(byLabel.get(h.label) ?? []), h]);
+  for (const list of byLabel.values()) if (list.length > 1) for (const h of list) if (h.path) h.hint = parentName(h.path);
 
   // topic hubs: a tool or service two or more live pieces are about (as the mirror's 주제/)
   const topics = new Map<string, Topic>();
@@ -264,11 +279,11 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     const count = (n: TreeNode[]): number => n.reduce((x, c) => x + (c.type === "kind" || c.type === "home" ? c.count : 0), 0);
     if (match && !kids.length && !h.label.toLowerCase().includes(s)) return null;
     // no pieces anywhere under it → no folder on disk either
-    if (!match && !h.live.length && !h.past.length && !kids.some((c) => c.type === "home" || c.type === "now" || c.type === "journal")) return h.files.length ? { key: h.id, id: h.id, type: "home", label: h.label, home: h.id, path: h.path, children: kids, count: 0 } : null;
+    if (!match && !h.live.length && !h.past.length && !kids.some((c) => c.type === "home" || c.type === "now" || c.type === "journal")) return h.files.length ? { key: h.id, id: h.id, type: "home", label: h.label, hint: h.hint, home: h.id, path: h.path, children: kids, count: 0 } : null;
     // the folder note (회사/회사.md): links to everything in the folder
     // a space folder's note is its 목차.md (it lives in <space>/.ondra/memory)
     if (h.live.length) kids.push({ key: `${h.id}|note`, id: h.id, type: "index", label: h.kind === "space" && h.path && h.path !== "~" ? t("목차") : `${h.label}.md`, home: h.id, count: 0 });
-    return { key: h.id, id: h.id, type: "home", label: h.label, home: h.id, path: h.path, children: kids, count: count(kids) };
+    return { key: h.id, id: h.id, type: "home", label: h.label, hint: h.hint, home: h.id, path: h.path, children: kids, count: count(kids) };
   };
   const roots: TreeNode[] = [];
   const g = homeRow(homes.get("g")!);
@@ -312,6 +327,8 @@ export interface GNode {
   id: string;
   kind: GKind;
   label: string;
+  /** muted after the label: the folder a project sits in, when two share a name */
+  hint?: string;
   /** where a new node grows out of */
   anchor?: string;
   r: number;
@@ -384,6 +401,7 @@ export function buildGraph(model: Model, sel: string, match?: (m: Memory) => boo
       id: h.id,
       kind: h.kind,
       label: h.label,
+      hint: h.hint,
       anchor: h.parent,
       r: h.kind === "global" ? hubR(n, 9, 0.8) : h.kind === "space" ? hubR(n, 10, 0.6) : hubR(n, 8, 0.7),
       path: h.path,

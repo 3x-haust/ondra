@@ -7,9 +7,9 @@ import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
-import { ago, compact, IssueTag, now } from "../ui/bits";
+import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { Icon } from "../ui/Icon";
-import { changes, SidebarToggle } from "./Sidebar";
+import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 import { taskContextMenu } from "../ui/taskMenu";
 
@@ -39,8 +39,36 @@ const STATES: { id: string; label: string; tone: string }[] = [
 const ORDER = ["you", "review", "running", "queued", "done"];
 /** the project a task is filed under, by the same name the sidebar shows (none: 기타) */
 const projectOf = (task: Task) => projectsIn(task.space).find((p) => p.id === task.project);
-/** a task's state as the canvas draws it (the same status glyph) */
-const TONE: Record<string, string> = { you: "ask", running: "live", queued: "idle", review: "review", done: "done" };
+/** a column's mark: the glyph the sidebar draws for a task in that state */
+const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", running: "running", queued: "queued", review: "inreview", done: "done" };
+
+/** The sidebar's status glyph for a state, where there is no one task (a column head). */
+function StateGlyph(props: { g: ReturnType<typeof glyphOf> }) {
+  return (
+    <span class={`sb-glyph st-icon sm ${props.g}`} aria-hidden="true">
+      <Show when={props.g === "running"} fallback={<Show when={props.g === "done"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
+        <span class="spin" />
+      </Show>
+    </span>
+  );
+}
+
+/** Subagents of a task, one format on the board and the canvas: ⑂ 1/2 while some run, ⑂ 2 when none do. */
+export function Kids(props: { t: Task; class?: string }) {
+  const kids = () => state.tasks.filter((k) => k.parentId === props.t.id);
+  const live = () => kids().filter((k) => k.status === "running").length;
+  return (
+    <Show when={kids().length}>
+      <span
+        class={`kids-n ${props.class ?? ""}`}
+        title={live() ? t("서브에이전트 {live}/{n}개 진행 중", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}
+      >
+        <Icon name="branch" size={12} />
+        {live() ? `${live()}/${kids().length}` : kids().length}
+      </span>
+    </Show>
+  );
+}
 
 /** 상태별 · 프로젝트별: how the board groups its columns (sits in the header) */
 export function BoardGroup() {
@@ -132,11 +160,6 @@ export function Board(props: { embedded?: boolean } = {}) {
         tasks: list.sort((a, b) => ORDER.indexOf(stateOf(a)) - ORDER.indexOf(stateOf(b))),
       }));
   });
-  const counts = () => {
-    const c: Record<string, number> = {};
-    for (const x of roots()) c[stateOf(x)] = (c[stateOf(x)] ?? 0) + 1;
-    return c;
-  };
 
   return (
     <div class="view board-view" classList={{ embedded: props.embedded }}>
@@ -144,25 +167,28 @@ export function Board(props: { embedded?: boolean } = {}) {
         <header class="head" data-tauri-drag-region>
           <SidebarToggle />
           <span class="head-title">{t("보드")}</span>
-          <span class="board-sum">
-            <Show when={counts().running}><span><i class="tone-dot td-live" />{t("진행 중")} <b>{counts().running}</b></span></Show>
-            <Show when={counts().you}><span><i class="tone-dot td-ask" />{t("응답 필요")} <b>{counts().you}</b></span></Show>
-            <Show when={counts().review}><span><i class="tone-dot td-review" />{t("검토")} <b>{counts().review}</b></span></Show>
-            <Show when={counts().queued}><span><i class="tone-dot td-idle" />{t("대기")} <b>{counts().queued}</b></span></Show>
-          </span>
           <span class="spacer" data-tauri-drag-region />
           <BoardGroup />
           <NewTask />
         </header>
       </Show>
 
+      <Show
+        when={roots().length}
+        fallback={
+          <div class="pane-empty cv-empty">
+            <Icon name="board" size={20} />
+            <span>{t("작업 없음")}</span>
+          </div>
+        }
+      >
       <div class="board" classList={{ project: groupBy() === "project" }}>
-        <For each={cols()} fallback={<div class="board-empty">{t("작업 없음")}</div>}>
+        <For each={cols()}>
           {(c) => (
             <section class="bcol" classList={{ empty: !c.tasks.length }}>
               <div class="bcol-head">
-                <Show when={groupBy() === "state"} fallback={<Icon name={c.id ? "folder" : "inbox"} size={14} class="bcol-ic" />}>
-                  <i class={`cv-st t-${c.tone}`} />
+                <Show when={groupBy() === "state"} fallback={<Icon name="folder" size={14} class="bcol-ic" />}>
+                  <StateGlyph g={GLYPH[c.id]} />
                 </Show>
                 <span class="bcol-name">{groupBy() === "state" || !c.label ? t(c.label || "기타") : c.label}</span>
                 <span class="bcol-n">{c.tasks.length}</span>
@@ -177,6 +203,7 @@ export function Board(props: { embedded?: boolean } = {}) {
           )}
         </For>
       </div>
+      </Show>
     </div>
   );
 }
@@ -185,7 +212,6 @@ function Card(props: { t: Task; byProject: boolean }) {
   const job = () => props.t;
   const st = () => stateOf(job());
   const kids = () => state.tasks.filter((k) => k.parentId === job().id);
-  const liveKids = () => kids().filter((k) => k.status === "running").length;
   const diff = () => changes(job());
   const [talk, setTalk] = createSignal(false);
   const [msg, setMsg] = createSignal("");
@@ -196,10 +222,10 @@ function Card(props: { t: Task; byProject: boolean }) {
     const d = decisionFor(job().id);
     if (d) return d.question;
     if (job().status === "failed") return job().error ?? t("실패");
-    if (st() === "running") return job().now || t("시작하는 중");
+    if (st() === "running") return job().now ? t(job().now!) : t("시작하는 중");
     // the column (or the glyph) already says it's waiting: only a pause is worth a word
     if (st() === "queued") return job().status === "paused" ? t("일시정지") : "";
-    return job().summary || job().now || "";
+    return job().summary || (job().now ? t(job().now!) : "");
   };
   const when = () => {
     if (st() === "running" && job().startedAt) return compact(now() - job().startedAt!);
@@ -234,7 +260,7 @@ function Card(props: { t: Task; byProject: boolean }) {
   return (
     <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} onContextMenu={taskContextMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
       <div class="bc-top">
-        <i class={`cv-st t-${TONE[st()]}`} classList={{ failed: job().status === "failed", paused: job().status === "paused" }} />
+        <span class="bc-glyph" title={t(st() === "review" ? "검토" : st() === "you" && job().status !== "failed" ? "응답 필요" : statusLabel[job().status])}><Glyph t={job()} /></span>
         <IssueTag t={job()} />
         <Show when={!props.byProject}><span class="bc-proj">{projectOf(job())?.name ?? t("기타")}</span></Show>
         <span class="spacer" />
@@ -244,12 +270,7 @@ function Card(props: { t: Task; byProject: boolean }) {
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
       <Show when={foot()}>
         <div class="bc-meta">
-          <Show when={kids().length}>
-            <span class="bc-kids" title={t("서브에이전트")}>
-              <Icon name="branch" size={12} />
-              {liveKids() ? `${liveKids()}/${kids().length}` : kids().length}
-            </span>
-          </Show>
+          <Kids t={job()} class="bc-kids" />
           <Show when={diff().add || diff().del}>
             <span class="bc-diff">
               <span class="add">+{diff().add}</span>

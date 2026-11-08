@@ -76,6 +76,7 @@ export default {
   "브라우저 여는 중": "Opening browser",
   "{n}개 확인 안 됨": "{n} unverified",
   "계획 단계": "Plan step",
+  "서브에이전트 {live}/{n}개 진행 중": "{live} of {n} subagent running|{live} of {n} subagents running",
 
   // ── canvas: cards and chrome
   "캔버스": "Canvas",
@@ -215,6 +216,10 @@ export default {
   "이 버전으로": "Restore",
   "되돌리는 중": "Restoring",
   "{n}번": "{n}×",
+  "같은 기억과 합쳤어요": "Merged into the same memory",
+  "새 기억과 달라서 내렸어요": "Replaced by a newer memory",
+  "오래 안 써서 흐려졌어요": "Faded from disuse",
+  "가리키던 코드가 사라졌어요": "The code it pointed to is gone",
 
   // ── devices
   "디바이스": "Devices",
@@ -232,6 +237,9 @@ export default {
   "{name} 삭제했어요": "Deleted {name}",
   "삭제 확인": "Confirm delete",
   "불러오는 중": "Loading",
+  "불러오는 중…": "Loading…",
+  "모든 워크스페이스": "All workspaces",
+  "리턴 키 보내기": "Send return key",
   "{name} 화면": "{name} screen",
   "기기 조작": "Device controls",
   "홈": "Home",
@@ -294,7 +302,7 @@ export default {
   "디컴파일 중": "Decompiling",
   "리버싱 기록 없음": "No reverse engineering yet",
   "읽은 함수 없음": "No functions read",
-  "함수 {all} · 어셈블리 {asm} · 의사코드 {code}": "{all} functions · {asm} assembly · {code} pseudocode",
+  "함수 {all} · 어셈블리 {asm} · 의사코드 {code}": "Functions {all} · assembly {asm} · pseudocode {code}",
   "함수 없음": "No function",
   "외 {n}개": "+{n} more",
   "호출됨": "Called by",

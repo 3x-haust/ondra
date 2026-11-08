@@ -13,13 +13,13 @@ import { goMain, live, openTask, setView } from "../state/ui";
 import { decide, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
 import { costDetail, costShort, jobCost } from "../ui/cost";
-import { compact, IssueTag, now } from "../ui/bits";
+import { compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
-import { changes, SidebarToggle } from "./Sidebar";
+import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { planCount } from "../state/progress";
-import { Board, BoardGroup, NewTask } from "./Board";
+import { Board, BoardGroup, Kids, NewTask } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
 import { t } from "../i18n";
@@ -137,10 +137,37 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
   return { nodes, edges };
 }
 
+/** the frame around a set of cards */
+const boxOf = (list: Node[]) => ({
+  x0: Math.min(...list.map((n) => n.x)), x1: Math.max(...list.map((n) => n.x + n.w)),
+  y0: Math.min(...list.map((n) => n.y)), y1: Math.max(...list.map((n) => n.y + n.h)),
+});
+/** room around the cards when the view is framed */
+const INSET = { top: 24, bottom: 24, side: 32 };
+/** everything is shown when it fits at this zoom or more; otherwise READ_ZOOM */
+const MIN_ZOOM = 0.6;
+const READ_ZOOM = 0.75;
+
+/**
+ * How many jobs side by side: the arrangement that fits whole at the biggest zoom;
+ * when none fits at MIN_ZOOM, the widest that still fits across at READ_ZOOM.
+ */
+function bestCols(space: string, open: string[], v: { w: number; h: number }): number {
+  const aw = v.w - INSET.side * 2, ah = v.h - INSET.top - INSET.bottom;
+  const tries = [1, 2, 3].map((c) => {
+    const ns = layout(space, open, c).nodes;
+    if (!ns.length) return { c, z: 1, w: 0 };
+    const b = boxOf(ns);
+    return { c, z: Math.min(1, aw / (b.x1 - b.x0), ah / (b.y1 - b.y0)), w: b.x1 - b.x0 };
+  });
+  const best = tries.reduce((a, b) => (b.z > a.z + 0.01 ? b : a));
+  if (best.z >= MIN_ZOOM) return best.c;
+  return [...tries].reverse().find((x) => x.w * READ_ZOOM <= aw)?.c ?? 1;
+}
+
 // ───────────── what a job is doing, as a picture
 
-type Act = { kind: string; icon: string; label: string; target?: string };
-const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done" | "review" | "failed" | "paused", Omit<Act, "target" | "kind">> = {
+const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done" | "review" | "failed" | "paused", { icon: string; label: string }> = {
   read: { icon: "read", label: "읽는 중" },
   search: { icon: "search", label: "찾는 중" },
   edit: { icon: "pencil", label: "수정 중" },
@@ -159,21 +186,6 @@ const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done"
   review: { icon: "merge", label: "검토" },
   failed: { icon: "alert", label: "실패" },
 };
-
-function actOf(t: Task): Act {
-  const pick = (k: keyof typeof ACT, target?: string): Act => ({ kind: k, ...ACT[k], target });
-  if (t.status === "waiting") return pick("wait", decisionFor(t.id)?.question);
-  if (t.status === "failed") return pick("failed");
-  if (t.status === "queued") return pick("queued");
-  if (t.status === "paused") return pick("paused");
-  if (t.status === "done") return pick(t.worktree?.state === "open" ? "review" : "done");
-  const last = t.entries[t.entries.length - 1];
-  if (last?.kind === "tool" && !last.tool.endedAt) return pick(last.tool.kind, last.tool.target);
-  if (live[t.id]) return pick("write-text");
-  // what the job itself says it's doing, as in its own view
-  if (t.now) return { kind: "think", icon: ACT.think.icon, label: t.now };
-  return pick("think");
-}
 
 const base = (s?: string) => (s ? s.split(/[\\/]/).filter(Boolean).pop()?.slice(0, 40) : undefined);
 
@@ -280,7 +292,7 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
 function Activity(props: { t: Task }) {
   const job = () => props.t;
   const cur = () => job().plan.findIndex((s) => s.state === "now");
-  const head = () => job().intent || job().plan[cur()]?.text || job().now;
+  const head = () => job().intent || job().plan[cur()]?.text || (job().now ? t(job().now!) : "");
   const sub = () => (job().intent && cur() >= 0 && job().plan[cur()].text !== job().intent ? job().plan[cur()].text : "");
   const toolIds = createMemo(() => {
     const ids: string[] = [];
@@ -288,11 +300,6 @@ function Activity(props: { t: Task }) {
     return ids;
   }, undefined, { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) });
   const entry = (id: string) => job().entries.find((e) => e.id === id) as Extract<Task["entries"][number], { kind: "tool" }> | undefined;
-  const tail = (id: string) => {
-    const e = entry(id);
-    const sh = e?.tool.shellId ? job().shells.find((s) => s.id === e.tool.shellId) : undefined;
-    return sh?.tail ? (lastLines(sh.tail, 1)[0] ?? "").trim().slice(-120) : "";
-  };
   return (
     <div class="cv-act">
       <Show when={job().plan.length > 1}>
@@ -314,7 +321,6 @@ function Activity(props: { t: Task }) {
                 <Icon name={s().icon} size={11} />
                 <span class="lb">{s().label}</span>
                 <Show when={s().target}><span class="tg">{s().target}</span></Show>
-                <Show when={open() && tail(id)}><span class="tl">{tail(id)}</span></Show>
               </div>
             );
           }}
@@ -399,37 +405,34 @@ function Live(props: { t: Task }) {
 
 const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", review: "검토", idle: "대기", done: "완료" };
 
-/** The static status glyph (as in the sidebar): ring, pie, dot or check by state. */
+/** The status glyph the sidebar draws (one look everywhere), named in its tooltip. */
 function StatusGlyph(props: { t: Task }) {
-  const tn = () => tone(props.t);
-  return <i class={`cv-st t-${tn()}`} classList={{ failed: props.t.status === "failed", paused: props.t.status === "paused" }} title={t(statusText(props.t))} />;
+  return (
+    <span class="cv-stg" title={t(statusText(props.t))}>
+      <Glyph t={props.t} />
+    </span>
+  );
 }
 
-/** The words of a card's status line. */
+/** The state of a card in words (the same words as the sidebar and the board). */
 function statusText(task: Task): string {
+  if (task.status === "failed") return statusLabel.failed;
   const tn = tone(task);
-  if (task.status === "failed") return "실패";
-  if (task.status === "paused") return "일시정지";
-  return tn === "live" ? actOf(task).label : STATUS[tn];
+  return tn === "idle" ? statusLabel[task.status] : STATUS[tn];
 }
 
 function StatusRow(props: { t: Task }) {
   const tn = () => tone(props.t);
-  const kids = () => state.tasks.filter((k) => k.parentId === props.t.id);
-  const step = () => {
-    return props.t.plan.length ? planCount(props.t.plan).label : "";
-  };
+  /** where it is in its plan, while it isn't finished: 진행 중 · 2/4 */
+  const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan).label : "");
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
   return (
     <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" }}>
-      <span class="cv-status-text">{t(statusText(props.t))}</span>
-      <Show when={step()}><span class="cv-meta" title={t("계획 단계")}>{step()}</span></Show>
-      <Show when={kids().length}>
-        <span class="cv-meta cv-kids" title={t("서브에이전트")}>
-          <Icon name="branch" size={12} />
-          {kids().filter((k) => k.status === "running").length || kids().length}
-        </span>
-      </Show>
+      <span class="cv-status-text">
+        {t(statusText(props.t))}
+        <Show when={step()}><span class="cv-step" title={t("계획 단계")}> · {step()}</span></Show>
+      </span>
+      <Kids t={props.t} class="cv-meta" />
       <span class="spacer" />
       <Diff t={props.t} />
       <Show when={when()}><span class="cv-when">{when()}</span></Show>
@@ -477,7 +480,7 @@ function ProjCard(props: { n: Node; space: string }) {
     <>
       <div class="cv-head">
         <span class="cv-ic" classList={{ busy: busy() }}>
-          <Icon name={p().id === "_" ? "inbox" : "folder"} size={16} />
+          <Icon name="folder" size={16} />
         </span>
         <span class="cv-title">{p().id === "_" ? t(p().name) : p().name}</span>
       </div>
@@ -671,8 +674,9 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 
 export function Canvas() {
   const space = () => state.space;
-  /** jobs side by side only as many as the canvas can show readably */
-  const [maxCols, setMaxCols] = createSignal(3);
+  const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
+  /** jobs side by side: the arrangement that shows the most at a readable size */
+  const maxCols = createMemo(() => bestCols(space(), unfolded(), vpSize()));
   const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
   /** projects that have finished jobs folded away (or unfolded) */
   const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
@@ -772,12 +776,10 @@ export function Canvas() {
 
   /** the person moved or zoomed the view: a window resize no longer refits it */
   let touched = false;
-  /** room the floating toolbar takes at the bottom-left: cards are framed above it */
-  const INSET = { top: 24, bottom: 64, side: 32 };
   /**
-   * `all`: everything in view (the button, ⇧1). Otherwise readable (never under 75%)
-   * and as much as fits; when it doesn't all fit, what needs the person (a reply,
-   * then running work) is what's kept in view.
+   * `all`: everything in view (the button, ⇧1). Otherwise everything when it fits at
+   * 60% or more; when it doesn't, 75% and what needs the person (a reply, then running
+   * work) is kept in view, with no card cut at the top edge.
    */
   const fit = (animate = true, all = false) => {
     const ns = graph().nodes;
@@ -785,14 +787,10 @@ export function Canvas() {
     touched = false;
     const r = vp.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const box = (list: Node[]) => ({
-      x0: Math.min(...list.map((n) => n.x)), x1: Math.max(...list.map((n) => n.x + n.w)),
-      y0: Math.min(...list.map((n) => n.y)), y1: Math.max(...list.map((n) => n.y + n.h)),
-    });
-    const b = box(ns);
+    const b = boxOf(ns);
     const aw = r.width - INSET.side * 2, ah = r.height - INSET.top - INSET.bottom;
-    const zw = aw / (b.x1 - b.x0), zh = ah / (b.y1 - b.y0);
-    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.75, Math.min(1, zw, zh));
+    const whole = Math.min(1, aw / (b.x1 - b.x0), ah / (b.y1 - b.y0));
+    const z = all ? Math.max(0.3, whole) : whole >= MIN_ZOOM ? whole : READ_ZOOM;
     if (animate) vp.classList.add("glide");
     setZoom(z);
     const x = (b.x1 - b.x0) * z <= aw ? INSET.side + (aw - (b.x1 - b.x0) * z) / 2 - b.x0 * z : INSET.side - b.x0 * z;
@@ -803,10 +801,19 @@ export function Canvas() {
       y = INSET.top - b.y0 * z;
       const need = ns.filter((n) => n.task && tone(n.task) === "ask");
       const keep = need.length ? need : ns.filter((n) => n.task && tone(n.task) === "live");
-      if (keep.length) {
-        const k = box(keep);
+      const k = keep.length ? boxOf(keep) : undefined;
+      if (k) {
         const over = (k.y1 * z + y) - (INSET.top + ah);
         if (over > 0) y -= Math.min(over, k.y0 * z + y - INSET.top);
+      }
+      // never a card cut at the top edge: start the view in the gap above or below it
+      for (let i = 0; i < 6; i++) {
+        const edge = -y / z;
+        const cut = ns.filter((n) => n.y < edge && n.y + n.h > edge);
+        if (!cut.length) break;
+        const below = Math.max(...cut.map((n) => n.y + n.h)) + GAP.sub;
+        const above = Math.min(...cut.map((n) => n.y)) - GAP.sub;
+        y = !k || k.y0 >= below ? -below * z : -above * z;
       }
     }
     setPan({ x, y });
@@ -935,15 +942,11 @@ export function Canvas() {
     const minY = Math.min(...ns.map((n) => pos(n).y)), maxY = Math.max(...ns.map((n) => pos(n).y + n.h));
     return { x: minX - 60, y: minY - 60, w: maxX - minX + 120, h: maxY - minY + 120 };
   };
-  const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
   // the viewport only exists in canvas mode (and with tasks): watch it while it's there
   createEffect(() => {
     const el = vpEl();
     if (!el || mode() !== "canvas") return;
-    const ro = new ResizeObserver(() => {
-      setVpSize({ w: el.clientWidth, h: el.clientHeight });
-      setMaxCols(Math.max(1, Math.min(3, Math.floor((el.clientWidth / 0.75 - X.job - 120) / (W.job + GAP.col)))));
-    });
+    const ro = new ResizeObserver(() => setVpSize({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
     // shown (opened, or back from the board): framed as on first open
     const id = requestAnimationFrame(() => fit(false));
@@ -975,12 +978,14 @@ export function Canvas() {
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
         <span class="head-title">{mode() === "canvas" ? t("캔버스") : t("보드")}</span>
+        <Show when={mode() === "canvas"}>
         <span class="board-sum">
           <Show when={counts().live}><span><i class="tone-dot td-live" />{t("진행 중")} <b>{counts().live}</b></span></Show>
           <Show when={counts().ask}><span><i class="tone-dot td-ask" />{t("응답 필요")} <b>{counts().ask}</b></span></Show>
           <Show when={counts().review}><span><i class="tone-dot td-review" />{t("검토")} <b>{counts().review}</b></span></Show>
           <Show when={counts().idle}><span><i class="tone-dot td-idle" />{t("대기")} <b>{counts().idle}</b></span></Show>
         </span>
+        </Show>
         <span class="spacer" data-tauri-drag-region />
         {/* cards were dragged out of line: one press puts them back */}
         <Show when={mode() === "canvas" && Object.keys(state.canvas ?? {}).some((k) => k.startsWith(`${space()}:`))}>
@@ -1060,28 +1065,6 @@ export function Canvas() {
               </For>
             </div>
 
-            <div class="cv-ctrl" role="toolbar" aria-label={t("캔버스 도구")}>
-              <button title={grid() ? t("격자 숨기기") : t("격자 표시")} aria-label={grid() ? t("격자 숨기기") : t("격자 표시")} classList={{ on: grid() }} onClick={() => setGrid(!grid())}>
-                <Icon name="dots" size={14} />
-              </button>
-              <i class="cv-ctrl-sep" />
-              <button title={t("축소 (−)")} aria-label={t("축소")} onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={14} /></button>
-              <button class="cv-zoom" title={t("전체 보기 (⇧1)")} onClick={() => fit(true, true)}>{Math.round(zoom() * 100)}%</button>
-              <button title={t("확대 (+)")} aria-label={t("확대")} onClick={() => zoomAt(1.2)}><Icon name="plus" size={14} /></button>
-              <i class="cv-ctrl-sep" />
-              <button title={t("다시 정렬")} aria-label={t("다시 정렬")} onClick={resetLayout}><Icon name="tidy" size={14} /></button>
-              <Show when={foldable().length}>
-                <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
-                  {allOpen() ? <ChevronsDownUp size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" /> : <ChevronsUpDown size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />}
-                </button>
-              </Show>
-              <Show when={roomy() || mini()}>
-                <button title={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-label={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-pressed={mini()} classList={{ on: mini() }} onClick={() => setMini(!mini())}>
-                  <MapIcon size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />
-                </button>
-              </Show>
-            </div>
-
             <svg
               class="cv-mini"
               classList={{ shifted: !!selTask(), gone: !mini() || vpSize().w < 640 || vpSize().h < 460 }}
@@ -1106,6 +1089,28 @@ export function Canvas() {
               {(t) => <Drawer t={t} onClose={() => setSel(undefined)} />}
             </Show>
           </div>
+          {/* the controls sit under the map, never on a card */}
+          <div class="cv-ctrl" role="toolbar" aria-label={t("캔버스 도구")}>
+              <button title={grid() ? t("격자 숨기기") : t("격자 표시")} aria-label={grid() ? t("격자 숨기기") : t("격자 표시")} classList={{ on: grid() }} onClick={() => setGrid(!grid())}>
+                <Icon name="dots" size={14} />
+              </button>
+              <i class="cv-ctrl-sep" />
+              <button title={t("축소 (−)")} aria-label={t("축소")} onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={14} /></button>
+              <button class="cv-zoom" title={t("전체 보기 (⇧1)")} onClick={() => fit(true, true)}>{Math.round(zoom() * 100)}%</button>
+              <button title={t("확대 (+)")} aria-label={t("확대")} onClick={() => zoomAt(1.2)}><Icon name="plus" size={14} /></button>
+              <i class="cv-ctrl-sep" />
+              <button title={t("다시 정렬")} aria-label={t("다시 정렬")} onClick={resetLayout}><Icon name="tidy" size={14} /></button>
+              <Show when={foldable().length}>
+                <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
+                  {allOpen() ? <ChevronsDownUp size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" /> : <ChevronsUpDown size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />}
+                </button>
+              </Show>
+              <Show when={roomy() || mini()}>
+                <button title={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-label={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-pressed={mini()} classList={{ on: mini() }} onClick={() => setMini(!mini())}>
+                  <MapIcon size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />
+                </button>
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>

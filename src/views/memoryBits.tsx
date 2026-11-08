@@ -12,7 +12,14 @@ export const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 export const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
 /** shown with t() */
-export const OUTCOME: Record<JournalEntry["outcome"], string> = { done: "완료", failed: "실패", stopped: "중단" };
+export const OUTCOME: Record<Outcome, string> = { done: "완료", failed: "실패", stopped: "중단", review: "검토" };
+export type Outcome = JournalEntry["outcome"] | "review";
+/** how a finished job ended, as it stands now: a job still waiting to be merged is in review, not done */
+export function outcomeOf(e: JournalEntry): Outcome {
+  if (e.outcome !== "done") return e.outcome;
+  const task = state.tasks.find((x) => x.id === e.taskId);
+  return task?.status === "done" && task.worktree?.state === "open" ? "review" : "done";
+}
 
 /** "11월 5일 14:32" / "Nov 5, 14:32" (year added when it isn't this year) */
 export function stampOf(at: number) {
@@ -47,7 +54,7 @@ export function Badges(props: { m: Memory; globs?: boolean; cites?: boolean }) {
       </Show>
       <Show when={m().skill}><span class="mb-i" title={`${t("스킬")} · ${m().skill}`}><Icon name="skill" size={12} /></span></Show>
       <Show when={props.cites && m().cites?.length}><span class="mb-i" title={m().cites!.join("\n")}><Icon name="file" size={12} /></span></Show>
-      <Show when={(m().seen ?? 0) > 0}><span class="mb-n" title={t("반복")}>{t("{n}번", { n: m().seen! })}</span></Show>
+      <Show when={m().uses > 0}><span class="mb-n" title={t("{n}번 사용", { n: m().uses })}>{t("{n}번", { n: m().uses })}</span></Show>
       <Show when={userOwned(m())}><span class="mb-i mb-user" title={t("사용자")}><Icon name="lock" size={12} /></span></Show>
     </span>
   );
