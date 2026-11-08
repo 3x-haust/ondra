@@ -18,6 +18,7 @@ import { long, now, priorityLabel, short, statusLabel } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
+import { ReversePane } from "./Reverse";
 import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
@@ -477,6 +478,7 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "files", label: "파일", icon: "file", keys: shortcutHint("files"), job: true },
   { kind: "browser", label: "브라우저", icon: "globe", keys: shortcutHint("browser") },
   { kind: "overview", label: "정보", icon: "list", keys: shortcutHint("overview"), job: true },
+  { kind: "reverse", label: "리버싱", icon: "binary", job: true },
   { kind: "preview", label: "미리보기", icon: "monitor" },
 ];
 const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "more" };
@@ -661,6 +663,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                 <Match when={tab() === "terminal"}><TerminalPane t={t()} /></Match>
                 <Match when={tab() === "browser"}><BrowserPane t={t()} /></Match>
                 <Match when={tab() === "artifacts"}><ArtifactsPane t={t()} /></Match>
+                <Match when={tab() === "reverse"}><ReversePane t={t()} /></Match>
               </Switch>
             )}
           </Match>

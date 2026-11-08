@@ -423,6 +423,15 @@ export interface ArtifactFile {
 }
 /** Files a job left in its artifacts folder, newest first. */
 export const artifactsList = (workerId: string) => call<ArtifactFile[]>("artifacts_list", { workerId }, []);
+/** New lines of a job's reverse-engineering trace, from byte `from` on. */
+export const reverseTrace = (workerId: string, from: number): Promise<{ text: string; end: number }> =>
+  inTauri ? invoke("reverse_trace", { workerId, from }) : fixtureTrace(workerId, from);
+// the fixture's one reversing job reads a real trace (ondra-binary on Ondra's own helper)
+async function fixtureTrace(workerId: string, from: number) {
+  if (!import.meta.env.DEV || workerId !== "t_re" || from > 0) return { text: "", end: from };
+  const text = (await import("../state/fixture-reverse.jsonl?raw")).default;
+  return { text, end: text.length };
+}
 
 // ── device hub
 export interface Device {

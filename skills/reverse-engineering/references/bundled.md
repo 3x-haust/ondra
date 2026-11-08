@@ -60,7 +60,8 @@ Every successful command returns one JSON object containing `engine`, `operation
 The hash is computed from the exact private copy passed to the engine. Check
 that all exports share the target hash and selected architecture.
 
-- `inspect`: format, CPU, base address and binary metadata in `data`/`target`.
+- `inspect`: format, CPU, base address and binary metadata in `data`/`target`,
+  and the sections in `data.sections` (`name`, `vaddr`, `vsize`, `perm`).
 - `functions`: discovered functions in `data`. Discovery is not guaranteed complete.
   Over 300 functions without `--name` returns a compact preview instead:
   `data.total`, the first 200 entries (`name`, `addr`, `size`) in

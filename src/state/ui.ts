@@ -20,7 +20,7 @@ export type View =
 
 export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
-export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview";
+export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse";
 
 export const [view, setView] = createSignal<View>({ name: "main" });
 /** A memory piece the Memory view should select when it opens (set with setView({ name: "memory" })). */

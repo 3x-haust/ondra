@@ -21,6 +21,7 @@ const LANGS: Record<string, () => Promise<unknown>> = {
   swift: () => import("shiki/langs/swift.mjs"),
   sql: () => import("shiki/langs/sql.mjs"),
   diff: () => import("shiki/langs/diff.mjs"),
+  c: () => import("shiki/langs/c.mjs"),
 };
 
 const EXT: Record<string, string> = {
