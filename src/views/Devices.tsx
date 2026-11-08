@@ -78,7 +78,7 @@ function Actions(props: { d: Device }) {
       <SpacePick d={props.d} />
       <Show
         when={props.d.booted}
-        fallback={<button class="btn sm" onClick={() => void act(t("{name} 켜는 중", { name: props.d.name }), () => deviceBoot(props.d))}>{t("켜기")}</button>}
+        fallback={<button class="btn sm" onClick={() => void act(t("{name} 켜는 중…", { name: props.d.name }), () => deviceBoot(props.d))}>{t("켜기")}</button>}
       >
         <Show when={props.d.kind !== "phone"}>
           <button class="btn sm" onClick={() => void act(t("{name} 껐어요", { name: props.d.name }), () => deviceShutdown(props.d))}>{t("끄기")}</button>

@@ -78,7 +78,7 @@ async function filesOf(folder: string): Promise<string[]> {
 
 // the tree and the detail side can be dragged wider, like the sidebar (kept per machine)
 const WIDTH_KEY = "ondra.memory.widths";
-const WIDTH0 = { tree: 260, detail: 320 };
+const WIDTH0 = { tree: 300, detail: 320 };
 const [widths, setWidths] = createSignal<{ tree: number; detail: number }>(store.get(WIDTH_KEY, WIDTH0));
 const saveWidths = () => store.set(WIDTH_KEY, widths());
 function drag(e: PointerEvent, side: "tree" | "detail") {
@@ -212,12 +212,12 @@ export function MemoryView() {
         <Show when={myNotes().length}>
           <button class="btn sm" disabled={absorbing()} onClick={() => void absorbNotes(myNotes())} title={myNotes().map((x) => tilde(x.path)).join("\n")}>
             <Icon name="download" size={14} />
-            {absorbing() ? t("가져오는 중") : t("폴더 노트 {n}개", { n: myNotes().length })}
+            {absorbing() ? t("가져오는 중…") : t("폴더 노트 {n}개", { n: myNotes().length })}
           </button>
         </Show>
         <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true, state.space)} title={tidyTitle()}>
           <Icon name="refresh" size={14} />
-          {tidying() ? t("정리하는 중") : t("정리")}
+          {tidying() ? t("정리하는 중…") : t("정리")}
         </button>
         <button class="btn sm ghost" classList={{ on: sel() === VERSIONS }} onClick={() => setSel(sel() === VERSIONS ? "" : VERSIONS)} aria-pressed={sel() === VERSIONS}>
           <Icon name="history" size={14} />{t("버전")}
@@ -815,7 +815,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
           aria-expanded={folder() ? open() : undefined}
           aria-selected={props.sel === p.n.id}
           data-key={p.n.key}
-          title={m ? m.text : p.n.entry ? p.n.entry.title : p.n.now ? p.n.now.text : p.n.type === "home" && p.n.path && !props.full.homes.get(p.n.id)?.parent?.startsWith("s:") ? `${tilde(p.n.path)}/.ondra/memory` : p.n.path ? tilde(p.n.path) : undefined}
+          title={m ? (m.uses ? `${m.text} · ${t("{n}번 사용", { n: m.uses })}` : m.text) : p.n.entry ? p.n.entry.title : p.n.now ? p.n.now.text : p.n.type === "home" && p.n.path && !props.full.homes.get(p.n.id)?.parent?.startsWith("s:") ? `${tilde(p.n.path)}/.ondra/memory` : p.n.path ? tilde(p.n.path) : undefined}
           onClick={() => {
             if (folder() && (props.sel === p.n.id || !open())) toggle(p.n, props.sel === p.n.id ? !open() : true);
             choose(p.n);

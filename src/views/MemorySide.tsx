@@ -607,11 +607,11 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const homeLabel = () => (props.model.homes.get(home()) ? homeName(props.model.homes.get(home())!) : t("워크스페이스|one"));
   const entry = () => learnedIn(m());
   const task = () => (m().taskId ? state.tasks.find((t) => t.id === m().taskId) : undefined);
-  /** "2번 사용 · 1번 반복 · 마지막 사용 3분 전", the parts that apply */
+  /** "2번 사용 · 같은 내용 1번 더 저장 · 마지막 사용 3분 전", the parts that apply (seen counts the first save too) */
   const use = () =>
     [
       m().uses ? t("{n}번 사용", { n: m().uses }) : t("사용 안 함"),
-      m().seen ? t("{n}번 반복", { n: m().seen! }) : "",
+      (m().seen ?? 1) > 1 ? t("같은 내용 {n}번 더 저장", { n: m().seen! - 1 }) : "",
       m().lastUsed ? t("마지막 사용 {when}", { when: agoIn(m().lastUsed!) }) : "",
     ].filter(Boolean);
   return (

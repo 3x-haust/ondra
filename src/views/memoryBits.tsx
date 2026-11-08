@@ -63,7 +63,7 @@ export function Badges(props: { m: Memory; globs?: boolean; cites?: boolean }) {
       </Show>
       <Show when={m().skill}><span class="mb-i" title={`${t("스킬")} · ${m().skill}`}><Icon name="skill" size={12} /></span></Show>
       <Show when={props.cites && m().cites?.length}><span class="mb-i" title={m().cites!.join("\n")}><Icon name="file" size={12} /></span></Show>
-      <Show when={m().uses > 0}><span class="mb-n" title={t("{n}번 사용", { n: m().uses })}>{t("{n}번", { n: m().uses })}</span></Show>
+      <Show when={m().uses > 0}><span class="mb-n">{t("{n}번 사용", { n: m().uses })}</span></Show>
       <Show when={userOwned(m())}><span class="mb-i mb-user" title={t("사용자")}><Icon name="lock" size={12} /></span></Show>
     </span>
   );
