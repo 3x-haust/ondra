@@ -12,6 +12,7 @@ import { Sheet } from "../ui/Sheet";
 import { Markdown } from "../ui/Markdown";
 import { t } from "../i18n";
 import { GroupTitle } from "./Settings";
+import { firstSentence } from "./Tools";
 
 type Kind = "bundled" | "changed" | "mine" | "imported";
 interface Entry {
@@ -28,6 +29,23 @@ interface Entry {
 }
 const KIND_LABEL: Record<Kind, string> = { bundled: "기본", changed: "수정됨", mine: "내 스킬", imported: "가져옴" };
 const FROM: Record<string, string> = { claude: "Claude Code", codex: "Codex", pi: "pi", "3xhaust": "3xhaustPi", omo: "OmO", cursor: "Cursor", opencode: "opencode" };
+/** One plain line for the bundled skills (their own descriptions are written for the model). */
+const LINE: Record<string, string> = {
+  "browser-use": "브라우저로 사이트를 열고 다뤄요",
+  "code-review": "끝내기 전에 바뀐 코드를 검토해요",
+  "computer-use": "Mac 앱을 뒤에서 조작해요",
+  "deep-research": "여러 출처를 읽고 조사해요",
+  "device-use": "시뮬레이터와 에뮬레이터에서 앱을 다뤄요",
+  "goal-loop": "목표를 이룰 때까지 고치고 확인해요",
+  mimikyu: "Figma 디자인을 코드로 옮기고 맞춰 봐요",
+  "reverse-engineering": "바이너리와 앱을 분석해요",
+  "test-ci": "테스트와 CI를 만들어요",
+  "visual-report": "진행과 결과를 차트와 블록으로 보여 줘요",
+  "web-design": "사이트와 화면을 디자인해요",
+};
+/** a skill's line in the list: ours for a bundled one, else the first sentence of its own */
+const lineOf = (e: { name: string; description: string; kind: Kind }) =>
+  (e.kind === "bundled" || e.kind === "changed") && LINE[e.name] ? t(LINE[e.name]) : firstSentence(e.description, 140);
 const mdOf = (p: string) => (/\.md$/i.test(p) ? p : `${p.replace(/\/$/, "")}/SKILL.md`);
 const madeHere = (p: string) => !!engine.info.dataDir && p.startsWith(`${engine.info.dataDir}/skills/`);
 
@@ -250,7 +268,7 @@ export function SkillsTab() {
       <Icon name="skill" size={16} class="muted" />
       <div class="item-main">
         <b>{p.e.name}</b>
-        <Show when={p.e.description}><p title={p.e.description}>{p.e.description}</p></Show>
+        <Show when={lineOf(p.e)}><p title={p.e.description || undefined}>{lineOf(p.e)}</p></Show>
       </div>
       <Show when={p.e.kind === "changed" || p.e.kind === "imported"}>
         <span class="pill" title={p.e.kind === "imported" ? t("가져옴") : undefined}>{p.e.kind === "imported" ? FROM[p.e.from ?? ""] ?? p.e.from ?? t("가져옴") : t(KIND_LABEL[p.e.kind])}</span>
