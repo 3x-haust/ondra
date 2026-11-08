@@ -10,6 +10,7 @@ import { createEffect, createMemo, createRoot, createSignal, onCleanup, For, typ
 import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
+import { discarded } from "../state/progress";
 import { fsFiles, pickFolder } from "../lib/native";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Status, Task } from "../state/types";
@@ -22,7 +23,7 @@ import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
 import { ago, compact, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
-import { Composer } from "../ui/Composer";
+import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
@@ -84,7 +85,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
             {(err) => (
               <div class="reply-error">
                 <Icon name="alert" size={14} />
-                <span>{err() === NO_ACCOUNT ? t(NO_ACCOUNT) : err()}</span>
+                <span>{isNoAccount(err()) ? t("계정 없음|notice") : err()}</span>
                 {/* no account here: trying again can't help, adding one can */}
                 <Show
                   when={isNoAccount(err())}
@@ -135,7 +136,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                     {(a) => (
                       <div class="reply-note">
                         <Icon name="memory" size={14} />
-                        <span>{t("메모리에 저장했어요")} · {state.memory.find((x) => x.id === a().memoryId)?.text ?? ""}</span>
+                        <span>{t("메모리에 저장|note")} · {state.memory.find((x) => x.id === a().memoryId)?.text ?? ""}</span>
                       </div>
                     )}
                   </Match>
@@ -176,20 +177,21 @@ const isNoAccount = (err?: string) => !!err && (err === NO_ACCOUNT || err === t(
 const addAccount = () => openAddAccount(state.space);
 
 /** The app can't start, or this workspace has no account: said above the input until it is fixed.
- *  `quiet`: a no-account card in the chat already has the button, so the notice leaves its own out. */
+ *  `quiet`: a no-account card in the chat already says it with its button, so the notice steps aside. */
 function SetupNotice(props: { quiet?: boolean }) {
+  const none = () => !accountsIn(state.space).length;
   return (
     <>
       <Show when={engine.checked && !engine.ready}>
         <div class="notice bad"><Icon name="alert" size={16} /><div class="notice-body"><b>{t("앱을 시작하지 못했어요")}</b><p>{t("다시 설치해 주세요.")}</p></div></div>
       </Show>
-      <Show when={engine.checked && engine.ready && !loggedIn()}>
+      <Show when={engine.checked && engine.ready && !loggedIn() && !(none() && props.quiet)}>
         <div class="notice">
           <Icon name="key" size={16} />
-          <div class="notice-body"><b>{t("로그인 필요")}</b></div>
-          <Show when={!props.quiet}>
-            {/* no account at all: start adding one; an account not signed in: its row in Settings */}
-            <button class="btn sm" onClick={() => (accountsIn(state.space).length ? setView({ name: "settings", tab: "accounts" }) : addAccount())}>{t("로그인")}</button>
+          {/* no account at all: add one; an account not signed in: its row in Settings */}
+          <div class="notice-body"><b>{none() ? t("계정 없음|notice") : t("로그인 필요")}</b></div>
+          <Show when={none()} fallback={<button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>}>
+            <button class="btn sm" onClick={addAccount}>{t("계정 추가")}</button>
           </Show>
         </div>
       </Show>
@@ -294,6 +296,12 @@ const drafting = newTaskOpen;
 const setDrafting = setNewTaskOpen;
 // any move elsewhere (another view, another workspace) ends it, whether or not Main is still mounted
 createRoot(() => createEffect(on([view, () => state.space], () => setDrafting(null), { defer: true })));
+/** the project each workspace's unsent new task was written for: it comes back with its text */
+const draftProject = new Map<string, string | undefined>();
+createRoot(() => createEffect(() => {
+  const d = drafting();
+  if (d) draftProject.set(state.space, d.project);
+}));
 /** × and Esc: close it and go back to where it was opened from */
 function closeNewTask() {
   const from = drafting()?.from;
@@ -306,7 +314,9 @@ export function startNewTask(preset?: string) {
   const v = view();
   const p = preset ? projectById(preset) : undefined;
   if (p && p.space !== state.space) switchSpace(p.space, { name: "main" });
-  const project = preset ?? (v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
+  // an unsent draft keeps the project it was written for; else the project in view carries over
+  const kept = !preset && hasDraft(`new:${state.space}`) && draftProject.has(state.space);
+  const project = preset ?? (kept ? draftProject.get(state.space) : v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
   // reopened over itself: keep where it first came from
   const from = drafting()?.from ?? v;
   setView({ name: "main" });
@@ -340,7 +350,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
           </For>
           <div class="pop-sep" />
           <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(undefined), setOpen(false))}>
-            <Icon name="dot" size={14} class="muted" />
+            <Icon name="folder" size={14} class="muted" />
             <span class="pop-item-main">{t("프로젝트 없음")}</span>
             <span class="pop-check">{!props.value && <Icon name="check" size={14} />}</span>
           </button>
@@ -391,7 +401,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
           big
           popDown
           autofocus
-          placeholder={t("새 작업")}
+          placeholder={t("작업 내용")}
           files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
           onSend={send}
           status={<StatusLine accountId={account()} space={state.space} />}
@@ -485,8 +495,13 @@ export function MainView() {
   const projCounts = () => {
     const p = project();
     if (!p) return [];
-    const top = state.tasks.filter((x) => x.project === p.id && x.space === state.space && !x.parentId);
-    return (["waiting", "failed", "running", "queued", "paused", "done"] as Status[]).map((st) => [st, top.filter((x) => x.status === st).length] as const).filter(([, n]) => n);
+    // the tasks the strip lists, by state; a discarded one counts as 버림, never as 완료
+    const top = projectTasks(p.id);
+    const kept = top.filter((x) => !discarded(x));
+    return [
+      ...(["waiting", "failed", "running", "queued", "paused", "done"] as Status[]).map((st) => [st, kept.filter((x) => x.status === st).length, tr(statusLabel[st])] as const),
+      ["discarded", top.length - kept.length, tr("버림")] as const,
+    ].filter(([, n]) => n);
   };
   const toBottom = () => queueMicrotask(() => box && (box.scrollTop = box.scrollHeight));
   createEffect(on(() => [state.space, msgs().length, msgs()[msgs().length - 1]?.pending, asks().length], toBottom));
@@ -580,7 +595,7 @@ export function MainView() {
         </h1>
         <Show when={projCounts().length}>
           <span class="head-counts">
-            <For each={projCounts()}>{([st, n]) => <span class={`req-tag ${st}`}>{tr(statusLabel[st])} {n}</span>}</For>
+            <For each={projCounts()}>{([st, n, word]) => <span class={`req-tag ${st}`}>{word} {n}</span>}</For>
           </span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
@@ -594,10 +609,11 @@ export function MainView() {
           <Show when={project()} fallback={<Hero composer={composer(true)} />}>
             {(p) => (
               <>
-                {/* a project with nothing said yet: its tasks, then what they are asking; its input where it always is */}
+                {/* a project with nothing said yet: its tasks (in the strip they keep once something is said),
+                    then what they are asking; its input where it always is */}
+                <ProjectStrip project={p().id} all />
                 <div class="thread proj-empty">
                   <div class="thread-inner convo">
-                    <ProjectTasks project={p().id} />
                     <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
                     <For each={asks()}>{(d) => <DecisionCard d={d} />}</For>
                     <Picks project={p().id} />
@@ -614,11 +630,19 @@ export function MainView() {
           </Show>
         }
       >
-        <RequestBoard
-          msgs={msgs()}
-          started={started}
-          onJump={(id) => box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        {/* a project's chat: all its tasks stay above the conversation (they include what it started) */}
+        <Show
+          when={project()}
+          fallback={
+            <RequestBoard
+              msgs={msgs()}
+              started={started}
+              onJump={(id) => box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            />
+          }
+        >
+          {(p) => <ProjectStrip project={p().id} />}
+        </Show>
         <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el)); }}>
           <div class="thread-inner convo">
             <For each={timeline()}>
@@ -652,12 +676,57 @@ export function MainView() {
 }
 
 
-/** A project's tasks, newest first (pinned on top), in the sidebar's row look; a click opens one. */
-function ProjectTasks(props: { project: string }) {
-  const list = () =>
-    state.tasks
-      .filter((x) => x.project === props.project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
-      .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
+const TONE_ORDER = ["bad", "ask", "review", "live", "idle", "done"] as const;
+const toneRank = (x: Task) => (discarded(x) ? TONE_ORDER.length : TONE_ORDER.indexOf(stateMeta(x).tone));
+/** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. */
+const projectTasks = (project: string) =>
+  state.tasks
+    .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
+
+/** a long list folded or open, per project, while the app runs */
+const [stripOpen, setStripOpen] = createSignal<Record<string, boolean>>({});
+
+/**
+ * A project's tasks above its conversation. Up to three are rows; more fold into one line like
+ * Main's strip (the count and the task that needs you most), opened in place. `all`: nothing said
+ * yet, so the whole list shows (and "작업 없음" when there is none).
+ */
+function ProjectStrip(props: { project: string; all?: boolean }) {
+  const list = () => projectTasks(props.project);
+  const fold = () => !props.all && list().length > 3;
+  const open = () => !fold() || !!stripOpen()[props.project];
+  const lead = () => [...list()].sort((a, b) => toneRank(a) - toneRank(b))[0];
+  return (
+    <Show when={props.all || list().length}>
+      <div class="req-board proj-board" classList={{ open: fold() && open(), folded: fold() }}>
+        <Show when={fold()}>
+          <button class="req-head" onClick={() => setStripOpen({ ...stripOpen(), [props.project]: !open() })} aria-expanded={open()}>
+            <span class="req-sum">
+              <span class="req-total">{t("작업 {n}|board", { n: list().length })}</span>
+            </span>
+            <Show when={!open() && lead()}>
+              {(x) => (
+                <span class="req-now">
+                  {x().title}
+                  <span class={`proj-lead tone-${stateMeta(x()).tone}`}> · {stateMeta(x()).text}</span>
+                </span>
+              )}
+            </Show>
+            <Icon name="chevron" size={12} class="req-chev" />
+          </button>
+        </Show>
+        <Show when={open()}>
+          <ProjectTasks list={list()} />
+        </Show>
+      </div>
+    </Show>
+  );
+}
+
+/** Task rows in the sidebar's look; a click opens one. */
+function ProjectTasks(props: { list: Task[] }) {
+  const list = () => props.list;
   return (
     <Show when={list().length} fallback={<p class="proj-tasks-empty">{t("작업 없음")}</p>}>
       <div class="proj-tasks">
@@ -780,7 +849,12 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const listed = () => [...new Set(reqs().flatMap((r) => r.tasks))];
   // the head counts the tasks below it, by the words the sidebar uses
   const ORDER: Status[] = ["waiting", "failed", "running", "queued", "paused", "done"];
-  const counts = () => ORDER.map((st) => [st, listed().filter((t) => t.status === st).length] as const).filter(([, n]) => n);
+  // a discarded task is counted as 버림, never as 완료
+  const counts = () =>
+    [
+      ...ORDER.map((st) => [st, listed().filter((t) => t.status === st && !discarded(t)).length, tr(statusLabel[st])] as const),
+      ["discarded", listed().filter(discarded).length, tr("버림")] as const,
+    ].filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
   // never the state word again (the row ends with it): "실패" beside 실패, "응답 필요" beside 응답 필요
   // ("대기 중" / "일시정지됨" are the state word too)
@@ -821,14 +895,14 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     );
   };
   /** a task line's right side: how long it has run, or its state */
-  const when = (t: Task) => (t.status === "running" && t.startedAt ? compact(now() - t.startedAt) : tr(statusLabel[t.status]));
+  const when = (t: Task) => (discarded(t) ? tr("버림") : t.status === "running" && t.startedAt ? compact(now() - t.startedAt) : tr(statusLabel[t.status]));
   return (
     <Show when={reqs().length}>
       <div class="req-board" ref={board} classList={{ open: open() }}>
         <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
           <span class="req-sum">
             <span class="req-total">{t("작업 {n}|board", { n: listed().length })}</span>
-            <For each={counts()}>{([st, n]) => <span class={`req-tag ${st}`}>{tr(statusLabel[st])} {n}</span>}</For>
+            <For each={counts()}>{([st, n, word]) => <span class={`req-tag ${st}`}>{word} {n}</span>}</For>
           </span>
           {/* what is being worked on right now, in one line (the same open or closed, so the head never changes width) */}
           <Show when={working()[0]}>{(x) => <span class="req-now">{x().title}<Show when={doing(x())}> · {doing(x())}</Show></span>}</Show>

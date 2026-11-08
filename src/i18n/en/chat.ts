@@ -240,4 +240,10 @@ export default {
   "중단됨": "Stopped",
   "{n}개 {state}": "{n} {state}",
   "찾기": "Search",
+  "버림": "Discarded",
+  "추천": "Recommended",
+  "계정 없음|notice": "No account",
+  "작업 내용": "Describe the task",
+  "일시정지 · {d} 뒤 다시 시작": "Paused · resumed {d} later",
+  "메모리에 저장|note": "Saved to memory",
 } satisfies Record<string, string>;
