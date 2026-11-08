@@ -52,7 +52,6 @@ export default {
   "병합 중": "Merging",
   "작업 실패": "Task failed",
   "다시 시도": "Try again",
-  "직접 응답": "Reply in your own words",
   "작업 중에 말하기": "Message while it works",
   "이어서 말하기": "Follow up",
 
@@ -74,7 +73,6 @@ export default {
   "열림": "Open",
   "탭 닫기": "Close tab",
   "작업 화면": "Task screen",
-  "열린 작업 없음": "No task open",
   "PR 없음": "No pull request",
 
   // changes: branch row and Git menu
@@ -130,7 +128,6 @@ export default {
   // overview
   "결과": "Result",
   "지금": "Now",
-  "세션 {n}개": "{n} session|{n} sessions",
   "폴더": "Folder",
   "우선순위": "Priority",
   "자동": "Auto",
@@ -307,4 +304,9 @@ export default {
   "쓴 파일": "File written",
   "검색 결과": "Search results",
   "폴더 목록": "Folder listing",
+  // round 3
+  "실행 기록": "Runs",
+  "{name} 닫기": "Close {name}",
+  "작업이 끝나면 만들 수 있어요": "Available when the task finishes",
+  "메시지 보내기": "Message",
 } satisfies Record<string, string>;

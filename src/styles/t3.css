@@ -8718,14 +8718,14 @@ select.select.dev-space {
 .thread-inner > .blocks {
   margin: 0;
 }
-/* header chips: one shape; colour by state as in the sidebar (waiting amber, review green, done grey) */
+/* header chips: one shape; colour by state as in the sidebar (waiting amber, review blue, done grey) */
 .status-chip.unverified {
   background: var(--warn-soft);
   color: var(--warn-ink);
 }
 .status-chip.unmerged {
-  background: var(--ok-soft);
-  color: var(--ok-ink);
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 .status-chip.done {
   background: var(--active);

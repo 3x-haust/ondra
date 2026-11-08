@@ -38,13 +38,15 @@ const share = (n: number, of: number) => {
   return p >= 10 ? `${Math.round(p)}%` : p >= 0.1 ? `${p.toFixed(1)}%` : "0%";
 };
 
-/** A part that opens to show what is inside. */
-function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: string; seg?: Seg; children: JSX.Element; open?: boolean; nested?: boolean }) {
+/** A part that opens to show what is inside; an empty one is a plain row. */
+function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: string; seg?: Seg; children?: JSX.Element; open?: boolean; nested?: boolean; empty?: boolean }) {
   const [open, setOpen] = createSignal(!!props.open);
   return (
-    <div class="cx-part" classList={{ open: open(), nested: props.nested }}>
-      <button class="cx-part-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
-        <Icon name="chevron" size={13} class="chev cx-chev" />
+    <div class="cx-part" classList={{ open: open() && !props.empty, nested: props.nested, empty: props.empty }}>
+      <button class="cx-part-head" disabled={props.empty} onClick={() => setOpen(!open())} aria-expanded={props.empty ? undefined : open()}>
+        <Show when={!props.empty} fallback={<span class="cx-chev-room" />}>
+          <Icon name="chevron" size={13} class="chev cx-chev" />
+        </Show>
         <Show when={props.seg}><i class={`cx-key k-${props.seg}`} /></Show>
         <span class="cx-part-title">{props.title}</span>
         <Show when={props.meta}><span class="cx-part-meta">{props.meta}</span></Show>
@@ -54,9 +56,11 @@ function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: st
           <Show when={props.of}><span class="cx-part-share">{share(props.size!, props.of!)}</span></Show>
         </Show>
       </button>
-      <Fold open={open()}>
-        <div class="cx-part-body">{props.children}</div>
-      </Fold>
+      <Show when={!props.empty}>
+        <Fold open={open()}>
+          <div class="cx-part-body">{props.children}</div>
+        </Fold>
+      </Show>
     </div>
   );
 }
@@ -159,6 +163,8 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
   const sec = (name: string) => c().sections.find((s) => s.name === name)?.tokens ?? 0;
   const engineSections = () => c().sections.filter((s) => !["addendum", "project_context", "skills"].includes(s.name));
   const activeTools = () => c().tools.filter((t) => t.active);
+  /** skills whose text is in the prompt (none when they are only searched for) */
+  const loadedSkills = () => (sec("skills") > 0 ? c().skills.filter((s) => s.modelInvocable) : []);
   const counted = createMemo(() => {
     const s: Record<Seg, number> = {
       engine: engineSections().reduce((n, x) => n + x.tokens, 0),
@@ -239,33 +245,33 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           <Part seg="engine" title={t("기본 지침")} size={segs().engine} of={total()}>
             <For each={engineSections()}>
               {(s) => (
-                <Part nested title={ENGINE_SECTION[s.name] ? t(ENGINE_SECTION[s.name]) : t("기타")} size={s.tokens}>
+                <Part nested seg="engine" title={ENGINE_SECTION[s.name] ? t(ENGINE_SECTION[s.name]) : t("기타")} size={s.tokens}>
                   <Pre text={s.text} />
                 </Part>
               )}
             </For>
           </Part>
-          <Part seg="ondra" title={t("내 지침")} size={segs().ondra} of={total()} meta={props.data.parts.length ? `${props.data.parts.length}` : undefined}>
-            <For each={props.data.parts} fallback={<p class="cx-empty">{t("없음")}</p>}>
+          <Part seg="ondra" title={t("내 지침")} size={segs().ondra} of={total()} meta={`${props.data.parts.length}`} empty={!props.data.parts.length}>
+            <For each={props.data.parts}>
               {(p) => (
-                <Part nested title={p.title} size={c().appendSystemPrompt.find((a) => a.text === p.text)?.tokens}>
+                <Part nested seg="ondra" title={p.title} size={c().appendSystemPrompt.find((a) => a.text === p.text)?.tokens}>
                   <Pre text={p.text} />
                 </Part>
               )}
             </For>
           </Part>
-          <Part seg="files" title={t("지시 파일")} size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || undefined}>
-            <For each={c().contextFiles} fallback={<p class="cx-empty">{t("없음")}</p>}>
+          <Part seg="files" title={t("지시 파일")} size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || "0"} empty={!c().contextFiles.length}>
+            <For each={c().contextFiles}>
               {(f) => (
-                <Part nested title={tilde(f.path)} size={f.tokens}>
+                <Part nested seg="files" title={tilde(f.path)} size={f.tokens}>
                   <Pre text={f.content} />
                 </Part>
               )}
             </For>
           </Part>
-          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={c().skills.length ? `${c().skills.length}` : undefined}>
+          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={`${loadedSkills().length}`} empty={!loadedSkills().length}>
             <div class="cx-list">
-              <For each={c().skills} fallback={<p class="cx-empty">{t("없음")}</p>}>
+              <For each={loadedSkills()}>
                 {(s) => (
                   <div class="cx-li" classList={{ off: !s.modelInvocable }}>
                     <b>{s.name}</b>
@@ -279,7 +285,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           </Part>
         </Show>
 
-        <Part seg="tools" title={t("도구")} size={segs().tools} of={total()} meta={`${activeTools().length}`}>
+        <Part seg="tools" title={t("도구")} size={segs().tools} of={total()} meta={`${activeTools().length}`} empty={!activeTools().length}>
           <div class="cx-list">
             <For each={activeTools()}>
               {(t) => (
@@ -296,7 +302,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
 
         <Part seg="talk" title={t("대화")} size={segs().talk} of={total()} meta={t("메시지 {n}개", { n: c().messages.length })} open={c().messages.length > 0}>
           {/* memory goes in with a message, so it is part of the conversation */}
-          <Part nested title={t("메모리")} meta={`${props.data.recalled.length}`}>
+          <Part nested seg="talk" title={t("메모리")} meta={`${props.data.recalled.length}`} empty={!props.data.recalled.length}>
             <MemoryList list={props.data.recalled} empty={t("없음")} onOpen={openMemory} />
           </Part>
           <Talk list={c().messages} total={segs().talk} live={props.data.live} known={props.known?.tokens} />

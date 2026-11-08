@@ -8,7 +8,7 @@ import { goMain, hoverTask, openTask, setHoverTask, view } from "../state/ui";
 import { ago, compact, now } from "../ui/bits";
 import { line, plain } from "../ui/ForkCard";
 import { Icon } from "../ui/Icon";
-import { bucket, changes } from "./Sidebar";
+import { bucket, changes, Glyph } from "./Sidebar";
 import { t as tr } from "../i18n";
 
 const openId = () => {
@@ -34,15 +34,6 @@ const GUTTER = NODE + 15;
 /** a subagent's glyph, at the end of its twig */
 const KID_X = NODE + 11;
 
-/** the status glyph's shape, as the sidebar draws it: what the row needs, not only its status */
-const glyph = (t: Task) => {
-  if (t.status === "failed") return "failed";
-  if (bucket(t) === "you") return "waiting";
-  if (bucket(t) === "review") return "done unmerged";
-  if (t.status === "running") return "running";
-  if (t.status === "paused" || t.status === "queued") return t.status;
-  return "done";
-};
 
 interface Row {
   t: Task;
@@ -149,18 +140,21 @@ export function Flow() {
     return out;
   });
 
+  /** the same words as the sidebar row */
   const meta = (t: Task) => {
+    if (t.status === "failed") return tr("실패");
+    if (t.status === "waiting") return tr("응답 필요");
+    if (bucket(t) === "review") return tr("검토");
     if (t.status === "queued") return tr("대기");
     if (t.status === "paused") return tr("일시정지");
     if (t.status === "done") return ago(t.finishedAt ?? t.createdAt);
-    if (t.status === "waiting") return tr("응답 필요");
     return t.startedAt ? compact(now() - t.startedAt) : "";
   };
   const sub = (t: Task) => {
     if (t.status === "done") {
       if (t.worktree?.state === "open") {
         const c = changes(t);
-        return `+${c.add} −${c.del} · ${tr("검토")}`;
+        return c.add || c.del ? `+${c.add} −${c.del}` : tr("변경 없음");
       }
       return t.worktree?.state === "merged" ? tr("병합됨") : t.worktree?.state === "discarded" ? tr("버림") : plain(t.summary ?? "") || tr("완료");
     }
@@ -184,15 +178,8 @@ export function Flow() {
         {/* the same status glyphs as the sidebar */}
         <For each={order()}>
           {(r) => (
-            <span
-              class={`g-glyph st-icon sm ${glyph(r.t)}`}
-              classList={{ kid: r.kid, on: openId() === r.t.id }}
-              style={{ left: `${r.kid ? KID_X : NODE}px`, top: `${cyOf(r.k)}px` }}
-              aria-hidden="true"
-            >
-              <Show when={glyph(r.t) === "running"} fallback={<Show when={glyph(r.t).startsWith("done")} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
-                <span class="spin" />
-              </Show>
+            <span class="g-at" style={{ left: `${r.kid ? KID_X : NODE}px`, top: `${cyOf(r.k)}px` }}>
+              <Glyph t={r.t} class={`g-glyph${r.kid ? " kid" : ""}${openId() === r.t.id ? " on" : ""}`} />
             </span>
           )}
         </For>
@@ -228,7 +215,7 @@ export function Flow() {
                     {tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                   </span>
                 </Show>
-                <span class="g-meta">{meta(r.t)}</span>
+                <span class="g-meta" classList={{ "m-review": bucket(r.t) === "review", "m-ask": r.t.status === "waiting" }}>{meta(r.t)}</span>
               </span>
               <Show when={!r.kid && r.base === ROW}>
                 <span class="g-line2-wrap">

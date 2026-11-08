@@ -1075,13 +1075,20 @@
 }
 
 /* ───────────── flow: the sidebar's status glyphs on the branches ───────────── */
-.graph .g-glyph {
+.graph .g-at {
   position: absolute;
   z-index: 1;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.graph .g-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 14px;
   height: 14px;
   margin: -7px 0 0 -7px;
-  pointer-events: none;
 }
 .graph .g-glyph.kid {
   width: 12px;
@@ -1139,4 +1146,179 @@
 .graph .g-glyph.kid .icon {
   width: 8px;
   height: 8px;
+}
+
+/* ═════════════ round 3 ═════════════ */
+
+/* flow: review is the sidebar's ring with a dot, in the accent, and says 검토 */
+.graph .g-glyph.inreview {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+  color: var(--accent-text);
+}
+.graph .g-glyph.inreview i {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+.graph .g-glyph.kid.inreview i {
+  width: 5px;
+  height: 5px;
+}
+.graph .g-glyph.running {
+  box-shadow: none;
+}
+.graph .g-meta.m-review {
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}
+.graph .g-meta.m-ask {
+  color: var(--warn-ink);
+  font-weight: var(--fw-medium);
+}
+
+/* header pill for review: the sidebar's glyph (ring + dot) in the accent */
+.task-head .status-chip .st-icon.inreview {
+  color: var(--accent-text);
+  width: 12px;
+  height: 12px;
+  margin-left: -2px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.task-head .status-chip .st-icon.inreview i {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+/* context sheet: a part with nothing in it is a plain row (no chevron, no hover) */
+.cx-part .cx-chev-room {
+  width: 13px;
+  flex: none;
+}
+.cx-part.empty > .cx-part-head {
+  cursor: default;
+}
+.cx-part.empty > .cx-part-head:hover {
+  background: transparent;
+}
+.cx-part.empty > .cx-part-head:disabled {
+  opacity: 1;
+}
+
+/* panel overflow menu: each row is its tab; close is its own button beside it */
+.ptab-menu .ptab-menu-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.ptab-menu .ptab-menu-row > button[role="menuitem"] {
+  flex: 1;
+  min-width: 0;
+  padding-right: 32px;
+}
+.ptab-menu .ptab-menu-row > .ptab-menu-x {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  margin: -10px 0 0;
+  opacity: 0;
+}
+.ptab-menu .ptab-menu-row:hover > .ptab-menu-x,
+.ptab-menu .ptab-menu-row:focus-within > .ptab-menu-x {
+  opacity: 1;
+}
+
+/* browser tab: its empty line sits where every other pane's does (§9.12) */
+.panel-body > .bpane,
+.panel-body > .pbrowser {
+  position: relative;
+}
+.panel-body .bpane .bview,
+.panel-body .bpane .bscreen {
+  position: static;
+}
+.panel-body .bpane .bempty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--s-24) var(--s-16) 8%;
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* the job chip under a main reply: the sidebar's glyphs (§8) */
+.br-chip .sb-glyph {
+  width: 14px;
+  height: 14px;
+}
+.br-chip .sb-glyph i {
+  width: 6px;
+  height: 6px;
+}
+.br-chip .sb-glyph.paused i {
+  width: 4px;
+  height: 4px;
+}
+.br-chip .sb-glyph.queued {
+  box-shadow: none;
+  border: 1.5px dashed var(--ink-4);
+}
+.br-chip .sb-glyph.waiting,
+.br-chip .sb-glyph.failed,
+.br-chip .sb-glyph.inreview {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.br-chip .sb-glyph.waiting {
+  color: var(--warn);
+}
+.br-chip .sb-glyph.failed {
+  color: var(--bad);
+}
+.br-chip .sb-glyph.inreview {
+  color: var(--accent-text);
+}
+.br-chip .sb-glyph.waiting i,
+.br-chip .sb-glyph.failed i,
+.br-chip .sb-glyph.inreview i {
+  background: currentColor;
+}
+.br-chip .sb-glyph.done {
+  background: var(--accent-soft);
+  box-shadow: none;
+  color: var(--accent-text);
+}
+.br-chip .sb-glyph.running {
+  box-shadow: none;
+}
+.br-chip .sb-glyph .spin {
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+}
+.br-chip.m-review .br-chip-meta {
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}
+/* a branch in review: the accent, like its glyph (never green) */
+.graph .g-lines path.ready {
+  stroke: var(--accent-text);
+}
+/* a part inside a part keeps its section's swatch, a step smaller */
+.cx-part.nested > .cx-part-head .cx-key {
+  width: 6px;
+  height: 6px;
+  margin: 0 1px;
+}
+/* overview: sections 24 apart, the details list included */
+.panel-body .pane > div > .kv {
+  margin-top: 0;
 }

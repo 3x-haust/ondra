@@ -5,15 +5,16 @@ import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { accountById, homeDir, state, updateTask } from "../state/store";
-import type { Priority, Shell, Task } from "../state/types";
+import type { Account, Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
-import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, type PanelTab } from "../state/ui";
+import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, type PanelTab } from "../state/ui";
 import { discardTask, gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
-import { ago, long, now, priorityLabel, short, statusLabel } from "../ui/bits";
+import { ago, compact, long, now, priorityLabel, short, statusLabel } from "../ui/bits";
+import { emails } from "../state/limits";
 import { planCount } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { prettyModel, usePop } from "../ui/ModelPicker";
@@ -25,6 +26,16 @@ import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
 import { lang, t as tr } from "../i18n";
+
+// TODO(merge): switch to accountName() from ../ui/AccountPicker once the shell group adds it
+const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
+/** An account by provider + email, or the name it was given (the default name is only the workspace's). */
+function accountName(a: Account): string {
+  const own = a.label && !state.spaces.some((s) => a.label === s.label || a.label.startsWith(`${s.label} `));
+  if (own) return a.label;
+  const who = [[...new Set(a.providers.map(service))].join(" · "), emails[a.id]].filter(Boolean).join(" · ");
+  return who || tr(a.label);
+}
 
 /** The task's own branch: where it is, and merge / throw away. */
 export function BranchCard(props: { t: Task }) {
@@ -96,14 +107,16 @@ const prDone = (u: string) => (u ? tr("PR을 열었어요 · {url}", { url: u })
 /** No pull request yet: the next step, when the job has a branch to open one from. */
 function NoPr(props: { t: Task }) {
   const [busy, setBusy] = createSignal(false);
-  const can = () => props.t.worktree?.state === "open" && props.t.status !== "running" && props.t.status !== "queued";
+  const branch = () => props.t.worktree?.state === "open";
+  const working = () => props.t.status === "running" || props.t.status === "queued";
   return (
     <div class="pane-empty">
       <span>{tr("PR 없음")}</span>
-      <Show when={can()}>
+      <Show when={branch()}>
         <button
           class="btn sm"
-          disabled={busy()}
+          disabled={busy() || working()}
+          title={working() ? tr("작업이 끝나면 만들 수 있어요") : props.t.worktree!.branch}
           onClick={async () => {
             setBusy(true);
             try {
@@ -173,7 +186,7 @@ function Overview(props: { t: Task }) {
     <div class="pane">
       <div class="now-box">
         <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
-        <div class="now-text">{t().status === "done" ? t().summary || t().now : t().status === "running" ? t().now : tr(statusLabel[t().status])}</div>
+        <div class="now-text">{t().status === "done" ? t().summary || tr(t().now) : t().status === "running" ? tr(t().now) : tr(statusLabel[t().status])}</div>
       </div>
       <Show when={t().plan.length}>
         <div>
@@ -197,15 +210,19 @@ function Overview(props: { t: Task }) {
       </Show>
       <Show when={t().legs.length > 1}>
         <div>
-          <div class="pane-title" title={tr("컨텍스트가 차면 새 세션에서 이어 가요")}>{tr("세션 {n}개", { n: t().legs.length })}</div>
+          <div class="pane-title" title={tr("컨텍스트가 차면 새 세션에서 이어 가요")}>{tr("실행 기록")} <span class="pane-count">{t().legs.length}</span></div>
           <div class="legs">
             <For each={t().legs}>
               {(l, i) => (
                 <div class="leg" classList={{ live: !l.endedAt && t().status === "running" }}>
                   <span class="leg-n">{i() + 1}</span>
-                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? t().now : "—"}</span>
-                  {/* when each began, oldest first; how long it ran on hover */}
-                  <span class="leg-time" title={short((l.endedAt ?? t().legs[i() + 1]?.startedAt ?? t().finishedAt ?? now()) - l.startedAt)}>{ago(l.startedAt)}</span>
+                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? tr(t().now) : "—"}</span>
+                  {/* how long each ran (the running one: so far); when it began on hover */}
+                  <span class="leg-time" title={ago(l.startedAt)}>
+                    {!l.endedAt && t().status === "running" && i() === t().legs.length - 1
+                      ? compact(now() - l.startedAt)
+                      : short((l.endedAt ?? t().legs[i() + 1]?.startedAt ?? t().finishedAt ?? now()) - l.startedAt)}
+                  </span>
                 </div>
               )}
             </For>
@@ -238,7 +255,7 @@ function Overview(props: { t: Task }) {
           <dt>{tr("계정|one")}</dt>
           <dd>
             <select class="select" value={t().accountId} onChange={(e) => updateTask(t().id, (x) => (x.accountId = e.currentTarget.value))}>
-              <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{tr(a.label)}</option>}</For>
+              <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{accountName(a)}</option>}</For>
             </select>
             <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
           </dd>
@@ -267,7 +284,7 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
         </span>
         <span class="shell-cmd" title={props.s.command}>{props.s.command}</span>
         <Show when={props.s.background}><span class="shell-tag">{tr("백그라운드")}</span></Show>
-        <span class="shell-time">{short((props.s.endedAt ?? now()) - props.s.startedAt)}</span>
+        <span class="shell-time">{props.s.endedAt ? short(props.s.endedAt - props.s.startedAt) : compact(now() - props.s.startedAt)}</span>
       </button>
       <Fold open={props.open}>
         <pre class="shell-out" ref={pre}>{props.s.tail.replace(/^\n+/, "").trimEnd() || (props.s.endedAt ? tr("출력 없음") : tr("출력 대기 중"))}</pre>
@@ -544,6 +561,11 @@ function NewTab(props: { t?: Task }) {
   );
 }
 
+/** A task's tab (Changes, Terminal…): off Main's strip, back when a task is open. */
+const jobOnly = (k: PanelTab) => !!TOOLS.find((x) => x.kind === k)?.job;
+/** On Main a task's tab steps aside: the tab it was on, and the one picked in its place. */
+let parked: { id: number; instead: number } | null = null;
+
 /** when the last panel went away: a re-mount right after a close shouldn't slide again */
 let panelGoneAt = 0;
 const DRAWER = "cubic-bezier(.32,.72,0,1)";
@@ -569,6 +591,24 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     setPanelLeave(null);
   });
   const running = () => props.t?.shells.filter((s) => !s.endedAt).length ?? 0;
+  /** tabs that work here: on Main, not a task's own */
+  const usable = (x: { kind: PanelTab }) => !!props.t || !jobOnly(x.kind);
+  createEffect(
+    on([() => !!props.t, activeTab], ([job, cur]) => {
+      if (!job) {
+        const at = ptabs().find((x) => x.id === cur);
+        if (!at || usable(at)) return;
+        const alt = ptabs().find(usable);
+        if (alt) setActiveTab(alt.id);
+        else setPanelTab("flow");
+        parked = { id: at.id, instead: activeTab() };
+      } else if (parked) {
+        // back on a task: its tab again, unless another one was picked meanwhile
+        if (cur === parked.instead && ptabs().some((x) => x.id === parked!.id)) setActiveTab(parked.id);
+        parked = null;
+      }
+    }),
+  );
   const tab = panelTab;
   // the active tab's pill slides between tabs
   let bar!: HTMLDivElement;
@@ -578,48 +618,54 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     if (on) setInd({ x: on.offsetLeft, w: on.offsetWidth, on: true });
     else setInd((v) => ({ ...v, on: false }));
   };
-  createEffect(
-    on([activeTab, () => ptabs().map((t) => t.kind).join()], () =>
-      requestAnimationFrame(() => {
-        measure();
-        bar?.querySelector<HTMLElement>(".ptab.on")?.scrollIntoView({ inline: "nearest", block: "nearest" });
-      }),
-    ),
-  );
   // tabs always show in full; the ones that don't fit go into the menu at the end
   // (the active tab always stays in the strip)
   const widths = new Map<number, number>();
   const [over, setOver] = createSignal<number[]>([]);
   const [more, setMore] = usePop();
+  // an empty tab you left has nothing in it: it goes, instead of waiting in the strip or the menu
+  createEffect(
+    on(activeTab, (cur) => {
+      if (ptabs().some((x) => x.kind === "new" && x.id !== cur)) setPtabs((l) => l.filter((x) => x.kind !== "new" || x.id === cur));
+    }),
+  );
   onMount(() => {
-    const fit = () => {
+    /** the active tab, measured and in full view, with its pill under it */
+    const settle = () => {
+      measure();
+      bar?.querySelector<HTMLElement>(".ptab.on")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    };
+    const fit = (again = true) => {
       const strip = bar?.parentElement;
       if (!strip) return;
       // a hidden tab keeps the width it had when it last showed
       for (const el of bar.querySelectorAll<HTMLElement>(".ptab")) if (el.offsetWidth) widths.set(Number(el.dataset.id), el.offsetWidth);
-      const list = ptabs();
+      const list = ptabs().filter(usable);
       const w = (id: number) => (widths.get(id) ?? 120) + 2;
       const add = strip.querySelector<HTMLElement>(".ptab-add")?.offsetWidth ?? 0;
       const room = strip.clientWidth - 16 - add - 4;
-      if (list.reduce((n, x) => n + w(x.id), 0) <= room) return setOver([]);
-      let left = room - 32 - w(activeTab());
-      let full = false;
-      const hide: number[] = [];
-      for (const x of list) {
-        if (x.id === activeTab()) continue;
-        if (!full && w(x.id) <= left) left -= w(x.id);
-        else (full = true), hide.push(x.id);
+      let hide: number[] = [];
+      if (list.reduce((n, x) => n + w(x.id), 0) > room) {
+        let left = room - 32 - w(activeTab());
+        let full = false;
+        for (const x of list) {
+          if (x.id === activeTab()) continue;
+          if (!full && w(x.id) <= left) left -= w(x.id);
+          else (full = true), hide.push(x.id);
+        }
       }
-      setOver(hide);
+      if (hide.join() !== over().join()) setOver(hide);
+      // a tab shown for the first time can be wider than guessed: measure it and fit once more
+      requestAnimationFrame(() => (again && bar && bar.scrollWidth > bar.clientWidth + 1 ? fit(false) : settle()));
     };
-    const ro = new ResizeObserver(fit);
+    const ro = new ResizeObserver(() => fit());
     ro.observe(bar.parentElement!);
-    createEffect(on([() => ptabs().map((x) => `${x.id}:${x.kind}`).join(), activeTab], () => requestAnimationFrame(fit)));
+    createEffect(on([() => ptabs().map((x) => `${x.id}:${x.kind}`).join(), activeTab, () => !!props.t], () => requestAnimationFrame(() => fit())));
     // another language: every tab is measured again
-    createEffect(on(lang, () => (widths.clear(), setOver([]), requestAnimationFrame(fit)), { defer: true }));
+    createEffect(on(lang, () => (widths.clear(), setOver([]), requestAnimationFrame(() => fit())), { defer: true }));
     onCleanup(() => ro.disconnect());
   });
-  const hidden = () => ptabs().filter((x) => over().includes(x.id));
+  const hidden = () => ptabs().filter((x) => usable(x) && over().includes(x.id));
   // drag the left edge to resize; remembered per machine
   const KEY = "ondra.jobW";
   try {
@@ -667,7 +713,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               return (
                 <div
                   class="ptab"
-                  classList={{ on: activeTab() === x.id, over: over().includes(x.id) }}
+                  classList={{ on: activeTab() === x.id, over: over().includes(x.id) || !usable(x) }}
                   data-id={x.id}
                   role="tab"
                   tabindex="0"
@@ -691,7 +737,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                     class="ptab-x"
                     data-shortcut={activeTab() === x.id ? "closeTab" : undefined}
                     title={`${tr("탭 닫기")}${activeTab() === x.id ? ` (${shortcutHint("closeTab")})` : ""}`}
-                    aria-label={tr("탭 닫기")}
+                    aria-label={tr("{name} 닫기", { name: tr(tool().label) })}
                     onClick={(e) => {
                       e.stopPropagation();
                       closePanelTab(x.id);
@@ -721,20 +767,21 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
               <div class="menu ptab-menu" role="menu" onClick={(e) => e.stopPropagation()}>
                 <For each={hidden()}>
                   {(x) => (
-                    <button role="menuitem" onClick={() => (setActiveTab(x.id), setMore(false))}>
-                      <Show when={toolOf(x.kind).icon}><Icon name={toolOf(x.kind).icon} size={14} class="muted" /></Show>
-                      <span class="row-title">{tr(toolOf(x.kind).label)}</span>
-                      <Show when={x.kind === "terminal" && running()}><span class="badge">{running()}</span></Show>
-                      <span
+                    <div class="ptab-menu-row" role="none">
+                      <button role="menuitem" onClick={() => (setActiveTab(x.id), setMore(false))}>
+                        <Show when={toolOf(x.kind).icon}><Icon name={toolOf(x.kind).icon} size={16} class="muted" /></Show>
+                        <span class="row-title">{tr(toolOf(x.kind).label)}</span>
+                        <Show when={x.kind === "terminal" && running()}><span class="badge">{running()}</span></Show>
+                      </button>
+                      <button
                         class="ptab-menu-x"
-                        role="button"
                         title={tr("탭 닫기")}
-                        aria-label={tr("탭 닫기")}
+                        aria-label={tr("{name} 닫기", { name: tr(toolOf(x.kind).label) })}
                         onClick={(e) => (e.stopPropagation(), closePanelTab(x.id), hidden().length || setMore(false))}
                       >
                         <Icon name="x" size={12} />
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                   )}
                 </For>
               </div>
@@ -766,7 +813,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
             </div>
           </Match>
           <Match when={tab() === "issues"}><IssuesPane t={props.t} /></Match>
-          <Match when={needsJob()}><div class="pane-empty">{tr("열린 작업 없음")}</div></Match>
+          <Match when={needsJob()}><NewTab t={props.t} /></Match>
           <Match when={props.t}>
             {(t) => (
               <Switch>

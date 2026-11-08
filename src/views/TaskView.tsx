@@ -13,8 +13,8 @@ import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, togglePan
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
 import { planCount, taskDiff } from "../state/progress";
-import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { ago, compact, Dot, IssueTag, now, statusLabel } from "../ui/bits";
+import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
+import { ago, compact, Dot, IssueTag, long, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
 import { Composer } from "../ui/Composer";
@@ -24,7 +24,7 @@ import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
 import { Transcript } from "../ui/Transcript";
-import { renaming, setRenaming, SidebarToggle } from "./Sidebar";
+import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
@@ -312,7 +312,7 @@ export function TaskView(props: { id: string }) {
               <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
-              <span class="status-chip unmerged">{tr("검토")}</span>
+              <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state !== "open"}>
               <span class="status-chip done">
@@ -354,7 +354,15 @@ export function TaskView(props: { id: string }) {
               footer={
                 <>
                   <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
-                  <Show when={task().status === "done" && costDetail(jobCost(task()))}>{(s) => <div class="job-cost">{tr("완료")} · {s()}</div>}</Show>
+                  {/* the end of a task: its state and time; the token breakdown on hover */}
+                  <Show when={task().status === "done" && jobCost(task())}>
+                    {(c) => (
+                      <div class="job-cost" title={costDetail(c()) || undefined}>
+                        {task().worktree?.state === "open" ? tr("검토") : tr("완료")}
+                        {c().ms ? ` · ${long(c().ms)}` : ""}
+                      </div>
+                    )}
+                  </Show>
                 </>
               }
             />
@@ -386,21 +394,28 @@ export function TaskView(props: { id: string }) {
                     btwCommand(() => `task:${task().id}`),
                     drawCommand(() => task().id),
                     { name: "remember", desc: tr("프로젝트 메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
-                    { name: "stop", desc: tr("일시정지"), icon: "pause", run: () => stopTask(task().id) },
-                    { name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) },
-                    { name: "done", desc: tr("완료로 표시"), icon: "check", run: () => finishTask(task().id) },
+                    // what the task's state allows, as in its ⋯ menu
+                    ...(task().status === "running" || task().status === "waiting" ? [{ name: "stop", desc: tr("일시정지|action"), icon: "pause", run: () => stopTask(task().id) }] : []),
+                    ...(task().status === "paused" || task().status === "failed" ? [{ name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) }] : []),
+                    ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
+                    ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),
                     { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
                     { name: "changes", desc: tr("변경 사항"), icon: "diff", run: () => showTool("changes") },
                     { name: "files", desc: tr("파일"), icon: "file", run: () => showTool("files") },
                     { name: "terminal", desc: tr("터미널"), icon: "shell", run: () => showTool("terminal") },
                     { name: "browser", desc: tr("브라우저"), icon: "globe", run: () => showTool("browser") },
-                    { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
+                    ...(ready()
+                      ? [
+                          { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
+                          { name: "discard", desc: tr("버리기"), icon: "undo", run: () => void discardTask(task().id) },
+                        ]
+                      : []),
                     { name: "ask", desc: tr("권한: 매번 묻기"), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
                     { name: "edits", desc: tr("권한: 편집 허용"), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
                     { name: "full", desc: tr("권한: 전체 권한"), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
                     ...skillCommands(() => ({ task: task().id, space: task().space })),
                   ]}
-                  placeholder={decision() ? tr("직접 응답") : task().status === "running" ? tr("작업 중에 말하기") : tr("이어서 말하기")}
+                  placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" ? tr("메시지 보내기") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
                   onSend={(m) => tell(task().id, m)}
                   running={task().status === "running"}
