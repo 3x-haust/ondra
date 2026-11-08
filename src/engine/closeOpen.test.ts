@@ -45,10 +45,16 @@ describe("a run that ends leaves nothing spinning", () => {
 });
 
 describe("a new task's title", () => {
-  it("is cut where a word ends, with …", () => {
+  it("keeps up to 80 characters (views truncate it)", () => {
     const id = createTask({ space: "home", topic: "", title: "로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기", ask: "x" });
     const title = state.tasks.find((t) => t.id === id)!.title;
-    expect(title).toBe("로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고…");
+    expect(title).toBe("로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기");
+  });
+  it("is cut where a word ends past that, with …", () => {
+    const long = "로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기, 그리고 세션이 만료된 경우에도 로그인 화면을 거쳐 같은 페이지로 돌려보내기";
+    const id = createTask({ space: "home", topic: "", title: long, ask: "x" });
+    const title = state.tasks.find((t) => t.id === id)!.title;
+    expect(title).toBe("로그인 후 원래 보던 페이지로 돌아가게 리다이렉트 처리를 고치고 테스트까지 추가하기, 그리고 세션이 만료된 경우에도 로그인 화면을 거쳐 같은…");
   });
   it("stays whole when it fits", () => {
     const id = createTask({ space: "home", topic: "", title: "  README 정리 ", ask: "x" });

@@ -64,7 +64,7 @@ export function HooksTab() {
         <button class="btn ghost sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>
       </div>
       <div class="set-group">
-        <For each={list()} fallback={<div class="empty-line">{loaded() ? t("훅 없음") : t("불러오는 중")}</div>}>
+        <For each={list()} fallback={<div class="empty-line">{loaded() ? t("훅 없음") : t("불러오는 중…")}</div>}>
           {(h) => (
             <div class="hk-row" classList={{ off: !h.enabled && !!h.command.trim() }}>
               <div class="hk-line">

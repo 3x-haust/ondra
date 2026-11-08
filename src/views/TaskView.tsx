@@ -15,7 +15,7 @@ import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
 import { discarded, planCount, stepState, taskDiff, workedMs } from "../state/progress";
-import { askDiscard, DiscardGlyph } from "../ui/Review";
+import { askDiscard } from "../ui/Review";
 import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
@@ -382,11 +382,13 @@ export function TaskView(props: { id: string }) {
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
             </Show>
-            {/* its changes were thrown away: 버림, the done check muted */}
+            {/* its changes were thrown away: the muted trash, 버림 · when it ended */}
             <Show when={discarded(task())}>
               <span class="status-chip discarded">
-                <DiscardGlyph />
+                <Glyph t={task()} />
                 {tr("버림")}
+                <span class="faint" aria-hidden="true">·</span>
+                <span class="faint">{inlineAgo(task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
             <Show when={task().status === "done" && !discarded(task()) && task().worktree?.state !== "open"}>

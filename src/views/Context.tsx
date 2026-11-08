@@ -524,7 +524,7 @@ export function ContextSheet(props: { agent: string; accountId: string; known?: 
           </div>
           <div class="sheet-body cx-body">
             <Show when={!data.error} fallback={<p class="cx-error">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</p>}>
-              <Show when={data()} fallback={<div class="cx-wait">{t("불러오는 중")}</div>}>
+              <Show when={data()} fallback={<div class="cx-wait">{t("불러오는 중…")}</div>}>
                 <View data={data()!} known={known()} onClose={props.onClose} />
               </Show>
             </Show>

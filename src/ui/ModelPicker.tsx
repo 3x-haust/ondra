@@ -159,7 +159,7 @@ export function ModelPicker(props: {
             </div>
           </Show>
           <div class="pop-scroll">
-            <Show when={!loading()} fallback={<div class="pop-empty"><span class="spin sm" />{t("모델 불러오는 중")}</div>}>
+            <Show when={!loading()} fallback={<div class="pop-empty"><span class="spin sm" />{t("모델 불러오는 중…")}</div>}>
               <Show
                 when={found()}
                 fallback={

@@ -2239,7 +2239,7 @@ export function archiveTask(id: string, on = true) {
   if (on) toast(tr("보관했어요"), "info", { label: tr("되돌리기"), run: () => archiveTask(id, false) });
 }
 export function renameTask(id: string, title: string) {
-  const v = title.trim().slice(0, 60);
+  const v = title.trim().slice(0, 80);
   if (v) updateTask(id, (t) => (t.title = v));
 }
 /** Same request again as a new job (same folder, model and permission). */

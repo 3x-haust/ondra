@@ -23,7 +23,7 @@ export function ReleaseNotes(props: { current: string }) {
           fallback={
             <Show when={releasesLoading() || releasesFailed()}>
               <div class="rn-empty">
-                <Show when={!releasesLoading()} fallback={t("불러오는 중")}>
+                <Show when={!releasesLoading()} fallback={t("불러오는 중…")}>
                   {t("불러오지 못했어요")}
                   <button class="btn sm" onClick={() => void loadReleases()}>{t("다시 시도")}</button>
                 </Show>

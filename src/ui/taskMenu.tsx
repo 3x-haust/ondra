@@ -233,7 +233,7 @@ export function ContextMenuHost() {
 interface Ask {
   title: string;
   /** what is lost; a function when it can still change while the dialog is up (a diff still being counted) */
-  body?: string | (() => string);
+  body?: JSX.Element | (() => JSX.Element);
   action: string;
   danger?: boolean;
   run: () => void;
@@ -246,9 +246,16 @@ export function confirmDiscard(id: string) {
   const x = taskById(id);
   if (!x) return;
   // the body says what goes: its files and lines, counted the one way every screen does
+  // (+ and − coloured like the review bar)
   const lost = () => {
     const d = taskDiff(x);
-    return d.files.length ? `${t("파일 {n}개", { n: d.files.length })} · +${d.add} −${d.del}` : x.title;
+    return d.files.length ? (
+      <>
+        {t("파일 {n}개", { n: d.files.length })} · <span class="add">+{d.add}</span> <span class="del">−{d.del}</span>
+      </>
+    ) : (
+      x.title
+    );
   };
   confirmAsk({ title: t("변경을 버릴까요?"), body: lost, action: t("버리기"), danger: true, run: () => void discardTask(id) });
 }
@@ -275,7 +282,7 @@ export function ConfirmHost() {
     <Show when={ask()} keyed>
       {(a) => {
         let cancel!: HTMLButtonElement;
-        const body = () => (typeof a.body === "function" ? a.body() : a.body);
+        const body = () => (typeof a.body === "function" ? (a.body as () => JSX.Element)() : a.body);
         const close = () => setAsk(null);
         const go = () => (close(), a.run());
         const key = (e: KeyboardEvent) => {

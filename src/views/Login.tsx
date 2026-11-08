@@ -197,7 +197,7 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
           <Switch>
             <Match when={step().kind === "pick"}>
               <Show when={error()}><p class="login-err">{error()}</p></Show>
-              <Show when={providers()} fallback={<div class="login-wait"><span class="spin sm" />{t("불러오는 중")}</div>}>
+              <Show when={providers()} fallback={<div class="login-wait"><span class="spin sm" />{t("불러오는 중…")}</div>}>
                 <div class="login-top">
                   <For each={top()}>
                     {(p) => (
