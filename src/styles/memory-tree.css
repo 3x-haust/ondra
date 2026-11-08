@@ -782,8 +782,13 @@
 .ms-piece i {
   transform: none;
 }
+/* one line each, cut at the end (the whole piece is in the tooltip and a click away) */
 .ms-piece > span:not(.mb) {
   flex: 1;
+  display: block;
+  -webkit-line-clamp: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .ms-piece .mb {
   flex: none;
