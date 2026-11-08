@@ -10,6 +10,7 @@ import { state } from "../state/store";
 import type { Task } from "../state/types";
 import { tokenize, type Tok } from "../ui/highlight";
 import { now } from "../ui/bits";
+import { lang as uiLang, t } from "../i18n";
 
 const COLS = 64;
 const ROWS = 16;
@@ -17,12 +18,12 @@ const CELLS = COLS * ROWS;
 const ROW_H = 20;
 
 /** the file's kind in plain words (radare2 says MACH064, ELF64, PE32+) */
-const kind = (t: Record<string, unknown>) => {
-  const c = String(t.class ?? "").toUpperCase();
-  const bin = String(t.bintype ?? "").toLowerCase();
-  if (c.startsWith("MACH") || bin === "mach0") return "맥 실행 파일";
-  if (c.startsWith("ELF") || bin === "elf") return "리눅스 실행 파일";
-  if (c.startsWith("PE") || bin === "pe") return "윈도우 실행 파일";
+const kind = (info: Record<string, unknown>) => {
+  const c = String(info.class ?? "").toUpperCase();
+  const bin = String(info.bintype ?? "").toLowerCase();
+  if (c.startsWith("MACH") || bin === "mach0") return t("맥 실행 파일");
+  if (c.startsWith("ELF") || bin === "elf") return t("리눅스 실행 파일");
+  if (c.startsWith("PE") || bin === "pe") return t("윈도우 실행 파일");
   return c || undefined;
 };
 /** the source language radare2 guessed ("c with blocks" is C with Apple's blocks) */
@@ -37,12 +38,13 @@ const lang = (v: unknown) => {
   if (l === "go") return "Go";
   return l;
 };
+/** shown with t() */
 const OP: Record<RStep["op"], string> = { inspect: "구조", functions: "함수 목록", disassemble: "어셈블리", decompile: "의사코드" };
 const DOING: Record<RStep["op"], string> = { inspect: "구조 읽는 중", functions: "함수 찾는 중", disassemble: "디스어셈블 중", decompile: "디컴파일 중" };
 
 const bytes = (n?: number) => (n === undefined ? "" : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`);
-const secs = (ms?: number) => (ms === undefined ? "" : ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}초`);
-const n = (x: number) => x.toLocaleString("ko-KR");
+const secs = (ms?: number) => (ms === undefined ? "" : ms < 1000 ? `${ms}ms` : t("{n}초", { n: (ms / 1000).toFixed(ms < 10_000 ? 1 : 0) }));
+const n = (x: number) => x.toLocaleString(uiLang() === "en" ? "en-US" : "ko-KR");
 
 /** Read the trace of a job and its subagents, only what is new each time. */
 function useTrace(t: () => Task) {
@@ -106,13 +108,13 @@ export function ReversePane(props: { t: Task }) {
 
   return (
     <div class="rv">
-      <Show when={bin()} fallback={<div class="pane-empty">{running() ? DOING[running()!.op] : "리버싱 기록 없음"}</div>}>
+      <Show when={bin()} fallback={<div class="pane-empty">{running() ? t(DOING[running()!.op]) : t("리버싱 기록 없음")}</div>}>
         {(b) => (
           <>
             <Head b={b()} running={running()} bins={trace().bins} pick={(f) => (setPick(f), setChosen(undefined))} />
             <BinaryMap b={b()} focus={focus()} live={running()?.address} onPick={choose} />
             <Trail steps={steps()} focus={focus()} onPick={choose} />
-            <Show when={focus()} keyed fallback={<div class="rv-none">아직 읽은 함수 없음</div>}>
+            <Show when={focus()} keyed fallback={<div class="rv-none">{t("읽은 함수 없음")}</div>}>
               {(addr) => <FnView b={b()} addr={addr} onPick={choose} />}
             </Show>
           </>
@@ -124,8 +126,8 @@ export function ReversePane(props: { t: Task }) {
 
 function Head(props: { b: RBinary; running?: RStep; bins: RBinary[]; pick: (file: string) => void }) {
   const meta = () => {
-    const t = props.b.target;
-    return [kind(t), t.arch === "arm" ? "arm64" : t.arch === "x86" ? "x86_64" : t.arch, lang(t.lang), bytes(props.b.size)].filter(Boolean).join(" · ");
+    const tg = props.b.target;
+    return [kind(tg), tg.arch === "arm" ? "arm64" : tg.arch === "x86" ? "x86_64" : tg.arch, lang(tg.lang), bytes(props.b.size)].filter(Boolean).join(" · ");
   };
   return (
     <div class="rv-head">
@@ -141,13 +143,13 @@ function Head(props: { b: RBinary; running?: RStep; bins: RBinary[]; pick: (file
       <Show when={props.running}>
         {(s) => (
           <div class="rv-live">
-            <span class="spin xs" />
-            {DOING[s().op]}
+            <i class="cv-st t-live" />
+            {t(DOING[s().op])}
             <Show when={s().address !== undefined}>
               <span class="rv-live-at">{((f) => (f ? shortName(f.name) : hex(s().address!)))(fnAt(props.b, s().address!))}</span>
             </Show>
             <Show when={s().filter}><span class="rv-live-at">"{s().filter}"</span></Show>
-            <span class="rv-live-t">{Math.max(0, Math.floor((now() - s().at) / 1000))}초</span>
+            <span class="rv-live-t">{t("{n}초", { n: Math.max(0, Math.floor((now() - s().at) / 1000)) })}</span>
           </div>
         )}
       </Show>
@@ -236,7 +238,7 @@ function BinaryMap(props: { b: RBinary; focus?: number; live?: number; onPick: (
           if (f) props.onPick(f.addr);
         }}
         role="img"
-        aria-label={`함수 ${counts().all}개 중 어셈블리 ${counts().asm + counts().code}개, 의사코드 ${counts().code}개`}
+        aria-label={t("함수 {all} · 어셈블리 {asm} · 의사코드 {code}", { all: counts().all, asm: counts().asm + counts().code, code: counts().code })}
       >
         <For each={Array.from({ length: CELLS }, (_, i) => i)}>
           {(i) => <rect class={`rv-cell d${cells()[i]}`} x={(i % COLS) + 0.08} y={Math.floor(i / COLS) + 0.08} width={0.84} height={0.84} rx={0.14} />}
@@ -256,17 +258,17 @@ function BinaryMap(props: { b: RBinary; focus?: number; live?: number; onPick: (
           when={hover() !== undefined}
           fallback={
             <>
-              <span><i class="rv-sw d1" />함수 {n(counts().all)}</span>
-              <Show when={counts().found}><span><i class="rv-sw d2" />찾음 {n(counts().found)}</span></Show>
-              <span><i class="rv-sw d3" />어셈블리 {n(counts().asm + counts().code)}</span>
-              <span><i class="rv-sw d4" />의사코드 {n(counts().code)}</span>
+              <span><i class="rv-sw d1" />{t("함수")} {n(counts().all)}</span>
+              <Show when={counts().found}><span><i class="rv-sw d2" />{t("찾음")} {n(counts().found)}</span></Show>
+              <span><i class="rv-sw d3" />{t("어셈블리")} {n(counts().asm + counts().code)}</span>
+              <span><i class="rv-sw d4" />{t("의사코드")} {n(counts().code)}</span>
             </>
           }
         >
           <span class="rv-addr">{hex(Math.floor(range().lo + hover()! * per()))}</span>
           <span class="rv-hover-fn">
-            {hovered()[0] ? shortName(hovered()[0].name) : "함수 없음"}
-            <Show when={hovered().length > 1}><span class="faint"> 외 {hovered().length - 1}개</span></Show>
+            {hovered()[0] ? shortName(hovered()[0].name) : t("함수 없음")}
+            <Show when={hovered().length > 1}><span class="faint"> {t("외 {n}개", { n: hovered().length - 1 })}</span></Show>
           </span>
         </Show>
       </div>
@@ -291,11 +293,11 @@ function Trail(props: { steps: RStep[]; focus?: number; onPick: (addr: number) =
               class={`rv-step ${s.state}`}
               classList={{ on: s.address !== undefined && s.address === props.focus }}
               disabled={s.address === undefined}
-              title={[OP[s.op], s.filter ? `"${s.filter}"` : "", s.address !== undefined ? hex(s.address) : "", s.ms !== undefined ? secs(s.ms) : "", s.error ?? ""].filter(Boolean).join(" · ")}
+              title={[t(OP[s.op]), s.filter ? `"${s.filter}"` : "", s.address !== undefined ? hex(s.address) : "", s.ms !== undefined ? secs(s.ms) : "", s.error ?? ""].filter(Boolean).join(" · ")}
               onClick={() => s.address !== undefined && props.onPick(s.address)}
             >
               <span class="rv-step-t">+{secs(s.at - t0()) || "0ms"}</span>
-              <span class="rv-step-op">{OP[s.op]}</span>
+              <span class="rv-step-op">{t(OP[s.op])}</span>
               <Show when={detail(s)}><span class="rv-step-d">{detail(s)}</span></Show>
             </button>
           </>
@@ -355,11 +357,11 @@ function FnView(props: { b: RBinary; addr: number; onPick: (addr: number) => voi
       <Show when={linked().out.length || linked().in.length}>
         <div class="rv-calls">
           <Show when={linked().in.length}>
-            <span class="rv-calls-k">호출됨</span>
+            <span class="rv-calls-k">{t("호출됨")}</span>
             <For each={linked().in}>{(f) => <button class="rv-chip on" title={f.name} onClick={() => props.onPick(f.addr)}>{shortName(f.name)}</button>}</For>
           </Show>
           <Show when={linked().out.length}>
-            <span class="rv-calls-k">호출</span>
+            <span class="rv-calls-k">{t("호출")}</span>
             <For each={linked().out.slice(0, 24)}>
               {(c) => (
                 <button class="rv-chip" classList={{ on: known(c.addr) }} disabled={!known(c.addr)} title={`${c.name} · ${hex(c.addr)}`} onClick={() => props.onPick(c.addr)}>

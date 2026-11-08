@@ -21,6 +21,7 @@ import { Markdown } from "../ui/Markdown";
 import { changes, SidebarToggle } from "./Sidebar";
 import { Board } from "./Board";
 import { viewKey } from "../lib/shortcuts";
+import { t } from "../i18n";
 
 // ───────────── geometry
 
@@ -49,7 +50,8 @@ interface Edge {
   tone: string;
 }
 
-const mode = () => "canvas" as "canvas" | "list";
+/** the map, or the same tasks as columns by state */
+const [mode, setMode] = createSignal<"canvas" | "list">("canvas");
 /** projects whose finished jobs are unfolded on the canvas */
 const [unfolded, setUnfolded] = createSignal<string[]>([]);
 /** a finished job folds into "끝난 일" right away (one waiting on a merge or an answer stays out) */
@@ -70,7 +72,7 @@ function tone(t: Task): string {
 function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
-  if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "그 밖의 일", folder: spaceById(space as Task["space"]).folder });
+  if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "기타", folder: spaceById(space as Task["space"]).folder });
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   let y = 0;
@@ -138,22 +140,22 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
 type Act = { kind: string; icon: string; label: string; target?: string };
 const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done" | "review" | "failed" | "paused", Omit<Act, "target" | "kind">> = {
   read: { icon: "read", label: "읽는 중" },
-  search: { icon: "search", label: "찾는 중" },
-  edit: { icon: "pencil", label: "고치는 중" },
-  write: { icon: "write", label: "만드는 중" },
+  search: { icon: "search", label: "검색 중" },
+  edit: { icon: "pencil", label: "수정 중" },
+  write: { icon: "write", label: "작성 중" },
   bash: { icon: "terminal", label: "실행 중" },
   test: { icon: "test", label: "테스트 중" },
-  browser: { icon: "globe", label: "웹에서" },
-  desktop: { icon: "monitor", label: "화면에서" },
-  other: { icon: "tools", label: "도구 쓰는 중" },
+  browser: { icon: "globe", label: "브라우저 사용 중" },
+  desktop: { icon: "monitor", label: "화면 조작 중" },
+  other: { icon: "tools", label: "도구 사용 중" },
   think: { icon: "brain", label: "생각 중" },
-  "write-text": { icon: "message", label: "답 쓰는 중" },
-  wait: { icon: "bell", label: "답이 필요해요" },
-  queued: { icon: "clock", label: "순서 기다림" },
-  paused: { icon: "pause", label: "쉬는 중" },
-  done: { icon: "done", label: "끝났어요" },
-  review: { icon: "merge", label: "확인하고 합치기" },
-  failed: { icon: "alert", label: "멈췄어요" },
+  "write-text": { icon: "message", label: "응답 작성 중" },
+  wait: { icon: "bell", label: "응답 필요" },
+  queued: { icon: "clock", label: "대기" },
+  paused: { icon: "pause", label: "일시정지" },
+  done: { icon: "done", label: "완료" },
+  review: { icon: "merge", label: "검토" },
+  failed: { icon: "alert", label: "실패" },
 };
 
 function actOf(t: Task): Act {
@@ -231,7 +233,7 @@ function BrowserThumb(props: { t: Task }) {
   });
   const src = () => frame() ?? (props.t.shot ? fileSrc(props.t.shot) : null);
   return (
-    <Show when={src()} fallback={<div class="cv-live-empty">브라우저 여는 중</div>}>
+    <Show when={src()} fallback={<div class="cv-live-empty">{t("브라우저 여는 중")}</div>}>
       {(s) => <img class="cv-shot" src={s()} alt="" draggable={false} />}
     </Show>
   );
@@ -243,13 +245,13 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
   const icon = ACT[x.kind]?.icon ?? "tools";
   if (x.kind === "bash") {
     const d = describeCommand(x.detail ?? x.target);
-    return { icon, label: d.label, target: d.target && !d.label.includes(d.target) ? d.target : "" };
+    return { icon, label: t(d.label), target: d.target && !d.label.includes(d.target) ? d.target : "" };
   }
-  if (x.note) return { icon: "write", label: "기록", target: x.target };
-  const L: Partial<Record<ToolKind, string>> = { read: x.name === "web_fetch" ? "웹 읽기" : "읽기", edit: "수정", write: "만들기", search: x.name === "web_search" ? "웹 검색" : "찾기", test: "테스트", desktop: "화면 조작" };
-  if (x.kind === "browser") return { icon, label: "브라우저", target: x.target.match(/https?:\/\/(?:www\.)?([^/\s"']+)/)?.[1] ?? x.target.split(/\s+/)[0] ?? "" };
-  if (x.kind === "other") return { icon, label: ({ memory_search: "기억 찾기", subagent: "서브 일 맡기기" } as Record<string, string>)[x.name] ?? x.name, target: "" };
-  return { icon, label: L[x.kind] ?? x.name, target: x.target };
+  if (x.note) return { icon: "write", label: t("기록"), target: x.target };
+  const L: Partial<Record<ToolKind, string>> = { read: x.name === "web_fetch" ? "웹 읽기" : "읽기", edit: "수정", write: "작성", search: x.name === "web_search" ? "웹 검색" : "검색", test: "테스트", desktop: "화면 조작" };
+  if (x.kind === "browser") return { icon, label: t("브라우저"), target: x.target.match(/https?:\/\/(?:www\.)?([^/\s"']+)/)?.[1] ?? x.target.split(/\s+/)[0] ?? "" };
+  if (x.kind === "other") return { icon, label: t(({ memory_search: "메모리 검색", subagent: "서브에이전트 실행" } as Record<string, string>)[x.name] ?? x.name), target: "" };
+  return { icon, label: L[x.kind] ? t(L[x.kind]!) : x.name, target: x.target };
 }
 
 /**
@@ -258,29 +260,29 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
  * in plain words, the running one with its latest output line.
  */
 function Activity(props: { t: Task }) {
-  const t = () => props.t;
-  const cur = () => t().plan.findIndex((s) => s.state === "now");
-  const head = () => t().intent || t().plan[cur()]?.text || t().now;
-  const sub = () => (t().intent && cur() >= 0 && t().plan[cur()].text !== t().intent ? t().plan[cur()].text : "");
+  const job = () => props.t;
+  const cur = () => job().plan.findIndex((s) => s.state === "now");
+  const head = () => job().intent || job().plan[cur()]?.text || job().now;
+  const sub = () => (job().intent && cur() >= 0 && job().plan[cur()].text !== job().intent ? job().plan[cur()].text : "");
   const toolIds = createMemo(() => {
     const ids: string[] = [];
-    for (let i = t().entries.length - 1; i >= 0 && ids.length < 3; i--) if (t().entries[i].kind === "tool") ids.unshift(t().entries[i].id);
+    for (let i = job().entries.length - 1; i >= 0 && ids.length < 3; i--) if (job().entries[i].kind === "tool") ids.unshift(job().entries[i].id);
     return ids;
   }, undefined, { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) });
-  const entry = (id: string) => t().entries.find((e) => e.id === id) as Extract<Task["entries"][number], { kind: "tool" }> | undefined;
+  const entry = (id: string) => job().entries.find((e) => e.id === id) as Extract<Task["entries"][number], { kind: "tool" }> | undefined;
   const tail = (id: string) => {
     const e = entry(id);
-    const sh = e?.tool.shellId ? t().shells.find((s) => s.id === e.tool.shellId) : undefined;
+    const sh = e?.tool.shellId ? job().shells.find((s) => s.id === e.tool.shellId) : undefined;
     return sh?.tail ? (lastLines(sh.tail, 1)[0] ?? "").trim().slice(-120) : "";
   };
   return (
     <div class="cv-act">
-      <Show when={t().plan.length > 1}>
-        <div class="cv-act-rail" title={t().plan.map((s, i) => `${i + 1}. ${s.text}`).join("\n")}>
-          <For each={t().plan}>{(s) => <i class={s.state} />}</For>
+      <Show when={job().plan.length > 1}>
+        <div class="cv-act-rail" title={job().plan.map((s, i) => `${i + 1}. ${s.text}`).join("\n")}>
+          <For each={job().plan}>{(s) => <i class={s.state} />}</For>
         </div>
       </Show>
-      <Show when={sub()}><span class="cv-act-step">{cur() + 1}/{t().plan.length} · {sub()}</span></Show>
+      <Show when={sub()}><span class="cv-act-step">{cur() + 1}/{job().plan.length} · {sub()}</span></Show>
       <p class="cv-act-head">{head()}</p>
       {/* newest first in the DOM: the feed stacks from the bottom and drops whole rows that don't fit */}
       <div class="cv-act-feed">
@@ -309,53 +311,53 @@ function Activity(props: { t: Task }) {
  * last lines of the command it runs, or the end of what it is writing.
  */
 function Live(props: { t: Task }) {
-  const t = () => props.t;
+  const job = () => props.t;
   const lastTool = () => {
-    for (let i = t().entries.length - 1; i >= 0; i--) {
-      const e = t().entries[i];
+    for (let i = job().entries.length - 1; i >= 0; i--) {
+      const e = job().entries[i];
       if (e.kind === "tool") return e.tool;
     }
     return undefined;
   };
   const shell = () => {
-    const open = t().shells.filter((s) => !s.endedAt && !s.background);
-    return open[open.length - 1] ?? (lastTool()?.kind === "bash" || lastTool()?.kind === "test" ? t().shells[t().shells.length - 1] : undefined);
+    const open = job().shells.filter((s) => !s.endedAt && !s.background);
+    return open[open.length - 1] ?? (lastTool()?.kind === "bash" || lastTool()?.kind === "test" ? job().shells[job().shells.length - 1] : undefined);
   };
   const what = (): "browser" | "shell" | "text" | "tool" | "act" | "question" | "summary" | "none" => {
-    if (t().status === "waiting" && decisionFor(t().id)) return "question";
-    if (t().status === "running") {
+    if (job().status === "waiting" && decisionFor(job().id)) return "question";
+    if (job().status === "running") {
       // the browser only while it's what the job is using now (not after it moved on to the desktop or a shell)
       if (lastTool()?.kind === "browser") return "browser";
-      if (live[t().id] && !t().intent && !t().plan.length) return "text";
-      if (lastTool() || t().intent || t().plan.length) return "act";
+      if (live[job().id] && !job().intent && !job().plan.length) return "text";
+      if (lastTool() || job().intent || job().plan.length) return "act";
       return "none";
     }
-    if (t().shot && lastTool()?.kind === "browser") return "browser";
-    return t().summary || t().error || t().ask ? "summary" : "none";
+    if (job().shot && lastTool()?.kind === "browser") return "browser";
+    return job().summary || job().error || job().ask ? "summary" : "none";
   };
   return (
     <div class={`cv-live w-${what()}`}>
-      <Switch fallback={<div class="cv-live-empty">{t().status === "queued" ? "순서를 기다려요" : t().status === "running" ? "시작하는 중" : ""}</div>}>
-        <Match when={what() === "browser"}><BrowserThumb t={t()} /></Match>
+      <Switch fallback={<div class="cv-live-empty">{job().status === "queued" ? t("대기 중") : job().status === "running" ? t("시작하는 중") : ""}</div>}>
+        <Match when={what() === "browser"}><BrowserThumb t={job()} /></Match>
         <Match when={what() === "shell"}>
           <pre class="cv-term"><span class="cv-cmd">$ {shell()!.command}</span>{"\n"}{lastLines(shell()!.tail, 4).join("\n")}</pre>
         </Match>
         <Match when={what() === "text"}>
-          <p class="cv-text">{lastLines(live[t().id] ?? "", 3).join(" ").slice(-220)}</p>
+          <p class="cv-text">{lastLines(live[job().id] ?? "", 3).join(" ").slice(-220)}</p>
         </Match>
         <Match when={what() === "tool"}>
-          <pre class="cv-term"><span class="cv-cmd">{ACT[lastTool()!.kind]?.label ?? "도구"}</span>{"  "}{lastTool()!.target}</pre>
+          <pre class="cv-term"><span class="cv-cmd">{t(ACT[lastTool()!.kind]?.label ?? "도구")}</span>{"  "}{lastTool()!.target}</pre>
         </Match>
-        <Match when={what() === "act"}><Activity t={t()} /></Match>
+        <Match when={what() === "act"}><Activity t={job()} /></Match>
         <Match when={what() === "question"}>
           <div class="cv-ask">
-            <p class="cv-text ask">{decisionFor(t().id)!.question}</p>
+            <p class="cv-text ask">{decisionFor(job().id)!.question}</p>
             {/* the first few answers, pressable right on the card; the rest are in the drawer */}
-            <Show when={!decisionFor(t().id)!.ui && decisionFor(t().id)!.options.length}>
+            <Show when={!decisionFor(job().id)!.ui && decisionFor(job().id)!.options.length}>
               <div class="cv-ask-opts" onPointerDown={(e) => e.stopPropagation()}>
-                <For each={decisionFor(t().id)!.options.slice(0, 3)}>
+                <For each={decisionFor(job().id)!.options.slice(0, 3)}>
                   {(o) => (
-                    <button class="cv-ask-opt" classList={{ primary: !!o.primary }} title={o.note ?? o.label} onClick={(e) => (e.stopPropagation(), void decide(decisionFor(t().id)!.id, o.id))}>
+                    <button class="cv-ask-opt" classList={{ primary: !!o.primary }} title={o.note ?? o.label} onClick={(e) => (e.stopPropagation(), void decide(decisionFor(job().id)!.id, o.id))}>
                       {o.label}
                     </button>
                   )}
@@ -365,9 +367,9 @@ function Live(props: { t: Task }) {
           </div>
         </Match>
         <Match when={what() === "summary"}>
-          <p class="cv-text" classList={{ muted: !t().summary && !t().error }}>{t().error || t().summary || t().ask}</p>
-          <Show when={t().status === "done" && t().unverified?.length}>
-            <span class="unverified-badge" title={t().unverified!.join("\n")}>확인 안 됨 {t().unverified!.length}</span>
+          <p class="cv-text" classList={{ muted: !job().summary && !job().error }}>{job().error || job().summary || job().ask}</p>
+          <Show when={job().status === "done" && job().unverified?.length}>
+            <span class="unverified-badge" title={job().unverified!.join("\n")}>{t("미확인 {n}", { n: job().unverified!.length })}</span>
           </Show>
         </Match>
       </Switch>
@@ -375,17 +377,22 @@ function Live(props: { t: Task }) {
   );
 }
 
-// ───────────── cards (Railway-like: icon and name on top, one status line at the bottom)
+// ───────────── cards: a status glyph and the title on top, what it is doing, one status line
 
-const STATUS: Record<string, string> = { live: "일하는 중", ask: "답이 필요해요", review: "검토 대기", idle: "대기", done: "끝남" };
+const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", review: "검토", idle: "대기", done: "완료" };
 
-function Glyph(props: { t: Task; size?: number }) {
-  const a = () => actOf(props.t);
-  return (
-    <span class="cv-glyph" title={a().label}>
-      <Icon name={a().icon} size={props.size ?? 15} />
-    </span>
-  );
+/** The static status glyph (as in the sidebar): ring, pie, dot or check by state. */
+function StatusGlyph(props: { t: Task }) {
+  const tn = () => tone(props.t);
+  return <i class={`cv-st t-${tn()}`} classList={{ failed: props.t.status === "failed", paused: props.t.status === "paused" }} title={t(statusText(props.t))} />;
+}
+
+/** The words of a card's status line. */
+function statusText(task: Task): string {
+  const tn = tone(task);
+  if (task.status === "failed") return "실패";
+  if (task.status === "paused") return "일시정지";
+  return tn === "live" ? actOf(task).label : STATUS[tn];
 }
 
 function StatusRow(props: { t: Task }) {
@@ -394,15 +401,19 @@ function StatusRow(props: { t: Task }) {
   const step = () => {
     const p = props.t.plan;
     const i = p.findIndex((x) => x.state === "now");
-    return p.length ? `${(i < 0 ? p.filter((x) => x.state === "done").length : i + 1)}/${p.length}단계` : "";
+    return p.length ? `${i < 0 ? p.filter((x) => x.state === "done").length : i + 1}/${p.length}` : "";
   };
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
   return (
-    <div class="cv-status">
-      <i class={`cv-dot t-${tn()}`} />
-      <span class="cv-status-text">{tn() === "live" ? actOf(props.t).label : STATUS[tn()]}</span>
-      <Show when={step()}><span class="cv-meta">{step()}</span></Show>
-      <Show when={kids().length}><span class="cv-meta">서브 {kids().filter((k) => k.status === "running").length || kids().length}</span></Show>
+    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" }}>
+      <span class="cv-status-text">{t(statusText(props.t))}</span>
+      <Show when={step()}><span class="cv-meta" title={t("계획 단계")}>{step()}</span></Show>
+      <Show when={kids().length}>
+        <span class="cv-meta cv-kids" title={t("서브에이전트")}>
+          <Icon name="branch" size={12} />
+          {kids().filter((k) => k.status === "running").length || kids().length}
+        </span>
+      </Show>
       <span class="spacer" />
       <Diff t={props.t} />
       <Show when={when()}><span class="cv-when">{when()}</span></Show>
@@ -414,65 +425,65 @@ function StatusRow(props: { t: Task }) {
 }
 
 function JobCard(props: { n: Node }) {
-  const t = () => props.n.task!;
+  const job = () => props.n.task!;
   return (
     <>
       <div class="cv-head">
-        <Glyph t={t()} />
-        <span class="cv-title">{t().title}</span>
-        <IssueTag t={t()} />
+        <StatusGlyph t={job()} />
+        <span class="cv-title">{job().title}</span>
+        <IssueTag t={job()} />
       </div>
-      <Live t={t()} />
-      <StatusRow t={t()} />
+      <Live t={job()} />
+      <StatusRow t={job()} />
     </>
   );
 }
 
 function SubCard(props: { n: Node }) {
-  const t = () => props.n.task!;
+  const job = () => props.n.task!;
   return (
     <>
       <div class="cv-head">
-        <Glyph t={t()} size={13} />
-        <span class="cv-title">{t().title}</span>
+        <StatusGlyph t={job()} />
+        <span class="cv-title">{job().title}</span>
       </div>
-      <StatusRow t={t()} />
+      <StatusRow t={job()} />
     </>
   );
 }
 
 function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
-  const jobs = () => state.tasks.filter((t) => t.space === props.space && !t.parentId && !t.answer && !t.archived && (p().id === "_" ? !t.project : t.project === p().id));
-  const count = (k: string) => jobs().filter((t) => tone(t) === k).length;
+  const jobs = () => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id));
+  const count = (k: string) => jobs().filter((x) => tone(x) === k).length;
   const busy = () => p().id !== "_" && state.captain.some((m) => m.space === props.space && m.project === p().id && m.pending);
   return (
     <>
       <div class="cv-head">
-        <span class="cv-glyph k-proj" classList={{ busy: busy() }}>
-          <Icon name={p().id === "_" ? "inbox" : "folder"} size={15} />
+        <span class="cv-ic" classList={{ busy: busy() }}>
+          <Icon name={p().id === "_" ? "inbox" : "folder"} size={16} />
         </span>
-        <span class="cv-title">{p().name}</span>
+        <span class="cv-title">{p().id === "_" ? t(p().name) : p().name}</span>
       </div>
       <div class="cv-status">
-        <div class="cv-proj-meter" title="진행 · 답 필요 · 검토 · 대기 · 끝남">
+        <div class="cv-proj-meter" title={t("진행 중 · 응답 필요 · 검토 · 대기 · 완료")}>
           <For each={["live", "ask", "review", "idle", "done"]}>{(k) => <Show when={count(k)}><i class={`t-${k}`} style={{ flex: count(k) }} /></Show>}</For>
           <Show when={!jobs().length}><i class="empty" style={{ flex: 1 }} /></Show>
         </div>
-        <span class="cv-when">{jobs().length ? `${jobs().length}개` : "비어 있음"}</span>
+        <span class="cv-when">{jobs().length === 1 ? t("작업 1개") : jobs().length ? t("작업 {n}개", { n: jobs().length }) : t("작업 없음")}</span>
       </div>
     </>
   );
 }
 
-/** A project's finished jobs, folded into one line. */
+/** A project's finished jobs (or a job's finished subagents), folded into one line. */
 function MoreCard(props: { n: Node }) {
   const open = () => unfolded().includes(props.n.project!.id);
   return (
-    <div class="cv-more-row" classList={{ open: open() }} title={open() ? "끝난 일 접기" : "끝난 일 펼치기"}>
+    <div class="cv-more-row" classList={{ open: open() }} title={open() ? t("접기") : t("펼치기")}>
       <Icon name="chevron" size={12} class={`cv-more-chev${open() ? " open" : ""}`} />
-      <span>{props.n.task ? (open() ? "끝난 서브 접기" : "끝난 서브") : open() ? "끝난 일 접기" : "끝난 일"}</span>
-      <Show when={!open()}><b class="cv-more-n">{props.n.count}</b></Show>
+      <span>{props.n.task ? t("완료된 서브에이전트") : t("완료된 작업")}</span>
+      <b class="cv-more-n">{props.n.count}</b>
     </div>
   );
 }
@@ -482,14 +493,13 @@ function MainCard() {
   return (
     <>
       <div class="cv-head">
-        <span class="cv-glyph k-main" classList={{ busy: busy() }}>
-          <Icon name="message" size={15} />
+        <span class="cv-ic" classList={{ busy: busy() }}>
+          <Icon name="message" size={16} />
         </span>
-        <span class="cv-title">메인</span>
+        <span class="cv-title">{t("메인")}</span>
       </div>
-      <div class="cv-status">
-        <i class={`cv-dot ${busy() ? "t-live" : "t-done"}`} />
-        <span class="cv-status-text">{busy() ? "나누는 중" : "듣는 중"}</span>
+      <div class="cv-status" classList={{ "s-live": busy() }}>
+        <span class="cv-status-text">{busy() ? t("진행 중") : t("대기")}</span>
       </div>
     </>
   );
@@ -497,65 +507,64 @@ function MainCard() {
 
 /** Opens from the right when a job is picked, like a service panel. */
 function Drawer(props: { t: Task; onClose: () => void }) {
-  const t = () => props.t;
-  const kids = () => state.tasks.filter((k) => k.parentId === t().id);
-  const recent = () => steps(t()).slice(-8).reverse();
-  const ended = () => t().status === "done" || t().status === "failed";
+  const job = () => props.t;
+  const kids = () => state.tasks.filter((k) => k.parentId === job().id);
+  const recent = () => steps(job()).slice(-8).reverse();
+  const ended = () => job().status === "done" || job().status === "failed";
   /** what the job ended with: its last answer and the files / pages behind it */
   const outcome = createMemo(() => {
     let text = "";
     let proof: { kind: string; ref: string }[] = [];
-    for (let i = t().entries.length - 1; i >= 0; i--) {
-      const e = t().entries[i];
+    for (let i = job().entries.length - 1; i >= 0; i--) {
+      const e = job().entries[i];
       if (e.kind === "user") break;
       if (!text && e.kind === "text") text = e.text;
       if (!proof.length && e.kind === "block" && e.block.type === "evidence") proof = (e.block as { items?: { kind: string; ref: string }[] }).items ?? [];
     }
-    return { text: text || t().result || t().summary || t().error || "", proof: proof.filter((x) => x.kind === "file" || x.kind === "shot" || x.kind === "link") };
+    return { text: text || job().result || job().summary || job().error || "", proof: proof.filter((x) => x.kind === "file" || x.kind === "shot" || x.kind === "link") };
   });
-  const d = () => changes(t());
+  const d = () => changes(job());
   const [msg, setMsg] = createSignal("");
   const say = () => {
     const m = msg().trim();
     if (!m) return;
-    void tell(t().id, m);
+    void tell(job().id, m);
     setMsg("");
   };
   return (
     <aside class="cv-drawer" onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       <header class="cv-dr-head">
-        <span class="cv-dr-title">{t().title}</span>
-        <button class="icon-btn sm" title="닫기 (Esc)" onClick={props.onClose}>
+        <StatusGlyph t={job()} />
+        <span class="cv-dr-title" title={job().title}>{job().title}</span>
+        <button class="btn sm cv-dr-open" title={t("작업 열기 (⏎)")} onClick={() => openTask(job().id)}>{t("열기")}</button>
+        <button class="icon-btn sm" title={t("닫기 (Esc)")} aria-label={t("닫기")} onClick={props.onClose}>
           <Icon name="x" size={14} />
         </button>
       </header>
-      <div class="cv-dr-acts">
-        <button class="btn sm primary" onClick={() => openTask(t().id)}>열어서 보기</button>
-      </div>
       <div class="cv-dr-body">
         <Show
           when={ended() && outcome().text}
           fallback={
             <div class="cv-dr-now">
-              <StatusRow t={t()} />
+              <StatusRow t={job()} />
               {/* a job waiting on the user is answered right here */}
-              <Show when={decisionFor(t().id)} fallback={<Live t={t()} />}>
+              <Show when={decisionFor(job().id)} fallback={<Live t={job()} />}>
                 {(dec) => <DecisionCard d={dec()} />}
               </Show>
             </div>
           }
         >
           <div class="cv-dr-now">
-            <StatusRow t={t()} />
+            <StatusRow t={job()} />
             <Markdown class="cv-dr-result" text={outcome().text} />
           </div>
           <Show when={outcome().proof.length}>
             <section>
-              <h4>근거</h4>
+              <h4>{t("근거")}</h4>
               <ul class="cv-dr-steps">
                 <For each={outcome().proof}>
                   {(x) => (
-                    <li class="link" onClick={() => (x.kind === "link" ? window.open(x.ref, "_blank") : openTask(t().id))} title={x.ref}>
+                    <li class="link" onClick={() => (x.kind === "link" ? window.open(x.ref, "_blank") : openTask(job().id))} title={x.ref}>
                       <span class={`cv-dr-ic`}><Icon name={x.kind === "link" ? "link" : x.kind === "shot" ? "monitor" : "file"} size={12} /></span>
                       <span class="cv-dr-step">{x.kind === "link" ? x.ref.replace(/^https?:\/\/(www\.)?/, "") : base(x.ref)}</span>
                     </li>
@@ -565,11 +574,11 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             </section>
           </Show>
         </Show>
-        <Show when={t().plan.length}>
+        <Show when={job().plan.length}>
           <section>
-            <h4>계획</h4>
+            <h4>{t("계획")}</h4>
             <ol class="cv-dr-plan">
-              <For each={t().plan}>
+              <For each={job().plan}>
                 {(p) => (
                   <li class={`p-${p.state}`}>
                     <i />
@@ -582,13 +591,13 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         </Show>
         <Show when={!ended() && recent().length}>
           <section>
-            <h4>최근 단계</h4>
+            <h4>{t("최근 단계")}</h4>
             <ul class="cv-dr-steps">
               <For each={recent()}>
                 {(s) => (
                   <li classList={{ bad: !s.ok, open: s.open }}>
                     <span class={`cv-dr-ic r-${s.kind}`}><Icon name={ACT[s.kind]?.icon ?? "tools"} size={12} /></span>
-                    <span class="cv-dr-step">{base(s.target) || ACT[s.kind]?.label}</span>
+                    <span class="cv-dr-step">{base(s.target) || t(ACT[s.kind]?.label ?? "도구")}</span>
                   </li>
                 )}
               </For>
@@ -597,12 +606,12 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         </Show>
         <Show when={kids().length}>
           <section>
-            <h4>서브에이전트</h4>
+            <h4>{t("서브에이전트")}</h4>
             <ul class="cv-dr-steps">
               <For each={kids()}>
                 {(k) => (
                   <li onClick={() => openTask(k.id)} class="link">
-                    <i class={`cv-dot t-${tone(k)}`} />
+                    <StatusGlyph t={k} />
                     <span class="cv-dr-step">{k.title}</span>
                   </li>
                 )}
@@ -612,7 +621,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         </Show>
         <Show when={d().add || d().del}>
           <section>
-            <h4>바뀐 것</h4>
+            <h4>{t("변경")}</h4>
             <div class="cv-dr-diff">
               <span class="add">+{d().add}</span>
               <span class="del">−{d().del}</span>
@@ -620,7 +629,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           </section>
         </Show>
       </div>
-      <Show when={tone(t()) !== "done"}>
+      <Show when={tone(job()) !== "done"}>
         <form
           class="cv-dr-talk"
           onSubmit={(e) => {
@@ -629,12 +638,12 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           }}
         >
           <input
-            placeholder={t().status === "running" ? "일하는 중에 끼어들어 말하기" : "이어서 시킬 것"}
+            placeholder={t("메시지 보내기")}
             value={msg()}
             onInput={(e) => setMsg(e.currentTarget.value)}
             onKeyDown={(e) => e.stopPropagation()}
           />
-          <button type="submit" class="cv-send" disabled={!msg().trim()} aria-label="보내기">
+          <button type="submit" class="cv-send" disabled={!msg().trim()} aria-label={t("보내기")} title={t("보내기")}>
             <Icon name="send" size={13} />
           </button>
         </form>
@@ -758,8 +767,9 @@ export function Canvas() {
     const minX = Math.min(...ns.map((n) => n.x)), maxX = Math.max(...ns.map((n) => n.x + n.w));
     const minY = Math.min(...ns.map((n) => n.y)), maxY = Math.max(...ns.map((n) => n.y + n.h));
     const zw = (r.width - 120) / (maxX - minX), zh = (r.height - 150) / (maxY - minY);
-    // opened: readable first (cards' text at 12px or more), the rest a pan away; ⇧1 shows it all
-    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.8, Math.min(1, zw, Math.max(zh, 0.8)));
+    // opened: full size when the width fits (crisp text), never under 0.8; what's
+    // below is a scroll away. ⇧1 shows it all
+    const z = all ? Math.max(0.3, Math.min(1, zw, zh)) : Math.max(0.8, Math.min(1, zw));
     if (animate) vp.classList.add("glide");
     setZoom(z);
     // too tall to fit: start at the top, readable
@@ -929,16 +939,26 @@ export function Canvas() {
     <div class="view canvas-view">
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
-        <span class="head-title">캔버스</span>
+        <span class="head-title">{t("캔버스")}</span>
         <span class="board-sum">
-          <Show when={counts().live}><span><i class="tone-dot td-live" />진행 {counts().live}</span></Show>
-          <Show when={counts().ask}><span><i class="tone-dot td-ask" />답 필요 {counts().ask}</span></Show>
-          <Show when={counts().review}><span><i class="tone-dot td-review" />검토 {counts().review}</span></Show>
-          <Show when={counts().idle}><span><i class="tone-dot td-idle" />대기 {counts().idle}</span></Show>
+          <Show when={counts().live}><span><i class="tone-dot td-live" />{t("진행 중")} <b>{counts().live}</b></span></Show>
+          <Show when={counts().ask}><span><i class="tone-dot td-ask" />{t("응답 필요")} <b>{counts().ask}</b></span></Show>
+          <Show when={counts().review}><span><i class="tone-dot td-review" />{t("검토")} <b>{counts().review}</b></span></Show>
+          <Show when={counts().idle}><span><i class="tone-dot td-idle" />{t("대기")} <b>{counts().idle}</b></span></Show>
         </span>
         <span class="spacer" data-tauri-drag-region />
-        <div class="cv-progress" title="끝남 · 검토 · 진행 · 답 필요 · 대기">
-          <For each={["done", "review", "live", "ask", "idle"]}>{(k) => <Show when={counts()[k]}><i class={`t-${k}`} style={{ flex: counts()[k] }} /></Show>}</For>
+        <Show when={mode() === "canvas" && Object.keys(counts()).length}>
+          <div class="cv-progress" title={t("완료 · 검토 · 진행 중 · 응답 필요 · 대기")}>
+            <For each={["done", "review", "live", "ask", "idle"]}>{(k) => <Show when={counts()[k]}><i class={`t-${k}`} style={{ flex: counts()[k] }} /></Show>}</For>
+          </div>
+        </Show>
+        <div class="seg sm cv-mode" role="tablist">
+          <button role="tab" aria-selected={mode() === "canvas"} classList={{ on: mode() === "canvas" }} title={t("캔버스")} aria-label={t("캔버스")} onClick={() => setMode("canvas")}>
+            <Icon name="canvas" size={14} />
+          </button>
+          <button role="tab" aria-selected={mode() === "list"} classList={{ on: mode() === "list" }} title={t("보드")} aria-label={t("보드")} onClick={() => setMode("list")}>
+            <Icon name="board" size={14} />
+          </button>
         </div>
       </header>
 
@@ -994,15 +1014,15 @@ export function Canvas() {
             {/* cards were dragged out of line: one press puts them back */}
             <Show when={Object.keys(state.canvas ?? {}).some((k) => k.startsWith(`${space()}:`))}>
               <button class="cv-retidy" onClick={resetLayout}>
-                <Icon name="tidy" size={13} />
-                다시 정렬
+                <Icon name="tidy" size={14} />
+                {t("다시 정렬")}
               </button>
             </Show>
 
             <div class="cv-add">
               <button class="cv-add-btn" classList={{ on: adding() }} onClick={() => (setAdding(!adding()), queueMicrotask(() => addInput?.focus()))}>
-                <Icon name="plus" size={15} />
-                <span>추가</span>
+                <Icon name="plus" size={14} />
+                <span>{t("새 작업")}</span>
               </button>
               <Show when={adding()}>
                 <form
@@ -1012,33 +1032,29 @@ export function Canvas() {
                     send();
                   }}
                 >
-                  <input ref={addInput} placeholder={`새 일 · ${spaceById(state.space).label} 메인이 나눠서 맡겨요`} value={ask()} onInput={(e) => setAsk(e.currentTarget.value)} onKeyDown={(e) => (e.stopPropagation(), e.key === "Escape" && setAdding(false))} />
-                  <button type="submit" class="cv-send" disabled={!ask().trim()} aria-label="맡기기">
+                  <input ref={addInput} placeholder={t("무엇을 할까요?")} title={t("{space} 메인으로 보내요", { space: t(spaceById(state.space).label) })} value={ask()} onInput={(e) => setAsk(e.currentTarget.value)} onKeyDown={(e) => (e.stopPropagation(), e.key === "Escape" && setAdding(false))} />
+                  <button type="submit" class="cv-send" disabled={!ask().trim()} aria-label={t("보내기")} title={t("보내기")}>
                     <Icon name="send" size={13} />
                   </button>
                 </form>
               </Show>
             </div>
 
-            <div class="cv-ctrl">
-              <div class="cv-ctrl-group">
-                <button title={grid() ? "격자 숨기기" : "격자 보이기"} classList={{ on: grid() }} onClick={() => setGrid(!grid())}>
-                  <Icon name="dots" size={15} />
+            <div class="cv-ctrl" role="toolbar" aria-label={t("캔버스 도구")}>
+              <button title={grid() ? t("격자 숨기기") : t("격자 표시")} aria-label={grid() ? t("격자 숨기기") : t("격자 표시")} classList={{ on: grid() }} onClick={() => setGrid(!grid())}>
+                <Icon name="dots" size={14} />
+              </button>
+              <i class="cv-ctrl-sep" />
+              <button title={t("축소 (−)")} aria-label={t("축소")} onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={14} /></button>
+              <button class="cv-zoom" title={t("전체 보기 (⇧1)")} onClick={() => fit(true, true)}>{Math.round(zoom() * 100)}%</button>
+              <button title={t("확대 (+)")} aria-label={t("확대")} onClick={() => zoomAt(1.2)}><Icon name="plus" size={14} /></button>
+              <i class="cv-ctrl-sep" />
+              <button title={t("다시 정렬")} aria-label={t("다시 정렬")} onClick={resetLayout}><Icon name="tidy" size={14} /></button>
+              <Show when={foldable().length}>
+                <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
+                  <Icon name="history" size={14} />
                 </button>
-              </div>
-              <div class="cv-ctrl-group">
-                <button title="확대 (+)" onClick={() => zoomAt(1.2)}><Icon name="plus" size={15} /></button>
-                <button title="축소 (−)" onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={15} /></button>
-                <button title="전체 보기 (⇧1)" onClick={() => fit(true, true)}><Icon name="fit" size={14} /></button>
-              </div>
-              <div class="cv-ctrl-group">
-                <button title="정렬" onClick={resetLayout}><Icon name="tidy" size={14} /></button>
-                <Show when={foldable().length}>
-                  <button title={allOpen() ? "끝난 일 모두 접기" : "끝난 일 모두 펼치기"} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
-                    <Icon name="history" size={14} />
-                  </button>
-                </Show>
-              </div>
+              </Show>
             </div>
 
             <svg

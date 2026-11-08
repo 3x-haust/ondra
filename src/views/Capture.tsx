@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount } from "solid-js";
 import type { SpaceId } from "../state/types";
 import { hideCapture, onEvent, stateLoad, submitCapture } from "../lib/native";
 import { Icon } from "../ui/Icon";
+import { t } from "../i18n";
 
 export function Capture() {
   const [text, setText] = createSignal("");
@@ -21,7 +22,7 @@ export function Capture() {
     const l = spaces();
     setSpace(l[(l.findIndex((s) => s.id === space()) + 1) % l.length].id);
   };
-  const label = () => spaces().find((s) => s.id === space())?.label ?? "개인";
+  const label = () => t(spaces().find((s) => s.id === space())?.label ?? "개인");
   let input!: HTMLTextAreaElement;
 
   const focus = () => queueMicrotask(() => input?.focus());
@@ -34,9 +35,9 @@ export function Capture() {
   });
 
   const send = async () => {
-    const t = text().trim();
-    if (!t) return;
-    await submitCapture(t, space());
+    const value = text().trim();
+    if (!value) return;
+    await submitCapture(value, space());
     setText("");
   };
 
@@ -45,7 +46,7 @@ export function Capture() {
       <textarea
         ref={input}
         value={text()}
-        placeholder="할 일을 적어 주세요"
+        placeholder={t("무엇을 할까요?")}
         onInput={(e) => setText(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") hideCapture();
@@ -59,15 +60,14 @@ export function Capture() {
         }}
       />
       <div class="capture-bar">
-        <button class="space" onClick={next} disabled={spaces().length < 2}>
+        <button class="space" onClick={next} disabled={spaces().length < 2} title={t("워크스페이스")}>
           {label()}
           <Icon name="down" size={12} />
         </button>
-        <span>Ondra에게</span>
         <span class="keys">
-          <span><kbd>⏎</kbd> 보내기</span>
-          {spaces().length > 1 && <span><kbd>⇥</kbd> 공간</span>}
-          <span><kbd>esc</kbd> 닫기</span>
+          <span><kbd>⏎</kbd> {t("보내기")}</span>
+          {spaces().length > 1 && <span><kbd>⇥</kbd> {t("워크스페이스")}</span>}
+          <span><kbd>esc</kbd> {t("닫기")}</span>
         </span>
       </div>
     </div>

@@ -13,16 +13,20 @@ import { Markdown } from "../ui/Markdown";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { anyPop, closePops } from "../ui/ModelPicker";
 import { SidebarToggle } from "./Sidebar";
+import { lang, t } from "../i18n";
 
-const dayOf = (t: number) => {
-  const d = new Date(t);
-  const today = new Date();
+const locale = () => (lang() === "en" ? "en-US" : "ko-KR");
+/** days back from today: 0 today, 1 yesterday */
+const daysAgo = (at: number) => {
   const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((start(today) - start(d)) / 86_400_000);
-  return days === 0 ? "오늘" : days === 1 ? "어제" : `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  return Math.round((start(new Date()) - start(new Date(at))) / 86_400_000);
 };
-const timeOf = (t: number) => new Date(t).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
-const whenOf = (t: number) => (dayOf(t) === "오늘" ? timeOf(t) : dayOf(t));
+const dayOf = (at: number) => {
+  const days = daysAgo(at);
+  return days === 0 ? t("오늘") : days === 1 ? t("어제") : new Date(at).toLocaleDateString(locale(), { month: "short", day: "numeric" });
+};
+const timeOf = (at: number) => new Date(at).toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
+const whenOf = (at: number) => (daysAgo(at) === 0 ? timeOf(at) : dayOf(at));
 
 export function ResultsView() {
   const [q, setQ] = createSignal("");
@@ -34,7 +38,7 @@ export function ResultsView() {
   let searchEl: HTMLInputElement | undefined;
 
   const all = createMemo(() => resultsIn(state.space));
-  const where = (r: ResultEntry) => projectById(r.project, r.space)?.name ?? "메인";
+  const where = (r: ResultEntry) => projectById(r.project, r.space)?.name ?? t("메인");
   /** the places results came from, for the filter (only when there is more than one) */
   const places = createMemo(() => {
     const seen = new Map<string, string>();
@@ -56,7 +60,7 @@ export function ResultsView() {
   const targets = () => (picked().length > 1 ? picked() : sel() ? [sel()!.id] : []);
   const many = () => picked().length > 1;
   const inChat = (r: ResultEntry) => state.captain.some((m) => m.id === r.id);
-  const group = (r: ResultEntry) => (r.pinned ? "고정" : dayOf(r.at));
+  const group = (r: ResultEntry) => (r.pinned ? t("고정됨") : dayOf(r.at));
 
   const go = (id: string) => {
     setView({ name: "results", id });
@@ -91,12 +95,12 @@ export function ResultsView() {
     setPicked([]);
     setMenu(null);
     if (after) go(after);
-    toast(gone.length > 1 ? `결과 ${gone.length}개를 지웠어요` : "결과를 지웠어요", "info", { label: "되돌리기", run: () => restoreResults(gone) });
+    toast(gone.length > 1 ? t("{n}개 삭제했어요", { n: gone.length }) : t("삭제했어요"), "info", { label: t("되돌리기"), run: () => restoreResults(gone) });
   };
   const copy = async (r: ResultEntry) => {
     try {
       await navigator.clipboard.writeText(resultCopy(r));
-      toast("복사했어요");
+      toast(t("복사했어요"));
     } catch {
       /* clipboard can be blocked */
     }
@@ -153,7 +157,7 @@ export function ResultsView() {
 
   const Tool = (p: { icon: string; label: string; on?: boolean; danger?: boolean; run: () => void }) => (
     <button class="res-tool" classList={{ on: p.on, danger: p.danger }} title={p.label} aria-label={p.label} onClick={p.run}>
-      <Icon name={p.icon} size={15} />
+      <Icon name={p.icon} size={16} />
     </button>
   );
 
@@ -161,28 +165,28 @@ export function ResultsView() {
     <div class="view res-view">
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
-        <h1 class="head-title">결과</h1>
+        <h1 class="head-title">{t("결과물")}</h1>
         <Show when={all().length}>
           <span class="res-count">{all().length}</span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
         <Show when={places().length > 1}>
           <div class="res-seg" role="tablist">
-            <button classList={{ on: !proj() }} onClick={() => setProj("")}>전체</button>
+            <button classList={{ on: !proj() }} onClick={() => setProj("")}>{t("전체")}</button>
             <For each={places()}>{(p) => <button classList={{ on: proj() === `:${p.id}` }} onClick={() => setProj(`:${p.id}`)}>{p.name}</button>}</For>
           </div>
         </Show>
         <Show when={all().length}>
           <div class="mem-search">
-            <Icon name="search" size={13} />
-            <input ref={searchEl} placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && (setQ(""), listEl?.focus())} />
+            <Icon name="search" size={14} />
+            <input ref={searchEl} placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && (setQ(""), listEl?.focus())} />
           </div>
         </Show>
       </header>
-      <Show when={all().length} fallback={<div class="pane-empty">결과 없음</div>}>
+      <Show when={all().length} fallback={<div class="pane-empty res-none"><Icon name="inbox" size={20} /><span>{t("결과물 없음")}</span></div>}>
         <div class="res-body">
           <div class="res-list" ref={listEl} tabIndex={0} onKeyDown={keys}>
-            <For each={list()} fallback={<div class="res-empty">찾은 결과가 없어요</div>}>
+            <For each={list()} fallback={<div class="res-empty">{t("검색 결과 없음")}</div>}>
               {(r, i) => (
                 <>
                   <Show when={i() === 0 || group(list()[i() - 1]) !== group(r)}>
@@ -205,15 +209,15 @@ export function ResultsView() {
                     <div class="res-r1">
                       <span class="res-title">{r.title}</span>
                       <Show when={r.pinned}>
-                        <Icon name="pin" size={11} class="res-pin" />
+                        <Icon name="pin" size={12} class="res-pin" />
                       </Show>
                       <span class="res-time">{whenOf(r.at)}</span>
                       <span class="res-acts">
-                        <button class="res-act" title={r.pinned ? "고정 해제" : "고정"} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
-                          <Icon name="pin" size={13} />
+                        <button class="res-act" title={r.pinned ? t("고정 해제") : t("고정")} aria-label={r.pinned ? t("고정 해제") : t("고정")} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
+                          <Icon name="pin" size={14} />
                         </button>
-                        <button class="res-act" title="지우기" onClick={(e) => (e.stopPropagation(), remove([r.id]))}>
-                          <Icon name="trash" size={13} />
+                        <button class="res-act" title={t("삭제")} aria-label={t("삭제")} onClick={(e) => (e.stopPropagation(), remove([r.id]))}>
+                          <Icon name="trash" size={14} />
                         </button>
                       </span>
                     </div>
@@ -231,15 +235,15 @@ export function ResultsView() {
               when={!many()}
               fallback={
                 <div class="res-many">
-                  <b>{picked().length}개 골랐어요</b>
+                  <b>{t("{n}개 선택됨", { n: picked().length })}</b>
                   <div class="res-many-acts">
                     <button class="btn sm ghost" onClick={() => pin(picked())}>
-                      <Icon name="pin" size={13} />
-                      {picked().every((id) => all().find((r) => r.id === id)?.pinned) ? "고정 해제" : "고정"}
+                      <Icon name="pin" size={14} />
+                      {picked().every((id) => all().find((r) => r.id === id)?.pinned) ? t("고정 해제") : t("고정")}
                     </button>
-                    <button class="btn sm danger" onClick={() => remove(picked())}>
-                      <Icon name="trash" size={13} />
-                      지우기
+                    <button class="btn sm ghost danger" onClick={() => remove(picked())}>
+                      <Icon name="trash" size={14} />
+                      {t("삭제")}
                     </button>
                   </div>
                 </div>
@@ -256,16 +260,16 @@ export function ResultsView() {
                         </div>
                       </div>
                       <div class="res-tools">
-                        <Tool icon="pin" label={r.pinned ? "고정 해제" : "고정"} on={r.pinned} run={() => pinResult(r.id, !r.pinned)} />
-                        <Tool icon="copy" label="복사" run={() => void copy(r)} />
+                        <Tool icon="pin" label={r.pinned ? t("고정 해제") : t("고정")} on={r.pinned} run={() => pinResult(r.id, !r.pinned)} />
+                        <Tool icon="copy" label={t("복사")} run={() => void copy(r)} />
                         <Show when={inChat(r)}>
-                          <Tool icon="message" label="채팅에서 보기" run={() => (setJumpMsg(r.id), setView({ name: "main", project: r.project }))} />
+                          <Tool icon="message" label={t("대화에서 보기")} run={() => (setJumpMsg(r.id), setView({ name: "main", project: r.project }))} />
                         </Show>
                         <Show when={taskById(r.taskId)}>
-                          <Tool icon="arrow" label="일 열기" run={() => openTask(r.taskId)} />
+                          <Tool icon="arrow" label={t("작업 열기")} run={() => openTask(r.taskId)} />
                         </Show>
                         <span class="res-tools-sep" />
-                        <Tool icon="trash" label="지우기" danger run={() => remove([r.id])} />
+                        <Tool icon="trash" label={t("삭제")} danger run={() => remove([r.id])} />
                       </div>
                     </div>
                     <div class="reply-body">
@@ -305,28 +309,28 @@ export function ResultsView() {
                   <Show when={taskById(r()!.taskId)}>
                     <button onClick={() => (openTask(r()!.taskId), closeMenu())}>
                       <Icon name="arrow" size={14} class="muted" />
-                      <span class="row-title">일 열기</span>
+                      <span class="row-title">{t("작업 열기")}</span>
                     </button>
                   </Show>
                   <Show when={inChat(r()!)}>
                     <button onClick={() => (setJumpMsg(r()!.id), setView({ name: "main", project: r()!.project }), closeMenu())}>
                       <Icon name="message" size={14} class="muted" />
-                      <span class="row-title">채팅에서 보기</span>
+                      <span class="row-title">{t("대화에서 보기")}</span>
                     </button>
                   </Show>
                   <button onClick={() => (void copy(r()!), closeMenu())}>
                     <Icon name="copy" size={14} class="muted" />
-                    <span class="row-title">복사</span>
+                    <span class="row-title">{t("복사")}</span>
                   </button>
                 </Show>
                 <button onClick={() => (pin(ids()), closeMenu())}>
                   <Icon name="pin" size={14} class="muted" />
-                  <span class="row-title">{ids().every((id) => all().find((x) => x.id === id)?.pinned) ? "고정 해제" : "고정"}</span>
+                  <span class="row-title">{ids().every((id) => all().find((x) => x.id === id)?.pinned) ? t("고정 해제") : t("고정")}</span>
                 </button>
                 <div class="menu-sep" />
                 <button class="danger" onClick={() => remove(ids())}>
                   <Icon name="trash" size={14} class="muted" />
-                  <span class="row-title">{ids().length > 1 ? `${ids().length}개 지우기` : "지우기"}</span>
+                  <span class="row-title">{ids().length > 1 ? t("{n}개 삭제", { n: ids().length }) : t("삭제")}</span>
                   <kbd class="menu-kbd">⌫</kbd>
                 </button>
               </div>

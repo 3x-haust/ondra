@@ -26,6 +26,7 @@ import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { SidebarToggle } from "./Sidebar";
+import { t } from "../i18n";
 import { Badges, stampOf, tilde } from "./memoryBits";
 import { Detail } from "./MemorySide";
 import {
@@ -181,8 +182,8 @@ export function MemoryView() {
     files: [...model().homes.values()].reduce((n, h) => n + h.files.length, 0),
   });
   const tidyTitle = () => {
-    const t = state.memoryTidy;
-    return t ? `마지막 정리 ${ago(t.at)}${t.cursor ? `\n배운 일 ${stampOf(t.cursor)}까지` : ""}` : "정리";
+    const x = state.memoryTidy;
+    return x ? `${t("마지막 정리 {when}", { when: ago(x.at) })}${x.cursor ? `\n${t("{when}까지 학습", { when: stampOf(x.cursor) })}` : ""}` : t("정리");
   };
   // the folder of what's selected: a space's own <folder>/.ondra/memory, else the app's
   const openFolder = async () => {
@@ -200,30 +201,30 @@ export function MemoryView() {
     <div class="view mem-view">
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
-        <h1 class="head-title">기억</h1>
+        <h1 class="head-title">{t("메모리")}</h1>
         <span class="mem-count">
-          <b>{counts().facts}</b>기억
-          <Show when={counts().files}><span class="mem-sep" /><b>{counts().files}</b>파일</Show>
-          <Show when={myJournal().length}><span class="mem-sep" /><b>{myJournal().length}</b>일 기록</Show>
+          <span>{t("메모리")} <b>{counts().facts}</b></span>
+          <Show when={counts().files}><span>{t("파일")} <b>{counts().files}</b></span></Show>
+          <Show when={myJournal().length}><span>{t("작업 기록")} <b>{myJournal().length}</b></span></Show>
         </span>
         <span class="spacer" data-tauri-drag-region />
         <Show when={myNotes().length}>
           <button class="btn sm" disabled={absorbing()} onClick={() => void absorbNotes(myNotes())} title={myNotes().map((x) => tilde(x.path)).join("\n")}>
-            <Icon name="download" size={13} />
-            {absorbing() ? "가져오는 중" : `폴더 노트 ${myNotes().length}개`}
+            <Icon name="download" size={14} />
+            {absorbing() ? t("가져오는 중") : t("폴더 노트 {n}개", { n: myNotes().length })}
           </button>
         </Show>
         <button class="btn sm ghost" disabled={tidying()} onClick={() => void tidyMemory(true, state.space)} title={tidyTitle()}>
-          <Icon name="refresh" size={13} />
-          {tidying() ? "정리하는 중" : "정리"}
+          <Icon name="refresh" size={14} />
+          {tidying() ? t("정리하는 중") : t("정리")}
         </button>
         <button class="btn sm ghost" classList={{ on: sel() === VERSIONS }} onClick={() => setSel(sel() === VERSIONS ? "" : VERSIONS)} aria-pressed={sel() === VERSIONS}>
-          <Icon name="history" size={13} />버전
+          <Icon name="history" size={14} />{t("버전")}
         </button>
-        <button class="btn sm ghost" onClick={() => void openFolder()} title="Obsidian 폴더"><Icon name="folder" size={13} />파일로 보기</button>
+        <button class="btn sm ghost" onClick={() => void openFolder()} title={t("Finder에서 보기")}><Icon name="folder" size={14} />{t("폴더 열기")}</button>
         <div class="mem-search">
-          <Icon name="search" size={13} />
-          <input placeholder="찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => {
+          <Icon name="search" size={14} />
+          <input placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => {
             if (e.key !== "Escape" || ignoredKey(e) || !noModifiers(e) || shortcutOverlay()) return;
             e.preventDefault();
             setQ("");
@@ -234,8 +235,8 @@ export function MemoryView() {
         <MemTree model={tree()} full={model()} sel={sel()} onSel={setSel} searching={!!match()} />
         <Graph graph={graph()} sel={graphSel()} hover={hover()} onSel={setSel} onHover={setHover} />
         <Detail model={model()} sel={sel()} onSel={setSel} />
-        <div class="mem-resize left" onPointerDown={(e) => drag(e, "tree")} onDblClick={() => resetWidth("tree")} title="끌어서 너비 바꾸기" />
-        <div class="mem-resize right" onPointerDown={(e) => drag(e, "detail")} onDblClick={() => resetWidth("detail")} title="끌어서 너비 바꾸기" />
+        <div class="mem-resize left" onPointerDown={(e) => drag(e, "tree")} onDblClick={() => resetWidth("tree")} title={t("너비 조절")} />
+        <div class="mem-resize right" onPointerDown={(e) => drag(e, "detail")} onDblClick={() => resetWidth("detail")} title={t("너비 조절")} />
       </div>
     </div>
   );
@@ -647,13 +648,13 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       <Show when={focusNode()}>
         {(f) => (
           <div class="mg-where">
-            <button class="mg-back" onClick={() => props.onSel("")} title="전체 (Esc)"><Icon name="back" size={12} />전체</button>
-            <span class="mg-where-name">{f().kind === "memory" ? "기억" : f().kind === "entry" ? "일 기록" : f().label}</span>
+            <button class="mg-back" onClick={() => props.onSel("")} title={t("전체 (Esc)")}><Icon name="back" size={14} />{t("전체")}</button>
+            <span class="mg-where-name">{f().kind === "memory" ? t("메모리") : f().kind === "entry" ? t("작업 기록") : f().label}</span>
           </div>
         )}
       </Show>
       <div class="mg-ctrl">
-        <button class="icon-btn sm" title="화면에 맞추기" onClick={() => fit()}><Icon name="fit" size={14} /></button>
+        <button class="icon-btn sm" title={t("화면에 맞추기")} aria-label={t("화면에 맞추기")} onClick={() => fit()}><Icon name="fit" size={14} /></button>
       </div>
     </div>
   );
@@ -774,7 +775,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
           <Switch>
             <Match when={m}>{(mm) => <Badges m={mm()} />}</Match>
             <Match when={p.n.type === "entry"}>
-              <Show when={p.n.entry!.learned?.length}><span class="mt-learn" title="배운 기억">+{p.n.entry!.learned!.length}</span></Show>
+              <Show when={p.n.entry!.learned?.length}><span class="mt-learn" title={t("배운 메모리")}>+{p.n.entry!.learned!.length}</span></Show>
               <span class="mt-n">{clock(p.n.entry!.at)}</span>
             </Match>
             <Match when={p.n.type === "now"}><span class="mt-n">{ago(p.n.now!.at)}</span></Match>
@@ -788,7 +789,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
               <Show when={rest() > 0}>
                 <button class="mt-row mt-more" style={{ "--d": p.depth + 1 }} onClick={() => setMore((x) => ({ ...x, [p.n.key]: shown(p.n) + 200 }))}>
                   <span class="mt-chev" />
-                  {rest()}개 더
+                  {t("{n}개 더", { n: rest() })}
                 </button>
               </Show>
             </div>
@@ -821,7 +822,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
       if (k) kind = k[2] as MemoryKind;
     }
     const h = full.homes.get(home) ?? full.homes.get("g")!;
-    const where = [h.label, kind ? kindLabel(kind) : about].filter(Boolean).join(" · ");
+    const where = [h.label, kind ? t(kindLabel(kind)) : about].filter(Boolean).join(" · ");
     return { h, kind, about, where };
   });
   const addHere = () => {
@@ -838,11 +839,11 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
   };
   return (
     <aside class="mt">
-      <div class="mt-list" ref={list} tabindex="0" role="tree" aria-label="기억 폴더" onKeyDown={onKey}>
-        <For each={props.model.roots} fallback={<div class="mt-none">없음</div>}>{(n) => <Row n={n} depth={0} />}</For>
+      <div class="mt-list" ref={list} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
+        <For each={props.model.roots} fallback={<div class="mt-none">{t("없음")}</div>}>{(n) => <Row n={n} depth={0} />}</For>
       </div>
       <form class="mt-add" onSubmit={(e) => (e.preventDefault(), addHere())}>
-        <input placeholder={`${target().where}에 기억 추가`} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+        <input placeholder={t("{where}에 메모리 추가", { where: target().where })} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
       </form>
     </aside>
   );
