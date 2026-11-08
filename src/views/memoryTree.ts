@@ -111,12 +111,14 @@ export function dayLabel(at: number, withMonth = false) {
 export const clock = (t: number) => new Date(t).toLocaleTimeString(locale(), { hour: "numeric", minute: "2-digit" });
 /** a home's name in plain text, with what tells it apart from a namesake */
 export const homeName = (h: { label: string; hint?: string }) => (h.hint ? `${h.label} · ${h.hint}` : h.label);
-/** the folder a path sits in, as a short name ("01_Projects", "~" for the home folder) */
+/** the person's home folder ("~", /Users/me, /home/me) */
+const isHomeDir = (dir: string) => !dir || dir === "~" || /^\/(Users|home)\/[^/]+\/?$/.test(dir);
+/** the folder a path sits in, as a short name ("01_Projects", 홈 / Home for the home folder) */
 const parentName = (p: string) => {
   const parts = p.replace(/\/+$/, "").split("/");
   parts.pop();
   const dir = parts.join("/");
-  if (!dir || dir === "~" || /^\/Users\/[^/]+$/.test(dir) || /^\/home\/[^/]+$/.test(dir)) return "~";
+  if (isHomeDir(dir)) return t("홈");
   return parts[parts.length - 1];
 };
 
@@ -159,7 +161,8 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     const had = homes.get(k);
     if (had) return had;
     const sp = space ?? inp.spaces.find((s) => inp.expand(folder).startsWith(inp.expand(s.folder)))?.id ?? inp.spaces[0]?.id;
-    return mk({ id: k, kind: "project", label: name ?? base(folder), parent: spaceHome(sp).id, space: sp, path: inp.expand(folder) });
+    // the home folder itself reads 홈 / Home, never "~"
+    return mk({ id: k, kind: "project", label: name ?? (isHomeDir(folder) ? t("홈") : base(folder)), parent: spaceHome(sp).id, space: sp, path: inp.expand(folder) });
   };
   for (const p of inp.projects) projHome(p.folder, p.name, p.space);
   const nows = new Map<string, { folder: string; home: string; now: ProjectNow }>();

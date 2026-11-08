@@ -41,7 +41,6 @@ export default {
   "메시지": "Message",
   "작업 중에 말하기": "Message while it works",
   "이어서 말하기": "Follow up",
-  "{space} 메인으로 보내요": "Goes to {space} Main",
   "Finder에서 보기": "Show in Finder",
 
   // ── canvas: what a task is doing
@@ -81,7 +80,8 @@ export default {
   // ── canvas: cards and chrome
   "캔버스": "Canvas",
   "보드": "Board",
-  "진행 중 · 응답 필요 · 검토 · 대기 · 완료": "Running · Needs reply · Review · Queued · Done",
+  "진행 중 · 응답 필요 · 실패 · 검토 · 대기 · 완료": "Running · Needs reply · Failed · Review · Queued · Done",
+  "{name}에 새 작업": "New task in {name}",
   "완료 · 검토 · 진행 중 · 응답 필요 · 대기": "Done · Review · Running · Needs reply · Queued",
   "작업 {n}개": "{n} task|{n} tasks",
   "접기": "Collapse",

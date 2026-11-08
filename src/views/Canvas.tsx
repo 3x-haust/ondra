@@ -20,11 +20,10 @@ import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { planCount } from "../state/progress";
-import { Board, BoardGroup, Kids, NewTask } from "./Board";
+import { Board, BoardGroup, cardMenu, Kids, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
 import { t } from "../i18n";
-import { taskContextMenu } from "../ui/taskMenu";
 
 // ───────────── geometry
 
@@ -62,10 +61,12 @@ const folded = (t: Task) => tone(t) === "done" && !t.pinned;
 /** a finished sub-job folds under its job the same way */
 const subFolded = (k: Task) => k.status === "done" && !k.pinned;
 
-/** live = working now · ask = needs you · review = done, branch not merged · idle · done */
+/** failed · live = working now · ask = needs a reply · review = done, branch not merged · idle · done.
+ *  Failed is its own state: never counted or drawn as needing a reply. */
 function tone(t: Task): string {
+  if (t.status === "failed") return "failed";
   const kids = state.tasks.filter((k) => k.parentId === t.id);
-  if (t.status === "waiting" || t.status === "failed" || kids.some((k) => k.status === "waiting" || k.status === "failed")) return "ask";
+  if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "ask";
   if (t.status === "running" || kids.some((k) => k.status === "running")) return "live";
   if (t.status === "queued" || t.status === "paused") return "idle";
   if (t.status === "done" && t.worktree?.state === "open") return "review";
@@ -124,7 +125,7 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
     const pn: Node = { id: `p:${p.id}`, kind: "proj", x: X.proj, y: top + (span - H.proj) / 2, w: W.proj, h: H.proj, project: p };
     projNodes.push(pn);
     nodes.push(pn);
-    edges.push({ from: "main", to: pn.id, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
+    edges.push({ from: "main", to: pn.id, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "failed") ? "failed" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
     y += GAP.proj - GAP.job;
   }
   const mid = projNodes.length ? (projNodes[0].y + projNodes[projNodes.length - 1].y + H.proj) / 2 : H.main / 2;
@@ -145,8 +146,8 @@ const boxOf = (list: Node[]) => ({
 });
 /** room around the cards when the view is framed */
 const INSET = { top: 24, bottom: 24, side: 32 };
-/** everything is shown when it fits at this zoom or more; otherwise READ_ZOOM */
-const MIN_ZOOM = 0.6;
+/** everything is shown when it fits at this zoom or more; otherwise READ_ZOOM (readability beats fitting) */
+const MIN_ZOOM = 0.75;
 const READ_ZOOM = 0.75;
 
 /**
@@ -404,7 +405,16 @@ function Live(props: { t: Task }) {
 
 // ───────────── cards: a status glyph and the title on top, what it is doing, one status line
 
-const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", review: "검토", idle: "대기", done: "완료" };
+/** the header's counts, in the board's order of urgency, each with its sidebar glyph */
+const LEGEND = [
+  { tone: "live", g: "running", label: "진행 중" },
+  { tone: "ask", g: "waiting", label: "응답 필요" },
+  { tone: "failed", g: "failed", label: "실패" },
+  { tone: "review", g: "inreview", label: "검토" },
+  { tone: "idle", g: "queued", label: "대기" },
+] as const;
+
+const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", failed: "실패", review: "검토", idle: "대기", done: "완료" };
 
 /** The status glyph the sidebar draws (one look everywhere), named in its tooltip. */
 function StatusGlyph(props: { t: Task }) {
@@ -486,8 +496,8 @@ function ProjCard(props: { n: Node; space: string }) {
         <span class="cv-title">{p().id === "_" ? t(p().name) : p().name}</span>
       </div>
       <div class="cv-status">
-        <div class="cv-proj-meter" title={t("진행 중 · 응답 필요 · 검토 · 대기 · 완료")}>
-          <For each={["live", "ask", "review", "idle", "done"]}>{(k) => <Show when={count(k)}><i class={`t-${k}`} style={{ flex: count(k) }} /></Show>}</For>
+        <div class="cv-proj-meter" title={t("진행 중 · 응답 필요 · 실패 · 검토 · 대기 · 완료")}>
+          <For each={["live", "ask", "failed", "review", "idle", "done"]}>{(k) => <Show when={count(k)}><i class={`t-${k}`} style={{ flex: count(k) }} /></Show>}</For>
           <Show when={!jobs().length}><i class="empty" style={{ flex: 1 }} /></Show>
         </div>
         <span class="cv-when">{jobs().length ? t("작업 {n}개", { n: jobs().length }) : t("작업 없음")}</span>
@@ -744,6 +754,12 @@ export function Canvas() {
     while (t?.parentId) t = taskById(t.parentId);
     return t ? (t.project && graph().nodes.some((x) => x.kind === "proj" && x.project?.id === t!.project) ? t.project : "_") : undefined;
   };
+  /** a new task from the header lands in the selected card's project */
+  const selProject = () => {
+    const n = sel() ? byId().get(sel()!) : undefined;
+    const p = n && projectOf(n);
+    return p && p !== "_" ? p : undefined;
+  };
   /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. */
   const fold = (next: string[]) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
@@ -779,7 +795,7 @@ export function Canvas() {
   let touched = false;
   /**
    * `all`: everything in view (the button, ⇧1). Otherwise everything when it fits at
-   * 60% or more; when it doesn't, 75% and what needs the person (a reply, then running
+   * 75% or more; when it doesn't, 75% and what needs the person (a reply, then running
    * work) is kept in view, with no card cut at the top edge.
    */
   const fit = (animate = true, all = false) => {
@@ -807,15 +823,16 @@ export function Canvas() {
         const over = (k.y1 * z + y) - (INSET.top + ah);
         if (over > 0) y -= Math.min(over, k.y0 * z + y - INSET.top);
       }
-      // never a card cut at the top edge: start the view in the gap above or below it
-      for (let i = 0; i < 6; i++) {
-        const edge = -y / z;
-        const cut = ns.filter((n) => n.y < edge && n.y + n.h > edge);
-        if (!cut.length) break;
-        const below = Math.max(...cut.map((n) => n.y + n.h)) + GAP.sub;
-        const above = Math.min(...cut.map((n) => n.y)) - GAP.sub;
-        y = !k || k.y0 >= below ? -below * z : -above * z;
-      }
+      // never a card cut at the top edge: the view starts at the top of a task card (not a
+      // subagent or a folded pill, whose task would be out of view) that no other card
+      // crosses, with the gap above it (up to the inset) and nothing of the card before
+      const want = (INSET.top - y) / z;
+      const clear = (s: number) => !ns.some((n) => n.y < s && n.y + n.h > s);
+      const starts = [...new Set([b.y0, ...ns.filter((n) => n.kind === "job" || n.kind === "proj").map((n) => n.y)])].filter(clear).sort((p, q) => p - q);
+      const s = starts.find((v) => v >= want && (!k || v <= k.y0)) ?? [...starts].reverse().find((v) => v <= want) ?? b.y0;
+      const above = ns.filter((n) => n.y + n.h <= s).map((n) => n.y + n.h);
+      const pad = above.length ? Math.max(0, Math.min(INSET.top, (s - Math.max(...above)) * z - 2)) : INSET.top;
+      y = pad - s * z;
     }
     setPan({ x, y });
     if (animate) setTimeout(() => vp?.classList.remove("glide"), 260);
@@ -980,11 +997,15 @@ export function Canvas() {
         <SidebarToggle />
         <span class="head-title">{mode() === "canvas" ? t("캔버스") : t("보드")}</span>
         <Show when={mode() === "canvas"}>
-        <span class="board-sum">
-          <Show when={counts().live}><span><i class="tone-dot td-live" />{t("진행 중")} <b>{counts().live}</b></span></Show>
-          <Show when={counts().ask}><span><i class="tone-dot td-ask" />{t("응답 필요")} <b>{counts().ask}</b></span></Show>
-          <Show when={counts().review}><span><i class="tone-dot td-review" />{t("검토")} <b>{counts().review}</b></span></Show>
-          <Show when={counts().idle}><span><i class="tone-dot td-idle" />{t("대기")} <b>{counts().idle}</b></span></Show>
+        {/* the legend draws each state with the sidebar's glyph, so running and review read apart */}
+        <span class="board-sum cv-legend">
+          <For each={LEGEND}>
+            {(l) => (
+              <Show when={counts()[l.tone]}>
+                <span><StateGlyph g={l.g} />{t(l.label)} <b>{counts()[l.tone]}</b></span>
+              </Show>
+            )}
+          </For>
         </span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
@@ -996,7 +1017,7 @@ export function Canvas() {
           </button>
         </Show>
         <Show when={mode() === "list"}><BoardGroup /></Show>
-        <NewTask />
+        <NewTask project={() => (mode() === "canvas" ? selProject() : undefined)} />
         <div class="seg sm cv-mode" role="tablist">
           <button role="tab" aria-selected={mode() === "canvas"} classList={{ on: mode() === "canvas" }} title={t("캔버스")} aria-label={t("캔버스")} onClick={() => setMode("canvas")}>
             <Icon name="canvas" size={14} />
@@ -1055,7 +1076,7 @@ export function Canvas() {
                     style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => n.task && openTask(n.id)}
-                    onContextMenu={(e) => n.task && n.kind !== "more" && taskContextMenu(n.id)(e)}
+                    onContextMenu={(e) => n.task && n.kind !== "more" && cardMenu(n.id)(e)}
                   >
                     {n.kind === "main" ? <MainCard /> : n.kind === "proj" ? <ProjCard n={node()} space={space()} /> : n.kind === "job" ? <JobCard n={node()} /> : n.kind === "more" ? <MoreCard n={node()} /> : <SubCard n={node()} />}
                   </div>

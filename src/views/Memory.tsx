@@ -276,7 +276,8 @@ type View = { x: number; y: number; z: number };
 const CUT = 220;
 
 function edgeLen(e: GEdge, a: GNode, b: GNode) {
-  if (e.kind === "own") return b.kind === "space" ? 210 : b.kind === "project" ? 140 : b.kind === "memory" ? (e.w < 1 ? 110 : 40) + a.r : b.kind === "file" ? 44 + a.r : 84 + a.r + b.r;
+  // the picked piece stands well off its folder (a close pair read as squashed)
+  if (e.kind === "own") return b.kind === "space" ? 210 : b.kind === "project" ? 140 : b.kind === "memory" ? (e.w < 1 || b.ring === 0 ? 110 : 40) + a.r : b.kind === "file" ? 44 + a.r : 84 + a.r + b.r;
   if (e.kind === "tie") return 70 + a.r + b.r;
   if (e.kind === "hold") return 190 + a.r + b.r;
   if (e.kind === "about") return 34 + a.r;
@@ -330,7 +331,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     }
     // measure now: on the first frame the observer hasn't reported the size yet
     const w = svg?.clientWidth || size().w, h = svg?.clientHeight || size().h;
-    const z = Math.min(props.graph.focus ? 1.4 : 1.5, Math.max(0.25, Math.min((w - 60) / (maxX - minX || 1), (h - 70) / (maxY - minY || 1))));
+    const z = Math.min(props.graph.focus ? 1.4 : 1.25, Math.max(0.25, Math.min((w - 60) / (maxX - minX || 1), (h - 70) / (maxY - minY || 1))));
     goTo({ z, x: w / 2 - ((minX + maxX) / 2) * z, y: h / 2 - ((minY + maxY) / 2) * z }, ease);
   };
 
@@ -577,7 +578,10 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   };
   const labelOf = (n: GNode) => (n.kind === "memory" || n.kind === "entry" ? (n.label.length > 22 ? `${n.label.slice(0, 22)}…` : n.label) : n.label);
   // names never sit on top of each other: the more important one wins, the other fades out
-  const FS: Partial<Record<GNode["kind"], number>> = { global: 12.5, space: 12.5, project: 12.5, folder: 11.5, past: 11.5, topics: 11.5, topic: 10.5, memory: 10, entry: 12 };
+  const FS: Partial<Record<GNode["kind"], number>> = { global: 12, space: 12, project: 12, folder: 12, past: 12, topics: 12, topic: 11, memory: 11, file: 11, entry: 12 };
+  /** a name never reads smaller than 11px on screen: zoomed out, it keeps its size (and more of them hide) */
+  const MIN_PX = 11;
+  const fsOf = (n: GNode) => Math.max(FS[n.kind] ?? 11, MIN_PX / view().z);
   const textW = (t: string, fs: number) => [...t].reduce((w, c) => w + (c.charCodeAt(0) > 0x2e80 ? 1 : 0.58), 0) * fs;
   const labelOn = createMemo(() => {
     tick();
@@ -588,7 +592,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     for (const n of cands) {
       const b = bodies.get(n.id);
       if (!b) continue;
-      const fs = FS[n.kind] ?? 11;
+      const fs = fsOf(n);
       const w = textW(labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
       const box = [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
       // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
@@ -668,7 +672,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
                         </Match>
                       </Switch>
                       <Show when={n().kind === "project" && n().path}><title>{tilde(n().path!)}</title></Show>
-                      <text y={n().r + 12} text-anchor="middle" classList={{ off: !labelOn().has(n().id) }}>
+                      <text y={n().r + fsOf(n())} text-anchor="middle" style={{ "font-size": `${fsOf(n())}px` }} classList={{ off: !labelOn().has(n().id) }}>
                         {labelOf(n())}
                         <Show when={n().hint}><tspan class="mg-hint"> · {n().hint}</tspan></Show>
                         <Show when={isHub(n().kind) && n().count}><tspan class="mg-n"> {n().count}</tspan></Show>

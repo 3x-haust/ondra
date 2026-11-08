@@ -985,49 +985,13 @@
 
 /* ═════════════ round 2 ═════════════ */
 
-/* ── canvas / board header: 새 작업 drops a field under the button */
-.cv-new-task {
-  position: relative;
-  flex: none;
-}
+/* ── canvas / board header: 새 작업 opens the new-task screen */
 .new-task-btn {
+  flex: none;
   gap: var(--s-6);
 }
 .new-task-btn .icon {
   color: var(--ink-3);
-}
-.new-task-btn.on {
-  background: var(--active);
-}
-.new-task-pop {
-  position: absolute;
-  top: calc(100% + var(--s-6));
-  right: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: var(--s-6);
-  width: 380px;
-  max-width: calc(100vw - 64px);
-  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-12);
-  border-radius: var(--r-lg);
-  background: var(--card);
-  box-shadow: var(--shadow-pop);
-  animation: pop-in 140ms var(--ease);
-}
-.new-task-pop input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  outline: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--fs-sm);
-  color: var(--ink);
-}
-.new-task-pop input::placeholder {
-  color: var(--ink-4);
 }
 .canvas-view .head {
   gap: var(--s-8);
@@ -1151,74 +1115,59 @@
 
 /* ═════════════ round 3 ═════════════ */
 
-/* ── status glyphs on the canvas and the board: the sidebar's (one look everywhere;
+/* ── status glyphs on the canvas, the board and memory's task rows: the sidebar's (one look everywhere;
    review is the blue ring with a dot, never a check) */
-.canvas-view .st-icon,
-.board-view .st-icon {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon {
   width: 14px;
   height: 14px;
   margin: 0;
 }
-.canvas-view .st-icon i,
-.board-view .st-icon i {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon i {
   width: 6px;
   height: 6px;
 }
-.canvas-view .st-icon.paused i,
-.board-view .st-icon.paused i {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.paused i {
   width: 4px;
   height: 4px;
 }
-.canvas-view .st-icon.queued,
-.board-view .st-icon.queued {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.queued {
   box-shadow: none;
   border: 1.5px dashed var(--ink-4);
   box-sizing: border-box;
 }
-.canvas-view .st-icon.waiting,
-.canvas-view .st-icon.failed,
-.board-view .st-icon.waiting,
-.board-view .st-icon.failed {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.waiting,
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.failed {
   box-shadow: inset 0 0 0 1.5px currentColor;
 }
-.canvas-view .st-icon.waiting,
-.board-view .st-icon.waiting {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.waiting {
   color: var(--warn);
 }
-.canvas-view .st-icon.failed,
-.board-view .st-icon.failed {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.failed {
   color: var(--bad);
 }
-.canvas-view .st-icon.waiting i,
-.canvas-view .st-icon.failed i,
-.board-view .st-icon.waiting i,
-.board-view .st-icon.failed i {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.waiting i,
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.failed i {
   background: currentColor;
 }
-.canvas-view .st-icon.done,
-.board-view .st-icon.done {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.done {
   background: var(--accent-soft);
   box-shadow: none;
   color: var(--accent-text);
 }
-.canvas-view .st-icon.inreview,
-.board-view .st-icon.inreview {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.inreview {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--accent-text);
   color: var(--accent-text);
 }
-.canvas-view .st-icon.inreview i,
-.board-view .st-icon.inreview i {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.inreview i {
   width: 7px;
   height: 7px;
   background: currentColor;
 }
-.canvas-view .st-icon.running,
-.board-view .st-icon.running {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon.running {
   box-shadow: none;
 }
-.canvas-view .st-icon .spin,
-.board-view .st-icon .spin {
+:is(.canvas-view, .board-view, .ms-entry) .st-icon .spin {
   width: 14px;
   height: 14px;
   padding: 2px;
@@ -1361,4 +1310,87 @@
 }
 .dev-type .btn .icon {
   color: var(--ink-3);
+}
+
+/* ═════════════ round 4 ═════════════ */
+
+/* ── failed is its own state: red, never the needs-reply amber */
+.cv-node.t-failed {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 55%, transparent);
+}
+.cv-node.t-failed.sel {
+  box-shadow: 0 0 0 1px var(--bad), 0 0 0 3px var(--bad-soft);
+}
+.cv-edge.t-failed path {
+  stroke: color-mix(in srgb, var(--bad) 60%, transparent);
+}
+.cv-edge.hot.t-failed path:not(.flow) {
+  stroke: var(--bad);
+}
+.cv-proj-meter i.t-failed,
+.cv-mini rect.t-failed {
+  background: var(--bad);
+  fill: var(--bad);
+}
+.cv-status.s-failed .cv-status-text {
+  color: var(--bad-ink);
+}
+.tone-failed .bc-line {
+  color: var(--bad-ink);
+}
+
+/* ── canvas header legend: the sidebar's glyphs at the normal small size */
+.canvas-view .cv-legend {
+  gap: var(--s-12);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+}
+.canvas-view .cv-legend > span {
+  gap: var(--s-6);
+  color: var(--ink-2);
+}
+/* the glyph is a span too: keep the board-sum row rule off it */
+.canvas-view .cv-legend .st-icon {
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+.canvas-view .cv-legend b {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+/* ── board by project: the state in words beside the glyph */
+.bc-state {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.bc-state.tone-running {
+  color: var(--ink-2);
+}
+.bc-state.tone-review {
+  color: var(--accent-text);
+}
+.bc-state.tone-you {
+  color: var(--warn-ink);
+}
+.bc-state.tone-failed {
+  color: var(--bad-ink);
+}
+.bcol-add {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+/* six columns by state (a failed one joined): narrower columns so all fit at 1440 */
+.board:not(.project):has(> .bcol:nth-child(6)) {
+  grid-auto-columns: minmax(176px, 1fr);
+}
+
+/* ── memory: a finished task's row carries the sidebar's glyph */
+.ms-glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
 }
