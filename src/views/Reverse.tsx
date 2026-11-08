@@ -16,6 +16,27 @@ const ROWS = 16;
 const CELLS = COLS * ROWS;
 const ROW_H = 20;
 
+/** the file's kind in plain words (radare2 says MACH064, ELF64, PE32+) */
+const kind = (t: Record<string, unknown>) => {
+  const c = String(t.class ?? "").toUpperCase();
+  const bin = String(t.bintype ?? "").toLowerCase();
+  if (c.startsWith("MACH") || bin === "mach0") return "맥 실행 파일";
+  if (c.startsWith("ELF") || bin === "elf") return "리눅스 실행 파일";
+  if (c.startsWith("PE") || bin === "pe") return "윈도우 실행 파일";
+  return c || undefined;
+};
+/** the source language radare2 guessed ("c with blocks" is C with Apple's blocks) */
+const lang = (v: unknown) => {
+  const l = String(v ?? "").toLowerCase();
+  if (!l) return undefined;
+  if (l.startsWith("c with blocks") || l === "c") return "C";
+  if (l === "cxx" || l === "c++") return "C++";
+  if (l === "objc") return "Objective-C";
+  if (l === "swift") return "Swift";
+  if (l === "rust") return "Rust";
+  if (l === "go") return "Go";
+  return l;
+};
 const OP: Record<RStep["op"], string> = { inspect: "구조", functions: "함수 목록", disassemble: "어셈블리", decompile: "의사코드" };
 const DOING: Record<RStep["op"], string> = { inspect: "구조 읽는 중", functions: "함수 찾는 중", disassemble: "디스어셈블 중", decompile: "디컴파일 중" };
 
@@ -104,7 +125,7 @@ export function ReversePane(props: { t: Task }) {
 function Head(props: { b: RBinary; running?: RStep; bins: RBinary[]; pick: (file: string) => void }) {
   const meta = () => {
     const t = props.b.target;
-    return [t.class, t.arch === "arm" ? "arm64" : t.arch === "x86" ? "x86_64" : t.arch, t.lang, bytes(props.b.size)].filter(Boolean).join(" · ");
+    return [kind(t), t.arch === "arm" ? "arm64" : t.arch === "x86" ? "x86_64" : t.arch, lang(t.lang), bytes(props.b.size)].filter(Boolean).join(" · ");
   };
   return (
     <div class="rv-head">
