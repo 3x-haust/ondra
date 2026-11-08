@@ -8079,42 +8079,18 @@ textarea { resize: none !important; field-sizing: content; }
 .req-head {
   display: flex;
   align-items: center;
-  gap: var(--s-10);
+  gap: var(--s-8);
   width: 100%;
-  min-height: 36px;
-  padding: var(--s-6) var(--s-12);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-lg);
-  background: color-mix(in oklab, var(--card) 60%, transparent);
+  padding: var(--s-6) var(--s-10);
+  border-radius: var(--r-md);
   color: var(--ink-3);
   font-size: var(--fs-sm);
 }
 .req-head:hover { background: var(--hover); color: var(--ink-2, var(--ink)); }
-.req-sum { display: flex; align-items: center; gap: var(--s-6); min-width: 0; flex: none; color: var(--ink-2, var(--ink)); font-weight: var(--fw-medium); }
-.req-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 var(--s-8);
-  border-radius: var(--r-pill);
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-medium);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.req-tag::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.req-tag.ask { color: var(--warn-ink); background: color-mix(in oklab, var(--warn) 14%, transparent); }
-.req-tag.live { color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, transparent); }
-.req-sum > .req-tag:first-of-type { margin-left: var(--s-4); }
+.req-sum { display: flex; align-items: center; gap: var(--s-8); min-width: 0; }
+.req-tag { font-size: var(--fs-xs); color: var(--ink-3); }
+.req-tag.ask { color: var(--warn-ink); }
+.req-tag.live { color: var(--accent); }
 .req-chev { margin-left: auto; color: var(--ink-4); transition: transform var(--dur) var(--ease); }
 .req-board.open .req-chev { transform: rotate(90deg); }
 .req-list {
@@ -9043,4 +9019,37 @@ select.select.dev-space {
 }
 .queued-acts.on {
   opacity: 1;
+}
+
+/* the row under a message: buttons as tall as the row, so a hovered one is never cut off */
+.msg-actions .msg-act {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+}
+.thread-inner > .user-turn:last-child,
+.thread-inner > :last-child .user-turn:last-child {
+  margin-bottom: 32px;
+}
+
+/* the folded sidebar's "needs you" dot: cut out of the icon, not stuck on it */
+.sb-show-dot {
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* canvas drawer: the question sits in the job's box, not in a second card */
+.cv-dr-now > .decision {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.cv-dr-now > .decision .decision-src {
+  display: none;
 }
