@@ -5,7 +5,7 @@ import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { accountById, homeDir, state, updateTask } from "../state/store";
-import type { Account, Priority, Shell, Task } from "../state/types";
+import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, type PanelTab } from "../state/ui";
 import { discardTask, gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
@@ -14,7 +14,6 @@ import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, 
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, long, now, priorityLabel, short, statusLabel } from "../ui/bits";
-import { emails } from "../state/limits";
 import { planCount } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { prettyModel, usePop } from "../ui/ModelPicker";
@@ -26,16 +25,7 @@ import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
 import { lang, t as tr } from "../i18n";
-
-// TODO(merge): switch to accountName() from ../ui/AccountPicker once the shell group adds it
-const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
-/** An account by provider + email, or the name it was given (the default name is only the workspace's). */
-function accountName(a: Account): string {
-  const own = a.label && !state.spaces.some((s) => a.label === s.label || a.label.startsWith(`${s.label} `));
-  if (own) return a.label;
-  const who = [[...new Set(a.providers.map(service))].join(" · "), emails[a.id]].filter(Boolean).join(" · ");
-  return who || tr(a.label);
-}
+import { accountName } from "../ui/AccountPicker";
 
 /** The task's own branch: where it is, and merge / throw away. */
 export function BranchCard(props: { t: Task }) {
