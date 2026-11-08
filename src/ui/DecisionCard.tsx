@@ -11,6 +11,9 @@ import { Icon } from "./Icon";
 import { dropAsked } from "./decisionText";
 import { t as tr } from "../i18n";
 
+/** what was typed in each question's own-answer line, kept while the card is away (another view, Main ↔ task) */
+const ownDrafts = new Map<string, string>();
+
 export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
   const t = () => taskById(props.d.taskId);
   // what to choose from: the pictures sent with the question, else what the job
@@ -26,8 +29,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     }
     return dropAsked(out.slice(-4));
   };
-  // the recommended choice starts selected. Clicking, ↑↓ or a number only
-  // selects; Enter or the send button answers (never on hover, never by accident)
+  // nothing starts selected (the recommended choice is only marked). Clicking, ↑↓ or a number
+  // only selects; Enter or the send button answers (never on hover, never by accident)
   /** a job asking the user to sign in: the page it was on, to open in the browser view */
   const loginUrl = () => {
     if (!/로그인|login|sign.?in|인증/i.test(`${props.d.question} ${props.d.options.map((o) => o.label).join(" ")}`)) return undefined;
@@ -45,8 +48,14 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     const u = loginUrl();
     openBrowser(u || undefined);
   };
-  const [sel, setSel] = createSignal(Math.max(0, props.d.options.findIndex((o) => o.primary)));
-  const [typed, setTyped] = createSignal("");
+  const [typed, setTyped_] = createSignal(ownDrafts.get(props.d.id) ?? "");
+  const setTyped = (v: string) => {
+    setTyped_(v);
+    if (v) ownDrafts.set(props.d.id, v);
+    else ownDrafts.delete(props.d.id);
+  };
+  // a kept answer comes back selected; otherwise nothing is
+  const [sel, setSel] = createSignal(typed() && !props.d.ui ? props.d.options.length : -1);
   let own!: HTMLInputElement;
   let list!: HTMLDivElement;
   // one place to answer in your own words, in Main and in the task alike: the card's own line
@@ -57,13 +66,15 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     if (i === props.d.options.length) own?.focus();
     else list.focus();
   };
-  const ready = () => sel() < props.d.options.length || !!typed().trim();
+  const picked = () => sel() >= 0 && sel() < props.d.options.length;
+  const ready = () => picked() || !!typed().trim();
   const submit = async () => {
+    if (!ready()) return;
     // a sign-in card: what was signed in to in the app's browser reaches the jobs' browser first
     if (loginUrl() !== undefined) await inBrowserShare(t()?.space ?? state.space, loginUrl() || undefined).catch(() => {});
-    if (sel() < props.d.options.length) void decide(props.d.id, props.d.options[sel()].id);
-    else if (typed().trim()) void decide(props.d.id, typed().trim());
-    else own?.focus();
+    if (picked()) void decide(props.d.id, props.d.options[sel()].id);
+    else void decide(props.d.id, typed().trim());
+    ownDrafts.delete(props.d.id);
   };
   // a number pressed anywhere (not while typing) selects that choice and
   // brings the keyboard here, so Enter then answers
@@ -80,7 +91,8 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
     if (!viewKey(e) || !noModifiers(e)) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      select((sel() + (e.key === "ArrowDown" ? 1 : -1) + count()) % count());
+      const down = e.key === "ArrowDown";
+      select(sel() < 0 ? (down ? 0 : count() - 1) : (sel() + (down ? 1 : -1) + count()) % count());
     } else if (e.key === "Enter") {
       e.preventDefault();
       submit();
@@ -148,6 +160,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean }) {
               class="decision-input"
               placeholder={tr("다른 답")}
               aria-label={tr("다른 답")}
+              value={typed()}
               onFocus={() => setSel(props.d.options.length)}
               onInput={(e) => setTyped(e.currentTarget.value)}
               onKeyDown={(e) => {

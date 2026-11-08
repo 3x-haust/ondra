@@ -344,10 +344,16 @@ export function Composer(props: {
       return;
     }
     const f = files();
-    keep(text());
-    props.onSend(withFiles(text(), f));
+    const v = text();
+    keep(v);
+    // emptied before it is handed on: sending can close this input (a new task opens the task),
+    // and a draft saved after that would come back the next time
     setText("");
     setFiles([]);
+    el.value = "";
+    const key = props.draftKey;
+    if (key !== undefined) drafts.delete(key);
+    props.onSend(withFiles(v, f));
     queueMicrotask(grow);
   };
 

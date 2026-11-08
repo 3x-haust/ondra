@@ -6,6 +6,7 @@ import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import type { Permission } from "../state/types";
 import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
+import { accountName } from "./AccountPicker";
 import { t } from "../i18n";
 
 /** `name` is the Korean key: show it with t(name) (낮음 · 보통 · 높음 · 매우 높음 · 최대). */
@@ -122,6 +123,8 @@ export function ModelPicker(props: {
   };
   const PROVIDER: Record<string, string> = { "openai-codex": "OpenAI · ChatGPT 계정", openai: "OpenAI", anthropic: "Anthropic · Claude 계정", google: "Google" };
   const provider = (id: string) => (PROVIDER[id] ? t(PROVIDER[id]) : id);
+  // the models of one account: it is named the way the usage chip names it; several providers keep theirs
+  const heading = (id: string) => (groups().length <= 1 && accountName(props.accountId)) || provider(id);
   const Item = (p: { m: string }) => (
     <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
       <span class="pop-item-main">{prettyModel(p.m)}</span>
@@ -136,7 +139,7 @@ export function ModelPicker(props: {
         <Icon name="down" size={12} class="muted" />
       </button>
       <Show when={open()}>
-        <div class="pop model-pop" classList={{ up: props.up }}>
+        <div class="pop model-pop" classList={{ up: props.up }} role="dialog" aria-label={[t("모델 · 추론 강도"), accountName(props.accountId)].filter(Boolean).join(" · ")}>
           <EffortSlider value={effort()} onChange={(id) => props.onChange(props.model, id)} />
           <div class="pop-sep" />
           <Show when={all().length > 8}>
@@ -168,7 +171,7 @@ export function ModelPicker(props: {
                     <For each={groups()}>
                       {([id, list]) => (
                         <>
-                          <div class="pop-label">{provider(id)}</div>
+                          <div class="pop-label">{heading(id)}</div>
                           <For each={list}>{(m) => <Item m={m} />}</For>
                         </>
                       )}

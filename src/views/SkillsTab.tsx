@@ -33,7 +33,7 @@ interface Entry {
 const KIND_LABEL: Record<Kind, string> = { bundled: "기본", changed: "수정됨", mine: "내 스킬", imported: "가져옴" };
 const FROM: Record<string, string> = { claude: "Claude Code", codex: "Codex", pi: "pi", "3xhaust": "3xhaustPi", omo: "OmO", cursor: "Cursor", opencode: "opencode" };
 /** a skill's line in the list: ours for a bundled one, else the first sentence of its own */
-const lineOf = (e: { name: string; description: string; kind: Kind }) => skillLine(e, e.kind !== "bundled" && e.kind !== "changed");
+export const lineOf = (e: { name: string; description: string; kind: Kind }) => skillLine(e, e.kind !== "bundled" && e.kind !== "changed");
 const mdOf = (p: string) => (/\.md$/i.test(p) ? p : `${p.replace(/\/$/, "")}/SKILL.md`);
 const madeHere = (p: string) => !!engine.info.dataDir && p.startsWith(`${engine.info.dataDir}/skills/`);
 

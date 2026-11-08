@@ -22,6 +22,8 @@ export default {
   "{n}일 전": "{n}d ago",
   "어제|ago": "yesterday",
   "{d} 동안 작업": "Worked for {d}",
+  // a finished turn's fold: what it holds (the time is on the end line)
+  "작업 과정 {n}단계": "{n} step|{n} steps",
   // a running task's time so far (past times say "전" / "ago")
   "방금 시작": "Just started",
   "{n}분째": "{n}m",
