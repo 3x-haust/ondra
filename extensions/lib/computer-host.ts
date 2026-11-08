@@ -275,14 +275,18 @@ export class ComputerHostSession {
       // Refs are checked against the epoch the caller observed, not the latest one.
       const translated = this.translate(action, String(action.epoch));
       const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
-      if (r.backgroundPreserved === false) {
+      // the user's own mouse or keys moved things: theirs, not the action's
+      if (r.backgroundPreserved === false && r.userInput !== true) {
         this.obs.invalidate();
-        throw new Error("Action changed the foreground or cursor; this cannot be done in the background");
+        throw new Error(r.selfActivated
+          ? "The app brought itself to the front and the user's app could not be put back in front; observe, and tell the user if they need to switch back"
+          : "Action changed the foreground or cursor; this cannot be done in the background");
       }
       const snapshot = r.tree !== undefined ? this.obs.accept(r.tree, false) : undefined;
       // Delivery is not success: an unchanged tree after the action means it probably did nothing.
       const effect = snapshot ? (snapshot.kind === "unchanged" ? "no_change" : "changed") : "unknown";
-      return { action: { ok: true, outcome: "verified", effect }, actionMs: r.actionMs, env: r.env,
+      return { action: { ok: true, outcome: "verified", effect, ...(typeof r.via === "string" ? { via: r.via } : {}),
+          ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}) }, actionMs: r.actionMs, env: r.env,
         ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}),
         ...(snapshot ? { observation: snapshot } : { observationError: "NO_WINDOW" }) };
     });
@@ -291,7 +295,12 @@ export class ComputerHostSession {
   private translate(action: { kind: string; epoch: string; ref?: string } & Record<string, unknown>, epoch: string): Record<string, unknown> {
     const ref = () => this.obs.resolve(epoch, String(action.ref));
     switch (action.kind) {
-      case "click": return { kind: "press-action", ref: ref(), action: "AXPress" };
+      // AXPress first; a view that ignores it gets a pointer click addressed to its window
+      case "click": return {
+        kind: "press-action", ref: ref(), action: "AXPress", fallbackClick: true,
+        count: action.count === 2 ? 2 : 1, button: action.button === "right" ? "right" : "left",
+        ...(action.pointer === true ? { pointer: true } : {}),
+      };
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
       case "type": return action.ref !== undefined ? { kind: "type", ref: ref(), text: String(action.text ?? "") } : { kind: "type", text: String(action.text ?? "") };
       case "press": return { kind: "press", key: String(action.key), modifiers: action.modifiers ?? [] };

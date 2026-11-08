@@ -131,6 +131,13 @@ process.stdin.on("data", c => {
       appendFileSync(${JSON.stringify(log)}, JSON.stringify(req.action) + "\\n");
       if (req.action.kind === "drag" && req.action.from.x !== 0) report = "dragged";
       result = { tree: tree(), env, envBefore: env, backgroundPreserved: true, actionMs: 3, dragMs: 90 };
+      if (req.action.kind === "press-action") {
+        report = req.action.ref;
+        result = { ...result, via: req.action.count === 2 ? "pointer" : "ax" };
+        if (req.action.ref === "e2") result = { ...result, selfActivated: true, restored: true };
+        if (req.action.ref === "e3") result = { ...result, backgroundPreserved: false, userInput: true };
+        if (req.action.ref === "e1") result = { ...result, backgroundPreserved: false, selfActivated: true, restored: false };
+      }
     }
     process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
   }
@@ -176,6 +183,25 @@ process.stdin.on("data", c => {
     expect(acts(log)).toEqual([
       { kind: "drag", from: { x: 1, y: 2 }, to: { x: 3, y: 4 } },
       { kind: "scroll", ref: "e2", direction: "down", amount: 3 },
+    ]);
+    await session.stop();
+  });
+
+  it("clicks fall back to a pointer click, and an app that comes forward or the user's own input is not a failure", async () => {
+    const { path, log } = recordingHelper();
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    const started = await session.start("Test") as { observation: { epoch: string } };
+    const forward = await session.act({ kind: "click", epoch: started.observation.epoch, ref: "e2", count: 2 }) as Record<string, any>;
+    expect(forward.action).toMatchObject({ via: "pointer", selfActivated: true, restored: true });
+    const mine = await session.act({ kind: "click", epoch: forward.observation.epoch, ref: "e3", button: "right" }) as Record<string, any>;
+    expect(mine.action.ok).toBe(true);
+    await expect(session.act({ kind: "click", epoch: mine.observation.epoch, ref: "e1" })).rejects.toThrow("brought itself to the front");
+    expect(acts(log).map(a => [a.kind, a.ref, a.count, a.button, a.fallbackClick])).toEqual([
+      ["press-action", "e2", 2, "left", true],
+      ["press-action", "e3", 1, "right", true],
+      ["press-action", "e1", 1, "left", true],
     ]);
     await session.stop();
   });

@@ -3,8 +3,9 @@ name: computer-use
 description: >
   Native Mac app automation that runs in the background on the user's own Mac.
   Read before operating Mac apps, clicking buttons, typing into fields or
-  capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력).
-  Defines the background contract, observation and safe recovery. An isolated
+  capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 카카오톡·메신저 앱).
+  Covers how it stays in the background, observation, and what to try when an
+  app ignores an action. An isolated
   macOS guest is an optional separate mode.
 metadata:
   ondra-tools: 'computer'
@@ -16,19 +17,18 @@ metadata:
 Native app automation runs **in the background on the user's own Mac**, through
 the `computer` tool and its signed `ondra-cuhost` helper. It operates one target
 app at a time: it reads that app's accessibility tree and acts on it, and only
-captures that app's own windows. It must never take the user's focus.
+captures that app's own windows. It must never take the user's focus: their cursor
+and their front app stay as they are.
 
-## The background contract
+## How it stays in the background
 
-The helper, and you through it:
-
-- never activate an app or bring a window to the front;
-- never move or warp the cursor, and never post events to the global session
-  (keys and clicks go to the target process only);
-- launch apps without activation, so the user's frontmost app stays in front;
-- check the frontmost app, key window and mouse position after every action and
-  report whether they changed. If an action cannot be done without changing them,
-  it fails — **report that instead of falling back to the foreground**.
+- Actions go to the target app only: accessibility actions, or pointer and key
+  events addressed to its window. The real cursor never moves; a small pointer
+  of the helper's own shows where you act, just above the target window.
+- Apps launch without activation, so the user's front app stays in front.
+- Some apps bring themselves forward when clicked. The helper hands the front
+  straight back to the user's app and reports `selfActivated` / `restored`.
+- The user's own mouse and keys during an action are theirs, not a failure.
 
 Do not drive the host yourself. Do not use `agent-desktop`, AppleScript or System
 Events UI scripting, `cliclick`, `open` with activation, or raw CGEvent/AX/PID
@@ -57,8 +57,8 @@ instructions.
    look (`NEEDS_LOOK`) or once the window moved (`WINDOW_MOVED`) — look again.
    Prefer element ids over coordinates. An accepted action is not proof the UI
    changed: inspect the returned observation. `effect: no_change` means the tree
-   did not change, so the action probably did nothing; some views ignore
-   background drags (text selection, native sliders) — use `set-value` or keys.
+   did not change, so the action probably did nothing: see "When the app
+   doesn't respond".
 4. `look {full?}` captures a PNG of the target app's key window — only when you
    need pixels (a canvas, an image, a control missing from the tree). Image-only
    models cannot verify visual-only controls; report that rather than guessing.
@@ -70,6 +70,28 @@ instructions.
 
 Long lists show only their visible rows; `offscreen` counts the rest — scroll to
 reveal them. `selection` shows a text element's selected text.
+
+## When the app doesn't respond
+
+Many apps (chat apps, custom lists, profile cards) ignore some ways of acting.
+`effect: no_change`, `AX_ACTION_FAILED` or `FOCUS_UNVERIFIED` means: take the next
+way, not stop.
+
+1. `click` a ref: tries the accessibility action, then clicks the element with
+   pointer events (`action.via` says which). If the action "worked" but nothing
+   changed, `click` again with `pointer: true`.
+2. Rows that open on a double click (a chat in a list, a file): `click` with
+   `count: 2`. Context menus: `button: "right"`.
+3. Keys: search fields often answer `cmd+f`, lists `up`/`down` then `return`,
+   dialogs `return`/`escape`. Type into the focused field without a ref.
+4. Text fields: `set-value`, or `type` (it focuses by a background click and
+   falls back to appending to the value).
+5. Controls missing from the tree: `look`, then `click-at` the pixel. A `staged`
+   look (Stage Manager thumbnail) is not to scale; use refs and keys.
+
+Report a limit only after every way above was tried, naming each try and what
+the observation showed. Asking the user is for permission, never for handing
+the work back.
 
 If an action returns `USER_ACTIVE`, the user is working in that app: nothing was
 sent. Wait, observe, keep their changes, then continue. Password fields are
