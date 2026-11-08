@@ -15,15 +15,16 @@ import { spaceById, state } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { openTask, setView, toast, view } from "../state/ui";
 import { Icon } from "../ui/Icon";
+import { t } from "../i18n";
 
 type Filter = "all" | "ios" | "android";
 const ago = (ms?: number | null) => {
   if (!ms) return "";
   const m = Math.round((Date.now() - ms) / 60000);
-  return m < 60 ? `${Math.max(1, m)}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`;
+  return m < 60 ? t("{n}분 전", { n: Math.max(1, m) }) : m < 1440 ? t("{n}시간 전", { n: Math.round(m / 60) }) : t("{n}일 전", { n: Math.round(m / 1440) });
 };
 /** "iOS 26.3", "Android 에뮬레이터", "iOS 26.3 · 실제 기기" — the OS is already in the runtime */
-const platformLabel = (d: Device) => d.runtime + (d.kind === "phone" ? " · 실제 기기" : "");
+const platformLabel = (d: Device) => t(d.runtime) + (d.kind === "phone" ? ` · ${t("실제 기기")}` : "");
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function act(label: string, f: () => Promise<unknown>) {
@@ -49,7 +50,7 @@ function Status(props: { d: Device }) {
   return (
     <span class={`dev-status ${st()}`}>
       <span class="dev-dot" />
-      {st() === "off" ? "꺼짐" : st() === "busy" ? "사용 중" : "켜짐"}
+      {st() === "off" ? t("꺼짐") : st() === "busy" ? t("사용 중") : t("켜짐")}
     </span>
   );
 }
@@ -64,8 +65,8 @@ function SpacePick(props: { d: Device }) {
         value={deviceSpace(props.d) ?? ""}
         onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
       >
-        <option value="">공용</option>
-        <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+        <option value="">{t("공용")}</option>
+        <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
       </select>
     </Show>
   );
@@ -78,10 +79,10 @@ function Actions(props: { d: Device }) {
       <SpacePick d={props.d} />
       <Show
         when={props.d.booted}
-        fallback={<button class="btn sm" onClick={() => void act(`${props.d.name} 켜는 중이에요`, () => deviceBoot(props.d))}>켜기</button>}
+        fallback={<button class="btn sm" onClick={() => void act(t("{name} 켜는 중", { name: props.d.name }), () => deviceBoot(props.d))}>{t("켜기")}</button>}
       >
         <Show when={props.d.kind !== "phone"}>
-          <button class="btn sm" onClick={() => void act(`${props.d.name} 껐어요`, () => deviceShutdown(props.d))}>끄기</button>
+          <button class="btn sm" onClick={() => void act(t("{name} 껐어요", { name: props.d.name }), () => deviceShutdown(props.d))}>{t("끄기")}</button>
         </Show>
       </Show>
       <Show when={props.d.kind !== "phone" && !props.d.booted}>
@@ -89,9 +90,9 @@ function Actions(props: { d: Device }) {
           class="btn sm ghost"
           classList={{ danger: sure() }}
           onBlur={() => setSure(false)}
-          onClick={() => (sure() ? void act(`${props.d.name} 지웠어요`, () => deviceDelete(props.d)) : setSure(true))}
+          onClick={() => (sure() ? void act(t("{name} 삭제했어요", { name: props.d.name }), () => deviceDelete(props.d)) : setSure(true))}
         >
-          {sure() ? "정말 지우기" : "지우기"}
+          {sure() ? t("삭제 확인") : t("삭제")}
         </button>
       </Show>
     </div>
@@ -99,14 +100,14 @@ function Actions(props: { d: Device }) {
 }
 
 function UsedBy(props: { d: Device }) {
-  const t = createMemo(() => usedBy(props.d));
+  const job = createMemo(() => usedBy(props.d));
   return (
-    <Show when={t()}>
+    <Show when={job()}>
       {(x) => (
-        <button class="dev-job" onClick={() => openTask(x().id)} title="이 일 열기">
+        <button class="dev-job" onClick={() => openTask(x().id)} title={t("작업 열기")}>
           <span class={`dot ${x().status === "running" ? "live" : ""}`} />
-          {x().status === "running" ? "쓰는 중 · " : "마지막 사용 · "}
-          {x().title}
+          <span class="dev-job-k">{x().status === "running" ? t("사용 중") : t("마지막 사용")}</span>
+          <span class="dev-job-t">{x().title}</span>
         </button>
       )}
     </Show>
@@ -150,9 +151,9 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   // shown again (the open device closed): fresh at once
   createEffect(on(() => props.hidden, (h) => !h && void grab(), { defer: true }));
   return (
-    <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title="열어서 조작하기">
-      <Show when={src()} fallback={<span class="dev-wait">화면 가져오는 중</span>}>
-        <img src={src()} alt={`${props.d.name} 화면`} draggable={false} />
+    <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title={t("열기")}>
+      <Show when={src()} fallback={<span class="dev-wait">{t("화면 불러오는 중")}</span>}>
+        <img src={src()} alt={t("{name} 화면", { name: props.d.name })} draggable={false} />
       </Show>
     </button>
   );
@@ -397,7 +398,7 @@ function LiveScreen(props: { d: Device }) {
         style={{ width: `${fit().w}px`, height: `${fit().h}px` }}
         tabIndex={0}
         role="application"
-        aria-label={`${props.d.name} 화면`}
+        aria-label={t("{name} 화면", { name: props.d.name })}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
@@ -415,7 +416,7 @@ function LiveScreen(props: { d: Device }) {
           }}
         />
         <Show when={!size()}>
-          <span class="dev-wait">화면 가져오는 중</span>
+          <span class="dev-wait">{t("화면 불러오는 중")}</span>
         </Show>
         <Show when={mark()}>{(m) => <span class="dev-mark" style={{ left: `${m().x * 100}%`, top: `${m().y * 100}%` }} />}</Show>
       </div>
@@ -436,25 +437,25 @@ function Tools(props: { d: Device }) {
       toast(errText(e), "bad");
     }
   };
-  const saved = (label: string, p: string) => toast(label, "info", { label: "보기", run: () => void revealPath(p) });
+  const saved = (label: string, p: string) => toast(label, "info", { label: t("보기"), run: () => void revealPath(p) });
   const T = (p: { icon: string; label: string; on?: boolean; class?: string; click: () => unknown }) => (
     <button class={`icon-btn dev-tool ${p.class ?? ""}`} classList={{ on: !!p.on }} title={p.label} aria-label={p.label} aria-pressed={p.on} onClick={() => void p.click()}>
       <Glyph name={p.icon} size={16} />
     </button>
   );
   return (
-    <div class="dev-tools" role="toolbar" aria-label="기기 조작">
+    <div class="dev-tools" role="toolbar" aria-label={t("기기 조작")}>
       <div class="dev-tools-group">
-        <T icon="home" label="홈" click={() => run(() => deviceInput(props.d, "home"))} />
-        <T icon="back" label="뒤로" click={() => run(() => deviceInput(props.d, "back"))} />
+        <T icon="home" label={t("홈")} click={() => run(() => deviceInput(props.d, "home"))} />
+        <T icon="back" label={t("뒤로")} click={() => run(() => deviceInput(props.d, "back"))} />
       </div>
       <div class="dev-tools-group">
         <Show when={ios}>
-          <T icon="keyboard" label={kb() ? "키보드 숨기기" : "키보드 보이기"} on={kb()} click={() => run(async () => setKb(await deviceKeyboard(props.d)))} />
+          <T icon="keyboard" label={kb() ? t("키보드 숨기기") : t("키보드 표시")} on={kb()} click={() => run(async () => setKb(await deviceKeyboard(props.d)))} />
         </Show>
         <T
           icon="rotate"
-          label="돌리기"
+          label={t("회전")}
           on={!!turned()[props.d.id]}
           click={() => run(async () => {
             const land = await deviceRotate(props.d);
@@ -463,15 +464,15 @@ function Tools(props: { d: Device }) {
         />
       </div>
       <div class="dev-tools-group">
-        <T icon="camera" label="스크린샷" click={() => run(async () => saved("스크린샷을 데스크톱에 저장했어요", await deviceScreenshot(props.d, spaceById(state.space)?.label)))} />
+        <T icon="camera" label={t("스크린샷")} click={() => run(async () => saved(t("스크린샷을 데스크톱에 저장했어요"), await deviceScreenshot(props.d, spaceById(state.space)?.label)))} />
         <T
           icon={rec() ? "stop" : "video"}
-          label={rec() ? "녹화 멈추기" : "녹화"}
+          label={rec() ? t("녹화 중지") : t("녹화")}
           class={rec() ? "rec" : ""}
           click={() => run(async () => {
             const p = await deviceRecord(props.d, spaceById(state.space)?.label);
             setRecording(await deviceRecording());
-            if (p) saved("녹화를 데스크톱에 저장했어요", p);
+            if (p) saved(t("녹화를 데스크톱에 저장했어요"), p);
           })}
         />
       </div>
@@ -501,7 +502,7 @@ function TypeBox(props: { d: Device }) {
           void send("text", { text: t });
         }}
       >
-        <input placeholder="글자 보내기" value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+        <input placeholder={t("텍스트 입력")} aria-label={t("텍스트 입력")} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
       </form>
     </div>
   );
@@ -540,12 +541,12 @@ function Control(props: { d: Device; onClose: () => void }) {
   return (
     <div class="dev-control">
       <div class="dev-control-head">
-        <button class="icon-btn" title="목록으로 (Esc)" onClick={props.onClose}><Icon name="back" size={15} /></button>
+        <button class="icon-btn" title={t("목록으로 (Esc)")} aria-label={t("목록으로")} onClick={props.onClose}><Icon name="back" size={16} /></button>
         <b>{props.d.name}</b>
         <Status d={props.d} />
         <span class="dev-sub">{platformLabel(props.d)}</span>
         <Show when={recording().includes(props.d.id)}>
-          <span class="dev-rec-label">녹화 중</span>
+          <span class="dev-rec-label">{t("녹화 중")}</span>
         </Show>
         <UsedBy d={props.d} />
         <span class="spacer" />
@@ -586,43 +587,43 @@ export function Devices() {
   return (
     <div class="devices-view">
       <div class="head" data-tauri-drag-region>
-        <h1>디바이스</h1>
-        <span class="muted dev-count">{devices().filter((d) => d.booted).length}개 켜짐 · 전체 {devices().length}개</span>
+        <h1>{t("디바이스")}</h1>
+        <span class="muted dev-count">{t("켜짐 {on} · 전체 {all}", { on: devices().filter((d) => d.booted).length, all: devices().length })}</span>
         <span class="spacer" />
         <div class="seg">
           <For each={[["all", "전체"], ["ios", "iOS"], ["android", "Android"]] as [Filter, string][]}>
             {([id, label]) => (
               <button classList={{ on: filter() === id }} onClick={() => setFilter(id)}>
-                {label}<span class="seg-n">{count(id)}</span>
+                {t(label)}<span class="seg-n">{count(id)}</span>
               </button>
             )}
           </For>
         </div>
-        <button class="icon-btn" title="새로고침" onClick={() => void refreshDevices()}><Icon name="refresh" size={15} /></button>
+        <button class="icon-btn" title={t("새로고침")} aria-label={t("새로고침")} onClick={() => void refreshDevices()}><Icon name="refresh" size={16} /></button>
       </div>
       <Show when={focused()} keyed>
         {(d) => <Control d={d} onClose={() => setFocus(undefined)} />}
       </Show>
       <div class="devices-body" classList={{ hidden: !!focused() }}>
-        <div class="dev-section">켜져 있어요 <span class="muted">{on().length}</span></div>
+        <div class="dev-section">{t("켜짐")} <span class="dev-n">{on().length}</span></div>
         <div class="dev-grid">
-          <For each={on()} fallback={<p class="sb-empty">켜진 기기 없음</p>}>
+          <For each={on()} fallback={<p class="dev-empty">{t("켜진 기기 없음")}</p>}>
             {(d) => <LiveCard d={d} hidden={!!focused()} onOpen={() => setFocus(d.id)} />}
           </For>
         </div>
         <Show when={off().length}>
-          <div class="dev-section">꺼져 있어요 <span class="muted">{off().length}</span></div>
+          <div class="dev-section">{t("꺼짐")} <span class="dev-n">{off().length}</span></div>
           <div class="dev-list">
             <For each={groups()}>
               {([runtime, list]) => (
                 <div class="dev-group">
-                  <div class="dev-group-head">{runtime} <span class="muted">{list.length}</span></div>
+                  <div class="dev-group-head">{t(runtime)} <span class="dev-n">{list.length}</span></div>
                   <For each={list}>
                     {(d) => (
                       <div class="dev-row">
-                        <Icon name="phone" size={15} class="muted" />
+                        <Icon name="phone" size={16} class="muted" />
                         <b>{d.name}</b>
-                        <Show when={d.kind === "phone"}><span class="dev-sub">실제 기기</span></Show>
+                        <Show when={d.kind === "phone"}><span class="dev-sub">{t("실제 기기")}</span></Show>
                         <Show when={d.lastUsed}><span class="dev-sub">{ago(d.lastUsed)}</span></Show>
                         <UsedBy d={d} />
                         <span class="spacer" />

@@ -397,10 +397,14 @@
   align-items: baseline;
   flex: none;
   white-space: nowrap;
-  gap: 4px;
+  gap: var(--s-12);
   margin-left: var(--s-10);
   font-size: var(--fs-xs);
   color: var(--ink-3);
+}
+.mem-count > span {
+  display: inline-flex;
+  gap: var(--s-4);
 }
 .mem-count b {
   color: var(--ink-2);

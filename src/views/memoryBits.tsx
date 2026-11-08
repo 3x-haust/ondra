@@ -6,18 +6,19 @@ import { userOwned } from "../engine/memory";
 import { state } from "../state/store";
 import type { JournalEntry, Memory } from "../state/types";
 import { Icon } from "../ui/Icon";
+import { lang, t } from "../i18n";
 
 export const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 export const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
-export const OUTCOME: Record<JournalEntry["outcome"], string> = { done: "끝남", failed: "실패", stopped: "멈춤" };
+/** shown with t() */
+export const OUTCOME: Record<JournalEntry["outcome"], string> = { done: "완료", failed: "실패", stopped: "중단" };
 
-const pad = (n: number) => String(n).padStart(2, "0");
-/** "11월 5일 14:32" (year added when it isn't this year) */
-export function stampOf(t: number) {
-  const d = new Date(t);
-  const y = d.getFullYear() === new Date().getFullYear() ? "" : `${d.getFullYear()}년 `;
-  return `${y}${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** "11월 5일 14:32" / "Nov 5, 14:32" (year added when it isn't this year) */
+export function stampOf(at: number) {
+  const d = new Date(at);
+  const year = d.getFullYear() === new Date().getFullYear() ? undefined : "numeric";
+  return d.toLocaleString(lang() === "en" ? "en-US" : "ko-KR", { year, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 /** a cited code file, as a path on disk (cites are relative to the piece's project or space) */
@@ -27,7 +28,7 @@ export function citePath(m: Memory, c: string) {
   return root ? `${root.replace(/\/$/, "")}/${c.replace(/^\.\//, "")}` : c;
 }
 
-/** the 일 기록 entry a piece was learned from */
+/** the task log entry a piece was learned from */
 export function learnedIn(m: Memory): JournalEntry | undefined {
   const list = state.journal ?? [];
   return list.find((e) => e.learned?.includes(m.id)) ?? (m.taskId ? list.find((e) => e.taskId === m.taskId) : undefined);
@@ -40,14 +41,14 @@ export function Badges(props: { m: Memory; globs?: boolean; cites?: boolean }) {
     <span class="mb">
       <Show when={m().paths?.length}>
         <span class="mb-i mb-path" title={m().paths!.join("\n")}>
-          <Icon name="route" size={11} />
+          <Icon name="route" size={12} />
           <Show when={props.globs}><span class="mb-glob">{m().paths![0]}{m().paths!.length > 1 ? ` +${m().paths!.length - 1}` : ""}</span></Show>
         </span>
       </Show>
-      <Show when={m().skill}><span class="mb-i" title={`스킬 · ${m().skill}`}><Icon name="skill" size={11} /></span></Show>
-      <Show when={props.cites && m().cites?.length}><span class="mb-i" title={m().cites!.join("\n")}><Icon name="file" size={11} /></span></Show>
-      <Show when={(m().seen ?? 0) > 0}><span class="mb-n" title="다시 나온 횟수">{m().seen}번</span></Show>
-      <Show when={userOwned(m())}><span class="mb-i mb-user" title="사용자"><Icon name="lock" size={10.5} /></span></Show>
+      <Show when={m().skill}><span class="mb-i" title={`${t("스킬")} · ${m().skill}`}><Icon name="skill" size={12} /></span></Show>
+      <Show when={props.cites && m().cites?.length}><span class="mb-i" title={m().cites!.join("\n")}><Icon name="file" size={12} /></span></Show>
+      <Show when={(m().seen ?? 0) > 0}><span class="mb-n" title={t("반복")}>{t("{n}번", { n: m().seen! })}</span></Show>
+      <Show when={userOwned(m())}><span class="mb-i mb-user" title={t("사용자")}><Icon name="lock" size={12} /></span></Show>
     </span>
   );
 }

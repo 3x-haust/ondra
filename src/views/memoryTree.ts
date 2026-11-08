@@ -10,6 +10,7 @@
 // or the local neighbourhood of what's selected, like Obsidian's local graph.
 import { isLive, KINDS, kindLabel, kindOf } from "../engine/memory";
 import type { JournalEntry, Memory, MemoryKind, Project, ProjectNow, SpaceId } from "../state/types";
+import { lang, t } from "../i18n";
 
 export type HomeKind = "global" | "space" | "project";
 export interface Home {
@@ -87,18 +88,17 @@ export const monthKey = (t: number) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 };
 export const dayKey = (t: number) => `${monthKey(t)}-${pad(new Date(t).getDate())}`;
-const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
-export function monthLabel(t: number) {
-  const d = new Date(t);
-  return d.getFullYear() === new Date().getFullYear() ? `${d.getMonth() + 1}월` : `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+const locale = () => (lang() === "en" ? "en-US" : "ko-KR");
+export function monthLabel(at: number) {
+  const d = new Date(at);
+  return d.toLocaleDateString(locale(), d.getFullYear() === new Date().getFullYear() ? { month: "long" } : { year: "numeric", month: "long" });
 }
-export function dayLabel(t: number, withMonth = false) {
-  const d = new Date(t);
-  const today = dayKey(Date.now());
-  const k = dayKey(t);
-  if (k === today) return "오늘";
-  if (k === dayKey(Date.now() - 86_400_000)) return "어제";
-  return `${withMonth ? `${d.getMonth() + 1}월 ` : ""}${d.getDate()}일 ${WEEK[d.getDay()]}`;
+export function dayLabel(at: number, withMonth = false) {
+  const d = new Date(at);
+  const k = dayKey(at);
+  if (k === dayKey(Date.now())) return t("오늘");
+  if (k === dayKey(Date.now() - 86_400_000)) return t("어제");
+  return d.toLocaleDateString(locale(), withMonth ? { month: "short", day: "numeric", weekday: "short" } : { day: "numeric", weekday: "short" });
 }
 export const clock = (t: number) => {
   const d = new Date(t);
@@ -133,11 +133,11 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     homes.set(h.id, x);
     return x;
   };
-  mk({ id: "g", kind: "global", label: "모든 일" });
-  for (const s of inp.spaces) mk({ id: `s:${s.id}`, kind: "space", label: s.label, parent: "g", space: s.id, path: s.folder });
+  mk({ id: "g", kind: "global", label: t("모든 작업") });
+  for (const s of inp.spaces) mk({ id: `s:${s.id}`, kind: "space", label: t(s.label), parent: "g", space: s.id, path: s.folder });
   const spaceHome = (id?: SpaceId) => {
     const k = `s:${id ?? "?"}`;
-    return homes.get(k) ?? mk({ id: k, kind: "space", label: id ?? "공간", parent: "g", space: id });
+    return homes.get(k) ?? mk({ id: k, kind: "space", label: id ?? t("워크스페이스"), parent: "g", space: id });
   };
   const projHome = (folder: string, name?: string, space?: SpaceId) => {
     const k = `p:${inp.expand(folder)}`;
@@ -210,7 +210,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
       day.count++;
       mo.count++;
     }
-    return { key: `${h.id}|j`, id: JOURNAL, type: "journal", label: "일 기록", home: JOURNAL, children: months, count: mine.length };
+    return { key: `${h.id}|j`, id: JOURNAL, type: "journal", label: t("작업 기록"), home: JOURNAL, children: months, count: mine.length };
   };
   const ok = (m: Memory) => !match || match(m);
   const rowOf = new Map<string, TreeNode>();
@@ -236,7 +236,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
       const list = h.live.filter((m) => kindOf(m) === k.id && ok(m)).sort(byWeight);
       if (!list.length) continue;
       const key = kindFolderId(h.id, k.id);
-      kids.push({ key, id: key, type: "kind", label: k.label, home: h.id, kind: k.id, mems: list, children: memRows(key, h.id, list), count: list.length });
+      kids.push({ key, id: key, type: "kind", label: t(k.label), home: h.id, kind: k.id, mems: list, children: memRows(key, h.id, list), count: list.length });
     }
     const tops: TreeNode[] = [];
     for (const t of topics.values()) {
@@ -249,12 +249,12 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     if (tops.length) {
       tops.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
       const key = topicsId(h.id);
-      kids.push({ key, id: key, type: "topics", label: "주제", home: h.id, children: tops, count: tops.length });
+      kids.push({ key, id: key, type: "topics", label: t("주제"), home: h.id, children: tops, count: tops.length });
     }
     const past = h.past.filter(ok).sort((a, b) => (b.invalidAt ?? 0) - (a.invalidAt ?? 0));
     if (past.length) {
       const key = pastId(h.id);
-      kids.push({ key, id: key, type: "past", label: "지난 기억", home: h.id, mems: past, children: memRows(key, h.id, past), count: past.length });
+      kids.push({ key, id: key, type: "past", label: t("지난 메모리"), home: h.id, mems: past, children: memRows(key, h.id, past), count: past.length });
     }
     if (h.kind === "space") {
       const j = journalRow(h);
@@ -396,10 +396,10 @@ export function buildGraph(model: Model, sel: string, match?: (m: Memory) => boo
   const addKind = (h: Home, k: MemoryKind, ring: number) => {
     const list = h.live.filter((m) => kindOf(m) === k);
     if (!list.length) return null;
-    return add({ id: kindFolderId(h.id, k), kind: "folder", label: kindLabel(k), anchor: h.id, r: hubR(list.length, 5, 1.5), mk: k, count: list.length, ring, hit: hits(list) });
+    return add({ id: kindFolderId(h.id, k), kind: "folder", label: t(kindLabel(k)), anchor: h.id, r: hubR(list.length, 5, 1.5), mk: k, count: list.length, ring, hit: hits(list) });
   };
   const addPast = (h: Home, ring: number) =>
-    h.past.length ? add({ id: pastId(h.id), kind: "past", label: "지난 기억", anchor: h.id, r: hubR(h.past.length, 4, 1.2), count: h.past.length, ring, hit: hits(h.past) }) : null;
+    h.past.length ? add({ id: pastId(h.id), kind: "past", label: t("지난 메모리"), anchor: h.id, r: hubR(h.past.length, 4, 1.2), count: h.past.length, ring, hit: hits(h.past) }) : null;
   const addTopic = (t: Topic, ring: number, anchor?: string) =>
     add({ id: `t:${t.key}`, kind: "topic", label: t.label, anchor, r: hubR(t.mems.length, 3, 1.25), count: t.mems.length, ring, hit: !match || (!!q && t.label.toLowerCase().includes(q)) || hits(t.mems) });
   const addMem = (m: Memory, ring: number, anchor?: string) =>
@@ -533,7 +533,7 @@ export function buildGraph(model: Model, sel: string, match?: (m: Memory) => boo
     const h = model.homes.get(topicsSel[1]);
     if (h) {
       addHome(h, 1);
-      const hub = add({ id: sel, kind: "topics", label: "주제", anchor: h.id, r: 7, ring: 0, count: 0 });
+      const hub = add({ id: sel, kind: "topics", label: t("주제"), anchor: h.id, r: 7, ring: 0, count: 0 });
       edge(h.id, hub.id, "own");
       for (const t of model.topics.values()) {
         const here = t.mems.filter((m) => h.live.includes(m));
