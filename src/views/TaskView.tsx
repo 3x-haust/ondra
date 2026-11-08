@@ -2,7 +2,7 @@
 import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
-import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
@@ -12,7 +12,7 @@ import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/
 import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
-import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
+import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
@@ -135,22 +135,73 @@ function Todos(props: { t: Task }) {
 /** Said while it worked: these go in, in order, when the work is done. Like
  *  Codex: one quiet line each, actions on hover (send now, edit, remove). */
 function Queued(props: { t: Task }) {
+  // a queued message is changed where it is: it keeps its place in line
+  const [editing, setEditing] = createSignal<{ id: string; text: string } | null>(null);
+  const save = () => {
+    const e = editing();
+    if (!e) return;
+    setEditing(null);
+    if (props.t.queue?.some((q) => q.id === e.id)) editQueued(props.t.id, e.id, e.text);
+  };
+  // it went in while being changed: the change goes to the composer instead of being lost
+  createEffect(() => {
+    const e = untrack(editing);
+    if (e && !props.t.queue?.some((q) => q.id === e.id)) (setEditing(null), setDraft(e.text));
+  });
   return (
     <div class="queued">
       <For each={props.t.queue}>
         {(q) => (
-          <div class="queued-row">
-            <Icon name="handoff" size={13} />
-            <span class="queued-text" title={q.text}>{q.text}</span>
-            <div class="queued-acts">
-              <button class="queued-steer" title="기다리지 않고 지금 보내요" onClick={() => steerQueued(props.t.id, q.id)}>
-                <Icon name="send" size={12} />
-                지금 보내기
-              </button>
-              <button class="icon-btn sm" title="고치기" onClick={() => (dropQueued(props.t.id, q.id), setDraft(q.text))}><Icon name="pencil" size={13} /></button>
-              <button class="icon-btn sm" title="빼기" onClick={() => dropQueued(props.t.id, q.id)}><Icon name="trash" size={13} /></button>
+          <Show
+            when={editing()?.id === q.id}
+            fallback={
+              <div class="queued-row">
+                <Icon name="handoff" size={13} />
+                <span class="queued-text" title={q.text} onDblClick={() => setEditing({ id: q.id, text: q.text })}>{q.text}</span>
+                <div class="queued-acts">
+                  <button class="queued-steer" title="기다리지 않고 지금 보내요" onClick={() => steerQueued(props.t.id, q.id)}>
+                    <Icon name="send" size={12} />
+                    지금 보내기
+                  </button>
+                  <button class="icon-btn sm" title="고치기" onClick={() => setEditing({ id: q.id, text: q.text })}><Icon name="pencil" size={13} /></button>
+                  <button class="icon-btn sm" title="빼기" onClick={() => dropQueued(props.t.id, q.id)}><Icon name="trash" size={13} /></button>
+                </div>
+              </div>
+            }
+          >
+            <div class="queued-row editing">
+              <Icon name="pencil" size={13} />
+              <textarea
+                class="queued-edit"
+                rows={1}
+                value={editing()!.text}
+                ref={(el) =>
+                  queueMicrotask(() => {
+                    el.focus();
+                    el.setSelectionRange(el.value.length, el.value.length);
+                    el.style.height = "auto";
+                    el.style.height = `${el.scrollHeight}px`;
+                  })
+                }
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  setEditing({ id: q.id, text: el.value });
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.isComposing) return;
+                  if (e.key === "Enter" && !e.shiftKey) (e.preventDefault(), save());
+                  else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setEditing(null));
+                }}
+                onBlur={save}
+              />
+              <div class="queued-acts on">
+                <button class="icon-btn sm" title="저장 (⏎)" onMouseDown={(e) => e.preventDefault()} onClick={save}><Icon name="check" size={13} /></button>
+                <button class="icon-btn sm" title="취소 (esc)" onMouseDown={(e) => e.preventDefault()} onClick={() => setEditing(null)}><Icon name="x" size={13} /></button>
+              </div>
             </div>
-          </div>
+          </Show>
         )}
       </For>
     </div>
