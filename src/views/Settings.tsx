@@ -1,11 +1,12 @@
 // Settings: general, accounts, import from other tools, skills, tools.
+import { accountName } from "../ui/AccountPicker";
 import { modelsOf } from "../engine/modelList";
 import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { Account, SpaceId } from "../state/types";
-import { emails, loadEmail } from "../state/limits";
+import { loadEmail } from "../state/limits";
 import { EFFORTS, prettyModel } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
@@ -404,9 +405,6 @@ const ownLabel = (a: Account) => {
   const made = ["기본", "계정", ...state.spaces.map((s) => s.label)].flatMap((l) => [l, t(l)]);
   return a.label && !made.some((l) => a.label === l || a.label.startsWith(`${l} `)) ? a.label : "";
 };
-// TODO(merge): the shell group exports accountName() from ui/AccountPicker; use that one
-/** an account as people know it: provider + email, or the name they gave it */
-const accountName = (a: Account) => ownLabel(a) || [servicesOf(a).join(" · "), emails[a.id]].filter(Boolean).join(" · ") || t(a.label);
 /** signed in = the account has a provider login (the same test the account chip uses) */
 const signedIn = (a: Account) => a.providers.length > 0;
 

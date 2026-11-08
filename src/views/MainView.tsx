@@ -1,4 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
+import { nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { keepBottom } from "../ui/stick";
 import { DecisionCard } from "../ui/DecisionCard";
@@ -601,7 +602,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const counts = () => ORDER.map((st) => [st, listed().filter((t) => t.status === st).length] as const).filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
   const doing = (t: Task) => {
-    const s = (t.status === "waiting" ? tr(t.now ?? "") : t.intent || tr(t.now ?? "")).trim();
+    const s = (t.status === "waiting" ? nowText(t.now) : t.intent || nowText(t.now)).trim();
     return s && s !== t.title ? s : "";
   };
   const working = () => listed().filter((t) => t.status === "running");
@@ -618,7 +619,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   const stepNow = (r: Req) => {
     const t = focus(r);
     if (!t) return "";
-    const s = (t.status === "waiting" ? tr(t.now ?? "") : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
+    const s = (t.status === "waiting" ? nowText(t.now) : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "";
     return s.trim();
   };
   /** a request's job to look at: the one that needs you, else the one working, else the last one */

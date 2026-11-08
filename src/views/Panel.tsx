@@ -1,6 +1,7 @@
 // Right panel of a task: overview (now, plan, sessions, details), changes
 // (git diff of its folder), terminal (every command it ran, live, plus a shell
 // of your own in the same folder), and its browser, live.
+import { nowText } from "../engine/describe";
 import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
@@ -176,7 +177,7 @@ function Overview(props: { t: Task }) {
     <div class="pane">
       <div class="now-box">
         <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
-        <div class="now-text">{t().status === "done" ? t().summary || tr(t().now) : t().status === "running" ? tr(t().now) : tr(statusLabel[t().status])}</div>
+        <div class="now-text">{t().status === "done" ? t().summary || nowText(t().now) : t().status === "running" ? nowText(t().now) : tr(statusLabel[t().status])}</div>
       </div>
       <Show when={t().plan.length}>
         <div>
@@ -206,7 +207,7 @@ function Overview(props: { t: Task }) {
               {(l, i) => (
                 <div class="leg" classList={{ live: !l.endedAt && t().status === "running" }}>
                   <span class="leg-n">{i() + 1}</span>
-                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? tr(t().now) : "—"}</span>
+                  <span class="leg-text">{l.handoff ? l.handoff.did[l.handoff.did.length - 1] ?? l.handoff.next : i() === t().legs.length - 1 ? nowText(t().now) : "—"}</span>
                   {/* how long each ran (the running one: so far); when it began on hover */}
                   <span class="leg-time" title={ago(l.startedAt)}>
                     {!l.endedAt && t().status === "running" && i() === t().legs.length - 1

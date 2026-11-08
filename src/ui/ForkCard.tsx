@@ -1,5 +1,6 @@
 // A fork (or subagent) as a live card: state, what it is doing, plan
 // progress, its subagents. Used in the main conversation and inside forks.
+import { nowText } from "../engine/describe";
 import { For, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import type { Task } from "../state/types";
@@ -48,7 +49,7 @@ export function line(t: Task): string {
   if (t.status === "waiting") return state.decisions.find((d) => d.taskId === t.id)?.question ?? tr("응답 대기 중");
   if (t.status === "queued") return tr("대기 중");
   if (t.status === "paused") return tr("일시정지");
-  return plain(tr(t.now ?? "")) || tr("시작하는 중");
+  return plain(nowText(t.now)) || tr("시작하는 중");
 }
 
 export function ForkCard(props: { id: string; compact?: boolean }) {
