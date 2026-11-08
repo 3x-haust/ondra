@@ -81,7 +81,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
       <Match when={w().state === "discarded"}>
         <div class="bc quiet">
           <DiscardGlyph />
-          <span>{tr("변경을 버렸어요")}</span>
+          <span>{tr("변경 버림")}</span>
         </div>
       </Match>
     </Switch>
@@ -202,7 +202,7 @@ function Overview(props: { t: Task }) {
         <Match when={discarded(t())}>
           <div class="now-box">
             <div class="pane-title">{tr("결과")}</div>
-            <div class="now-text">{tr("변경을 버렸어요")}</div>
+            <div class="now-text">{tr("변경 버림")}</div>
             <Show when={t().summary}><div class="now-sub">{t().summary}</div></Show>
           </div>
         </Match>

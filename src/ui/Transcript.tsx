@@ -566,12 +566,6 @@ function JobEndLine(props: { t: Task }) {
   );
 }
 
-/** The thread draws its own end line now, right after the answer and before the notes under it;
- *  kept so a view that still places one doesn't show it twice. */
-export function JobEnd(_props: { t: Task }) {
-  return null;
-}
-
 export function Transcript(props: { task: Task; agentId: string; footer?: JSX.Element }) {
   let scroller!: HTMLDivElement;
   // a failed task's error is said once, by the card under the thread with 다시 시도: its last
