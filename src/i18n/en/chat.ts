@@ -75,7 +75,7 @@ export default {
   "모델 찾기": "Find a model",
 
   // usage strip under the input
-  "사용|used": "used",
+  "{w} {n}% 사용": "{w} {n}% used",
   "크레딧 {n}|left": "{n} credit|{n} credits",
 
   // quick question and side chat
@@ -140,7 +140,10 @@ export default {
   "다음: {next}": "Next: {next}",
   "맨 아래로": "Jump to bottom",
   "다음 차례": "Up next",
-  "앞에 {n}개 대기": "{n} ahead",
+  "앞에 작업 {n}개": "{n} task ahead|{n} tasks ahead",
+  "이전 시도 실패 · {text}": "Earlier attempt failed · {text}",
+  "계정 추가": "Add account",
+  "작업 없음": "No tasks",
   "지금 시작": "Start now",
 
   // fork card

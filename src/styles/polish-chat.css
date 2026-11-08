@@ -1123,16 +1123,44 @@
   margin-left: var(--s-12);
   white-space: nowrap;
 }
-/* nothing said yet: the starts sit just above the input */
-.main-view .proj-empty .thread-inner {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: 100%;
-}
+/* a project with nothing said yet: its tasks from the top, then its questions and starts */
 .main-view .proj-empty .hero-picks {
   margin-top: 0;
   padding: 0;
+}
+.main-view .proj-empty .hero-picks:empty {
+  display: none;
+}
+/* its tasks: the sidebar's rows (glyph, title, state or time), a click opens one */
+.proj-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 calc(-1 * var(--s-10));
+}
+.proj-tasks .sb-meta {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.proj-tasks .tone-ask .sb-meta {
+  color: var(--warn-ink);
+  font-weight: var(--fw-medium);
+}
+.proj-tasks .tone-bad .sb-meta {
+  color: var(--bad-ink);
+  font-weight: var(--fw-medium);
+}
+.proj-tasks .tone-review .sb-meta {
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}
+.proj-tasks-empty {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
 }
 
 /* the sign-in notice over the docked input: one compact row */
@@ -1154,4 +1182,28 @@
 /* a shell cut off when the run ended reads quiet, not as a pass */
 .tool-out .exit.cut {
   color: var(--ink-3);
+}
+
+/* an error from an attempt that was tried again: history, said quietly on one line */
+.thread .note.err-past {
+  min-width: 0;
+}
+.thread .note.err-past > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* system notes in a row read as one short list */
+.thread-inner > .note + .note {
+  margin-top: calc(var(--s-12) - var(--s-24));
+}
+/* plan windows read as one phrase: "5시간 41% 사용 · 주간 100% 사용 · 크레딧 12.5" */
+.composer-status .status-line > .st-lim + .st-lim {
+  margin-left: calc(var(--s-6) - var(--s-12));
+}
+.composer-status .status-line > .st-lim + .st-lim::before {
+  content: "·" !important;
+  margin-right: var(--s-6);
+  color: var(--ink-4);
 }

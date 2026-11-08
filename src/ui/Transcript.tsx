@@ -12,7 +12,7 @@ import { editTurn, startTask } from "../engine/tasks";
 import { describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView } from "./Blocks";
-import { withDiff } from "../state/progress";
+import { discarded, withDiff } from "../state/progress";
 import { long, now, short, statusLabel } from "./bits";
 import { Icon } from "./Icon";
 import { UsageLine } from "./Usage";
@@ -70,6 +70,12 @@ function chunkLinks(blocks: Block[]): (Block | Block[])[] {
   }
   return out;
 }
+
+/** the index of the last entry that matches, or -1 */
+const lastAt = (es: Entry[], ok: (e: Entry) => boolean) => {
+  for (let i = es.length - 1; i >= 0; i--) if (ok(es[i])) return i;
+  return -1;
+};
 
 /** A call left open on a task that isn't working (paused, failed, stopped) isn't running: it shows as stopped. */
 const halted = (t: Task) => t.status !== "running" && t.status !== "waiting";
@@ -146,7 +152,14 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
   /** pictures never fold away: errors and diagrams stay in view after the turn */
   const stays = (e: Entry) => e.kind === "error" || (e.kind === "block" && VISUAL.has(e.block.type));
   const work = () => body().slice(0, tailStart()).filter((e) => !stays(e));
-  const rest = () => [...body().slice(0, tailStart()).filter(stays), ...body().slice(tailStart())];
+  /** notes at the very end (merged, remembered) come after the answer's actions, not between the two */
+  const notesFrom = createMemo(() => {
+    let i = body().length;
+    while (i > tailStart() && body()[i - 1].kind === "note") i--;
+    return i;
+  });
+  const rest = () => [...body().slice(0, tailStart()).filter(stays), ...body().slice(tailStart(), notesFrom())];
+  const after = () => body().slice(notesFrom());
   const answer = () => {
     const r = rest();
     for (let i = r.length - 1; i >= 0; i--) {
@@ -217,6 +230,9 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
             </Show>
             <Show when={props.turn.usage}>{(u) => <UsageLine u={u()} />}</Show>
           </div>
+        </Show>
+        <Show when={after().length}>
+          <Items entries={after()} task={props.task} live={false} />
         </Show>
       </Show>
     </>
@@ -432,10 +448,21 @@ function EntryView(props: { e: Entry; task: Task }) {
       </Match>
       <Match when={e.kind === "error" && e}>
         {(x) => (
-          <div class="err-line">
-            <Icon name="alert" size={14} />
-            <span>{x().text}</span>
-          </div>
+          <Show
+            when={props.task.status === "failed" && props.task.entries[lastAt(props.task.entries, (y) => y.kind === "error")]?.id === x().id}
+            fallback={
+              // tried again since: what went wrong then is history, not the state now
+              <div class="note err-past" title={x().text}>
+                <Icon name="alert" size={13} />
+                <span>{tr("이전 시도 실패 · {text}", { text: x().text })}</span>
+              </div>
+            }
+          >
+            <div class="err-line">
+              <Icon name="alert" size={14} />
+              <span>{x().text}</span>
+            </div>
+          </Show>
         )}
       </Match>
       <Match when={e.kind === "spawn" && e}>
@@ -491,8 +518,13 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   let scroller!: HTMLDivElement;
   // a failed task's error is said once, by the card under the thread with 다시 시도: its last
   // error line here would only repeat it
+  // the same for a paused one: the bar above the input says 일시정지 with 다시 시작, so its note goes
   const shownEntries = createMemo(() => {
     const es = props.task.entries;
+    if (props.task.status === "paused" && !discarded(props.task)) {
+      const at = lastAt(es, (e) => e.kind === "note" && e.text === "일시정지");
+      return at < 0 ? es : [...es.slice(0, at), ...es.slice(at + 1)];
+    }
     if (props.task.status !== "failed" || !props.task.error) return es;
     const at = es.map((e) => e.kind).lastIndexOf("error");
     const e = es[at];
@@ -545,7 +577,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         <Show when={props.task.status === "queued"}>
           <div class="live-line muted queued-line">
             <Icon name="clock" size={14} />
-            <span>{queuePos() <= 1 ? tr("다음 차례") : tr("앞에 {n}개 대기", { n: queuePos() - 1 })}</span>
+            <span>{queuePos() <= 1 ? tr("다음 차례") : tr("앞에 작업 {n}개", { n: queuePos() - 1 })}</span>
             <span class="spacer" />
             <button class="btn sm" onClick={() => void startTask(props.task.id)}>{tr("지금 시작")}</button>
           </div>
