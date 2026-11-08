@@ -24,6 +24,8 @@ export type Bucket = "you" | "failed" | "review" | "work" | "done";
 /** What a job needs from you. A subagent waiting on you pulls its job up.
  *  Failed is its own bucket: never counted or shown as 응답 필요. */
 export function bucket(t: Task): Bucket {
+  // its changes were thrown away: nothing left to do or look at
+  if (discarded(t)) return "done";
   const kids = state.tasks.filter((k) => k.parentId === t.id);
   if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   // a subagent that failed under a job that has finished anyway needs nothing from you
@@ -62,12 +64,13 @@ const openRoot = () => {
 /** A job's line ends when it was merged, thrown away, or had nothing to merge. */
 /** how long a finished job stays in the list */
 const DONE_FOR = 10 * 60_000;
-const ended = (t: Task) => t.status === "done" && t.worktree?.state !== "open";
+const ended = (t: Task) => (t.status === "done" && t.worktree?.state !== "open") || discarded(t);
 
 /** The status glyph's shape (st-icon classes): what the row needs, not only its own status.
  *  One look everywhere a task is listed: sidebar, ⌘K, the 내 차례 popover. */
 export function glyphOf(x: Task): "failed" | "waiting" | "inreview" | "running" | "paused" | "queued" | "done" {
   const b = bucket(x);
+  if (discarded(x)) return "done";
   if (x.status === "failed") return "failed";
   if (b === "you") return "waiting";
   if (b === "review") return "inreview";
@@ -90,8 +93,8 @@ export function Glyph(props: { t: Task; class?: string }) {
  *  (응답 필요, 검토, 실패 ...), else how long it has run or when it finished. Sidebar and ⌘K. */
 export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "ask" | "review" | "idle" | "live" | "done" } {
   const b = bucket(x);
-  if (x.status === "failed") return { text: tr("실패"), tone: "bad" };
   if (discarded(x)) return { text: tr("버림"), tone: "idle" };
+  if (x.status === "failed") return { text: tr("실패"), tone: "bad" };
   if (x.status === "waiting" || (b === "you" && !kid)) return { text: tr("응답 필요"), tone: "ask" };
   if (b === "review") return { text: tr("검토"), tone: "review" };
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
@@ -331,16 +334,21 @@ function Head(props: { id: string; label: string; count?: number; on?: boolean; 
   );
 }
 
-/** finished tasks folded away under their group ("완료 3개"); the open one shows in place, so its fold opens */
+/** finished tasks folded away under their group ("완료 3개", not counting discarded ones, which sit
+ *  in the same fold and read 버림); the open one shows in place, so its fold opens */
 const [doneOpen, setDoneOpen] = createSignal<Record<string, boolean>>({});
 function DoneFold(props: { id: string; tasks: Task[] }) {
   const has = () => props.tasks.some((t) => t.id === openRoot());
   const open = () => doneOpen()[props.id] ?? has();
+  const label = () => {
+    const n = props.tasks.filter((t) => !discarded(t)).length;
+    return n ? tr("완료 {n}개", { n }) : tr("버림 {n}개", { n: props.tasks.length });
+  };
   return (
     <Show when={props.tasks.length}>
       <button class="sb-older" classList={{ open: open() }} aria-expanded={open()} onClick={() => setDoneOpen((m) => ({ ...m, [props.id]: !open() }))}>
         <Icon name="chevron" size={12} class="sb-older-chev" />
-        {tr("완료 {n}개", { n: props.tasks.length })}
+        {label()}
       </button>
       <Fold open={open()}>
         <div class="sb-done-list">

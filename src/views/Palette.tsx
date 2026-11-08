@@ -5,6 +5,8 @@ import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { setState, spaceById, state, taskById } from "../state/store";
 import { Glyph, stateMeta } from "./Sidebar";
+import { discarded } from "../state/progress";
+import type { Task } from "../state/types";
 import { openTask, paletteMode, setPaletteMode, setPaletteOpen, setView } from "../state/ui";
 import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
 import { throwThought } from "../engine/captain";
@@ -29,7 +31,8 @@ interface Item {
   enabled?: () => boolean;
 }
 
-const rank = (t: { status: string }) => ({ waiting: 0, failed: 0, running: 1, queued: 2, paused: 2, done: 3 } as Record<string, number>)[t.status] ?? 2;
+// a discarded task sits with the finished ones, whatever it was doing when it was thrown away
+const rank = (t: Task) => (discarded(t) ? 3 : ({ waiting: 0, failed: 0, running: 1, queued: 2, paused: 2, done: 3 } as Record<string, number>)[t.status] ?? 2);
 
 export function Palette(props: { commands: ShortcutCommand[] }) {
   const [q, setQ] = createSignal("");
