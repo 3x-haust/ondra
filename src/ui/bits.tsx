@@ -1,6 +1,7 @@
 // Small shared pieces: status dot and labels, time formatting, a ticking clock.
-import { createSignal } from "solid-js";
-import type { Status } from "../state/types";
+import { createSignal, Show } from "solid-js";
+import type { Status, Task } from "../state/types";
+import { openUrl } from "../lib/native";
 
 export const statusLabel: Record<Status, string> = {
   running: "진행 중",
@@ -15,6 +16,24 @@ export const priorityLabel = ["긴급", "높음", "보통", "낮음"] as const;
 
 export function Dot(props: { status: Status }) {
   return <span class={`dot ${props.status}`} aria-label={statusLabel[props.status]} />;
+}
+
+/** "#12" for a job started from a GitHub issue; opens the issue */
+export function IssueTag(props: { t: Task }) {
+  return (
+    <Show when={props.t.issue}>
+      {(i) => (
+        <span
+          class="issue-tag"
+          role="link"
+          title={`GitHub에서 #${i().n} 열기`}
+          onClick={(e) => (e.stopPropagation(), void openUrl(i().url))}
+        >
+          #{i().n}
+        </span>
+      )}
+    </Show>
+  );
 }
 
 const [tick, setTick] = createSignal(Date.now());

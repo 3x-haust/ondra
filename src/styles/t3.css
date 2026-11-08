@@ -9364,3 +9364,16 @@ select.select.dev-space {
 .code-row.hit {
   background: color-mix(in oklab, var(--warn) 16%, transparent);
 }
+
+/* #12 on jobs started from a GitHub issue */
+.issue-tag {
+  flex: none;
+  font: 500 11px/18px var(--mono);
+  color: var(--ink-3);
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.issue-tag:hover { color: var(--ink); background: var(--active, var(--hover)); }

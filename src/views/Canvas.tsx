@@ -14,7 +14,7 @@ import { decide, tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
 import { describeCommand } from "../engine/describe";
 import { costDetail, costShort, jobCost } from "../ui/cost";
-import { compact, now } from "../ui/bits";
+import { compact, IssueTag, now } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
@@ -420,6 +420,7 @@ function JobCard(props: { n: Node }) {
       <div class="cv-head">
         <Glyph t={t()} />
         <span class="cv-title">{t().title}</span>
+        <IssueTag t={t()} />
       </div>
       <Live t={t()} />
       <StatusRow t={t()} />
