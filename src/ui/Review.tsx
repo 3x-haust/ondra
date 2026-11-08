@@ -2,6 +2,7 @@
 // Diffs are parsed into files → hunks → lines with old/new line numbers, shown
 // as collapsible cards with sticky headers. Files is a searchable tree; a file
 // opens in a numbered viewer and can flip to its diff.
+import { confirmDiscard } from "./taskMenu";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
@@ -12,7 +13,7 @@ import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
-import { rememberDiff } from "../state/progress";
+import { discarded, rememberDiff } from "../state/progress";
 
 // ───────────── diff model ─────────────
 export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
@@ -285,6 +286,8 @@ export function ChangesPane(props: { t: Task; top?: any }) {
   return (
     <div class="review">
       {props.top}
+      {/* thrown away: its folder is the person's own checkout now, whose changes aren't the task's */}
+      <Show when={!discarded(props.t)}>
       <Show when={data()} fallback={<div class="pane-empty" />}>
         {(d) => (
           <Show when={d().isRepo} fallback={<WrittenFiles t={props.t} />}>
@@ -311,6 +314,7 @@ export function ChangesPane(props: { t: Task; top?: any }) {
             </Show>
           </Show>
         )}
+      </Show>
       </Show>
     </div>
   );
@@ -719,3 +723,16 @@ export function FilesPane(props: { t: Task }) {
 }
 
 export type { GitChanges };
+
+// ───────────── throwing a task's changes away ─────────────
+/** 버리기 asks once, with the same words everywhere (review bar, changes tab, ⋯ menu, /discard). */
+export const askDiscard = (t: Pick<Task, "id" | "title">) => confirmDiscard(t.id);
+
+/** A discarded task's mark: the done check, muted. */
+export function DiscardGlyph(props: { class?: string }) {
+  return (
+    <span class={`sb-glyph st-icon sm done discarded ${props.class ?? ""}`} aria-hidden="true">
+      <Icon name="check" size={9} stroke={2.5} />
+    </span>
+  );
+}

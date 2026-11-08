@@ -5,7 +5,7 @@ import { skillPaths } from "../engine/skillPick";
 import { mainTools, restartIfStale } from "../engine/captain";
 import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
-import { accountEnv, workerTools } from "../engine/tasks";
+import { accountEnv, offTools, workerTools } from "../engine/tasks";
 import { CAPTAIN_SYSTEM, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
 import { applying, inSpace, isLive, recall } from "../engine/memory";
 import { modelFor } from "../engine/models";
@@ -104,7 +104,7 @@ export interface Loaded {
   recalled: Memory[];
   recalledWhere: string;
   /** the skills agents can load, as Settings lists them (filled by the sheet) */
-  skills?: { name: string; description: string; path: string }[];
+  skills?: { name: string; description: string; path: string; own?: boolean }[];
 }
 
 const firstLine = (t: string) => t.split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "").trim() ?? "";
@@ -127,6 +127,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
     t.thinking || "high",
     ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
     ...workerTools(),
+    ...offTools(),
   ];
   const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t.space))]];
   return { cwd: expand(t.cwd || homeDir(t) || "~"), args, env };

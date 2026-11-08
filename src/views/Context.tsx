@@ -1,6 +1,6 @@
 // What the model actually receives for a job or a chat: a bar of how the
 // context window fills up, then each part to open and read.
-import { enabledTools } from "../engine/agentTools";
+import { enabledToolTokens, enabledTools, skillLine } from "../engine/agentTools";
 import { createMemo, createResource, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
@@ -17,7 +17,7 @@ import { fsRead, skillList } from "../lib/native";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { type CtxMessage, estimate, type Loaded, loadChat, loadJob } from "./contextData";
-import { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
+import { isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
 import { parseSkill } from "./SkillsTab";
 import { t } from "../i18n";
 
@@ -39,6 +39,11 @@ const ENGINE_SECTION: Record<string, string> = {
   cwd: "작업 폴더",
 };
 
+/** where a tool comes from, in the app's language ("Ondra 확장 · device" → "Ondra extension · device") */
+const sourceText = (label: string) => {
+  const [head, ...rest] = label.split(" · ");
+  return [t(`${head}|one`), ...rest].join(" · ");
+};
 const pct = (n: number, of: number) => (of ? Math.min(100, (n / of) * 100) : 0);
 /** whole percents, as everywhere else: 10%, <1% */
 const share = (n: number, of: number) => {
@@ -61,17 +66,30 @@ export function apportion(parts: number[], total: number): number[] {
   return out;
 }
 
-/** A message's opening as plain words: no markdown marks, one line. */
+/** A message's opening as plain words: no markdown marks, one line. The preview may already be
+ *  flattened to one line, so a quote, heading or list mark is dropped mid-line too. */
 export function plainPreview(text: string): string {
   return text
     .replace(/```[\w-]*\n?/g, " ")
+    .replace(/<\/?[a-z][^>]*>/gi, " ")
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+\.\s+)/gm, "")
+    .replace(/^\s{0,3}(?:>\s?)+/gm, "")
+    .replace(/^\s{0,3}(#{1,6}\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/gm, "")
+    .replace(/^\s*([-*_=]\s*){3,}$/gm, " ")
+    .replace(/^\s*\|?(\s*:?-{3,}:?\s*\|)+\s*:?-*:?\s*$/gm, " ")
+    .replace(/^\s*\|(.+)\|\s*$/gm, (_m, x: string) => x.split("|").map((c) => c.trim()).filter(Boolean).join(" · "))
+    // marks left inside a line that was flattened: " > ", " ## ", " - "
+    .replace(/(^|\s)(?:>\s?)+(?=\S)/g, "$1")
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/(^|\s)[-*+]\s+\[[ xX]\]\s+/g, "$1")
+    .replace(/(^|[.!?:。]\s+)[-*+]\s+(?=\S)/g, "$1")
     .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/~~(.+?)~~/g, "$1")
     .replace(/(^|[^\w*])[*_]([^*_\s][^*_]*?)[*_](?=[^\w*]|$)/g, "$1$2")
     .replace(/`([^`]*)`/g, "$1")
-    .replace(/\*\*|`/g, "")
+    .replace(/\s\|\s/g, " · ")
+    .replace(/\*\*|`|^\||\|$/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -80,12 +98,12 @@ export function plainPreview(text: string): string {
 /**
  * The skills agents can load, as Settings › 스킬 lists them: the bundled ones and the user's.
  */
-async function settingsSkills(): Promise<{ name: string; description: string; path: string }[]> {
+async function settingsSkills(): Promise<{ name: string; description: string; path: string; own: boolean }[]> {
   const files = await skillList().catch(() => []);
   const bundled = await Promise.all(
-    files.map(async (f) => ({ name: f.name, path: f.path, description: parseSkill((await fsRead(f.path).catch(() => ({ text: "" }))).text ?? "").description ?? "" })),
+    files.map(async (f) => ({ name: f.name, path: f.path, own: false, description: parseSkill((await fsRead(f.path).catch(() => ({ text: "" }))).text ?? "").description ?? "" })),
   );
-  return [...bundled, ...state.skills.filter((s) => s.enabled).map((s) => ({ name: s.name, path: s.path, description: s.description }))];
+  return [...bundled, ...state.skills.filter((s) => s.enabled).map((s) => ({ name: s.name, path: s.path, description: s.description, own: true }))];
 }
 
 /** A part that opens to show what is inside; an empty one is a plain row. */
@@ -160,11 +178,11 @@ const roleOf = (m: CtxMessage) =>
   m.role === "toolResult" ? t(RESULT[m.toolName ?? ""] ?? "도구 결과") : ROLE[m.role] ? t(ROLE[m.role]) : t("기타");
 
 function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; onOpen: (m: Memory) => void }) {
-  // each message's size is an estimate: scaled with the rest of the sheet so the rows add up to 대화
-  const scale = () => {
-    const raw = props.list.reduce((n, m) => n + m.tokens, 0);
-    return raw ? props.total / raw : 1;
-  };
+  // each message's size is an estimate. When the model counted more, the rest is a row of its
+  // own (나머지); when it counted less, the rows shrink to fit. Either way they add up to 대화.
+  const raw = () => props.list.reduce((n, m) => n + m.tokens, 0);
+  const scale = () => (raw() > props.total ? props.total / raw() : 1);
+  const rest = () => Math.max(0, props.total - raw());
   const groups = createMemo(() => {
     const g = new Map<string, { label: string; n: number; tokens: number }>();
     for (const m of props.list) {
@@ -175,6 +193,7 @@ function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; on
       g.set(label, x);
     }
     const list = [...g.values()].sort((a, b) => b.tokens - a.tokens);
+    if (raw() <= props.total) return list;
     const sized = apportion(list.map((x) => x.tokens), props.total);
     return list.map((x, i) => ({ ...x, tokens: sized[i] }));
   });
@@ -216,6 +235,14 @@ function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; on
             </div>
           )}
         </For>
+        <Show when={rest() > 0}>
+          <div class="cx-talk-row cx-talk-rest" title={t("위 메시지에 없는 토큰")}>
+            <span class="cx-talk-label">{t("나머지|context")}</span>
+            <span class="cx-talk-n" />
+            <span class="cx-talk-track"><i style={{ width: `${pct(rest(), props.total)}%` }} /></span>
+            <span class="cx-talk-size">{tokens(rest())}</span>
+          </div>
+        </Show>
       </div>
       <Show when={props.list.length}>
         <div class="cx-sub-title">{t("가장 큰 항목")}</div>
@@ -249,7 +276,8 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
       ondra: sec("addendum"),
       files: sec("project_context"),
       skills: sec("skills"),
-      tools: activeTools().reduce((n, t) => n + t.schemaTokens, 0),
+      // the same figure as Settings › 도구
+      tools: enabledToolTokens(c()),
       talk: c().messages.reduce((n, m) => n + m.tokens, 0),
     };
     // an extension replaced the whole prompt: count it as the engine's
@@ -258,17 +286,19 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
   });
   // the input's strip and this sheet read one number: what the engine last reported for this conversation
   const real = () => props.known?.tokens ?? c().contextUsage?.tokens ?? null;
-  // the parts are estimates; when the model's own count is known, the total is that number
-  // (the same one the status line shows) and each part keeps its share of it
+  // when the model's own count is known, the total is that number (the one the status line
+  // shows). The prompt's parts are what was sent, so they keep their own sizes (each the sum of
+  // its rows, the tools as Settings counts them) and 대화 is the rest of the count
   const segs = createMemo(() => {
     const s = counted();
-    const sum = Object.values(s).reduce((a, b) => a + b, 0);
     const r = real();
-    if (!r || !sum) return s;
-    // whole numbers that add up to the total exactly
-    const keys = Object.keys(s) as Seg[];
-    const sized = apportion(keys.map((key) => s[key]), r);
-    return Object.fromEntries(keys.map((key, i) => [key, sized[i]])) as Record<Seg, number>;
+    if (!r) return s;
+    const fixed = s.engine + s.ondra + s.files + s.skills + s.tools;
+    if (r >= fixed) return { ...s, talk: r - fixed };
+    // the model counted less than the estimates: they shrink to fit, the tools keep their number
+    const keys: Seg[] = ["engine", "ondra", "files", "skills"];
+    const sized = apportion(keys.map((key) => s[key]), Math.max(0, r - s.tools));
+    return { ...(Object.fromEntries(keys.map((key, i) => [key, sized[i]])) as Record<Seg, number>), tools: Math.min(s.tools, r), talk: 0 };
   });
   const total = () => real() || Object.values(segs()).reduce((a, b) => a + b, 0);
   const win = () => props.known?.window || c().contextUsage?.contextWindow || 0;
@@ -356,8 +386,9 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                 {(s) => (
                   <div class="cx-li">
                     <b>{s.name}</b>
-                    <span title={s.description}>{firstSentence(s.description, 90)}</span>
-                    <em>{skillSource(s.path)}</em>
+                    <span title={s.description}>{skillLine(s, s.own)}</span>
+                    {/* where it comes from, by name (기본, 내 스킬); never a folder path */}
+                    <em>{/^[~/]/.test(skillSource(s.path)) ? "" : skillSource(s.path)}</em>
                     <small>{inPrompt(s.name) ? tokens(skillTokens(inPrompt(s.name)!)) : ""}</small>
                   </div>
                 )}
@@ -373,7 +404,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                 <div class="cx-li">
                   <b>{t.name}</b>
                   <span classList={{ en: !isKorean(t) }} title={t.description}>{toolLine(t)}</span>
-                  <em>{toolSource(t).label}</em>
+                  <em>{sourceText(toolSource(t).label)}</em>
                   <small>{tokens(t.schemaTokens)}</small>
                 </div>
               )}
@@ -409,7 +440,7 @@ function cardLine(b: Block): string {
 /** The sheet. `agent` is "t:<job id>" or "captain:<chat key>". */
 /** Without the engine (the preview build) the probe's sample talk stands in: show this conversation's own. */
 function ownTalk(agent: string): CtxMessage[] {
-  const m = (role: string, text: string, toolName?: string): CtxMessage => ({ role, tokens: estimate(text), preview: text.replace(/\s+/g, " ").slice(0, 160), toolName });
+  const m = (role: string, text: string, toolName?: string): CtxMessage => ({ role, tokens: estimate(text), preview: text.trim().slice(0, 200), toolName });
   if (agent.startsWith("t:")) {
     const x = taskById(agent.slice(2));
     if (!x) return [];

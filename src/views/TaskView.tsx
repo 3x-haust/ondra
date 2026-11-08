@@ -9,11 +9,14 @@ import { addMemory } from "../engine/memory";
 import { usesReverse } from "../engine/reverse";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
+import { sendSide } from "../engine/aside";
+import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
-import { planCount, taskDiff, workedMs } from "../state/progress";
-import { rawStats, closeWorktree, discardTask, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
+import { discarded, planCount, taskDiff, workedMs } from "../state/progress";
+import { askDiscard, DiscardGlyph } from "../ui/Review";
+import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -195,7 +198,7 @@ export function TaskView(props: { id: string }) {
         void loadArtifacts(task().id);
         const strips = () => {
           const out: JSX.Element[] = [];
-          if (task().status === "paused")
+          if (task().status === "paused" && !discarded(task()))
             out.push(
               <button class="strip" onClick={() => resumeTask(task().id)}>
                 <Icon name="pause" size={14} />
@@ -247,7 +250,7 @@ export function TaskView(props: { id: string }) {
                     </button>
                   </Show>
                 </span>
-                <button class="btn sm ghost" onClick={() => void discardTask(task().id)}>{tr("버리기")}</button>
+                <button class="btn sm ghost" onClick={() => askDiscard(task())}>{tr("버리기")}</button>
                 <button
                   class="btn sm primary"
                   disabled={merging()}
@@ -307,20 +310,27 @@ export function TaskView(props: { id: string }) {
               </Show>
               <IssueTag t={task()} />
             </nav>
-            <Show when={task().status === "done" && task().unverified?.length}>
+            <Show when={task().status === "done" && !discarded(task()) && task().unverified?.length}>
               <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
             </Show>
-            <Show when={task().status === "done" && task().worktree?.state !== "open"}>
+            {/* its changes were thrown away: 버림, the done check muted */}
+            <Show when={discarded(task())}>
+              <span class="status-chip discarded">
+                <DiscardGlyph />
+                {tr("버림")}
+              </span>
+            </Show>
+            <Show when={task().status === "done" && !discarded(task()) && task().worktree?.state !== "open"}>
               <span class="status-chip done">
                 <Icon name="check" size={12} />
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
                 <span class="faint">{ago(task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
-            <Show when={task().status !== "done"}>
+            <Show when={task().status !== "done" && !discarded(task())}>
               <span class={`status-chip ${task().status}`}>
                 {/* the same glyph as the task's row in the sidebar (실패: the red one) */}
                 <Show when={task().status === "running"} fallback={<Glyph t={task()} />}>
@@ -383,28 +393,34 @@ export function TaskView(props: { id: string }) {
                 />}
                   files={() => fsFiles(expand(task().cwd))}
                   commands={[
+                    // the same names as Main's list: verbs for what opens, then this task's own actions
                     btwCommand(() => `task:${task().id}`),
-                    drawCommand(() => task().id),
-                    { name: "remember", desc: homeDir(task()) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
+                    { name: "side", desc: tr("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (showTool("side"), a.trim() && void sendSide(task().space, a)) },
+                    { name: "flow", desc: tr("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => showTool("flow") },
+                    { name: "changes", desc: tr("변경 사항 열기"), keys: shortcutHint("changes"), icon: "diff", run: () => showTool("changes") },
+                    { name: "files", desc: tr("파일 열기|panel"), keys: shortcutHint("files"), icon: "file", run: () => showTool("files") },
+                    { name: "terminal", desc: tr("터미널 열기"), keys: shortcutHint("terminal"), icon: "shell", run: () => showTool("terminal") },
+                    { name: "browser", desc: tr("브라우저 열기"), keys: shortcutHint("browser"), icon: "globe", run: () => showTool("browser") },
                     // what the task's state allows, as in its ⋯ menu
                     ...(task().status === "running" || task().status === "waiting" ? [{ name: "pause", desc: tr("일시정지|action"), icon: "pause", run: () => stopTask(task().id) }] : []),
-                    ...(task().status === "paused" || task().status === "failed" ? [{ name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) }] : []),
+                    ...(task().status === "paused" ? [{ name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) }] : []),
+                    ...(task().status === "failed" ? [{ name: "retry", desc: tr("다시 시도"), icon: "play", run: () => resumeTask(task().id) }] : []),
                     ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
                     ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),
-                    { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
-                    { name: "changes", desc: tr("변경 사항"), icon: "diff", run: () => showTool("changes") },
-                    { name: "files", desc: tr("파일"), icon: "file", run: () => showTool("files") },
-                    { name: "terminal", desc: tr("터미널"), icon: "shell", run: () => showTool("terminal") },
-                    { name: "browser", desc: tr("브라우저"), icon: "globe", run: () => showTool("browser") },
                     ...(ready()
                       ? [
                           { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
-                          { name: "discard", desc: tr("버리기"), icon: "undo", run: () => void discardTask(task().id) },
+                          { name: "discard", desc: tr("버리기"), icon: "undo", run: () => askDiscard(task()) },
                         ]
                       : []),
+                    { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim())) },
+                    { ...drawCommand(() => task().id), desc: tr("작업 흐름 그림") },
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
                     { name: "edits", desc: tr("권한: {name}", { name: tr("편집 허용") }), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
                     { name: "full", desc: tr("권한: {name}", { name: tr("전체 권한") }), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
+                    { name: "remember", desc: task().project && projectById(task().project!, task().space) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
+                    { name: "memory", desc: tr("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
+                    { name: "settings", desc: tr("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
                     ...skillCommands(() => ({ task: task().id, space: task().space })),
                   ]}
                   placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
