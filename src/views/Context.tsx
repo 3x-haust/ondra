@@ -12,11 +12,12 @@ import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { type CtxMessage, type Loaded, loadChat, loadJob } from "./contextData";
 import { firstSentence, isKorean, skillSource, skillTokens, toolLine, toolSource } from "./Tools";
+import { t } from "../i18n";
 
 type Seg = "engine" | "ondra" | "files" | "skills" | "tools" | "talk";
 const SEG_LABEL: Record<Seg, string> = {
-  engine: "엔진 기본",
-  ondra: "Ondra 지시",
+  engine: "기본 프롬프트",
+  ondra: "Ondra 지침",
   files: "지시 파일",
   skills: "스킬",
   tools: "도구",
@@ -27,7 +28,7 @@ const ENGINE_SECTION: Record<string, string> = {
   preamble: "역할",
   tools: "도구 목록",
   rules: "기본 규칙",
-  docs: "엔진 문서 안내",
+  docs: "문서 안내",
   cwd: "작업 폴더",
 };
 
@@ -68,8 +69,8 @@ function MemoryList(props: { list: Memory[]; empty: string; onOpen: (m: Memory) 
       <div class="cx-mems">
         <For each={props.list}>
           {(m) => (
-            <button class="cx-mem" onClick={() => props.onOpen(m)} title="기억에서 열기">
-              <span class="cx-mem-kind">{kindLabel(kindOf(m))}</span>
+            <button class="cx-mem" onClick={() => props.onOpen(m)} title={t("메모리에서 열기")}>
+              <span class="cx-mem-kind">{t(kindLabel(kindOf(m)))}</span>
               <span class="cx-mem-text">{m.text}</span>
               <Icon name="arrow" size={12} class="cx-mem-go" />
             </button>
@@ -90,7 +91,7 @@ const ROLE: Record<string, string> = {
   custom: "알림",
   system: "시스템 변경",
 };
-const roleOf = (m: CtxMessage) => (m.role === "toolResult" && m.toolName ? `도구 결과 · ${m.toolName}` : ROLE[m.role] ?? m.role);
+const roleOf = (m: CtxMessage) => (m.role === "toolResult" && m.toolName ? `${t("도구 결과")} · ${m.toolName}` : ROLE[m.role] ? t(ROLE[m.role]) : m.role);
 
 function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?: number }) {
   const groups = createMemo(() => {
@@ -110,7 +111,7 @@ function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?:
       when={props.list.length}
       fallback={
         <p class="cx-empty">
-          {props.known ? tokens(props.known) : "없어요"}
+          {props.known ? tokens(props.known) : t("없음")}
         </p>
       }
     >
@@ -119,20 +120,20 @@ function Talk(props: { list: CtxMessage[]; total: number; live: boolean; known?:
           {(g) => (
             <div class="cx-talk-row">
               <span class="cx-talk-label">{g.label}</span>
-              <span class="cx-talk-n">{g.n}개</span>
+              <span class="cx-talk-n">{t("{n}개", { n: g.n })}</span>
               <span class="cx-talk-track"><i style={{ width: `${pct(g.tokens, props.total)}%` }} /></span>
               <span class="cx-talk-size">{tokens(g.tokens)}</span>
             </div>
           )}
         </For>
       </div>
-      <div class="cx-sub-title">가장 큰 것</div>
+      <div class="cx-sub-title">{t("가장 큰 항목")}</div>
       <div class="cx-heavy">
         <For each={heavy()}>
           {(m) => (
             <div class="cx-heavy-row" classList={{ bad: m.isError }}>
               <span class="cx-heavy-role">{roleOf(m)}</span>
-              <span class="cx-heavy-text selectable">{m.preview || "(내용 없음)"}</span>
+              <span class="cx-heavy-text selectable">{m.preview || t("(내용 없음)")}</span>
               <span class="cx-heavy-size">{tokens(m.tokens)}</span>
             </div>
           )}
@@ -193,14 +194,14 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           <Show when={win()}><span class="cx-big-note">{share(total(), win())}</span></Show>
           <span class="spacer" />
           <Show when={real() !== null && real() !== undefined}>
-            <span class="cx-real" title="모델이 마지막 요청에서 알려준 크기">마지막 요청 {tokens(real()!)}</span>
+            <span class="cx-real">{t("마지막 요청 {n}", { n: tokens(real()!) })}</span>
           </Show>
         </div>
-        <div class="cx-bar" role="img" aria-label="컨텍스트 구성">
+        <div class="cx-bar" role="img" aria-label={t("컨텍스트")}>
           <For each={order}>
             {(k) => (
               <Show when={segs()[k] > 0}>
-                <i class={`cx-seg k-${k}`} style={{ width: `${pct(segs()[k], scale())}%` }} title={`${SEG_LABEL[k]} ${tokens(segs()[k])}`} />
+                <i class={`cx-seg k-${k}`} style={{ width: `${pct(segs()[k], scale())}%` }} title={`${t(SEG_LABEL[k])} ${tokens(segs()[k])}`} />
               </Show>
             )}
           </For>
@@ -210,7 +211,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
             {(k) => (
               <span class="cx-leg">
                 <i class={`cx-key k-${k}`} />
-                {SEG_LABEL[k]}
+                {t(SEG_LABEL[k])}
                 <b>{tokens(segs()[k])}</b>
               </span>
             )}
@@ -219,19 +220,19 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
       </div>
 
       <div class="cx-parts">
-        <Part title="시스템 프롬프트" size={systemTotal()} of={total()} open>
+        <Part title={t("시스템 프롬프트")} size={systemTotal()} of={total()} open>
           <Show when={!c().forced} fallback={<Pre text={c().systemPrompt} />}>
-            <Part nested seg="engine" title="엔진 기본" size={segs().engine} of={total()}>
+            <Part nested seg="engine" title={t("기본 프롬프트")} size={segs().engine} of={total()}>
               <For each={engineSections()}>
                 {(s) => (
-                  <Part nested title={ENGINE_SECTION[s.name] ?? s.name} meta={s.name} size={s.tokens}>
+                  <Part nested title={ENGINE_SECTION[s.name] ? t(ENGINE_SECTION[s.name]) : s.name} meta={s.name} size={s.tokens}>
                     <Pre text={s.text} />
                   </Part>
                 )}
               </For>
             </Part>
-            <Part nested seg="ondra" title="Ondra 지시" size={segs().ondra} of={total()} meta={`${props.data.parts.length}개`}>
-              <For each={props.data.parts} fallback={<p class="cx-empty">없어요</p>}>
+            <Part nested seg="ondra" title={t("Ondra 지침")} size={segs().ondra} of={total()} meta={t("{n}개", { n: props.data.parts.length })}>
+              <For each={props.data.parts} fallback={<p class="cx-empty">{t("없음")}</p>}>
                 {(p) => (
                   <Part nested title={p.title} size={c().appendSystemPrompt.find((a) => a.text === p.text)?.tokens}>
                     <Pre text={p.text} />
@@ -239,8 +240,8 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                 )}
               </For>
             </Part>
-            <Part nested seg="files" title="지시 파일" size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || "없음"}>
-              <For each={c().contextFiles} fallback={<p class="cx-empty">없어요</p>}>
+            <Part nested seg="files" title={t("지시 파일")} size={segs().files} of={total()} meta={c().contextFiles.map((f) => f.path.split("/").pop()).join(" · ") || t("없음")}>
+              <For each={c().contextFiles} fallback={<p class="cx-empty">{t("없음")}</p>}>
                 {(f) => (
                   <Part nested title={tilde(f.path)} size={f.tokens}>
                     <Pre text={f.content} />
@@ -248,9 +249,9 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                 )}
               </For>
             </Part>
-            <Part nested seg="skills" title="스킬" size={segs().skills} of={total()} meta={`${c().skills.length}개 · 이름과 설명만`}>
+            <Part nested seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={t("{n}개 · 이름과 설명", { n: c().skills.length })}>
               <div class="cx-list">
-                <For each={c().skills} fallback={<p class="cx-empty">없어요</p>}>
+                <For each={c().skills} fallback={<p class="cx-empty">{t("없음")}</p>}>
                   {(s) => (
                     <div class="cx-li" classList={{ off: !s.modelInvocable }}>
                       <b>{s.name}</b>
@@ -265,11 +266,11 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           </Show>
         </Part>
 
-        <Part title="기억" meta={`${props.data.recalled.length}`}>
-          <MemoryList list={props.data.recalled} empty="없어요" onOpen={openMemory} />
+        <Part title={t("메모리")} meta={`${props.data.recalled.length}`}>
+          <MemoryList list={props.data.recalled} empty={t("없음")} onOpen={openMemory} />
         </Part>
 
-        <Part seg="tools" title="도구" size={segs().tools} of={total()} meta={`${activeTools().length}`}>
+        <Part seg="tools" title={t("도구")} size={segs().tools} of={total()} meta={`${activeTools().length}`}>
           <div class="cx-list">
             <For each={activeTools()}>
               {(t) => (
@@ -284,7 +285,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
           </div>
         </Part>
 
-        <Part seg="talk" title="대화" size={segs().talk} of={total()} meta={`메시지 ${c().messages.length}개`} open={c().messages.length > 0}>
+        <Part seg="talk" title={t("대화")} size={segs().talk} of={total()} meta={t("메시지 {n}개", { n: c().messages.length })} open={c().messages.length > 0}>
           <Talk list={c().messages} total={segs().talk} live={props.data.live} known={props.known?.tokens} />
         </Part>
       </div>
@@ -310,16 +311,16 @@ export function ContextSheet(props: { agent: string; accountId: string; known?: 
   return (
     <Portal>
       <div class="backdrop cx-backdrop" onClick={props.onClose}>
-        <div class="sheet cx-sheet" role="dialog" aria-label="컨텍스트" onClick={(e) => e.stopPropagation()}>
+        <div class="sheet cx-sheet" role="dialog" aria-label={t("컨텍스트")} onClick={(e) => e.stopPropagation()}>
           <div class="sheet-head">
-            컨텍스트
+            {t("컨텍스트")}
             <span class="spacer" />
-            <button class="icon-btn" title="다시 불러오기" disabled={data.loading} onClick={() => setN(n() + 1)}><Icon name="refresh" size={14} /></button>
-            <button class="icon-btn" title="닫기 (esc)" onClick={props.onClose}><Icon name="x" size={15} /></button>
+            <button class="icon-btn" title={t("새로고침")} disabled={data.loading} onClick={() => setN(n() + 1)}><Icon name="refresh" size={16} /></button>
+            <button class="icon-btn" title={`${t("닫기")} (esc)`} onClick={props.onClose}><Icon name="x" size={16} /></button>
           </div>
           <div class="sheet-body cx-body">
-            <Show when={!data.error} fallback={<p class="cx-error">불러오지 못했어요 · {String(data.error?.message ?? data.error)}</p>}>
-              <Show when={data()} fallback={<div class="cx-wait">엔진에 물어보는 중이에요</div>}>
+            <Show when={!data.error} fallback={<p class="cx-error">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</p>}>
+              <Show when={data()} fallback={<div class="cx-wait">{t("불러오는 중")}</div>}>
                 <View data={data()!} known={props.known} onClose={props.onClose} />
               </Show>
             </Show>

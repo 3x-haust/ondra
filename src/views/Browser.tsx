@@ -6,6 +6,7 @@ import { inBrowserGo, inBrowserHide, inBrowserShow, onInBrowserPage } from "../l
 import { state } from "../state/store";
 import { browserTarget, paletteOpen, setBrowserTarget } from "../state/ui";
 import { Icon } from "../ui/Icon";
+import { t } from "../i18n";
 
 /** `example.com/login` → `https://example.com/login`; words → a search. */
 function address(raw: string): string | null {
@@ -77,13 +78,13 @@ export function BrowserView(_props: { embedded?: boolean }) {
     <div class="browser-view embedded">
       <div class="bpane">
         <div class="bbar">
-          <button class="icon-btn sm" title="뒤로" onClick={() => void inBrowserGo("back", state.space).catch(() => {})}>
+          <button class="icon-btn sm" title={t("뒤로")} onClick={() => void inBrowserGo("back", state.space).catch(() => {})}>
             <Icon name="back" size={14} />
           </button>
-          <button class="icon-btn sm" title="앞으로" onClick={() => void inBrowserGo("forward", state.space).catch(() => {})}>
+          <button class="icon-btn sm" title={t("앞으로")} onClick={() => void inBrowserGo("forward", state.space).catch(() => {})}>
             <Icon name="arrow" size={14} />
           </button>
-          <button class="icon-btn sm" title="새로고침" onClick={() => void inBrowserGo("reload", state.space).catch(() => {})}>
+          <button class="icon-btn sm" title={t("새로고침")} onClick={() => void inBrowserGo("reload", state.space).catch(() => {})}>
             <Icon name="refresh" size={14} />
           </button>
           <label class="burl">
@@ -92,7 +93,7 @@ export function BrowserView(_props: { embedded?: boolean }) {
               class="burl-in"
               spellcheck={false}
               autocomplete="off"
-              placeholder="주소나 검색어"
+              placeholder={t("주소 또는 검색어")}
               value={draft() ?? url()}
               onFocus={(e) => {
                 setDraft(e.currentTarget.value);
@@ -110,7 +111,7 @@ export function BrowserView(_props: { embedded?: boolean }) {
           </label>
         </div>
         <div class="bscreen" ref={area}>
-          {failed() ? <div class="bempty">브라우저를 열 수 없어요</div> : !url() ? <div class="bempty">열린 페이지 없음</div> : null}
+          {failed() ? <div class="bempty">{t("브라우저를 열 수 없어요")}</div> : !url() ? <div class="bempty">{t("열린 페이지 없음")}</div> : null}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 // The flow: main is the trunk and every job is a short branch off it, newest on
 // top, coloured by what it needs. Subagents hang off their job on a dotted twig.
-// Lives in the right panel's 흐름 tab.
+// Lives in the right panel's Flow tab.
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { state, taskById, tasksIn } from "../state/store";
 import type { Task } from "../state/types";
@@ -9,6 +9,7 @@ import { ago, compact, now } from "../ui/bits";
 import { line, plain } from "../ui/ForkCard";
 import { Icon } from "../ui/Icon";
 import { bucket, changes } from "./Sidebar";
+import { t as tr } from "../i18n";
 
 const openId = () => {
   const v = view();
@@ -49,7 +50,7 @@ export function Flow() {
       .filter((t) => !t.parentId && !t.answer)
       .sort((a, b) => b.createdAt - a.createdAt),
   );
-  /** finished, merged and not from today: tucked away under "이전" */
+  /** finished, merged and not from today: tucked away under "earlier" */
   const old = (t: Task) => ended(t) && (t.finishedAt ?? t.createdAt) < now() - DAY && t.id !== openRoot();
   const shown = () => roots().filter((t) => older() || !old(t));
   const hiddenCount = () => roots().filter(old).length;
@@ -63,7 +64,7 @@ export function Flow() {
     return forced ?? auto ? k : [];
   };
 
-  /** one line is enough: it is already in 할 일 above, or has not started */
+  /** one line is enough: it is already in the to-do list above, or has not started */
   const brief = (t: Task) => bucket(t) === "you" || bucket(t) === "review" || t.status === "queued" || t.status === "paused" || ended(t);
   // rows show all of their text: each one's drawn height, measured, places the rows below it
   const [drawn, setDrawn] = createSignal<Record<string, number>>({});
@@ -137,30 +138,30 @@ export function Flow() {
   });
 
   const meta = (t: Task) => {
-    if (t.status === "queued") return "대기";
-    if (t.status === "paused") return "쉼";
+    if (t.status === "queued") return tr("대기");
+    if (t.status === "paused") return tr("일시정지");
     if (t.status === "done") return ago(t.finishedAt ?? t.createdAt);
-    if (t.status === "waiting") return "답 필요";
+    if (t.status === "waiting") return tr("응답 필요");
     return t.startedAt ? compact(now() - t.startedAt) : "";
   };
   const sub = (t: Task) => {
     if (t.status === "done") {
       if (t.worktree?.state === "open") {
         const c = changes(t);
-        return `+${c.add} −${c.del} · 확인 필요`;
+        return `+${c.add} −${c.del} · ${tr("검토")}`;
       }
-      return t.worktree?.state === "merged" ? "합쳤어요" : t.worktree?.state === "discarded" ? "버렸어요" : plain(t.summary ?? "") || "끝났어요";
+      return t.worktree?.state === "merged" ? tr("병합됨") : t.worktree?.state === "discarded" ? tr("버림") : plain(t.summary ?? "") || tr("완료");
     }
     return line(t);
   };
 
   return (
     <div class="graph" classList={{ "has-jobs": !!roots().length }} style={{ "--gutter": `${GUTTER}px` }}>
-      <button class="g-main" data-shortcut="main" onClick={() => goMain()} title="메인에게 말하기 (⌘0)" style={{ "--trunk": `${TRUNK}px` }}>
+      <button class="g-main" data-shortcut="main" onClick={() => goMain()} title={`${tr("메인")} (⌘0)`} style={{ "--trunk": `${TRUNK}px` }}>
         <span class="g-main-node" style={{ left: `${TRUNK - 5}px` }} />
-        <span class="g-name">메인</span>
+        <span class="g-name">{tr("메인")}</span>
         <Show when={state.captain.some((m) => m.space === state.space && m.pending)} fallback={<kbd class="g-kbd">⌘0</kbd>}>
-          <span class="spin sm" />
+          <span class="tk-run" />
         </Show>
       </button>
       <div class="g-body" style={{ height: `${height()}px` }}>
@@ -202,13 +203,13 @@ export function Flow() {
                   <span
                     class="g-kids"
                     role="button"
-                    title={`서브에이전트 ${kidsOf(r.t).length}개`}
+                    title={tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                     onClick={(e) => {
                       e.stopPropagation();
                       setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
                     }}
                   >
-                    서브 {kidsOf(r.t).length}
+                    {tr("서브 {n}", { n: kidsOf(r.t).length })}
                   </span>
                 </Show>
                 <span class="g-meta">{meta(r.t)}</span>
@@ -220,13 +221,13 @@ export function Flow() {
                     <span
                       class="g-kids"
                       role="button"
-                      title={`서브에이전트 ${kidsOf(r.t).length}개`}
+                      title={tr("서브에이전트 {n}개", { n: kidsOf(r.t).length })}
                       onClick={(e) => {
                         e.stopPropagation();
                         setKidsOpen({ ...kidsOpen(), [r.t.id]: !kidsShown(r.t).length });
                       }}
                     >
-                      서브 {kidsOf(r.t).length}
+                      {tr("서브 {n}", { n: kidsOf(r.t).length })}
                     </span>
                   </Show>
                 </span>
@@ -238,11 +239,11 @@ export function Flow() {
       <Show when={hiddenCount()}>
         <button class="g-older" style={{ "padding-left": `${TRUNK - 4}px` }} onClick={() => setOlder(!older())}>
           <span class="g-older-dot" />
-          {older() ? "이전 일 접기" : `이전 ${hiddenCount()}개 보기`}
+          {older() ? tr("이전 작업 접기") : tr("이전 작업 {n}개", { n: hiddenCount() })}
         </button>
       </Show>
       <Show when={!roots().length}>
-        <p class="g-empty" style={{ "padding-left": `${GUTTER}px` }}>일 없음</p>
+        <p class="g-empty" style={{ "padding-left": `${GUTTER}px` }}>{tr("작업 없음")}</p>
       </Show>
     </div>
   );

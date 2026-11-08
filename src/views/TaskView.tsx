@@ -24,6 +24,8 @@ import { effortFor } from "../engine/models";
 import { StatusLine, ContextRing } from "../ui/Usage";
 import { Transcript } from "../ui/Transcript";
 import { renaming, setRenaming, SidebarToggle } from "./Sidebar";
+import { StatusIcon } from "../ui/ForkCard";
+import { t as tr } from "../i18n";
 
 function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
   const t = () => taskById(props.id)!;
@@ -37,7 +39,7 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
       <button
         class="icon-btn"
         classList={{ on: open() }}
-        title="더 보기"
+        title={tr("더 보기")}
         onClick={(e) => {
           e.stopPropagation();
           setOpen(!open());
@@ -48,35 +50,35 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
       <Show when={open()}>
         <div class="menu" style={{ top: "36px", right: "0" }} onClick={(e) => e.stopPropagation()}>
           <Show when={t().status === "running"}>
-            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">일시정지</span></button>
+            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">{tr("일시정지")}</span></button>
           </Show>
           <Show when={t().status === "paused" || t().status === "failed"}>
-            <button onClick={() => (resumeTask(t().id), close())}><Icon name="play" size={14} class="muted" /><span class="row-title">다시 시작</span></button>
+            <button onClick={() => (resumeTask(t().id), close())}><Icon name="play" size={14} class="muted" /><span class="row-title">{tr("다시 시작")}</span></button>
           </Show>
           <Show when={t().status !== "done"}>
-            <button onClick={() => (finishTask(t().id), close())}><Icon name="check" size={14} class="muted" /><span class="row-title">완료로 표시</span></button>
+            <button onClick={() => (finishTask(t().id), close())}><Icon name="check" size={14} class="muted" /><span class="row-title">{tr("완료로 표시")}</span></button>
           </Show>
           <div class="menu-sep" />
-          <button onClick={() => (setRenaming(t().id), close())}><Icon name="pencil" size={14} class="muted" /><span class="row-title">이름 바꾸기</span></button>
-          <button onClick={() => (togglePin(t().id), close())}><Icon name="pin" size={14} class="muted" /><span class="row-title">{t().pinned ? "고정 풀기" : "위에 고정"}</span></button>
-          <button onClick={() => { const n = duplicateTask(t().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={14} class="muted" /><span class="row-title">같은 요청으로 다시 시작</span></button>
-          <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(t().id)); toast("대화를 Markdown으로 복사했어요"); close(); }}><Icon name="copy" size={14} class="muted" /><span class="row-title">마크다운으로 복사</span></button>
+          <button onClick={() => (setRenaming(t().id), close())}><Icon name="pencil" size={14} class="muted" /><span class="row-title">{tr("이름 바꾸기")}</span></button>
+          <button onClick={() => (togglePin(t().id), close())}><Icon name="pin" size={14} class="muted" /><span class="row-title">{t().pinned ? tr("고정 해제") : tr("고정")}</span></button>
+          <button onClick={() => { const n = duplicateTask(t().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={14} class="muted" /><span class="row-title">{tr("다시 실행")}</span></button>
+          <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(t().id)); toast(tr("복사했어요")); close(); }}><Icon name="copy" size={14} class="muted" /><span class="row-title">{tr("Markdown으로 복사")}</span></button>
           <div class="menu-sep" />
-          <button onClick={() => (openInEditor(expand(t().cwd)), close())}><Icon name="external" size={14} class="muted" /><span class="row-title">편집기에서 열기</span></button>
-          <button onClick={() => (revealPath(expand(t().cwd)), close())}><Icon name="folder" size={14} class="muted" /><span class="row-title">Finder에서 보기</span></button>
-          <button onClick={() => (props.openPanel("terminal"), close())}><Icon name="terminal" size={14} class="muted" /><span class="row-title">터미널 열기</span></button>
+          <button onClick={() => (openInEditor(expand(t().cwd)), close())}><Icon name="external" size={14} class="muted" /><span class="row-title">{tr("편집기에서 열기")}</span></button>
+          <button onClick={() => (revealPath(expand(t().cwd)), close())}><Icon name="folder" size={14} class="muted" /><span class="row-title">{tr("Finder에서 보기")}</span></button>
+          <button onClick={() => (props.openPanel("terminal"), close())}><Icon name="terminal" size={14} class="muted" /><span class="row-title">{tr("셸 열기")}</span></button>
           <Show when={t().worktree?.state === "open" && !live()}>
             <div class="menu-sep" />
-            <button onClick={() => (void mergeTask(t().id), close())}><Icon name="merge" size={14} class="muted" /><span class="row-title">원래 폴더에 합치기</span></button>
-            <button onClick={() => (void discardTask(t().id), close())}><Icon name="x" size={14} class="muted" /><span class="row-title">변경 버리기</span></button>
+            <button onClick={() => (void mergeTask(t().id), close())}><Icon name="merge" size={14} class="muted" /><span class="row-title">{tr("병합")}</span></button>
+            <button onClick={() => (void discardTask(t().id), close())}><Icon name="x" size={14} class="muted" /><span class="row-title">{tr("변경 버리기")}</span></button>
           </Show>
           <div class="menu-sep" />
           <Show
             when={sure()}
             fallback={
               <>
-              <button onClick={() => (archiveTask(t().id), goMain(), close())}><Icon name="archive" size={14} class="muted" /><span class="row-title">보관</span></button>
-              <button class="danger" onClick={() => setSure(true)}><Icon name="trash" size={14} /><span class="row-title">삭제</span></button>
+              <button onClick={() => (archiveTask(t().id), goMain(), close())}><Icon name="archive" size={14} class="muted" /><span class="row-title">{tr("보관")}</span></button>
+              <button class="danger" onClick={() => setSure(true)}><Icon name="trash" size={14} /><span class="row-title">{tr("삭제")}</span></button>
             </>
             }
           >
@@ -88,7 +90,7 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
               }}
             >
               <Icon name="trash" size={14} />
-              <span class="row-title">정말 삭제</span>
+              <span class="row-title">{tr("삭제 확인")}</span>
             </button>
           </Show>
         </div>
@@ -106,7 +108,7 @@ function Todos(props: { t: Task }) {
     <div class="todos" classList={{ closed: !open() }}>
       <button class="todos-head" onClick={() => { holdScroll(); setOpen(!open()); }} aria-expanded={open()}>
         <Icon name="list" size={14} />
-        <b>할 일</b>
+        <b>{tr("할 일")}</b>
         <span class="num">{done()}/{props.t.plan.length}</span>
         <Show when={!open() && cur()}><span class="rest">{cur()!.text}</span></Show>
         <span class="spacer" />
@@ -159,12 +161,12 @@ function Queued(props: { t: Task }) {
                 <Icon name="handoff" size={13} />
                 <span class="queued-text" title={q.text} onDblClick={() => setEditing({ id: q.id, text: q.text })}>{q.text}</span>
                 <div class="queued-acts">
-                  <button class="queued-steer" title="기다리지 않고 지금 보내요" onClick={() => steerQueued(props.t.id, q.id)}>
+                  <button class="queued-steer" onClick={() => steerQueued(props.t.id, q.id)}>
                     <Icon name="send" size={12} />
-                    지금 보내기
+                    {tr("지금 보내기")}
                   </button>
-                  <button class="icon-btn sm" title="고치기" onClick={() => setEditing({ id: q.id, text: q.text })}><Icon name="pencil" size={13} /></button>
-                  <button class="icon-btn sm" title="빼기" onClick={() => dropQueued(props.t.id, q.id)}><Icon name="trash" size={13} /></button>
+                  <button class="icon-btn sm" title={tr("수정")} onClick={() => setEditing({ id: q.id, text: q.text })}><Icon name="pencil" size={13} /></button>
+                  <button class="icon-btn sm" title={tr("삭제")} onClick={() => dropQueued(props.t.id, q.id)}><Icon name="trash" size={13} /></button>
                 </div>
               </div>
             }
@@ -197,8 +199,8 @@ function Queued(props: { t: Task }) {
                 onBlur={save}
               />
               <div class="queued-acts on">
-                <button class="icon-btn sm" title="저장 (⏎)" onMouseDown={(e) => e.preventDefault()} onClick={save}><Icon name="check" size={13} /></button>
-                <button class="icon-btn sm" title="취소 (esc)" onMouseDown={(e) => e.preventDefault()} onClick={() => setEditing(null)}><Icon name="x" size={13} /></button>
+                <button class="icon-btn sm" title={`${tr("저장")} (⏎)`} onMouseDown={(e) => e.preventDefault()} onClick={save}><Icon name="check" size={13} /></button>
+                <button class="icon-btn sm" title={`${tr("취소")} (esc)`} onMouseDown={(e) => e.preventDefault()} onClick={() => setEditing(null)}><Icon name="x" size={13} /></button>
               </div>
             </div>
           </Show>
@@ -219,7 +221,7 @@ function setDraft(text: string) {
 export function TaskView(props: { id: string }) {
   const t = () => taskById(props.id);
   return (
-    <Show when={t()} fallback={<div class="pane-empty">삭제된 작업이에요.</div>}>
+    <Show when={t()} fallback={<div class="pane-empty">{tr("삭제된 작업")}</div>}>
       {(task) => {
         const decision = () => decisionFor(task().id);
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
@@ -246,8 +248,8 @@ export function TaskView(props: { id: string }) {
             out.push(
               <button class="strip" onClick={() => resumeTask(task().id)}>
                 <Icon name="pause" size={14} />
-                <b>멈춤</b>
-                <span class="strip-act"><Icon name="play" size={12} />다시 시작</span>
+                <b>{tr("일시정지")}</b>
+                <span class="strip-act"><Icon name="play" size={12} />{tr("다시 시작")}</span>
               </button>,
             );
           const made = artifacts[task().id] ?? [];
@@ -255,16 +257,16 @@ export function TaskView(props: { id: string }) {
             out.push(
               <button class="strip" onClick={() => openPanel("artifacts")}>
                 <Icon name="inbox" size={14} />
-                <b>결과물 {made.length}개</b>
+                <b>{tr("결과물 {n}개", { n: made.length })}</b>
                 <span class="rest">{made[0].name}</span>
-                <span class="strip-act">보기</span>
+                <span class="strip-act">{tr("보기")}</span>
               </button>,
             );
           if (bg().length)
             out.push(
               <button class="strip" onClick={() => openPanel("terminal")}>
                 <Icon name="terminal" size={14} />
-                <b>백그라운드 {bg().length}개</b>
+                <b>{tr("백그라운드 {n}개", { n: bg().length })}</b>
                 <span class="rest"><code>{bg().map((s) => s.command).join("  ·  ")}</code></span>
                 <Icon name="chevron" size={14} />
               </button>,
@@ -277,7 +279,7 @@ export function TaskView(props: { id: string }) {
                 <Icon name="branch" size={14} />
                 <button class="link-btn" onClick={() => openPanel("pr")}>PR #{pr.n}</button>
                 <span class="rest" />
-                <button class="btn sm ghost" title="변경은 PR에 남아요" onClick={() => void closeWorktree(task().id)}>작업 폴더 정리</button>
+                <button class="btn sm ghost" title={tr("변경은 PR에 남아요")} onClick={() => void closeWorktree(task().id)}>{tr("워크트리 정리")}</button>
               </div>,
             );
           // the changes tab already has merge / discard
@@ -285,20 +287,20 @@ export function TaskView(props: { id: string }) {
             out.push(
               <div class="strip">
                 <Icon name="branch" size={14} />
-                <b>검토 대기</b>
+                <b>{tr("검토")}</b>
                 <span class="rest">
-                  <Show when={diff()} fallback="변경 확인 중…">
+                  <Show when={diff()} fallback={tr("확인 중")}>
                     {(d) => (
-                      <Show when={d().files.length} fallback="바뀐 파일이 없어요">
+                      <Show when={d().files.length} fallback={tr("변경 없음")}>
                       <button class="link-btn" onClick={() => openPanel("changes")}>
-                        파일 {d().files.length}개 <span class="add">+{d().files.reduce((n, f) => n + f.add, 0)}</span>{" "}
+                        {tr("파일 {n}개", { n: d().files.length })} <span class="add">+{d().files.reduce((n, f) => n + f.add, 0)}</span>{" "}
                         <span class="del">−{d().files.reduce((n, f) => n + f.del, 0)}</span>
                       </button>
                       </Show>
                     )}
                   </Show>
                 </span>
-                <button class="btn sm ghost" onClick={() => void discardTask(task().id)}>버리기</button>
+                <button class="btn sm ghost" onClick={() => void discardTask(task().id)}>{tr("버리기")}</button>
                 <button
                   class="btn sm primary"
                   disabled={merging()}
@@ -309,7 +311,7 @@ export function TaskView(props: { id: string }) {
                   }}
                 >
                   <Icon name="merge" size={13} />
-                  {merging() ? "합치는 중…" : "원래 폴더에 합치기"}
+                  {merging() ? tr("병합 중") : tr("병합")}
                 </button>
               </div>,
             );
@@ -324,7 +326,7 @@ export function TaskView(props: { id: string }) {
               <Show when={task().parentId ? taskById(task().parentId!) : undefined}>
                 {(p) => (
                   <>
-                    <button class="icon-btn sm crumb-back" title={`${p().title}(으)로 돌아가기`} onClick={() => openTask(p().id)}>
+                    <button class="icon-btn sm crumb-back" title={tr("상위 작업: {title}", { title: p().title })} onClick={() => openTask(p().id)}>
                       <Icon name="chevron" size={14} />
                     </button>
                   </>
@@ -333,7 +335,7 @@ export function TaskView(props: { id: string }) {
               <Show when={!task().parentId && task().project ? projectById(task().project!, task().space) : undefined}>
                 {(p) => (
                   <>
-                    <button class="crumb-proj" title={`${p().name} 메인`} onClick={() => goMain(p().id)}>
+                    <button class="crumb-proj" title={tr("{name} 메인", { name: p().name })} onClick={() => goMain(p().id)}>
                       <ProjectBadge name={p().name} />
                       <span>{p().name}</span>
                     </button>
@@ -343,7 +345,7 @@ export function TaskView(props: { id: string }) {
               </Show>
               <Show
                 when={renaming() === task().id}
-                fallback={<h1 title={`${task().title} · 두 번 눌러 이름 바꾸기`} onDblClick={() => setRenaming(task().id)}>{task().title}</h1>}
+                fallback={<h1 title={task().title} onDblClick={() => setRenaming(task().id)}>{task().title}</h1>}
               >
                 <input
                   class="title-edit"
@@ -359,24 +361,24 @@ export function TaskView(props: { id: string }) {
               <IssueTag t={task()} />
             </nav>
             <Show when={task().status === "done" && task().unverified?.length}>
-              <span class="status-chip unverified" title={task().unverified!.join("\n")}>확인 안 됨 {task().unverified!.length}</span>
+              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("확인 안 됨 {n}", { n: task().unverified!.length })}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
-              <span class="status-chip unmerged">검토 대기</span>
+              <span class="status-chip unmerged">{tr("검토")}</span>
             </Show>
             <Show when={task().status === "done" && task().worktree?.state !== "open"}>
               <span class="status-chip done">
                 <Icon name="check" size={12} />
-                {task().worktree?.state === "merged" ? "합침" : "완료"}
+                {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
                 <span class="faint">{ago(task().finishedAt ?? task().createdAt)}</span>
               </span>
             </Show>
             <Show when={task().status !== "done"}>
               <span class={`status-chip ${task().status}`}>
                 <Show when={task().status === "running"} fallback={<Dot status={task().status} />}>
-                  <span class="spin xs" />
+                  <StatusIcon t={task()} size="sm" />
                 </Show>
-                {statusLabel[task().status]}
+                {tr(statusLabel[task().status])}
                 <Show when={task().status === "running" && task().startedAt}>
                   <span class="faint">{compact(now() - task().startedAt!)}</span>
                 </Show>
@@ -385,12 +387,12 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <Show when={usesReverse(task(), state.tasks)}>
-                <button class="icon-btn" classList={{ on: panelOpen() && panelTab() === "reverse" }} title="리버싱" onClick={() => showTool("reverse")}>
+                <button class="icon-btn" classList={{ on: panelOpen() && panelTab() === "reverse" }} title={tr("리버싱")} onClick={() => showTool("reverse")}>
                   <Icon name="binary" size={16} />
                 </button>
               </Show>
               <MoreMenu id={task().id} openPanel={openPanel} />
-              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title="패널 (⌘\)" onClick={togglePanel}>
+              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={`${tr("패널")} (⌘\\)`} onClick={togglePanel}>
                 <Icon name="panel" size={16} />
               </button>
             </div>
@@ -404,7 +406,7 @@ export function TaskView(props: { id: string }) {
               footer={
                 <>
                   <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
-                  <Show when={task().status === "done" && costDetail(jobCost(task()))}>{(s) => <div class="job-cost">끝 · {s()}</div>}</Show>
+                  <Show when={task().status === "done" && costDetail(jobCost(task()))}>{(s) => <div class="job-cost">{tr("완료")} · {s()}</div>}</Show>
                 </>
               }
             />
@@ -413,8 +415,8 @@ export function TaskView(props: { id: string }) {
                 <Show when={task().status === "failed" && task().error}>
                   <div class="notice bad">
                     <Icon name="alert" size={16} />
-                    <div class="notice-body"><b>작업이 멈췄어요</b><p class="selectable">{task().error}</p></div>
-                    <button class="btn sm" onClick={() => resumeTask(task().id)}>다시 시도</button>
+                    <div class="notice-body"><b>{tr("작업 실패")}</b><p class="selectable">{task().error}</p></div>
+                    <button class="btn sm" onClick={() => resumeTask(task().id)}>{tr("다시 시도")}</button>
                   </div>
                 </Show>
                 <Composer
@@ -435,22 +437,22 @@ export function TaskView(props: { id: string }) {
                   commands={[
                     btwCommand(() => `task:${task().id}`),
                     drawCommand(() => task().id),
-                    { name: "remember", desc: "이 폴더에서 기억하기 · 뒤에 적은 내용을 앞으로 지켜요", icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
-                    { name: "stop", desc: "멈추기", icon: "pause", run: () => stopTask(task().id) },
-                    { name: "resume", desc: "다시 시작", icon: "play", run: () => resumeTask(task().id) },
-                    { name: "done", desc: "완료로 표시", icon: "check", run: () => finishTask(task().id) },
-                    { name: "rename", desc: "이름 바꾸기 (/rename 새 이름)", icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
-                    { name: "changes", desc: "변경 사항 보기", icon: "diff", run: () => showTool("changes") },
-                    { name: "files", desc: "파일 보기", icon: "file", run: () => showTool("files") },
-                    { name: "terminal", desc: "터미널 열기", icon: "shell", run: () => showTool("terminal") },
-                    { name: "browser", desc: "브라우저 보기", icon: "globe", run: () => showTool("browser") },
-                    { name: "merge", desc: "원래 폴더에 합치기", icon: "merge", run: () => void mergeTask(task().id) },
-                    { name: "ask", desc: "매번 묻도록 바꾸기", icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
-                    { name: "edits", desc: "편집 허용으로 바꾸기", icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
-                    { name: "full", desc: "전체 권한으로 바꾸기", icon: "shield", run: () => void setTaskPermission(task().id, "full") },
+                    { name: "remember", desc: tr("프로젝트 메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
+                    { name: "stop", desc: tr("일시정지"), icon: "pause", run: () => stopTask(task().id) },
+                    { name: "resume", desc: tr("다시 시작"), icon: "play", run: () => resumeTask(task().id) },
+                    { name: "done", desc: tr("완료로 표시"), icon: "check", run: () => finishTask(task().id) },
+                    { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
+                    { name: "changes", desc: tr("변경 사항"), icon: "diff", run: () => showTool("changes") },
+                    { name: "files", desc: tr("파일"), icon: "file", run: () => showTool("files") },
+                    { name: "terminal", desc: tr("셸"), icon: "shell", run: () => showTool("terminal") },
+                    { name: "browser", desc: tr("브라우저"), icon: "globe", run: () => showTool("browser") },
+                    { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
+                    { name: "ask", desc: tr("권한: 매번 묻기"), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
+                    { name: "edits", desc: tr("권한: 편집 허용"), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
+                    { name: "full", desc: tr("권한: 전체 권한"), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
                     ...skillCommands(() => ({ task: task().id, space: task().space })),
                   ]}
-                  placeholder={decision() ? "다른 답을 직접 적어도 돼요" : task().status === "running" ? "일하는 중에 끼어들어 말하기…" : "이어서 말하기…"}
+                  placeholder={decision() ? tr("직접 응답") : task().status === "running" ? tr("작업 중에 말하기") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
                   onSend={(m) => tell(task().id, m)}
                   running={task().status === "running"}

@@ -23,6 +23,7 @@ import { ChangesPane, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
+import { lang, t as tr } from "../i18n";
 
 /** The task's own branch: where it is, and merge / throw away. */
 export function BranchCard(props: { t: Task }) {
@@ -32,23 +33,19 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   const w = () => props.w;
   const [sure, setSure] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
+  const actionable = () => w().state === "open" && props.t.status !== "running" && props.t.status !== "queued";
   return (
-    <div class="branch-card" classList={{ closed: w().state !== "open" }}>
-      <div class="branch-line">
-        <span class="branch-title">이 일의 변경</span>
-        <span class="spacer" />
-        <Show when={w().state === "merged"}><span class="branch-state ok"><Icon name="merge" size={12} />{w().into?.startsWith("PR ") ? `${w().into} 합쳐짐` : `${w().into}에 합침`}</span></Show>
-        <Show when={w().state === "discarded"}><span class="branch-state">버림</span></Show>
-      </div>
-      <Show when={w().state === "open" && props.t.status !== "running" && props.t.status !== "queued"}>
-        <div class="branch-actions">
+    <Switch>
+      <Match when={actionable()}>
+        <div class="bc">
           <ShipMenu t={props.t} />
+          <span class="bc-branch" title={w().branch}>{w().branch}</span>
           <span class="spacer" />
           <Show
             when={sure()}
-            fallback={<button class="btn sm" onClick={() => setSure(true)}>버리기</button>}
+            fallback={<button class="btn sm ghost" onClick={() => setSure(true)}>{tr("버리기")}</button>}
           >
-            <button class="btn sm danger" onClick={() => void discardTask(props.t.id)}>정말 버리기</button>
+            <button class="btn sm danger" onClick={() => void discardTask(props.t.id)}>{tr("버리기 확인")}</button>
           </Show>
           <Show
             when={prOf(props.t)}
@@ -62,16 +59,28 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
                   setBusy(false);
                 }}
               >
-                <Icon name="merge" size={13} />
-                {busy() ? "합치는 중…" : "원래 폴더에 합치기"}
+                <Icon name="merge" size={14} />
+                {busy() ? tr("병합 중") : tr("병합")}
               </button>
             }
           >
             {(pr) => <button class="btn sm primary" onClick={() => setPanelTab("pr")}>PR #{pr().n}</button>}
           </Show>
         </div>
-      </Show>
-    </div>
+      </Match>
+      <Match when={w().state === "merged"}>
+        <div class="bc quiet">
+          <Icon name="merge" size={14} />
+          <span>{w().into?.startsWith("PR ") ? tr("{pr} 병합됨", { pr: w().into! }) : tr("{into}에 병합됨", { into: w().into ?? "" })}</span>
+        </div>
+      </Match>
+      <Match when={w().state === "discarded"}>
+        <div class="bc quiet">
+          <Icon name="x" size={14} />
+          <span>{tr("버림")}</span>
+        </div>
+      </Match>
+    </Switch>
   );
 }
 
@@ -104,26 +113,26 @@ function ShipMenu(props: { t: Task }) {
       </button>
       <Show when={open()}>
         <div class="menu ship-menu">
-          <button onClick={() => void run("커밋하는 중…", async () => gitCommit(cwd(), props.t.title, await gitEnv(props.t)), (h) => `커밋했어요 · ${h}`)}>
-            <Icon name="commit" size={14} class="muted" /><span class="row-title">커밋</span><span class="row-hint">지금 바뀐 것 전부</span>
+          <button onClick={() => void run(tr("커밋 중"), async () => gitCommit(cwd(), props.t.title, await gitEnv(props.t)), (h) => tr("커밋했어요 · {hash}", { hash: h }))}>
+            <Icon name="commit" size={14} class="muted" /><span class="row-title">{tr("커밋")}</span><span class="row-hint">{tr("변경 전체")}</span>
           </button>
-          <button onClick={() => void run("올리는 중…", async () => gitPush(cwd(), await gitEnv(props.t)), (b) => `${b} 브랜치를 올렸어요`)}>
-            <Icon name="push" size={14} class="muted" /><span class="row-title">푸시</span><span class="row-hint">origin</span>
+          <button onClick={() => void run(tr("푸시 중"), async () => gitPush(cwd(), await gitEnv(props.t)), (b) => tr("{branch} 푸시했어요", { branch: b }))}>
+            <Icon name="push" size={14} class="muted" /><span class="row-title">{tr("푸시")}</span><span class="row-hint">origin</span>
           </button>
           <button
             onClick={() =>
               void run(
-                "PR 만드는 중…",
+                tr("PR 만드는 중"),
                 async () => {
                   const url = await gitPr(cwd(), props.t.title, `${props.t.ask}\n\n— Ondra`, await gitEnv(props.t));
                   if (url.startsWith("http")) void openUrl(url);
                   return url;
                 },
-                (u) => (u ? `PR을 열었어요 · ${u}` : "PR을 열었어요"),
+                (u) => (u ? tr("PR을 열었어요 · {url}", { url: u }) : tr("PR을 열었어요")),
               )
             }
           >
-            <Icon name="pr" size={14} class="muted" /><span class="row-title">PR 만들기</span><span class="row-hint">gh</span>
+            <Icon name="pr" size={14} class="muted" /><span class="row-title">{tr("PR 만들기")}</span><span class="row-hint">gh</span>
           </button>
         </div>
       </Show>
@@ -136,13 +145,13 @@ function Overview(props: { t: Task }) {
   return (
     <div class="pane">
       <div class="now-box">
-        <div class="pane-title">{t().status === "done" ? "결과" : "지금"}</div>
-        <div class="now-text">{t().status === "done" ? t().summary || t().now : t().status === "running" ? t().now : statusLabel[t().status]}</div>
+        <div class="pane-title">{t().status === "done" ? tr("결과") : tr("지금")}</div>
+        <div class="now-text">{t().status === "done" ? t().summary || t().now : t().status === "running" ? t().now : tr(statusLabel[t().status])}</div>
       </div>
       <Show when={t().plan.length}>
         <div>
-          <div class="pane-title">계획</div>
-          {/* the same marks as the 할 일 list under the job */}
+          <div class="pane-title">{tr("계획")}</div>
+          {/* the same marks as the to-do list under the job */}
           <ol class="todos-list plan-list">
             <For each={t().plan}>
               {(s) => (
@@ -161,7 +170,7 @@ function Overview(props: { t: Task }) {
       </Show>
       <Show when={t().legs.length > 1}>
         <div>
-          <div class="pane-title">세션 {t().legs.length}개</div>
+          <div class="pane-title">{tr("세션 {n}개", { n: t().legs.length })}</div>
           <div class="legs">
             <For each={t().legs}>
               {(l, i) => (
@@ -177,38 +186,38 @@ function Overview(props: { t: Task }) {
       </Show>
       <div>
         <dl class="kv">
-          <dt>폴더</dt>
+          <dt>{tr("폴더")}</dt>
           <dd>
             <button class="path link" onClick={() => revealPath(expand(homeDir(t())))} title={homeDir(t())}>{tilde(expand(homeDir(t())))}</button>
           </dd>
           <Show when={t().status !== "done"}>
-          <dt>우선순위</dt>
+          <dt>{tr("우선순위")}</dt>
           <dd>
             <div class="seg">
               <For each={[0, 1, 2, 3] as Priority[]}>
-                {(p) => <button classList={{ on: t().priority === p }} onClick={() => setPriority(t().id, p)}>{priorityLabel[p]}</button>}
+                {(p) => <button classList={{ on: t().priority === p }} onClick={() => setPriority(t().id, p)}>{tr(priorityLabel[p])}</button>}
               </For>
             </div>
           </dd>
-          <dt>종류</dt>
+          <dt>{tr("종류")}</dt>
           <dd>
             <div class="seg">
-              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>일반</button>
-              <button classList={{ on: t().weight === "heavy" }} onClick={() => setWeight(t().id, "heavy")}>무거운 일</button>
+              <button classList={{ on: t().weight === "light" }} onClick={() => setWeight(t().id, "light")}>{tr("일반")}</button>
+              <button classList={{ on: t().weight === "heavy" }} onClick={() => setWeight(t().id, "heavy")}>{tr("무거운 작업")}</button>
             </div>
           </dd>
           </Show>
-          <dt>계정</dt>
+          <dt>{tr("계정")}</dt>
           <dd>
             <select class="select" value={t().accountId} onChange={(e) => updateTask(t().id, (x) => (x.accountId = e.currentTarget.value))}>
               <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{a.label}</option>}</For>
             </select>
-            <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || "자동"}</span>
+            <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
           </dd>
-          <dt>{t().status === "done" ? "걸린 시간" : "진행"}</dt>
-          <dd class="muted">{t().startedAt ? long((t().finishedAt ?? now()) - t().startedAt!) : "아직 시작 전"}</dd>
+          <dt>{t().status === "done" ? tr("걸린 시간") : tr("진행 시간")}</dt>
+          <dd class="muted">{t().startedAt ? long((t().finishedAt ?? now()) - t().startedAt!) : tr("시작 전")}</dd>
           <Show when={t().origin}>
-            <dt>가져옴</dt>
+            <dt>{tr("가져온 곳")}</dt>
             <dd class="muted"><span class="path">{tilde(t().origin!.path)}</span></dd>
           </Show>
         </dl>
@@ -224,16 +233,16 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
     <div class="shell" classList={{ bad: props.s.ok === false }}>
       <button class="shell-head" onClick={props.toggle}>
         <span class="shell-state">
-          <Show when={props.s.endedAt} fallback={<span class="spin" />}>
-            <Icon name={props.s.ok === false ? "x" : "check"} size={12} stroke={2.5} />
+          <Show when={props.s.endedAt} fallback={<span class="tk-run" />}>
+            <Icon name={props.s.ok === false ? "x" : "check"} size={12} />
           </Show>
         </span>
         <span class="shell-cmd" title={props.s.command}>{props.s.command}</span>
-        <Show when={props.s.background}><span class="shell-tag">백그라운드</span></Show>
+        <Show when={props.s.background}><span class="shell-tag">{tr("백그라운드")}</span></Show>
         <span class="shell-time">{short((props.s.endedAt ?? now()) - props.s.startedAt)}</span>
       </button>
       <Fold open={props.open}>
-        <pre class="shell-out" ref={pre}>{props.s.tail.replace(/^\n+/, "").trimEnd() || (props.s.endedAt ? "출력 없음" : "출력 대기 중…")}</pre>
+        <pre class="shell-out" ref={pre}>{props.s.tail.replace(/^\n+/, "").trimEnd() || (props.s.endedAt ? tr("출력 없음") : tr("출력 대기 중"))}</pre>
       </Fold>
     </div>
   );
@@ -250,22 +259,22 @@ function TerminalPane(props: { t: Task }) {
   return (
     <div class="term-pane">
       <div class="term-sub">
-        <span class="term-count">{running().length ? `실행 중 ${running().length}` : "실행 중인 셸 없음"}</span>
+        <span class="term-count">{running().length ? tr("실행 중 {n}", { n: running().length }) : tr("실행 중인 명령 없음")}</span>
         <button class="btn sm ghost" onClick={() => void gitEnv(props.t).then((env) => openInTerminal(expand(props.t.cwd), env))} title={props.t.cwd}>
-          <Icon name="shell" size={13} />
-          터미널에서 열기
+          <Icon name="shell" size={14} />
+          {tr("터미널에서 열기")}
         </button>
       </div>
       <div class="shells">
         <For each={running()}>{card}</For>
         <Show when={ended().length}>
           <button class="sb-older shells-past" classList={{ open: past() }} onClick={() => setPast(!past())}>
-            <Icon name="chevron" size={11} class="sb-older-chev" />
-            {past() ? "끝난 명령 접기" : `끝난 명령 ${ended().length}개`}
+            <Icon name="chevron" size={12} class="sb-older-chev" />
+            {tr("끝난 명령 {n}개", { n: ended().length })}
           </button>
-          <Show when={past()}>
-            <For each={ended()}>{card}</For>
-          </Show>
+          <Fold open={past()}>
+            <div class="shells-past-list"><For each={ended()}>{card}</For></div>
+          </Fold>
         </Show>
       </div>
     </div>
@@ -328,18 +337,18 @@ function BrowserPane(props: { t: Task }) {
   return (
     <div class="bpane">
       <div class="bbar">
-        <span class="bdot" classList={{ live: !!frame() || (!!props.t.browser && props.t.status === "running") }} title={!!frame() || (!!props.t.browser && props.t.status === "running") ? "실시간으로 보는 중" : "멈춤"} />
+        <span class="bdot" classList={{ live: !!frame() || (!!props.t.browser && props.t.status === "running") }} title={!!frame() || (!!props.t.browser && props.t.status === "running") ? tr("실시간") : tr("멈춤")} />
         <div class="burl" title={shown()}>
           <Icon name="globe" size={13} />
-          <span>{shown().replace(/^https?:\/\//, "") || "아직 연 페이지가 없어요"}</span>
+          <span>{shown().replace(/^https?:\/\//, "") || tr("열린 페이지 없음")}</span>
         </div>
-        <button class="icon-btn sm" title="주소 복사" disabled={!shown()} onClick={() => void navigator.clipboard.writeText(shown())}>
+        <button class="icon-btn sm" title={tr("주소 복사")} disabled={!shown()} onClick={() => void navigator.clipboard.writeText(shown())}>
           <Icon name="copy" size={14} />
         </button>
-        <button class="icon-btn sm" title="내 브라우저에서 열기" disabled={!shown()} onClick={() => void openUrl(shown())}>
+        <button class="icon-btn sm" title={tr("기본 브라우저에서 열기")} disabled={!shown()} onClick={() => void openUrl(shown())}>
           <Icon name="external" size={14} />
         </button>
-        <button class="icon-btn sm" title="공유 브라우저에서 로그인·탐색" onClick={() => setPanelShared(true)}>
+        <button class="icon-btn sm" title={tr("공유 브라우저")} onClick={() => setPanelShared(true)}>
           <Icon name="key" size={14} />
         </button>
       </div>
@@ -347,12 +356,12 @@ function BrowserPane(props: { t: Task }) {
         <Show
           when={frame()}
           fallback={
-            <Show when={props.t.shot} fallback={<div class="bempty">{!props.t.browser ? "이 일이 브라우저를 쓰면 여기에 실시간으로 보여요" : props.t.status === "running" ? "브라우저에 연결하는 중…" : "브라우저를 닫았어요"}</div>}>
-              {(p) => <img src={fileSrc(p())} alt="마지막 스크린샷" />}
+            <Show when={props.t.shot} fallback={<div class="bempty">{!props.t.browser ? tr("브라우저 없음") : props.t.status === "running" ? tr("연결 중") : tr("브라우저 닫힘")}</div>}>
+              {(p) => <img src={fileSrc(p())} alt={tr("마지막 스크린샷")} />}
             </Show>
           }
         >
-          {(f) => <img class="click" src={f()} alt="" onClick={click} draggable={false} title="눌러서 직접 조작할 수 있어요" />}
+          {(f) => <img class="click" src={f()} alt="" onClick={click} draggable={false} title={tr("눌러서 조작")} />}
         </Show>
       </div>
     </div>
@@ -392,15 +401,15 @@ function ArtifactsPane(props: { t: Task }) {
   const icon = (name: string) => (kindOf(name) === "page" ? "globe" : kindOf(name) === "video" ? "video" : "file");
   return (
     <div class="apane">
-      <Show when={list().length} fallback={<div class="pane-empty">없음</div>}>
+      <Show when={list().length} fallback={<div class="pane-empty">{tr("결과물 없음")}</div>}>
         <Show
           when={cur()}
           keyed
           fallback={
             <>
               <div class="abar">
-                <span class="acount">{list().length}개</span>
-                <button class="icon-btn sm" title="Finder에서 보기" onClick={() => void revealPath(list()[0].path.replace(/\/[^/]*$/, ""))}>
+                <span class="acount">{tr("{n}개", { n: list().length })}</span>
+                <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealPath(list()[0].path.replace(/\/[^/]*$/, ""))}>
                   <Icon name="open" size={14} />
                 </button>
               </div>
@@ -430,17 +439,17 @@ function ArtifactsPane(props: { t: Task }) {
           {(a) => (
             <>
               <div class="abar">
-                <button class="icon-btn sm" title="모두 보기 (Esc)" onClick={() => setPick(undefined)}><Icon name="back" size={14} /></button>
+                <button class="icon-btn sm" title={`${tr("모두 보기")} (esc)`} onClick={() => setPick(undefined)}><Icon name="back" size={14} /></button>
                 <span class="aname-cur" title={a.name}>{a.name}</span>
                 <span class="acount">{idx() + 1}/{list().length}</span>
                 <Show when={list().length > 1}>
-                  <button class="icon-btn sm" title="이전 (←)" onClick={() => step(-1)}><Icon name="back" size={14} /></button>
-                  <button class="icon-btn sm" title="다음 (→)" onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
+                  <button class="icon-btn sm" title={`${tr("이전")} (←)`} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
+                  <button class="icon-btn sm" title={`${tr("다음")} (→)`} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
                 </Show>
-                <button class="icon-btn sm" title="Finder에서 보기" onClick={() => void revealPath(a.path)}><Icon name="open" size={14} /></button>
+                <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealPath(a.path)}><Icon name="open" size={14} /></button>
               </div>
               <div class="aview">
-                <Switch fallback={<div class="pane-empty">미리 볼 수 없음</div>}>
+                <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
                   <Match when={kindOf(a.name) === "page"}>
                     <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
                       <iframe class="aframe" src={pdfSrc(a.path, a.modified)} title={a.name} />
@@ -483,21 +492,21 @@ const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?:
   { kind: "reverse", label: "리버싱", icon: "binary", job: true },
   { kind: "preview", label: "미리보기", icon: "monitor" },
 ];
-const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "more" };
+const toolOf = (k: PanelTab) => TOOLS.find((x) => x.kind === k) ?? { kind: "new" as PanelTab, label: "새 탭", icon: "plus" };
 
 /** The empty tab: the tools you can open here. */
 function NewTab(props: { t?: Task }) {
   return (
     <div class="nt">
-      <div class="nt-head">도구</div>
+      <div class="nt-head">{tr("새 탭")}</div>
       <For each={TOOLS}>
         {(x) => (
           <button class="nt-row" data-shortcut={x.kind} disabled={x.job && !props.t} onClick={() => setPanelTab(x.kind)}>
             <Icon name={x.icon} size={16} />
-            <span class="nt-label">{x.label}</span>
-            <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">열림</span></Show>
+            <span class="nt-label">{tr(x.label)}</span>
+            <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">{tr("열림")}</span></Show>
             <Show when={x.job && !props.t} fallback={<Show when={x.keys}><kbd class="nt-keys">{x.keys}</kbd></Show>}>
-              <span class="nt-hint">일을 고르면 쓸 수 있어요</span>
+              <span class="nt-hint">{tr("작업 필요")}</span>
             </Show>
           </button>
         )}
@@ -548,18 +557,31 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
       }),
     ),
   );
-  // tabs show in full; when the strip runs short they share it evenly, and past that the others keep just their icon
+  // tabs show in full; when they don't all fit, the others keep just their icon (never a cut-off label)
   const [tight, setTight] = createSignal(false);
   onMount(() => {
     const fit = () => {
       const strip = bar?.parentElement;
       if (!strip) return;
       const add = strip.querySelector<HTMLElement>(".ptab-add")?.offsetWidth ?? 28;
-      setTight((strip.clientWidth - add - 48) / Math.max(1, ptabs().length) < 78);
+      // each tab's width with its label and close button showing, whatever it shows now
+      let need = 0;
+      for (const tab of bar.querySelectorAll<HTMLElement>(".ptab")) {
+        const label = tab.querySelector<HTMLElement>(".ptab-label");
+        const folded = !!label && label.offsetWidth === 0;
+        need += tab.offsetWidth + 2 + (label ? label.scrollWidth - label.offsetWidth : 0) + (folded ? 6 + 22 : 0);
+      }
+      setTight(need + add + 16 > strip.clientWidth);
     };
     const ro = new ResizeObserver(fit);
     ro.observe(bar.parentElement!);
-    createEffect(on(() => ptabs().length, fit));
+    // a tab's own size changes too (fonts, language, the badge)
+    const later = () =>
+      requestAnimationFrame(() => {
+        bar.querySelectorAll<HTMLElement>(".ptab").forEach((el) => ro.observe(el));
+        fit();
+      });
+    createEffect(on([() => ptabs().length, activeTab, lang], later));
     onCleanup(() => ro.disconnect());
   });
   // drag the left edge to resize; remembered per machine
@@ -599,7 +621,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
   const shared = () => tab() === "browser" && (!props.t?.browser || panelShared());
   return (
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
-      <div class="panel-resize" onPointerDown={drag} title="끌어서 너비 바꾸기" />
+      <div class="panel-resize" onPointerDown={drag} />
       <div class="panel-bar" data-tauri-drag-region>
         <div class="ptabs" ref={bar} classList={{ tight: tight() }}>
           <span class="tab-ind" classList={{ on: ind().on }} style={{ transform: `translateX(${ind().x}px)`, width: `${ind().w}px` }} />
@@ -614,7 +636,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   tabindex="0"
                   aria-selected={activeTab() === x.id}
                   data-shortcut={x.kind}
-                  title={`${tool().label}${tool().keys ? ` (${tool().keys})` : ""} · 이전/다음 탭 ${shortcutHint("previousTab")} / ${shortcutHint("nextTab")}`}
+                  title={`${tr(tool().label)}${tool().keys ? ` (${tool().keys})` : ""}`}
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget || ignoredKey(e) || !noModifiers(e) || (e.key !== "Enter" && e.key !== " ")) return;
                     e.preventDefault();
@@ -623,27 +645,28 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   onClick={() => setActiveTab(x.id)}
                   onAuxClick={(e) => e.button === 1 && closePanelTab(x.id)}
                 >
-                  <Icon name={tool().icon} size={13} />
-                  <span class="ptab-label">{tool().label}</span>
+                  <Icon name={tool().icon} size={14} />
+                  <span class="ptab-label">{tr(tool().label)}</span>
                   <Show when={x.kind === "terminal" && running()}><span class="badge">{running()}</span></Show>
                   <Show when={x.kind === "browser" && props.t?.browser && props.t?.status === "running"}><span class="screen-live" /></Show>
                   <button
                     class="ptab-x"
                     data-shortcut={activeTab() === x.id ? "closeTab" : undefined}
-                    title={`탭 닫기${activeTab() === x.id ? ` (${shortcutHint("closeTab")})` : ""}`}
+                    title={`${tr("탭 닫기")}${activeTab() === x.id ? ` (${shortcutHint("closeTab")})` : ""}`}
+                    aria-label={tr("탭 닫기")}
                     onClick={(e) => {
                       e.stopPropagation();
                       closePanelTab(x.id);
                     }}
                   >
-                    <Icon name="x" size={11} />
+                    <Icon name="x" size={12} />
                   </button>
                 </div>
               );
             }}
           </For>
         </div>
-        <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`새 탭 (${shortcutHint("newTab")})`} onClick={newPanelTab}>
+        <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`${tr("새 탭")} (${shortcutHint("newTab")})`} onClick={newPanelTab}>
           <Icon name="plus" size={14} />
         </button>
         <span class="spacer" data-tauri-drag-region />
@@ -658,21 +681,21 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
             <div class="pbrowser">
               <Show when={props.t?.browser}>
                 <button class="pbrowser-back" onClick={() => setPanelShared(false)}>
-                  <Icon name="back" size={12} />이 일의 화면
+                  <Icon name="back" size={14} />{tr("작업 화면")}
                 </button>
               </Show>
               <BrowserView embedded />
             </div>
           </Match>
           <Match when={tab() === "issues"}><IssuesPane t={props.t} /></Match>
-          <Match when={needsJob()}><div class="pane-empty">열린 일 없음</div></Match>
+          <Match when={needsJob()}><div class="pane-empty">{tr("열린 작업 없음")}</div></Match>
           <Match when={props.t}>
             {(t) => (
               <Switch>
                 <Match when={tab() === "overview"}><Overview t={t()} /></Match>
                 <Match when={tab() === "changes"}><ChangesPane t={t()} top={t().worktree ? <BranchCard t={t()} /> : undefined} /></Match>
                 <Match when={tab() === "pr"}>
-                  <Show when={prOf(t())?.url} keyed fallback={<div class="pane-empty">이 일에는 PR이 없어요</div>}>
+                  <Show when={prOf(t())?.url} keyed fallback={<div class="pane-empty">{tr("PR 없음")}</div>}>
                     {(_url) => <PrPane t={t()} />}
                   </Show>
                 </Match>
