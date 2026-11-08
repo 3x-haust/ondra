@@ -1,6 +1,5 @@
 // The left side, after T3 Code: main on top, then one quiet row per job with a
-// status dot (working sky, needs-you amber/indigo, ready emerald, failed red).
-// The git-style flow lives in the right panel's 흐름 tab.
+// static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { anyPop, closePops } from "../ui/ModelPicker";
@@ -15,6 +14,7 @@ import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { Fold } from "../ui/Fold";
 import { archiveTask, duplicateTask, togglePin, transcriptMarkdown } from "../engine/tasks";
+import { t as tr } from "../i18n";
 
 export type Bucket = "you" | "review" | "work" | "done";
 
@@ -67,14 +67,24 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   const b = () => bucket(t());
   const tone = () =>
     t().status === "failed" ? "bad" : b() === "you" ? "ask" : b() === "review" ? "ok" : t().status === "running" ? "live" : t().status === "queued" || t().status === "paused" ? "idle" : "done";
+  /** the status glyph's shape (st-icon classes): what the row needs, not only its own status */
+  const glyph = () => {
+    const x = t();
+    if (x.status === "failed") return "failed";
+    if (b() === "you") return "waiting";
+    if (b() === "review") return "done unmerged";
+    if (x.status === "running") return "running";
+    if (x.status === "paused" || x.status === "queued") return x.status;
+    return "done";
+  };
   const meta = () => {
     const x = t();
-    if (x.status === "failed") return "멈춤";
-    if (x.status === "waiting" || (b() === "you" && !props.kid)) return "답 필요";
+    if (x.status === "failed") return tr("실패");
+    if (x.status === "waiting" || (b() === "you" && !props.kid)) return tr("응답 필요");
     if (b() === "review") return "";
-    if (x.status === "queued") return "대기";
-    if (x.status === "paused") return "쉼";
-    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? "방금" : compact(now() - x.startedAt)) : "";
+    if (x.status === "queued") return tr("대기");
+    if (x.status === "paused") return tr("일시정지");
+    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "";
     return ago(x.finishedAt ?? x.createdAt);
   };
   return (
@@ -94,24 +104,28 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         }}
         title={t().title}
       >
-        <span class="sb-dot" />
+        <span class={`sb-glyph st-icon sm ${glyph()}`} aria-hidden="true">
+          <Show when={glyph() === "running"} fallback={<Show when={glyph().startsWith("done")} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
+            <span class="spin" />
+          </Show>
+        </span>
         <span class="sb-title">{t().title}</span>
         <Show when={!props.kid && kids().length}>
           <span
             class="sb-kids"
             classList={{ open: showKids() }}
             role="button"
-            title={showKids() ? "서브에이전트 접기" : `서브에이전트 ${kids().length}개`}
+            title={showKids() ? tr("서브에이전트 접기") : tr("서브에이전트 {n}개", { n: kids().length })}
             onClick={(e) => {
               e.stopPropagation();
               setOpen(!showKids());
             }}
           >
             {kids().length}
-            <Icon name="chevron" size={10} class="sb-kids-chev" />
+            <Icon name="chevron" size={12} class="sb-kids-chev" />
           </span>
         </Show>
-        <Show when={t().pinned && !props.kid}><Icon name="pin" size={11} class="sb-pin" /></Show>
+        <Show when={t().pinned && !props.kid}><Icon name="pin" size={12} class="sb-pin" /></Show>
         <span class="sb-meta">
           <Show when={b() === "review" && !meta() && (changes(t()).add || changes(t()).del)} fallback={meta()}>
             <span class="add">+{changes(t()).add}</span>
@@ -120,11 +134,11 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         </span>
         <Show when={!props.kid}>
           <span class="sb-acts">
-            <span class="sb-act" role="button" title={t().pinned ? "고정 풀기" : "위에 고정"} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
-              <Icon name="pin" size={13} />
+            <span class="sb-act" role="button" title={t().pinned ? tr("고정 해제") : tr("고정")} aria-label={t().pinned ? tr("고정 해제") : tr("고정")} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
+              <Icon name="pin" size={14} />
             </span>
-            <span class="sb-act" role="button" title="보관" onClick={(e) => (e.stopPropagation(), archiveTask(t().id))}>
-              <Icon name="archive" size={13} />
+            <span class="sb-act" role="button" title={tr("보관")} aria-label={tr("보관")} onClick={(e) => (e.stopPropagation(), archiveTask(t().id))}>
+              <Icon name="archive" size={14} />
             </span>
           </span>
         </Show>
@@ -159,7 +173,7 @@ function ProjectMenu() {
     <Show when={projMenu()}>
       {(m) => (
         <div class="menu ctx-menu" style={{ left: `${Math.min(m().x, window.innerWidth - 220)}px`, top: `${Math.min(m().y, window.innerHeight - 120)}px` }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => (goMain(m().id), close())}><Icon name="arrow" size={14} class="muted" /><span class="row-title">열기</span></button>
+          <button onClick={() => (goMain(m().id), close())}><Icon name="arrow" size={16} class="muted" /><span class="row-title">{tr("열기")}</span></button>
           <div class="menu-sep" />
           <button
             class="danger"
@@ -171,15 +185,15 @@ function ProjectMenu() {
               close();
             }}
           >
-            <Icon name="trash" size={14} class="muted" />
-            <span class="row-title">{m().sure ? "한 번 더 누르면 삭제" : "프로젝트 삭제"}</span>
+            <Icon name="trash" size={16} class="muted" />
+            <span class="row-title">{m().sure ? tr("다시 눌러 삭제") : tr("프로젝트 삭제")}</span>
           </button>
         </div>
       )}
     </Show>
   );
 }
-/** 확인할 일: the jobs waiting on you, to pick one */
+/** 확인 필요: the jobs waiting on you, to pick one */
 const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; w: number } | null>(null);
 function NeedsMenu() {
   const close = () => setNeedsMenu(null);
@@ -198,13 +212,15 @@ function NeedsMenu() {
   return (
     <Show when={needsMenu()}>
       {(m) => (
-        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, width: `${m().w}px`, top: `${Math.min(m().y, window.innerHeight - 60 - list().length * 34)}px` }} onClick={(e) => e.stopPropagation()}>
+        <div class="menu ctx-menu needs-menu" style={{ left: `${m().x}px`, width: `${m().w}px`, top: `${Math.min(m().y, window.innerHeight - 24 - list().length * 28)}px` }} onClick={(e) => e.stopPropagation()}>
           <For each={list()}>
             {(t) => (
               <button onClick={() => (openTask(t.id), close())}>
-                <span class="dot" classList={{ ask: bucket(t) === "you", ok: bucket(t) === "review" }} />
+                <span class={`st-icon sm ${t.status === "failed" ? "failed" : bucket(t) === "you" ? "waiting" : "done unmerged"}`} aria-hidden="true">
+                  <Show when={bucket(t) === "review"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>
+                </span>
                 <span class="row-title">{t.title}</span>
-                <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? "멈춤" : "답 필요") : "검토"}{where(t) ? ` · ${where(t)}` : ""}</span>
+                <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? tr("실패") : tr("응답 필요")) : tr("검토")}{where(t) ? ` · ${where(t)}` : ""}</span>
               </button>
             )}
           </For>
@@ -262,13 +278,13 @@ function RowMenu() {
           <Show when={t()}>
             {(x) => (
               <div class="menu ctx-menu" style={{ left: `${Math.min(m().x, window.innerWidth - 220)}px`, top: `${Math.min(m().y, window.innerHeight - 260)}px` }} onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => (openTask(x().id), close())}><Icon name="arrow" size={14} class="muted" /><span class="row-title">열기</span></button>
-                <button onClick={() => (openTask(x().id), setRenaming(x().id), close())}><Icon name="pencil" size={14} class="muted" /><span class="row-title">이름 바꾸기</span></button>
-                <button onClick={() => (togglePin(x().id), close())}><Icon name="pin" size={14} class="muted" /><span class="row-title">{x().pinned ? "고정 풀기" : "위에 고정"}</span></button>
-                <button onClick={() => { const n = duplicateTask(x().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={14} class="muted" /><span class="row-title">같은 요청으로 다시 시작</span></button>
-                <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(x().id)); toast("대화를 Markdown으로 복사했어요"); close(); }}><Icon name="copy" size={14} class="muted" /><span class="row-title">마크다운으로 복사</span></button>
+                <button onClick={() => (openTask(x().id), close())}><Icon name="arrow" size={16} class="muted" /><span class="row-title">{tr("열기")}</span></button>
+                <button onClick={() => (openTask(x().id), setRenaming(x().id), close())}><Icon name="pencil" size={16} class="muted" /><span class="row-title">{tr("이름 바꾸기")}</span><span class="menu-kbd">F2</span></button>
+                <button onClick={() => (togglePin(x().id), close())}><Icon name="pin" size={16} class="muted" /><span class="row-title">{x().pinned ? tr("고정 해제") : tr("고정")}</span></button>
+                <button onClick={() => { const n = duplicateTask(x().id); close(); if (n) openTask(n); }}><Icon name="refresh" size={16} class="muted" /><span class="row-title">{tr("다시 실행")}</span></button>
+                <button onClick={() => { void navigator.clipboard.writeText(transcriptMarkdown(x().id)); toast(tr("복사했어요")); close(); }}><Icon name="copy" size={16} class="muted" /><span class="row-title">{tr("Markdown으로 복사")}</span></button>
                 <div class="menu-sep" />
-                <button onClick={() => (archiveTask(x().id, !x().archived), close())}><Icon name="archive" size={14} class="muted" /><span class="row-title">{x().archived ? "보관 풀기" : "보관"}</span></button>
+                <button onClick={() => (archiveTask(x().id, !x().archived), close())}><Icon name="archive" size={16} class="muted" /><span class="row-title">{x().archived ? tr("보관 해제") : tr("보관")}</span></button>
               </div>
             )}
           </Show>
@@ -304,7 +320,7 @@ function Head(props: { id: string; label: string; count?: number; children?: any
     <div class="sb-head">
       <button class="sb-head-btn" classList={{ shut: shut() }} onClick={() => setFold(props.id, !shut())} aria-expanded={!shut()}>
         {props.label}
-        <Icon name="chevron" size={10} class="sb-head-chev" />
+        <Icon name="chevron" size={12} class="sb-head-chev" />
         <Show when={shut() && props.count}><span class="sb-head-n">{props.count}</span></Show>
       </button>
       <span class="spacer" />
@@ -333,7 +349,7 @@ export function Sidebar() {
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
   const addFolder = async () => {
-    const dir = await pickFolder("채팅을 따로 둘 프로젝트 폴더");
+    const dir = await pickFolder(tr("프로젝트 폴더 선택"));
     if (!dir) return;
     const id = addProject(state.space, dir);
     goMain(id);
@@ -342,13 +358,13 @@ export function Sidebar() {
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" data-shortcut="new" title="새로 맡기기 (⌘N)" onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
+        <button class="icon-btn" data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => { goMain(); setTimeout(() => document.getElementById("main-input")?.focus(), 60); }}>
           <Icon name="compose" size={16} />
         </button>
-        <button class="icon-btn" data-shortcut="search" title="찾기 (⌘K)" onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
+        <button class="icon-btn" data-shortcut="search" title={`${tr("검색")} ${shortcutHint("search")}`} aria-label={tr("검색")} onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
           <Icon name="search" size={16} />
         </button>
-        <button class="icon-btn" data-shortcut="sidebar" title="접기 (⌘B)" onClick={() => setSidebarHidden(true)}>
+        <button class="icon-btn" data-shortcut="sidebar" title={`${tr("사이드바 접기")} ${shortcutHint("sidebar")}`} aria-label={tr("사이드바 접기")} onClick={() => setSidebarHidden(true)}>
           <Icon name="panelLeft" size={16} />
         </button>
       </div>
@@ -356,8 +372,8 @@ export function Sidebar() {
       <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
         <For each={state.spaces}>
           {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`${s.label} (⌘${state.spaces.indexOf(s) + 1})`}>
-              <span class="space-name">{s.label}</span>
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`⌘${state.spaces.indexOf(s) + 1}`} aria-pressed={state.space === s.id}>
+              <span class="space-name">{tr(s.label)}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>
           )}
@@ -378,27 +394,29 @@ export function Sidebar() {
           onCleanup(() => (ro.disconnect(), mo.disconnect()));
         }}
       >
-        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} data-shortcut="main" title="메인에게 말하기 (⌘0)">
-          <Icon name="message" size={15} class="sb-main-ic" />
-          <span class="sb-title">메인</span>
-          <Show when={mainBusy()} fallback={<kbd class="sb-kbd">⌘0</kbd>}>
+        <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() }} onClick={() => goMain()} data-shortcut="main">
+          <Icon name="message" size={16} class="sb-main-ic" />
+          <span class="sb-title">{tr("메인")}</span>
+          <Show when={mainBusy()} fallback={<kbd class="sb-kbd">{shortcutHint("main")}</kbd>}>
             <span class="spin sm" />
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "board" }} onClick={() => setView({ name: "board" })} data-shortcut="board" title="모든 일을 한 장에서 (⌘⇧B)">
-          <Icon name="canvas" size={15} class="sb-main-ic" />
-          <span class="sb-title">캔버스</span>
-          <Show when={boardLive()} fallback={<kbd class="sb-kbd">⌘⇧B</kbd>}>
-            <span class="sb-live" title={`지금 일하는 중 ${boardLive()}개`}><i />{boardLive()}</span>
+        <button class="sb-row sb-main" classList={{ on: view().name === "board" }} onClick={() => setView({ name: "board" })} data-shortcut="board">
+          <Icon name="canvas" size={16} class="sb-main-ic" />
+          <span class="sb-title">{tr("캔버스")}</span>
+          <Show when={boardLive()} fallback={<kbd class="sb-kbd">{shortcutHint("board")}</kbd>}>
+            <span class="sb-live" title={tr("진행 중 {n}개", { n: boardLive() })}><span class="spin xs" />{boardLive()}</span>
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} data-shortcut="memory" title={`에이전트가 기억하는 것: 그래프와 파일 (${shortcutHint("memory")})`}>
-          <Icon name="memory" size={15} class="sb-main-ic" />
-          <span class="sb-title">기억</span>
+        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} data-shortcut="memory">
+          <Icon name="memory" size={16} class="sb-main-ic" />
+          <span class="sb-title">{tr("메모리")}</span>
+          <kbd class="sb-kbd">{shortcutHint("memory")}</kbd>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "results" }} onClick={() => setView({ name: "results" })} data-shortcut="results" title={`결과 (${shortcutHint("results")})`}>
-          <Icon name="inbox" size={15} class="sb-main-ic" />
-          <span class="sb-title">결과</span>
+        <button class="sb-row sb-main" classList={{ on: view().name === "results" }} onClick={() => setView({ name: "results" })} data-shortcut="results">
+          <Icon name="inbox" size={16} class="sb-main-ic" />
+          <span class="sb-title">{tr("결과물")}</span>
+          <kbd class="sb-kbd">{shortcutHint("results")}</kbd>
         </button>
         {/* jobs anywhere in this space that need an answer or a merge: a row of its own, not under one section */}
         <Show when={needs()}>
@@ -413,16 +431,16 @@ export function Sidebar() {
               setNeedsMenu({ x: r.left, y: r.bottom + 4, w: r.width });
             }}
             data-shortcut="waiting"
-            title="답하거나 확인할 일 (⌘.로 다음 일)"
+            title={`${tr("다음")} ${shortcutHint("waiting")}`}
           >
-            <Icon name="alert" size={15} class="sb-main-ic" />
-            <span class="sb-title">확인할 일</span>
+            <Icon name="alert" size={16} class="sb-main-ic" />
+            <span class="sb-title">{tr("확인 필요")}</span>
             <span class="sb-need">{needs()}</span>
           </button>
         </Show>
-        <Head id="projects" label="프로젝트" count={projectsIn(state.space).length}>
-          <button class="icon-btn xs" title="프로젝트 폴더 추가" onClick={() => void addFolder()}>
-            <Icon name="plus" size={13} />
+        <Head id="projects" label={tr("프로젝트")} count={projectsIn(state.space).length}>
+          <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
+            <Icon name="plus" size={14} />
           </button>
         </Head>
         <Fold open={!fold("projects")}>
@@ -452,7 +470,7 @@ export function Sidebar() {
                   >
                     <span
                       class="sb-proj-ic"
-                      title={all() ? (open() ? "일 접기" : "일 펴기") : undefined}
+                      title={all() ? (open() ? tr("접기") : tr("펼치기")) : undefined}
                       onClick={(e) => {
                         if (!all()) return;
                         e.stopPropagation();
@@ -460,17 +478,18 @@ export function Sidebar() {
                       }}
                     >
                       <ProjectBadge name={p.name} class="ic-folder" />
-                      <Icon name="chevron" size={11} class="ic-chev" />
+                      <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
                     <span class="sb-title">{p.name}</span>
-                    <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}><span class="sb-meta">{all()}</span></Show>}><span class="sb-live" title={`이 프로젝트에서 일하는 중 ${live()}개`}><i />{live()}</span></Show>}>
+                    <Show when={busy()} fallback={<Show when={live()} fallback={<Show when={all() && !open()}><span class="sb-meta">{all()}</span></Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: live() })}><span class="spin xs" />{live()}</span></Show>}>
                       <span class="spin sm" />
                     </Show>
                     <span class="sb-acts">
                       <span
                         class="sb-act"
                         role="button"
-                        title="더 보기"
+                        title={tr("더보기")}
+                        aria-label={tr("더보기")}
                         onClick={(e) => {
                           e.stopPropagation();
                           closePops();
@@ -486,7 +505,7 @@ export function Sidebar() {
                   <Show when={all()}>
                     <Fold open={open()}>
                       <div class="sb-proj-jobs">
-                        <For each={jobs()} fallback={<p class="sb-empty sm">지난 일만 있어요</p>}>{(t, i) => <Row t={t} index={i()} />}</For>
+                        <For each={jobs()} fallback={<p class="sb-empty sm">{tr("완료된 작업만 있어요")}</p>}>{(t, i) => <Row t={t} index={i()} />}</For>
                       </div>
                     </Fold>
                   </Show>
@@ -497,9 +516,9 @@ export function Sidebar() {
         </div>
         </Fold>
 
-        <Head id="devices" label="디바이스" count={bootedDevices().length}>
-          <button class="icon-btn xs" classList={{ on: view().name === "devices" }} data-shortcut="devices" title={`디바이스 허브 열기 (${shortcutHint("devices")})`} onClick={() => setView({ name: "devices" })}>
-            <Icon name="arrow" size={13} />
+        <Head id="devices" label={tr("디바이스")} count={bootedDevices().length}>
+          <button class="icon-btn xs" classList={{ on: view().name === "devices" }} data-shortcut="devices" title={`${tr("디바이스 열기")} ${shortcutHint("devices")}`} aria-label={tr("디바이스 열기")} onClick={() => setView({ name: "devices" })}>
+            <Icon name="arrow" size={14} />
           </button>
         </Head>
         <Fold open={!fold("devices")}>
@@ -508,9 +527,9 @@ export function Sidebar() {
             each={bootedDevices()}
             fallback={
               <button class="sb-row sb-proj" onClick={() => setView({ name: "devices" })}>
-                <Icon name="phone" size={14} class="sb-main-ic" />
-                <span class="sb-title muted">켜진 기기 없음</span>
-                <span class="sb-hint">전체 {devices().length}개</span>
+                <Icon name="phone" size={16} class="sb-main-ic" />
+                <span class="sb-title muted">{tr("켜진 기기 없음")}</span>
+                <span class="sb-meta">{tr("전체 {n}개", { n: devices().length })}</span>
               </button>
             }
           >
@@ -518,7 +537,7 @@ export function Sidebar() {
               const job = () => usedBy(d);
               return (
                 <button class="sb-row sb-proj" classList={{ on: (() => { const v = view(); return v.name === "devices" && v.device === d.id; })() }} onClick={() => setView({ name: "devices", device: d.id })} title={`${d.name} · ${d.runtime}${job() ? ` · ${job()!.title}` : ""}`}>
-                  <Icon name="phone" size={14} class="sb-main-ic" />
+                  <Icon name="phone" size={16} class="sb-main-ic" />
                   <span class="sb-title">{d.name}</span>
                   <span class="sb-meta">{d.platform === "ios" ? "iOS" : "Android"}</span>
                   <Show when={job()?.status === "running"}><span class="spin sm" /></Show>
@@ -530,7 +549,7 @@ export function Sidebar() {
         </Fold>
 
         <Show when={loose().length || hidden() || archived().length}>
-        <Head id="jobs" label={projectsIn(state.space).length ? "그 밖의 일" : "맡긴 일"} count={loose().length} />
+        <Head id="jobs" label={projectsIn(state.space).length ? tr("기타 작업") : tr("작업")} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()}>
@@ -538,8 +557,8 @@ export function Sidebar() {
           </For>
           <Show when={hidden()}>
             <button class="sb-older" classList={{ open: older() }} onClick={() => setOlder(!older())}>
-              <Icon name="chevron" size={11} class="sb-older-chev" />
-              {older() ? "끝난 일 접기" : `끝난 일 ${hidden()}개`}
+              <Icon name="chevron" size={12} class="sb-older-chev" />
+              {tr("완료 {n}개", { n: hidden() })}
             </button>
             {/* they open right here, under the button, not back in their places above */}
             <Show when={older()}>
@@ -548,8 +567,8 @@ export function Sidebar() {
           </Show>
           <Show when={archived().length}>
             <button class="sb-older" classList={{ open: showArchived() }} onClick={() => setShowArchived(!showArchived())}>
-              <Icon name="chevron" size={11} class="sb-older-chev" />
-              보관함 {archived().length}
+              <Icon name="chevron" size={12} class="sb-older-chev" />
+              {tr("보관함 {n}개", { n: archived().length })}
             </button>
             <Show when={showArchived()}>
               <For each={archived()}>{(t, i) => <Row t={t} index={i()} />}</For>
@@ -564,9 +583,10 @@ export function Sidebar() {
       <NeedsMenu />
 
       <div class="sb-foot">
-        <button class="row" data-shortcut="settings" title={`설정 (${shortcutHint("settings")})`} onClick={() => setView({ name: "settings" })}>
+        <button class="row" data-shortcut="settings" onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
-          <span class="row-title">설정</span>
+          <span class="row-title">{tr("설정")}</span>
+          <kbd class="sb-kbd">{shortcutHint("settings")}</kbd>
         </button>
       </div>
     </aside>
@@ -578,7 +598,7 @@ export function SidebarToggle() {
   const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you").length;
   return (
     <Show when={sidebarAway()}>
-      <button class="icon-btn sb-show" data-shortcut="sidebar" title="펴기 (⌘B)" onClick={showSidebar}>
+      <button class="icon-btn sb-show" data-shortcut="sidebar" title={`${tr("사이드바 펼치기")} ${shortcutHint("sidebar")}`} aria-label={tr("사이드바 펼치기")} onClick={showSidebar}>
         <Icon name="panelLeft" size={16} />
         <Show when={waiting()}><i class="sb-show-dot" /></Show>
       </button>

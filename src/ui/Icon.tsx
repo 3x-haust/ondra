@@ -1,4 +1,4 @@
-// Icons: lucide, one stroke weight everywhere.
+// Icons: lucide, one stroke weight everywhere (1.5px absolute, DESIGN.md §8).
 import type { Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import {
@@ -30,7 +30,8 @@ export function Icon(props: { name: string; size?: number; class?: string; strok
     <Dynamic
       component={map[props.name] ?? Circle}
       size={props.size ?? 16}
-      stroke-width={props.stroke ?? 1.75}
+      stroke-width={props.stroke ?? 1.5}
+      absoluteStrokeWidth={props.stroke === undefined}
       class={`icon ${props.class ?? ""}`}
       aria-hidden="true"
     />

@@ -3,6 +3,7 @@
 // back to the front, and after each turn; never stored.
 import { createStore } from "solid-js/store";
 import { accountEmail, accountLimits, type Limit } from "../lib/native";
+import { t } from "../i18n";
 
 const [limits, setLimits] = createStore<Record<string, Limit[]>>({});
 const asked = new Map<string, number>();
@@ -43,12 +44,12 @@ export async function refreshLimits(accountId: string, force = false) {
   }
 }
 
-/** "5시간" / "주간" / "N일" */
+/** "5시간" / "주간" / "N일", in the current language */
 export function windowLabel(min: number) {
-  if (min <= 300) return "5시간";
-  if (min >= 10_000 && min <= 10_100) return "주간";
-  if (min >= 1440) return `${Math.round(min / 1440)}일`;
-  return `${Math.round(min / 60)}시간`;
+  if (min <= 300) return t("5시간");
+  if (min >= 10_000 && min <= 10_100) return t("주간");
+  if (min >= 1440) return t("{n}일", { n: Math.round(min / 1440) });
+  return t("{n}시간", { n: Math.round(min / 60) });
 }
 
 /** what a usage note keeps: the windows as they were then */

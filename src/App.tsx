@@ -4,7 +4,7 @@ import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, paletteOpen, panelOpen, setView, sidebarAway, toast, toasts, dropToast, view } from "./state/ui";
+import { closePanel, paletteOpen, panelOpen, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { appCommands } from "./state/commands";
 import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
 import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
@@ -43,7 +43,7 @@ import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
 import "./engine/journal";
 import "./engine/memgit";
-import { lang } from "./i18n";
+import { lang, t as tr } from "./i18n";
 
 let firstSlide = true;
 /** The center's content slides in from the side it comes from (not on first paint). */
@@ -52,7 +52,7 @@ function Slide(props: { from: 1 | -1; children: JSX.Element }) {
   onMount(() => {
     if (firstSlide) return void (firstSlide = false);
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    el.animate([{ transform: `translateX(${props.from * 36}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 320, easing: "cubic-bezier(.32,.72,0,1)" });
+    el.animate([{ transform: `translateX(${props.from * 24}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 280, easing: "cubic-bezier(.32,.72,0,1)" });
   });
   return <div class="slide" ref={el}>{props.children}</div>;
 }
@@ -76,7 +76,7 @@ export default function App() {
     let hint = 0;
     let unq: (() => void) | undefined;
     void onEvent("quit:hold", () => {
-      if (Date.now() - hint > 4000) toast("⌘Q를 길게 누르면 종료돼요");
+      if (Date.now() - hint > 4000) toast(tr("⌘Q를 길게 눌러 종료"));
       hint = Date.now();
     }).then((u) => (unq = u));
     onCleanup(() => (un?.(), unq?.()));
@@ -115,7 +115,7 @@ export default function App() {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
       switchSpace(target, { name: "main" });
       throwThought(text, target);
-      toast("메인에게 전달했어요");
+      toast(tr("메인에 보냈어요"));
     });
   });
 
@@ -145,10 +145,10 @@ export default function App() {
       seen.set(t.id, t.status);
       if (!was || was === t.status || document.hasFocus()) continue;
       // which space it is in, so a company job never reads as a personal one
-      const title = `${spaceById(t.space)?.label ?? t.space} · ${t.title}`;
-      if (t.status === "waiting") void notify(title, "답이 필요해요");
-      else if (t.status === "done" && !t.parentId) void notify(title, t.answer ? "답했어요" : ["끝났어요", costShort(jobCost(t))].filter(Boolean).join(" · "));
-      else if (t.status === "failed") void notify(title, "멈췄어요");
+      const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;
+      if (t.status === "waiting") void notify(title, tr("응답이 필요해요"));
+      else if (t.status === "done" && !t.parentId) void notify(title, t.answer ? tr("답변했어요") : [tr("완료했어요"), costShort(jobCost(t))].filter(Boolean).join(" · "));
+      else if (t.status === "failed") void notify(title, tr("실패했어요"));
     }
   });
   createEffect(() => {
@@ -191,14 +191,16 @@ export default function App() {
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
       <VisualViewer />
+      {/* one toast at a time (DESIGN.md §9.10): the newest shows; a kept one comes back after it */}
       <div class="toasts" aria-live="polite">
-        <For each={toasts()}>
+        <For each={toasts().slice(-1)}>
           {(t) => (
-            <div class={`toast ${t.tone}`}>
-              <span>{t.text}</span>
-              <Show when={t.action}>{(a) => <button onClick={() => (dropToast(t.id), a().run())}>{a().label}</button>}</Show>
+            <div class={`toast ${t.tone}`} role={t.tone === "bad" ? "alert" : "status"} onMouseEnter={() => holdToast(t.id)} onMouseLeave={() => releaseToast(t.id)}>
+              <Show when={t.tone === "bad"}><Icon name="alert" size={14} class="toast-ic" /></Show>
+              <span class="toast-text">{tr(t.text)}</span>
+              <Show when={t.action}>{(a) => <button class="toast-act" onClick={() => (dropToast(t.id), a().run())}>{tr(a().label)}</button>}</Show>
               <Show when={t.stay}>
-                <button class="toast-x" aria-label="닫기" onClick={() => dropToast(t.id)}><Icon name="x" size={13} /></button>
+                <button class="toast-x" aria-label={tr("닫기")} title={tr("닫기")} onClick={() => dropToast(t.id)}><Icon name="x" size={14} /></button>
               </Show>
             </div>
           )}

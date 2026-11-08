@@ -9,11 +9,12 @@ import { setView } from "../state/ui";
 import { Logo } from "./Logos";
 import { Icon } from "./Icon";
 import { usePop } from "./ModelPicker";
+import { t } from "../i18n";
 
 const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
 /** the windows the provider really has (now usually only the weekly one): "주간 19%" */
 const usage = (id: string) =>
-  [...usageOf(id).map((l) => `${windowLabel(l.window)} ${Math.round(l.used)}%`), ...(creditsOf(id) ? [`크레딧 ${creditsOf(id)}`] : [])].join(" · ");
+  [...usageOf(id).map((l) => `${windowLabel(l.window)} ${Math.round(l.used)}%`), ...(creditsOf(id) ? [t("크레딧 {n}", { n: creditsOf(id)! })] : [])].join(" · ");
 
 export function AccountPicker(props: {
   accountId: string;
@@ -48,21 +49,21 @@ export function AccountPicker(props: {
       <button
         class="st-acc"
         classList={{ on: open() }}
-        title={[a()?.label, emails[props.accountId], auto() && pool().length > 1 ? "자동으로 고른 계정" : ""].filter(Boolean).join(" · ")}
+        title={[a()?.label, emails[props.accountId], auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
         onClick={() => setOpen(!open())}
       >
-        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{a()?.label}</span></>}>
+        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{t(a()?.label ?? "")}</span></>}>
           <Icon name="key" size={14} />
-          <span class="st-acc-name">자동</span>
+          <span class="st-acc-name">{t("자동")}</span>
         </Show>
-        <Icon name="chevron" size={11} class="st-acc-chev" />
+        <Icon name="chevron" size={12} class="st-acc-chev" />
       </button>
       <Show when={open()}>
         <div class="pop acc-pop up">
-          <div class="pop-label">계정</div>
+          <div class="pop-label">{t("계정")}</div>
           <Show when={!props.onPick}>
             <button type="button" class="pop-item" onClick={() => choose("auto")}>
-              <span class="pop-item-main">자동</span>
+              <span class="pop-item-main">{t("자동")}</span>
               <Show when={pick() === "auto"}><Icon name="check" size={14} /></Show>
             </button>
           </Show>
@@ -70,8 +71,8 @@ export function AccountPicker(props: {
             {(x) => (
               <button type="button" class="pop-item" disabled={props.running && x.id !== props.accountId} onClick={() => choose(x.id)}>
                 <span class="pop-item-main">
-                  <span class="acc-row"><Logos id={x.id} />{x.label}</span>
-                  <span class="pop-item-sub">{[emails[x.id], usage(x.id)].filter(Boolean).join(" · ") || (x.providers.length ? "" : "로그인 필요")}</span>
+                  <span class="acc-row"><Logos id={x.id} />{t(x.label)}</span>
+                  <span class="pop-item-sub">{[emails[x.id], usage(x.id)].filter(Boolean).join(" · ") || (x.providers.length ? "" : t("로그인 필요"))}</span>
                 </span>
                 <Show when={props.onPick ? x.id === props.accountId : pick() === x.id}><Icon name="check" size={14} /></Show>
               </button>
@@ -79,7 +80,7 @@ export function AccountPicker(props: {
           </For>
           <div class="pop-sep" />
           <button type="button" class="pop-item" onClick={() => (setOpen(false), setView({ name: "settings", tab: "accounts" }))}>
-            <span class="pop-item-main">계정 관리</span>
+            <span class="pop-item-main">{t("계정 관리")}</span>
           </button>
         </div>
       </Show>

@@ -9,6 +9,7 @@ import type { Permission, Usage } from "../state/types";
 import { tokens, now } from "./bits";
 import { state } from "../state/store";
 import { ContextSheet } from "../views/Context";
+import { t } from "../i18n";
 
 /** no login yet: no limits to show (numbers kept from before would say otherwise) */
 const limitsShown = (id: string) => (state.accounts.find((a) => a.id === id)?.providers.length ? usageOf(id, now()) : []);
@@ -16,38 +17,38 @@ const limitsShown = (id: string) => (state.accounts.find((a) => a.id === id)?.pr
 const promptOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite;
 
 const secs = (ms: number) => {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}초`;
+  if (ms < 60_000) return t("{s}초", { s: (ms / 1000).toFixed(1) });
   const m = Math.floor(ms / 60_000);
   const s = Math.round((ms % 60_000) / 1000);
-  return s ? `${m}분 ${s}초` : `${m}분`;
+  return s ? t("{m}분 {s}초", { m, s }) : t("{m}분", { m });
 };
 
 /** One quiet line under an answer: speed, cache hit, time, tokens; plan windows on hover. */
 export function UsageLine(props: { u: Usage; lead?: string }) {
   const detail = () =>
     [
-      `입력 ${tokens(promptOf(props.u))} (새로 ${tokens(props.u.input)} · 캐시 ${tokens(props.u.cacheRead)}${props.u.cacheWrite ? ` · 캐시 저장 ${tokens(props.u.cacheWrite)}` : ""})`,
-      `출력 ${tokens(props.u.output)}`,
+      `${t("입력 {n}", { n: tokens(promptOf(props.u)) })} (${[t("새로 {n}", { n: tokens(props.u.input) }), t("캐시 {n}", { n: tokens(props.u.cacheRead) }), ...(props.u.cacheWrite ? [t("캐시 저장 {n}", { n: tokens(props.u.cacheWrite) })] : [])].join(" · ")})`,
+      t("출력 {n}", { n: tokens(props.u.output) }),
       ...(props.u.limits ?? []).map((l) => `${windowLabel(l.window)} ${l.used}%`),
     ].join(" · ");
   return (
     <div class="usage-line" title={detail()}>
       <Show when={props.lead}><span>{props.lead}</span></Show>
-      <Show when={props.u.tps}><span>초당 {props.u.tps}토큰</span></Show>
+      <Show when={props.u.tps}><span>{t("초당 {n}토큰", { n: props.u.tps! })}</span></Show>
       <Show when={promptOf(props.u)}>
-        <span class="usage-cache" title="이 답의 입력 중 캐시에서 읽은 비율">캐시 {pctText((props.u.cacheRead / promptOf(props.u)) * 100)}%</span>
+        <span class="usage-cache" title={t("캐시 적중률")}>{t("캐시 {p}%", { p: pctText((props.u.cacheRead / promptOf(props.u)) * 100) })}</span>
       </Show>
       <Show when={props.u.ms}><span>{secs(props.u.ms!)}</span></Show>
-      <span class="usage-tok">입력 {tokens(promptOf(props.u))} · 출력 {tokens(props.u.output)}</span>
+      <span class="usage-tok">{t("입력 {n}", { n: tokens(promptOf(props.u)) })} · {t("출력 {n}", { n: tokens(props.u.output) })}</span>
     </div>
   );
 }
 
 const left = (ms: number) => {
   const m = Math.max(0, Math.round(ms / 60_000));
-  if (m < 60) return `${m}분`;
+  if (m < 60) return t("{m}분", { m });
   const h = Math.round(m / 60);
-  return h < 48 ? `${h}시간` : `${Math.round(h / 24)}일`;
+  return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
 };
 
 /** Live plan windows for an account, under the input. */
@@ -59,16 +60,16 @@ export function LimitBar(props: { accountId: string }) {
       <div class="limit-bar">
         <For each={list()}>
           {(l) => (
-            <span class="limit" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
+            <span class="limit" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
               <span class="limit-name">{windowLabel(l.window)}</span>
               <span class="limit-track"><i style={{ width: `${Math.min(100, l.used)}%` }} /></span>
               <span class="limit-num">{Math.round(l.used)}%</span>
-              <Show when={l.resetsAt}><span class="limit-reset">{left(l.resetsAt! - Date.now())} 뒤</span></Show>
+              <Show when={l.resetsAt}><span class="limit-reset">{t("{t} 후", { t: left(l.resetsAt! - Date.now()) })}</span></Show>
             </span>
           )}
         </For>
         <Show when={creditsOf(props.accountId)}>
-          {(c) => <span class="limit limit-credits" title="요금제를 다 써도 이걸로 계속 써요"><span class="limit-name">크레딧</span><span class="limit-num">{c()}</span></span>}
+          {(c) => <span class="limit limit-credits" title={t("요금제 한도 이후 사용")}><span class="limit-name">{t("크레딧")}</span><span class="limit-num">{c()}</span></span>}
         </Show>
       </div>
     </Show>
@@ -99,22 +100,22 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? `${left(l.resetsAt - Date.now())} 뒤 다시 채워져요` : undefined}>
+          <span class="st-lim" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
             {windowLabel(l.window)} {Math.round(l.used)}%
           </span>
         )}
       </For>
       <Show when={creditsOf(props.accountId)}>
-        {(c) => <span class="st-lim" title="요금제를 다 써도 크레딧으로 계속 써요">크레딧 {c()}</span>}
+        {(c) => <span class="st-lim" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}", { n: c() })}</span>}
       </Show>
       <Show when={props.agent}>
         <button
           class="st-ctx"
           classList={{ hot: pct() >= 70 }}
-          title={c() ? `대화 길이 ${tokens(c()!.tokens)}/${tokens(c()!.window)} · 누르면 모델이 받는 내용을 보여줘요` : "누르면 모델이 받는 내용을 보여줘요"}
+          title={c() ? t("컨텍스트 {a} / {b}", { a: tokens(c()!.tokens), b: tokens(c()!.window) }) : t("컨텍스트")}
           onClick={() => setCtxOpen(true)}
         >
-          <Show when={c()} fallback="컨텍스트">
+          <Show when={c()} fallback={t("컨텍스트")}>
             {(x) => <>{tokens(x().tokens)} ({pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%)</>}
           </Show>
         </button>
@@ -123,14 +124,14 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
         </Show>
       </Show>
       <Show when={props.agent && reusePct(props.agent) !== undefined}>
-        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title="캐시에서 다시 쓴 비율">
-          캐시 {pctText(reusePct(props.agent!)!)}%
+        <span class="st-cache" classList={{ low: reusePct(props.agent!)! < 90 }} title={t("캐시 적중률")}>
+          {t("캐시 {p}%", { p: pctText(reusePct(props.agent!)!) })}
         </span>
       </Show>
       <Show when={props.shells}>
-        <button class="st-sh" title="실행 중인 셸 보기" onClick={() => openPanel("terminal")}>셸 {props.shells}</button>
+        <button class="st-sh" title={t("셸 보기")} onClick={() => openPanel("terminal")}>{t("셸 {n}", { n: props.shells! })}</button>
       </Show>
-      <Show when={props.branch}><span class="st-br" title="이 일의 브랜치"><Icon name="branch" size={11} />{props.branch}</span></Show>
+      <Show when={props.branch}><span class="st-br" title={t("브랜치")}><Icon name="branch" size={12} />{props.branch}</span></Show>
     </div>
     </Show>
   );
@@ -154,8 +155,8 @@ export function ContextRing(props: { agent: string; accountId: string }) {
             type="button"
             class="ctx-ring"
             classList={{ warn: pct() >= 70, hot: pct() >= 90 }}
-            title={`대화 ${tokens(x().tokens)} / ${tokens(x().window)} · ${pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%`}
-            aria-label={`대화 ${Math.round(pct())}% 사용`}
+            title={`${t("컨텍스트 {a} / {b}", { a: tokens(x().tokens), b: tokens(x().window) })} · ${pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%`}
+            aria-label={t("컨텍스트 {p}% 사용", { p: Math.round(pct()) })}
             onClick={() => setOpen(true)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">

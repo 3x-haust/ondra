@@ -3,14 +3,16 @@
 import { createMemo, createSignal, For, onCleanup } from "solid-js";
 import { appCommands } from "../state/commands";
 import { shortcutLabel, type ShortcutCommand } from "../lib/shortcuts";
+import { t } from "../i18n";
 
 const [open, setOpen] = createSignal(false);
 export { open as sheetOpen, setOpen as setSheetOpen };
 
+/** keys that aren't commands: Korean labels, shown with t() */
 const EXTRA: [string, string][] = [
-  ["버튼마다 단축키 보기", "⌘ 길게"],
-  ["어디서든 요청 보내기", "⌥ Space"],
-  ["단축키 보기", "?"],
+  ["단축키 표시", "⌘ 길게"],
+  ["빠른 요청", "⌥ Space"],
+  ["단축키 목록", "?"],
 ];
 
 export function ShortcutSheet() {
@@ -30,15 +32,16 @@ export function ShortcutSheet() {
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
   return (
     <div class="backdrop" onClick={() => setOpen(false)}>
-      <div class="keysheet" role="dialog" aria-modal="true" aria-label="단축키" onClick={(e) => e.stopPropagation()}>
-        <h3>단축키</h3>
+      <div class="keysheet" role="dialog" aria-modal="true" aria-label={t("단축키")} onClick={(e) => e.stopPropagation()}>
+        <h3>{t("단축키")}</h3>
         <div class="keysheet-cols">
           <section>
+            <h4>{t("일반")}</h4>
             <For each={EXTRA}>
               {([label, keys]) => (
                 <div class="keysheet-row">
-                  <span>{label}</span>
-                  <kbd>{keys}</kbd>
+                  <span>{t(label)}</span>
+                  <kbd>{t(keys)}</kbd>
                 </div>
               )}
             </For>

@@ -11,6 +11,8 @@ import { toast } from "../state/ui";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { Logo } from "../ui/Logos";
+import { t } from "../i18n";
+import { ignoredKey, noModifiers } from "../lib/shortcuts";
 
 interface Provider {
   id: string;
@@ -26,19 +28,20 @@ type Step =
   | { kind: "busy"; p: Provider; url?: string; device?: { code: string; uri: string }; note?: string; prompt?: Prompt }
   | { kind: "done"; p: Provider };
 
-/** The services people actually sign in with, in the order they look for them. */
+/** The services people actually sign in with, in the order they look for them. `sub` is a Korean key for t(). */
 const TOP: Record<string, { title: string; sub: string }> = {
   anthropic: { title: "Claude", sub: "Pro · Max 구독" },
-  "openai-codex": { title: "ChatGPT", sub: "Plus · Pro 구독 (Codex)" },
+  "openai-codex": { title: "ChatGPT", sub: "Plus · Pro 구독" },
   "github-copilot": { title: "GitHub Copilot", sub: "Copilot 구독" },
 };
 const ORDER = ["anthropic", "openai-codex", "github-copilot"];
 
+/** the engine's English prompts, said the app's way */
 const say = (m: string) =>
   m
-    .replace(/^Select (.+) login method:?$/i, "$1 로그인 방법을 골라 주세요")
-    .replace(/^Complete login in your browser.*$/i, "로그인한 뒤 주소 붙여넣기")
-    .replace(/^Enter (.+) API key:?$/i, "$1 API 키를 넣어 주세요");
+    .replace(/^Select (.+) login method:?$/i, (_, name) => t("{name} 로그인 방법", { name }))
+    .replace(/^Complete login in your browser.*$/i, () => t("로그인 후 주소 붙여넣기"))
+    .replace(/^Enter (.+) API key:?$/i, (_, name) => t("{name} API 키", { name }));
 
 export function LoginSheet(props: { accountId: string; onClose: () => void }) {
   const agent = `login:${props.accountId}:${Date.now()}`;
@@ -122,7 +125,7 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
   const reply = (id: string, value: string) => {
     void agentSend(agent, { type: "extension_ui_response", id, value });
     const s = step();
-    if (s.kind === "busy" && s.prompt?.id === id) setStep({ ...s, prompt: undefined, note: "확인하는 중이에요" });
+    if (s.kind === "busy" && s.prompt?.id === id) setStep({ ...s, prompt: undefined, note: t("확인 중") });
   };
 
   const start = async (p: Provider) => {
@@ -138,7 +141,7 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
       updateAccount(props.accountId, (a) => (a.providers = list));
       void refreshModels(props.accountId, true);
       setStep({ kind: "done", p });
-      toast(`${TOP[p.id]?.title ?? p.name}에 로그인했어요`);
+      toast(t("{name}에 로그인했어요", { name: TOP[p.id]?.title ?? p.name }));
       setTimeout(props.onClose, 900);
     } catch (e) {
       loginId = "";
@@ -159,6 +162,17 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
     });
   };
 
+  // Esc steps back from a sign-in under way, or closes the sheet
+  const esc = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || ignoredKey(e) || !noModifiers(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (step().kind === "busy") cancel();
+    else props.onClose();
+  };
+  window.addEventListener("keydown", esc, true);
+  onCleanup(() => window.removeEventListener("keydown", esc, true));
+
   const top = createMemo(() => ORDER.map((id) => providers()?.find((p) => p.id === id && p.authType === "oauth")).filter((p): p is Provider => !!p));
   const rest = createMemo(() => {
     const k = q().trim().toLowerCase();
@@ -170,47 +184,47 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
 
   return (
     <div class="backdrop" onClick={props.onClose}>
-      <div class="sheet login-sheet" onClick={(e) => e.stopPropagation()}>
+      <div class="sheet login-sheet" role="dialog" aria-modal="true" aria-label={t("로그인")} onClick={(e) => e.stopPropagation()}>
         <div class="sheet-head">
           <Show when={step().kind === "busy"}>
-            <button class="icon-btn" title="뒤로" onClick={cancel}><Icon name="back" size={15} /></button>
+            <button class="icon-btn" title={t("뒤로")} aria-label={t("뒤로")} onClick={cancel}><Icon name="back" size={16} /></button>
           </Show>
-          로그인
+          {t("로그인")}
           <span class="spacer" />
-          <button class="icon-btn" onClick={props.onClose}><Icon name="x" size={15} /></button>
+          <button class="icon-btn" title={t("닫기")} aria-label={t("닫기")} onClick={props.onClose}><Icon name="x" size={16} /></button>
         </div>
         <div class="login-body">
           <Switch>
             <Match when={step().kind === "pick"}>
               <Show when={error()}><p class="login-err">{error()}</p></Show>
-              <Show when={providers()} fallback={<div class="login-wait"><span class="spin sm" />불러오는 중</div>}>
+              <Show when={providers()} fallback={<div class="login-wait"><span class="spin sm" />{t("불러오는 중")}</div>}>
                 <div class="login-top">
                   <For each={top()}>
                     {(p) => (
                       <button class="login-card" onClick={() => void start(p)}>
                         <Logo name={p.id === "anthropic" ? "claude" : p.id} size={22} class="login-card-logo" />
                         <span class="login-card-t">{TOP[p.id].title}</span>
-                        <span class="login-card-s">{TOP[p.id].sub}</span>
-                        <Show when={p.configured}><span class="pill ok login-card-on">로그인됨</span></Show>
+                        <span class="login-card-s">{t(TOP[p.id].sub)}</span>
+                        <Show when={p.configured}><span class="pill ok login-card-on">{t("로그인됨")}</span></Show>
                       </button>
                     )}
                   </For>
                 </div>
                 <button class="login-more" classList={{ open: more() }} onClick={() => setMore(!more())}>
-                  <Icon name="chevron" size={11} />
-                  다른 서비스 · API 키 <span class="muted">{rest().length}</span>
+                  <Icon name="chevron" size={12} />
+                  {t("다른 서비스 · API 키")} <span class="muted">{rest().length}</span>
                 </button>
                 <Fold open={more()}>
                   <div class="login-rest">
-                    <input class="input" placeholder="찾기 (OpenAI, Gemini, OpenRouter…)" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+                    <input class="input" placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
                     <div class="login-list">
                       <For each={rest()}>
                         {(p) => (
                           <button class="login-row" onClick={() => void start(p)}>
                             <span class="login-row-logo"><Logo name={p.id} size={14} /></span>
                             <span class="login-row-t">{p.name}</span>
-                            <span class="login-row-k">{p.authType === "oauth" ? "브라우저 로그인" : "API 키"}</span>
-                            <Show when={p.configured}><span class="pill ok">로그인됨</span></Show>
+                            <span class="login-row-k">{p.authType === "oauth" ? t("브라우저") : t("API 키")}</span>
+                            <Show when={p.configured}><span class="pill ok">{t("로그인됨")}</span></Show>
                           </button>
                         )}
                       </For>
@@ -223,7 +237,7 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
               {(s) => (
                 <div class="login-flow">
                   <h3>{TOP[s().p.id]?.title ?? s().p.name}</h3>
-                  <Switch fallback={<div class="login-wait"><span class="spin sm" />{s().note ?? "준비하는 중이에요"}</div>}>
+                  <Switch fallback={<div class="login-wait"><span class="spin sm" />{s().note ?? t("준비 중")}</div>}>
                     <Match when={s().prompt && s().prompt!.type !== "manual_code" && s().prompt}>
                       {(p) => (
                         <Show
@@ -234,14 +248,14 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
                               <input
                                 class="input"
                                 type={p().type === "secret" ? "password" : "text"}
-                                placeholder={p().placeholder ?? (p().type === "secret" ? "키 붙여 넣기" : "")}
+                                placeholder={p().placeholder ?? (p().type === "secret" ? t("키 붙여넣기") : "")}
                                 value={answer()}
                                 autofocus
                                 onInput={(e) => setAnswer(e.currentTarget.value)}
                               />
                               <div class="login-acts">
                                 <button class="btn primary sm" type="submit" disabled={p().type === "secret" && !answer().trim()}>
-                                  {p().type === "text" && !answer().trim() ? "건너뛰기" : "확인"}
+                                  {p().type === "text" && !answer().trim() ? t("건너뛰기") : t("계속")}
                                 </button>
                               </div>
                             </form>
@@ -264,32 +278,32 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
                     <Match when={s().device}>
                       {(d) => (
                         <div class="login-device">
-                          <p>코드 복사됨</p>
+                          <p>{t("브라우저에 코드 입력")}</p>
                           <code class="login-code">{d().code}</code>
                           <div class="login-acts">
-                            <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(d().code), toast("코드를 복사했어요"))}><Icon name="copy" size={13} />코드 복사</button>
-                            <button class="btn sm" onClick={() => void openUrl(d().uri)}><Icon name="link" size={13} />페이지 다시 열기</button>
+                            <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(d().code), toast(t("복사했어요")))}><Icon name="copy" size={14} />{t("코드 복사")}</button>
+                            <button class="btn sm" onClick={() => void openUrl(d().uri)}><Icon name="link" size={14} />{t("페이지 다시 열기")}</button>
                           </div>
-                          <div class="login-wait"><span class="spin sm" />끝나면 저절로 넘어가요</div>
+                          <div class="login-wait"><span class="spin sm" />{t("기다리는 중")}</div>
                         </div>
                       )}
                     </Match>
                     <Match when={s().url}>
                       {(u) => (
                         <div class="login-device">
-                          <p>브라우저에서 로그인 중</p>
+                          <p>{t("브라우저에서 로그인하세요")}</p>
                           <div class="login-acts">
-                            <button class="btn sm" onClick={() => void openUrl(u())}><Icon name="link" size={13} />브라우저 다시 열기</button>
-                            <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(u()), toast("링크를 복사했어요"))}><Icon name="copy" size={13} />링크 복사</button>
+                            <button class="btn sm" onClick={() => void openUrl(u())}><Icon name="link" size={14} />{t("다시 열기")}</button>
+                            <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(u()), toast(t("복사했어요")))}><Icon name="copy" size={14} />{t("링크 복사")}</button>
                           </div>
-                          <div class="login-wait"><span class="spin sm" />기다리는 중이에요</div>
+                          <div class="login-wait"><span class="spin sm" />{t("기다리는 중")}</div>
                           <Show when={s().prompt?.type === "manual_code" && s().prompt}>
                             {(p) => (
                               <form class="login-ask small" onSubmit={(e) => (e.preventDefault(), answer().trim() && reply(p().id, answer().trim()))}>
                                 <label>{say(p().message)}</label>
                                 <div class="login-inline">
-                                  <input class="input" placeholder={p().placeholder ?? "주소나 코드 붙여 넣기"} value={answer()} onInput={(e) => setAnswer(e.currentTarget.value)} />
-                                  <button class="btn sm" type="submit" disabled={!answer().trim()}>확인</button>
+                                  <input class="input" placeholder={p().placeholder ?? t("주소 또는 코드")} value={answer()} onInput={(e) => setAnswer(e.currentTarget.value)} />
+                                  <button class="btn sm" type="submit" disabled={!answer().trim()}>{t("계속")}</button>
                                 </div>
                               </form>
                             )}
@@ -303,8 +317,8 @@ export function LoginSheet(props: { accountId: string; onClose: () => void }) {
             </Match>
             <Match when={step().kind === "done"}>
               <div class="login-done">
-                <Icon name="check" size={18} />
-                로그인했어요
+                <Icon name="check" size={16} />
+                {t("로그인했어요")}
               </div>
             </Match>
           </Switch>
