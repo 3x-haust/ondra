@@ -905,7 +905,8 @@
   height: 6px;
   background: currentColor;
 }
-.st-icon.done {
+/* (a discarded task's glyph keeps its own muted look) */
+.st-icon.done:not(.discarded) {
   color: var(--accent-text);
 }
 .br-chip-meta.review,
@@ -1288,10 +1289,11 @@
 .thread-inner > .note > .note-glyph {
   flex: none;
 }
-/* a pause in the thread: the sidebar's paused glyph at icon size */
+/* a pause in the thread: the shared paused glyph at icon size, in the icons' column */
 .thread-inner > .note > .note-glyph {
   width: 14px;
   height: 14px;
+  margin: 0;
 }
 .thread-inner > .note > span {
   min-width: 0;

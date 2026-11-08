@@ -143,10 +143,10 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
       <Show when={props.showTask !== false && props.crumb !== false && t()}>
         {(x) => (
           <button class="decision-src" onClick={() => openTask(x().id)}>
-            {/* where it runs: its project (badge and name), the topic only when it has none;
+            {/* where it runs: its project (badge and name), 기타 when it has none;
                 in that project's own chat the header already says it, so only the task */}
             <Show when={!inOwnProject(x())}>
-              <Show when={x().project ? projectById(x().project!) : undefined} fallback={<span>{x().topic}</span>}>
+              <Show when={x().project ? projectById(x().project!) : undefined} fallback={<span>{tr("기타")}</span>}>
                 {(p) => (
                   <>
                     <ProjectBadge name={p().name} />

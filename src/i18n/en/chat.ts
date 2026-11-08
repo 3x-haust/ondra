@@ -247,4 +247,5 @@ export default {
   "일시정지 · {d} 뒤 다시 시작": "Paused · resumed {d} later",
   "일시정지 · 다시 시작함": "Paused · resumed",
   "메모리에 저장|note": "Saved to memory",
+  "기타": "Other",
 } satisfies Record<string, string>;
