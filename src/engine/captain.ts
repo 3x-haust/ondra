@@ -18,7 +18,7 @@ import { skillScope } from "./skillPick";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, prOf, pauseTask, rawStats, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, prOf, rawStats, stopTask, tell, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { workedIn } from "./workedIn";
 
@@ -118,6 +118,22 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
 }
 
 /**
+ * The user ended or stopped this work themselves, or the automatic follow-ups it
+ * came from: main reports it and starts nothing to carry it on until the user asks.
+ * A job the user asked for again starts clean; only main's own follow-ups inherit it.
+ */
+export function userParked(t: Task | undefined): boolean {
+  for (let i = 0; t && i < 12; i++) {
+    if (t.endedBy === "user" || t.parkedAt) return true;
+    const id = t.id;
+    const made = state.captain.find((m) => (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === id));
+    if (!made?.after || !t.follows) return false;
+    t = taskById(t.follows);
+  }
+  return false;
+}
+
+/**
  * Main is the orchestrator: when a job it started ends, the result comes back to
  * main, which tells the user what came out and carries on (next job, or a question).
  */
@@ -148,6 +164,7 @@ export function jobEnded(t: Task) {
     blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
     asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
     sentBack ? "You already sent this fork back once since the user last spoke. Report what came out and stop: no append to it until the user asks." : "",
+    userParked(t) ? "The user ended or stopped this work themselves. Report what came out and what is left in a few lines, then stop: no new fork to carry it on and no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
@@ -853,6 +870,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
     return m && (m.space ? m.space === sp(space) : m.scope === "global") ? m.id : undefined;
   };
   for (const r of raw) {
+    // main reacting to a job's end never carries on work the user ended or stopped
+    if (!fromUser && (r?.kind === "append" || r?.kind === "new") && userParked(job(r.kind === "new" ? r.from : (r.taskId ?? r.workerId)))) continue;
     if (r?.kind === "answer") {
       const text = String(r.text ?? "");
       const blocks = Array.isArray(r.blocks) ? (r.blocks as Block[]) : [];
@@ -871,7 +890,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       }
     } else if (r?.kind === "stop" && job(r.taskId)) {
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
-      pauseTask(r.taskId);
+      stopTask(r.taskId);
       out.push({ kind: "stop", taskId: r.taskId });
     } else if (r?.kind === "append" && finished(job(r.taskId ?? r.workerId)) && String(r.message ?? "").trim()) {
       // a finished job is closed: more on it is a new job with a fresh context, on its branch

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { reconcile } from "solid-js/store";
 import { freshState, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
-import { applyRoutes } from "./captain";
+import { applyRoutes, userParked } from "./captain";
+import { trimEntries } from "./tasks";
 
 const job = (id: string, space: Task["space"], status: Task["status"]): Task => ({
   id, space, topic: "Example", title: id, ask: `Do ${id}`, cwd: "/repo", status,
@@ -36,5 +37,55 @@ describe("main's routes stay in their space", () => {
     expect(made.space).toBe("home");
     expect(made.after).toEqual(["h-run"]);
     expect(made.follows).toBeUndefined();
+  });
+});
+
+describe("work the user ended stays ended", () => {
+  const ended = (over: Partial<Task>) => ({ ...job("h-ended", "home", "done"), ...over });
+
+  it("main's reaction to a job's end starts no successor for work the user marked done", async () => {
+    setState("tasks", (list) => [...list, ended({ endedBy: "user" })]);
+    const before = state.tasks.length;
+    const out = await applyRoutes("home", [
+      { kind: "answer", text: "정리했어요" },
+      { kind: "new", title: "이어서", task: "finish the rest", from: "h-ended" },
+      { kind: "append", taskId: "h-ended", message: "finish the rest" },
+    ], "Fork h-ended finished.", undefined, false);
+    expect(out.map((r) => r.kind)).toEqual(["answer"]);
+    expect(state.tasks.length).toBe(before);
+  });
+
+  it("the user's own request still carries it on", async () => {
+    setState("tasks", (list) => [...list, ended({ endedBy: "user" })]);
+    const out = await applyRoutes("home", [{ kind: "new", title: "이어서", task: "finish the rest", from: "h-ended" }], "이어서 해줘");
+    expect(out.map((r) => r.kind)).toEqual(["new"]);
+  });
+
+  it("a stop reaches main's own follow-ups, not a job the user asked for again", () => {
+    setState("tasks", (list) => [
+      ...list,
+      ended({ id: "a", parkedAt: 5 }),
+      ended({ id: "auto", follows: "a", endedBy: undefined }),
+      ended({ id: "asked", follows: "a", endedBy: undefined }),
+    ]);
+    setState("captain", [
+      { id: "c1", at: 1, space: "home", from: "captain", after: "a", routes: [{ kind: "new", taskId: "auto" }] },
+      { id: "c2", at: 2, space: "home", from: "me", text: "다시 해줘" },
+      { id: "c3", at: 3, space: "home", from: "captain", routes: [{ kind: "new", taskId: "asked" }] },
+    ]);
+    expect(userParked(taskById("auto"))).toBe(true);
+    expect(userParked(taskById("asked"))).toBe(false);
+    expect(userParked(taskById("h-run"))).toBe(false);
+  });
+});
+
+describe("trimEntries", () => {
+  it("drops the oldest entries past the cap but keeps the user's words", () => {
+    const entries = [
+      { id: "u1", at: 1, kind: "user", text: "원래 요청" },
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `n${i}`, at: 2 + i, kind: "note", text: `n${i}` })),
+    ] as Task["entries"];
+    trimEntries(entries, 3);
+    expect(entries.map((e) => e.id)).toEqual(["u1", "n3", "n4"]);
   });
 });

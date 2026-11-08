@@ -6,7 +6,7 @@ import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
 import { decisionFor, spaceById, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
-import { mergeTask, pauseTask, resumeTask, startTask, tell } from "../engine/tasks";
+import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { throwThought } from "../engine/captain";
 import { ago, compact, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -222,7 +222,7 @@ function Card(props: { t: Task; byProject: boolean }) {
         <Show when={st() === "running" || st() === "you" || st() === "review" || st() === "queued"}>
           {act("말하기", "message", () => (setTalk(!talk()), queueMicrotask(() => input?.focus())))}
         </Show>
-        <Show when={st() === "running"}>{act("멈추기", "pause", () => pauseTask(t().id))}</Show>
+        <Show when={st() === "running"}>{act("멈추기", "pause", () => stopTask(t().id))}</Show>
         <Show when={t().status === "paused"}>{act("다시 시작", "play", () => resumeTask(t().id))}</Show>
         <Show when={t().status === "queued"}>{act("지금 시작", "play", () => void startTask(t().id))}</Show>
         <Show when={st() === "review"}>{act("원래 폴더에 합치기", "merge", () => void mergeTask(t().id), true)}</Show>

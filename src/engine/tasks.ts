@@ -83,6 +83,7 @@ const HANDOFF_AT = [90_000, 150_000];
 
 const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
+// a long job's transcript keeps its newest entries; reaching this trims, it never ends the job
 const MAX_ENTRIES = 600;
 const MAX_SHELLS = 40;
 const TAIL = 3000;
@@ -187,8 +188,20 @@ type NewEntry = Entry extends infer E ? (E extends Entry ? Omit<E, "id" | "at"> 
 function push(t: Task, e: NewEntry): string {
   const id = uid("e");
   t.entries.push({ at: Date.now(), ...e, id } as Entry);
-  if (t.entries.length > MAX_ENTRIES) t.entries.splice(0, t.entries.length - MAX_ENTRIES);
+  trimEntries(t.entries);
   return id;
+}
+
+/** Drop the oldest entries past the cap, but keep the user's own words: later sessions and main still read them. */
+export function trimEntries(entries: Entry[], max = MAX_ENTRIES) {
+  let drop = entries.length - max;
+  for (let i = 0; i < entries.length && drop > 0; ) {
+    if (entries[i].kind === "user") i++;
+    else {
+      entries.splice(i, 1);
+      drop--;
+    }
+  }
 }
 
 /**
@@ -1794,6 +1807,7 @@ function drainQueue(id: string): boolean {
 }
 
 function requeue(t: Task) {
+  t.parkedAt = undefined;
   t.status = "queued";
   t.now = "대기 중";
   t.error = undefined;
@@ -1832,13 +1846,14 @@ export async function decide(decisionId: string, optionId: string) {
   }
   if (d.kind === "stalled" && optionId === "finish") {
     // its last report, not "now" (that is what it was doing, e.g. "명령 실행 중")
+    updateTask(t.id, (x) => (x.endedBy = "user"));
     finish(t.id, lastReport(t) ?? "완료");
     return;
   }
   // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself
   if (meansStop(label)) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
-    pauseTask(t.id);
+    stopTask(t.id);
     return;
   }
   if (d.kind === "stalled") {
@@ -1896,8 +1911,17 @@ export function pauseTask(id: string) {
   for (const k of activeKids(id)) pauseTask(k.id);
 }
 
+/** The user stopped it: paused, and main doesn't carry it on by itself. */
+export function stopTask(id: string) {
+  pauseTask(id);
+  updateTask(id, (t) => (t.parkedAt = Date.now()));
+}
+
 export const resumeTask = (id: string) => updateTask(id, (t) => requeue(t));
-export const finishTask = (id: string) => finish(id, "직접 완료 처리");
+export const finishTask = (id: string) => {
+  updateTask(id, (t) => (t.endedBy = "user"));
+  finish(id, "직접 완료 처리");
+};
 
 export function removeTask(id: string) {
   for (const k of childrenOf(id)) removeTask(k.id);

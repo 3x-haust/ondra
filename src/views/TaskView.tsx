@@ -11,7 +11,7 @@ import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/
 import { goMain, newTask, openPanel as showTool, toast, openTask, panelOpen, panelTab, togglePanel, type PanelTab } from "../state/ui";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles, gitChanges, openInEditor, revealPath } from "../lib/native";
-import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, pauseTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
+import { rawStats, archiveTask, closeWorktree, discardTask, prOf, duplicateTask, renameTask, togglePin, transcriptMarkdown, finishTask, mergeTask, stopTask, removeTask, resumeTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, tell } from "../engine/tasks";
 import { ago, compact, Dot, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { costDetail, jobCost } from "../ui/cost";
@@ -46,7 +46,7 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
       <Show when={open()}>
         <div class="menu" style={{ top: "36px", right: "0" }} onClick={(e) => e.stopPropagation()}>
           <Show when={t().status === "running"}>
-            <button onClick={() => (pauseTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">일시정지</span></button>
+            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">일시정지</span></button>
           </Show>
           <Show when={t().status === "paused" || t().status === "failed"}>
             <button onClick={() => (resumeTask(t().id), close())}><Icon name="play" size={14} class="muted" /><span class="row-title">다시 시작</span></button>
@@ -366,7 +366,7 @@ export function TaskView(props: { id: string }) {
                     btwCommand(() => `task:${task().id}`),
                     drawCommand(() => task().id),
                     { name: "remember", desc: "이 폴더에서 기억하기 · 뒤에 적은 내용을 앞으로 지켜요", icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
-                    { name: "stop", desc: "멈추기", icon: "pause", run: () => pauseTask(task().id) },
+                    { name: "stop", desc: "멈추기", icon: "pause", run: () => stopTask(task().id) },
                     { name: "resume", desc: "다시 시작", icon: "play", run: () => resumeTask(task().id) },
                     { name: "done", desc: "완료로 표시", icon: "check", run: () => finishTask(task().id) },
                     { name: "rename", desc: "이름 바꾸기 (/rename 새 이름)", icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim().slice(0, 40))) },
@@ -384,7 +384,7 @@ export function TaskView(props: { id: string }) {
                   left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
                   onSend={(m) => tell(task().id, m)}
                   running={task().status === "running"}
-                  onStop={() => pauseTask(task().id)}
+                  onStop={() => stopTask(task().id)}
                   right={
                     <>
                     <ModelPicker
