@@ -2,8 +2,9 @@
 // 자동 = routed (stays where the cache is warm, moves only when a plan window is
 // nearly used up). Picking one pins new work in this space to it. A job already
 // running keeps its account; switching a job starts its cache fresh, so it's said.
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { accountsIn, setState, state } from "../state/store";
+import type { Account } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { setView } from "../state/ui";
 import { Logo } from "./Logos";
@@ -12,18 +13,34 @@ import { usePop } from "./ModelPicker";
 import { t } from "../i18n";
 
 const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
-const services = (id: string) => [...new Set((state.accounts.find((x) => x.id === id)?.providers ?? []).map(service))];
-/** what an account is called: its provider (ChatGPT, Claude), unless it was given a name of its own
- *  (the default name is only the workspace's, "회사 2", which says nothing about the account) */
-const nameOf = (id: string) => {
-  const x = state.accounts.find((a) => a.id === id);
-  if (!x) return "";
-  const own = x.label && !state.spaces.some((s) => x.label === s.label || x.label.startsWith(`${s.label} `));
-  return own ? x.label : services(id).join(" · ") || t(x.label);
+const services = (a: Account) => [...new Set(a.providers.map(service))];
+const find = (a: Account | string | undefined) => (typeof a === "string" ? state.accounts.find((x) => x.id === a) : a);
+/** a label the person gave it (the default one is only the workspace's name, "회사 2", which says nothing) */
+const ownLabel = (a: Account) => (a.label && !state.spaces.some((s) => a.label === s.label || a.label.startsWith(`${s.label} `)) ? a.label : "");
+/** What an account is called everywhere (picker, settings, overview, new task): the person's own
+ *  label if they set one, otherwise provider + email ("ChatGPT · me@example.com").
+ *  `short` drops the email, for a chip that has no room for it. */
+export function accountName(account: Account | string | undefined, short = false): string {
+  const a = find(account);
+  if (!a) return "";
+  const own = ownLabel(a);
+  if (own) return own;
+  const who = services(a).join(" · ");
+  const mail = short ? "" : emails[a.id];
+  if (who) return [who, mail].filter(Boolean).join(" · ");
+  // no provider known yet: who it is, else the built-in login, never the workspace's name
+  return emails[a.id] || (a.id === "default" ? t("기본 로그인") : t(a.label));
+}
+/** "12.5 credits": a number picks the English singular or plural */
+const credits = (id: string) => {
+  const c = creditsOf(id);
+  if (!c) return [];
+  const n = Number(c);
+  return [Number.isFinite(n) ? t("크레딧 {n}", { n }) : `${t("크레딧")} ${c}`];
 };
 /** the windows the provider really has (now usually only the weekly one): "주간 19% 사용" */
 const usage = (id: string) =>
-  [...usageOf(id).map((l) => t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })), ...(creditsOf(id) ? [t("크레딧 {n}", { n: creditsOf(id)! })] : [])].join(" · ");
+  [...usageOf(id).map((l) => t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })), ...credits(id)].join(" · ");
 
 export function AccountPicker(props: {
   accountId: string;
@@ -33,6 +50,17 @@ export function AccountPicker(props: {
   running?: boolean;
 }) {
   const [open, setOpen] = usePop();
+  // it opens toward the side with more room (up from the usage line, down on the new-task screen)
+  // and never past the window's edge
+  const [room, setRoom] = createSignal<{ up: boolean; max: number }>({ up: true, max: 480 });
+  const toggle = (el: HTMLElement) => {
+    if (!open()) {
+      const r = el.getBoundingClientRect();
+      const up = r.top > innerHeight - r.bottom;
+      setRoom({ up, max: Math.max(160, (up ? r.top : innerHeight - r.bottom) - 16) });
+    }
+    setOpen(!open());
+  };
   const pool = () => accountsIn(props.space);
   const pick = () => state.accountPick?.[props.space] ?? "auto";
   const auto = () => !props.onPick && pick() === "auto";
@@ -57,17 +85,17 @@ export function AccountPicker(props: {
       <button
         class="st-acc"
         classList={{ on: open() }}
-        title={[nameOf(props.accountId), emails[props.accountId], auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
-        onClick={() => setOpen(!open())}
+        title={[accountName(props.accountId), auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
+        onClick={(e) => toggle(e.currentTarget)}
       >
-        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{nameOf(props.accountId)}</span></>}>
+        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{accountName(props.accountId, true)}</span></>}>
           <Icon name="key" size={14} />
           <span class="st-acc-name">{t("자동")}</span>
         </Show>
         <Icon name="chevron" size={12} class="st-acc-chev" />
       </button>
       <Show when={open()}>
-        <div class="pop acc-pop up">
+        <div class="pop acc-pop" classList={{ up: room().up }} style={{ "max-height": `${room().max}px`, "overflow-y": "auto" }}>
           <div class="pop-label">{t("계정")}</div>
           <Show when={!props.onPick}>
             <button type="button" class="pop-item" onClick={() => choose("auto")}>
@@ -81,8 +109,8 @@ export function AccountPicker(props: {
                 <span class="pop-item-main">
                   <span class="acc-row">
                     <Logos id={x.id} />
-                    <span class="acc-name">{nameOf(x.id)}</span>
-                    <Show when={emails[x.id]}><span class="acc-email">{emails[x.id]}</span></Show>
+                    <span class="acc-name">{accountName(x, true)}</span>
+                    <Show when={emails[x.id] && emails[x.id] !== accountName(x, true)}><span class="acc-email">{emails[x.id]}</span></Show>
                   </span>
                   <span class="pop-item-sub">{usage(x.id) || (x.providers.length ? "" : t("로그인 필요"))}</span>
                 </span>

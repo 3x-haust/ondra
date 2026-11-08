@@ -80,6 +80,19 @@ export function Glyph(props: { t: Task; class?: string }) {
   );
 }
 
+/** What a task's row says on the right, and in which tone: its state when it needs something
+ *  (응답 필요, 검토, 실패 ...), else how long it has run or when it finished. Sidebar and ⌘K. */
+export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "ask" | "review" | "idle" | "live" | "done" } {
+  const b = bucket(x);
+  if (x.status === "failed") return { text: tr("실패"), tone: "bad" };
+  if (x.status === "waiting" || (b === "you" && !kid)) return { text: tr("응답 필요"), tone: "ask" };
+  if (b === "review") return { text: tr("검토"), tone: "review" };
+  if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
+  if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
+  if (x.status === "running") return { text: x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "", tone: "live" };
+  return { text: ago(x.finishedAt ?? x.createdAt), tone: "done" };
+}
+
 // ───────────── one row per job (T3-style thread list)
 function Row(props: { t: Task; kid?: boolean; index: number }) {
   const t = () => props.t;
@@ -89,16 +102,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
   const b = () => bucket(t());
   const tone = () =>
     t().status === "failed" ? "bad" : b() === "you" ? "ask" : b() === "review" ? "review" : t().status === "running" ? "live" : t().status === "queued" || t().status === "paused" ? "idle" : "done";
-  const meta = () => {
-    const x = t();
-    if (x.status === "failed") return tr("실패");
-    if (x.status === "waiting" || (b() === "you" && !props.kid)) return tr("응답 필요");
-    if (b() === "review") return tr("검토");
-    if (x.status === "queued") return tr("대기");
-    if (x.status === "paused") return tr("일시정지");
-    if (x.status === "running") return x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "";
-    return ago(x.finishedAt ?? x.createdAt);
-  };
+  const meta = () => stateMeta(t(), props.kid).text;
   // a task in review says so; its size is in the tooltip
   const tip = () => {
     const d = changes(t());
@@ -199,10 +203,17 @@ function projectMenu(id: string): MenuEntry[] {
 const [renamingProject, setRenamingProject] = createSignal<string | null>(null);
 
 /** 내 차례: the tasks waiting on you, in a popover beside the row (§9.8) */
-const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number } | null>(null);
+const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; keyboard?: boolean } | null>(null);
 function NeedsMenu() {
   let el!: HTMLDivElement;
-  const close = () => setNeedsMenu(null);
+  const close = () => {
+    const m = needsMenu();
+    if (!m) return;
+    setNeedsMenu(null);
+    const row = document.querySelector<HTMLElement>(".sidebar .sb-todo");
+    if (m.keyboard) row?.focus();
+    else if (document.activeElement === row) row?.blur();
+  };
   const esc = (e: KeyboardEvent) => !ignoredKey(e) && noModifiers(e) && e.key === "Escape" && needsMenu() && (e.preventDefault(), e.stopPropagation(), close());
   const away = (e: Event) => needsMenu() && el && !el.contains(e.target as Node) && !(e.target as Element).closest?.(".sb-todo") && close();
   window.addEventListener("pointerdown", away, true);
@@ -234,7 +245,11 @@ function NeedsMenu() {
               <button role="menuitem" onClick={() => (openTask(t.id), close())}>
                 <Glyph t={t} />
                 <span class="row-title">{t.title}</span>
-                <span class="row-hint">{bucket(t) === "you" ? (t.status === "failed" ? tr("실패") : tr("응답 필요")) : tr("검토")}{where(t) ? ` · ${where(t)}` : ""}</span>
+                <span class="row-hint">
+                  {/* the state word in its tone, as on the sidebar row */}
+                  <span class={`needs-word ${t.status === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "you" ? (t.status === "failed" ? tr("실패") : tr("응답 필요")) : tr("검토")}</span>
+                  {where(t) ? ` · ${where(t)}` : ""}
+                </span>
               </button>
             )}
           </For>
@@ -294,10 +309,10 @@ const setFold = (k: string, v: boolean) => {
 };
 
 /** A section title you can click to fold what's under it. */
-function Head(props: { id: string; label: string; count?: number; children?: any }) {
+function Head(props: { id: string; label: string; count?: number; on?: boolean; children?: any }) {
   const shut = () => !!fold(props.id);
   return (
-    <div class="sb-head">
+    <div class="sb-head" classList={{ on: !!props.on }}>
       <button class="sb-head-btn" classList={{ shut: shut() }} onClick={() => setFold(props.id, !shut())} aria-expanded={!shut()}>
         {props.label}
         <Icon name="chevron" size={12} class="sb-head-chev" />
@@ -309,8 +324,27 @@ function Head(props: { id: string; label: string; count?: number; children?: any
   );
 }
 
+/** finished tasks folded away under their group ("완료 3개"); the open one shows in place, so its fold opens */
+const [doneOpen, setDoneOpen] = createSignal<Record<string, boolean>>({});
+function DoneFold(props: { id: string; tasks: Task[] }) {
+  const has = () => props.tasks.some((t) => t.id === openRoot());
+  const open = () => doneOpen()[props.id] ?? has();
+  return (
+    <Show when={props.tasks.length}>
+      <button class="sb-older" classList={{ open: open() }} aria-expanded={open()} onClick={() => setDoneOpen((m) => ({ ...m, [props.id]: !open() }))}>
+        <Icon name="chevron" size={12} class="sb-older-chev" />
+        {tr("완료 {n}개", { n: props.tasks.length })}
+      </button>
+      <Fold open={open()}>
+        <div class="sb-done-list">
+          <For each={props.tasks}>{(t, i) => <Row t={t} index={i()} />}</For>
+        </div>
+      </Fold>
+    </Show>
+  );
+}
+
 export function Sidebar() {
-  const [older, setOlder] = createSignal(false);
   const [showArchived, setShowArchived] = createSignal(false);
   const roots = createMemo(() =>
     tasksIn(state.space)
@@ -318,12 +352,14 @@ export function Sidebar() {
       .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
   );
   const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
-  // finished (and merged) jobs leave the list after a few minutes; the canvas keeps them
-  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR && t.id !== openRoot();
+  // finished (and merged) jobs fold away under their group after a few minutes; opening one
+  // doesn't move it back up: it shows where it is, in its group's done fold
+  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR;
   const shown = () => roots().filter((t) => !old(t));
-  const hidden = () => roots().filter(old).length;
+  const filed = (t: Task) => !!t.project && projectsIn(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
-  const loose = () => shown().filter((t) => !t.project || !projectsIn(state.space).some((p) => p.id === t.project));
+  const loose = () => shown().filter((t) => !filed(t));
+  const looseDone = () => roots().filter((t) => old(t) && !filed(t));
   const needs = () => roots().filter((t) => bucket(t) === "you" || bucket(t) === "review").length;
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
@@ -410,7 +446,7 @@ export function Sidebar() {
               if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
               if (needsMenu()) return setNeedsMenu(null);
               const r = e.currentTarget.getBoundingClientRect();
-              setNeedsMenu({ x: r.right + 8, y: r.top - 4 });
+              setNeedsMenu({ x: r.right + 8, y: r.top - 4, keyboard: e.detail === 0 });
             }}
             data-shortcut="waiting"
             title={`${tr("다음 내 차례")} ${shortcutHint("waiting")}`}
@@ -443,9 +479,10 @@ export function Sidebar() {
               const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = () => shown().filter((t) => t.project === p.id);
-              // the number and the fold go by what the row shows when opened (older finished jobs live under 끝난 일)
-              const all = () => jobs().length;
-              const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t) || t.id === openRoot()));
+              const done = () => roots().filter((t) => old(t) && t.project === p.id);
+              // the number and the fold go by what the row holds: its jobs and its done fold
+              const all = () => jobs().length + done().length;
+              const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));
               return (
                 <>
                   <button
@@ -511,7 +548,8 @@ export function Sidebar() {
                   <Show when={all()}>
                     <Fold open={open()}>
                       <div class="sb-proj-jobs">
-                        <For each={jobs()} fallback={<p class="sb-empty sm">{tr("완료된 작업만 있어요")}</p>}>{(t, i) => <Row t={t} index={i()} />}</For>
+                        <For each={jobs()}>{(t, i) => <Row t={t} index={i()} />}</For>
+                        <DoneFold id={`p:${p.id}`} tasks={done()} />
                       </div>
                     </Fold>
                   </Show>
@@ -522,8 +560,8 @@ export function Sidebar() {
         </div>
         </Fold>
 
-        <Head id="devices" label={tr("디바이스")} count={bootedDevices().length}>
-          <button class="icon-btn xs" classList={{ on: view().name === "devices" }} data-shortcut="devices" title={`${tr("디바이스 열기")} ${shortcutHint("devices")}`} aria-label={tr("디바이스 열기")} onClick={() => setView({ name: "devices" })}>
+        <Head id="devices" label={tr("디바이스")} count={bootedDevices().length} on={(() => { const v = view(); return v.name === "devices" && !bootedDevices().some((d) => d.id === v.device); })()}>
+          <button class="icon-btn xs" data-shortcut="devices" title={`${tr("디바이스 열기")} ${shortcutHint("devices")}`} aria-label={tr("디바이스 열기")} onClick={() => setView({ name: "devices" })}>
             <Icon name="arrow" size={14} />
           </button>
         </Head>
@@ -542,7 +580,7 @@ export function Sidebar() {
             {(d) => {
               const job = () => usedBy(d);
               return (
-                <button class="sb-row sb-proj" classList={{ on: (() => { const v = view(); return v.name === "devices" && v.device === d.id; })() }} onClick={() => setView({ name: "devices", device: d.id })} title={`${d.name} · ${d.runtime}${job() ? ` · ${job()!.title}` : ""}`}>
+                <button class="sb-row sb-proj" classList={{ on: (() => { const v = view(); return v.name === "devices" && v.device === d.id; })() }} onClick={() => setView({ name: "devices", device: d.id })} title={[d.name, tr(d.runtime), job()?.title].filter(Boolean).join(" · ")}>
                   <Icon name="phone" size={16} class="sb-main-ic" />
                   <span class="sb-title">{d.name}</span>
                   <span class="sb-meta">{d.platform === "ios" ? "iOS" : "Android"}</span>
@@ -554,23 +592,14 @@ export function Sidebar() {
         </div>
         </Fold>
 
-        <Show when={loose().length || hidden() || archived().length}>
+        <Show when={loose().length || looseDone().length || archived().length}>
         <Head id="jobs" label={projectsIn(state.space).length ? tr("기타 작업") : tr("작업")} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()}>
             {(t, i) => <Row t={t} index={i()} />}
           </For>
-          <Show when={hidden()}>
-            <button class="sb-older" classList={{ open: older() }} onClick={() => setOlder(!older())}>
-              <Icon name="chevron" size={12} class="sb-older-chev" />
-              {tr("완료 {n}개", { n: hidden() })}
-            </button>
-            {/* they open right here, under the button, not back in their places above */}
-            <Show when={older()}>
-              <For each={roots().filter(old)}>{(t, i) => <Row t={t} index={i()} />}</For>
-            </Show>
-          </Show>
+          <DoneFold id="loose" tasks={looseDone()} />
           <Show when={archived().length}>
             <button class="sb-older" classList={{ open: showArchived() }} onClick={() => setShowArchived(!showArchived())}>
               <Icon name="chevron" size={12} class="sb-older-chev" />

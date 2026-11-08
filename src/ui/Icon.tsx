@@ -9,7 +9,7 @@ import {
   PanelRight, Pause, Play, Plus, RefreshCw, Route, Search, Settings, Shield,
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
   GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, Minus, Maximize, LayoutGrid, Binary, CircleDot,
-  Flag, Undo2, Hand, CircleArrowUp, FolderPlus,
+  Flag, Undo2, Hand, CircleArrowUp, FolderPlus, Keyboard, Languages, SunMoon,
 } from "lucide-solid";
 
 const map: Record<string, Component<any>> = {
@@ -25,6 +25,7 @@ const map: Record<string, Component<any>> = {
   done: CircleCheck, merge: GitMerge, clip: Paperclip, open: FolderOpen, copy: Copy, pencil: Pencil, lock: Lock, unlock: LockOpen,
   pin: Pin, archive: Archive, push: ArrowUpFromLine, commit: GitCommitHorizontal, compact: Minimize2, bell: Bell, duplicate: CopyPlus, slash: Slash, at: AtSign, binary: Binary, issue: CircleDot,
   flag: Flag, undo: Undo2, hand: Hand, update: CircleArrowUp, folderPlus: FolderPlus,
+  keyboard: Keyboard, language: Languages, theme: SunMoon,
 };
 
 export function Icon(props: { name: string; size?: number; class?: string; stroke?: number }) {

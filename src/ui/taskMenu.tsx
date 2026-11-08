@@ -53,7 +53,13 @@ export function taskMenuItems(id: string): MenuEntry[] {
     x.worktree?.state === "open" && !live
       ? [
           { id: "merge", label: t("병합"), icon: "merge", run: () => void mergeTask(id) },
-          { id: "discard", label: t("변경 버리기"), icon: "undo", run: () => void discardTask(id) },
+          {
+            id: "discard",
+            label: t("버리기"),
+            icon: "undo",
+            // the work goes with the worktree: asked first, like delete
+            run: () => confirmAsk({ title: t("변경을 버릴까요?"), body: x.title, action: t("버리기"), danger: true, run: () => void discardTask(id) }),
+          },
         ]
       : [],
     [
@@ -133,7 +139,8 @@ function arrowKeys(e: KeyboardEvent, root: HTMLElement) {
 
 // ───────────── a right-click menu at the pointer (one at a time)
 
-const [ctx, setCtx] = createSignal<{ items: () => MenuEntry[]; x: number; y: number; key: string; keyboard?: boolean } | null>(null);
+/** `row`: the top and bottom of what was clicked when it is a list row, which the menu must not cover */
+const [ctx, setCtx] = createSignal<{ items: () => MenuEntry[]; x: number; y: number; key: string; keyboard?: boolean; row?: { top: number; bottom: number; right: number } } | null>(null);
 /** what the open right-click menu belongs to ("task:t1", "project:ondra"), to mark its row */
 export const ctxFor = () => ctx()?.key;
 export const closeCtx = () => setCtx(null);
@@ -141,8 +148,12 @@ export const closeCtx = () => setCtx(null);
 /** Open a menu at a point (a right-click) or under an element (⇧F10, a ⋯ button). */
 export function openMenuAt(key: string, items: () => MenuEntry[], at: MouseEvent | DOMRect, keyboard = false) {
   closePops();
-  const p = at instanceof MouseEvent ? { x: at.clientX, y: at.clientY } : { x: at.left, y: at.bottom + 4 };
-  setCtx({ key, items, ...p, keyboard });
+  if (!(at instanceof MouseEvent)) return void setCtx({ key, items, x: at.left, y: at.bottom + 4, keyboard, row: { top: at.top, bottom: at.bottom, right: at.right } });
+  // a right-click on a list row (sidebar, menu-sized things): the menu opens beside the pointer,
+  // below the row or above it, never over it. On a big card it opens at the pointer.
+  const el = at.currentTarget instanceof Element ? at.currentTarget : null;
+  const r = el?.getBoundingClientRect();
+  setCtx({ key, items, x: at.clientX, y: at.clientY, keyboard, row: r && r.height <= 48 ? { top: r.top, bottom: r.bottom, right: r.right } : undefined });
 }
 export function openTaskMenu(id: string, at: MouseEvent | DOMRect, keyboard = false) {
   openMenuAt(`task:${id}`, () => taskMenuItems(id), at, keyboard);
@@ -170,9 +181,16 @@ export function ContextMenuHost() {
         const away = (e: Event) => !el.contains(e.target as Node) && close();
         onMount(() => {
           const r = el.getBoundingClientRect();
-          // no room below the pointer: it opens upward, like a macOS menu
-          const top = m.y + r.height > innerHeight - 8 ? m.y - r.height : m.y;
-          setPos({ left: Math.max(8, Math.min(m.x, innerWidth - r.width - 8)), top: Math.max(8, Math.min(top, innerHeight - r.height - 8)) });
+          // below the row (or the pointer) when it fits, else above it; with room for neither,
+          // beside the row: the clicked row always stays in view
+          const below = m.row ? m.row.bottom + 2 : m.y;
+          const above = (m.row ? m.row.top - 2 : m.y) - r.height;
+          const fitsBelow = below + r.height <= innerHeight - 8;
+          const fitsAbove = above >= 8;
+          const beside = m.row && !fitsBelow && !fitsAbove && m.row.right + 4 + r.width <= innerWidth - 8;
+          const top = beside ? m.row!.top - 4 : fitsBelow || !fitsAbove ? below : above;
+          const left = beside ? m.row!.right + 4 : m.x + 2;
+          setPos({ left: Math.max(8, Math.min(left, innerWidth - r.width - 8)), top: Math.max(8, Math.min(top, innerHeight - r.height - 8)) });
           if (m.keyboard) el.querySelector<HTMLButtonElement>("button")?.focus();
           // the click that opened it is over; any later one outside closes it
           setTimeout(() => window.addEventListener("pointerdown", away, true));

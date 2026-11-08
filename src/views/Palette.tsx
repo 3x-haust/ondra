@@ -2,20 +2,26 @@
 import { checkUpdate } from "../engine/update";
 import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { setState, spaceById, state, taskById } from "../state/store";
-import { Glyph } from "./Sidebar";
+import { Glyph, stateMeta } from "./Sidebar";
 import { openTask, paletteMode, setPaletteMode, setPaletteOpen, setView } from "../state/ui";
 import { ignoredKey, matchesShortcut, noModifiers, shortcutLabel, shortcuts, type ShortcutCommand } from "../lib/shortcuts";
 import { throwThought } from "../engine/captain";
-import { ago, compact, now } from "../ui/bits";
+import { ago } from "../ui/bits";
+import { lang } from "../i18n";
 import { Icon } from "../ui/Icon";
 import { t as tr } from "../i18n";
 
 interface Item {
   id: string;
   label: string;
+  /** keys, shown as a key chip */
+  keys?: string;
+  /** plain text on the right (a task's state or age, a result's date) */
   hint?: string;
+  /** the hint's tone, as on the sidebar row (검토 in the accent, 응답 필요 in amber) */
+  tone?: string;
   icon?: string;
   status?: string;
   section: string;
@@ -38,13 +44,15 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
 
   // commands come with their labels already in the current language (appCommands)
   const places: Item[] = [
-    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, hint: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
+    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, keys: c.shortcut ? shortcutLabel(c.shortcut) : c.keys })),
     { id: "s-accounts", label: tr("계정"), icon: "key", section: tr("설정"), run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-agent-tools", label: tr("도구"), icon: "tools", section: tr("설정"), run: () => setView({ name: "settings", tab: "agent-tools" }) },
     { id: "s-tools", label: tr("권한"), icon: "shield", section: tr("설정"), run: () => setView({ name: "settings", tab: "tools" }) },
     { id: "s-import", label: tr("가져오기"), icon: "download", section: tr("설정"), run: () => setView({ name: "settings", tab: "import" }) },
     { id: "update", label: tr("업데이트 확인"), icon: "update", section: tr("설정"), run: () => void checkUpdate(true) },
-    { id: "theme", label: tr("테마 전환"), icon: "monitor", section: tr("설정"), run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    { id: "theme", label: tr("테마 전환"), icon: "theme", section: tr("설정"), run: () => setState("settings", "theme", ({ system: "light", light: "dark", dark: "system" } as const)[state.settings.theme] ?? "system") },
+    // the other language, named in itself
+    { id: "language", label: tr("언어 전환"), hint: lang() === "ko" ? "English" : "한국어", icon: "language", section: tr("설정"), run: () => setState("settings", "language", lang() === "ko" ? "en" : "ko") },
   ];
   /** with nothing typed: a few tasks, then the places you go to most */
   const START = ["main", "new", "board", "memory", "results", "devices", "settings"];
@@ -59,7 +67,9 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
       .map((t) => ({
         id: t.id,
         label: t.title,
-        hint: [t.space === state.space ? "" : tr(spaceById(t.space).label), t.status === "done" ? ago(t.finishedAt ?? t.createdAt) : t.status === "waiting" ? tr("응답 필요") : t.status === "failed" ? tr("실패") : t.status === "paused" ? tr("일시정지") : t.startedAt ? compact(now() - t.startedAt) : tr("대기")].filter(Boolean).join(" · "),
+        // the same word as the task's sidebar row (검토 for one in review, not its age)
+        hint: [t.space === state.space ? "" : tr(spaceById(t.space).label), stateMeta(t, !!t.parentId).text].filter(Boolean).join(" · "),
+        tone: stateMeta(t, !!t.parentId).tone,
         status: t.status,
         section: tr("작업"),
         run: () => {
@@ -77,7 +87,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     // the command list doesn't list itself
     const cmds = commandsOnly() ? places.filter((i) => i.id !== "commands") : places;
     const all = commandsOnly() ? cmds : needle ? [...tasks, ...cmds] : [...tasks.slice(0, 6), ...START.map((id) => cmds.find((i) => i.id === id)!).filter(Boolean)];
-    const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)) : all;
+    const found = needle ? all.filter((i) => `${i.label} ${i.hint ?? ""} ${i.keys ?? ""}`.toLowerCase().includes(needle)) : all;
     // each section once: its items together, sections in the order they first appear
     // (settings last, as in the sidebar and the shortcut sheet)
     const order = [...new Set(found.map((i) => i.section))].sort((a, b) => Number(a === tr("설정")) - Number(b === tr("설정")));
@@ -88,11 +98,11 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     return [...(commandsOnly() || !needle ? hits : hits.slice(0, 13)), ...results, ...send];
   });
 
-  createEffect(() => {
-    sel();
-    items();
+  // the picked row stays in view when it moves or the query changes (not when a clock tick
+  // re-renders the list, which would pull a scrolled list back)
+  createEffect(on([sel, q, paletteMode], () => {
     queueMicrotask(() => document.querySelector<HTMLElement>(".palette-list .palette-item.on")?.scrollIntoView({ block: "nearest" }));
-  });
+  }));
   const move = (direction: 1 | -1) => {
     const list = items();
     for (let i = sel() + direction; i >= 0 && i < list.length; i += direction) {
@@ -171,11 +181,8 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
                     </Show>
                   </span>
                   <span class="label">{it.label}</span>
-                  <Show when={it.hint}>
-                    <Show when={!it.status && it.section !== tr("결과물") && it.id !== "send"} fallback={<span class="hint">{it.hint}</span>}>
-                      <kbd class="hint-keys">{it.hint}</kbd>
-                    </Show>
-                  </Show>
+                  <Show when={it.hint}><span class={`hint ${it.tone ? `tone-${it.tone}` : ""}`}>{it.hint}</span></Show>
+                  <Show when={it.keys}><kbd class="hint-keys">{it.keys}</kbd></Show>
                 </button>
               </>
             )}
