@@ -32,7 +32,8 @@ import { StatusLine, UsageLine } from "../ui/Usage";
 import { matchesShortcut, noModifiers, shortcutHint, shortcuts } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
-import { SidebarToggle } from "./Sidebar";
+import { Glyph, SidebarToggle, stateMeta } from "./Sidebar";
+import * as settingsView from "./Settings";
 import { t, t as tr } from "../i18n";
 
 /** "{task}에 전달했어요" with the task name in bold */
@@ -86,10 +87,10 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                 <span>{err() === NO_ACCOUNT ? t(NO_ACCOUNT) : err()}</span>
                 {/* no account here: trying again can't help, adding one can */}
                 <Show
-                  when={err() === NO_ACCOUNT || err() === t(NO_ACCOUNT)}
+                  when={isNoAccount(err())}
                   fallback={<button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>}
                 >
-                  <button class="retry" onClick={() => setView({ name: "settings", tab: "accounts" })}><Icon name="plus" size={14} />{t("계정 추가")}</button>
+                  <button class="retry" onClick={() => addAccount()}><Icon name="plus" size={14} />{t("계정 추가")}</button>
                 </Show>
               </div>
             )}
@@ -169,8 +170,18 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
 /** this space's accounts only: jobs here never run on the other space's */
 const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
 
-/** The app can't start, or this workspace has no account: said above the input until it is fixed. */
-function SetupNotice() {
+const isNoAccount = (err?: string) => !!err && (err === NO_ACCOUNT || err === t(NO_ACCOUNT));
+
+/** Settings › 계정 with 계정 추가 already started for this workspace (Settings' opener; the tab alone if it has none) */
+function addAccount() {
+  const open = (settingsView as unknown as { openAddAccount?: (space: string) => void }).openAddAccount;
+  if (open) open(state.space);
+  else setView({ name: "settings", tab: "accounts" });
+}
+
+/** The app can't start, or this workspace has no account: said above the input until it is fixed.
+ *  `quiet`: a no-account card in the chat already has the button, so the notice leaves its own out. */
+function SetupNotice(props: { quiet?: boolean }) {
   return (
     <>
       <Show when={engine.checked && !engine.ready}>
@@ -180,7 +191,10 @@ function SetupNotice() {
         <div class="notice">
           <Icon name="key" size={16} />
           <div class="notice-body"><b>{t("로그인 필요")}</b></div>
-          <button class="btn sm" onClick={() => setView({ name: "settings", tab: "accounts" })}>{t("로그인")}</button>
+          <Show when={!props.quiet}>
+            {/* no account at all: start adding one; an account not signed in: its row in Settings */}
+            <button class="btn sm" onClick={() => (accountsIn(state.space).length ? setView({ name: "settings", tab: "accounts" }) : addAccount())}>{t("로그인")}</button>
+          </Show>
         </div>
       </Show>
     </>
@@ -584,13 +598,13 @@ export function MainView() {
           <Show when={project()} fallback={<Hero composer={composer(true)} />}>
             {(p) => (
               <>
-                {/* a project's chat with nothing said yet: a chat, with its input where it always is */}
+                {/* a project with nothing said yet: its tasks, then what they are asking; its input where it always is */}
                 <div class="thread proj-empty">
                   <div class="thread-inner convo">
-                    <Picks project={p().id} />
+                    <ProjectTasks project={p().id} />
                     <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
-                    {/* what its tasks are asking is answered here too, before anything is said */}
                     <For each={asks()}>{(d) => <DecisionCard d={d} />}</For>
+                    <Picks project={p().id} />
                   </div>
                 </div>
                 <div class="dock">
@@ -631,7 +645,7 @@ export function MainView() {
         </div>
         <div class="dock">
           <div class="dock-inner">
-            <SetupNotice />
+            <SetupNotice quiet={msgs().some((m) => isNoAccount(m.error))} />
             {composer(false)}
           </div>
         </div>
@@ -641,6 +655,32 @@ export function MainView() {
   );
 }
 
+
+/** A project's tasks, newest first (pinned on top), in the sidebar's row look; a click opens one. */
+function ProjectTasks(props: { project: string }) {
+  const list = () =>
+    state.tasks
+      .filter((x) => x.project === props.project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
+      .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
+  return (
+    <Show when={list().length} fallback={<p class="proj-tasks-empty">{t("작업 없음")}</p>}>
+      <div class="proj-tasks">
+        <For each={list()}>
+          {(x) => {
+            const meta = () => stateMeta(x);
+            return (
+              <button class="sb-row proj-task" classList={{ [`tone-${meta().tone}`]: true, past: x.status === "done" && x.worktree?.state !== "open" }} onClick={() => openTask(x.id)} title={x.title}>
+                <Glyph t={x} />
+                <span class="sb-title">{x.title}</span>
+                <span class="sb-meta">{meta().text}</span>
+              </button>
+            );
+          }}
+        </For>
+      </div>
+    </Show>
+  );
+}
 
 /** A task's question answered (in Main or in the task), as Main shows it afterwards. */
 type Answered = { id: string; at: number; taskId: string; q: string; a: string };
