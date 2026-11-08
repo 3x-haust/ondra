@@ -97,7 +97,7 @@ export function NewTask() {
   window.addEventListener("pointerdown", away, true);
   onCleanup(() => window.removeEventListener("pointerdown", away, true));
   return (
-    <div class="new-task" ref={box}>
+    <div class="cv-new-task" ref={box}>
       <button class="btn sm new-task-btn" classList={{ on: open() }} aria-expanded={open()} onClick={() => (setOpen(!open()), queueMicrotask(() => input?.focus()))}>
         <Icon name="plus" size={14} />
         {t("새 작업")}

@@ -3,6 +3,7 @@ import { nextWaiting, stepFork } from "../views/Sidebar";
 import { state, taskById } from "./store";
 import { switchSpace } from "./workspace";
 import { t } from "../i18n";
+import { setNewTaskOpen } from "../ui/bits";
 import { activeTab, canStep, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
 
 /** a place still there to go back to (a job can be deleted meanwhile) */
@@ -37,7 +38,7 @@ export function appCommands(): ShortcutCommand[] {
     command("commands", "명령 보기", "일반", "list", showCommands, undefined, true),
     { id: "keys", label: t("단축키 목록"), section: t("일반"), icon: "keyboard", keys: "?", run: () => void import("../views/ShortcutSheet").then((m) => m.setSheetOpen(true)) },
     command("sidebar", "사이드바 열기·닫기", "일반", "panelLeft", toggleSidebar),
-    command("main", "메인", "이동", "message", () => goMain()),
+    command("main", "메인", "이동", "message", () => (setNewTaskOpen(null), goMain())),
     command("new", "새 작업", "이동", "compose", () => void import("../views/MainView").then((m) => m.startNewTask())),
     command("board", "캔버스", "이동", "canvas", () => setView(view().name === "board" ? { name: "main" } : { name: "board" })),
     { id: "boardList", label: t("보드"), section: t("이동"), icon: "board", run: showBoard },

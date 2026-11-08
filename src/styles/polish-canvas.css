@@ -986,7 +986,7 @@
 /* ═════════════ round 2 ═════════════ */
 
 /* ── canvas / board header: 새 작업 drops a field under the button */
-.new-task {
+.cv-new-task {
   position: relative;
   flex: none;
 }
