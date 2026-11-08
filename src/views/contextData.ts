@@ -272,7 +272,8 @@ function sample(args: string[]): EngineContext {
       tool("grep", "Search file contents for a pattern.", "builtin:grep", 252, false),
       tool("find", "Search for files by glob pattern.", "builtin:find", 147, false),
       tool("ls", "List directory contents.", "builtin:ls", 111, false),
-      tool("device", "시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요.", "/ondra/extensions/device.ts", 410),
+      // the line Settings › Tools shows for it, in the app's language
+      tool("device", tr("시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요"), "/ondra/extensions/device.ts", 410),
       tool("memory", "Save or replace a memory piece the user's agents will see later.", "/ondra/extensions/memory.ts", 230),
       tool("mcp__docs__search", "Search the product documentation.", "builtin:mcp", 190, true, "mcp__docs"),
     ],

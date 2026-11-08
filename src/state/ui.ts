@@ -141,8 +141,10 @@ export const [sidebarHidden, setSidebarHidden] = createSignal(false);
 /** Window wide enough for list + chat + panel side by side. */
 export const [roomy, setRoomy] = createSignal(typeof window === "undefined" || window.innerWidth >= 1200);
 if (typeof window !== "undefined") window.addEventListener("resize", () => setRoomy(window.innerWidth >= 1200));
+/** The panel belongs to a task (and Main): elsewhere it stays hidden, its tabs kept for later. */
+export const panelShown = () => panelOpen() && (view().name === "task" || view().name === "main");
 /** The list is out of the way: folded by you, or making room for a panel in a narrow window. */
-export const sidebarAway = () => sidebarHidden() || (!roomy() && panelOpen());
+export const sidebarAway = () => sidebarHidden() || (!roomy() && panelShown());
 /** The job the pointer is over, in the graph or a chip: main lights up the message that started it. */
 export const [hoverTask, setHoverTask] = createSignal<string | null>(null);
 /** Bring the list back (in a narrow window that means closing the panel). */

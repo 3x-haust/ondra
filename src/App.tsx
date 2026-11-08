@@ -4,7 +4,7 @@ import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, paletteOpen, panelOpen, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { closePanel, paletteOpen, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { appCommands } from "./state/commands";
 import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
 import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
@@ -72,7 +72,7 @@ export default function App() {
   // ⌘W (menu): close the right panel; the window stays
   onMount(() => {
     let un: (() => void) | undefined;
-    void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && view().name !== "settings" && panelOpen() && closePanel()).then((u) => (un = u));
+    void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && panelShown() && closePanel()).then((u) => (un = u));
     // ⌘Q tapped, not held (Rust quits once it has been held)
     let hint = 0;
     let unq: (() => void) | undefined;
@@ -130,7 +130,7 @@ export default function App() {
       return;
     }
     // Local views handle Escape first; only an unclaimed Escape closes the panel.
-    if (e.key === "Escape" && noModifiers(e) && viewKey(e) && panelOpen() && view().name !== "settings") {
+    if (e.key === "Escape" && noModifiers(e) && viewKey(e) && panelShown()) {
       e.preventDefault();
       void closePanel();
     }
@@ -193,7 +193,7 @@ export default function App() {
           </Show>
           </Show>
         </main>
-        <Show when={panelOpen() && view().name !== "settings"}>
+        <Show when={panelShown()}>
           <Panel t={view().name === "task" ? taskById((view() as { id: string }).id) : undefined} onClose={() => void closePanel()} />
         </Show>
       </div>
