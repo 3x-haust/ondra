@@ -6,6 +6,7 @@
 // Cards can be dragged; where you put them is kept.
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 type P = { x: number; y: number };
+import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openTask, setView } from "../state/ui";
@@ -522,7 +523,10 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           fallback={
             <div class="cv-dr-now">
               <StatusRow t={t()} />
-              <Live t={t()} />
+              {/* a job waiting on the user is answered right here */}
+              <Show when={decisionFor(t().id)} fallback={<Live t={t()} />}>
+                {(dec) => <DecisionCard d={dec()} />}
+              </Show>
             </div>
           }
         >
