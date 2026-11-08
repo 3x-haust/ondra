@@ -21,7 +21,9 @@ Make `.ondra/goal/spec.md` in your folder:
   (the task, the earlier messages, memories you were given).
 - **Must not break**: the user's rules and preferences from memory, what
   works today, files and things that aren't part of this goal.
-- **Not asked for**: what you will leave alone. Doing more than asked fails too.
+- **Not asked for**: what you will leave alone. Doing more than asked fails too:
+  no requirements, safety layers or edge cases the user didn't name. A real
+  risk you notice goes in the report as one line, not into the checks.
 - **Assumptions**: what you had to decide. If an assumption changes what the
   checks are, `ask` before going on (an `ask` block with 2–4 options).
 
@@ -30,7 +32,9 @@ Show it: a `scope` block (in / out) and a `checklist` of the requirements.
 ## 2. Make the checks
 
 One check per requirement, runnable and objective, in `.ondra/goal/checks`
-(a script or a test file; use the project's own test tools when there are any):
+(a script or a test file; use the project's own test tools when there are any).
+Prefer running the feature the way the user will (the flow, the command, the
+screen) over checks of its internals:
 
 | requirement is about | check it by |
 |---|---|
@@ -50,13 +54,14 @@ One check per requirement, runnable and objective, in `.ondra/goal/checks`
 ## 3. Loop
 
 Each round:
-1. Run all checks. Show a `progress` block (passing / total) and a
-   `checklist` of the checks with `done` = passing.
+1. Show a `progress` block (passing / total) and a `checklist` of the checks
+   with `done` = passing, from the last run.
 2. Pick **one** failing check, most important first: broken behaviour >
    missing requirement > something it broke > look > speed. Say it in a `now`.
 3. Find why it fails (the actual output, logs), not just what fails.
 4. Make the smallest change that fixes that cause.
-5. Rerun **all** checks. If another one broke, undo the change and try again.
+5. Rerun that check and the ones that cover what you changed. If one of them
+   broke, undo the change and try again.
 6. Add one line to `.ondra/goal/log.md`: round · check · cause · fix · before → after.
 
 Same check failing three rounds in a row: stop and rethink (re-read the spec,
@@ -66,7 +71,8 @@ blocked (needs the user's login, a decision, a device you may not touch):
 
 ## 4. Finish
 
-- Every check passes on two runs in a row.
+- Run every check once more; all pass. A check that passed stays passed
+  until a change touches what it covers: don't run it again for its own sake.
 - Then review it the way the user would: go through **Asked for** line by
   line against the evidence (shots, outputs), not against what you remember
   doing. Anything that goes against their words is a failing check: back to 3.

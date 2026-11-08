@@ -17,7 +17,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agent
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { commandKind } from "./commandKind";
-import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved } from "./proof";
+import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
@@ -72,6 +72,8 @@ interface Run {
   longNudges?: number;
   /** a handoff sent while subagents still worked: the new session starts once they are done */
   pendingHandoff?: Handoff;
+  /** a review it asked for was refused (one per job): said again as a prompt if the turn ended waiting for it */
+  refused?: string;
 }
 
 
@@ -364,6 +366,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           push(t, { kind: "note", text: "앞의 일에서 받은 리뷰가 그대로 유효해요" });
           const jobId = t.id;
           const message = `(Ondra) The job this carries on was already reviewed ("${before.title}") and its findings were fixed there; you haven't changed code since. That review covers this: don't start another one, go on with the next step.`;
+          run.refused = message;
           queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
@@ -375,6 +378,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           const message = going
             ? `(Ondra) A review is already running ("${had.title}"). Its findings come to you by themselves when it ends. Don't start another one and never ask the user for them: go on with what doesn't depend on it, or end your turn and wait.`
             : `(Ondra) This job was already reviewed once ("${had.title}"). Don't start another review. What it found:\n\n${had.result ?? had.summary ?? "(nothing written)"}\n\nFix P1·P2 only, re-run the tests that cover them, and finish.`;
+          if (!going) run.refused = message;
           queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
@@ -867,6 +871,8 @@ function handlers(id: string, run: Run) {
           break;
         }
         case "tool_execution_start": {
+          // it went on after a refused review: the steer reached it
+          run.refused = undefined;
           const tool = describeTool(ev.toolName, ev.args);
           updateTask(id, (t) => {
             const { now, ...call } = tool;
@@ -1165,6 +1171,18 @@ async function settle(id: string, run: Run) {
     });
     return;
   }
+  // It ended its turn waiting for a review that was refused: no result will wake it, so say why now
+  if (run.refused) {
+    const message = run.refused;
+    run.refused = undefined;
+    try {
+      run.turnStart = Date.now();
+      await request(agent, { type: "prompt", message });
+      return;
+    } catch {
+      // fall through to the stalled card
+    }
+  }
   // Stopped without done / handoff / ask.
   // its last words wait on the user ("병합해 주세요", "알려주시면 이어갈게요"): it needs an answer, not "finished?"
   const said = lastWords(t);
@@ -1284,13 +1302,13 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)
   const code = (p: string) => isCodeFile(p, t) && !/\.html?$/i.test(p);
   const changed = wrote.some((e) => e.kind === "tool" && code((e.tool.detail ?? "").split("\n")[0]));
-  // a review is required only for a large or risky change (as the prompt says)
+  // a review is required only for a risky change (security, money, data loss), as the prompt says
   const codeFiles = new Set(wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && code(p)));
-  const risky = [...codeFiles].some((p) => /auth|login|session|token|secret|payment|billing|checkout|migrat|schema|\.sql$|security|permission|crypto|delete|remove/i.test(p));
+  const risky = riskyChange(codeFiles);
   // once it went out, a review can't change what shipped: say so instead of sending the job back
   const out = shipped(t);
-  const needsReview = changed && (codeFiles.size >= 5 || risky) && !out;
-  if (changed && (codeFiles.size >= 5 || risky) && out && !state.tasks.some((x) => x.parentId === t.id && x.review && x.status === "done"))
+  const needsReview = changed && risky && !out;
+  if (changed && risky && out && !state.tasks.some((x) => x.parentId === t.id && x.review && x.status === "done"))
     run.unverified = [...(run.unverified ?? []), "리뷰 없이 내보냈어요"];
   const kids = state.tasks.filter((x) => x.parentId === t.id);
   const reviewed = !needsReview || kids.some((x) => x.review && x.status === "done");
