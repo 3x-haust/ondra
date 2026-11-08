@@ -1430,3 +1430,14 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+
+/* ═════════════ round 8 ═════════════ */
+
+/* narrow header, first step: the project crumb keeps its name and drops its badge ("acme /") */
+.task-head.crumb-text .crumbs > .crumb-proj .pbadge {
+  display: none;
+}
+/* the "/" sits evenly between the name and the title (the name's hover padding doesn't count) */
+.task-head .crumbs > .crumb-proj {
+  margin-right: calc(-1 * var(--s-4));
+}

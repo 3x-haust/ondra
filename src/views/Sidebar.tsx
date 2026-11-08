@@ -100,7 +100,8 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
   if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
   if (x.status === "running") return { text: x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "", tone: "live" };
-  return { text: ago(x.finishedAt ?? x.createdAt), tone: "done" };
+  // merged: when it was merged (older tasks without mergedAt: when it finished)
+  return { text: ago((x.worktree?.state === "merged" ? x.mergedAt : undefined) ?? x.finishedAt ?? x.createdAt), tone: "done" };
 }
 
 // ───────────── one row per job (T3-style thread list)
@@ -257,9 +258,9 @@ function NeedsMenu() {
                   <span class="sb-glyph st-icon sm failed" aria-hidden="true"><i /></span>
                 </Show>
                 <span class="row-title">{t.title}</span>
-                {/* "state · project": the state word in its tone, as on the sidebar row; both line up in columns */}
+                {/* the state word in its tone, as on the sidebar row; the project in its own right-aligned column */}
                 <span class={`needs-word tone-${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
-                <span class="needs-where">{where(t) ?? tr("기타")}</span>
+                <span class="needs-where">{where(t) ?? tr("프로젝트 없음")}</span>
               </button>
             )}
           </For>

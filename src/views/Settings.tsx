@@ -414,8 +414,9 @@ const resetIn = (ms: number) => {
   return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
 };
 
-/** what the per-account sign-in button says; its sheet carries the same title */
-const loginWord = (a: Account) => (signedIn(a) ? "로그인 추가" : "로그인");
+/** what the per-account sign-in button says (signed in: another service for this account);
+ *  its sheet carries the same title */
+const loginWord = (a: Account) => (signedIn(a) ? "서비스 추가" : "로그인");
 
 function AccountRow(props: { id: string; onLogin: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
