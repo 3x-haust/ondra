@@ -254,7 +254,9 @@ function Card(props: { t: Task; byProject: boolean }) {
   const when = () => {
     if (st() === "running" && job().startedAt) return compact(now() - job().startedAt!);
     if (st() === "queued") return ago(job().createdAt);
-    return ago(job().finishedAt ?? job().startedAt ?? job().createdAt);
+    // merged: when it was merged (older tasks without mergedAt: when they finished)
+    const merged = job().worktree?.state === "merged" && !gone() ? job().mergedAt : undefined;
+    return ago(merged ?? job().finishedAt ?? job().startedAt ?? job().createdAt);
   };
   const say = () => {
     const m = msg().trim();

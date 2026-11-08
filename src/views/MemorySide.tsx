@@ -607,12 +607,11 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const homeLabel = () => (props.model.homes.get(home()) ? homeName(props.model.homes.get(home())!) : t("워크스페이스|one"));
   const entry = () => learnedIn(m());
   const task = () => (m().taskId ? state.tasks.find((t) => t.id === m().taskId) : undefined);
-  /** "2번 사용 · 같은 내용 1번 더 저장 · 마지막 사용 3분 전", the parts that apply (seen counts the first save too) */
-  const use = () =>
+  /** the use row: "2번", then quietly "같은 내용 1번 더 저장 · 마지막 3분 전", the parts that apply (seen counts the first save too) */
+  const useMore = () =>
     [
-      m().uses ? t("{n}번 사용", { n: m().uses }) : t("사용 안 함"),
-      (m().seen ?? 1) > 1 ? t("같은 내용 {n}번 더 저장", { n: m().seen! - 1 }) : "",
-      m().lastUsed ? t("마지막 사용 {when}", { when: agoIn(m().lastUsed!) }) : "",
+      (m().seen ?? 1) > 1 ? t("같은 내용 {n}번 더 저장|inline", { n: m().seen! - 1 }) : "",
+      m().lastUsed ? t("마지막 {when}", { when: agoIn(m().lastUsed!) }) : "",
     ].filter(Boolean);
   return (
     <div class="md-in">
@@ -628,9 +627,6 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
       <div class="md-kinds">
         <For each={KINDS}>{(k) => <button class={`chip mk-${k.id}`} classList={{ on: kindOf(m()) === k.id }} onClick={() => setMemory(m().id, { kind: k.id })}><i />{t(k.label)}</button>}</For>
       </div>
-      <p class="md-use">
-        <For each={use()}>{(x) => <span>{x}</span>}</For>
-      </p>
       <dl class="mp">
         <dt>{t("중요도")}</dt>
         <dd><Importance m={m()} /></dd>
@@ -668,6 +664,11 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
           <dt>{t("검색어")}</dt>
           <dd class="md-keys">{m().keys!.join(" · ")}</dd>
         </Show>
+        <dt>{t("사용|property")}</dt>
+        <dd>
+          {m().uses ? t("{n}번", { n: m().uses }) : t("없음")}
+          <Show when={useMore().length}><span class="md-sub"> · {useMore().join(" · ")}</span></Show>
+        </dd>
         <dt>{t("생성")}</dt>
         <dd title={stampOf(m().createdAt)}>
           {ago(m().createdAt)}

@@ -5,7 +5,7 @@
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
 import { nowText } from "../engine/describe";
-import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
@@ -14,7 +14,7 @@ import { goMain, live, openTask, setView } from "../state/ui";
 import { decide, resumeTask, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
 import { costDetail, costShort, jobCost } from "../ui/cost";
-import { compact, IssueTag, now, statusLabel } from "../ui/bits";
+import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
@@ -77,6 +77,19 @@ function tone(t: Task): string {
   return "done";
 }
 
+/** which comes first on the canvas (and in the first view): a reply, failed, running, review, queued, done */
+const RANK: Record<string, number> = { ask: 0, failed: 1, live: 2, review: 3, idle: 4, done: 5 };
+/**
+ * Each task's place in that order when the canvas was opened (or tidied): lanes and cards keep
+ * their place while the work moves on, instead of jumping under the pointer. New tasks rank as they are.
+ */
+const [ranks, setRanks] = createSignal<Record<string, number>>({});
+const rankOf = (t: Task) => ranks()[t.id] ?? RANK[tone(t)];
+const snapRanks = (space: string) =>
+  setRanks(Object.fromEntries(state.tasks.filter((t) => t.space === space && !t.parentId).map((t) => [t.id, RANK[tone(t)]])));
+/** the zoom the canvas is at, for what has to be measured at the size it's drawn */
+const [zoomNow, setZoomNow] = createSignal(1);
+
 function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
@@ -85,44 +98,55 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
   const edges: Edge[] = [];
   let y = 0;
   const projNodes: Node[] = [];
-  for (const p of projects) {
-    const all = roots
+  const jobsOf = (p: { id: string }) =>
+    roots
       .filter((t) => (p.id === "_" ? !t.project || !projects.some((q) => q.id === t.project && q.id !== "_") : t.project === p.id))
-      .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
-    // finished jobs fold into one "끝난 일 N개" card per project; it unfolds them under it
+      .sort((a, b) => rankOf(a) - rankOf(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
+  // the lane that needs the person most comes first (the sidebar's order between equals)
+  const laneRank = (p: { id: string }) => Math.min(6, ...jobsOf(p).filter((t) => !folded(t)).map(rankOf));
+  const lanes = projects.map((p, i) => ({ p, i, r: laneRank(p) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.p);
+  for (const p of lanes) {
+    const all = jobsOf(p);
+    // finished jobs fold into one "완료 N개" card per project; unfolded, they come out under it
     const done = all.filter(folded);
-    const jobs = open.includes(p.id) ? all : all.filter((t) => !folded(t));
+    const jobs = all.filter((t) => !folded(t));
     const top = y;
-    // a grid, not one long column: up to 3 jobs side by side, a job's own
-    // sub-jobs stacked under it
-    const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(jobs.length))));
-    for (let r = 0; r < jobs.length; r += cols) {
-      const row = jobs.slice(r, r + cols);
-      let rowH = 0;
-      row.forEach((t, c) => {
-        const x = X.job + c * (W.job + GAP.col);
-        const h = jobHeight(t);
-        nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h, task: t });
-        edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
-        let ky = y + h + GAP.sub;
-        const kids = state.tasks.filter((k) => k.parentId === t.id);
-        const kidsDone = kids.filter(subFolded);
-        for (const k of open.includes(t.id) ? kids : kids.filter((k) => !subFolded(k))) {
-          nodes.push({ id: k.id, kind: "sub", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
-          edges.push({ from: t.id, to: k.id, tone: tone(k) });
-          ky += H.sub + GAP.sub;
-        }
-        if (kidsDone.length) {
-          nodes.push({ id: `more:${t.id}`, kind: "more", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.more, project: { id: t.id, name: t.title, folder: "" }, task: t, count: kidsDone.length });
-          ky += H.more + GAP.sub;
-        }
-        rowH = Math.max(rowH, ky - GAP.sub - y);
-      });
-      y += rowH + GAP.job;
-    }
+    /** a grid, not one long column: up to 3 jobs side by side, a job's own sub-jobs stacked under it */
+    const place = (list: Task[]) => {
+      const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(list.length))));
+      for (let r = 0; r < list.length; r += cols) {
+        const row = list.slice(r, r + cols);
+        let rowH = 0;
+        row.forEach((t, c) => {
+          const x = X.job + c * (W.job + GAP.col);
+          const h = jobHeight(t);
+          nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h, task: t });
+          edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
+          let ky = y + h + GAP.sub;
+          const kids = state.tasks.filter((k) => k.parentId === t.id);
+          const kidsDone = kids.filter(subFolded);
+          const sub = (k: Task) => {
+            nodes.push({ id: k.id, kind: "sub", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
+            edges.push({ from: t.id, to: k.id, tone: tone(k) });
+            ky += H.sub + GAP.sub;
+          };
+          kids.filter((k) => !subFolded(k)).forEach(sub);
+          // finished subagents: one fold, and unfolded they come out under it
+          if (kidsDone.length) {
+            nodes.push({ id: `more:${t.id}`, kind: "more", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.more, project: { id: t.id, name: t.title, folder: "" }, task: t, count: kidsDone.length });
+            ky += H.more + GAP.sub;
+            if (open.includes(t.id)) kidsDone.forEach(sub);
+          }
+          rowH = Math.max(rowH, ky - GAP.sub - y);
+        });
+        y += rowH + GAP.job;
+      }
+    };
+    place(jobs);
     if (done.length) {
       nodes.push({ id: `more:${p.id}`, kind: "more", x: X.job, y, w: W.job, h: H.more, project: p, count: done.length, gone: done.filter(discarded).length });
       y += H.more + GAP.job;
+      if (open.includes(p.id)) place(done);
     }
     const shownAny = jobs.length || done.length;
     const span = shownAny ? y - GAP.job - top : H.proj;
@@ -133,7 +157,7 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
     edges.push({ from: "main", to: pn.id, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "failed") ? "failed" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
     y += GAP.proj - GAP.job;
   }
-  const mid = projNodes.length ? (projNodes[0].y + projNodes[projNodes.length - 1].y + H.proj) / 2 : H.main / 2;
+  const mid = projNodes.length ? (Math.min(...projNodes.map((n) => n.y)) + Math.max(...projNodes.map((n) => n.y)) + H.proj) / 2 : H.main / 2;
   nodes.unshift({ id: "main", kind: "main", x: X.main, y: mid - H.main / 2, w: W.main, h: H.main });
   // where the user put things wins
   const moved = state.canvas ?? {};
@@ -225,9 +249,8 @@ const bodyText = (job: Task) => {
 /** finished with checks it couldn't do (a discarded task's checks no longer matter) */
 const unchecked = (job: Task) => job.status === "done" && !discarded(job) && !!job.unverified?.length;
 
-/** a card that only says something in words (not running, not asking, no screenshot): it takes the height of its words */
-const quiet = (job: Task) =>
-  job.status !== "running" && !(job.status === "waiting" && decisionFor(job.id)) && !(job.shot && lastToolOf(job)?.kind === "browser");
+/** a card that only says something in words (not running, no screenshot): it takes the height of its words */
+const quiet = (job: Task) => job.status !== "running" && !(job.shot && lastToolOf(job)?.kind === "browser");
 
 function lastToolOf(job: Task) {
   for (let i = job.entries.length - 1; i >= 0; i--) {
@@ -236,6 +259,14 @@ function lastToolOf(job: Task) {
   }
   return undefined;
 }
+
+/** the question a waiting card asks, with the answers it offers right on the card */
+const askOf = (job: Task) => {
+  const d = job.status === "waiting" ? decisionFor(job.id) : undefined;
+  return d ? { q: d.question, opts: d.ui ? [] : d.options.slice(0, 3).map((o) => ({ label: o.label, rec: !!o.primary })) } : undefined;
+};
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** the height a quiet card's words take, measured with the card's own styles (kept per text and language) */
 const heights = new Map<string, number>();
@@ -248,23 +279,26 @@ if (typeof document !== "undefined" && document.fonts) {
   // a font used for the first time loads later than `ready`: words take another width then
   document.fonts.addEventListener("loadingdone", again);
 }
-function measure(title: string, body: string, badge: boolean): number {
+/**
+ * Measured at the default zoom: a card's words are drawn biggest there (see .cv-world in
+ * polish-canvas.css), so a card sized at 75% holds its words at any zoom.
+ */
+function measure(title: string, live: string, max: number): number {
   measured();
-  const key = `${lang()}\u0000${title}\u0000${body}\u0000${badge}`;
+  const key = `${lang()}\u0000${title}\u0000${live}`;
   const had = heights.get(key);
   if (had) return had;
   if (typeof document === "undefined" || !document.querySelector(".canvas-view")) return H.job;
   if (!probe) {
     probe = document.createElement("div");
     probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+    probe.className = "cv-world";
+    probe.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;--cv-z:${READ_ZOOM}`;
   }
   // inside the view, so the card picks up the same rules it will on the canvas
   document.querySelector(".canvas-view")!.appendChild(probe);
-  probe.innerHTML = `<div class="cv-node cv-job" style="position:static;width:${W.job}px;height:auto"><div class="cv-head"><span class="cv-stg"><span class="sb-glyph st-icon sm"></span></span><span class="cv-title"></span></div><div class="cv-live w-${body ? "summary" : "none"}">${body ? '<p class="cv-text"></p>' : '<div class="cv-live-empty"></div>'}${badge ? '<span class="unverified-badge">0</span>' : ""}</div><div class="cv-status"><span class="cv-status-text">x</span></div></div>`;
-  probe.querySelector(".cv-title")!.textContent = title;
-  if (body) probe.querySelector(".cv-text")!.textContent = body;
-  const h = Math.min(H.job, Math.ceil((probe.firstElementChild as HTMLElement).getBoundingClientRect().height));
+  probe.innerHTML = `<div class="cv-node cv-job" style="position:static;width:${W.job}px;height:auto"><div class="cv-head"><span class="cv-stg"><span class="sb-glyph st-icon sm"></span></span><span class="cv-title">${esc(title)}</span></div>${live}<div class="cv-status"><span class="cv-status-text">x</span></div></div>`;
+  const h = Math.min(max, Math.ceil((probe.firstElementChild as HTMLElement).getBoundingClientRect().height));
   probe.remove();
   if (h > 0) heights.set(key, h);
   return h > 0 ? h : H.job;
@@ -273,7 +307,14 @@ function measure(title: string, body: string, badge: boolean): number {
 /** a job card's height: the full card for work that moves, the height of its words for the rest */
 function jobHeight(job: Task): number {
   if (!quiet(job)) return H.job;
-  return measure(job.title, bodyText(job), unchecked(job));
+  const ask = askOf(job);
+  if (ask) {
+    const opts = ask.opts.map((o) => `<button class="cv-ask-opt"><span class="cv-ask-label">${esc(o.label)}</span>${o.rec ? `<span class="cv-ask-rec">${esc(t("추천"))}</span>` : ""}</button>`).join("");
+    return measure(job.title, `<div class="cv-live w-question"><div class="cv-ask"><p class="cv-text ask">${esc(ask.q)}</p>${opts ? `<div class="cv-ask-opts">${opts}</div>` : ""}</div></div>`, H.job + 40);
+  }
+  const body = bodyText(job);
+  const badge = unchecked(job) ? '<span class="unverified-badge">0</span>' : "";
+  return measure(job.title, `<div class="cv-live w-${body ? "summary" : "none"}">${body ? `<p class="cv-text">${esc(body)}</p>` : '<div class="cv-live-empty"></div>'}${badge}</div>`, H.job);
 }
 
 /** +8 −3, plain (nothing for a discarded task: its changes are gone) */
@@ -506,27 +547,58 @@ function StatusGlyph(props: { t: Task }) {
 function statusText(task: Task): string {
   if (discarded(task)) return "버림";
   if (task.status === "failed") return statusLabel.failed;
+  if (mergedAt(task)) return "병합됨";
   const tn = tone(task);
   return tn === "idle" ? statusLabel[task.status] : STATUS[tn];
 }
 
+/** merged by Ondra: when (older tasks without mergedAt: when they finished) */
+const mergedAt = (task: Task) => (task.worktree?.state === "merged" && !discarded(task) ? (task.mergedAt ?? task.finishedAt) : undefined);
+
 function StatusRow(props: { t: Task }) {
   const tn = () => tone(props.t);
-  /** where it is in its plan, while it isn't finished: 진행 중 · 2/4 */
+  /** where it is in its plan, while it isn't finished: 진행 중 · 할 일 2/4 */
   const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan) : undefined);
   const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
+  const cost = () => (props.t.status === "done" ? jobCost(props.t) : undefined);
+  /**
+   * The row never wraps: when it runs out of room it first drops the word "할 일" (2/4 stays),
+   * then the subagent count, and only then cuts the state word. Numbers are never split.
+   */
+  const [tight, setTight] = createSignal(0);
+  let row: HTMLDivElement | undefined;
+  const cut = () => {
+    const s = row?.querySelector<HTMLElement>(".cv-status-text");
+    return !!s && s.scrollWidth > s.clientWidth + 0.5;
+  };
+  const refit = () => {
+    if (!row?.isConnected) return;
+    setTight(0);
+    for (let k = 1; k <= 2 && cut(); k++) setTight(k);
+  };
+  createEffect(
+    on([() => statusText(props.t), step, when, () => changes(props.t).add + changes(props.t).del, () => state.tasks.filter((k) => k.parentId === props.t.id).length, lang, zoomNow, measured], () =>
+      queueMicrotask(refit),
+    ),
+  );
+  onMount(() => requestAnimationFrame(refit));
   return (
-    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }}>
-      <span class="cv-status-text">
-        {t(statusText(props.t))}
-        <Show when={step()}>{(p) => <span class="cv-step"> · {t("할 일 {done}/{all}", { done: p().done, all: p().total })}</span>}</Show>
-      </span>
-      <Kids t={props.t} class="cv-meta" />
+    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }} ref={row}>
+      <span class="cv-status-text">{t(statusText(props.t))}</span>
+      <Show when={step()}>
+        {(p) => <span class="cv-step">{tight() ? `· ${p().done}/${p().total}` : `· ${t("할 일 {done}/{all}", { done: p().done, all: p().total })}`}</span>}
+      </Show>
+      <Show when={tight() < 2}><Kids t={props.t} class="cv-meta" /></Show>
       <span class="spacer" />
       <Diff t={props.t} />
       <Show when={when()}><span class="cv-when">{when()}</span></Show>
-      <Show when={props.t.status === "done" && jobCost(props.t)} keyed>
-        {(c) => <Show when={costShort(c)}><span class="cv-when" title={costDetail(c)}>{costShort(c)}</span></Show>}
+      {/* merged: when it was merged, its cost on hover; otherwise what it took */}
+      <Show when={mergedAt(props.t)} fallback={
+        <Show when={cost()} keyed>
+          {(c) => <Show when={costShort(c)}><span class="cv-when" title={costDetail(c)}>{costShort(c)}</span></Show>}
+        </Show>
+      }>
+        {(at) => <span class="cv-when" title={[cost() && costShort(cost()!), cost() && costDetail(cost()!)].filter(Boolean).join(" · ") || undefined}>{ago(at())}</span>}
       </Show>
     </div>
   );
@@ -590,10 +662,10 @@ function MoreCard(props: { n: Node }) {
   /** it counts every task it folds: discarded ones apart (완료 2 · 버림 1) */
   const label = () => {
     const n = props.n.count ?? 0;
-    if (props.n.task) return t("완료된 서브에이전트 {n}개", { n });
+    if (props.n.task) return t("서브에이전트 완료 {n}개", { n });
     const gone = props.n.gone ?? 0;
-    if (!gone) return t("완료된 작업 {n}개", { n });
-    return n > gone ? t("완료 {n}개 · 버림 {m}개", { n: n - gone, m: gone }) : t("버린 작업 {n}개", { n: gone });
+    if (!gone) return t("완료 {n}개", { n });
+    return n > gone ? t("완료 {n}개 · 버림 {m}개", { n: n - gone, m: gone }) : t("버림 {n}개", { n: gone });
   };
   return (
     <div class="cv-more-row" classList={{ open: open() }} title={open() ? t("접기") : t("펼치기")}>
@@ -702,7 +774,10 @@ function Drawer(props: { t: Task; onClose: () => void }) {
               <For each={job().plan}>
                 {(p) => (
                   <li class={`p-${stepState(p, job())}`}>
-                    <i />
+                    {/* done: a quiet check; the one being worked on now (running tasks only): an accent dot */}
+                    <Show when={stepState(p, job()) === "done"} fallback={<i />}>
+                      <Icon name="check" size={12} class="cv-dr-check" />
+                    </Show>
                     <span>{p.text}</span>
                   </li>
                 )}
@@ -779,6 +854,8 @@ export function Canvas() {
   const space = () => state.space;
   const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
   onMount(() => remeasure(0));
+  // the order is taken when the canvas opens and when the workspace changes
+  createEffect(on(space, (sp) => untrack(() => snapRanks(sp))));
   /** jobs side by side: the arrangement that shows the most at a readable size */
   const maxCols = createMemo(() => bestCols(space(), unfolded(), vpSize()));
   const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
@@ -791,6 +868,7 @@ export function Canvas() {
   const ids = createMemo(() => graph().nodes.map((n) => n.id), [], { equals: (a, b) => a.length === b.length && a.every((x, i) => x === b[i]) });
   const [pan, setPan] = createSignal({ x: 80, y: 80 });
   const [zoom, setZoom] = createSignal(1);
+  createEffect(() => setZoomNow(zoom()));
   const [sel, setSel] = createSignal<string>();
   const [drag, setDrag] = createSignal<{ id: string; x: number; y: number } | null>(null);
   const [grid, setGrid] = createSignal(true);
@@ -876,8 +954,13 @@ export function Canvas() {
   };
   /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. */
   const fold = (next: string[]) => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const was = new Set(graph().nodes.map((n) => n.id));
+      setUnfolded(next);
+      return void reveal(graph().nodes.filter((n) => !was.has(n.id)));
+    }
     const before = graph().nodes;
+    const unfoldedBefore = unfolded();
     const after = layout(space(), next, maxCols()).nodes;
     const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
     const was = at(before);
@@ -902,7 +985,27 @@ export function Canvas() {
         from[n.id] = c ? pos(c) : will[n.id];
       }
       animate(from, will, [Object.fromEntries(born.map((n) => [n.id, 0])), {}], 300);
+      reveal(after.filter((n) => !was[n.id] || (n.kind === "more" && next.includes(n.project!.id) && !unfoldedBefore.includes(n.project!.id))));
     }
+  };
+  /** what just came out of a fold is brought into view, the fold itself kept on screen */
+  const reveal = (ns: Node[]) => {
+    if (!vp || !ns.length) return;
+    const z = zoom(), p = pan(), v = vpSize(), room = 16;
+    const b = boxOf(ns);
+    const x0 = b.x0 * z + p.x, x1 = b.x1 * z + p.x, y0 = b.y0 * z + p.y, y1 = b.y1 * z + p.y;
+    let dx = 0, dy = 0;
+    if (x1 > v.w - room) dx = Math.max(v.w - room - x1, room - x0);
+    else if (x0 < room) dx = room - x0;
+    if (y1 > v.h - room) dy = Math.max(v.h - room - y1, room - y0);
+    else if (y0 < room) dy = room - y0;
+    if (!dx && !dy) return;
+    touched = true;
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      vp.classList.add("glide");
+      setTimeout(() => vp?.classList.remove("glide"), 260);
+    }
+    setPan({ x: p.x + dx, y: p.y + dy });
   };
 
   /** the person moved or zoomed the view: a window resize no longer refits it */
@@ -1035,6 +1138,7 @@ export function Canvas() {
 
   /** Put every card back in line (drops where they were dragged to). */
   const resetLayout = () => {
+    snapRanks(space());
     const from = Object.fromEntries(graph().nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
     const prefix = `${space()}:`;
     // a store merges objects, so a filtered copy would keep the old keys: drop each one

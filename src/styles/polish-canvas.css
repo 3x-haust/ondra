@@ -1060,21 +1060,6 @@
   color: var(--ink-3);
 }
 
-/* ── memory: how a piece has been used, one line */
-.md-use {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 0;
-  font-size: var(--fs-xs);
-  line-height: 20px;
-  color: var(--ink-3);
-}
-.md-use span + span::before {
-  content: "·";
-  margin: 0 var(--s-6);
-  color: var(--ink-4);
-}
-
 /* ── devices: who may use a device, labelled */
 .dev-space-pick {
   display: inline-flex;
@@ -1484,15 +1469,127 @@
   flex: none;
 }
 
-/* ── canvas: a card's meta (state · to-dos, subagents, task counts, folds) never reads below ~11px on
-   screen: zoomed out, it grows in card space by the zoom (up to a cap, so a far zoom-out stays tidy) */
+/* ── canvas: card type on screen. At the default 75% a title reads ≈13px and everything else ≥11px.
+   Zoomed in, the words shrink in card space so they keep that size on screen (down to the app's own
+   sizes); zoomed out past 75%, they keep their 75% size in card space, so a card measured at 75%
+   (Canvas.tsx `measure`) always holds its words. --cv-k is the zoom, never under 75%. */
+.cv-world {
+  --cv-k: max(var(--cv-z, 1), 0.75);
+  --cv-title: max(var(--fs-sm), calc(13px / var(--cv-k)));
+  --cv-title-lh: max(20px, calc(18px / var(--cv-k)));
+  --cv-meta: max(var(--fs-xs), calc(11px / var(--cv-k)));
+  --cv-meta-lh: max(18px, calc(14px / var(--cv-k)));
+  --cv-body: max(var(--fs-xs), calc(11px / var(--cv-k)));
+  --cv-body-lh: max(20px, calc(15px / var(--cv-k)));
+}
+.cv-world .cv-node .cv-title {
+  font-size: var(--cv-title);
+  line-height: var(--cv-title-lh);
+}
+.cv-world .cv-node .cv-stg,
+.cv-world .cv-node .cv-ic {
+  height: var(--cv-title-lh);
+}
 .cv-world .cv-node .cv-status,
 .cv-world .cv-node .cv-when,
-.cv-world .cv-node .cv-diff {
-  font-size: clamp(var(--fs-xs), calc(11px / var(--cv-z, 1)), 15px);
+.cv-world .cv-node .cv-diff,
+.cv-world .cv-node .kids-n,
+.cv-world .cv-node .cv-live-empty {
+  font-size: var(--cv-meta);
+  line-height: var(--cv-meta-lh);
+}
+.cv-world .cv-node .cv-status {
+  min-height: var(--cv-meta-lh);
+}
+.cv-world .cv-node .kids-n .icon {
+  width: calc(var(--cv-meta) * 0.9);
+  height: calc(var(--cv-meta) * 0.9);
+}
+.cv-world .cv-node .cv-text,
+.cv-world .cv-node .cv-act-head,
+.cv-world .cv-node .cv-act-row,
+.cv-world .cv-node .cv-act-step {
+  font-size: var(--cv-body);
+  line-height: var(--cv-body-lh);
+}
+.cv-world .cv-node .cv-act-row .icon {
+  width: calc(var(--cv-body) * 0.8);
+  height: calc(var(--cv-body) * 0.8);
+}
+.cv-world .cv-node .cv-ask .cv-text {
+  font-size: max(var(--fs-sm), calc(12px / var(--cv-k)));
+  line-height: max(20px, calc(16.5px / var(--cv-k)));
+}
+.cv-world .cv-node .cv-ask-opt {
+  height: max(28px, calc(21px / var(--cv-k)));
+  font-size: var(--cv-meta);
+}
+.cv-world .cv-node .cv-ask-rec,
+.cv-world .cv-node .unverified-badge {
+  font-size: var(--cv-meta);
+  line-height: var(--cv-meta-lh);
 }
 .cv-world .cv-more-row {
-  font-size: clamp(var(--fs-sm), calc(11.5px / var(--cv-z, 1)), 15.5px);
+  font-size: max(var(--fs-sm), calc(11.5px / var(--cv-k)));
+}
+
+/* the status row never wraps: the state word gives way (Canvas.tsx drops "할 일", then the subagent
+   count first); the to-do count, the diff and the time keep whole */
+.cv-status .cv-status-text {
+  flex: 0 1 auto;
+}
+.cv-status .cv-step,
+.cv-status .kids-n,
+.cv-status .cv-diff,
+.cv-status .cv-when {
+  flex: none;
+  white-space: nowrap;
+}
+.cv-status .cv-step {
+  margin-left: calc(-1 * var(--s-4));
+  color: inherit;
+}
+.cv-status.s-live .cv-step,
+.cv-status.s-review .cv-step {
+  color: var(--ink-2);
+}
+.cv-status .cv-diff {
+  display: inline-flex;
+}
+
+/* a question card: the answers right under the question (no gap), the card as tall as both */
+.cv-job .cv-live.w-question {
+  flex: none;
+  height: auto;
+}
+.cv-job .cv-ask {
+  height: auto;
+}
+.cv-job .cv-ask-opts {
+  margin-top: 0;
+}
+
+/* the side sheet's to-dos: done ones a quiet check with quiet words; only the one being worked on is accent */
+.cv-dr-plan li.p-done {
+  color: var(--ink-3);
+}
+.cv-dr-plan li .cv-dr-check {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 4px -2.5px 0;
+  color: var(--ink-4);
+}
+.cv-dr-plan li.p-now {
+  color: var(--ink);
+}
+.cv-dr-plan li.p-now i {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.cv-dr-plan li.p-todo i {
+  background: none;
+  border-color: var(--ink-4);
 }
 
 /* ── memory tree: a piece's name comes first; its "2번 사용" tag shows only where it fits beside a

@@ -204,7 +204,8 @@ export function MemoryView() {
         <SidebarToggle />
         <h1 class="head-title">{t("메모리")}</h1>
         <span class="mem-count">
-          <span>{t("메모리")} <b>{counts().facts}</b></span>
+          {/* named like the overview's card: the pieces in use now */}
+          <span>{t("적용 중")} <b>{counts().facts}</b></span>
           <Show when={counts().files}><span>{t("파일")} <b>{counts().files}</b></span></Show>
           <Show when={myJournal().length}><span>{t("작업 기록")} <b>{myJournal().length}</b></span></Show>
         </span>
@@ -577,8 +578,10 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     return (!!props.graph.focus && n.ring <= 1 && memCount() <= 36) || z >= 1.8;
   };
   const labelOf = (n: GNode) => (n.kind === "memory" || n.kind === "entry" ? (n.label.length > 22 ? `${n.label.slice(0, 22)}…` : n.label) : n.label);
-  /** the name in less room: a project told apart by its folder is just the folder; long names are cut */
-  const shortOf = (n: GNode) => n.hint ?? (labelOf(n).length > 12 ? `${labelOf(n).slice(0, 11)}…` : labelOf(n));
+  /** the name in less room: a project told apart by its folder keeps its name, tight, with the folder cut
+   *  ("ondra·홈", "ondra·01_Pr…"), so two homes of one repo still read as that repo; long names are cut */
+  const shortOf = (n: GNode) =>
+    n.hint ? `${n.label}·${n.hint.length > 6 ? `${n.hint.slice(0, 5)}…` : n.hint}` : labelOf(n).length > 12 ? `${labelOf(n).slice(0, 11)}…` : labelOf(n);
   // names never sit on top of each other: the more important one wins, the other fades out
   const FS: Partial<Record<GNode["kind"], number>> = { global: 12, space: 12, project: 12, folder: 12, past: 12, topics: 12, topic: 11, memory: 11, file: 11, entry: 12 };
   /** a name never reads smaller than 11px on screen: zoomed out, it keeps its size (and more of them hide) */
@@ -588,44 +591,54 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   /**
    * The names that fit, each "full" or "short", under its node or (when under is taken) over it.
    * A name that would cover another is first moved over its node, then shortened (a project told
-   * apart by its folder keeps just the folder: "01_Projects", "홈"; a hub drops its count), and only
+   * apart by its folder: "ondra·홈", "ondra·01_Pr…"; a hub drops its count), and only
    * hidden when none of that fits. Hovered, it shows whole; its tooltip names it either way.
    */
+  type Spot = { short: boolean; up: boolean; side?: "l" | "r" };
   const labelOn = createMemo(() => {
     tick();
     const rank = (n: GNode) => (n.id === props.sel || n.id === props.hover ? 0 : near()?.has(n.id) ? 1 : isHub(n.kind) ? 2 : 3);
     const cands = props.graph.nodes.filter(showLabel).sort((a, b) => rank(a) - rank(b) || b.r - a.r);
-    const placed: number[][] = [];
-    const on = new Map<string, { short: boolean; up: boolean }>();
-    const free = (n: GNode, box: number[]) =>
-      !placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3]) &&
-      // nor across another node
-      !props.graph.nodes.some((o) => {
-        const ob = o.id !== n.id && bodies.get(o.id);
-        return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
-      });
-    for (const n of cands) {
-      const b = bodies.get(n.id);
-      if (!b) continue;
-      // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
-      if (n.kind === "file" && rank(n) > 1) continue;
-      const fs = fsOf(n);
-      const boxOf = (text: string, up: boolean) => {
-        const w = textW(text, fs) / 2 + 2;
-        return up ? [b.x - w, b.y - n.r - 4 - fs, b.x + w, b.y - n.r - 1] : [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
-      };
-      const whole = labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : "");
-      const tries: { short: boolean; up: boolean }[] = [{ short: false, up: false }, { short: false, up: true }];
-      if (shortOf(n) !== whole) tries.push({ short: true, up: false }, { short: true, up: true });
-      const fit = rank(n) === 0 ? tries[0] : tries.find((x) => free(n, boxOf(x.short ? shortOf(n) : whole, x.up)));
-      if (!fit) continue;
-      placed.push(boxOf(fit.short ? shortOf(n) : whole, fit.up));
-      on.set(n.id, fit);
-    }
-    // two projects of one name read alike: when one is down to its folder, so is the other ("01_Projects", "홈")
-    const cut = new Set(props.graph.nodes.filter((n) => n.hint && on.get(n.id)?.short).map((n) => n.label));
-    for (const n of props.graph.nodes) if (n.hint && cut.has(n.label) && on.has(n.id) && n.id !== props.hover) on.set(n.id, { ...on.get(n.id)!, short: true });
-    return on;
+    /** `tight`: names of projects told apart by their folder that go short from the start */
+    const place = (tight: Set<string>) => {
+      const placed: number[][] = [];
+      const on = new Map<string, Spot>();
+      const free = (n: GNode, box: number[]) =>
+        !placed.some((p) => p[0] < box[2] && box[0] < p[2] && p[1] < box[3] && box[1] < p[3]) &&
+        // nor across another node
+        !props.graph.nodes.some((o) => {
+          const ob = o.id !== n.id && bodies.get(o.id);
+          return ob && ob.x + o.r > box[0] && ob.x - o.r < box[2] && ob.y + o.r > box[1] && ob.y - o.r < box[3];
+        });
+      for (const n of cands) {
+        const b = bodies.get(n.id);
+        if (!b) continue;
+        // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
+        if (n.kind === "file" && rank(n) > 1) continue;
+        const fs = fsOf(n);
+        const boxOf = (text: string, up: boolean, side?: "l" | "r") => {
+          const w = textW(text, fs) / 2 + 2;
+          if (side === "r") return [b.x + n.r + 2, b.y - fs * 0.6, b.x + n.r + 4 + w * 2, b.y + fs * 0.6];
+          if (side === "l") return [b.x - n.r - 4 - w * 2, b.y - fs * 0.6, b.x - n.r - 2, b.y + fs * 0.6];
+          return up ? [b.x - w, b.y - n.r - 4 - fs, b.x + w, b.y - n.r - 1] : [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
+        };
+        const whole = labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : "");
+        const tries: Spot[] = n.hint && tight.has(n.label) && rank(n) > 0 ? [] : [{ short: false, up: false }, { short: false, up: true }];
+        if (shortOf(n) !== whole) tries.push({ short: true, up: false }, { short: true, up: true });
+        // a repo's second home is never left unnamed: beside its node when under and over are taken
+        if (n.hint) tries.push({ short: true, up: false, side: "r" }, { short: true, up: false, side: "l" });
+        const fit = rank(n) === 0 ? tries[0] : tries.find((x) => free(n, boxOf(x.short ? shortOf(n) : whole, x.up, x.side)));
+        if (!fit) continue;
+        placed.push(boxOf(fit.short ? shortOf(n) : whole, fit.up, fit.side));
+        on.set(n.id, fit);
+      }
+      return on;
+    };
+    // two projects of one name read alike: when one has to go short (or can't show), both are short
+    // from the start ("ondra·01_Pr…", "ondra·홈"), which also leaves the room for both
+    const first = place(new Set());
+    const cut = new Set(cands.filter((n) => n.hint && n.id !== props.hover && (first.get(n.id)?.short || !first.has(n.id))).map((n) => n.label));
+    return cut.size ? place(cut) : first;
   });
   const nodeIds = createMemo(() => props.graph.nodes.map((n) => n.id));
   const edgeKey = (e: GEdge) => `${e.a}~${e.b}~${e.kind}`;
@@ -692,7 +705,10 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
                       </Switch>
                       {/* the name on hover, also when it's hidden or shortened for room */}
                       <title>{n().kind === "project" && n().path ? `${homeName(n())}\n${tilde(n().path!)}` : n().hint ? homeName(n()) : n().label}</title>
-                      <text y={labelOn().get(n().id)?.up ? -n().r - 4 - fsOf(n()) * 0.25 : n().r + fsOf(n())} text-anchor="middle" style={{ "font-size": `${fsOf(n())}px` }} classList={{ off: !labelOn().has(n().id) }}>
+                      <text
+                        x={labelOn().get(n().id)?.side === "r" ? n().r + 4 : labelOn().get(n().id)?.side === "l" ? -n().r - 4 : 0}
+                        y={labelOn().get(n().id)?.side ? fsOf(n()) * 0.35 : labelOn().get(n().id)?.up ? -n().r - 4 - fsOf(n()) * 0.25 : n().r + fsOf(n())}
+                        text-anchor={labelOn().get(n().id)?.side === "r" ? "start" : labelOn().get(n().id)?.side === "l" ? "end" : "middle"} style={{ "font-size": `${fsOf(n())}px` }} classList={{ off: !labelOn().has(n().id) }}>
                         <Show when={!labelOn().get(n().id)?.short} fallback={shortOf(n())}>
                           {labelOf(n())}
                           <Show when={n().hint}><tspan class="mg-hint"> · {n().hint}</tspan></Show>
