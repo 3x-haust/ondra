@@ -25,7 +25,7 @@ import { Markdown } from "../ui/Markdown";
 import { ModelPicker, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
-import { StatusLine, UsageLine } from "../ui/Usage";
+import { ContextRing, StatusLine, UsageLine } from "../ui/Usage";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { SidebarToggle } from "./Sidebar";
@@ -301,6 +301,8 @@ export function MainView() {
       onStop={() => void stopMain(key())}
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
       right={
+        <>
+        <ContextRing agent={`captain:${key()}`} accountId={account()} />
         <ModelPicker
           up={!big}
           accountId={account()}
@@ -314,6 +316,7 @@ export function MainView() {
             })
           }
         />
+        </>
       }
     />
   );

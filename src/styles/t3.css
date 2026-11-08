@@ -8919,3 +8919,37 @@ select.select.dev-space {
   border-radius: 4px;
   font-size: 8px;
 }
+
+/* composer: how full the conversation is */
+.ctx-ring {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  color: var(--ink-3);
+  transition: background var(--dur-fast);
+}
+.ctx-ring:hover {
+  background: var(--hover);
+}
+.ctx-ring-track,
+.ctx-ring-fill {
+  fill: none;
+  stroke-width: 2;
+}
+.ctx-ring-track {
+  stroke: var(--line-strong, var(--line));
+}
+.ctx-ring-fill {
+  stroke: var(--ink-2);
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--dur-slow) var(--ease), stroke var(--dur-fast);
+}
+.ctx-ring.warn .ctx-ring-fill {
+  stroke: var(--warn);
+}
+.ctx-ring.hot .ctx-ring-fill {
+  stroke: var(--bad);
+}

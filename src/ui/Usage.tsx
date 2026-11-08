@@ -129,3 +129,39 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     </Show>
   );
 }
+
+/** How full the conversation is, as a small ring beside the model: hover for the numbers, click for what the model gets. */
+export function ContextRing(props: { agent: string; accountId: string }) {
+  const c = () => ctx[props.agent];
+  const pct = () => {
+    const x = c();
+    return x ? Math.min(100, x.window ? (x.tokens / x.window) * 100 : x.percent) : 0;
+  };
+  const [open, setOpen] = createSignal(false);
+  const R = 6.5;
+  const L = 2 * Math.PI * R;
+  return (
+    <Show when={c()}>
+      {(x) => (
+        <>
+          <button
+            type="button"
+            class="ctx-ring"
+            classList={{ warn: pct() >= 70, hot: pct() >= 90 }}
+            title={`대화 ${tokens(x().tokens)} / ${tokens(x().window)} · ${pct() < 1 ? pct().toFixed(1) : Math.round(pct())}%`}
+            aria-label={`대화 ${Math.round(pct())}% 사용`}
+            onClick={() => setOpen(true)}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <circle class="ctx-ring-track" cx="8" cy="8" r={R} />
+              <circle class="ctx-ring-fill" cx="8" cy="8" r={R} stroke-dasharray={`${(pct() / 100) * L} ${L}`} transform="rotate(-90 8 8)" />
+            </svg>
+          </button>
+          <Show when={open()}>
+            <ContextSheet agent={props.agent} accountId={props.accountId} known={{ tokens: x().tokens, window: x().window }} onClose={() => setOpen(false)} />
+          </Show>
+        </>
+      )}
+    </Show>
+  );
+}
