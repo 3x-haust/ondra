@@ -13,7 +13,6 @@ import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 import { openTaskMenu, taskMenuItems } from "../ui/taskMenu";
 import { discarded } from "../state/progress";
-import { DiscardGlyph } from "../ui/Review";
 
 /** about how wide the task menu is: enough to put it beside a card instead of on it */
 const MENU_W = 232;
@@ -72,19 +71,27 @@ const projectOf = (task: Task) => projectsIn(task.space).find((p) => p.id === ta
 /** a column's mark: the glyph the sidebar draws for a task in that state */
 const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", failed: "failed", running: "running", queued: "queued", review: "inreview", done: "done" };
 
-/** The sidebar's status glyph for a state, where there is no one task (a column head, the canvas legend). */
-export function StateGlyph(props: { g: ReturnType<typeof glyphOf> }) {
-  return (
-    <span class={`sb-glyph st-icon sm ${props.g}`} aria-hidden="true">
-      <Show when={props.g === "running"} fallback={<Show when={props.g === "done"} fallback={<i />}><Icon name="check" size={9} stroke={2.5} /></Show>}>
-        <span class="spin" />
-      </Show>
-    </span>
-  );
+/** a task in each state, for drawing that state's glyph where there is no one task */
+const SAMPLE: Record<string, Partial<Task>> = {
+  waiting: { status: "waiting" },
+  failed: { status: "failed" },
+  inreview: { status: "done", worktree: { state: "open" } as Task["worktree"] },
+  running: { status: "running" },
+  paused: { status: "paused" },
+  queued: { status: "queued" },
+  done: { status: "done" },
+  discarded: { status: "done", worktree: { state: "discarded" } as Task["worktree"] },
+};
+
+/** The sidebar's status glyph for a state, where there is no one task (a column head, the canvas legend,
+ *  memory's finished tasks): drawn by the sidebar's own Glyph, so every place keeps one look. */
+export function StateGlyph(props: { g: ReturnType<typeof glyphOf> | "discarded" }) {
+  return <Glyph t={{ id: `~${props.g}`, entries: [], plan: [], shells: [], ...SAMPLE[props.g] } as unknown as Task} />;
 }
 
-/** Subagents of a task, one format on the board and the canvas: ⑂ 1/2 while some run, ⑂ 2 when none do. */
-export function Kids(props: { t: Task; class?: string }) {
+/** Subagents of a task, one format on the board and the canvas: ⑂ 1/2 while some run, ⑂ 2 when none do
+ *  (or `short`, where room is tight: the count alone, the fraction in the tooltip). */
+export function Kids(props: { t: Task; class?: string; short?: boolean }) {
   const kids = () => state.tasks.filter((k) => k.parentId === props.t.id);
   const live = () => kids().filter((k) => k.status === "running").length;
   return (
@@ -94,7 +101,7 @@ export function Kids(props: { t: Task; class?: string }) {
         title={live() ? t("서브에이전트 {live}/{n}개 진행 중", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}
       >
         <Icon name="branch" size={12} />
-        {live() ? `${live()}/${kids().length}` : kids().length}
+        {live() && !props.short ? `${live()}/${kids().length}` : kids().length}
       </span>
     </Show>
   );
@@ -290,7 +297,7 @@ function Card(props: { t: Task; byProject: boolean }) {
     <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} onContextMenu={cardMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
       <div class="bc-top">
         <span class="bc-glyph" title={props.byProject ? undefined : t(word())}>
-          <Show when={gone()} fallback={<Glyph t={job()} />}><DiscardGlyph /></Show>
+          <Glyph t={job()} />
         </span>
         {/* grouped by project, no column says the state: the card does */}
         <Show when={props.byProject}><span class={`bc-state tone-${gone() ? "discarded" : st()}`}>{t(word())}</span></Show>

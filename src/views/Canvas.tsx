@@ -10,17 +10,17 @@ type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
-import { goMain, live, openTask, setView } from "../state/ui";
-import { decide, resumeTask, tell } from "../engine/tasks";
+import { goMain, live, openPanel, openTask, setView } from "../state/ui";
+import { decide, mergeTask, resumeTask, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
-import { costDetail, costShort, jobCost } from "../ui/cost";
-import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
+import { costDetail, jobCost } from "../ui/cost";
+import { ago, compact, IssueTag, now, statusLabel, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
-import { discarded, planCount, stepState } from "../state/progress";
-import { DiscardGlyph } from "../ui/Review";
+import { discarded, planCount, stepState, taskDiff } from "../state/progress";
+import { confirmDiscard } from "../ui/taskMenu";
 import { Board, BoardGroup, cardMenu, Kids, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
@@ -48,6 +48,8 @@ interface Node {
   count?: number;
   /** of `count`, the discarded ones */
   gone?: number;
+  /** sized to its words (measured at 75%): drawn as tall as they are, `h` at most */
+  hug?: boolean;
 }
 interface Edge {
   from: string;
@@ -90,7 +92,12 @@ const snapRanks = (space: string) =>
 /** the zoom the canvas is at, for what has to be measured at the size it's drawn */
 const [zoomNow, setZoomNow] = createSignal(1);
 
-function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; edges: Edge[] } {
+/**
+ * Lanes top to bottom, a lane's cards in one column (a job's subagents stacked under it).
+ * Main and each project sit at the top of what they lead to, so a lane that grows (a fold
+ * opened) only grows downward: nothing above it moves, and nothing is re-centred.
+ */
+function layout(space: string, open: string[]): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "기타", folder: spaceById(space as Task["space"]).folder });
@@ -111,35 +118,28 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
     const done = all.filter(folded);
     const jobs = all.filter((t) => !folded(t));
     const top = y;
-    /** a grid, not one long column: up to 3 jobs side by side, a job's own sub-jobs stacked under it */
+    /** one column: each job, then its own sub-jobs under it */
     const place = (list: Task[]) => {
-      const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(list.length))));
-      for (let r = 0; r < list.length; r += cols) {
-        const row = list.slice(r, r + cols);
-        let rowH = 0;
-        row.forEach((t, c) => {
-          const x = X.job + c * (W.job + GAP.col);
-          const h = jobHeight(t);
-          nodes.push({ id: t.id, kind: "job", x, y, w: W.job, h, task: t });
-          edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
-          let ky = y + h + GAP.sub;
-          const kids = state.tasks.filter((k) => k.parentId === t.id);
-          const kidsDone = kids.filter(subFolded);
-          const sub = (k: Task) => {
-            nodes.push({ id: k.id, kind: "sub", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
-            edges.push({ from: t.id, to: k.id, tone: tone(k) });
-            ky += H.sub + GAP.sub;
-          };
-          kids.filter((k) => !subFolded(k)).forEach(sub);
-          // finished subagents: one fold, and unfolded they come out under it
-          if (kidsDone.length) {
-            nodes.push({ id: `more:${t.id}`, kind: "more", x: x + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.more, project: { id: t.id, name: t.title, folder: "" }, task: t, count: kidsDone.length });
-            ky += H.more + GAP.sub;
-            if (open.includes(t.id)) kidsDone.forEach(sub);
-          }
-          rowH = Math.max(rowH, ky - GAP.sub - y);
-        });
-        y += rowH + GAP.job;
+      for (const t of list) {
+        const h = jobHeight(t);
+        nodes.push({ id: t.id, kind: "job", x: X.job, y, w: W.job, h, task: t, hug: quiet(t) });
+        edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
+        let ky = y + h + GAP.sub;
+        const kids = state.tasks.filter((k) => k.parentId === t.id);
+        const kidsDone = kids.filter(subFolded);
+        const sub = (k: Task) => {
+          nodes.push({ id: k.id, kind: "sub", x: X.job + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
+          edges.push({ from: t.id, to: k.id, tone: tone(k) });
+          ky += H.sub + GAP.sub;
+        };
+        kids.filter((k) => !subFolded(k)).forEach(sub);
+        // finished subagents: one fold, and unfolded they come out under it
+        if (kidsDone.length) {
+          nodes.push({ id: `more:${t.id}`, kind: "more", x: X.job + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.more, project: { id: t.id, name: t.title, folder: "" }, task: t, count: kidsDone.length });
+          ky += H.more + GAP.sub;
+          if (open.includes(t.id)) kidsDone.forEach(sub);
+        }
+        y = ky - GAP.sub + GAP.job;
       }
     };
     place(jobs);
@@ -148,17 +148,14 @@ function layout(space: string, open: string[], maxCols = 3): { nodes: Node[]; ed
       y += H.more + GAP.job;
       if (open.includes(p.id)) place(done);
     }
-    const shownAny = jobs.length || done.length;
-    const span = shownAny ? y - GAP.job - top : H.proj;
-    if (!shownAny) y += H.proj + GAP.job;
-    const pn: Node = { id: `p:${p.id}`, kind: "proj", x: X.proj, y: top + (span - H.proj) / 2, w: W.proj, h: H.proj, project: p };
+    if (!jobs.length && !done.length) y += H.proj + GAP.job;
+    const pn: Node = { id: `p:${p.id}`, kind: "proj", x: X.proj, y: top, w: W.proj, h: H.proj, project: p };
     projNodes.push(pn);
     nodes.push(pn);
     edges.push({ from: "main", to: pn.id, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "failed") ? "failed" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
     y += GAP.proj - GAP.job;
   }
-  const mid = projNodes.length ? (Math.min(...projNodes.map((n) => n.y)) + Math.max(...projNodes.map((n) => n.y)) + H.proj) / 2 : H.main / 2;
-  nodes.unshift({ id: "main", kind: "main", x: X.main, y: mid - H.main / 2, w: W.main, h: H.main });
+  nodes.unshift({ id: "main", kind: "main", x: X.main, y: projNodes.length ? Math.min(...projNodes.map((n) => n.y)) : 0, w: W.main, h: H.main });
   // where the user put things wins
   const moved = state.canvas ?? {};
   for (const n of nodes) {
@@ -178,23 +175,10 @@ const INSET = { top: 24, bottom: 24, side: 32 };
 /** everything is shown when it fits at this zoom or more; otherwise READ_ZOOM (readability beats fitting) */
 const MIN_ZOOM = 0.75;
 const READ_ZOOM = 0.75;
-
-/**
- * How many jobs side by side: the arrangement that fits whole at the biggest zoom;
- * when none fits at MIN_ZOOM, the widest that still fits across at READ_ZOOM.
- */
-function bestCols(space: string, open: string[], v: { w: number; h: number }): number {
-  const aw = v.w - INSET.side * 2, ah = v.h - INSET.top - INSET.bottom;
-  const tries = [1, 2, 3].map((c) => {
-    const ns = layout(space, open, c).nodes;
-    if (!ns.length) return { c, z: 1, w: 0 };
-    const b = boxOf(ns);
-    return { c, z: Math.min(1, aw / (b.x1 - b.x0), ah / (b.y1 - b.y0)), w: b.x1 - b.x0 };
-  });
-  const best = tries.reduce((a, b) => (b.z > a.z + 0.01 ? b : a));
-  if (best.z >= MIN_ZOOM) return best.c;
-  return [...tries].reverse().find((x) => x.w * READ_ZOOM <= aw)?.c ?? 1;
-}
+/** the zoom steps − and + (and ⌘− ⌘+) move along */
+const LADDER = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2];
+/** the ladder's step at or under `z` (the zoom itself under the first step) */
+const stepUnder = (z: number) => [...LADDER].reverse().find((s) => s <= z + 0.001) ?? z;
 
 // ───────────── what a job is doing, as a picture
 
@@ -220,12 +204,6 @@ const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done"
 
 const base = (s?: string) => (s ? s.split(/[\\/]/).filter(Boolean).pop()?.slice(0, 40) : undefined);
 
-/** the tool steps of a job, oldest first (the last 28) */
-const steps = (t: Task) =>
-  t.entries
-    .flatMap((e) => (e.kind === "tool" ? [{ id: e.id, kind: e.tool.kind, ok: e.tool.ok !== false, open: !e.tool.endedAt, target: e.tool.target }] : []))
-    .slice(-28);
-
 /** two texts that read the same (spacing and closing punctuation aside) */
 const same = (a: string, b: string) => {
   const n = (s: string) => s.replace(/\s+/g, " ").replace(/[\s.。!?…]+$/, "").trim();
@@ -249,8 +227,11 @@ const bodyText = (job: Task) => {
 /** finished with checks it couldn't do (a discarded task's checks no longer matter) */
 const unchecked = (job: Task) => job.status === "done" && !discarded(job) && !!job.unverified?.length;
 
+/** a failed card says why in one muted line, in place of any preview */
+const failedLine = (job: Task) => job.status === "failed" && !discarded(job) && !!bodyText(job);
+
 /** a card that only says something in words (not running, no screenshot): it takes the height of its words */
-const quiet = (job: Task) => job.status !== "running" && !(job.shot && lastToolOf(job)?.kind === "browser");
+const quiet = (job: Task) => job.status !== "running" && (failedLine(job) || !(job.shot && lastToolOf(job)?.kind === "browser"));
 
 function lastToolOf(job: Task) {
   for (let i = job.entries.length - 1; i >= 0; i--) {
@@ -314,7 +295,7 @@ function jobHeight(job: Task): number {
   }
   const body = bodyText(job);
   const badge = unchecked(job) ? '<span class="unverified-badge">0</span>' : "";
-  return measure(job.title, `<div class="cv-live w-${body ? "summary" : "none"}">${body ? `<p class="cv-text">${esc(body)}</p>` : '<div class="cv-live-empty"></div>'}${badge}</div>`, H.job);
+  return measure(job.title, `<div class="cv-live w-${body ? "summary" : "none"}">${body ? `<p class="cv-text${failedLine(job) ? " muted one" : ""}">${esc(body)}</p>` : '<div class="cv-live-empty"></div>'}${badge}</div>`, H.job);
 }
 
 /** +8 −3, plain (nothing for a discarded task: its changes are gone) */
@@ -452,6 +433,23 @@ function Activity(props: { t: Task }) {
   );
 }
 
+/** what a card shows of the work: the browser it drives, its steps, its question, its words, or nothing */
+function liveMode(job: Task): "browser" | "shell" | "text" | "tool" | "act" | "question" | "summary" | "none" {
+  const lastTool = lastToolOf(job);
+  if (job.status === "waiting" && decisionFor(job.id)) return "question";
+  if (job.status === "running") {
+    // the browser only while it's what the job is using now (not after it moved on to the desktop or a shell)
+    if (lastTool?.kind === "browser") return "browser";
+    if (live[job.id] && !job.intent && !job.plan.length) return "text";
+    if (lastTool || job.intent || job.plan.length) return "act";
+    return "none";
+  }
+  if (failedLine(job)) return "summary";
+  if (job.shot && lastTool?.kind === "browser") return "browser";
+  // a body that only repeats the title (a queued task's ask, word for word, or the title is its cut) says nothing
+  return bodyText(job) ? "summary" : "none";
+}
+
 /**
  * The bottom of what the job is doing right now: the browser it drives, the
  * last lines of the command it runs, or the end of what it is writing.
@@ -463,19 +461,7 @@ function Live(props: { t: Task }) {
     const open = job().shells.filter((s) => !s.endedAt && !s.background);
     return open[open.length - 1] ?? (lastTool()?.kind === "bash" || lastTool()?.kind === "test" ? job().shells[job().shells.length - 1] : undefined);
   };
-  const what = (): "browser" | "shell" | "text" | "tool" | "act" | "question" | "summary" | "none" => {
-    if (job().status === "waiting" && decisionFor(job().id)) return "question";
-    if (job().status === "running") {
-      // the browser only while it's what the job is using now (not after it moved on to the desktop or a shell)
-      if (lastTool()?.kind === "browser") return "browser";
-      if (live[job().id] && !job().intent && !job().plan.length) return "text";
-      if (lastTool() || job().intent || job().plan.length) return "act";
-      return "none";
-    }
-    if (job().shot && lastTool()?.kind === "browser") return "browser";
-    // a body that only repeats the title (a queued task's ask, word for word, or the title is its cut) says nothing
-    return bodyText(job()) ? "summary" : "none";
-  };
+  const what = () => liveMode(job());
   return (
     <div class={`cv-live w-${what()}`}>
       {/* a queued task with nothing more to say stays blank: its status line already says 대기 */}
@@ -511,7 +497,7 @@ function Live(props: { t: Task }) {
           </div>
         </Match>
         <Match when={what() === "summary"}>
-          <p class="cv-text" classList={{ muted: !job().summary && !job().error }}>{bodyText(job())}</p>
+          <p class="cv-text" classList={{ muted: (!job().summary && !job().error) || failedLine(job()), one: failedLine(job()) }} title={failedLine(job()) ? bodyText(job()) : undefined}>{bodyText(job())}</p>
           <Show when={unchecked(job())}>
             <span class="unverified-badge" title={job().unverified!.join("\n")}>{t("{n}개 확인 안 됨", { n: job().unverified!.length })}</span>
           </Show>
@@ -538,7 +524,7 @@ const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요
 function StatusGlyph(props: { t: Task }) {
   return (
     <span class="cv-stg" title={t(statusText(props.t))}>
-      <Show when={discarded(props.t)} fallback={<Glyph t={props.t} />}><DiscardGlyph /></Show>
+      <Glyph t={props.t} />
     </span>
   );
 }
@@ -555,15 +541,44 @@ function statusText(task: Task): string {
 /** merged by Ondra: when (older tasks without mergedAt: when they finished) */
 const mergedAt = (task: Task) => (task.worktree?.state === "merged" && !discarded(task) ? (task.mergedAt ?? task.finishedAt) : undefined);
 
-function StatusRow(props: { t: Task }) {
+/** how long something took, one way everywhere: minutes, seconds only under a minute */
+function took(ms: number): string {
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return t("{n}초", { n: Math.max(1, sec) });
+  const m = Math.round(sec / 60);
+  if (m < 60) return t("{n}분", { n: m });
+  return m % 60 ? t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 }) : t("{n}시간", { n: m / 60 });
+}
+
+/** a finished task's time and tokens: "19분 · 토큰 48K" */
+const tookLine = (task: Task) => {
+  const c = jobCost(task);
+  return [c.ms ? took(c.ms) : "", c.total ? t("토큰 {n}", { n: tokens(c.total) }) : ""].filter(Boolean).join(" · ");
+};
+
+/** when a finished task ended: merged, or (discarded, done, failed) finished */
+const endedAt = (task: Task) => (task.status === "done" || task.status === "failed" ? (mergedAt(task) ?? task.finishedAt) : undefined);
+
+function StatusRow(props: { t: Task; sheet?: boolean }) {
   const tn = () => tone(props.t);
   /** where it is in its plan, while it isn't finished: 진행 중 · 할 일 2/4 */
   const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan) : undefined);
-  const when = () => (props.t.status === "running" && props.t.startedAt ? compact(now() - props.t.startedAt) : "");
-  const cost = () => (props.t.status === "done" ? jobCost(props.t) : undefined);
+  /** running: for how long; finished: when (on a card) or what it took (in the sheet) */
+  const when = () => {
+    if (props.t.status === "running" && props.t.startedAt) return compact(now() - props.t.startedAt);
+    const at = endedAt(props.t);
+    if (!at) return "";
+    return props.sheet ? tookLine(props.t) || ago(at) : ago(at);
+  };
+  const whenTitle = () => {
+    if (!endedAt(props.t)) return undefined;
+    const c = jobCost(props.t);
+    return (props.sheet ? [ago(endedAt(props.t)), costDetail(c)] : [tookLine(props.t), costDetail(c)]).filter(Boolean).join(" · ") || undefined;
+  };
   /**
-   * The row never wraps: when it runs out of room it first drops the word "할 일" (2/4 stays),
-   * then the subagent count, and only then cuts the state word. Numbers are never split.
+   * The row never wraps. When it runs out of room it drops, in order: the diff, the subagent
+   * count's fraction (⑂ 1/2 → ⑂ 2), the word "할 일" (2/4 stays), the subagent count; only then
+   * is the state word cut. Two bare fractions never sit side by side, and numbers are never split.
    */
   const [tight, setTight] = createSignal(0);
   let row: HTMLDivElement | undefined;
@@ -574,10 +589,10 @@ function StatusRow(props: { t: Task }) {
   const refit = () => {
     if (!row?.isConnected) return;
     setTight(0);
-    for (let k = 1; k <= 2 && cut(); k++) setTight(k);
+    for (let k = 1; k <= 4 && cut(); k++) setTight(k);
   };
   createEffect(
-    on([() => statusText(props.t), step, when, () => changes(props.t).add + changes(props.t).del, () => state.tasks.filter((k) => k.parentId === props.t.id).length, lang, zoomNow, measured], () =>
+    on([() => statusText(props.t), step, when, () => changes(props.t).add + changes(props.t).del, () => state.tasks.filter((k) => k.parentId === props.t.id).map((k) => k.status).join(), lang, zoomNow, measured], () =>
       queueMicrotask(refit),
     ),
   );
@@ -586,20 +601,12 @@ function StatusRow(props: { t: Task }) {
     <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }} ref={row}>
       <span class="cv-status-text">{t(statusText(props.t))}</span>
       <Show when={step()}>
-        {(p) => <span class="cv-step">{tight() ? `· ${p().done}/${p().total}` : `· ${t("할 일 {done}/{all}", { done: p().done, all: p().total })}`}</span>}
+        {(p) => <span class="cv-step">{tight() >= 3 ? `· ${p().done}/${p().total}` : `· ${t("할 일 {done}/{all}", { done: p().done, all: p().total })}`}</span>}
       </Show>
-      <Show when={tight() < 2}><Kids t={props.t} class="cv-meta" /></Show>
+      <Show when={tight() < 4}><Kids t={props.t} class="cv-meta" short={tight() >= 2} /></Show>
       <span class="spacer" />
-      <Diff t={props.t} />
-      <Show when={when()}><span class="cv-when">{when()}</span></Show>
-      {/* merged: when it was merged, its cost on hover; otherwise what it took */}
-      <Show when={mergedAt(props.t)} fallback={
-        <Show when={cost()} keyed>
-          {(c) => <Show when={costShort(c)}><span class="cv-when" title={costDetail(c)}>{costShort(c)}</span></Show>}
-        </Show>
-      }>
-        {(at) => <span class="cv-when" title={[cost() && costShort(cost()!), cost() && costDetail(cost()!)].filter(Boolean).join(" · ") || undefined}>{ago(at())}</span>}
-      </Show>
+      <Show when={tight() < 1}><Diff t={props.t} /></Show>
+      <Show when={when()}><span class="cv-when" title={whenTitle()}>{when()}</span></Show>
     </div>
   );
 }
@@ -692,11 +699,34 @@ function MainCard() {
   );
 }
 
+/** A changed file's row: the folder quiet, the name in ink, its +n −m on the right. */
+function FileRow(props: { path: string; add: number; del: number; onOpen: () => void }) {
+  const cut = () => props.path.lastIndexOf("/");
+  return (
+    <li class="link cv-dr-file" onClick={props.onOpen} title={props.path}>
+      <span class="cv-dr-ic"><Icon name="file" size={14} /></span>
+      <span class="cv-dr-path">
+        <Show when={cut() > 0}><span class="dir">{props.path.slice(0, cut() + 1)}</span></Show>
+        <span class="name">{props.path.slice(cut() + 1)}</span>
+      </span>
+      <span class="cv-dr-n">
+        <Show when={props.add}><span class="add">+{props.add}</span></Show>
+        <Show when={props.del}><span class="del">−{props.del}</span></Show>
+      </span>
+    </li>
+  );
+}
+
 /** Opens from the right when a job is picked, like a service panel. */
 function Drawer(props: { t: Task; onClose: () => void }) {
   const job = () => props.t;
   const kids = () => state.tasks.filter((k) => k.parentId === job().id);
-  const recent = () => steps(job()).slice(-8).reverse();
+  /** the last steps, newest first, in the card's words (verb + target) */
+  const recent = () =>
+    job()
+      .entries.filter((e): e is Extract<Task["entries"][number], { kind: "tool" }> => e.kind === "tool")
+      .slice(-8)
+      .reverse();
   const ended = () => job().status === "done" || job().status === "failed";
   /** what the job ended with: its last answer and the files / pages behind it */
   const outcome = createMemo(() => {
@@ -710,7 +740,20 @@ function Drawer(props: { t: Task; onClose: () => void }) {
     }
     return { text: text || job().result || job().summary || job().error || "", proof: proof.filter((x) => x.kind === "file" || x.kind === "shot" || x.kind === "link") };
   });
-  const d = () => (discarded(job()) ? { add: 0, del: 0 } : changes(job()));
+  /** the files it changed (nothing for a discarded task: its changes are gone) */
+  const files = () => (discarded(job()) ? [] : taskDiff(job()).files);
+  /**
+   * While it works, the plan is listed below: the box above says only what the list doesn't
+   * (its own sentence when that isn't the current to-do, or what it's on when it has no plan).
+   */
+  const nowLine = () => {
+    const j = job();
+    const cur = j.plan.find((p) => p.state === "now")?.text;
+    if (j.intent && !(cur && same(j.intent, cur))) return j.intent;
+    return !j.plan.length && j.now ? nowText(j.now) : "";
+  };
+  const review = () => tone(job()) === "review";
+  const [merging, setMerging] = createSignal(false);
   const [msg, setMsg] = createSignal("");
   const say = () => {
     const m = msg().trim();
@@ -729,7 +772,25 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             {t("다시 시도")}
           </button>
         </Show>
-        <button class="btn sm cv-dr-open" title={t("작업 열기 (⏎)")} onClick={() => openTask(job().id)}>{t("열기")}</button>
+        {/* waiting on a merge: the review bar's two actions, with its confirm */}
+        <Show when={review()}>
+          <button class="btn sm ghost cv-dr-discard" onClick={() => confirmDiscard(job().id)}>{t("버리기")}</button>
+          <button
+            class="btn sm primary cv-dr-merge"
+            disabled={merging()}
+            onClick={async () => {
+              setMerging(true);
+              await mergeTask(job().id);
+              setMerging(false);
+            }}
+          >
+            <Icon name="merge" size={14} />
+            {merging() ? t("병합 중") : t("병합")}
+          </button>
+        </Show>
+        <button class="icon-btn sm cv-dr-open" title={t("작업 열기 (⏎)")} aria-label={t("작업 열기")} onClick={() => openTask(job().id)}>
+          <Icon name="external" size={14} />
+        </button>
         <button class="icon-btn sm" title={t("닫기 (Esc)")} aria-label={t("닫기")} onClick={props.onClose}>
           <Icon name="x" size={14} />
         </button>
@@ -739,17 +800,31 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           when={ended() && outcome().text}
           fallback={
             <div class="cv-dr-now">
-              <StatusRow t={job()} />
+              <StatusRow t={job()} sheet />
               {/* a job waiting on the user is answered right here */}
-              <Show when={decisionFor(job().id)} fallback={<Live t={job()} />}>
+              <Show
+                when={decisionFor(job().id)}
+                fallback={
+                  <Show when={job().status === "running" && liveMode(job()) === "act"} fallback={<Live t={job()} />}>
+                    <Show when={nowLine()}><p class="cv-dr-line">{nowLine()}</p></Show>
+                  </Show>
+                }
+              >
                 {(dec) => <DecisionCard d={dec()} />}
               </Show>
             </div>
           }
         >
           <div class="cv-dr-now">
-            <StatusRow t={job()} />
+            <StatusRow t={job()} sheet />
             <Markdown class="cv-dr-result" text={outcome().text} />
+            {/* what the card's "확인 안 됨" badge stands for */}
+            <Show when={unchecked(job())}>
+              <p class="cv-dr-unverified">
+                <Icon name="alert" size={14} />
+                <span>{t("확인 안 됨")} · {job().unverified!.join(" · ")}</span>
+              </p>
+            </Show>
           </div>
           <Show when={outcome().proof.length}>
             <section>
@@ -758,7 +833,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
                 <For each={outcome().proof}>
                   {(x) => (
                     <li class="link" onClick={() => (x.kind === "link" ? window.open(x.ref, "_blank") : openTask(job().id))} title={x.ref}>
-                      <span class={`cv-dr-ic`}><Icon name={x.kind === "link" ? "link" : x.kind === "shot" ? "monitor" : "file"} size={12} /></span>
+                      <span class={`cv-dr-ic`}><Icon name={x.kind === "link" ? "link" : x.kind === "shot" ? "monitor" : "file"} size={14} /></span>
                       <span class="cv-dr-step">{x.kind === "link" ? x.ref.replace(/^https?:\/\/(www\.)?/, "") : base(x.ref)}</span>
                     </li>
                   )}
@@ -788,14 +863,20 @@ function Drawer(props: { t: Task; onClose: () => void }) {
         <Show when={!ended() && recent().length}>
           <section>
             <h4>{t("최근 단계")}</h4>
-            <ul class="cv-dr-steps">
+            <ul class="cv-dr-steps cv-dr-acts">
               <For each={recent()}>
-                {(s) => (
-                  <li classList={{ bad: !s.ok, open: s.open }}>
-                    <span class={`cv-dr-ic r-${s.kind}`}><Icon name={ACT[s.kind]?.icon ?? "tools"} size={12} /></span>
-                    <span class="cv-dr-step">{base(s.target) || t(ACT[s.kind]?.label ?? "도구")}</span>
-                  </li>
-                )}
+                {(e) => {
+                  const s = () => said(e);
+                  /** a command reads as code; everything else in the card's sans */
+                  const cmd = () => e.tool.kind === "bash" || e.tool.kind === "test";
+                  return (
+                    <li classList={{ bad: e.tool.ok === false, open: !e.tool.endedAt }}>
+                      <span class="cv-dr-ic"><Icon name={s().icon} size={14} /></span>
+                      <span class="lb">{s().label}</span>
+                      <Show when={s().target}><span class="tg" classList={{ cmd: cmd() }} title={s().target}>{s().target}</span></Show>
+                    </li>
+                  );
+                }}
               </For>
             </ul>
           </section>
@@ -815,13 +896,15 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             </ul>
           </section>
         </Show>
-        <Show when={d().add || d().del}>
+        {/* what it changed, file by file (a file opens in the task's changes) */}
+        <Show when={files().length}>
           <section>
             <h4>{t("변경")}</h4>
-            <div class="cv-dr-diff">
-              <Show when={d().add}><span class="add">+{d().add}</span></Show>
-              <Show when={d().del}><span class="del">−{d().del}</span></Show>
-            </div>
+            <ul class="cv-dr-steps">
+              <For each={files()}>
+                {(f) => <FileRow path={f.path} add={f.add} del={f.del} onOpen={() => (openTask(job().id), openPanel("changes", f.path))} />}
+              </For>
+            </ul>
           </section>
         </Show>
       </div>
@@ -856,9 +939,7 @@ export function Canvas() {
   onMount(() => remeasure(0));
   // the order is taken when the canvas opens and when the workspace changes
   createEffect(on(space, (sp) => untrack(() => snapRanks(sp))));
-  /** jobs side by side: the arrangement that shows the most at a readable size */
-  const maxCols = createMemo(() => bestCols(space(), unfolded(), vpSize()));
-  const graph = createMemo(() => layout(space(), unfolded(), maxCols()));
+  const graph = createMemo(() => layout(space(), unfolded()));
   /** projects that have finished jobs folded away (or unfolded) */
   const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
   const allOpen = () => foldable().length > 0 && foldable().every((id) => unfolded().includes(id));
@@ -961,7 +1042,7 @@ export function Canvas() {
     }
     const before = graph().nodes;
     const unfoldedBefore = unfolded();
-    const after = layout(space(), next, maxCols()).nodes;
+    const after = layout(space(), next).nodes;
     const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
     const was = at(before);
     const will = Object.fromEntries(after.map((n) => [n.id, { x: n.x, y: n.y }]));
@@ -1024,47 +1105,93 @@ export function Canvas() {
     const b = boxOf(ns);
     const aw = r.width - INSET.side * 2, ah = r.height - INSET.top - INSET.bottom;
     const whole = Math.min(1, aw / (b.x1 - b.x0), ah / (b.y1 - b.y0));
-    const z = all ? Math.max(0.3, whole) : whole >= MIN_ZOOM ? whole : READ_ZOOM;
+    const xAt = (z: number) => ((b.x1 - b.x0) * z <= aw ? INSET.side + (aw - (b.x1 - b.x0) * z) / 2 - b.x0 * z : INSET.side - b.x0 * z);
     if (animate) vp.classList.add("glide");
-    setZoom(z);
-    const x = (b.x1 - b.x0) * z <= aw ? INSET.side + (aw - (b.x1 - b.x0) * z) / 2 - b.x0 * z : INSET.side - b.x0 * z;
-    let y: number;
-    if ((b.y1 - b.y0) * z <= ah) y = INSET.top + (ah - (b.y1 - b.y0) * z) / 2 - b.y0 * z;
-    else {
-      // too tall: from the top, moved down only as far as the cards that need the person:
-      // a reply, then failed, then running work, as many of those as fit together
-      y = INSET.top - b.y0 * z;
+    const done = (z: number, y: number) => {
+      setZoom(z);
+      setPan({ x: xAt(z), y });
+      if (animate) setTimeout(() => vp?.classList.remove("glide"), 260);
+    };
+    // everything fits: all of it, centred, at the ladder's step that holds it
+    if (all || whole >= MIN_ZOOM) {
+      const z = all ? Math.max(0.3, whole) : stepUnder(whole);
+      return done(z, INSET.top + (ah - (b.y1 - b.y0) * z) / 2 - b.y0 * z);
+    }
+    // too tall: a readable zoom, from the top, moved down only as far as the cards that need
+    // the person (a reply, then failed, then running work, as many of those as fit together).
+    // Both edges of the view fall in a gap between cards: a card that doesn't fit is left out, never cut.
+    /** no card crosses this line */
+    const clearAt = (s: number) => !ns.some((n) => n.y < s - 0.5 && n.y + n.h > s + 0.5);
+    const parent = (n: Node) => (n.kind === "sub" ? n.task?.parentId : n.kind === "more" && n.task ? n.task.id : undefined);
+    // the view starts at the top of a task card (not a subagent or a folded pill, whose task
+    // would be out of view) that no other card crosses
+    const starts = [...new Set([b.y0, ...ns.filter((n) => n.kind === "job" || n.kind === "proj").map((n) => n.y)])]
+      .filter((s) => clearAt(s) && !ns.some((n) => n.y >= s && parent(n) && (byId().get(parent(n)!)?.y ?? s) < s))
+      .sort((p, q) => p - q);
+    /** how far above `s` the view reaches: the inset, or less when a card ends closer */
+    const padAt = (s: number, z: number) => {
+      const above = ns.filter((n) => n.y + n.h <= s).map((n) => n.y + n.h);
+      return above.length ? Math.max(0, Math.min(INSET.top, (s - Math.max(...above)) * z - 2)) : INSET.top;
+    };
+    const frame = (z: number) => {
+      const room = (r.height - INSET.top) / z;
       let keep: Node[] = [];
       for (const tn of ["ask", "failed", "live"]) {
         const more = ns.filter((n) => n.task && n.kind !== "more" && tone(n.task) === tn);
         if (!more.length) continue;
         const next = [...keep, ...more];
         const nb = boxOf(next);
-        if (keep.length && (nb.y1 - nb.y0) * z > ah) break;
+        if (keep.length && nb.y1 - nb.y0 > room) break;
         keep = next;
       }
       const k = keep.length ? boxOf(keep) : undefined;
-      if (k) {
-        const over = (k.y1 * z + y) - (INSET.top + ah);
-        if (over > 0) y -= Math.min(over, k.y0 * z + y - INSET.top);
+      // the first start that keeps those cards in view, nearest the top
+      const want = k && k.y1 - b.y0 > room ? k.y1 - room : b.y0;
+      const order = [...starts].sort((p, q) => Math.abs(p - want) - Math.abs(q - want) || p - q);
+      for (const s of order) {
+        if (k && (s > k.y0 + 0.5 || s + room < k.y1 - 0.5)) continue;
+        // the room above the first card can give (down to none), so the bottom edge can reach a gap
+        const most = padAt(s, z);
+        if (most < 8) continue;
+        const lo = s + (r.height - most) / z, hi = s + (r.height - 8) / z;
+        for (const g of gaps) {
+          const a = Math.max(lo, g[0]), c = Math.min(hi, g[1]);
+          if (a > c) continue;
+          // a little air under the last card when the gap allows it
+          const line = Math.min(c, Math.max(a, g[0] + 8));
+          const pad = r.height - (line - s) * z;
+          return { y: pad - s * z, pad };
+        }
       }
-      // never a card cut at the top edge: the view starts at the top of a task card (not a
-      // subagent or a folded pill, whose task would be out of view) that no other card
-      // crosses, with the gap above it (up to the inset) and nothing of the card before
-      const want = (INSET.top - y) / z;
-      const parent = (n: Node) => (n.kind === "sub" ? n.task?.parentId : n.kind === "more" && n.task ? n.task.id : undefined);
-      // no card crosses the line, and no subagent below it has its task above it
-      const clear = (s: number) =>
-        !ns.some((n) => n.y < s && n.y + n.h > s) &&
-        !ns.some((n) => n.y >= s && parent(n) && (byId().get(parent(n)!)?.y ?? s) < s);
-      const starts = [...new Set([b.y0, ...ns.filter((n) => n.kind === "job" || n.kind === "proj").map((n) => n.y)])].filter(clear).sort((p, q) => p - q);
-      const s = starts.find((v) => v >= want && (!k || v <= k.y0)) ?? [...starts].reverse().find((v) => v <= want) ?? b.y0;
-      const above = ns.filter((n) => n.y + n.h <= s).map((n) => n.y + n.h);
-      const pad = above.length ? Math.max(0, Math.min(INSET.top, (s - Math.max(...above)) * z - 2)) : INSET.top;
-      y = pad - s * z;
+      return undefined;
+    };
+    /** the stretches no card crosses, top to bottom (the last one runs on) */
+    const gaps: [number, number][] = [];
+    {
+      let end = -Infinity;
+      for (const n of [...ns].sort((p, q) => p.y - q.y)) {
+        if (n.y > end) gaps.push([end, n.y]);
+        end = Math.max(end, n.y + n.h);
+      }
+      gaps.push([end, Infinity]);
     }
-    setPan({ x, y });
-    if (animate) setTimeout(() => vp?.classList.remove("glide"), 260);
+    // the readable zoom first, then the nearest one (a little under it, or in, showing fewer
+    // cards) that lands the bottom edge in a gap; never wider than the view
+    const zs: number[] = [READ_ZOOM];
+    for (let d = 0.005; d <= 0.25 + 1e-6; d += 0.005) zs.push(READ_ZOOM + d, READ_ZOOM - d);
+    // the best of them: near the readable zoom (under it costs more: words get small) with the
+    // inset above the first card kept
+    let best: { z: number; y: number; cost: number } | undefined;
+    for (const z of zs) {
+      if (z < READ_ZOOM - 0.05 - 1e-6 || (z > READ_ZOOM && (b.x1 - b.x0) * z > aw)) continue;
+      const f = frame(z);
+      if (!f) continue;
+      const cost = (z < READ_ZOOM ? (READ_ZOOM - z) * 300 : (z - READ_ZOOM) * 100) + (INSET.top - Math.min(INSET.top, f.pad)) * 0.6;
+      if (!best || cost < best.cost) best = { z: Math.round(z * 1000) / 1000, y: f.y, cost };
+    }
+    if (best) return done(best.z, best.y);
+    const s = starts.find((v) => v >= b.y0) ?? b.y0;
+    done(READ_ZOOM, padAt(s, READ_ZOOM) - s * READ_ZOOM);
   };
 
   const zoomAt = (factor: number, cx = (vp?.clientWidth ?? 0) / 2, cy = (vp?.clientHeight ?? 0) / 2) => {
@@ -1075,6 +1202,26 @@ export function Canvas() {
     setPan({ x: cx - ((cx - p.x) * z) / z0, y: cy - ((cy - p.y) * z) / z0 });
     setZoom(z);
   };
+
+  /** one step along the ladder, from the view's centre */
+  const step = (dir: 1 | -1) => {
+    const z0 = zoom();
+    const next = dir > 0 ? LADDER.find((s) => s > z0 + 0.001) : [...LADDER].reverse().find((s) => s < z0 - 0.001);
+    if (next) zoomAt(next / z0);
+  };
+  /** 100%, around the view's centre */
+  const actual = () => {
+    if (vp && !matchMedia("(prefers-reduced-motion: reduce)").matches) vp.classList.add("glide"), setTimeout(() => vp?.classList.remove("glide"), 260);
+    zoomAt(1 / zoom());
+  };
+  /** the % button: a click shows everything, a double click goes to 100% */
+  let pctTimer: ReturnType<typeof setTimeout> | undefined;
+  const onPct = (e: MouseEvent) => {
+    clearTimeout(pctTimer);
+    if (e.detail >= 2) return actual();
+    pctTimer = setTimeout(() => fit(true, true), 220);
+  };
+  onCleanup(() => clearTimeout(pctTimer));
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -1162,27 +1309,65 @@ export function Canvas() {
     if (target.closest('button, a[href], [tabindex], [role="button"], [role="tab"]')) return;
     if (!viewKey(e) || e.metaKey || e.ctrlKey || e.altKey || mode() !== "canvas") return;
     if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), fit(true, true));
-    else if (!e.metaKey && (e.key === "=" || e.key === "+")) zoomAt(1.2);
-    else if (!e.metaKey && e.key === "-") zoomAt(1 / 1.2);
+    else if (e.shiftKey && e.code === "Digit0") (e.preventDefault(), actual());
+    else if (!e.metaKey && (e.key === "=" || e.key === "+")) step(1);
+    else if (!e.metaKey && e.key === "-") step(-1);
     else if (!e.shiftKey && e.key === "Enter" && sel()) (e.preventDefault(), openSel());
     else if (!e.shiftKey && e.key === "Escape" && sel()) (e.preventDefault(), e.stopPropagation(), setSel(undefined));
   };
   window.addEventListener("keydown", onKey, true);
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
-  const edgePath = (e: Edge) => {
+  /** where a line leaves or meets a card: beside its first line (the middle of a short card) */
+  const port = (n: Node) => pos(n).y + Math.min(n.h / 2, H.main / 2);
+  /**
+   * The line from a card to one it leads to, drawn as a bracket: out to a spine halfway
+   * between the columns, down it, and in at the card. Lines to cards of one column share
+   * the spine; each draws only its own stretch of it (from the card above), so the
+   * stretch takes the tone of the card it leads to and nothing is drawn twice.
+   * `whole`: the full route from the source (a picked card's line).
+   */
+  const edgePath = (e: Edge, whole = false) => {
     const a = byId().get(e.from), b = byId().get(e.to);
     if (!a || !b) return "";
     const pa = pos(a), pb = pos(b);
+    /** the nearest card above `b` in the same column that `a` also leads to */
+    const above = (y2: number, x: number, min: number) => {
+      if (whole) return undefined;
+      let best: number | undefined;
+      for (const o of graph().edges) {
+        if (o.from !== e.from || o.to === e.to) continue;
+        const c = byId().get(o.to);
+        if (!c || Math.abs(pos(c).x - x) > 1) continue;
+        const cy = c.kind === "sub" || c.kind === "more" ? pos(c).y + c.h / 2 : port(c);
+        if (cy < y2 - 1 && cy >= min && (best === undefined || cy > best)) best = cy;
+      }
+      return best;
+    };
     // a sub-job sits under its job: drop down from the job's left edge
     if (pb.x < pa.x + a.w && pb.y >= pa.y + a.h) {
-      const x = pa.x + SUB_INDENT / 2, y1 = pa.y + a.h, y2 = pb.y + b.h / 2, r = Math.min(10, (y2 - y1) / 2);
+      const x = pa.x + SUB_INDENT / 2, y2 = pb.y + b.h / 2;
+      const prev = above(y2, pb.x, pa.y + a.h);
+      const y1 = prev !== undefined ? prev - 10 : pa.y + a.h;
+      const r = Math.min(10, (y2 - y1) / 2);
       return `M ${x} ${y1} L ${x} ${y2 - r} Q ${x} ${y2}, ${x + r} ${y2} L ${pb.x} ${y2}`;
     }
-    const x1 = pa.x + a.w, y1 = pa.y + a.h / 2, x2 = pb.x, y2 = pb.y + b.h / 2;
-    const dx = Math.max(40, (x2 - x1) / 2);
-    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    const x1 = pa.x + a.w, y1 = port(a), x2 = pb.x, y2 = port(b);
+    if (x2 - x1 < 32) {
+      const dx = Math.max(40, (x2 - x1) / 2);
+      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    }
+    if (Math.abs(y2 - y1) < 1) return `M ${x1} ${y1} L ${x2} ${y2}`;
+    const sx = Math.round((x1 + x2) / 2), dir = Math.sign(y2 - y1);
+    const from = dir > 0 ? above(y2, pb.x, y1) : undefined;
+    const r = Math.min(10, Math.abs(y2 - (from ?? y1)) / 2, (x2 - x1) / 4);
+    const into = `L ${sx} ${y2 - dir * r} Q ${sx} ${y2}, ${sx + r} ${y2} L ${x2} ${y2}`;
+    // from the card above's corner, so the spine runs on without a break
+    if (from !== undefined) return `M ${sx} ${from - 10} ${into}`;
+    return `M ${x1} ${y1} L ${sx - r} ${y1} Q ${sx} ${y1}, ${sx} ${y1 + dir * r} ${into}`;
   };
+  /** a picked card's lines are drawn last, over the shared spines */
+  const hot = (e: Edge) => !!lineage() && lineage()!.has(e.to) && lineage()!.has(e.from);
 
   const counts = () => {
     const c: Record<string, number> = {};
@@ -1291,10 +1476,10 @@ export function Canvas() {
                     <path d="M 0 0.5 L 7 4 L 0 7.5" class="cv-arrow" />
                   </marker>
                 </defs>
-                <For each={graph().edges}>
+                <For each={[...graph().edges].sort((p, q) => +hot(p) - +hot(q))}>
                   {(e) => (
-                    <g class={`cv-edge t-${e.tone}`} style={{ opacity: fade()?.[e.to] }} classList={{ hot: !!lineage() && lineage()!.has(e.to) && lineage()!.has(e.from), dim: !!lineage() && !(lineage()!.has(e.to) && lineage()!.has(e.from)) }}>
-                      <path d={edgePath(e)} marker-end="url(#cv-arrow)" />
+                    <g class={`cv-edge t-${e.tone}`} style={{ opacity: fade()?.[e.to] }} classList={{ hot: hot(e), dim: !!lineage() && !hot(e) }}>
+                      <path d={edgePath(e, hot(e))} marker-end="url(#cv-arrow)" />
                     </g>
                   )}
                 </For>
@@ -1308,7 +1493,7 @@ export function Canvas() {
                   <div
                     class={`cv-node cv-${n.kind}${node().task ? ` t-${tone(node().task!)}` : ""}`}
                     classList={{ sel: sel() === n.id, dragging: drag()?.id === n.id, dim: dim(n.id) }}
-                    style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: `${node().h}px`, opacity: fade()?.[n.id] }}
+                    style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: node().hug ? "auto" : `${node().h}px`, "max-height": `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => (n.kind === "proj" ? goMain(n.project!.id === "_" ? undefined : n.project!.id) : n.task && openTask(n.id))}
                     onContextMenu={(e) => n.task && n.kind !== "more" && cardMenu(n.id)(e)}
@@ -1352,21 +1537,18 @@ export function Canvas() {
                 <Icon name="dots" size={14} />
               </button>
               <i class="cv-ctrl-sep" />
-              <button title={t("축소 (−)")} aria-label={t("축소")} onClick={() => zoomAt(1 / 1.2)}><Icon name="minus" size={14} /></button>
-              <button class="cv-zoom" title={t("전체 보기 (⇧1)")} onClick={() => fit(true, true)}>{Math.round(zoom() * 100)}%</button>
-              <button title={t("확대 (+)")} aria-label={t("확대")} onClick={() => zoomAt(1.2)}><Icon name="plus" size={14} /></button>
+              <button title={t("축소 (−)")} aria-label={t("축소")} disabled={zoom() <= LADDER[0] + 0.001} onClick={() => step(-1)}><Icon name="minus" size={14} /></button>
+              <button class="cv-zoom" title={t("전체 보기 (⇧1) · 100% (⇧0)")} onClick={onPct}>{Math.round(zoom() * 100)}%</button>
+              <button title={t("확대 (+)")} aria-label={t("확대")} disabled={zoom() >= LADDER[LADDER.length - 1] - 0.001} onClick={() => step(1)}><Icon name="plus" size={14} /></button>
               <i class="cv-ctrl-sep" />
               <button title={t("다시 정렬")} aria-label={t("다시 정렬")} onClick={resetLayout}><Icon name="tidy" size={14} /></button>
-              <Show when={foldable().length}>
-                <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} onClick={() => fold(allOpen() ? [] : foldable())}>
-                  {allOpen() ? <ChevronsDownUp size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" /> : <ChevronsUpDown size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />}
-                </button>
-              </Show>
-              <Show when={roomy() || mini()}>
-                <button title={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-label={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-pressed={mini()} classList={{ on: mini() }} onClick={() => setMini(!mini())}>
-                  <MapIcon size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />
-                </button>
-              </Show>
+              {/* always in place (off when there is nothing to do), so the strip never shifts */}
+              <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} disabled={!foldable().length} onClick={() => fold(allOpen() ? [] : foldable())}>
+                {allOpen() ? <ChevronsDownUp size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" /> : <ChevronsUpDown size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />}
+              </button>
+              <button title={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-label={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-pressed={mini()} classList={{ on: mini() }} disabled={!roomy() && !mini()} onClick={() => setMini(!mini())}>
+                <MapIcon size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />
+              </button>
             </div>
           </Show>
         </div>

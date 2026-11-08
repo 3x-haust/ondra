@@ -5,7 +5,7 @@ import { createMemo, createResource, createSignal, For, Match, Show, Switch } fr
 import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, updateMemory, userOwned } from "../engine/memory";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
 import { fsRead, openInEditor, revealPath } from "../lib/native";
-import { setState, state } from "../state/store";
+import { setState, state, taskById } from "../state/store";
 import type { JournalEntry, Memory, MemoryKind } from "../state/types";
 import { openTask, previewFile, toast } from "../state/ui";
 import { ago } from "../ui/bits";
@@ -14,7 +14,6 @@ import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { agoIn, Badges, base, citePath, learnedIn, OUTCOME, type Outcome, outcomeOf, stampOf, tilde } from "./memoryBits";
 import { StateGlyph } from "./Board";
-import { DiscardGlyph } from "../ui/Review";
 import {
   byWeight,
   clock,
@@ -133,7 +132,13 @@ function PieceList(props: { list: Memory[]; onSel: (id: string) => void; limit?:
 
 /** finished jobs, newest first */
 /** how a finished task ended, drawn with the sidebar's glyph for that state */
-const OUTCOME_GLYPH: Record<Exclude<Outcome, "discarded">, "done" | "failed" | "paused" | "inreview"> = { done: "done", failed: "failed", stopped: "paused", review: "inreview" };
+const OUTCOME_GLYPH: Record<Outcome, "done" | "failed" | "paused" | "inreview" | "discarded"> = { done: "done", failed: "failed", stopped: "paused", review: "inreview", discarded: "discarded" };
+
+/** when a finished task ended, as the sidebar and the board say it: merged, or finished (the entry's own time otherwise) */
+const endedAt = (e: JournalEntry) => {
+  const x = taskById(e.taskId);
+  return (x && ((x.worktree?.state === "merged" ? x.mergedAt : undefined) ?? x.finishedAt)) || e.at;
+};
 
 function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; days?: boolean; limit?: number }) {
   const [all, setAll] = createSignal(false);
@@ -148,14 +153,13 @@ function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; d
             <button class={`ms-entry oc-${outcomeOf(e)}`} onClick={() => props.onSel(entryId(e))} title={e.ask}>
               {/* the sidebar's glyph for how it ended (review: the blue ring with a dot) */}
               <span class="ms-glyph" title={t(OUTCOME[outcomeOf(e)])}>
-                {/* discarded: the done check, muted */}
-                <Show when={outcomeOf(e) !== "discarded"} fallback={<DiscardGlyph />}><StateGlyph g={OUTCOME_GLYPH[outcomeOf(e) as Exclude<Outcome, "discarded">]} /></Show>
+                <StateGlyph g={OUTCOME_GLYPH[outcomeOf(e)]} />
               </span>
               <span>{e.title || e.ask}</span>
               <Show when={e.learned?.length}><em class="ms-learn" title={t("배운 메모리")}>+{e.learned!.length}</em></Show>
               {/* a discarded task says so where the time would be, as in the sidebar */}
-              <Show when={outcomeOf(e) === "discarded"} fallback={<em>{props.days ? clock(e.at) : ago(e.at)}</em>}>
-                <em title={props.days ? clock(e.at) : ago(e.at)}>{t("버림")}</em>
+              <Show when={outcomeOf(e) === "discarded"} fallback={<em>{props.days ? clock(e.at) : ago(endedAt(e))}</em>}>
+                <em title={props.days ? clock(e.at) : ago(endedAt(e))}>{t("버림")}</em>
               </Show>
             </button>
           </>
@@ -221,7 +225,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
   const fadedN = () => list().filter((m) => isLive(m) && faded(m)).length;
   const live = () => list().filter(isLive);
   /** finished jobs shown under 최근 작업 (the overview) */
-  const recentJobs = () => props.model.journal.slice(0, 4);
+  const recentJobs = () => [...props.model.journal].sort((a, b) => endedAt(b) - endedAt(a)).slice(0, 4);
   const nows = createMemo(() => {
     const i = info();
     const all = [...props.model.nows.values()].sort((a, b) => b.now.at - a.now.at);
