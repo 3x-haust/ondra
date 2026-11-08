@@ -5,6 +5,7 @@ import { defineViz } from "../registry";
 import { series, useTip } from "../kit";
 import { arr, clamp, foldParts, marimekko, normSeries, parts, sharePct, str } from "./math";
 import { AX, ChFrame, cut, fmtC, fmtV, hover, inkOn, MUTED, pct, TipBody, tw } from "./common";
+import { t } from "../../../i18n";
 
 const unitOf = (b: any) => str(b.unit) || undefined;
 
@@ -35,11 +36,11 @@ defineViz({
                 {(r) => {
                   const x = x0 + r.x * iw, wd = r.w * iw;
                   const y = top + ih - r.y1 * ih, hh = (r.y1 - r.y0) * ih;
-                  const t = pct(r.share * 100);
+                  const sh = pct(r.share * 100);
                   return (
-                    <g class="viz-mark" {...hover(tip, () => <TipBody title={`${cats[r.col]} · ${ss[r.row].label}`} rows={[{ color: series(r.row), key: "box", label: "", value: `${fmtV(r.value, unit)} · ${t}` }]} foot={`${cats[r.col]} 비중 ${pct((m.cols[r.col].total / grand) * 100)}`} />)}>
+                    <g class="viz-mark" {...hover(tip, () => <TipBody title={`${cats[r.col]} · ${ss[r.row].label}`} rows={[{ color: series(r.row), key: "box", label: "", value: `${fmtV(r.value, unit)} · ${sh}` }]} foot={t("{c} 비중 {p}", { c: cats[r.col], p: pct((m.cols[r.col].total / grand) * 100) })} />)}>
                       <rect x={x} y={y} width={Math.max(0, wd)} height={Math.max(0, hh - 2)} fill={series(r.row)} rx={1.5} />
-                      <Show when={wd > tw(t) + 8 && hh > 18}><text class={inkOn(series(r.row))} x={x + wd / 2} y={y + (hh - 2) / 2} dy="0.32em" text-anchor="middle">{t}</text></Show>
+                      <Show when={wd > tw(sh) + 8 && hh > 18}><text class={inkOn(series(r.row))} x={x + wd / 2} y={y + (hh - 2) / 2} dy="0.32em" text-anchor="middle">{sh}</text></Show>
                     </g>
                   );
                 }}
@@ -95,11 +96,11 @@ defineViz({
                 const wd = Math.max(1, (p.value / total) * room);
                 const at = x;
                 x += wd + 2;
-                const t = b.show === "value" ? fmtC(p.value) : `${shares[i()]}%`;
+                const lab = b.show === "value" ? fmtC(p.value) : `${shares[i()]}%`;
                 return (
                   <g class="viz-mark" {...hover(tip, () => <TipBody title={p.label} rows={[{ color: color(i()), key: "box", label: "", value: `${shares[i()]}% · ${fmtV(p.value, unit)}` }]} />)}>
                     <rect x={at} y={1} width={wd} height={28} rx={4} fill={color(i())} />
-                    <Show when={tw(t) + 14 < wd}><text class={inkOn(color(i()))} x={at + 8} y={15} dy="0.32em">{t}</text></Show>
+                    <Show when={tw(lab) + 14 < wd}><text class={inkOn(color(i()))} x={at + 8} y={15} dy="0.32em">{lab}</text></Show>
                   </g>
                 );
               }}
@@ -161,7 +162,7 @@ defineViz({
                 const cx = col * cw + cw / 2;
                 const color = anyEm && !isEm(p.label) ? MUTED : series(0);
                 return (
-                  <g class="viz-mark" {...hover(tip, () => <TipBody title={p.label} rows={[{ label: "", value: fmtV(p.value, unit) }]} foot={p.value !== max ? `가장 큰 값의 ${pct((p.value / max) * 100)}` : undefined} />)}>
+                  <g class="viz-mark" {...hover(tip, () => <TipBody title={p.label} rows={[{ label: "", value: fmtV(p.value, unit) }]} foot={p.value !== max ? t("가장 큰 값의 {p}", { p: pct((p.value / max) * 100) }) : undefined} />)}>
                     <rect class="ch-hit" x={col * cw} y={tops[row]} width={cw} height={tops[row + 1] - tops[row]} />
                     <Show when={square} fallback={<circle cx={cx} cy={base - d / 2} r={d / 2} fill={color} />}>
                       <rect x={cx - d / 2} y={base - d} width={d} height={d} rx={3} fill={color} />

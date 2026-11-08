@@ -2,6 +2,7 @@
 // its emotion curve, a fishbone (Ishikawa) and a conversion funnel.
 import { For, Show } from "solid-js";
 import { Frame, compact, num, seq, series, useTip, withUnit } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { Card, Tag, measure } from "./common";
 import { arr, around, clip, conversions, feel, item, items, pct, str, texts, toNum, wrapPx, type Checked, type Item } from "./util";
@@ -63,10 +64,10 @@ defineViz<StairB>({
             {(it, i) => (
               <li style={{ "--i": i() }} classList={{ now: i() === now(), past: now() >= 0 && i() < now(), em: !!it.em }}>
                 <div class="sl-stair-step">
-                  <span class="sl-stair-no">{i() + 1}단계</span>
+                  <span class="sl-stair-no">{t("{n}단계", { n: i() + 1 })}</span>
                   <b>{it.label}</b>
                   <Show when={it.note}><span class="sl-note">{it.note}</span></Show>
-                  <Show when={i() === now()}><span class="sl-tag t-now">현재</span></Show>
+                  <Show when={i() === now()}><span class="sl-tag t-now">{t("현재")}</span></Show>
                 </div>
               </li>
             )}
@@ -333,7 +334,7 @@ defineViz<JourneyB>({
                   return (
                     <Show when={list.length}>
                       <div class={`sl-journey-cell k-${k}`}>
-                        <span class="sl-journey-k">{name}</span>
+                        <span class="sl-journey-k">{t(name)}</span>
                         <Show when={k === "touch"} fallback={<ul class="sl-points"><For each={list}>{(t) => <li>{t}</li>}</For></ul>}>
                           <div class="sl-chips"><For each={list}>{(t) => <span class="sl-chip">{t}</span>}</For></div>
                         </Show>
@@ -367,12 +368,12 @@ defineViz<JourneyB>({
           return (
             <g>
               <line class="viz-grid" x1={0} x2={bx.w} y1={Y(0)} y2={Y(0)} />
-              <text class="sl-axt2" x={2} y={bx.y0 + 2}>좋음</text>
-              <text class="sl-axt2" x={2} y={bx.y0 + bx.ih + 2}>나쁨</text>
+              <text class="sl-axt2" x={2} y={bx.y0 + 2}>{t("좋음")}</text>
+              <text class="sl-axt2" x={2} y={bx.y0 + bx.ih + 2}>{t("나쁨")}</text>
               <path d={d} class="sl-curve" />
               <For each={def}>
                 {(p) => (
-                  <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${s[p.i].label} · ${FEEL_WORD[Math.round(p.f) + 2]}`)} onMouseLeave={tip.hide}>
+                  <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${s[p.i].label} · ${t(FEEL_WORD[Math.round(p.f) + 2])}`)} onMouseLeave={tip.hide}>
                     <circle cx={p.x} cy={p.y} r="12" fill="transparent" />
                     <circle cx={p.x} cy={p.y} r="5" class="sl-feel" classList={{ low: p.f === low && p.f < 0, good: p.f > 0 }} />
                   </g>
@@ -553,7 +554,7 @@ defineViz<FunnelB>({
                   const nx = list[i() + 1];
                   const nw2 = nx ? W(nx.value!) : 0;
                   const c = conv[i() + 1];
-                  const t = Math.max(0, 1 - i() / Math.max(1, list.length - 1));
+                  const shade = Math.max(0, 1 - i() / Math.max(1, list.length - 1));
                   const val = `${compact(it.value!)}`, share = `  ${pct(conv[i()].ofFirst)}`;
                   const vw = measure(val + share, 12.5, 600);
                   return (
@@ -562,8 +563,8 @@ defineViz<FunnelB>({
                         <path class="sl-funnel-gap" d={`M${cx - w / 2} ${y + BH}L${cx + w / 2} ${y + BH}L${cx + nw2 / 2} ${y + BH + GAP + top}L${cx - nw2 / 2} ${y + BH + GAP + top}Z`} />
                         <text class="sl-conv" classList={{ worst: i() + 1 === worst }} x={cx} y={y + BH + (GAP + top) / 2 + (nw ? 10 : 4.5)} text-anchor="middle">{pct(c.ofPrev)}</text>
                       </Show>
-                      <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${it.label}\n${withUnit(num(it.value!), it.unit ?? b.unit)} · 처음 대비 ${pct(conv[i()].ofFirst)}${c && nx ? `\n다음 단계로 ${pct(c.ofPrev)}` : ""}`)} onMouseLeave={tip.hide}>
-                        <rect x={cx - w / 2} y={y} width={w} height={BH} rx="4" fill={seq(0.35 + t * 0.6)} />
+                      <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${it.label}\n${withUnit(num(it.value!), it.unit ?? b.unit)} · ${t("처음 대비 {p}", { p: pct(conv[i()].ofFirst) })}${c && nx ? `\n${t("다음 단계로 {p}", { p: pct(c.ofPrev) })}` : ""}`)} onMouseLeave={tip.hide}>
+                        <rect x={cx - w / 2} y={y} width={w} height={BH} rx="4" fill={seq(0.35 + shade * 0.6)} />
                         <text class="sl-tl" classList={{ em: !!it.em }} x={nw ? bx.x0 : bx.x0 + lw - 10} y={nw ? y - 7 : y + BH / 2 + 4.5} text-anchor={nw ? "start" : "end"}>{clip(it.label, nw ? bx.iw - vw - 12 : lw - 12, 13, measure, 600)}</text>
                         <text class="sl-tl" x={bx.x0 + bx.iw} y={nw ? y - 7 : y + BH / 2 + 4.5} text-anchor="end">{val}<tspan class="sl-tn">{share}</tspan></text>
                       </g>

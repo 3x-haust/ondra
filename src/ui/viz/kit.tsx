@@ -2,6 +2,7 @@
 // a frame that fits its width, axes, gridlines, a legend, a hover tip, number
 // formats and the palette (tokens in styles/viz.css, validated for colour blindness).
 import { createContext, createSignal, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
+import { lang } from "../../i18n";
 
 /** categorical slot i (0-based), fixed order; from the 9th on, everything is "기타" grey */
 export const series = (i: number) => (i < 8 ? `var(--viz-${i + 1})` : "var(--viz-other)");
@@ -14,17 +15,34 @@ export const div = (t: number) => {
 };
 export const status = { good: "var(--viz-good)", warn: "var(--viz-warn)", serious: "var(--viz-serious)", bad: "var(--viz-bad)" } as const;
 
-/** 12345 → "12,345", 0.1234 → "0.123"; compact: 12345 → "1.2만", 3.4e8 → "3.4억" */
+/** 12345 → "12,345", 0.1234 → "0.123" */
 export function num(n: number, digits = 3): string {
   if (!Number.isFinite(n)) return "–";
   if (Number.isInteger(n)) return n.toLocaleString("ko-KR");
   return Number(n.toPrecision(digits)).toLocaleString("ko-KR", { maximumFractionDigits: 6 });
 }
+const KO_STEPS: [number, string][] = [[1e12, "조"], [1e8, "억"], [1e4, "만"]];
+const EN_STEPS: [number, string][] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e4, "K"]];
+/**
+ * a short number in the language in use. Korean: 12345 → "1.2만", 3.4e8 → "3.4억",
+ * 1.5e12 → "1.5조". English: 12345 → "12K", 3.4e8 → "340M", 1.5e12 → "1.5T".
+ * Below 10,000 both write the whole number.
+ */
 export function compact(n: number): string {
   const a = Math.abs(n);
-  if (a >= 1e12) return `${num(n / 1e12, 2)}조`;
-  if (a >= 1e8) return `${num(n / 1e8, 2)}억`;
-  if (a >= 1e4) return `${num(n / 1e4, 2)}만`;
+  if (lang() !== "en") {
+    for (const [at, w] of KO_STEPS) if (a >= at) return `${num(n / at, 2)}${w}`;
+    return num(n);
+  }
+  for (let i = 0; i < EN_STEPS.length; i++) {
+    const [at, w] = EN_STEPS[i];
+    if (a < at) continue;
+    const step = w === "K" ? 1e3 : at;
+    const v = Number((n / step).toPrecision(Math.abs(n / step) >= 100 ? 3 : 2));
+    // 999,999 rounds to 1,000K: write it as 1M instead
+    if (Math.abs(v) >= 1000 && i > 0) return `${num(v / 1000, 2)}${EN_STEPS[i - 1][1]}`;
+    return `${num(v)}${w}`;
+  }
   return num(n);
 }
 export const withUnit = (v: string, unit?: string) => (unit ? (unit === "%" ? `${v}%` : `${v}${/^[A-Za-z]/.test(unit) ? " " : ""}${unit}`) : v);

@@ -4,6 +4,7 @@ import { createSignal, ErrorBoundary, For, Show, type JSX } from "solid-js";
 import { textW } from "../../Charts";
 import { compact, num, seq, div, withUnit } from "../kit";
 import { ellipsize, inkFor, INK_DARK, INK_LIGHT } from "./layout/text";
+import { t } from "../../../i18n";
 
 /** label sizes inside relation figures (px) */
 export const FS = 12;
@@ -32,7 +33,7 @@ export function Empty(props: { label?: string }) {
   return (
     <div class="blk viz rl-empty">
       <Show when={props.label}><div class="blk-label">{props.label}</div></Show>
-      <div class="rl-empty-line">표시할 데이터가 없어요</div>
+      <div class="rl-empty-line">{t("데이터 없음")}</div>
     </div>
   );
 }
@@ -76,7 +77,7 @@ export function Ramp(props: { min: number; max: number; unit?: string; diverging
   const classed = () => (props.breaks && props.breaks.length > 2 ? props.breaks : undefined);
   const NoData = () => (
     <Show when={props.noData}>
-      <span class="rl-ramp-nd"><i />자료 없음</span>
+      <span class="rl-ramp-nd"><i />{t("자료 없음")}</span>
     </Show>
   );
   return (

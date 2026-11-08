@@ -83,6 +83,27 @@ export default {
   "여는 중": "Opening",
   "명령 실행": "Run command",
   "명령 실행 중": "Running command",
+  "검사|lint": "Check",
+
+  // a task's "now" line (stored in Korean, shown through nowText() / t())
+  "이어서 작업 중": "Resuming",
+  "시작 중": "Starting",
+  "웹 검색 중": "Searching the web",
+  "웹 페이지 읽는 중": "Reading a web page",
+  "테스트 실행 중": "Running tests",
+  "서브에이전트 결과 확인 중": "Checking subagent results",
+  "연결 기다리는 중": "Waiting for connection",
+  "증거를 채우는 중": "Gathering evidence",
+  "답을 기다리는 중": "Waiting for a reply",
+  "새 세션으로 이어가는 중": "Continuing in a new session",
+  "답변함": "Answered",
+  "일시정지됨": "Paused",
+  "다시 하는 중": "Retrying",
+  "{f} 읽는 중": "Reading {f}",
+  "{f}에 적는 중": "Writing to {f}",
+  "{f} 수정 중": "Editing {f}",
+  "{f} 작성 중": "Writing {f}",
+  "서브에이전트 {n}개 기다리는 중": "Waiting for {n} subagent|Waiting for {n} subagents",
 
   // tasks.ts
   "이 워크스페이스에 계정이 없어요": "No account in this workspace",

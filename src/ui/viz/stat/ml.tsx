@@ -2,7 +2,8 @@
 //   roc · pr · calibration · training · confusion · importance · shap · pdp · embedding · scree · biplot
 import { area, line } from "d3-shape";
 import { createMemo, For, Show } from "solid-js";
-import { div, Frame, seq, useTip } from "../kit";
+import { compact, div, Frame, seq, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { arr, col, onSeq, Crosshair, DIV_STOPS, ell, fix, Nearest, nums, Plot, RefLines, refsOf, RowPlot, ScaleKey, SEQ_STOPS, SM, str, Tip, tw } from "./common";
 import { barPath } from "./effect";
@@ -35,7 +36,7 @@ function curves(b: CurveB, kind: "roc" | "pr") {
     const score = kind === "roc" ? (isNum(s.auc) ? s.auc : auc(pts)) : isNum(s.ap) ? s.ap : avgPrecision(pts);
     const prev = sc.length && tr.length ? tr.filter(Boolean).length / tr.length : NaN;
     const at = Array.isArray(s.at) && isNum(toNum(s.at[0])) && isNum(toNum(s.at[1])) ? ([toNum(s.at[0]), toNum(s.at[1])] as Pt) : null;
-    return { label: str(s.label) || `모델 ${i + 1}`, pts, score, prev, at, em: !!s.em };
+    return { label: str(s.label) || t("모델 {n}", { n: i + 1 }), pts, score, prev, at, em: !!s.em };
   }).filter((s) => s.pts.length > 1);
 }
 function Curves(b: CurveB & { kind: "roc" | "pr" }) {
@@ -46,11 +47,11 @@ function Curves(b: CurveB & { kind: "roc" | "pr" }) {
     <Show when={S().length}>
       <Plot
         label={b.label} height={squareH} legend={S().map((s, i) => ({ label: `${s.label} · ${name} ${fix(s.score, 3)}`, color: col(i) }))}
-        x={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: b.kind === "roc" ? "거짓 양성률 (1 − 특이도)" : "재현율", grid: true }}
-        y={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: b.kind === "roc" ? "참 양성률 (민감도)" : "정밀도" }}
+        x={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: b.kind === "roc" ? t("거짓 양성률 (1 − 특이도)") : t("재현율"), grid: true }}
+        y={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: b.kind === "roc" ? t("참 양성률 (민감도)") : t("정밀도") }}
       >
         {(c) => {
-          const pts = () => S().flatMap((s, k) => thinPts(s.pts, 120).map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 2, color: col(k), tip: `${s.label}\n${b.kind === "roc" ? `FPR ${fix(p[0], 3)} · TPR ${fix(p[1], 3)}` : `재현율 ${fix(p[0], 3)} · 정밀도 ${fix(p[1], 3)}`}` })));
+          const pts = () => S().flatMap((s, k) => thinPts(s.pts, 120).map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 2, color: col(k), tip: `${s.label}\n${b.kind === "roc" ? `FPR ${fix(p[0], 3)} · TPR ${fix(p[1], 3)}` : `${t("재현율")} ${fix(p[0], 3)} · ${t("정밀도")} ${fix(p[1], 3)}`}` })));
           return (
             <g>
               <Show when={b.kind === "roc"}><line class="st-ref" x1={c.X(0)} y1={c.Y(0)} x2={c.X(1)} y2={c.Y(1)} /></Show>
@@ -97,10 +98,10 @@ function Calibration(b: CalB) {
     const sc = nums(s.scores), tr = arr<any>(s.truth);
     if (sc.length && tr.length) {
       const r = calibrationFrom(sc, tr, clamp(Math.round(b.bins ?? 10), 4, 20));
-      return { label: str(s.label) || `모델 ${i + 1}`, pts: r.pts, ece: isNum(s.ece) ? s.ece : r.ece };
+      return { label: str(s.label) || t("모델 {n}", { n: i + 1 }), pts: r.pts, ece: isNum(s.ece) ? s.ece : r.ece };
     }
     const pts = arr<any>(s.points).map((p) => (Array.isArray(p) ? [toNum(p[0]), toNum(p[1]), toNum(p[2])] : [toNum(p?.x), toNum(p?.y), toNum(p?.n)])).filter((p) => isNum(p[0]) && isNum(p[1])) as [number, number, number][];
-    return { label: str(s.label) || `모델 ${i + 1}`, pts, ece: isNum(s.ece) ? s.ece : NaN };
+    return { label: str(s.label) || t("모델 {n}", { n: i + 1 }), pts, ece: isNum(s.ece) ? s.ece : NaN };
   }).filter((s) => s.pts.length));
   const counts = () => (S().length === 1 && S()[0].pts.every((p) => isNum(p[2])) ? S()[0].pts : null);
   return (
@@ -108,12 +109,12 @@ function Calibration(b: CalB) {
       <Plot
         label={b.label} height={squareH}
         legend={S().map((s, i) => ({ label: `${s.label}${isNum(s.ece) ? ` · ECE ${fix(s.ece, 3)}` : ""}`, color: col(i) }))}
-        x={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: "예측 확률", grid: true }}
-        y={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: "실제 양성 비율" }}
+        x={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: t("예측 확률"), grid: true }}
+        y={{ domain: [0, 1], nice: false, ticks: unitTicks, fmt: (v) => fix(v), title: t("실제 양성 비율") }}
       >
         {(c) => {
           const mx = () => Math.max(1, ...(counts() ?? []).map((p) => p[2]));
-          const pts = () => S().flatMap((s, k) => s.pts.map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 4, color: col(k), tip: `실제 ${pct(p[1])} · 예측 ${pct(p[0])}${isNum(p[2]) ? `\nn = ${p[2]}` : ""}\n${s.label}` })));
+          const pts = () => S().flatMap((s, k) => s.pts.map((p) => ({ x: c.X(p[0]), y: c.Y(p[1]), r: 4, color: col(k), tip: `${t("실제 {v}", { v: pct(p[1]) })} · ${t("예측 {v}", { v: pct(p[0]) })}${isNum(p[2]) ? `\nn = ${p[2]}` : ""}\n${s.label}` })));
           return (
             <g>
               <Show when={counts()}>
@@ -173,7 +174,7 @@ function Training(b: TrainB) {
   const xs = () => [...new Set(S().flatMap((s) => s.pts.map((p) => p[0])))].sort((a, c) => a - c);
   return (
     <Show when={S().length}>
-      <Plot label={b.label} legend={S().map((s, i) => ({ label: s.label, color: col(i) }))} x={{ domain: b.logx ? [Math.min(...xs()), Math.max(...xs())] : extent(xs()), log: b.logx, nice: false, title: str(b.x) || "에폭" }} y={{ domain: b.log ? [Math.min(...S().flatMap((s) => s.pts.map((p) => p[1]))), Math.max(...S().flatMap((s) => s.pts.map((p) => p[1])))] : extent(S().flatMap((s) => s.pts.map((p) => p[1])), 0.05), log: b.log, title: str(b.y) || "손실" }}>
+      <Plot label={b.label} legend={S().map((s, i) => ({ label: s.label, color: col(i) }))} x={{ domain: b.logx ? [Math.min(...xs()), Math.max(...xs())] : extent(xs()), log: b.logx, nice: false, title: str(b.x) || t("에폭") }} y={{ domain: b.log ? [Math.min(...S().flatMap((s) => s.pts.map((p) => p[1]))), Math.max(...S().flatMap((s) => s.pts.map((p) => p[1])))] : extent(S().flatMap((s) => s.pts.map((p) => p[1])), 0.05), log: b.log, title: str(b.y) || t("손실") }}>
         {(c) => {
           const at = (s: { pts: Pt[] }, x: number) => s.pts.find((p) => p[0] === x)?.[1];
           return (
@@ -183,7 +184,7 @@ function Training(b: TrainB) {
                 {(bp) => {
                   const x = () => c.X(bp().p[0]), y = () => c.Y(bp().p[1]);
                   const right = () => x() < c.x0 + c.iw * 0.6;
-                  const txt = () => `${bp().dir === "min" ? "최저" : "최고"} ${fix(bp().p[1])} · ${fix(bp().p[0])}`;
+                  const txt = () => `${bp().dir === "min" ? t("최저") : t("최고")} ${fix(bp().p[1])} · ${fix(bp().p[0])}`;
                   return (
                     <g>
                       <line class="st-ref" x1={x()} x2={x()} y1={c.y0} y2={c.y0 + c.ih} />
@@ -194,7 +195,7 @@ function Training(b: TrainB) {
                 }}
               </Show>
               <RefLines refs={refsOf(b.refs)} c={c} />
-              <Crosshair box={c} xs={xs().map((x) => c.X(x))} read={(i) => `${str(b.x) || "에폭"} ${fix(xs()[i])}\n${S().map((s) => `${s.label} ${fix(at(s, xs()[i]) ?? NaN)}`).join("\n")}`} dots={(i) => S().flatMap((s, k) => { const v = at(s, xs()[i]); return v === undefined ? [] : [{ y: c.Y(v), color: col(k) }]; })} />
+              <Crosshair box={c} xs={xs().map((x) => c.X(x))} read={(i) => `${str(b.x) || t("에폭")} ${fix(xs()[i])}\n${S().map((s) => `${s.label} ${fix(at(s, xs()[i]) ?? NaN)}`).join("\n")}`} dots={(i) => S().flatMap((s, k) => { const v = at(s, xs()[i]); return v === undefined ? [] : [{ y: c.Y(v), color: col(k) }]; })} />
             </g>
           );
         }}
@@ -228,14 +229,14 @@ function Confusion(b: ConfB) {
   const acc = () => labs().reduce((s, _, i) => s + M()[i][i], 0) / (total() || 1);
   return (
     <Show when={labs().length >= 2}>
-      <Frame label={b.label} class="st" height={(w) => confLayout(labs(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={SEQ_STOPS} lo="0%" hi={b.norm === "none" ? "최대" : "100%"} title={b.norm === "none" ? "개수" : "행 비율"} after={`정확도 ${pct(acc())}`} />}>
+      <Frame label={b.label} class="st" height={(w) => confLayout(labs(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={SEQ_STOPS} lo="0%" hi={b.norm === "none" ? t("최대") : "100%"} title={b.norm === "none" ? t("개수") : t("행 비율")} after={t("정확도 {v}", { v: pct(acc()) })} />}>
         {(box) => {
           const L = () => confLayout(labs(), box.w);
           const tip = useTip();
           return (
             <g>
-              <text class="viz-axis-title" x={L().x0} y={11} text-anchor="start">예측 →</text>
-              <text class="viz-axis-title" x={L().x0 - 8} y={L().y0 - 8} text-anchor="end">실제 ↓</text>
+              <text class="viz-axis-title" x={L().x0} y={11} text-anchor="start">{t("예측 →")}</text>
+              <text class="viz-axis-title" x={L().x0 - 8} y={L().y0 - 8} text-anchor="end">{t("실제 ↓")}</text>
               <For each={labs()}>
                 {(l, j) => (
                   <Show when={L().tilt} fallback={<text class="st-mute" x={L().x0 + (j() + 0.5) * L().cell} y={L().y0 - 8} text-anchor="middle">{ell(l, L().cell - 4, SM)}</text>}>
@@ -249,13 +250,13 @@ function Confusion(b: ConfB) {
                     <text x={L().x0 - 8} y={L().y0 + (i() + 0.5) * L().cell} dy="0.32em" text-anchor="end" style={{ "font-size": "12.5px" }}><title>{l}</title>{ell(l, L().lw, 12.5)}</text>
                     <For each={labs()}>
                       {(_, j) => {
-                        const t = () => share(i(), j());
+                        const sh = () => share(i(), j());
                         return (
-                          <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${M()[i()][j()].toLocaleString("ko-KR")}건 · ${pct(M()[i()][j()] / (rowSum()[i()] || 1))}\n실제 ${l} → 예측 ${labs()[j()]}`)} onMouseLeave={tip.hide}>
-                            <rect x={L().x0 + j() * L().cell + 1} y={L().y0 + i() * L().cell + 1} width={L().cell - 2} height={L().cell - 2} rx={3} style={{ fill: M()[i()][j()] ? seq(t()) : "var(--viz-grid)", "fill-opacity": M()[i()][j()] ? 1 : 0.5 }} />
+                          <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${t("{v}건", { v: M()[i()][j()].toLocaleString("ko-KR"), n: M()[i()][j()] })} · ${pct(M()[i()][j()] / (rowSum()[i()] || 1))}\n${t("실제 {a} → 예측 {b}", { a: l, b: labs()[j()] })}`)} onMouseLeave={tip.hide}>
+                            <rect x={L().x0 + j() * L().cell + 1} y={L().y0 + i() * L().cell + 1} width={L().cell - 2} height={L().cell - 2} rx={3} style={{ fill: M()[i()][j()] ? seq(sh()) : "var(--viz-grid)", "fill-opacity": M()[i()][j()] ? 1 : 0.5 }} />
                             <Show when={L().cell >= 30}>
-                              <text class={`st-cell-v ${onSeq(t())}`} x={L().x0 + (j() + 0.5) * L().cell} y={L().y0 + (i() + 0.5) * L().cell + (L().cell >= 52 ? -6 : 0)} dy="0.35em" text-anchor="middle" style={{ "font-weight": i() === j() ? 600 : 400 }}>{compactN(M()[i()][j()])}</text>
-                              <Show when={L().cell >= 52}><text class={`st-cell-v ${onSeq(t())}`} x={L().x0 + (j() + 0.5) * L().cell} y={L().y0 + (i() + 0.5) * L().cell + 10} dy="0.35em" text-anchor="middle" style={{ "font-size": "11px", opacity: 0.8 }}>{pct(M()[i()][j()] / (rowSum()[i()] || 1))}</text></Show>
+                              <text class={`st-cell-v ${onSeq(sh())}`} x={L().x0 + (j() + 0.5) * L().cell} y={L().y0 + (i() + 0.5) * L().cell + (L().cell >= 52 ? -6 : 0)} dy="0.35em" text-anchor="middle" style={{ "font-weight": i() === j() ? 600 : 400 }}>{compactN(M()[i()][j()])}</text>
+                              <Show when={L().cell >= 52}><text class={`st-cell-v ${onSeq(sh())}`} x={L().x0 + (j() + 0.5) * L().cell} y={L().y0 + (i() + 0.5) * L().cell + 10} dy="0.35em" text-anchor="middle" style={{ "font-size": "11px", opacity: 0.8 }}>{pct(M()[i()][j()] / (rowSum()[i()] || 1))}</text></Show>
                             </Show>
                           </g>
                         );
@@ -271,7 +272,7 @@ function Confusion(b: ConfB) {
     </Show>
   );
 }
-const compactN = (n: number) => (n >= 1e4 ? `${+(n / 1e4).toFixed(1)}만` : n.toLocaleString("ko-KR"));
+const compactN = (n: number) => compact(n);
 function confLayout(labs: string[], w: number) {
   const n = Math.max(1, labs.length);
   const lw = Math.min(w * 0.3, Math.max(...labs.map((l) => tw(l, 12.5))) + 4);
@@ -313,7 +314,7 @@ function Importance(b: ImpB) {
                 const y = () => c.rowY(k());
                 const neg = () => i.value < 0;
                 return (
-                  <Tip tip={`${fix(i.value)}${isNum(i.lo) ? `\n구간 ${fix(i.lo)} – ${fix(i.hi)}` : ""}\n${i.label}`}>
+                  <Tip tip={`${fix(i.value)}${isNum(i.lo) ? `\n${t("구간 {v}", { v: `${fix(i.lo)} – ${fix(i.hi)}` })}` : ""}\n${i.label}`}>
                     <rect x={c.x0} y={y() - c.band / 2} width={c.iw} height={c.band} fill="transparent" />
                     <path transform={`translate(0,${y() + h() / 2}) rotate(-90)`} d={barPath(0, c.X(0), c.X(i.value), h())} style={{ fill: anyEm() && !i.em ? "var(--viz-other)" : col(0) }} />
                     <Show when={isNum(i.lo) && isNum(i.hi)}><line class="st-whisker" style={{ stroke: "var(--ink-2)" }} x1={c.X(i.lo)} x2={c.X(i.hi)} y1={y()} y2={y()} /></Show>
@@ -352,7 +353,7 @@ function Shap(b: ShapB) {
   }).filter((i) => i.vals.length).sort((a, c) => c.imp - a.imp).slice(0, clamp(b.top ?? 12, 1, 30));
   return (
     <Show when={items().length}>
-      <RowPlot label={b.label} rows={items().map((i) => i.label)} rowH={(w) => (w < 480 ? 30 : 34)} x={{ domain: extent(items().flatMap((i) => i.vals), 0.05), title: str(b.x) || "SHAP 값 (예측에 미친 영향)" }} below={<ScaleKey stops={DIV_STOPS} lo="낮음" hi="높음" title="특성값" />}>
+      <RowPlot label={b.label} rows={items().map((i) => i.label)} rowH={(w) => (w < 480 ? 30 : 34)} x={{ domain: extent(items().flatMap((i) => i.vals), 0.05), title: str(b.x) || t("SHAP 값 (예측에 미친 영향)") }} below={<ScaleKey stops={DIV_STOPS} lo={t("낮음")} hi={t("높음")} title={t("특성값")} />}>
         {(c) => {
           const pts = createMemo(() => items().flatMap((it, k) => {
             const pos = it.vals.map((v) => c.X(v));
@@ -404,7 +405,7 @@ function Pdp(b: PdpB) {
   const allY = () => [...S().flatMap((s) => s.pts.map((p) => p.y)), ...ice().flatMap((l) => l.map((p) => p.y))];
   return (
     <Show when={S().length}>
-      <Plot label={b.label} legend={S().length > 1 ? S().map((s, i) => ({ label: s.label, color: col(i) })) : ice().length ? [{ label: "평균 (PDP)", color: col(0) }, { label: "개별 (ICE)", color: "var(--viz-other)" }] : undefined} x={{ domain: extent(allX(), 0.02), title: str(b.x) || undefined }} y={{ domain: extent(allY(), 0.06), title: str(b.y) || "예측값" }}>
+      <Plot label={b.label} legend={S().length > 1 ? S().map((s, i) => ({ label: s.label, color: col(i) })) : ice().length ? [{ label: t("평균 (PDP)"), color: col(0) }, { label: t("개별 (ICE)"), color: "var(--viz-other)" }] : undefined} x={{ domain: extent(allX(), 0.02), title: str(b.x) || undefined }} y={{ domain: extent(allY(), 0.06), title: str(b.y) || t("예측값") }}>
         {(c) => {
           const xs = () => S()[0].pts.map((p) => c.X(p.x));
           return (
@@ -412,7 +413,7 @@ function Pdp(b: PdpB) {
               <For each={ice()}>{(l) => <path class="st-thin" style={{ stroke: "var(--viz-other)", "stroke-width": 1, opacity: 0.6 }} d={line<{ x: number; y: number }>().x((p) => c.X(p.x)).y((p) => c.Y(p.y))(l) ?? ""} />}</For>
               <For each={S()}>{(s, k) => <path class="st-line" style={{ stroke: col(k()), "stroke-width": ice().length ? 3 : 2 }} d={line<{ x: number; y: number }>().x((p) => c.X(p.x)).y((p) => c.Y(p.y))(s.pts) ?? ""} />}</For>
               <For each={rug()}>{(v) => <line class="st-ref-solid" style={{ stroke: "var(--ink-3)", opacity: 0.6 }} x1={c.X(v)} x2={c.X(v)} y1={c.y0 + c.ih} y2={c.y0 + c.ih - 6} />}</For>
-              <Crosshair box={c} xs={xs()} read={(i) => `${str(b.x) || "x"} ${fix(S()[0].pts[i].x)}\n${S().map((s) => `${S().length > 1 ? s.label + " " : "예측 "}${fix(s.pts[i]?.y ?? NaN)}`).join("\n")}`} dots={(i) => S().flatMap((s, k) => (s.pts[i] ? [{ y: c.Y(s.pts[i].y), color: col(k) }] : []))} />
+              <Crosshair box={c} xs={xs()} read={(i) => `${str(b.x) || "x"} ${fix(S()[0].pts[i].x)}\n${S().map((s) => `${S().length > 1 ? s.label + " " : t("예측") + " "}${fix(s.pts[i]?.y ?? NaN)}`).join("\n")}`} dots={(i) => S().flatMap((s, k) => (s.pts[i] ? [{ y: c.Y(s.pts[i].y), color: col(k) }] : []))} />
             </g>
           );
         }}
@@ -442,7 +443,7 @@ interface EmbB { label?: string; method?: string; hull?: boolean; series?: { lab
 function Embedding(b: EmbB) {
   const S = () => seriesOf(b, 8);
   const all = () => S().flatMap((s) => s.pts);
-  const m = () => str(b.method) || "차원";
+  const m = () => str(b.method) || t("차원");
   return (
     <Show when={all().length}>
       <Plot label={b.label} legend={S().length > 1 ? S().map((s, i) => ({ label: s.label, color: col(i) })) : undefined} height={(w) => clamp(Math.round(w * 0.7), 260, 460)} x={{ domain: extent(all().map((p) => p.x), 0.06), hide: true, grid: false, title: `${m()} 1` }} y={{ domain: extent(all().map((p) => p.y), 0.06), hide: true, grid: false, title: `${m()} 2` }}>
@@ -499,18 +500,18 @@ function Scree(b: ScreeB) {
   return (
     <Show when={v().length}>
       <Plot
-        label={b.label} legend={b.eigen ? undefined : [{ label: "설명 분산", color: col(0) }, { label: "누적", color: col(1) }]}
+        label={b.label} legend={b.eigen ? undefined : [{ label: t("설명 분산"), color: col(0) }, { label: t("누적"), color: col(1) }]}
         x={{ domain: [0.4, v().length + 0.6], nice: false, ticks: v().map((_, i) => i + 1), fmt: (x) => names()[Math.round(x) - 1] ?? "" }}
-        y={b.eigen ? { domain: [0, Math.max(...v(), 1) * 1.1], title: "고윳값" } : { domain: [0, 100], nice: false, ticks: [0, 25, 50, 75, 100], fmt: (x) => `${x}%`, title: "설명 분산 비율" }}
+        y={b.eigen ? { domain: [0, Math.max(...v(), 1) * 1.1], title: t("고윳값") } : { domain: [0, 100], nice: false, ticks: [0, 25, 50, 75, 100], fmt: (x) => `${x}%`, title: t("설명 분산 비율") }}
       >
         {(c) => {
           const bw = () => Math.min(24, (c.iw / v().length) * 0.6);
           return (
             <g>
-              <Show when={b.eigen}><line class="st-ref" x1={c.x0} x2={c.x0 + c.iw} y1={c.Y(1)} y2={c.Y(1)} /><text class="st-dl" x={c.x0 + c.iw - 2} y={c.Y(1) - 5} text-anchor="end">고윳값 1 (카이저 기준)</text></Show>
+              <Show when={b.eigen}><line class="st-ref" x1={c.x0} x2={c.x0 + c.iw} y1={c.Y(1)} y2={c.Y(1)} /><text class="st-dl" x={c.x0 + c.iw - 2} y={c.Y(1) - 5} text-anchor="end">{t("고윳값 1 (카이저 기준)")}</text></Show>
               <For each={share()}>
                 {(s, i) => (
-                  <Tip tip={`${names()[i()]}\n${b.eigen ? `고윳값 ${fix(s)}` : `${fix(s, 1)}% · 누적 ${fix(cum()[i()], 1)}%`}`}>
+                  <Tip tip={`${names()[i()]}\n${b.eigen ? `${t("고윳값")} ${fix(s)}` : `${fix(s, 1)}% · ${t("누적 {v}", { v: `${fix(cum()[i()], 1)}%` })}`}`}>
                     <rect x={c.X(i() + 1) - c.iw / v().length / 2} y={c.y0} width={c.iw / v().length} height={c.ih} fill="transparent" />
                     <path d={barPath(c.X(i() + 1) - bw() / 2, c.Y(0), c.Y(s), bw())} style={{ fill: col(0) }} />
                   </Tip>
@@ -573,7 +574,7 @@ function Biplot(b: BiB) {
                   const head = () => `M${x2()},${y2()}L${x2() - 7 * Math.cos(a() - 0.4)},${y2() - 7 * Math.sin(a() - 0.4)}L${x2() - 7 * Math.cos(a() + 0.4)},${y2() - 7 * Math.sin(a() + 0.4)}Z`;
                   const spot = () => labSpots()[li()];
                   return (
-                    <Tip tip={`${l.label}\n적재량 ${fix(l.x, 2)}, ${fix(l.y, 2)}`}>
+                    <Tip tip={`${l.label}\n${t("적재량 {v}", { v: `${fix(l.x, 2)}, ${fix(l.y, 2)}` })}`}>
                       <line style={{ stroke: "var(--ink-2)", "stroke-width": 1.5 }} x1={c.X(0)} y1={c.Y(0)} x2={x2()} y2={y2()} />
                       <path d={head()} style={{ fill: "var(--ink-2)" }} />
                       <Show when={spot()}>{(r) => <text class="st-dl" x={r().x + 1} y={r().y + 11}>{ell(l.label, c.iw * 0.3, SM)}</text>}</Show>

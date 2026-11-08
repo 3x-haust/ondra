@@ -209,6 +209,18 @@ export function trimEntries(entries: Entry[], max = MAX_ENTRIES) {
 // (the engine runs with --no-extensions, so the built-in tool_search is loaded by name)
 export const WORKER_TOOLS = ["--extension", "builtin:tool-search", "--tools", "+tool_search"];
 
+/**
+ * A job's tool flags: WORKER_TOOLS plus the tools turned on in Settings › 도구.
+ * Each one is a "+name" modifier, so the engine's defaults (read, bash, edit, write)
+ * stay and nothing can be taken away here. No extra tools = exactly WORKER_TOOLS.
+ */
+export function workerTools(extra: readonly string[] | undefined = state.settings.extraTools): string[] {
+  // exact names only: "+name" entries take no patterns, and a comma would split the list
+  const names = [...new Set((extra ?? []).map((n) => n.trim()).filter((n) => /^\w[\w.:-]*$/.test(n) && n !== "tool_search"))];
+  if (!names.length) return WORKER_TOOLS;
+  return ["--extension", "builtin:tool-search", "--tools", ["+tool_search", ...names.map((n) => `+${n}`)].join(",")];
+}
+
 /** A quiet line in a job's transcript (from outside the event stream, e.g. a tool). */
 export function pushNote(id: string, text: string) {
   updateTask(id, (t) => void push(t, { kind: "note", text }));
@@ -278,7 +290,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
       if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: "브라우저 사용 중" };
       if (/\bagent-desktop\b/.test(cmd)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
       if (/\b(test|vitest|jest|pytest|cargo test|xcodebuild test|go test)\b/.test(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
-      return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).now };
+      return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).nowKo };
     }
     default:
       return { name, kind: "other", target: name, detail: JSON.stringify(args ?? {}), now: name };
@@ -723,7 +735,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--thinking",
       t.thinking || effortFor(account.id) || "high",
       ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
-      ...WORKER_TOOLS,
+      ...workerTools(),
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);

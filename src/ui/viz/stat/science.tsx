@@ -9,6 +9,7 @@ import { arr, col, onDiv, onSeq, Crosshair, DIV_STOPS, ell, fix, Nearest, nums, 
 import { clamp, dendroLines, extent, fit4pl, hclust, isNum, kaplanMeier, likert, logDomain, logistic4, placeLabels, pText, spc, stars, sum, ternary, toNum, type Pt } from "./math";
 import { pointsOf } from "./rel";
 import { rng, rnorm } from "./sample";
+import { t } from "../../../i18n";
 
 // ───────────── matrix heatmaps (correlation, clustered)
 
@@ -88,7 +89,7 @@ function Corr(b: CorrB) {
   });
   return (
     <Show when={vars().length >= 2}>
-      <Frame label={b.label} class="st" height={(w) => heatLayout(h(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={DIV_STOPS} lo="−1" hi="+1" title="상관계수 r" />}>
+      <Frame label={b.label} class="st" height={(w) => heatLayout(h(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={DIV_STOPS} lo="−1" hi="+1" title={t("상관계수 r")} />}>
         {(box) => <HeatGrid h={h()} w={box.w} />}
       </Frame>
     </Show>
@@ -124,15 +125,15 @@ function Clustermap(b: ClusterB) {
     const amax = Math.max(Math.abs(lo), Math.abs(hi)) || 1;
     return { rows: ro.map((i) => rows[i]), cols: co.map((j) => cols[j]), m: ro.map((i) => co.map((j) => m[i][j])), rt: rt ? dendroLines(rt) : undefined, ct: ct ? dendroLines(ct) : undefined, lo, hi, diverging, amax };
   });
-  const t = (v: number) => (D().diverging ? v / D().amax : (v - D().lo) / (D().hi - D().lo || 1));
+  const tone = (v: number) => (D().diverging ? v / D().amax : (v - D().lo) / (D().hi - D().lo || 1));
   const h = (): HeatIn => ({
     rows: D().rows, cols: D().cols, m: D().m, rowTree: D().rt, colTree: D().ct,
-    color: (v) => (D().diverging ? div(t(v)) : seq(t(v))), on: (v) => (D().diverging ? onDiv(t(v)) : onSeq(t(v))), fmt: (v) => fix(v, Math.abs(v) < 10 ? 1 : 0),
+    color: (v) => (D().diverging ? div(tone(v)) : seq(tone(v))), on: (v) => (D().diverging ? onDiv(tone(v)) : onSeq(tone(v))), fmt: (v) => fix(v, Math.abs(v) < 10 ? 1 : 0),
     tip: (i, j) => `${fix(D().m[i][j])}\n${D().rows[i]} · ${D().cols[j]}`,
   });
   return (
     <Show when={D().rows.length && D().cols.length}>
-      <Frame label={b.label} class="st" height={(w) => heatLayout(h(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={D().diverging ? DIV_STOPS : SEQ_STOPS} lo={fix(D().diverging ? -D().amax : D().lo)} hi={fix(D().diverging ? D().amax : D().hi)} title={str(b.key) || "값"} />}>
+      <Frame label={b.label} class="st" height={(w) => heatLayout(h(), w).h} margin={{ t: 0, r: 0, b: 0, l: 0 }} below={<ScaleKey stops={D().diverging ? DIV_STOPS : SEQ_STOPS} lo={fix(D().diverging ? -D().amax : D().lo)} hi={fix(D().diverging ? D().amax : D().hi)} title={str(b.key) || t("값")} />}>
         {(box) => <HeatGrid h={b.values === false ? { ...h(), fmt: () => "" } : h()} w={box.w} />}
       </Frame>
     </Show>
@@ -176,8 +177,8 @@ function Survival(b: SurvB) {
     <Show when={S().length}>
       <Plot
         label={b.label} legend={S().length > 1 ? S().map((s, i) => ({ label: s.label, color: col(i) })) : undefined}
-        x={{ domain: [0, end()], title: str(b.x) || (b.unit ? `시간 (${b.unit})` : "시간") }}
-        y={{ domain: [0, 1], nice: false, ticks: [0, 0.25, 0.5, 0.75, 1], fmt: (v) => `${Math.round(v * 100)}%`, title: "생존 확률" }}
+        x={{ domain: [0, end()], title: str(b.x) || (b.unit ? `${t("시간")} (${b.unit})` : t("시간")) }}
+        y={{ domain: [0, 1], nice: false, ticks: [0, 0.25, 0.5, 0.75, 1], fmt: (v) => `${Math.round(v * 100)}%`, title: t("생존 확률") }}
         pad={{ b: showRisk() ? 24 + 17 * S().length : 0 }}
         height={(w) => clamp(Math.round(w * 0.55), 230, 360) + (showRisk() ? 24 + 17 * S().length : 0)}
       >
@@ -202,7 +203,7 @@ function Survival(b: SurvB) {
               <Crosshair box={c} xs={grid().map((x) => c.X(x))} read={(i) => `${withU(fix(grid()[i]), b.unit)}\n${S().map((s) => `${s.label} ${Math.round(sAt(s.km.steps, grid()[i]) * 1000) / 10}%`).join("\n")}`} dots={(i) => S().map((s, k) => ({ y: c.Y(sAt(s.km.steps, grid()[i])), color: col(k) }))} />
               <Show when={showRisk()}>
                 <g class="viz-axis">
-                  <text class="viz-axis-title" x={c.x0} y={c.y0 + c.ih + 56} style={{ "font-size": "11px" }}>위험 대상 수</text>
+                  <text class="viz-axis-title" x={c.x0} y={c.y0 + c.ih + 56} style={{ "font-size": "11px" }}>{t("위험 대상 수")}</text>
                   <For each={S()}>
                     {(s, k) => (
                       <g>
@@ -263,8 +264,8 @@ function Volcano(b: VolB) {
   return (
     <Show when={items().length}>
       <Plot
-        label={b.label} legend={[{ label: `증가 ${counts().up}`, color: SIG_COLOR.up }, { label: `감소 ${counts().down}`, color: SIG_COLOR.down }, { label: "유의하지 않음", color: SIG_COLOR.ns }]}
-        x={{ domain: [-xm(), xm()], title: str(b.x) || "log₂ 배수 변화" }} y={{ domain: [0, Math.max(...items().map((i) => i.y), -Math.log10(alpha())) * 1.08], title: "−log₁₀ p" }}
+        label={b.label} legend={[{ label: t("증가 {n}", { n: counts().up }), color: SIG_COLOR.up }, { label: t("감소 {n}", { n: counts().down }), color: SIG_COLOR.down }, { label: t("유의하지 않음"), color: SIG_COLOR.ns }]}
+        x={{ domain: [-xm(), xm()], title: str(b.x) || t("log₂ 배수 변화") }} y={{ domain: [0, Math.max(...items().map((i) => i.y), -Math.log10(alpha())) * 1.08], title: "−log₁₀ p" }}
       >
         {(c) => <OmicsMarks c={c} items={items()} cls={(i) => sigClass(i.x, i.p, fc(), alpha())} top={b.top ?? 8} vlines={[-fc(), fc()]} hline={-Math.log10(alpha())} tipX="log₂FC" />}
       </Plot>
@@ -332,8 +333,8 @@ function MaPlot(b: MaB) {
   const ym = () => Math.max(...items().map((i) => Math.abs(i.y)), fc() * 1.5) * 1.08;
   return (
     <Show when={items().length}>
-      <Plot label={b.label} legend={[{ label: "증가", color: SIG_COLOR.up }, { label: "감소", color: SIG_COLOR.down }, { label: "유의하지 않음", color: SIG_COLOR.ns }]} x={{ domain: extent(items().map((i) => i.x), 0.03), title: str(b.x) || "평균 발현 (log₂)" }} y={{ domain: [-ym(), ym()], title: str(b.y) || "log₂ 배수 변화" }}>
-        {(c) => <OmicsMarks c={c} items={items()} cls={cls} top={b.top ?? 6} vlines={[-fc(), fc()]} zero tipX="평균" tipY="log₂FC" />}
+      <Plot label={b.label} legend={[{ label: t("증가"), color: SIG_COLOR.up }, { label: t("감소"), color: SIG_COLOR.down }, { label: t("유의하지 않음"), color: SIG_COLOR.ns }]} x={{ domain: extent(items().map((i) => i.x), 0.03), title: str(b.x) || t("평균 발현 (log₂)") }} y={{ domain: [-ym(), ym()], title: str(b.y) || t("log₂ 배수 변화") }}>
+        {(c) => <OmicsMarks c={c} items={items()} cls={cls} top={b.top ?? 6} vlines={[-fc(), fc()]} zero tipX={t("평균")} tipY="log₂FC" />}
       </Plot>
     </Show>
   );
@@ -367,7 +368,7 @@ function Manhattan(b: ManB) {
   const gw = () => (isNum(b.line) ? b.line : 5e-8), sg = () => (isNum(b.suggest) ? b.suggest : 1e-5);
   return (
     <Show when={D().pts.length}>
-      <Plot label={b.label} x={{ domain: [0, D().total], nice: false, ticks: [], title: "염색체" }} y={{ domain: [0, Math.max(...D().pts.map((p) => p.y), -Math.log10(gw())) * 1.08], title: "−log₁₀ p" }}>
+      <Plot label={b.label} x={{ domain: [0, D().total], nice: false, ticks: [], title: t("염색체") }} y={{ domain: [0, Math.max(...D().pts.map((p) => p.y), -Math.log10(gw())) * 1.08], title: "−log₁₀ p" }}>
         {(c) => {
           const pts = () => D().pts.map((p) => ({ x: c.X(p.gx), y: c.Y(p.y), r: 2.5, color: col(0), alt: p.ci % 2 === 1, hit: p.p < gw(), label: p.label, p: p.p, tip: `${p.label ? p.label + "\n" : ""}chr${p.chr}:${p.pos.toLocaleString("ko-KR")}\n${pText(p.p)}` }));
           const labs = createMemo(() => {
@@ -432,7 +433,7 @@ function Dose(b: DoseB) {
   const u = () => str(b.unit);
   return (
     <Show when={S().length}>
-      <Plot label={b.label} legend={S().map((s, i) => ({ label: `${s.label}${s.fit ? ` · EC₅₀ ${fix(s.fit.ec50)}${u() ? " " + u() : ""}` : ""}`, color: col(i) }))} x={{ domain: xd(), log: true, title: str(b.x) || `농도${u() ? ` (${u()})` : ""}` }} y={{ domain: extent(S().flatMap((s) => [...s.pts.map((p) => p.y), ...(s.fit ? [s.fit.bottom, s.fit.top] : [])]), 0.06), title: str(b.y) || "반응" }}>
+      <Plot label={b.label} legend={S().map((s, i) => ({ label: `${s.label}${s.fit ? ` · EC₅₀ ${fix(s.fit.ec50)}${u() ? " " + u() : ""}` : ""}`, color: col(i) }))} x={{ domain: xd(), log: true, title: str(b.x) || `${t("농도")}${u() ? ` (${u()})` : ""}` }} y={{ domain: extent(S().flatMap((s) => [...s.pts.map((p) => p.y), ...(s.fit ? [s.fit.bottom, s.fit.top] : [])]), 0.06), title: str(b.y) || t("반응") }}>
         {(c) => {
           const grid = () => Array.from({ length: 100 }, (_, i) => xd()[0] * Math.pow(xd()[1] / xd()[0], i / 99));
           const pts = () => S().flatMap((s, k) => s.pts.map((p) => ({ x: c.X(p.x), y: c.Y(p.y), r: 3.5, color: col(k), tip: `${fix(p.y)} @ ${withU(fix(p.x), u())}\n${s.label}` })));
@@ -683,14 +684,14 @@ function Control(b: SpcB) {
     <Show when={v().filter(isNum).length > 1}>
       <Plot
         label={b.label}
-        legend={[{ label: "측정값", color: col(0) }, ...(anyOut() ? [{ label: "관리 한계 이탈", color: status.bad }] : []), ...(anyRun() ? [{ label: "8점 연속 한쪽", color: status.warn }] : [])]}
+        legend={[{ label: t("측정값"), color: col(0) }, ...(anyOut() ? [{ label: t("관리 한계 이탈"), color: status.bad }] : []), ...(anyRun() ? [{ label: t("8점 연속 한쪽"), color: status.warn }] : [])]}
         x={{ domain: [0.5, v().length + 0.5], nice: false, ticks: v().map((_, i) => i + 1), fmt: (x) => labs()[Math.round(x) - 1] || String(Math.round(x)), title: str(b.x) || undefined }}
         y={{ domain: extent([...v().filter(isNum), L().ucl, L().lcl], 0.08), title: str(b.y) || (b.unit ? `(${b.unit})` : undefined) }}
         pad={(w) => ({ r: w > 460 ? 58 : 0 })}
       >
         {(c) => {
           const lines = () => [{ v: L().ucl, n: "UCL", dash: true }, { v: L().center, n: "CL", dash: false }, { v: L().lcl, n: "LCL", dash: true }];
-          const pts = () => v().map((y, i) => (isNum(y) ? { x: c.X(i + 1), y: c.Y(y), r: L().out[i] ? 5 : L().run[i] ? 4.5 : 3, color: L().out[i] ? status.bad : L().run[i] ? status.warn : col(0), tip: `${withU(fix(y), b.unit)}\n${labs()[i] || `#${i + 1}`}${L().out[i] ? "\n관리 한계 이탈" : L().run[i] ? "\n8점 연속 한쪽" : ""}` } : null)).filter((p): p is NonNullable<typeof p> => !!p);
+          const pts = () => v().map((y, i) => (isNum(y) ? { x: c.X(i + 1), y: c.Y(y), r: L().out[i] ? 5 : L().run[i] ? 4.5 : 3, color: L().out[i] ? status.bad : L().run[i] ? status.warn : col(0), tip: `${withU(fix(y), b.unit)}\n${labs()[i] || `#${i + 1}`}${L().out[i] ? `\n${t("관리 한계 이탈")}` : L().run[i] ? `\n${t("8점 연속 한쪽")}` : ""}` } : null)).filter((p): p is NonNullable<typeof p> => !!p);
           const wide = () => c.w > 460;
           return (
             <g>

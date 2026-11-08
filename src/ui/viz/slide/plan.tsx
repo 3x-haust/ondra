@@ -2,6 +2,7 @@
 // milestones, today), milestone timeline, kanban, OKR tree and RACI.
 import { For, Index, Show } from "solid-js";
 import { Frame, series, status as STATUS, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { Card, StatusMark, Tag, initials, measure } from "./common";
 import { arr, clip, day, dayTicks, fmtDay, item, packRows, periodIx, raci, str, texts, toNum, type Checked, type State, type Status } from "./util";
@@ -128,19 +129,19 @@ defineViz<GanttB>({
   check: checkGantt,
   render: (raw) => {
     const b = raw as ReturnType<typeof checkGantt>["block"];
-    const t = b._t;
+    const tasks = b._t;
     // rows: a group header before the first task of each group
     const rows: ({ kind: "group"; label: string; a: number; b: number } | { kind: "task"; t: GTask })[] = [];
     let g: string | undefined;
-    for (const x of t) {
+    for (const x of tasks) {
       if (x.group && x.group !== g) {
-        const kids = t.filter((y) => y.group === x.group);
+        const kids = tasks.filter((y) => y.group === x.group);
         rows.push({ kind: "group", label: x.group, a: Math.min(...kids.map((k) => k.a)), b: Math.max(...kids.map((k) => k.b)) });
       }
       g = x.group;
       rows.push({ kind: "task", t: x });
     }
-    const lo = Math.min(...t.map((x) => x.a), b._today ?? Infinity), hi = Math.max(...t.map((x) => x.b), b._today ?? -Infinity);
+    const lo = Math.min(...tasks.map((x) => x.a), b._today ?? Infinity), hi = Math.max(...tasks.map((x) => x.b), b._today ?? -Infinity);
     const span = Math.max(1, hi - lo);
     const narrow = (w: number) => w < 520;
     const RH = (w: number) => (narrow(w) ? 40 : 30);
@@ -169,7 +170,7 @@ defineViz<GanttB>({
                 </For>
               </g>
               {/* dependencies: finish → start */}
-              <For each={t.flatMap((k) => k.dep.map((d) => ({ from: t.find((x) => x.id === d)!, to: k })))}>
+              <For each={tasks.flatMap((k) => k.dep.map((d) => ({ from: tasks.find((x) => x.id === d)!, to: k })))}>
                 {(e) => {
                   const i0 = rowOf.get(e.from.id)!, i1 = rowOf.get(e.to.id)!;
                   const xa = X(e.from.b) + (e.from.ms ? 7 : 0), xb = X(e.to.a) - (e.to.ms ? 7 : 0), ya = Y(i0), yb = Y(i1);
@@ -194,7 +195,7 @@ defineViz<GanttB>({
                       const xa = X(k.a), xb = Math.max(X(k.b), xa + 3);
                       const late = !k.ms && b._today !== undefined && k.b < b._today && (k.done ?? 0) < 1;
                       return (
-                        <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${k.label}\n${fmt(k.a)}${k.ms ? "" : ` – ${fmt(k.b)}`}${k.done !== undefined ? ` · ${Math.round(k.done * 100)}%` : ""}${late ? " · 지연" : ""}`)} onMouseLeave={tip.hide}>
+                        <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${k.label}\n${fmt(k.a)}${k.ms ? "" : ` – ${fmt(k.b)}`}${k.done !== undefined ? ` · ${Math.round(k.done * 100)}%` : ""}${late ? ` · ${t("지연")}` : ""}`)} onMouseLeave={tip.hide}>
                           <rect x={bx.x0} y={Y(i()) - (nw ? 22 : rh / 2)} width={bx.iw} height={rh} fill="transparent" />
                           <text class="sl-tl" classList={{ em: !!k.em, halo: nw }} x={nw ? Math.min(Math.max(bx.x0, xa), bx.x0 + bx.iw - 60) : bx.x0 + 8} y={nw ? Y(i()) - 9 : Y(i()) + 4.5}>{clip(k.label, nw ? bx.x0 + bx.iw - Math.min(Math.max(bx.x0, xa), bx.x0 + bx.iw - 60) : lw - 14, 12.5, measure, 500)}</text>
                           <Show when={k.ms} fallback={
@@ -214,7 +215,7 @@ defineViz<GanttB>({
               <Show when={b._today !== undefined}>
                 <line class="sl-today" x1={X(b._today!)} x2={X(b._today!)} y1={bx.y0 - 4} y2={bx.y0 + bx.ih} />
                 <rect x={X(b._today!) - 16} y={bx.y0 - 24} width="32" height="17" rx="8.5" class="sl-today-pill" />
-                <text class="sl-in-light" x={X(b._today!)} y={bx.y0 - 11.5} text-anchor="middle">오늘</text>
+                <text class="sl-in-light" x={X(b._today!)} y={bx.y0 - 11.5} text-anchor="middle">{t("오늘")}</text>
               </Show>
             </g>
           );
@@ -293,7 +294,7 @@ defineViz<MsB>({
             return (
               <g>
                 <line class="sl-spine" x1={lx} x2={lx} y1={bx.y0 + 10} y2={bx.y0 + (m.length - 1) * 52 + 18} />
-                <Show when={ti >= 0}><g><line class="sl-today" x1={lx - 10} x2={bx.x0 + bx.iw} y1={bx.y0 + ti * 52 - 4} y2={bx.y0 + ti * 52 - 4} /><text class="sl-today-t" x={bx.x0 + bx.iw} y={bx.y0 + ti * 52 - 8} text-anchor="end">오늘</text></g></Show>
+                <Show when={ti >= 0}><g><line class="sl-today" x1={lx - 10} x2={bx.x0 + bx.iw} y1={bx.y0 + ti * 52 - 4} y2={bx.y0 + ti * 52 - 4} /><text class="sl-today-t" x={bx.x0 + bx.iw} y={bx.y0 + ti * 52 - 8} text-anchor="end">{t("오늘")}</text></g></Show>
                 <For each={m}>
                   {(x, i) => {
                     const y = bx.y0 + i() * 52 + 18;
@@ -495,7 +496,7 @@ defineViz<OkrB>({
 /* ───────────── RACI ───────────── */
 
 interface RaciB { label?: string; roles?: unknown[]; rows?: unknown[] }
-const RACI_WORD: Record<string, string> = { R: "실행", A: "책임", C: "협의", I: "통보" };
+const RACI_WORD: Record<string, string> = { R: "실행|raci", A: "책임|raci", C: "협의|raci", I: "통보|raci" };
 defineViz<RaciB>({
   type: "raci",
   family: "slide",
@@ -512,7 +513,7 @@ defineViz<RaciB>({
       return { ...it, cells };
     }).filter((r): r is NonNullable<typeof r> => !!r);
     return (
-      <Card label={b.label} class="sl-raci" aside={<ul class="sl-raci-key"><For each={["R", "A", "C", "I"]}>{(l) => <li><span class={`sl-raci-l l-${l}`}>{l}</span>{RACI_WORD[l]}</li>}</For></ul>}>
+      <Card label={b.label} class="sl-raci" aside={<ul class="sl-raci-key"><For each={["R", "A", "C", "I"]}>{(l) => <li><span class={`sl-raci-l l-${l}`}>{l}</span>{t(RACI_WORD[l])}</li>}</For></ul>}>
         <div class="sl-scroll">
           <table class="sl-table">
             <thead><tr><th />{<For each={roles()}>{(r) => <th class="c">{r}</th>}</For>}</tr></thead>
@@ -521,7 +522,7 @@ defineViz<RaciB>({
                 {(r) => (
                   <tr classList={{ em: !!r.em }}>
                     <th>{r.label}</th>
-                    <Index each={roles()}>{(_, i) => <td class="c"><For each={(r.cells[i] ?? "").split("").filter(Boolean)}>{(l) => <span class={`sl-raci-l l-${l}`} title={RACI_WORD[l]}>{l}</span>}</For></td>}</Index>
+                    <Index each={roles()}>{(_, i) => <td class="c"><For each={(r.cells[i] ?? "").split("").filter(Boolean)}>{(l) => <span class={`sl-raci-l l-${l}`} title={RACI_WORD[l] ? t(RACI_WORD[l]) : undefined}>{l}</span>}</For></td>}</Index>
                   </tr>
                 )}
               </For>

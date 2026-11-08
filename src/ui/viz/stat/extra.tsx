@@ -7,6 +7,7 @@ import { defineViz } from "../registry";
 import { arr, col, ColPlot, ell, fix, Nearest, nums, Plot, SM, str, Tip, tw, withU } from "./common";
 import { acf, cdfAt, cdfTable, clamp, distPdf, distRange, distSupport, extent, frontier, isNum, mean, mosaic, placeLabels, pText, sd, tInv, toNum, type Dist, type Pt } from "./math";
 import { rnorm } from "./sample";
+import { t } from "../../../i18n";
 
 // ───────────── null distribution of a test statistic
 
@@ -29,9 +30,9 @@ function TestDist(b: TestB) {
     return { pdf, xs, lo, hi, crit, p: Math.min(1, Math.max(0, p)), ymax: Math.max(...xs.map(pdf).filter(Number.isFinite)) };
   });
   const reject = (x: number) => (tail() === "two" ? x <= D().crit[0] || x >= D().crit[1] : tail() === "right" ? x >= D().crit[0] : x <= D().crit[0]);
-  const title = () => ({ normal: "표준정규분포", t: `t 분포 (자유도 ${fix(df())})`, chi2: `χ² 분포 (자유도 ${fix(df())})`, f: `F 분포 (자유도 ${fix(df())}, ${fix(df2())})` }[d()]);
+  const title = () => ({ normal: t("표준정규분포"), t: t("t 분포 (자유도 {v})", { v: fix(df()) }), chi2: t("χ² 분포 (자유도 {v})", { v: fix(df()) }), f: t("F 분포 (자유도 {v})", { v: `${fix(df())}, ${fix(df2())}` }) }[d()]);
   return (
-    <Plot label={b.label} legend={[{ label: `기각역 (α = ${fix(alpha())})`, color: "var(--viz-div-p2)" }, ...(isNum(b.stat) ? [{ label: `관측 ${name()} = ${fix(b.stat!, 2)} · ${pText(D().p)}`, color: "var(--ink)" }] : [])]} x={{ domain: [D().lo, D().hi], nice: false, title: title() }} y={{ domain: [0, D().ymax * 1.12], hide: true, grid: false }} height={(w) => clamp(Math.round(w * 0.45), 200, 300)}>
+    <Plot label={b.label} legend={[{ label: t("기각역 (α = {v})", { v: fix(alpha()) }), color: "var(--viz-div-p2)" }, ...(isNum(b.stat) ? [{ label: `${t("관측 {v}", { v: `${name()} = ${fix(b.stat!, 2)}` })} · ${pText(D().p)}`, color: "var(--ink)" }] : [])]} x={{ domain: [D().lo, D().hi], nice: false, title: title() }} y={{ domain: [0, D().ymax * 1.12], hide: true, grid: false }} height={(w) => clamp(Math.round(w * 0.45), 200, 300)}>
       {(c) => {
         const seg = (f: (x: number) => boolean) => {
           const out: Pt[][] = [];
@@ -66,7 +67,7 @@ function TestDist(b: TestB) {
               )}
             </For>
             <Show when={isNum(b.stat)}>
-              <Tip tip={`관측 ${name()} = ${fix(b.stat!, 3)}\n${pText(D().p)}`}>
+              <Tip tip={`${t("관측 {v}", { v: `${name()} = ${fix(b.stat!, 3)}` })}\n${pText(D().p)}`}>
                 <line style={{ stroke: "var(--ink)", "stroke-width": 2 }} x1={c.X(b.stat!)} x2={c.X(b.stat!)} y1={c.Y(0)} y2={c.y0 + 14} />
                 <text class="st-dl st-strong" x={c.X(b.stat!)} y={c.y0 + 8} text-anchor={c.X(b.stat!) > c.x0 + c.iw * 0.8 ? "end" : c.X(b.stat!) < c.x0 + c.iw * 0.2 ? "start" : "middle"}>{`${name()} = ${fix(b.stat!, 2)}`}</text>
               </Tip>
@@ -97,13 +98,13 @@ function Paired(b: PairedB) {
     const it = arr<any>(b.items).length ? arr<any>(b.items).map((i) => ({ label: str(i?.label), a: toNum(i?.before ?? i?.a), z: toNum(i?.after ?? i?.b) })) : arr<any>(b.pairs).map((p) => ({ label: "", a: toNum(p?.[0]), z: toNum(p?.[1]) }));
     return it.filter((i) => isNum(i.a) && isNum(i.z)).slice(0, 300);
   };
-  const names = () => [str(b.a) || "전", str(b.b) || "후"];
+  const names = () => [str(b.a) || t("전"), str(b.b) || t("후")];
   const diffs = () => items().map((i) => i.z - i.a);
   const md = () => mean(diffs());
   const ci = () => { const n = diffs().length; const h = n > 1 ? tInv(0.975, n - 1) * (sd(diffs()) / Math.sqrt(n)) : 0; return [md() - h, md() + h]; };
   return (
     <Show when={items().length}>
-      <ColPlot label={b.label} legend={[{ label: `증가 ${diffs().filter((x) => x > 0).length}`, color: col(0) }, { label: `감소 ${diffs().filter((x) => x < 0).length}`, color: col(1) }]} cats={names()} y={{ domain: extent(items().flatMap((i) => [i.a, i.z]), 0.06), title: str(b.y) || (b.unit ? `(${b.unit})` : undefined) }} bandPad={0.5} height={(w) => clamp(Math.round(w * 0.6), 240, 380)}>
+      <ColPlot label={b.label} legend={[{ label: t("증가 {n}", { n: diffs().filter((x) => x > 0).length }), color: col(0) }, { label: t("감소 {n}", { n: diffs().filter((x) => x < 0).length }), color: col(1) }]} cats={names()} y={{ domain: extent(items().flatMap((i) => [i.a, i.z]), 0.06), title: str(b.y) || (b.unit ? `(${b.unit})` : undefined) }} bandPad={0.5} height={(w) => clamp(Math.round(w * 0.6), 240, 380)}>
         {(c) => {
           const xa = () => c.colX(0), xz = () => c.colX(1);
           const pts = () => items().flatMap((i) => [
@@ -115,12 +116,12 @@ function Paired(b: PairedB) {
             <g>
               <For each={items()}>{(i) => <line style={{ stroke: i.z >= i.a ? col(0) : col(1), "stroke-width": 1.2, "stroke-opacity": items().length > 40 ? 0.35 : 0.6 }} x1={xa()} x2={xz()} y1={c.Y(i.a)} y2={c.Y(i.z)} />}</For>
               <For each={pts()}>{(p) => <circle cx={p.x} cy={p.y} r={p.r} style={{ fill: p.color, "fill-opacity": 0.8 }} />}</For>
-              <Tip tip={`평균 변화 ${withU(fix(md()), b.unit)}\n95% CI ${fix(ci()[0])} – ${fix(ci()[1])}\nn = ${items().length}`}>
+              <Tip tip={`${t("평균 변화 {v}", { v: withU(fix(md()), b.unit) })}\n95% CI ${fix(ci()[0])} – ${fix(ci()[1])}\nn = ${items().length}`}>
                 <line style={{ stroke: "var(--ink)", "stroke-width": 3, "stroke-linecap": "round" }} x1={xa()} x2={xz()} y1={c.Y(ma())} y2={c.Y(mz())} />
                 <circle cx={xa()} cy={c.Y(ma())} r={5} style={{ fill: "var(--ink)", stroke: "var(--viz-gap)", "stroke-width": 2 }} />
                 <circle cx={xz()} cy={c.Y(mz())} r={5} style={{ fill: "var(--ink)", stroke: "var(--viz-gap)", "stroke-width": 2 }} />
               </Tip>
-              <text class="st-dl" x={xz() + 10} y={c.Y(mz())} dy="0.32em">{`평균 ${md() >= 0 ? "+" : ""}${fix(md())}`}</text>
+              <text class="st-dl" x={xz() + 10} y={c.Y(mz())} dy="0.32em">{t("평균 {v}", { v: `${md() >= 0 ? "+" : ""}${fix(md())}` })}</text>
               <Nearest pts={pts()} box={c} />
             </g>
           );
@@ -157,7 +158,7 @@ function Acf(b: AcfB) {
   });
   return (
     <Show when={D().r.length}>
-      <Plot label={b.label} x={{ domain: [0, D().lags.length + 0.5], nice: false, title: "시차 (lag)" }} y={{ domain: [Math.min(-0.25, ...D().r) * 1.1, Math.max(0.25, ...D().r) * 1.1], title: b.partial ? "편자기상관 (PACF)" : "자기상관 (ACF)", fmt: (v) => fix(v, 1) }} height={(w) => clamp(Math.round(w * 0.45), 200, 300)}>
+      <Plot label={b.label} x={{ domain: [0, D().lags.length + 0.5], nice: false, title: t("시차 (lag)") }} y={{ domain: [Math.min(-0.25, ...D().r) * 1.1, Math.max(0.25, ...D().r) * 1.1], title: b.partial ? t("편자기상관 (PACF)") : t("자기상관 (ACF)"), fmt: (v) => fix(v, 1) }} height={(w) => clamp(Math.round(w * 0.45), 200, 300)}>
         {(c) => (
           <g>
             <Show when={isNum(D().band)}>
@@ -170,7 +171,7 @@ function Acf(b: AcfB) {
               {(r, i) => {
                 const out = () => isNum(D().band) && Math.abs(r) > D().band;
                 return (
-                  <Tip tip={`시차 ${D().lags[i()]}\nr = ${fix(r, 3)}${out() ? "\n신뢰대 밖" : ""}`}>
+                  <Tip tip={`${t("시차 {v}", { v: D().lags[i()] })}\nr = ${fix(r, 3)}${out() ? `\n${t("신뢰대 밖")}` : ""}`}>
                     <rect x={c.X(D().lags[i()]) - 6} y={c.y0} width={12} height={c.ih} fill="transparent" />
                     <line style={{ stroke: out() ? col(0) : "var(--viz-other)", "stroke-width": 2 }} x1={c.X(D().lags[i()])} x2={c.X(D().lags[i()])} y1={c.Y(0)} y2={c.Y(r)} />
                     <circle cx={c.X(D().lags[i()])} cy={c.Y(r)} r={3.5} style={{ fill: out() ? col(0) : "var(--viz-other)" }} />
@@ -223,7 +224,7 @@ function Mosaic(b: MosB) {
                         const x = () => 1 + cell.x0 * W(), y = () => (1 - cell.y1) * H(), w = () => Math.max(0, (cell.x1 - cell.x0) * W() - 2), h = () => Math.max(0, (cell.y1 - cell.y0) * H() - 2);
                         const label = () => `${Math.round(cell.rowShare * 100)}%`;
                         return (
-                          <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${cell.v.toLocaleString("ko-KR")} (${cols()[j()]} 중 ${label()})\n${cols()[j()]} · ${rows()[i()]}`)} onMouseLeave={tip.hide}>
+                          <g class="viz-mark" onMouseMove={(e) => tip.show(e, `${cell.v.toLocaleString("ko-KR")} (${t("{c} 중 {p}", { c: cols()[j()], p: label() })})\n${cols()[j()]} · ${rows()[i()]}`)} onMouseLeave={tip.hide}>
                             <rect x={x()} y={y()} width={w()} height={h()} rx={2} style={{ fill: col(i()) }} />
                             <Show when={w() > tw(label(), SM) + 8 && h() > 18}>
                               <text class={`st-cell-v ${[3, 4].includes(i()) ? "st-on-light" : "st-on-dark"}`} x={x() + w() / 2} y={y() + h() / 2} dy="0.35em" text-anchor="middle">{label()}</text>
@@ -267,9 +268,9 @@ function Frontier(b: FrontB) {
   const front = createMemo(() => new Set(frontier(pts().map((p) => [p.x, p.y] as Pt), bx(), by())));
   return (
     <Show when={pts().length}>
-      <Plot label={b.label} legend={[...(groups().length > 1 ? groups().map((g, i) => ({ label: g, color: col(i) })) : []), { label: "파레토 경계", color: "var(--ink-2)" }]} x={{ domain: b.logx ? [Math.min(...pts().map((p) => p.x)) / 1.3, Math.max(...pts().map((p) => p.x)) * 1.3] : extent(pts().map((p) => p.x), 0.06), log: b.logx, title: str(b.x) || undefined, grid: true }} y={{ domain: extent(pts().map((p) => p.y), 0.08), title: str(b.y) || undefined }}>
+      <Plot label={b.label} legend={[...(groups().length > 1 ? groups().map((g, i) => ({ label: g, color: col(i) })) : []), { label: t("파레토 경계"), color: "var(--ink-2)" }]} x={{ domain: b.logx ? [Math.min(...pts().map((p) => p.x)) / 1.3, Math.max(...pts().map((p) => p.x)) * 1.3] : extent(pts().map((p) => p.x), 0.06), log: b.logx, title: str(b.x) || undefined, grid: true }} y={{ domain: extent(pts().map((p) => p.y), 0.08), title: str(b.y) || undefined }}>
         {(c) => {
-          const P = () => pts().map((p, i) => ({ x: c.X(p.x), y: c.Y(p.y), r: front().has(i) ? 5 : 3.5, on: front().has(i), label: p.label, color: groups().length > 1 ? col(Math.max(0, groups().indexOf(p.group))) : col(0), tip: `${p.label ? p.label + "\n" : ""}${fix(p.x)}, ${fix(p.y)}${front().has(i) ? "\n파레토 경계" : ""}` }));
+          const P = () => pts().map((p, i) => ({ x: c.X(p.x), y: c.Y(p.y), r: front().has(i) ? 5 : 3.5, on: front().has(i), label: p.label, color: groups().length > 1 ? col(Math.max(0, groups().indexOf(p.group))) : col(0), tip: `${p.label ? p.label + "\n" : ""}${fix(p.x)}, ${fix(p.y)}${front().has(i) ? `\n${t("파레토 경계")}` : ""}` }));
           const fl = () => [...front()].map((i) => P()[i]).sort((a, z) => a.x - z.x);
           // the frontier as a staircase: each step holds until the next better point
           const stair = () => fl().flatMap((p, i) => (i ? [{ x: p.x, y: fl()[i - 1].y }, p] : [p]));

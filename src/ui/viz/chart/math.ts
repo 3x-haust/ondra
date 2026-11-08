@@ -2,6 +2,8 @@
 // de-collision, part-to-whole folding and per-kind layouts. No JSX, so tests
 // can run it in node.
 import { stack, stackOffsetDiverging, stackOffsetExpand, stackOffsetNone, stackOffsetWiggle, stackOrderInsideOut, stackOrderNone } from "d3-shape";
+import { t } from "../../../i18n";
+import { monthWord, yearMonth } from "../words";
 
 export const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 /** a number from a number or a numeric string ("1,234", "12.5%"), else null */
@@ -36,12 +38,12 @@ export function xKind(xs: unknown[]): XKind {
   return "cat";
 }
 const DAY = 864e5;
-/** a short Korean label for a time tick, by how much time the axis spans */
+/** a short label for a time tick, by how much time the axis spans */
 export function fmtTime(t: number, span: number): string {
   const d = new Date(t);
   const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, da = d.getUTCDate();
   if (span > 3 * 365 * DAY) return `${y}`;
-  if (span > 120 * DAY) return mo === 1 ? `${y}.${mo}` : `${mo}월`;
+  if (span > 120 * DAY) return mo === 1 ? yearMonth(y, mo) : monthWord(mo);
   if (span > 2 * DAY) return `${mo}/${da}`;
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
@@ -68,13 +70,13 @@ export interface SeriesData { x: (string | number)[]; series: Series[] }
 export function normSeries(b: any): SeriesData {
   let series: Series[] = arr<any>(b?.series)
     .filter((s) => s && typeof s === "object")
-    .map((s, i) => ({ label: str(s.label ?? s.name, `계열 ${i + 1}`), values: arr(s.values ?? s.data).map(toNum), em: !!(s.em ?? s.highlight), dash: !!s.dash, as: str(s.as) || undefined }));
+    .map((s, i) => ({ label: str(s.label ?? s.name, t("계열 {n}", { n: i + 1 })), values: arr(s.values ?? s.data).map(toNum), em: !!(s.em ?? s.highlight), dash: !!s.dash, as: str(s.as) || undefined }));
   let x: (string | number)[] = arr<any>(b?.x).map((v) => (isNum(v) ? v : str(v)));
-  if (!series.length && Array.isArray(b?.values)) series = [{ label: str(b?.label, "값"), values: arr(b.values).map(toNum) }];
+  if (!series.length && Array.isArray(b?.values)) series = [{ label: str(b?.label, t("값")), values: arr(b.values).map(toNum) }];
   if (!series.length && Array.isArray(b?.items)) {
     const items = arr<any>(b.items).filter((i) => i && typeof i === "object");
     if (!x.length) x = items.map((i, k) => str(i.label ?? i.x, `${k + 1}`));
-    series = [{ label: str(b?.label, "값"), values: items.map((i) => toNum(i.value ?? i.y)) }];
+    series = [{ label: str(b?.label, t("값")), values: items.map((i) => toNum(i.value ?? i.y)) }];
   }
   const n = Math.max(x.length, ...series.map((s) => s.values.length), 0);
   if (!x.length) x = Array.from({ length: n }, (_, i) => i + 1);
@@ -231,7 +233,7 @@ export interface Part { label: string; value: number; other?: boolean; note?: st
 export function parts(items: unknown): Part[] {
   return arr<any>(items)
     .filter((i) => i && typeof i === "object")
-    .map((i, k) => ({ label: str(i.label ?? i.name, `항목 ${k + 1}`), value: toNum(i.value) ?? NaN, note: str(i.note) || undefined }))
+    .map((i, k) => ({ label: str(i.label ?? i.name, t("항목 {n}", { n: k + 1 })), value: toNum(i.value) ?? NaN, note: str(i.note) || undefined }))
     .filter((p) => isNum(p.value) && p.value > 0);
 }
 /** keep the largest `max - 1` parts and fold the rest into one "기타" (only when more than `max`) */
@@ -240,10 +242,10 @@ export function foldParts(ps: Part[], max = 6): Part[] {
   const given = ps.filter((p) => /^(기타|other)$/i.test(p.label)).reduce((n, p) => n + p.value, 0);
   const sorted = [...named].sort((a, b) => b.value - a.value);
   const total = sorted.length + (given > 0 ? 1 : 0);
-  if (total <= max) return given > 0 ? [...sorted, { label: "기타", value: given, other: true }] : sorted;
+  if (total <= max) return given > 0 ? [...sorted, { label: t("기타"), value: given, other: true }] : sorted;
   const keep = sorted.slice(0, max - 1);
   const rest = sorted.slice(max - 1).reduce((n, p) => n + p.value, 0) + given;
-  return [...keep, { label: "기타", value: rest, other: true }];
+  return [...keep, { label: t("기타"), value: rest, other: true }];
 }
 /** integers that sum to `total`, proportional to the values (largest remainder) */
 export function largestRemainder(values: number[], total: number): number[] {
@@ -275,7 +277,7 @@ export function waterfall(items: unknown): WfStep[] {
   const out: WfStep[] = [];
   for (const [k, i] of arr<any>(items).entries()) {
     if (!i || typeof i !== "object") continue;
-    const label = str(i.label, `항목 ${k + 1}`);
+    const label = str(i.label, t("항목 {n}", { n: k + 1 }));
     const v = toNum(i.value);
     if (i.total) {
       if (v !== null) acc = v;

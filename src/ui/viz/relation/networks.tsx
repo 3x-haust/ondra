@@ -5,6 +5,7 @@ import { cluster, hierarchy } from "d3-hierarchy";
 import { curveBundle, lineRadial } from "d3-shape";
 import { defineViz } from "../registry";
 import { Frame, seq, series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { bundleTree, cleanGraph, degrees, egoLayout, forceLayout, matrixOrder, type Graph } from "./layout/graph";
 import { declutter, toStr } from "./layout/text";
 import { Empty, FS, FS_SM, Ramp, Safe, fit, legendOf, tw, val } from "./ui";
@@ -77,7 +78,7 @@ function Network(b: NetB) {
                     cx={p.x} cy={p.y} r={p.r}
                     fill={emNode && !p.em ? "var(--viz-muted)" : groupColor(g(), p.group)}
                     onMouseEnter={() => setHot(p.id)}
-                    onMouseMove={(e) => tip.show(e, `${p.label}${p.group ? ` · ${p.group}` : ""}\n연결 ${nb().get(p.id)?.size ?? 0}${p.value !== undefined ? ` · ${val(p.value, b.unit)}` : ""}${p.note ? `\n${p.note}` : ""}`)}
+                    onMouseMove={(e) => tip.show(e, `${p.label}${p.group ? ` · ${p.group}` : ""}\n${t("연결 {n}", { n: nb().get(p.id)?.size ?? 0 })}${p.value !== undefined ? ` · ${val(p.value, b.unit)}` : ""}${p.note ? `\n${p.note}` : ""}`)}
                     onMouseLeave={tip.hide}
                   />
                 )}
@@ -378,7 +379,7 @@ function Ego(b: NetB) {
                       r={n.ring === 0 ? 10 : 3 + (n.ring === 1 ? 5 : 3) * Math.sqrt((deg.get(n.id) ?? 0) / dmax)}
                       fill={color(n)}
                       onMouseEnter={() => setHot(n.id)}
-                      onMouseMove={(ev) => tip.show(ev, `${n.label}${n.group ? ` · ${n.group}` : ""}\n${n.ring === 0 ? "중심" : n.ring === 1 ? "직접 연결" : `${g().nodes.find((m) => m.id === n.parent)?.label} 거쳐 연결`}${n.note ? `\n${n.note}` : ""}`)}
+                      onMouseMove={(ev) => tip.show(ev, `${n.label}${n.group ? ` · ${n.group}` : ""}\n${n.ring === 0 ? t("중심") : n.ring === 1 ? t("직접 연결") : t("{p} 거쳐 연결", { p: g().nodes.find((m) => m.id === n.parent)?.label ?? "" })}${n.note ? `\n${n.note}` : ""}`)}
                       onMouseLeave={tip.hide}
                     />
                   );

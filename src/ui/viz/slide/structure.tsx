@@ -3,6 +3,7 @@
 // strategy house (roof, pillars, foundation).
 import { For, Show } from "solid-js";
 import { Frame, num, seq, series, useTip, withUnit } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { Card, measure } from "./common";
 import { arr, around, clip, item, items, layTree, readDecision, readTree, rollback, str, texts, wrapPx, type Checked, type DNode, type Item, type TNode } from "./util";
@@ -382,13 +383,13 @@ defineViz<DecB>({
   render: (raw) => {
     const b = raw as ReturnType<typeof checkDec>["block"];
     if (!b._t) return null;
-    const t = b._t;
-    const lay = layTree(t);
+    const root = b._t;
+    const lay = layTree(root);
     const RH = 52;
     const f = (v?: number) => (v === undefined ? "–" : withUnit(num(Math.round(v * 100) / 100), b.unit));
     return (
       <Frame label={b.label} class="sl sl-dec" margin={{ t: 22, r: 4, b: 4, l: 6 }} height={lay.rows * RH + 26}
-        legend={[{ label: "결정", color: "var(--ink-2)" }, { label: "확률", color: "var(--viz-1)" }]}>
+        legend={[{ label: t("결정"), color: "var(--ink-2)" }, { label: t("확률"), color: "var(--viz-1)" }]}>
         {(bx) => {
           const tip = useTip();
           const valW = Math.max(...lay.all.filter((n) => !n.kids.length).map((n) => measure(f(n.data.ev), 12.5, 600)), 30) + 14;
@@ -397,20 +398,20 @@ defineViz<DecB>({
           // a branch not chosen at some decision above it is drawn faint, with everything under it
           const off = new Set<TNode<DNode>>();
           const walk = (n: TNode<DNode>, o: boolean) => (o && off.add(n), n.kids.forEach((k) => walk(k, o || (n.data.kind === "decide" && !k.data.best))));
-          walk(t, false);
+          walk(root, false);
           const onPath = (n: TNode<DNode>, _p?: TNode<DNode>) => !off.has(n);
           const parent = new Map<TNode<DNode>, TNode<DNode>>();
           lay.all.forEach((p) => p.kids.forEach((k) => parent.set(k, p)));
           return (
             <g>
-              <For each={lay.all.filter((n) => n !== t)}>
+              <For each={lay.all.filter((n) => n !== root)}>
                 {(n) => {
                   const p = parent.get(n)!;
                   const x0 = X(p) + 9, x1 = X(n) - 9;
                   const lab = clip(n.data.label, x1 - x0 - 16, 12, measure, 500);
-                  const sub = [n.data.p !== undefined ? `${Math.round(n.data.p * 100)}%` : "", n.data.cost ? `비용 ${f(n.data.cost)}` : ""].filter(Boolean).join(" · ");
+                  const sub = [n.data.p !== undefined ? `${Math.round(n.data.p * 100)}%` : "", n.data.cost ? t("비용 {v}", { v: f(n.data.cost) }) : ""].filter(Boolean).join(" · ");
                   return (
-                    <g class="viz-mark" classList={{ off: !onPath(n, p) }} onMouseMove={(e) => tip.show(e, `${n.data.label}${sub ? ` · ${sub}` : ""}\n기대값 ${f(n.data.ev)}`)} onMouseLeave={tip.hide}>
+                    <g class="viz-mark" classList={{ off: !onPath(n, p) }} onMouseMove={(e) => tip.show(e, `${n.data.label}${sub ? ` · ${sub}` : ""}\n${t("기대값 {v}", { v: f(n.data.ev) })}`)} onMouseLeave={tip.hide}>
                       <path class="sl-link" classList={{ em: !!n.data.best }} d={`M${x0} ${Y(p)}H${x0 + 8}V${Y(n)}H${x1}`} />
                       <text class="sl-el" x={x0 + 14} y={Y(n) - 6}>{lab}</text>
                       <Show when={sub}><text class="sl-tn" x={x0 + 14} y={Y(n) + 15}>{clip(sub, x1 - x0 - 16, 11.5, measure, 400)}</text></Show>
@@ -427,7 +428,7 @@ defineViz<DecB>({
                       <Show when={k === "decide"}><rect x={x - 8} y={y - 8} width="16" height="16" rx="2" class="d-decide" /></Show>
                       <Show when={k === "chance"}><circle cx={x} cy={y} r="8.5" class="d-chance" /></Show>
                       <Show when={k === "end"}><path d={`M${x - 7} ${y}l12 -7v14z`} class="d-end" /></Show>
-                      <Show when={k === "end"} fallback={<Show when={n.data.ev !== undefined}><text class="sl-ev" x={n === t ? x - 8 : x} y={y - 13} text-anchor={n === t ? "start" : "middle"}>{f(n.data.ev)}</text></Show>}>
+                      <Show when={k === "end"} fallback={<Show when={n.data.ev !== undefined}><text class="sl-ev" x={n === root ? x - 8 : x} y={y - 13} text-anchor={n === root ? "start" : "middle"}>{f(n.data.ev)}</text></Show>}>
                         <text class="sl-tl" x={x + 10} y={y + 4.5}>{f(n.data.ev)}</text>
                       </Show>
                     </g>

@@ -1,6 +1,7 @@
 // The board: every task of the workspace at a glance, as columns by state or
 // by project. Cards act in place: pause, start now, merge, and "메시지" sends a
 // change to a task without opening it, so several can be steered one after another.
+import { nowText } from "../engine/describe";
 import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { decisionFor, projectsIn, spaceById, state } from "../state/store";
 import type { Task } from "../state/types";
@@ -222,10 +223,10 @@ function Card(props: { t: Task; byProject: boolean }) {
     const d = decisionFor(job().id);
     if (d) return d.question;
     if (job().status === "failed") return job().error ?? t("실패");
-    if (st() === "running") return job().now ? t(job().now!) : t("시작하는 중");
+    if (st() === "running") return job().now ? nowText(job().now) : t("시작하는 중");
     // the column (or the glyph) already says it's waiting: only a pause is worth a word
     if (st() === "queued") return job().status === "paused" ? t("일시정지") : "";
-    return job().summary || (job().now ? t(job().now!) : "");
+    return job().summary || (job().now ? nowText(job().now) : "");
   };
   const when = () => {
     if (st() === "running" && job().startedAt) return compact(now() - job().startedAt!);

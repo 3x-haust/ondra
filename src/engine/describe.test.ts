@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mainCommand, describeCommand as d } from "./describe";
+import { setState } from "../state/store";
+import { mainCommand, nowText, describeCommand as d } from "./describe";
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
@@ -25,5 +26,27 @@ describe("mainCommand", () => {
     expect(mainCommand(c).startsWith("npm run dev")).toBe(true);
     expect(mainCommand("cd /x && pnpm test")).toBe("pnpm test");
     expect(mainCommand("git status")).toBe("git status");
+  });
+});
+
+describe("nowText", () => {
+  it("keeps the stored Korean line in Korean and shows it in English", () => {
+    setState("settings", "language", "ko");
+    // stored lines are Korean whatever the app's language
+    expect(d("python3 tool.py").nowKo).toBe("tool.py 실행 중");
+    expect(nowText("router.ts 읽는 중")).toBe("router.ts 읽는 중");
+    setState("settings", "language", "en");
+    expect(d("python3 tool.py").nowKo).toBe("tool.py 실행 중");
+    expect(nowText("테스트 실행 중")).toBe("Running tests");
+    expect(nowText("일시정지됨")).toBe("Paused");
+    expect(nowText("router.ts 읽는 중")).toBe("Reading router.ts");
+    expect(nowText("NOTES.md에 적는 중")).toBe("Writing to NOTES.md");
+    expect(nowText("tool.py 실행 중")).toBe("Running tool.py");
+    expect(nowText("서브에이전트 1개 기다리는 중")).toBe("Waiting for 1 subagent");
+    expect(nowText("서브에이전트 3개 기다리는 중")).toBe("Waiting for 3 subagents");
+    // what the model wrote stays as written
+    expect(nowText("프로 요금제 결제 버튼을 누르는 중")).toBe("프로 요금제 결제 버튼을 누르는 중");
+    expect(nowText("a | b")).toBe("a | b");
+    setState("settings", "language", "ko");
   });
 });

@@ -3,6 +3,7 @@
 // canvases, Ansoff, 3C/4P/STP, risk matrix and empathy map.
 import { For, Index, Show } from "solid-js";
 import { Frame, series, useTip, type Box } from "../kit";
+import { t } from "../../../i18n";
 import { defineViz } from "../registry";
 import { Card, measure } from "./common";
 import { arr, autoMax, clip, item, placeLabels, str, texts, toNum, type Checked, type Rect } from "./util";
@@ -130,7 +131,7 @@ function Quadrant(props: { b: ReturnType<typeof checkQuad>["block"] }) {
   if (!pts().length)
     return (
       <Card label={props.b.label} class="sl-quad">
-        <Matrix n={n()} cells={props.b._cells.map((c, i) => ({ ...c, label: c.label || (n() === 2 ? QUAD_POS[i] : ""), tone: undefined }))}
+        <Matrix n={n()} cells={props.b._cells.map((c, i) => ({ ...c, label: c.label || (n() === 2 ? t(QUAD_POS[i]) : ""), tone: undefined }))}
           cols={x().lo || x().hi ? [x().lo ?? "", x().hi ?? ""].slice(0, n()) : undefined} rows={y().lo || y().hi ? [y().hi ?? "", y().lo ?? ""] : undefined}
           xLabel={x().label} yLabel={y().label} />
       </Card>
@@ -176,12 +177,12 @@ function Axes2(props: { x: Ax; y: Ax; bx: Box }) {
       <line class="viz-base" x1={b().x0 - 6} x2={b().x0 - 6} y1={b().y0 + b().ih} y2={b().y0} />
       <path class="sl-arrowhead" d={`M${b().x0 + b().iw - 5} ${b().y0 + b().ih + 3}l5 3l-5 3`} />
       <path class="sl-arrowhead" d={`M${b().x0 - 9} ${b().y0 + 5}l3 -5l3 5`} />
-      <text x={b().x0} y={b().y0 + b().ih + 22} text-anchor="start">{props.x.lo ?? "낮음"}</text>
-      <text x={b().x0 + b().iw - 10} y={b().y0 + b().ih + 22} text-anchor="end">{props.x.hi ?? "높음"}</text>
+      <text x={b().x0} y={b().y0 + b().ih + 22} text-anchor="start">{props.x.lo ?? t("낮음")}</text>
+      <text x={b().x0 + b().iw - 10} y={b().y0 + b().ih + 22} text-anchor="end">{props.x.hi ?? t("높음")}</text>
       <Show when={props.x.label}><text class="sl-axt" x={b().x0 + b().iw / 2} y={b().y0 + b().ih + 22} text-anchor="middle">{clip(props.x.label!, b().iw / 2 - 40, 12, measure, 600)}</text></Show>
       <g transform={`translate(${b().x0 - 14},${b().y0 + b().ih}) rotate(-90)`}>
-        <text x="0" y="0" text-anchor="start">{props.y.lo ?? "낮음"}</text>
-        <text x={b().ih - 10} y="0" text-anchor="end">{props.y.hi ?? "높음"}</text>
+        <text x="0" y="0" text-anchor="start">{props.y.lo ?? t("낮음")}</text>
+        <text x={b().ih - 10} y="0" text-anchor="end">{props.y.hi ?? t("높음")}</text>
         <Show when={yl()}><text class="sl-axt" x={b().ih / 2} y="0" text-anchor="middle">{clip(yl(), b().ih / 2 - 40, 12, measure, 600)}</text></Show>
       </g>
     </g>
@@ -308,10 +309,10 @@ defineViz<SwotB>({
     const has = tows.some(([k]) => texts(b[k]).length);
     return (
       <Card label={b.label} class="sl-swot">
-        <Matrix n={2} rows={["내부", "외부"]} cols={["도움", "방해"]} cells={SWOT.map((q) => ({ label: q.name, badge: q.badge, tone: q.tone, points: texts(b[q.k]) }))} />
+        <Matrix n={2} rows={[t("내부"), t("외부")]} cols={[t("도움"), t("방해")]} cells={SWOT.map((q) => ({ label: t(q.name), badge: q.badge, tone: q.tone, points: texts(b[q.k]) }))} />
         <Show when={has}>
           <div class="sl-tows">
-            <For each={tows}>{([k, name]) => <Show when={texts(b[k]).length}><div><b>{name}</b><ul class="sl-points"><For each={texts(b[k])}>{(p) => <li>{p}</li>}</For></ul></div></Show>}</For>
+            <For each={tows}>{([k, name]) => <Show when={texts(b[k]).length}><div><b>{t(name)}</b><ul class="sl-points"><For each={texts(b[k])}>{(p) => <li>{p}</li>}</For></ul></div></Show>}</For>
           </div>
         </Show>
       </Card>
@@ -349,7 +350,7 @@ defineViz<PestB>({
           <For each={cols()}>
             {(f, i) => (
               <div class="sl-col">
-                <div class="sl-mx-head"><span class="sl-badge" style={{ "--c": series(i() === 3 ? 6 : i()) }}>{f.badge}</span><b>{f.name}</b></div>
+                <div class="sl-mx-head"><span class="sl-badge" style={{ "--c": series(i() === 3 ? 6 : i()) }}>{f.badge}</span><b>{t(f.name)}</b></div>
                 <ul class="sl-points"><For each={texts(b[f.k])}>{(p) => <li>{p}</li>}</For></ul>
               </div>
             )}
@@ -394,7 +395,7 @@ defineViz<FrameB>({
       return Array.from({ length: Math.min(n, 6) }, (_, i) => {
         const r = raw[i];
         const o = (r && typeof r === "object" && !Array.isArray(r) ? r : {}) as Record<string, unknown>;
-        return { badge: str(o.key) || preset[i]?.badge || String(i + 1), name: item(r)?.label ?? preset[i]?.name ?? "", sub: str(o.sub), points: Array.isArray(r) ? texts(r) : texts(o.points ?? o.items), em: o.em === true };
+        return { badge: str(o.key) || preset[i]?.badge || String(i + 1), name: item(r)?.label ?? (preset[i] ? t(preset[i].name) : ""), sub: str(o.sub), points: Array.isArray(r) ? texts(r) : texts(o.points ?? o.items), em: o.em === true };
       }).filter((c) => c.name || c.points.length);
     };
     return (
@@ -453,9 +454,9 @@ function ForceBox(p: { name: string; f: Force; mid?: boolean; area: string }) {
       <div class="sl-force-head">
         <b>{p.name}</b>
         <Show when={p.f.level}>
-          <span class="sl-level" title={`강도 ${p.f.level}/5`}>
+          <span class="sl-level" title={t("강도 {v}/5", { v: p.f.level! })}>
             <Index each={[1, 2, 3, 4, 5]}>{(k) => <i classList={{ on: k() <= p.f.level! }} />}</Index>
-            <em>{LEVEL_WORD[p.f.level!]}</em>
+            <em>{t(LEVEL_WORD[p.f.level!])}</em>
           </span>
         </Show>
       </div>
@@ -471,11 +472,11 @@ defineViz<ForcesB>({
   render: (b) => (
     <Card label={b.label} class="sl-forces">
       <div class="sl-forces-grid">
-        <ForceBox area="n" name="신규 진입자의 위협" f={force(b.entrants)} />
-        <ForceBox area="w" name="공급자의 교섭력" f={force(b.suppliers)} />
-        <ForceBox area="c" name="기존 경쟁" f={force(b.rivalry)} mid />
-        <ForceBox area="e" name="구매자의 교섭력" f={force(b.buyers)} />
-        <ForceBox area="s" name="대체재의 위협" f={force(b.substitutes)} />
+        <ForceBox area="n" name={t("신규 진입자의 위협")} f={force(b.entrants)} />
+        <ForceBox area="w" name={t("공급자의 교섭력")} f={force(b.suppliers)} />
+        <ForceBox area="c" name={t("기존 경쟁")} f={force(b.rivalry)} mid />
+        <ForceBox area="e" name={t("구매자의 교섭력")} f={force(b.buyers)} />
+        <ForceBox area="s" name={t("대체재의 위협")} f={force(b.substitutes)} />
       </div>
     </Card>
   ),
@@ -504,9 +505,9 @@ defineViz<ChainB>({
   render: (b) => {
     const read = (raw: unknown[] | undefined, names: string[]) => {
       const r = arr(raw);
-      return (r.length ? r : names).map((x, i) => {
+      return (r.length ? r : names.map((x) => t(x))).map((x, i) => {
         const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
-        return { label: item(x)?.label ?? names[i] ?? "", points: texts(o.points ?? o.items), em: o.em === true, note: str(o.note) };
+        return { label: item(x)?.label ?? (names[i] ? t(names[i]) : ""), points: texts(o.points ?? o.items), em: o.em === true, note: str(o.note) };
       }).filter((x) => x.label);
     };
     const sup = () => read(b.support, SUPPORT), pri = () => read(b.primary, PRIMARY);
@@ -527,7 +528,7 @@ defineViz<ChainB>({
               )}
             </For>
           </div>
-          <div class="sl-chain-margin"><span>{b.margin ?? "이윤"}</span></div>
+          <div class="sl-chain-margin"><span>{b.margin ?? t("이윤")}</span></div>
         </div>
       </Card>
     );
@@ -554,7 +555,7 @@ function Canvas(props: { label?: string; names: string[]; keys: string[]; b: Rec
         <For each={props.keys}>
           {(k, i) => (
             <div class="sl-canvas-cell" style={{ "grid-area": CANVAS_AREAS[i()] }} classList={{ em: k === "value" }}>
-              <b>{props.names[i()]}</b>
+              <b>{t(props.names[i()])}</b>
               <ul class="sl-points"><For each={texts(props.b[k])}>{(p) => <li>{p}</li>}</For></ul>
             </div>
           )}
@@ -608,10 +609,10 @@ defineViz<AnsoffB>({
   when: "기존·신규 제품과 시장 중 어디로 성장할 것인가",
   render: (b) => {
     const pick = str(b.pick);
-    const c = (k: "penetration" | "product" | "market" | "diversification", label: string, note: string): MCell => ({ label, note, points: texts(b[k]), em: pick === k || pick === label });
+    const c = (k: "penetration" | "product" | "market" | "diversification", label: string, note: string): MCell => ({ label: t(label), note: t(note), points: texts(b[k]), em: pick === k || pick === label || pick === t(label) });
     return (
       <Card label={b.label} class="sl-ansoff">
-        <Matrix n={2} cols={["기존 제품", "신규 제품"]} rows={["기존 시장", "신규 시장"]}
+        <Matrix n={2} cols={[t("기존 제품"), t("신규 제품")]} rows={[t("기존 시장"), t("신규 시장")]}
           cells={[c("penetration", "시장 침투", "위험 낮음"), c("product", "제품 개발", "위험 중간"), c("market", "시장 개발", "위험 중간"), c("diversification", "다각화", "위험 높음")]} />
       </Card>
     );
@@ -660,7 +661,7 @@ defineViz<RiskB>({
     return (
       <Card label={b.label} class="sl-risk">
         <div class="sl-risk-wrap" style={{ "--n": n }}>
-          <div class="sl-risk-y"><span>{b.y ?? "발생 가능성"}</span></div>
+          <div class="sl-risk-y"><span>{b.y ?? t("발생 가능성")}</span></div>
           <div class="sl-risk-grid">
             <For each={cells()}>
               {(c) => (
@@ -673,7 +674,7 @@ defineViz<RiskB>({
             </For>
           </div>
           <div />
-          <div class="sl-risk-x">{b.x ?? "영향도"}</div>
+          <div class="sl-risk-x">{b.x ?? t("영향도")}</div>
         </div>
         <ol class="sl-risk-list">
           <For each={b._r}>{(r) => <li><span class={`sl-risk-chip l-${level(r.x, r.y)}`}>{r.no}</span><b>{r.label}</b><Show when={r.note}><em>{r.note}</em></Show></li>}</For>
@@ -702,7 +703,7 @@ defineViz<EmpathyB>({
   title: "공감 지도",
   when: "이 사용자는 무엇을 말하고, 생각하고, 하고, 느끼나",
   render: (b) => {
-    const q = (label: string, x: unknown): MCell => ({ label, points: texts(x) });
+    const q = (label: string, x: unknown): MCell => ({ label: t(label), points: texts(x) });
     const pains = () => texts(b.pains), gains = () => texts(b.gains);
     return (
       <Card label={b.label} class="sl-empathy">
@@ -712,8 +713,8 @@ defineViz<EmpathyB>({
         </div>
         <Show when={pains().length || gains().length}>
           <div class="sl-tows two">
-            <Show when={pains().length}><div><b>불편</b><ul class="sl-points"><For each={pains()}>{(p) => <li>{p}</li>}</For></ul></div></Show>
-            <Show when={gains().length}><div><b>얻고 싶은 것</b><ul class="sl-points"><For each={gains()}>{(p) => <li>{p}</li>}</For></ul></div></Show>
+            <Show when={pains().length}><div><b>{t("불편")}</b><ul class="sl-points"><For each={pains()}>{(p) => <li>{p}</li>}</For></ul></div></Show>
+            <Show when={gains().length}><div><b>{t("얻고 싶은 것")}</b><ul class="sl-points"><For each={gains()}>{(p) => <li>{p}</li>}</For></ul></div></Show>
           </div>
         </Show>
       </Card>

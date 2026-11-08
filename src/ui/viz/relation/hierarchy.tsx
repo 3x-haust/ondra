@@ -5,6 +5,7 @@ import { cluster, pack, partition, tree, treemap, treemapSquarify, type Hierarch
 import { arc as d3arc, linkHorizontal } from "d3-shape";
 import { defineViz } from "../registry";
 import { Frame, series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { balance, branchOf, orgIndented, orgLayout, sized, toTree, type TNode } from "./layout/trees";
 import { declutter } from "./layout/text";
 import { Empty, FS, FS_SM, Safe, fit, legendOf, onFillStyle, tw, val } from "./ui";
@@ -375,17 +376,17 @@ function colorOfBranch(n: HierarchyNode<TNode>, root: HierarchyNode<TNode>) {
 }
 
 function Dendrogram(b: TreeB & { kind: "dendrogram" | "tidytree" | "radialtree" }) {
-  const t = createMemo(() => sized(toTree(b)));
+  const tr = createMemo(() => sized(toTree(b)));
   const tip = useTip();
   const radial = () => b.kind === "radialtree" || (b.kind === "dendrogram" && !!b.radial);
-  const leafW = () => Math.min(120, Math.max(...t().leaves().map((l) => tw(l.data.name, FS_SM))) + 8);
+  const leafW = () => Math.min(120, Math.max(...tr().leaves().map((l) => tw(l.data.name, FS_SM))) + 8);
   const ROW = 20;
-  const heightOf = (w: number) => (radial() ? Math.round(Math.min(w, 600)) : Math.max(120, t().leaves().length * ROW + 12));
+  const heightOf = (w: number) => (radial() ? Math.round(Math.min(w, 600)) : Math.max(120, tr().leaves().length * ROW + 12));
   return (
-    <Show when={t().descendants().length > 1} fallback={<Empty label={b.label} />}>
-      <Frame label={b.label} class="rl" height={heightOf} margin={{ t: 0, r: 0, b: 0, l: 0 }} legend={hasEm(t()) ? undefined : branchLegend(t())} alt={b.label}>
+    <Show when={tr().descendants().length > 1} fallback={<Empty label={b.label} />}>
+      <Frame label={b.label} class="rl" height={heightOf} margin={{ t: 0, r: 0, b: 0, l: 0 }} legend={hasEm(tr()) ? undefined : branchLegend(tr())} alt={b.label}>
         {(box) => {
-          const root = t().copy();
+          const root = tr().copy();
           const isCluster = b.kind === "dendrogram";
           const heights = root.descendants().some((d) => d.data.height !== undefined);
           if (radial()) {
@@ -543,8 +544,8 @@ defineViz<TreeB>({
 interface OrgB extends TreeB { depth?: number }
 
 function OrgChart(b: OrgB) {
-  const t = createMemo(() => toTree(b, "조직"));
-  const roles = createMemo(() => JSON.stringify(t()).includes('"role"'));
+  const tr = createMemo(() => toTree(b, t("조직")));
+  const roles = createMemo(() => JSON.stringify(tr()).includes('"role"'));
   const [flip, setFlip] = createSignal(new Map<string, boolean>());
   const tip = useTip();
   const def = () => Math.max(1, Math.min(6, b.depth ?? 2));
@@ -552,11 +553,11 @@ function OrgChart(b: OrgB) {
   const toggle = (id: string, depth: number) => setFlip((m) => new Map(m).set(id, !open(id, depth)));
   const BH = () => (roles() ? 44 : 30);
   const layoutFor = (w: number) => {
-    const wide = orgLayout(t(), open, false);
+    const wide = orgLayout(tr(), open, false);
     if (wide.cols * 112 <= w) return { ...wide, indent: false };
-    const compact = orgLayout(t(), open, true);
+    const compact = orgLayout(tr(), open, true);
     if (compact.cols * 104 <= w) return { ...compact, indent: false };
-    return { ...orgIndented(t(), open), cols: 1, indent: true };
+    return { ...orgIndented(tr(), open), cols: 1, indent: true };
   };
   return (
     <Frame label={b.label} class="rl" height={(w) => { const L = layoutFor(w); return Math.round(L.indent ? L.rows * (BH() + 8) + 4 : L.rows * BH() + 8); }} margin={{ t: 0, r: 0, b: 0, l: 0 }} alt={b.label}>
@@ -642,7 +643,7 @@ defineViz<OrgB>({
 
 // ───────────── mind map
 function MindMap(b: TreeB) {
-  const t = createMemo(() => toTree(b, b.label ?? "주제"));
+  const tr = createMemo(() => toTree(b, b.label ?? t("주제|root")));
   const tip = useTip();
   const ROW = 26;
   // the width a side needs: the widest label at each depth
@@ -654,9 +655,9 @@ function MindMap(b: TreeB) {
     return acc;
   };
   const plan = (w: number) => {
-    const kids = t().children ?? [];
+    const kids = tr().children ?? [];
     const leaves = (n: TNode): number => (n.children?.length ? n.children.reduce((s, c) => s + leaves(c), 0) : 1);
-    const centerW = Math.min(150, tw(t().name, FS, 600) + 28);
+    const centerW = Math.min(150, tw(tr().name, FS, 600) + 28);
     const need = (ns: TNode[]) => depthW(ns).reduce((a, x) => a + (x ?? 0), 0);
     const split = balance(kids.map(leaves));
     const right = split.right.map((i) => ({ n: kids[i], i }));
@@ -668,7 +669,7 @@ function MindMap(b: TreeB) {
     return { both, R, L: Lf, centerW, rows };
   };
   return (
-    <Show when={(t().children?.length ?? 0) > 0} fallback={<Empty label={b.label} />}>
+    <Show when={(tr().children?.length ?? 0) > 0} fallback={<Empty label={b.label} />}>
       <Frame label={b.label} class="rl" height={(w) => plan(w).rows * ROW + 16} margin={{ t: 0, r: 0, b: 0, l: 0 }} alt={b.label}>
         {(box) => {
           const p = plan(box.w);
@@ -736,7 +737,7 @@ function MindMap(b: TreeB) {
                 }}
               </For>
               <rect class="rl-box" x={cx - p.centerW / 2} y={cy - 17} width={p.centerW} height={34} rx={17} />
-              <text class="rl-strong" x={cx} y={cy} dy="0.35em" text-anchor="middle" font-weight="600">{fit(t().name, p.centerW - 20, FS, 600)}</text>
+              <text class="rl-strong" x={cx} y={cy} dy="0.35em" text-anchor="middle" font-weight="600">{fit(tr().name, p.centerW - 20, FS, 600)}</text>
             </g>
           );
         }}

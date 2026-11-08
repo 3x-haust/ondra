@@ -6,6 +6,7 @@ import { defineViz } from "../registry";
 import { arr, col, fix, Nearest, Plot, SM, str, tw } from "./common";
 import { isNum, logDomain, placeLabels, powerFit, ranks, toNum } from "./math";
 import { pointsOf } from "./rel";
+import { t } from "../../../i18n";
 
 // ───────────── results table
 
@@ -34,7 +35,7 @@ function Results(b: ResB) {
               <tr>
                 <th />
                 <For each={cols()}>
-                  {(c) => <th>{c.label}<Show when={c.better}><span class="st-arrow" title={c.better === "up" ? "높을수록 좋음" : "낮을수록 좋음"}>{c.better === "up" ? "↑" : "↓"}</span></Show></th>}
+                  {(c) => <th>{c.label}<Show when={c.better}><span class="st-arrow" title={c.better === "up" ? t("높을수록 좋음") : t("낮을수록 좋음")}>{c.better === "up" ? "↑" : "↓"}</span></Show></th>}
                 </For>
               </tr>
             </thead>
@@ -168,7 +169,7 @@ function Scaling(b: ScaleB) {
     return raw.map((s) => ({ ...s, pts: s.pts.filter((p) => (!lx() || p.x > 0) && (!ly() || p.y > 0)).sort((a, z) => a.x - z.x) })).filter((s) => s.pts.length).slice(0, 6).map((s) => ({ ...s, fit: b.fit ? powerFit(s.pts.map((p) => [p.x, p.y])) : null }));
   });
   const all = () => S().flatMap((s) => s.pts);
-  const legend = () => S().map((s, i) => ({ label: `${s.label || "측정"}${s.fit ? ` · 기울기 ${fix(s.fit.b, 2)}` : ""}`, color: col(i) }));
+  const legend = () => S().map((s, i) => ({ label: `${s.label || t("측정")}${s.fit ? ` · ${t("기울기 {v}", { v: fix(s.fit.b, 2) })}` : ""}`, color: col(i) }));
   return (
     <Show when={all().length}>
       <Plot

@@ -483,6 +483,8 @@ export interface Settings {
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */
   githubWrite?: boolean;
+  /** tools a job gets on top of the default ones (Settings › 도구), by name; empty = the defaults only */
+  extraTools?: string[];
 }
 
 export interface AppState {

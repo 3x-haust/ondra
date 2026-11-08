@@ -4,6 +4,7 @@ import { For, Show, type JSX } from "solid-js";
 import { textW } from "../../Charts";
 import { Icon } from "../../Icon";
 import { status as STATUS } from "../kit";
+import { t } from "../../../i18n";
 import type { Measure, State, Status } from "./util";
 
 /** canvas text width in the app font (falls back to an estimate before fonts load) */
@@ -27,11 +28,11 @@ export function Card(props: { label?: string; class: string; children: JSX.Eleme
   );
 }
 
-export const STATE_WORD: Record<State, string> = { done: "완료", now: "진행 중", todo: "예정", new: "새로", changed: "바뀜", gone: "없앰", off: "안 씀", risk: "위험", late: "지연" };
+export const STATE_WORD: Record<State, string> = { done: "완료", now: "진행 중|state", todo: "예정", new: "새로", changed: "바뀜", gone: "없앰", off: "안 씀", risk: "위험|state", late: "지연" };
 /** a state as a word in a soft chip (colour is never the only cue) */
 export const Tag = (p: { state?: State }) => (
   <Show when={p.state}>
-    <span class={`sl-tag t-${p.state}`}>{STATE_WORD[p.state!]}</span>
+    <span class={`sl-tag t-${p.state}`}>{t(STATE_WORD[p.state!])}</span>
   </Show>
 );
 
@@ -41,14 +42,14 @@ const STATUS_ICON: Record<Status, string> = { good: "check", warn: "minus", bad:
 export const StatusMark = (p: { s: Status; word?: string; bare?: boolean }) => (
   <span class={`sl-status s-${p.s}`}>
     <i style={{ background: STATUS[p.s === "warn" ? "warn" : p.s] }}><Icon name={STATUS_ICON[p.s]} size={9} stroke={3.5} /></i>
-    <Show when={!p.bare}>{p.word ?? STATUS_WORD[p.s]}</Show>
+    <Show when={!p.bare}>{p.word ?? t(STATUS_WORD[p.s])}</Show>
   </span>
 );
 
 /** supported / not / partly, as icons (never emoji) */
 export function Mark(p: { k: "yes" | "no" | "part" }) {
   return (
-    <span class={`sl-mark m-${p.k}`} aria-label={p.k === "yes" ? "지원" : p.k === "no" ? "미지원" : "일부"} role="img">
+    <span class={`sl-mark m-${p.k}`} aria-label={p.k === "yes" ? t("지원") : p.k === "no" ? t("미지원") : t("일부")} role="img">
       <Show when={p.k === "part"} fallback={<Icon name={p.k === "yes" ? "check" : "x"} size={12} stroke={3} />}>
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M6 1a5 5 0 0 1 0 10z" fill="currentColor" /></svg>
       </Show>

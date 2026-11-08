@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { lang, t } from "../i18n";
 
 /**
  * A shell command in plain words, for the canvas and the "now" line: what it does
@@ -9,6 +9,8 @@ export interface Said {
   label: string;
   /** going on now: "PR 올리는 중" */
   now: string;
+  /** the same in Korean, as a task stores it (shown through nowText()) */
+  nowKo: string;
   /** the file, site or thing it works on */
   target?: string;
 }
@@ -20,7 +22,33 @@ const file = (s: string) => {
   return f ? f.split("/").filter(Boolean).pop() : undefined;
 };
 /** label and now are Korean keys, shown in the current language; {x} is filled from vars */
-const S = (label: string, now: string, target?: string, vars?: Record<string, string>): Said => ({ label: t(label, vars), now: t(now, vars), target });
+const fill = (s: string, vars?: Record<string, string>) => (vars ? s.replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m) : s);
+const S = (label: string, now: string, target?: string, vars?: Record<string, string>): Said => ({ label: t(label, vars), now: t(now, vars), nowKo: fill(now, vars), target });
+
+/** The shapes a stored "now" line takes when a name is filled in (the rest are plain t() keys). */
+const NOW_FORMS = ["{f} 읽는 중", "{f}에 적는 중", "{f} 수정 중", "{f} 작성 중", "서브에이전트 {n}개 기다리는 중", "Aside로 {h} 보는 중", "{h} 요청 중", "{p} 실행 중"];
+const escape = (s: string) => s.replace(/[.*+?^$()[\]\\|]/g, "\\$&");
+const FORM_RES = NOW_FORMS.map((f) => ({ f, keys: [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]), re: new RegExp(`^${escape(f).replace(/\{\w+\}/g, "(.+?)")}$`) }));
+
+/**
+ * A task's "now" line in the app's language. Tasks store it in Korean ("테스트 실행 중",
+ * "router.ts 읽는 중"); fixed lines are t() keys, lines with a file or command name in them
+ * are matched to their form. What the model wrote itself stays as written.
+ */
+export function nowText(now: string | undefined): string {
+  if (!now || lang() === "ko") return now ?? "";
+  // a bar would read as t()'s context mark: model text keeps it
+  const plain = now.includes("|") ? now : t(now);
+  if (plain !== now) return plain;
+  for (const { f, keys, re } of FORM_RES) {
+    const m = now.match(re);
+    if (!m) continue;
+    const vars: Record<string, string | number> = {};
+    keys.forEach((k, i) => (vars[k] = k === "n" && /^\d+$/.test(m[i + 1]) ? Number(m[i + 1]) : m[i + 1]));
+    return t(f, vars);
+  }
+  return now;
+}
 
 /** The part of a command that matters: no `cd …`, env settings, `date`, echo. */
 function core(cmd: string): string {
@@ -88,7 +116,7 @@ export function describeCommand(cmd: string): Said {
   if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(build|bundle)\b|\bcargo\s+build\b|\bxcodebuild\b|\bgradlew\b|\b(vite|next|tauri)\s+build\b|\bexpo\s+(export|prebuild)\b|\beas\s+build\b/.test(k))
     return S("빌드", "빌드 중");
   if (/\b(pnpm|npm|yarn|bun)\s+(install|i|add|ci)\b|\bpip3?\s+install\b|\bbrew\s+install\b|\bcargo\s+add\b|\bpod\s+install\b/.test(k)) return S("설치", "설치하는 중");
-  if (/\b(typecheck|lint|eslint|biome|prettier|clippy)\b|\btsc\b|\bcargo\s+check\b/.test(k)) return S("검사", "검사하는 중");
+  if (/\b(typecheck|lint|eslint|biome|prettier|clippy)\b|\btsc\b|\bcargo\s+check\b/.test(k)) return S("검사|lint", "검사하는 중");
   if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|\btauri\s+dev\b/.test(k)) return S("앱 띄우기", "앱 띄우는 중");
   if (/^(curl|wget|http)\b/.test(k)) {
     const h = host(k);

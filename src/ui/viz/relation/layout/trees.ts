@@ -2,6 +2,7 @@
 // turned into a d3 hierarchy, plus the mind-map balancing and the org-chart layout.
 import { hierarchy, type HierarchyNode } from "d3-hierarchy";
 import { arr, isObj, toNum, toStr } from "./text";
+import { t } from "../../../../i18n";
 
 export interface TNode { name: string; value?: number; note?: string; em?: boolean; role?: string; height?: number; children?: TNode[] }
 
@@ -38,7 +39,7 @@ function nested(list: unknown[], depth = 0): TNode[] {
  * Several tops get a shared root named `rootLabel` (default "전체").
  */
 export function toTree(b: { root?: unknown; items?: unknown }, rootLabel?: string): TNode {
-  const top = toStr(rootLabel) ?? "전체";
+  const top = toStr(rootLabel) ?? t("전체");
   if (isObj(b.root)) {
     const r = nested([b.root])[0];
     if (r) return r;

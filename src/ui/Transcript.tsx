@@ -1,4 +1,5 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
+import { nowText } from "../engine/describe";
 import { keepBottom } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
@@ -507,7 +508,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         <Show when={working() && !liveText() && !toolRunning() && !state.tasks.some((k) => k.parentId === props.task.id && (k.status === "running" || k.status === "queued"))}>
           <div class="live-line">
             <span class="spin" />
-            <span class="shimmer">{props.task.now ? tr(props.task.now) : tr("작업 중")}</span>
+            <span class="shimmer">{props.task.now ? nowText(props.task.now) : tr("작업 중")}</span>
           </div>
         </Show>
         {/* a question waiting on the user: last in the conversation, so it scrolls with it */}

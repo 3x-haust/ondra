@@ -5,6 +5,7 @@ import { chord, chordDirected, ribbon, ribbonArrow } from "d3-chord";
 import { arc as d3arc } from "d3-shape";
 import { defineViz } from "../registry";
 import { Frame, series, useTip } from "../kit";
+import { t } from "../../../i18n";
 import { acyclic, alluvialGraph, arcOrder, chordMatrix, cleanLinks, cleanNodes, sankeyLayout, type SNode } from "./layout/flows";
 import { cleanGraph, degrees } from "./layout/graph";
 import { arr, declutter, toStr } from "./layout/text";
@@ -305,7 +306,7 @@ function Chord(b: ChordB) {
                         class="viz-mark"
                         d={groupArc(g) ?? ""}
                         fill={color(g.index)}
-                        onMouseMove={(e) => tip.show(e, `${val(totals[g.index], b.unit)}\n${m().names[g.index]} 합계`)}
+                        onMouseMove={(e) => tip.show(e, `${val(totals[g.index], b.unit)}\n${t("{s} 합계", { s: m().names[g.index] })}`)}
                         onMouseLeave={tip.hide}
                       />
                       <Show when={name}>

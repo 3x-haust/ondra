@@ -4,6 +4,7 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
+import { nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
@@ -292,7 +293,7 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
 function Activity(props: { t: Task }) {
   const job = () => props.t;
   const cur = () => job().plan.findIndex((s) => s.state === "now");
-  const head = () => job().intent || job().plan[cur()]?.text || (job().now ? t(job().now!) : "");
+  const head = () => job().intent || job().plan[cur()]?.text || (job().now ? nowText(job().now) : "");
   const sub = () => (job().intent && cur() >= 0 && job().plan[cur()].text !== job().intent ? job().plan[cur()].text : "");
   const toolIds = createMemo(() => {
     const ids: string[] = [];
