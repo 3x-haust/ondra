@@ -27,7 +27,7 @@ import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
-import { Badges, stampOf, tilde } from "./memoryBits";
+import { Badges, outcomeOf, stampOf, tilde } from "./memoryBits";
 import { Detail } from "./MemorySide";
 import {
   buildGraph,
@@ -36,6 +36,7 @@ import {
   type GEdge,
   type GNode,
   type Graph as G,
+  homeName,
   isHub,
   LIMIT,
   type Model,
@@ -261,6 +262,16 @@ function unit(s: string) {
 }
 /** where nodes settled last time, so reopening the view shows the same picture */
 const settled = new Map<string, { x: number; y: number }>();
+/** where the whole structure settled: coming back from a local graph shows the same picture */
+const whole = new Map<string, { x: number; y: number }>();
+const keepWhole = (g: G, bodies: Map<string, Body>) => {
+  if (g.focus) return;
+  whole.clear();
+  for (const n of g.nodes) {
+    const b = bodies.get(n.id);
+    if (b) whole.set(n.id, { x: b.x, y: b.y });
+  }
+};
 type View = { x: number; y: number; z: number };
 const CUT = 220;
 
@@ -393,6 +404,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       setTick((t) => t + 1);
       if (frames === 36 && !userMoved) fit();
       const go = alpha > 0.02 || dragging();
+      if (!go) keepWhole(props.graph, bodies);
       if (!go && !userMoved) fit();
       raf = go ? requestAnimationFrame(loop) : 0;
     };
@@ -414,6 +426,18 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       () => props.graph.nodes.map((n) => n.id).join("|"),
       () => {
         const ids = new Set(props.graph.nodes.map((n) => n.id));
+        // back to the whole structure as it was laid out before: the same picture, not a new shake
+        if (!props.graph.focus && whole.size && props.graph.nodes.every((n) => whole.has(n.id))) {
+          const opening = !bodies.size;
+          bodies.clear();
+          for (const n of props.graph.nodes) bodies.set(n.id, { ...whole.get(n.id)!, vx: 0, vy: 0 });
+          center = { x: 0, y: 0 };
+          frames = 0;
+          userMoved = false;
+          alpha = 0;
+          setTick((t) => t + 1);
+          return fit(!opening);
+        }
         const f = props.graph.focus ? bodies.get(props.graph.focus) : undefined;
         center = f ? { x: f.x, y: f.y } : { x: 0, y: 0 };
         let added = 0, restored = 0;
@@ -451,6 +475,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
           for (let i = 0; i < 400 && alpha > 0.02; i++) step(), (alpha *= 0.982);
           alpha = 0;
           setTick((t) => t + 1);
+          keepWhole(props.graph, bodies);
           return fit(false);
         }
         heat(added > 20 ? 0.9 : added ? 0.6 : 0.3);
@@ -564,7 +589,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
       const b = bodies.get(n.id);
       if (!b) continue;
       const fs = FS[n.kind] ?? 11;
-      const w = textW(labelOf(n) + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
+      const w = textW(labelOf(n) + (n.hint ? ` · ${n.hint}` : "") + (isHub(n.kind) && n.count ? ` ${n.count}` : ""), fs) / 2 + 2;
       const box = [b.x - w, b.y + n.r + 1, b.x + w, b.y + n.r + 4 + fs];
       // file names repeat (AGENTS.md everywhere): only near what's picked or hovered
       if (n.kind === "file" && rank(n) > 1) continue;
@@ -639,12 +664,13 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
                       <Switch fallback={<circle r={n().r} />}>
                         <Match when={n().kind === "file"}><rect x={-n().r} y={-n().r} width={n().r * 2} height={n().r * 2} rx={1.5} /></Match>
                         <Match when={n().kind === "entry"}>
-                          <rect class={`oc-${n().entry?.outcome ?? "done"}`} x={-n().r} y={-n().r} width={n().r * 2} height={n().r * 2} rx={2.5} transform="rotate(45)" />
+                          <rect class={`oc-${n().entry ? outcomeOf(n().entry!) : "done"}`} x={-n().r} y={-n().r} width={n().r * 2} height={n().r * 2} rx={2.5} transform="rotate(45)" />
                         </Match>
                       </Switch>
                       <Show when={n().kind === "project" && n().path}><title>{tilde(n().path!)}</title></Show>
                       <text y={n().r + 12} text-anchor="middle" classList={{ off: !labelOn().has(n().id) }}>
                         {labelOf(n())}
+                        <Show when={n().hint}><tspan class="mg-hint"> · {n().hint}</tspan></Show>
                         <Show when={isHub(n().kind) && n().count}><tspan class="mg-n"> {n().count}</tspan></Show>
                       </text>
                     </g>
@@ -659,7 +685,7 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
         {(f) => (
           <div class="mg-where">
             <button class="mg-back" onClick={() => props.onSel("")} title={t("전체 (Esc)")}><Icon name="back" size={14} />{t("전체")}</button>
-            <span class="mg-where-name">{f().kind === "memory" ? t("메모리") : f().kind === "entry" ? t("작업 기록") : f().label}</span>
+            <span class="mg-where-name">{f().kind === "memory" ? t("메모리") : f().kind === "entry" ? t("작업 기록") : homeName(f())}</span>
           </div>
         )}
       </Show>
@@ -783,11 +809,14 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
           </Show>
           <Switch fallback={<Icon name="folder" size={13} class="mt-ic dir" />}>
             <Match when={p.n.type === "file"}><Icon name="file" size={13} class="mt-ic ext" /></Match>
-            <Match when={p.n.type === "entry"}><Icon name="file" size={13} class={`mt-ic md oc-${p.n.entry!.outcome}`} /></Match>
+            <Match when={p.n.type === "entry"}><Icon name="file" size={13} class={`mt-ic md oc-${outcomeOf(p.n.entry!)}`} /></Match>
             <Match when={p.n.type === "memory"}><Icon name="file" size={13} class={`mt-ic md mk-${m ? kindOf(m) : "fact"}${m?.invalidAt ? " past" : ""}`} /></Match>
             <Match when={p.n.type === "now" || p.n.type === "index" || p.n.type === "topic"}><Icon name="file" size={13} class="mt-ic md" /></Match>
           </Switch>
-          <span class="mt-name" classList={{ past: !!m?.invalidAt, faint: !!m && !m.invalidAt && faded(m) }}>{p.n.label}</span>
+          <span class="mt-name" classList={{ past: !!m?.invalidAt, faint: !!m && !m.invalidAt && faded(m) }}>
+            {p.n.label}
+            <Show when={p.n.hint}><span class="mt-hint"> · {p.n.hint}</span></Show>
+          </span>
           <Switch>
             <Match when={m}>{(mm) => <Badges m={mm()} />}</Match>
             <Match when={p.n.type === "entry"}>
@@ -838,7 +867,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
       if (k) kind = k[2] as MemoryKind;
     }
     const h = full.homes.get(home) ?? full.homes.get("g")!;
-    const where = [h.label, kind ? t(kindLabel(kind)) : about].filter(Boolean).join(" · ");
+    const where = [homeName(h), kind ? t(kindLabel(kind)) : about].filter(Boolean).join(" · ");
     return { h, kind, about, where };
   });
   const addHere = () => {

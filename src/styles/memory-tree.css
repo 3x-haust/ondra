@@ -1652,3 +1652,56 @@ button.md-kinds .chip:hover,
   background: var(--ok);
   transform: rotate(45deg) scale(0.85);
 }
+
+/* ── round 3 */
+.oc-review { --oc: var(--accent-text); }
+.mst-c b.accent {
+  color: var(--accent-text);
+}
+/* two folders with the same name: the folder each sits in, muted */
+.mt-hint,
+.ms-row .mt-hint {
+  color: var(--ink-3);
+  font-weight: normal;
+}
+.mg-node .mg-hint {
+  fill: var(--ink-3);
+  font-weight: normal;
+}
+/* the crumbs end in the thing's own name, cut to one line */
+.md-crumbs {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.md-crumbs > button {
+  flex: none;
+  white-space: nowrap;
+}
+.md-crumbs > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* graph names: one colour; pieces a size smaller than folders */
+.mg-node.k-memory text,
+.mg-node.k-file text {
+  fill: var(--ink-2);
+}
+/* narrow (1100 window): the three columns stay, each a little narrower */
+@container (max-width: 900px) {
+  .mem-body {
+    grid-template-columns: minmax(168px, 26%) minmax(0, 1fr) minmax(240px, 32%);
+  }
+  .mem-body > :nth-child(2) {
+    display: block;
+  }
+}
+@container (max-width: 640px) {
+  .mem-body {
+    grid-template-columns: minmax(170px, 40%) minmax(0, 1fr);
+  }
+  .mem-body > :nth-child(2) {
+    display: none;
+  }
+}

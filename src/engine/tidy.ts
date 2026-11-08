@@ -196,7 +196,9 @@ export async function tidyMemory(force = false, only?: SpaceId) {
     }
     total.skills = await growSkills(only);
     // one space tidied: the others keep their turn (the timer and the cursor of jobs not yet learned from)
-    setState("memoryTidy", { at: only ? (last?.at ?? 0) : Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: only ? cursor : reached });
+    // a pass that did nothing (it failed, or one space had nothing to tidy) leaves no record behind
+    const did = touched.length > 0 || Object.values(total).some(Boolean);
+    if (!only || did) setState("memoryTidy", { at: only ? (last?.at ?? 0) : Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: only ? cursor : reached });
     if (force && failed) toast(tr("정리하지 못했어요"), "bad", { label: tr("다시 시도"), run: () => void tidyMemory(true, only) });
     else if (force) {
       const parts = [total.skills && tr("스킬 {n}", { n: total.skills }), total.learned && tr("새 메모리 {n}", { n: total.learned }), total.merged && tr("병합 {n}", { n: total.merged }), total.retired && tr("내림 {n}", { n: total.retired }), total.keyed && tr("관련어 {n}", { n: total.keyed })].filter(Boolean);

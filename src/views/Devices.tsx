@@ -3,7 +3,7 @@
 // is live — iOS frames as the screen changes, Android screenshots in a loop — and you
 // drive it straight from here: touch and drag, type, home, rotate, screenshot, record.
 import { Camera, Keyboard, RotateCw } from "lucide-solid";
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type Component } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type Component, type JSX } from "solid-js";
 import {
   deviceBoot, deviceDelete, deviceInput, deviceInputWarm, deviceKey, deviceKeyboard, deviceLandscape, deviceRecord, deviceRecording, deviceRelease,
   deviceRotate, deviceScreenshot, deviceShot, deviceShutdown, deviceStream, deviceStreamPoke, deviceStreamStop, deviceTouch, fileSrc, revealPath,
@@ -57,13 +57,13 @@ function SpacePick(props: { d: Device }) {
   return (
     <Show when={!own()}>
       <label class="dev-space-pick">
-        <span>{t("사용 작업")}</span>
+        <span>{t("워크스페이스|one")}</span>
         <select
           class="select dev-space"
           value={deviceSpace(props.d) ?? ""}
           onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
         >
-          <option value="">{t("작업 지정 안 함")}</option>
+          <option value="">{t("모든 워크스페이스")}</option>
           <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
         </select>
       </label>
@@ -151,7 +151,7 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   createEffect(on(() => props.hidden, (h) => !h && void grab(), { defer: true }));
   return (
     <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title={t("열기")}>
-      <Show when={src()} fallback={<span class="dev-wait">{t("불러오는 중")}</span>}>
+      <Show when={src()} fallback={<span class="dev-wait">{t("불러오는 중…")}</span>}>
         <img src={src()} alt={t("{name} 화면", { name: props.d.name })} draggable={false} />
       </Show>
     </button>
@@ -171,7 +171,7 @@ const pokes = new Map<string, () => void>();
  * screenshots in a loop, a click is a tap and a drag a swipe. With the screen focused,
  * typing goes to the device.
  */
-function LiveScreen(props: { d: Device }) {
+function LiveScreen(props: { d: Device; children?: JSX.Element }) {
   const ios = props.d.platform === "ios";
   const [size, setSize] = createSignal<{ w: number; h: number } | null>(null);
   const [box, setBox] = createSignal({ w: 0, h: 0 });
@@ -297,7 +297,8 @@ function LiveScreen(props: { d: Device }) {
   const fit = createMemo(() => {
     // before the first frame: the shape of the device, so the screen doesn't change size when it arrives
     const s = size() ?? (ios ? { w: 9, h: 19.5 } : { w: 9, h: 20 });
-    const b = box();
+    // room on both sides for the buttons beside the screen, so the screen stays in the middle
+    const b = { w: Math.max(0, box().w - 2 * SIDE), h: box().h };
     const [w, h] = turn() ? [s.h, s.w] : [s.w, s.h];
     const k = Math.min(b.w / w, b.h / h) || 0;
     return { w: Math.floor(w * k), h: Math.floor(h * k) };
@@ -392,6 +393,7 @@ function LiveScreen(props: { d: Device }) {
 
   return (
     <div class="dev-stage" ref={stage}>
+      <div class="dev-frame-at">
       <div
         class="dev-frame"
         classList={{ android: !ios, busy: busy(), ready: !!size(), turning: turning() }}
@@ -416,13 +418,17 @@ function LiveScreen(props: { d: Device }) {
           }}
         />
         <Show when={!size()}>
-          <span class="dev-wait">{t("불러오는 중")}</span>
+          <span class="dev-wait">{t("불러오는 중…")}</span>
         </Show>
         <Show when={mark()}>{(m) => <span class="dev-mark" style={{ left: `${m().x * 100}%`, top: `${m().y * 100}%` }} />}</Show>
+      </div>
+      {props.children}
       </div>
     </div>
   );
 }
+/** the width of the buttons beside an open device's screen, and the gap to it */
+const SIDE = 52;
 
 /** The grouped buttons beside the open device. */
 function Tools(props: { d: Device }) {
@@ -480,9 +486,10 @@ function Tools(props: { d: Device }) {
   );
 }
 
-/** Longer text (any language) goes through the device's clipboard. */
+/** Longer text (any language) goes through the device's clipboard; empty, it presses return. */
 function TypeBox(props: { d: Device }) {
   const [text, setText] = createSignal("");
+  const id = `dev-type-${props.d.id}`;
   const send = async (action: DeviceAction, o: { text?: string } = {}) => {
     try {
       await deviceInput(props.d, action, o);
@@ -491,20 +498,23 @@ function TypeBox(props: { d: Device }) {
     }
   };
   return (
-    <div class="dev-side">
-      <form
-        class="dev-type"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const t = text();
-          if (!t) return void send("enter");
-          setText("");
-          void send("text", { text: t });
-        }}
-      >
-        <input placeholder={t("텍스트 입력")} aria-label={t("텍스트 입력")} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
-      </form>
-    </div>
+    <form
+      class="dev-type"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const t = text();
+        if (!t) return void send("enter");
+        setText("");
+        void send("text", { text: t });
+      }}
+    >
+      <label for={id}>{t("텍스트 입력")}</label>
+      <input id={id} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+      <button type="submit" class="btn sm" title={text() ? t("보내기") : t("리턴 키 보내기")}>
+        <Icon name="send" size={14} />
+        {t("보내기")}
+      </button>
+    </form>
   );
 }
 
@@ -552,11 +562,13 @@ function Control(props: { d: Device; onClose: () => void }) {
         <span class="spacer" />
         <Actions d={props.d} />
       </div>
+      {/* the screen in the middle of the pane, its buttons beside it, typing under it */}
       <div class="dev-live">
-        <LiveScreen d={props.d} />
-        <Tools d={props.d} />
-        <TypeBox d={props.d} />
+        <LiveScreen d={props.d}>
+          <Tools d={props.d} />
+        </LiveScreen>
       </div>
+      <TypeBox d={props.d} />
     </div>
   );
 }
@@ -590,7 +602,8 @@ export function Devices() {
         <h1>{t("디바이스")}</h1>
         <span class="muted dev-count">{t("켜짐 {on} · 전체 {all}", { on: devices().filter((d) => d.booted).length, all: devices().length })}</span>
         <span class="spacer" />
-        <div class="seg">
+        {/* the filter is for the list: hidden while one device is open */}
+        <div class="seg" classList={{ "dev-seg-off": !!focused() }}>
           <For each={[["all", "전체"], ["ios", "iOS"], ["android", "Android"]] as [Filter, string][]}>
             {([id, label]) => (
               <button classList={{ on: filter() === id }} onClick={() => setFilter(id)}>

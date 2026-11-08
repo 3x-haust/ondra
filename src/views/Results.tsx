@@ -39,17 +39,23 @@ export function ResultsView() {
   let searchEl: HTMLInputElement | undefined;
 
   const all = createMemo(() => resultsIn(state.space));
-  const where = (r: ResultEntry) => projectById(r.project, r.space)?.name ?? t("메인");
+  /** the project of the task a result came from (as the sidebar files it); none: 기타 */
+  const projectOf = (r: ResultEntry) => {
+    const task = taskById(r.taskId);
+    const id = task ? task.project : r.project;
+    return projectById(id, r.space) ? id : undefined;
+  };
+  const where = (r: ResultEntry) => projectById(projectOf(r), r.space)?.name ?? t("기타");
   /** the places results came from, for the filter (only when there is more than one) */
   const places = createMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of all()) seen.set(r.project ?? "", where(r));
-    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const r of all()) seen.set(projectOf(r) ?? "", where(r));
+    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => Number(!a.id) - Number(!b.id) || a.name.localeCompare(b.name));
   });
   const list = createMemo(() => {
     const n = q().trim().toLowerCase();
     const p = proj();
-    const l = all().filter((r) => (!p || (r.project ?? "") === p.slice(1)) && (!n || resultText(r).toLowerCase().includes(n)));
+    const l = all().filter((r) => (!p || (projectOf(r) ?? "") === p.slice(1)) && (!n || resultText(r).toLowerCase().includes(n)));
     return [...l.filter((r) => r.pinned), ...l.filter((r) => !r.pinned)];
   });
   const sel = createMemo<ResultEntry | undefined>(() => {
@@ -226,7 +232,7 @@ export function ResultsView() {
                     <Show when={resultPreview(r)}>
                       <p class="res-prev">{resultPreview(r)}</p>
                     </Show>
-                    <span class="res-where"><Show when={r.project}><ProjectBadge name={where(r)} /></Show>{where(r)}</span>
+                    <span class="res-where"><Show when={projectOf(r)}><ProjectBadge name={where(r)} /></Show>{where(r)}</span>
                   </div>
                 </>
               )}

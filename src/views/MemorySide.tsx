@@ -12,7 +12,7 @@ import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
-import { Badges, base, citePath, learnedIn, OUTCOME, stampOf, tilde } from "./memoryBits";
+import { Badges, base, citePath, learnedIn, OUTCOME, outcomeOf, stampOf, tilde } from "./memoryBits";
 import {
   byWeight,
   clock,
@@ -21,6 +21,7 @@ import {
   entryId,
   folderOf,
   homeChain,
+  homeName,
   JOURNAL,
   kindFolderId,
   type Model,
@@ -59,8 +60,13 @@ export function Detail(props: { model: Model; sel: string; onSel: (id: string) =
 
 const homeOfMem = (model: Model, m: Memory) => [...model.homes.values()].find((h) => h.live.includes(m) || h.past.includes(m))?.id ?? "g";
 
+/** where a thing is: workspace › project › folder, then its own name (전체 공통 only for what is filed there) */
 function Crumbs(props: { model: Model; home?: string; trail?: { id: string; label: string }[]; last: string; onSel: (id: string) => void }) {
-  const chain = () => (props.home ? homeChain(props.model, props.home).map((h) => ({ id: h.id, label: h.label })) : []);
+  const chain = () => {
+    if (!props.home) return [];
+    const all = homeChain(props.model, props.home);
+    return (all.length > 1 ? all.filter((h) => h.kind !== "global") : all).map((h) => ({ id: h.id, label: homeName(h) }));
+  };
   return (
     <nav class="md-crumbs">
       <For each={[...chain(), ...(props.trail ?? [])]}>
@@ -71,7 +77,7 @@ function Crumbs(props: { model: Model; home?: string; trail?: { id: string; labe
           </>
         )}
       </For>
-      <span>{props.last}</span>
+      <span title={props.last}>{props.last}</span>
     </nav>
   );
 }
@@ -134,7 +140,7 @@ function EntryList(props: { list: JournalEntry[]; onSel: (id: string) => void; d
         {(e, i) => (
           <>
             <Show when={head(e, i())}><div class="ms-day">{dayLabel(e.at, true)}</div></Show>
-            <button class={`ms-entry oc-${e.outcome}`} onClick={() => props.onSel(entryId(e))} title={e.ask}>
+            <button class={`ms-entry oc-${outcomeOf(e)}`} onClick={() => props.onSel(entryId(e))} title={e.ask}>
               <i />
               <span>{e.title || e.ask}</span>
               <Show when={e.learned?.length}><em class="ms-learn" title={t("배운 메모리")}>+{e.learned!.length}</em></Show>
@@ -170,7 +176,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
     if (pa && M.homes.has(pa[1])) return { type: "past" as const, home: pa[1], title: t("지난 메모리"), last: t("지난 메모리") };
     if (ts && M.homes.has(ts[1])) return { type: "topics" as const, home: ts[1], title: t("주제"), last: t("주제") };
     if (topic) return { type: "topic" as const, home: undefined, title: topic.label, last: t("주제") };
-    if (home) return { type: "home" as const, home: home.parent, title: home.label, last: home.kind === "global" ? t("전체 공통") : home.kind === "space" ? t("워크스페이스|one") : t("프로젝트|one"), path: home.path };
+    if (home) return { type: "home" as const, home: home.parent, title: homeName(home), last: homeName(home), path: home.path };
     return { type: "all" as const, home: undefined, title: t("메모리"), last: "" };
   });
   const all = () => info().type === "all";
@@ -202,10 +208,13 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
   const kindTarget = (k: MemoryKind) => (info().type === "home" ? kindFolderId(props.id, k) : undefined);
   const fadedN = () => list().filter((m) => isLive(m) && faded(m)).length;
   const live = () => list().filter(isLive);
+  /** finished jobs shown under 최근 작업 (the overview) */
+  const recentJobs = () => props.model.journal.slice(0, 4);
   const nows = createMemo(() => {
     const i = info();
     const all = [...props.model.nows.values()].sort((a, b) => b.now.at - a.now.at);
-    if (i.type === "all") return all;
+    // the overview lists recent tasks once: a project's 지금 only when its task isn't among them
+    if (i.type === "all") return all.filter((n) => !recentJobs().some((e) => e.taskId === n.now.taskId));
     if (i.type === "home") return all.filter((n) => n.home === props.id || props.model.homes.get(n.home)?.parent === props.id);
     return [];
   });
@@ -253,7 +262,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
               <button class="ms-now" onClick={() => props.onSel(nowId(n.folder))} title={`${tilde(n.folder)}\n${n.now.text}`}>
                 <Icon name="clock" size={14} />
                 <span>
-                  <b>{props.model.homes.get(n.home)?.label ?? base(n.folder)}</b>
+                  <b>{props.model.homes.get(n.home) ? homeName(props.model.homes.get(n.home)!) : base(n.folder)}</b>
                   {n.now.title}
                 </span>
                 <em>{ago(n.now.at)}</em>
@@ -284,7 +293,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
             {(h) => (
               <button class="ms-row" classList={{ sub: h.kind === "project" && all() }} onClick={() => props.onSel(h.id)}>
                 <Icon name={h.kind === "global" ? "globe" : "folder"} size={12} />
-                <span>{h.label}</span>
+                <span>{h.label}<Show when={h.hint}><span class="mt-hint"> · {h.hint}</span></Show></span>
                 <em>{memsUnder(props.model, h.id).length}</em>
               </button>
             )}
@@ -318,7 +327,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
       </Show>
       <Show when={all() && props.model.journal.length}>
         <H>{t("최근 작업")}</H>
-        <EntryList list={props.model.journal} onSel={props.onSel} limit={4} />
+        <EntryList list={recentJobs()} onSel={props.onSel} limit={4} />
       </Show>
       <Show when={all()}>
         <TidyLine />
@@ -345,13 +354,16 @@ function TidyLine() {
     ].filter((p): p is string => !!p);
   };
   return (
+    <Show when={tidy()?.at || parts().length}>
     <div class="md-tidy">
       <H>{t("정리")}</H>
-      <Show when={tidy()} fallback={<Empty>{t("없음")}</Empty>}>
+      <Show when={tidy()}>
         {(x) => (
           <dl class="mp">
-            <dt>{t("마지막")}</dt>
-            <dd title={stampOf(x().at)}>{ago(x().at)}</dd>
+            <Show when={x().at}>
+              <dt>{t("마지막")}</dt>
+              <dd title={stampOf(x().at)}>{ago(x().at)}</dd>
+            </Show>
             <Show when={x().cursor}>
               <dt>{t("학습 범위")}</dt>
               <dd>{t("{when}까지", { when: stampOf(x().cursor!) })}</dd>
@@ -366,6 +378,7 @@ function TidyLine() {
         )}
       </Show>
     </div>
+    </Show>
   );
 }
 
@@ -384,7 +397,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
     if (!k() || !e) return [];
     return k().length === 7 ? [] : [{ id: `j|${monthKey(e.at)}`, label: monthLabel(e.at) }];
   };
-  const n = (o: JournalEntry["outcome"]) => list().filter((e) => e.outcome === o).length;
+  const n = (o: ReturnType<typeof outcomeOf>) => list().filter((e) => outcomeOf(e) === o).length;
   return (
     <div class="md-in ms">
       <Show when={k()}>
@@ -395,6 +408,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
         items={[
           { n: list().length, label: t("작업") },
           { n: n("done"), label: t("완료"), tone: "ok" },
+          ...(n("review") ? [{ n: n("review"), label: t("검토"), tone: "accent" }] : []),
           { n: n("failed"), label: t("실패"), tone: n("failed") ? "bad" : "" },
           { n: list().reduce((x, e) => x + (e.learned?.length ?? 0), 0), label: t("배운 것") },
         ]}
@@ -420,13 +434,13 @@ function Entry(props: { model: Model; e: JournalEntry; onSel: (id: string) => vo
           { id: `j|${monthKey(e().at)}`, label: monthLabel(e().at) },
           { id: `j|${dayKey(e().at)}`, label: dayLabel(e().at) },
         ]}
-        last={clock(e().at)}
+        last={e().title || e().ask}
         onSel={props.onSel}
       />
       <h3 class="md-title">{e().title || e().ask}</h3>
       <div class="md-line">
-        <span class={`md-oc oc-${e().outcome}`}><i />{t(OUTCOME[e().outcome])}</span>
-        <span title={stampOf(e().at)}>{ago(e().at)}</span>
+        <span class={`md-oc oc-${outcomeOf(e())}`}><i />{t(OUTCOME[outcomeOf(e())])}</span>
+        <span title={stampOf(e().at)}>{clock(e().at)}</span>
         <Show when={space()}><span>{t(space()!)}</span></Show>
         <Show when={e().project}><span class="mono" title={tilde(e().project!)}>{base(e().project!)}</span></Show>
       </div>
@@ -578,7 +592,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const folder = () => ({ id: folderOf(home(), m()), label: m().invalidAt ? t("지난 메모리") : t(kindLabel(kindOf(m()))) });
   const linked = () => (m().links ?? []).map((l) => props.model.memById.get(l)).filter((x): x is Memory => !!x);
   const chain = createMemo(() => chainOf(props.model, m()));
-  const homeLabel = () => props.model.homes.get(home())?.label ?? t("워크스페이스|one");
+  const homeLabel = () => (props.model.homes.get(home()) ? homeName(props.model.homes.get(home())!) : t("워크스페이스|one"));
   const entry = () => learnedIn(m());
   const task = () => (m().taskId ? state.tasks.find((t) => t.id === m().taskId) : undefined);
   /** "2번 사용 · 1번 반복 · 마지막 사용 3분 전", the parts that apply */
@@ -590,12 +604,12 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
     ].filter(Boolean);
   return (
     <div class="md-in">
-      <Crumbs model={props.model} home={home()} trail={[folder()]} last={t("메모리")} onSel={props.onSel} />
+      <Crumbs model={props.model} home={home()} trail={[folder()]} last={m().text} onSel={props.onSel} />
       <Show when={m().invalidAt}>
         <div class="md-past">
           <b>{t("지난 메모리")}</b>
           <span title={stampOf(m().invalidAt!)}>{ago(m().invalidAt!)}</span>
-          <Show when={m().why}><span>{m().why}</span></Show>
+          <Show when={m().why}><span>{t(m().why!)}</span></Show>
         </div>
       </Show>
       <textarea class="md-text" value={m().text} rows={Math.min(10, Math.ceil(m().text.length / 34) + 1)} onChange={(e) => updateMemory(m().id, e.currentTarget.value)} />
@@ -673,7 +687,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
           }
         >
           {(e) => (
-            <button class={`ms-entry oc-${e().outcome}`} onClick={() => props.onSel(entryId(e()))} title={e().ask}>
+            <button class={`ms-entry oc-${outcomeOf(e())}`} onClick={() => props.onSel(entryId(e()))} title={e().ask}>
               <i />
               <span>{e().title || e().ask}</span>
               <em>{dayLabel(e().at, true)}</em>
@@ -727,7 +741,7 @@ function FileSide(props: { path: string; model: Model; onSel: (id: string) => vo
   const home = () => [...props.model.homes.values()].find((h) => h.files.includes(props.path))?.id;
   return (
     <div class="md-in">
-      <Crumbs model={props.model} home={home()} last={t("파일")} onSel={props.onSel} />
+      <Crumbs model={props.model} home={home()} last={base(props.path)} onSel={props.onSel} />
       <div class="md-file-head">
         <b title={props.path}>{tilde(props.path)}</b>
         <span class="spacer" />
