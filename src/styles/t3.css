@@ -2930,13 +2930,6 @@ input[type="checkbox"] {
 .cv-node.t-ask {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-ask) 70%, transparent), 0 0 0 4px color-mix(in srgb, var(--c-ask) 12%, transparent);
 }
-.cv-node.t-done {
-  opacity: 0.7;
-}
-.cv-node.t-done:hover,
-.cv-node.t-done.sel {
-  opacity: 1;
-}
 .cv-head {
   display: flex;
   align-items: center;

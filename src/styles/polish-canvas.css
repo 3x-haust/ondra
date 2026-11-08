@@ -1614,3 +1614,162 @@
 .mt-row.t-memory > .mb {
   height: 20px;
 }
+
+/* ═════════════ round 9 ═════════════ */
+
+/* ── canvas: a finished or waiting card steps back by its edge and its title only; the state line,
+   the time and the words stay at the muted ink (readable at 11px), with no fade over the card */
+.cv-node:is(.t-done, .t-idle):not(:hover, .sel) {
+  box-shadow: 0 0 0 1px var(--line-soft);
+}
+.cv-node:is(.t-done, .t-idle) .cv-head .cv-title {
+  color: var(--ink-2);
+}
+.cv-node:is(.t-done, .t-idle):is(:hover, .sel) .cv-head .cv-title {
+  color: var(--ink);
+}
+
+/* ── canvas: a failed card says why in one muted line under the title */
+.cv-text.one {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  -webkit-line-clamp: unset;
+}
+.cv-job .cv-live.w-summary:has(> .cv-text.one) {
+  align-items: stretch;
+}
+
+/* ── canvas: the strip's buttons stay in place; one with nothing to do is off */
+.cv-ctrl button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cv-ctrl button:disabled:hover {
+  color: var(--ink-3);
+  background: none;
+}
+
+/* ── side sheet: header actions, the line under the state, steps in the card's words, files */
+.cv-dr-head .btn,
+.cv-dr-head .icon-btn {
+  flex: none;
+}
+.cv-dr-head .cv-dr-open + .icon-btn {
+  margin-left: calc(-1 * var(--s-6));
+}
+.cv-dr-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cv-dr-line {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--ink);
+}
+.cv-dr-unverified {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-6);
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.cv-dr-unverified .icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.cv-dr-acts li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  font-size: var(--fs-sm);
+  line-height: 20px;
+}
+.cv-dr-acts .lb {
+  flex: none;
+  color: var(--ink-2);
+}
+.cv-dr-acts .tg {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+.cv-dr-acts .tg.cmd {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.cv-dr-acts li.open .lb {
+  color: var(--ink);
+}
+.cv-dr-acts li.bad .lb {
+  color: var(--bad-ink);
+}
+.cv-dr-file {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  cursor: pointer;
+}
+.cv-dr-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: calc(var(--fs-code) - 1px);
+}
+.cv-dr-path .dir {
+  color: var(--ink-3);
+}
+.cv-dr-path .name {
+  color: var(--ink);
+}
+.cv-dr-n {
+  flex: none;
+  display: inline-flex;
+  gap: var(--s-6);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.cv-dr-n .add {
+  color: var(--ok-ink);
+}
+.cv-dr-n .del {
+  color: var(--bad-ink);
+}
+
+/* ── board: columns give way to the window (down to a readable width) before the board scrolls */
+.board {
+  grid-auto-columns: minmax(148px, 1fr);
+}
+/* the card's top row: the gap before the time comes once (the spacer added a second one) */
+.bc-top .spacer {
+  margin-left: calc(-1 * var(--s-6));
+}
+/* a narrow column keeps its name, the project and the time on one line */
+.bcol {
+  container-type: inline-size;
+}
+@container (max-width: 168px) {
+  .bcol-head {
+    gap: var(--s-6);
+  }
+  .bcard {
+    padding: var(--s-12) var(--s-10);
+  }
+}

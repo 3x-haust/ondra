@@ -105,7 +105,7 @@ export default {
   "축소": "Zoom out",
   "확대 (+)": "Zoom in (+)",
   "확대": "Zoom in",
-  "전체 보기 (⇧1)": "Fit all (⇧1)",
+  "전체 보기 (⇧1) · 100% (⇧0)": "Fit all (⇧1) · 100% (⇧0)",
   "완료된 작업 모두 접기": "Collapse done tasks",
   "완료된 작업 모두 펼치기": "Expand done tasks",
 
