@@ -3,12 +3,12 @@ import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
 // the engine provides these at run time
-vi.mock("@earendil-works/pi-coding-agent", () => ({ loadSkills: () => ({ skills: [], diagnostics: [] }), stripFrontmatter: (s: string) => s }));
+vi.mock("@earendil-works/pi-coding-agent", () => ({ loadSkills: () => ({ skills: [], diagnostics: [] }), stripFrontmatter: (s: string) => s, parseFrontmatter: () => ({ frontmatter: {}, body: "" }) }));
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
 import { freshState, setState } from "../src/state/store";
 import type { Task } from "../src/state/types";
 import { handoffPrompt, taskPrompt } from "../src/engine/prompts";
-import { searchSkills, skillHint, taskQuery } from "./skills";
+import { messageHint, searchSkills, SkillRouter, skillHint, taskQuery, toolHint, triggersOf, type Triggers } from "./skills";
 
 // The bundled skills as the engine reads them: name and (folded) description from the frontmatter.
 const root = resolve("skills");
@@ -81,5 +81,69 @@ describe("taskQuery", () => {
   it("ignores messages that aren't a job's first", () => {
     expect(taskQuery("(Ondra가 다시 시작됐어요. 하던 일을 이어서 하세요.)")).toBeUndefined();
     expect(taskQuery("다시 확인해줘")).toBeUndefined();
+  });
+});
+
+// The bundled skills' own triggers, read from their frontmatter metadata lines.
+const triggers = new Map<string, Triggers>(
+  bundled.map((s) => {
+    const text = readFileSync(s.filePath, "utf8");
+    const front = text.split("\n---")[0].split("\n");
+    const at = front.findIndex((l) => l === "metadata:");
+    const metadata: Record<string, string> = {};
+    for (const l of at < 0 ? [] : front.slice(at + 1)) {
+      const m = l.match(/^  ([\w-]+): '(.*)'$/);
+      if (!m) break;
+      metadata[m[1]] = m[2];
+    }
+    return [s.name, triggersOf({ metadata })];
+  }),
+);
+const router = () => new SkillRouter(bundled, triggers);
+
+describe("skill router", () => {
+  it("offers a skill when a tool steps into its domain, once", () => {
+    const r = router();
+    expect(r.forTool("bash", { command: "agent-browser open https://example.com" })?.skill.name).toBe("browser-use");
+    expect(r.forTool("bash", { command: "agent-browser snapshot" })).toBeUndefined();
+    expect(r.forTool("bash", { command: "otool -L /Applications/Foo.app/Contents/MacOS/Foo" })?.skill.name).toBe("reverse-engineering");
+    expect(r.forTool("write", { path: ".github/workflows/ci.yml" })?.skill.name).toBe("test-ci");
+    expect(r.forTool("computer", {})?.skill.name).toBe("computer-use");
+    expect(r.forTool("device", {})?.skill.name).toBe("device-use");
+  });
+
+  it("leaves ordinary work alone", () => {
+    const r = router();
+    expect(r.forTool("bash", { command: "pnpm install && git status" })).toBeUndefined();
+    expect(r.forTool("read", { path: "src/App.tsx" })).toBeUndefined();
+    expect(r.forTool("edit", { path: "src/views/Results.tsx" })).toBeUndefined();
+  });
+
+  it("does not offer a skill the model has read", () => {
+    const r = router();
+    const browser = bundled.find((s) => s.name === "browser-use")!;
+    r.forTool("read", { path: browser.filePath });
+    expect(r.loaded.has("browser-use")).toBe(true);
+    expect(r.forTool("bash", { command: "agent-browser open x" })).toBeUndefined();
+    expect(r.forMessage("agent-browser로 사이트 열어서 브라우저로 확인해줘").map((s) => s.name)).not.toContain("browser-use");
+  });
+
+  it("reads every message, not only the first, and a link in it", () => {
+    const r = router();
+    expect(r.forMessage("README 오타 고쳐줘")).toEqual([]);
+    expect(r.forMessage("이제 이 앱 바이너리를 분석해줘").map((s) => s.name)).toContain("reverse-engineering");
+    expect(r.forMessage("https://www.figma.com/design/abc/Page?node-id=1-2 이대로").map((s) => s.name)[0]).toBe("mimikyu");
+    // said once is enough until the conversation is compacted
+    expect(r.forMessage("바이너리 하나 더 분석")).toEqual([]);
+    r.reset();
+    expect(r.forMessage("바이너리 하나 더 분석").map((s) => s.name)).toContain("reverse-engineering");
+  });
+
+  it("writes hints that name the skill and its file", () => {
+    const re = bundled.find((s) => s.name === "reverse-engineering")!;
+    expect(messageHint([re], false)).toContain(`- reverse-engineering:`);
+    expect(messageHint([re], true)).toContain("# Skills for this task");
+    expect(messageHint([], false)).toBe("");
+    expect(toolHint(re, "runs a command of its domain")).toContain(re.filePath);
   });
 });

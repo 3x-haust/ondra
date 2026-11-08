@@ -14,6 +14,25 @@ The app passes them to every pi worker with `--skill`.
 | `deep-research` | Research with sources (리서치, 조사해서 정리, 논문 찾아): plan sub-questions, search and read primary sources in rounds with findings on disk, check every claim, then a visual HTML report shown in the chat and printed to PDF (`pdf.sh`). |
 | `computer-use` | Computer use with the bundled agent-desktop: one worker at a time, headless input only, traces and screenshots as proof. |
 
+## When a skill is offered
+
+Each user message is matched against the skills' names and descriptions, and
+the ones that clearly fit go to the model with that message. While a job works,
+a skill can also be offered by what the work does, named in its frontmatter
+(one regular expression each):
+
+```yaml
+metadata:
+  ondra-commands: '\bagent-browser\b'    # a shell command
+  ondra-writes: '\.github/workflows/'     # a file edited or written
+  ondra-reads: '/Contents/MacOS/'          # a file read
+  ondra-urls: 'figma\.com/design/'         # a link in a message or a fetch
+  ondra-tools: 'computer,device'          # a tool called
+```
+
+The first match adds a short note to that tool's result. A skill the job has
+already read is not offered again until its conversation is compacted.
+
 The official agent-browser and agent-desktop skills ship with their binaries
 (`agent-browser skills get core`, `agent-desktop skills get desktop`); these
 files only add the app's rules on top, so they stay correct when the tools update.

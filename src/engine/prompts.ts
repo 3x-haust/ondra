@@ -9,7 +9,9 @@ import { engine, expand } from "./rpc";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
-A job's first message lists the skills skill_search found for its task. Use
+A message may come with the skills that fit it, and a tool result may end
+with a [skill] note when the step enters a skill's domain (its commands,
+files, links or tools): read that SKILL.md then, before going on. Use
 skill_search with the task's keywords (or a named skill) whenever the work
 enters a domain, then read and follow the matching SKILL.md before acting:
 - a binary, an app, a protocol or file format, "how does X do it", "어떻게

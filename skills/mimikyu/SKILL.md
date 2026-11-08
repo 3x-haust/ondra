@@ -8,6 +8,8 @@ description: >-
   픽셀 퍼펙트, pixel perfect, or "make it look exactly like the Figma".
   Keep looping until overall_match >= 99%, every region >= 99%, and zero
   structural mismatches; report blocked or incomplete gates honestly.
+metadata:
+  ondra-urls: 'figma\.com/(design|file|proto|make)/'
 ---
 
 # Mimikyu (따라큐)

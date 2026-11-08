@@ -6,6 +6,8 @@ description: >
   lint/typecheck/test/build jobs, caching, matrices. Follows what large
   open-source projects (Vite, Vue, Astro, Next.js, TypeScript, uv, Flask,
   Tauri, Biome) do in common.
+metadata:
+  ondra-writes: '(^|/)\.github/workflows/|\.(test|spec)\.[cm]?[jt]sx?$|_test\.(go|py)$|(^|/)test_[^/]+\.py$|(^|/)(vitest|jest|playwright)\.config\.'
 ---
 
 # Tests and CI
