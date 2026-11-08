@@ -2,8 +2,10 @@ import { shortcuts, type ShortcutCommand, type ShortcutId } from "../lib/shortcu
 import { nextWaiting, stepFork } from "../views/Sidebar";
 import { state, taskById } from "./store";
 import { switchSpace } from "./workspace";
-import { activeTab, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, togglePanel, toggleSidebar, view } from "./ui";
+import { activeTab, canStep, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
 
+/** a place still there to go back to (a job can be deleted meanwhile) */
+const exists = (v: View) => v.name !== "task" || !!taskById(v.id);
 const job = () => { const v = view(); return v.name === "task" ? taskById(v.id) : undefined; };
 const panelAvailable = () => view().name !== "settings";
 const visiblePanel = () => panelAvailable() && panelOpen();
@@ -34,6 +36,8 @@ export function appCommands(): ShortcutCommand[] {
     command("results", "결과", "이동", "inbox", () => setView({ name: "results" })),
     command("devices", "디바이스 허브", "이동", "phone", () => setView({ name: "devices" })),
     ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: `${s.label} 공간으로 전환`, section: "공간", icon: "arrow", shortcut: i < 9 ? { code: `Digit${i + 1}`, meta: true } : undefined, run: () => switchSpace(s.id) })),
+    command("back", "뒤로", "이동", "back", () => void stepView(-1, exists), () => canStep(-1), true),
+    command("forward", "앞으로", "이동", "arrow", () => void stepView(1, exists), () => canStep(1), true),
     command("previousJob", "이전 일", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1)),
     command("nextJob", "다음 일", "이동", "arrow", () => { const t = stepFork(state.space, 1); if (t) openTask(t.id); }, () => !!stepFork(state.space, 1)),
     command("waiting", "다음 확인할 일", "이동", "alert", () => { const t = nextWaiting(state.space); if (t) openTask(t.id); }, () => !!nextWaiting(state.space)),

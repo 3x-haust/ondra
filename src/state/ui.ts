@@ -22,7 +22,38 @@ export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "ski
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
 export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse";
 
-export const [view, setView] = createSignal<View>({ name: "main" });
+const [view, setViewNow] = createSignal<View>({ name: "main" });
+export { view };
+
+// Where you have been, for ⌘[ and ⌘]: each move to another place is kept; moving
+// within one place (another result, another settings tab) replaces it.
+const [past, setPast] = createSignal<View[]>([]);
+const [ahead, setAhead] = createSignal<View[]>([]);
+const HISTORY = 50;
+const samePlace = (a: View, b: View) => a.name === b.name && (a.name === "task" || a.name === "main" ? JSON.stringify(a) === JSON.stringify(b) : true);
+export function setView(v: View) {
+  const prev = view();
+  if (JSON.stringify(prev) === JSON.stringify(v)) return;
+  if (!samePlace(prev, v)) {
+    setPast((p) => [...p, prev].slice(-HISTORY));
+    setAhead([]);
+  }
+  setViewNow(v);
+}
+/** Go back (-1) or forward (1); `ok` skips places that are gone (a deleted job). */
+export function stepView(dir: -1 | 1, ok: (v: View) => boolean = () => true) {
+  const from = dir < 0 ? past() : ahead();
+  let i = from.length - 1;
+  while (i >= 0 && !ok(from[i])) i--;
+  if (i < 0) return false;
+  const cur = view();
+  const rest = from.slice(0, i);
+  if (dir < 0) (setPast(rest), setAhead((a) => [...a, cur]));
+  else (setAhead(rest), setPast((p) => [...p, cur].slice(-HISTORY)));
+  setViewNow(from[i]);
+  return true;
+}
+export const canStep = (dir: -1 | 1) => (dir < 0 ? past() : ahead()).length > 0;
 /** A memory piece the Memory view should select when it opens (set with setView({ name: "memory" })). */
 export const [memoryFocus, setMemoryFocus] = createSignal<string | null>(null);
 export const [panelOpen, setPanelOpen] = createSignal(false);

@@ -21,6 +21,8 @@ export const shortcuts = {
   memory: cmd("KeyM", true),
   results: cmd("KeyE", true),
   devices: cmd("KeyD", true),
+  back: cmd("BracketLeft"),
+  forward: cmd("BracketRight"),
   previousJob: cmd("BracketLeft", true),
   nextJob: cmd("BracketRight", true),
   waiting: cmd("Period"),
