@@ -85,6 +85,9 @@ export function planCount(plan: PlanStep[]) {
   return { done, total: plan.length, now, label: `${done}/${plan.length}` };
 }
 
+/** How a to-do row shows: the current one is marked only while the task is running. */
+export const stepState = (s: PlanStep, t: Task): PlanStep["state"] => (s.state === "now" && t.status !== "running" ? "todo" : s.state);
+
 /** Its changes were thrown away and it isn't working on them again: it reads 버림, not 완료. */
 export const discarded = (t: Task) => t.worktree?.state === "discarded" && (t.status === "done" || t.status === "paused" || t.status === "failed");
 
