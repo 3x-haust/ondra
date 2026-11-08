@@ -843,9 +843,11 @@ function existingProject(space: SpaceId, r: any, original: string) {
   }
   if (typeof r.cwd === "string" && r.cwd) {
     const id = projectFor(space, r.cwd);
-    if (id) return list.find((p) => p.id === id);
+    // a folder outside every project is its own work: words in the brief don't move it into one
+    return id ? list.find((p) => p.id === id) : undefined;
   }
-  const said = low(`${original} ${r.title ?? ""} ${r.task ?? ""} ${r.topic ?? ""}`);
+  // only what the user said and main's title: a brief names other things ("not an Ondra change")
+  const said = low(`${original} ${r.title ?? ""}`);
   const hits = list.filter((p) => {
     const base = (p.folder.split("/").pop() ?? "").toLowerCase();
     return said.includes(low(p.name)) || (base.length > 3 && said.includes(base));
@@ -916,7 +918,10 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       if (message) void tell(id, message, { now: true });
       out.push({ kind: "append", taskId: id, message });
     } else if (r?.kind === "new" && (r.task || r.title)) {
-      let proj = projectOf(space) ?? existingProject(sp(space), r, original);
+      // carrying on a job keeps its project; main naming a folder makes or finds that one, never a guess
+      const before = job(r.from)?.project ? projectById(job(r.from)!.project!, sp(space)) : undefined;
+      const making = !!r.project && typeof r.project === "object" && typeof r.project.folder === "string";
+      let proj = projectOf(space) ?? before ?? (making ? undefined : existingProject(sp(space), r, original));
       // main starting something new: make its folder and project chat first
       if (!proj && r.project && typeof r.project.folder === "string" && r.project.folder.startsWith("/")) {
         // a project is the repo, never one of its branch/worktree folders

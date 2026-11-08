@@ -89,3 +89,28 @@ describe("trimEntries", () => {
     expect(entries.map((e) => e.id)).toEqual(["u1", "n3", "n4"]);
   });
 });
+
+describe("a new job lands in the right project", () => {
+  beforeEach(() => {
+    setState("projects", [{ id: "ondra", space: "home", name: "ondra", folder: "/p/ondra" }]);
+  });
+
+  it("a brief that only mentions a project doesn't move work into it", async () => {
+    const out = await applyRoutes("home", [{
+      kind: "new", title: "카카오톡 에이전트 도구", cwd: "/p/kakaotalk-agent",
+      project: { name: "카카오톡 제어", folder: "/p/kakaotalk-agent" },
+      task: "카카오톡 읽기 도구를 만들어요. Ondra 자체 수정이나 배포는 범위가 아니에요.",
+    }], "카카오톡 에이전트 만들어줘");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.project).not.toBe("ondra");
+  });
+
+  it("a folder outside every project stays out, whatever the topic says", async () => {
+    const out = await applyRoutes("home", [{ kind: "new", title: "카카오톡 실검증", topic: "ondra", cwd: "/p/kakaotalk-agent", task: "검증해요" }], "검증해줘");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.project).not.toBe("ondra");
+  });
+
+  it("the user naming the project still finds it", async () => {
+    const out = await applyRoutes("home", [{ kind: "new", title: "탭 고치기", task: "panel tabs" }], "ondra 탭 고쳐줘");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("ondra");
+  });
+});
