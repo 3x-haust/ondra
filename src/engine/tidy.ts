@@ -21,6 +21,7 @@ import { pathsExist, skillSave } from "../lib/native";
 import { projectById, setState, spaceById, state } from "../state/store";
 import type { Memory, MemoryKind, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
+import { t as tr } from "../i18n";
 
 const EVERY_MS = 6 * 60 * 60_000;
 const KIND_IDS = new Set<MemoryKind>(KINDS.map((k) => k.id));
@@ -191,8 +192,8 @@ export async function tidyMemory(force = false, only?: SpaceId) {
     // one space tidied: the others keep their turn (the timer and the cursor of jobs not yet learned from)
     setState("memoryTidy", { at: only ? (last?.at ?? 0) : Date.now(), ...total, tasks: [...seen, ...touched].slice(-300), cursor: only ? cursor : reached });
     if (force) {
-      const parts = [total.skills && `스킬 ${total.skills}`, total.learned && `새로 배움 ${total.learned}`, total.merged && `합침 ${total.merged}`, total.retired && `지난 기억으로 ${total.retired}`, total.keyed && `관련어 ${total.keyed}`].filter(Boolean);
-      toast(parts.length ? `기억을 정리했어요 · ${parts.join(" · ")}` : "정리할 게 없었어요");
+      const parts = [total.skills && tr("스킬 {n}", { n: total.skills }), total.learned && tr("새 메모리 {n}", { n: total.learned }), total.merged && tr("병합 {n}", { n: total.merged }), total.retired && tr("내림 {n}", { n: total.retired }), total.keyed && tr("관련어 {n}", { n: total.keyed })].filter(Boolean);
+      toast(parts.length ? tr("메모리 정리 · {parts}", { parts: parts.join(" · ") }) : tr("정리할 메모리가 없어요"));
     }
   } finally {
     setRunning(false);
@@ -261,7 +262,7 @@ export function startTidy() {
 export const tidyLine = () => {
   const t = state.memoryTidy;
   if (!t) return "";
-  const parts = [t.learned && `배움 ${t.learned}`, t.merged && `합침 ${t.merged}`, t.retired && `내림 ${t.retired}`].filter(Boolean);
+  const parts = [t.learned && tr("새 메모리 {n}", { n: t.learned }), t.merged && tr("병합 {n}", { n: t.merged }), t.retired && tr("내림 {n}", { n: t.retired })].filter(Boolean);
   return parts.join(" · ");
 };
 

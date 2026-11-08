@@ -10,6 +10,8 @@ import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { Sheet } from "../ui/Sheet";
 import { Markdown } from "../ui/Markdown";
+import { t } from "../i18n";
+import { GroupTitle } from "./Settings";
 
 type Kind = "bundled" | "changed" | "mine" | "imported";
 interface Entry {
@@ -24,7 +26,7 @@ interface Entry {
   /** for imported skills: the tool it came from */
   from?: string;
 }
-const KIND_LABEL: Record<Kind, string> = { bundled: "기본", changed: "고침", mine: "내 스킬", imported: "가져옴" };
+const KIND_LABEL: Record<Kind, string> = { bundled: "기본", changed: "수정됨", mine: "내 스킬", imported: "가져옴" };
 const FROM: Record<string, string> = { claude: "Claude Code", codex: "Codex", pi: "pi", "3xhaust": "3xhaustPi", omo: "OmO", cursor: "Cursor", opencode: "opencode" };
 const mdOf = (p: string) => (/\.md$/i.test(p) ? p : `${p.replace(/\/$/, "")}/SKILL.md`);
 const madeHere = (p: string) => !!engine.info.dataDir && p.startsWith(`${engine.info.dataDir}/skills/`);
@@ -81,7 +83,7 @@ function SkillSheet(props: { entry: Entry; onClose: () => void; onChanged: () =>
         const name = slug(parsed().name || e().name) || "skill";
         const dir = await skillSave(name, draft(), false);
         setState("skills", (x) => x.path === e().statePath, (x) => ({ ...x, name, path: dir, source: "ondra" as const }));
-        toast("Ondra 스킬로 옮겨 저장했어요. 원래 파일은 그대로예요");
+        toast(t("내 스킬로 저장했어요"));
         props.onChanged();
         props.onClose();
         return;
@@ -93,7 +95,7 @@ function SkillSheet(props: { entry: Entry; onClose: () => void; onChanged: () =>
       }
       mutate(draft());
       setEditing(false);
-      toast(k === "bundled" ? "내 사본으로 저장했어요. 이제 일에는 이 내용이 가요" : "저장했어요");
+      toast(k === "bundled" ? t("내 사본으로 저장했어요") : t("저장했어요"));
       props.onChanged();
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), "bad");
@@ -105,15 +107,15 @@ function SkillSheet(props: { entry: Entry; onClose: () => void; onChanged: () =>
     const k = e().kind;
     if (k === "imported") {
       setState("skills", (l) => l.filter((s) => s.path !== e().statePath));
-      toast("목록에서 뺐어요. 원래 파일은 그대로예요");
+      toast(t("목록에서 뺐어요"));
     } else if (k === "changed") {
       await skillRemove(e().name, true).catch((err) => toast(String(err), "bad"));
-      toast("원래 내용으로 돌렸어요");
+      toast(t("원래대로 돌렸어요"));
     } else {
       if (!sure()) return void setSure(true);
       await skillRemove(e().path.split("/").slice(-2, -1)[0] ?? e().name, false).catch((err) => toast(String(err), "bad"));
       setState("skills", (l) => l.filter((s) => s.path !== e().statePath));
-      toast("지웠어요");
+      toast(t("삭제했어요"));
     }
     props.onChanged();
     props.onClose();
@@ -125,28 +127,28 @@ function SkillSheet(props: { entry: Entry; onClose: () => void; onChanged: () =>
       onClose={props.onClose}
       foot={
         <>
-          <Show when={e().kind === "changed"}><button class="btn sm ghost" onClick={remove}>원래대로</button></Show>
+          <Show when={e().kind === "changed"}><button class="btn sm ghost" onClick={remove}><Icon name="refresh" size={14} />{t("원래대로")}</button></Show>
           <Show when={e().kind === "mine"}>
-            <button class="btn sm ghost" classList={{ danger: sure() }} onClick={remove} onBlur={() => setSure(false)}><Icon name="trash" size={13} />{sure() ? "정말 지울까요?" : "지우기"}</button>
+            <button class="btn sm ghost set-del" classList={{ sure: sure() }} onClick={remove} onBlur={() => setSure(false)}><Icon name="trash" size={14} />{sure() ? t("삭제할까요?") : t("삭제")}</button>
           </Show>
-          <Show when={e().kind === "imported"}><button class="btn sm ghost" onClick={remove}>목록에서 빼기</button></Show>
+          <Show when={e().kind === "imported"}><button class="btn sm ghost" onClick={remove}>{t("목록에서 빼기")}</button></Show>
           <span class="spacer" />
           <Show
             when={editing()}
-            fallback={<button class="btn sm" disabled={text.loading} onClick={() => (setDraft(text() ?? ""), setEditing(true))}><Icon name="pencil" size={13} />고치기</button>}
+            fallback={<button class="btn sm" disabled={text.loading} onClick={() => (setDraft(text() ?? ""), setEditing(true))}><Icon name="pencil" size={14} />{t("편집")}</button>}
           >
-            <button class="btn sm ghost" onClick={() => setEditing(false)}>취소</button>
-            <button class="btn sm primary" disabled={busy() || draft() === text()} onClick={save}>저장</button>
+            <button class="btn sm" onClick={() => setEditing(false)}>{t("취소")}</button>
+            <button class="btn sm primary" disabled={busy() || draft() === text()} onClick={save}>{t("저장")}</button>
           </Show>
         </>
       }
     >
       <div class="sk-meta">
-        <div><span class="pill">{KIND_LABEL[e().kind]}{e().from ? ` · ${FROM[e().from!] ?? e().from}` : ""}</span></div>
+        <div><span class="pill">{t(KIND_LABEL[e().kind])}{e().from ? ` · ${FROM[e().from!] ?? e().from}` : ""}</span></div>
         <Show when={parsed().description || e().description}><p>{parsed().description || e().description}</p></Show>
         <span class="sk-path selectable">{tilde(e().path)}</span>
       </div>
-      <Show when={!text.loading} fallback={<p class="muted">불러오는 중이에요</p>}>
+      <Show when={!text.loading} fallback={<p class="muted">{t("불러오는 중")}</p>}>
         <Show when={editing()} fallback={<Markdown text={parsed().body} />}>
           <textarea class="sk-edit" spellcheck={false} value={draft()} onInput={(ev) => setDraft(ev.currentTarget.value)} />
         </Show>
@@ -162,13 +164,13 @@ function NewSkill(props: { onClose: () => void; onChanged: () => void; taken: st
   const [err, setErr] = createSignal("");
   const id = () => slug(name());
   const save = async () => {
-    if (!id()) return setErr("이름을 영문으로 적어 주세요");
-    if (props.taken.includes(id())) return setErr("같은 이름의 스킬이 있어요");
-    if (!desc().trim()) return setErr("언제 쓰는 스킬인지 한 줄로 적어 주세요");
+    if (!id()) return setErr(t("이름은 영문, 숫자, -만 돼요"));
+    if (props.taken.includes(id())) return setErr(t("같은 이름의 스킬이 있어요"));
+    if (!desc().trim()) return setErr(t("설명을 적어 주세요"));
     try {
       const dir = await skillSave(id(), compose(id(), desc(), body()), false);
       setState("skills", (l) => [...l, { name: id(), path: dir, description: desc().trim(), source: "ondra" as const, enabled: true, menu: true }]);
-      toast("스킬을 만들었어요");
+      toast(t("스킬을 만들었어요"));
       props.onChanged();
       props.onClose();
     } catch (e) {
@@ -177,29 +179,29 @@ function NewSkill(props: { onClose: () => void; onChanged: () => void; taken: st
   };
   return (
     <Sheet
-      title="새 스킬"
+      title={t("새 스킬")}
       onClose={props.onClose}
       foot={
         <>
           <Show when={err()}><p class="sk-err">{err()}</p></Show>
           <span class="spacer" />
-          <button class="btn sm ghost" onClick={props.onClose}>취소</button>
-          <button class="btn sm primary" onClick={save}>만들기</button>
+          <button class="btn sm" onClick={props.onClose}>{t("취소")}</button>
+          <button class="btn sm primary" onClick={save}>{t("만들기")}</button>
         </>
       }
     >
       <div class="sk-form">
         <label>
-          이름 <span class="muted">영문, 숫자, - 만{id() && id() !== name() ? ` · ${id()}` : ""}</span>
+          <span>{t("이름")}<Show when={id() && id() !== name()}><span class="muted"> · {id()}</span></Show></span>
           <input class="input" placeholder="release-notes" value={name()} onInput={(e) => (setName(e.currentTarget.value), setErr(""))} />
         </label>
         <label>
-          설명
-          <input class="input" placeholder="릴리스 노트를 쓸 때. 바뀐 점을 사용자 말로 정리해요" value={desc()} onInput={(e) => (setDesc(e.currentTarget.value), setErr(""))} />
+          <span>{t("설명")}</span>
+          <input class="input" placeholder={t("언제 쓰는 스킬인지 한 줄로")} value={desc()} onInput={(e) => (setDesc(e.currentTarget.value), setErr(""))} />
         </label>
         <label>
-          본문
-          <textarea class="sk-edit" spellcheck={false} placeholder={"# 릴리스 노트\n\n1. git log로 지난 태그 이후 커밋을 봐요\n2. ..."} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
+          <span>{t("본문")}</span>
+          <textarea class="sk-edit" spellcheck={false} placeholder={t("# 릴리스 노트\n\n1. 지난 태그 이후 커밋을 봐요\n2. ...")} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
         </label>
       </div>
     </Sheet>
@@ -212,8 +214,8 @@ export function SkillsTab() {
     // descriptions come from each SKILL.md
     return Promise.all(
       list.map(async (f: SkillFile) => {
-        const t = await fsRead(f.path).catch(() => ({ text: "" }));
-        return { f, description: parseSkill(t.text ?? "").description ?? "" };
+        const r = await fsRead(f.path).catch(() => ({ text: "" }));
+        return { f, description: parseSkill(r.text ?? "").description ?? "" };
       }),
     );
   });
@@ -245,31 +247,31 @@ export function SkillsTab() {
   );
   const Row = (p: { e: Entry }) => (
     <div class="item-row sk-row" role="button" tabIndex={0} onClick={() => setOpen(p.e)} onKeyDown={(ev) => ev.key === "Enter" && setOpen(p.e)}>
-      <Icon name="skill" size={15} class="muted" />
+      <Icon name="skill" size={16} class="muted" />
       <div class="item-main">
         <b>{p.e.name}</b>
         <Show when={p.e.description}><p title={p.e.description}>{p.e.description}</p></Show>
       </div>
-      <Show when={p.e.kind === "changed" || p.e.kind === "imported"}><span class="pill">{p.e.kind === "imported" ? `${FROM[p.e.from ?? ""] ?? p.e.from ?? "가져옴"}에서` : KIND_LABEL[p.e.kind]}</span></Show>
-      <Icon name="chevron" size={13} class="muted" />
+      <Show when={p.e.kind === "changed" || p.e.kind === "imported"}>
+        <span class="pill" title={p.e.kind === "imported" ? t("가져옴") : undefined}>{p.e.kind === "imported" ? FROM[p.e.from ?? ""] ?? p.e.from ?? t("가져옴") : t(KIND_LABEL[p.e.kind])}</span>
+      </Show>
+      <Icon name="chevron" size={14} class="muted" />
     </div>
   );
   return (
     <>
-      <h2>스킬</h2>
-      <div class="set-group-title">기본 포함</div>
+      <h2>{t("스킬")}</h2>
+      <GroupTitle title={t("기본")} />
       <div class="set-group">
-        <For each={ondra()} fallback={<div class="empty-line">{files.loading ? "불러오는 중이에요" : "스킬이 없어요"}</div>}>
+        <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중") : t("스킬 없음")}</div>}>
           {(e) => <Row e={e} />}
         </For>
       </div>
-      <div class="set-group-title" style={{ display: "flex", "align-items": "center" }}>
-        내 스킬
-        <span class="spacer" />
-        <button class="btn ghost sm" onClick={() => setAdding(true)}><Icon name="plus" size={13} />새 스킬</button>
-      </div>
+      <GroupTitle title={t("내 스킬")}>
+        <button class="btn ghost sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />{t("추가")}</button>
+      </GroupTitle>
       <div class="set-group">
-        <For each={mine()} fallback={<div class="empty-line">없음</div>}>
+        <For each={mine()} fallback={<div class="empty-line">{t("내 스킬 없음")}</div>}>
           {(e) => <Row e={e} />}
         </For>
       </div>

@@ -3,6 +3,7 @@
 // model when one is rejected, and schedule queued work into free slots.
 import { isNetError, waitOnline } from "./net";
 import { describeCommand } from "./describe";
+import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
@@ -116,7 +117,7 @@ export function chooseAccount(space: Task["space"], topic: string): string {
   return [...use].sort((a, b) => load(a.id) - load(b.id) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0].id;
 }
 
-export const NO_ACCOUNT = "이 공간에 계정이 없어요";
+export const NO_ACCOUNT = "이 워크스페이스에 계정이 없어요";
 
 /** The account work in this space runs on: the one given if it is this space's, else the space's pick. */
 export function spaceAccount(space: Task["space"], topic = "", given?: string): Account | undefined {
@@ -594,11 +595,11 @@ export async function mergeTask(id: string): Promise<boolean> {
         x.summary ||= `${into}에 합침`;
       }
     });
-    toast(`${into}에 합쳤어요`);
+    toast(tr("{into}에 병합했어요", { into }));
     return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    toast(/conflict|충돌/i.test(msg) ? "같은 곳을 고친 변경이 있어서 합치지 못했어요" : `합치지 못했어요: ${msg.split("\n")[0]}`, "bad");
+    toast(/conflict|충돌/i.test(msg) ? tr("충돌이 있어서 병합하지 못했어요") : tr("병합하지 못했어요 · {why}", { why: msg.split("\n")[0] }), "bad");
     return false;
   }
 }
@@ -677,7 +678,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   if (!t0) return;
   const agent = agentOf(id);
   const account = spaceAccount(t0.space, t0.topic, t0.accountId);
-  if (!account) return fail(id, NO_ACCOUNT);
+  if (!account) return fail(id, tr(NO_ACCOUNT));
   if (account.id !== t0.accountId) updateTask(id, (x) => (x.accountId = account.id));
   const cwd = expand(t0.cwd || spaceById(t0.space).folder || "~");
   const prev = runs.get(id);
@@ -1964,7 +1965,7 @@ export async function setTaskPermission(id: string, p: Permission) {
   try {
     await request(agent, { type: "prompt", message: `/ondra-permission ${p}` });
   } catch (e) {
-    toast(`권한을 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
+    toast(tr("권한을 바꾸지 못했어요 · {why}", { why: e instanceof Error ? e.message : String(e) }), "bad");
   }
 }
 
@@ -1986,7 +1987,7 @@ export async function setTaskModel(id: string, model: string, thinking: string) 
     if (thinking) await request(agent, { type: "set_thinking_level", level: thinking });
     updateTask(id, (t) => push(t, { kind: "note", text: `모델 → ${(m ?? "").split("/").pop()}${thinking ? ` · ${thinking}` : ""}` }));
   } catch (e) {
-    toast(`모델을 바꾸지 못했어요: ${e instanceof Error ? e.message : String(e)}`, "bad");
+    toast(tr("모델을 바꾸지 못했어요 · {why}", { why: e instanceof Error ? e.message : String(e) }), "bad");
   }
 }
 
@@ -2075,12 +2076,12 @@ export const slotsUsed = () => {
 
 /** Summarize the conversation so far and keep going in the same session (frees context). */
 export async function compactAgent(agent: string) {
-  if (!isAlive(agent)) return toast("지금은 정리할 대화가 없어요");
-  toast("대화를 요약해서 정리하는 중이에요");
+  if (!isAlive(agent)) return toast(tr("압축할 대화가 없어요"));
+  toast(tr("대화 압축 중"));
   try {
     await request(agent, { type: "compact" }, 180_000);
     noteCtx(agent, await request(agent, { type: "get_session_stats" }, 8000));
-    toast("정리했어요");
+    toast(tr("대화를 압축했어요"));
   } catch (e) {
     toast(e instanceof Error ? e.message : String(e), "bad");
   }
@@ -2182,7 +2183,7 @@ export function archiveTask(id: string, on = true) {
     t.archived = on;
     if (on) t.pinned = false;
   });
-  if (on) toast("보관했어요", "info", { label: "되돌리기", run: () => archiveTask(id, false) });
+  if (on) toast(tr("보관했어요"), "info", { label: tr("되돌리기"), run: () => archiveTask(id, false) });
 }
 export function renameTask(id: string, title: string) {
   const v = title.trim().slice(0, 60);

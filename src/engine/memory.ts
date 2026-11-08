@@ -20,6 +20,7 @@ import { expand } from "./rpc";
 import { loaded, setState, state, uid } from "../state/store";
 import type { Memory, MemoryKind, Skill, SpaceId } from "../state/types";
 import { toast } from "../state/ui";
+import { t as tr } from "../i18n";
 
 /** Other names people use for a space, by id. */
 const SPACE_ALIASES: Record<string, string[]> = { work: ["회사", "업무", "work"], home: ["개인", "personal"] };
@@ -352,8 +353,8 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
   old ??= replaced;
   if (old && made[0]) retireMemory(old.id, made[0].id, old === replaced ? "새 내용으로 바뀌었어요" : undefined);
   if (!opts.quiet && made.length) {
-    const what = made.length > 1 ? `${made.length}개로 나눠 기억했어요` : `기억함: ${made[0].text.slice(0, 200)}`;
-    toast(old ? `${what} · 예전 기억은 지난 기억으로 옮겼어요` : what, "info", { label: "취소", run: () => made.forEach((m) => removeMemory(m.id)) });
+    const what = made.length > 1 ? tr("메모리 {n}개 저장", { n: made.length }) : tr("메모리 저장 · {text}", { text: made[0].text.slice(0, 200) });
+    toast(old ? tr("{what} · 이전 메모리 대체", { what }) : what, "info", { label: tr("되돌리기"), run: () => made.forEach((m) => removeMemory(m.id)) });
   }
   return ids[0] ?? null;
 }

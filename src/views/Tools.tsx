@@ -5,9 +5,10 @@ import { engine, tilde } from "../engine/rpc";
 import { state } from "../state/store";
 import { tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
+import { t } from "../i18n";
 import { estimate, loadWorkerTools, type CtxTool, type EngineContext } from "./contextData";
 
-/** One line in plain Korean for the engine's own tools. */
+/** One line in plain Korean for the engine's own tools (the key for t()). */
 const KO: Record<string, string> = {
   read: "파일을 읽어요. 이미지도 볼 수 있어요",
   bash: "터미널 명령을 실행해요",
@@ -17,10 +18,10 @@ const KO: Record<string, string> = {
   find: "이름으로 파일을 찾아요",
   ls: "폴더 안 목록을 봐요",
   powershell: "PowerShell 명령을 실행해요",
-  memory: "나중에 볼 기억을 저장하거나 바꿔요",
-  memory_search: "저장한 기억에서 찾아요",
-  memory_save: "나중에 볼 기억을 저장하거나 바꿔요",
-  memory_forget: "저장한 기억을 지워요",
+  memory: "메모리를 저장하거나 바꿔요",
+  memory_search: "메모리에서 찾아요",
+  memory_save: "메모리를 저장하거나 바꿔요",
+  memory_forget: "메모리를 지워요",
   skill_search: "필요한 스킬을 찾아요",
   web_search: "웹에서 검색해요",
   web_fetch: "웹 페이지를 읽어요",
@@ -36,27 +37,28 @@ export function firstSentence(s: string, max = 110): string {
   return one.length > max ? `${one.slice(0, max - 1)}…` : one;
 }
 /** A tool's one-liner: our Korean line, its own if it is Korean, else its English first sentence. */
-export const toolLine = (t: { name: string; description: string }) => KO[t.name] ?? firstSentence(t.description || "");
-export const isKorean = (t: { name: string; description: string }) => !!KO[t.name] || hasHangul(t.description || "");
+export const toolLine = (x: { name: string; description: string }) => (KO[x.name] ? t(KO[x.name]) : firstSentence(x.description || ""));
+/** our own line (in the app's language) or a Korean description: shown at full strength */
+export const isKorean = (x: { name: string; description: string }) => !!KO[x.name] || hasHangul(x.description || "");
 
 const base = (p: string) => p.split("/").pop()?.replace(/\.(ts|js|mjs)$/, "") ?? p;
 
-/** Where a tool comes from. */
-export function toolSource(t: CtxTool): { group: string; label: string } {
-  if (t.namespace?.startsWith("mcp__")) return { group: `MCP · ${t.namespace.slice(5)}`, label: "MCP 서버" };
-  if (t.sourceInfo.path.startsWith("builtin:")) return { group: "엔진 기본 도구", label: "엔진 기본" };
-  const p = t.sourceInfo.path;
+/** Where a tool comes from (Korean keys: show them through t()). */
+export function toolSource(x: CtxTool): { group: string; label: string } {
+  if (x.namespace?.startsWith("mcp__")) return { group: `MCP · ${x.namespace.slice(5)}`, label: "MCP 서버" };
+  if (x.sourceInfo.path.startsWith("builtin:")) return { group: "기본 도구", label: "기본" };
+  const p = x.sourceInfo.path;
   if (/\/(app-extensions|extensions)\/[^/]+$/.test(p) && (p.includes("/app-extensions/") || p.includes("/ondra/"))) return { group: "Ondra 확장", label: `Ondra 확장 · ${base(p)}` };
   return { group: "다른 확장", label: `확장 · ${base(p)}` };
 }
 
 /** Where a skill comes from. */
 export function skillSource(path: string): string {
-  if (path.includes("/app-skills/") || /\/ondra\/skills\//.test(path)) return "Ondra 기본";
+  if (path.includes("/app-skills/") || /\/ondra\/skills\//.test(path)) return t("기본");
   const d = engine.info.dataDir;
-  if (d && path.startsWith(`${d}/skill-overrides/`)) return "Ondra 기본 · 고침";
-  if (d && path.startsWith(`${d}/skills/`)) return "내 스킬";
-  if (state.skills.some((s) => path === s.path || path.startsWith(`${s.path.replace(/\/$/, "")}/`))) return "가져온 스킬";
+  if (d && path.startsWith(`${d}/skill-overrides/`)) return t("기본 · 수정됨");
+  if (d && path.startsWith(`${d}/skills/`)) return t("내 스킬");
+  if (state.skills.some((s) => path === s.path || path.startsWith(`${s.path.replace(/\/$/, "")}/`))) return t("가져온 스킬");
   const dir = path.replace(/\/[^/]+\/SKILL\.md$/, "");
   return tilde(dir);
 }
@@ -87,12 +89,12 @@ function groupsOf(c: EngineContext): Group[] {
     if (!groups.has(g)) groups.set(g, { title: g, hint, rows: [] });
     groups.get(g)!.rows.push(row);
   };
-  const order = ["엔진 기본 도구", "Ondra 확장", "다른 확장"];
-  for (const t of [...c.tools].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))) {
-    const s = toolSource(t);
+  const order = ["기본 도구", "Ondra 확장", "다른 확장"];
+  for (const x of [...c.tools].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))) {
+    const s = toolSource(x);
     // deferred tools sit behind tool_search: declared only once a job looks for them
-    const found = !t.active && (t.exposure === "deferred" || t.exposure === "codemode");
-    add(s.group, { key: `t:${t.name}`, name: t.name, line: toolLine(t), ko: isKorean(t), source: s.label, size: t.schemaTokens, off: !t.active && !found, found, full: t.description });
+    const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
+    add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: !x.active && !found, found, full: x.description });
   }
   for (const s of c.skills)
     add("스킬", { key: `s:${s.path}`, name: s.name, line: firstSentence(s.description), ko: hasHangul(s.description), source: skillSource(s.path), size: skillTokens(s), off: !s.modelInvocable, full: s.description });
@@ -120,30 +122,30 @@ export function ToolsTab() {
   const declared = () => {
     const c = data();
     if (!c) return 0;
-    return c.tools.filter((t) => t.active).reduce((n, t) => n + t.schemaTokens, 0);
+    return c.tools.filter((x) => x.active).reduce((n, x) => n + x.schemaTokens, 0);
   };
   return (
     <>
-      <h2>도구</h2>
-      <div class="tl-bar">
-        <label class="tl-search">
-          <Icon name="search" size={14} />
-          <input placeholder="이름이나 설명으로 찾기" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
-        </label>
+      <div class="set-head">
+        <h2>{t("도구")}</h2>
         <Show when={data()}>
-          <span class="tl-total">도구 {data()!.tools.filter((t) => t.active).length}개 · {tokens(declared())} 토큰</span>
+          <span class="tl-total">{t("도구 {n}개 · {tok} 토큰", { n: data()!.tools.filter((x) => x.active).length, tok: tokens(declared()) })}</span>
         </Show>
-        <button class="btn sm ghost" disabled={data.loading} onClick={() => setForce((n) => n + 1)} title="엔진에 다시 물어봐요">
-          <Icon name="refresh" size={13} />새로고침
+        <button class="btn sm" disabled={data.loading} onClick={() => setForce((n) => n + 1)}>
+          <Icon name="refresh" size={14} />{t("새로고침")}
         </button>
       </div>
-      <Show when={!data.error} fallback={<div class="set-group"><div class="empty-line">목록을 못 불러왔어요 · {String(data.error?.message ?? data.error)}</div></div>}>
-        <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">엔진에 물어보는 중이에요</div></div>}>
-          <For each={groups()} fallback={<div class="set-group"><div class="empty-line">찾는 게 없어요</div></div>}>
+      <label class="tl-search">
+        <Icon name="search" size={14} />
+        <input placeholder={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+      </label>
+      <Show when={!data.error} fallback={<div class="set-group"><div class="empty-line">{t("불러오지 못했어요")} · {String(data.error?.message ?? data.error)}</div></div>}>
+        <Show when={data()} fallback={<div class="set-group"><div class="empty-line tl-wait">{t("불러오는 중")}</div></div>}>
+          <For each={groups()} fallback={<div class="set-group"><div class="empty-line">{t("결과 없음")}</div></div>}>
             {(g) => (
               <>
                 <div class="set-group-title tl-gtitle">
-                  {g.title}
+                  {t(g.title)}
                   <span class="tl-count">{g.rows.length}</span>
                   <Show when={g.hint}><span class="tl-ghint">{g.hint}</span></Show>
                 </div>
@@ -154,8 +156,8 @@ export function ToolsTab() {
                         <button class="tl-head" onClick={() => setOpen(open() === r.key ? null : r.key)} aria-expanded={open() === r.key}>
                           <span class="tl-name">{r.name}</span>
                           <span class="tl-line" classList={{ en: !r.ko }} title={r.full}>{r.line}</span>
-                          <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버"}><span class="tl-src">{r.source.replace(/^Ondra 확장 · |^확장 · /, "")}</span></Show>
-                          <span class="tl-size">{r.off ? "꺼짐" : r.found ? "검색" : `${tokens(r.size)}`}</span>
+                          <Show when={r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && r.source.replace(/^Ondra 확장 · |^확장 · /, "") !== r.name}><span class="tl-src">{t(r.source.replace(/^Ondra 확장 · |^확장 · /, ""))}</span></Show>
+                          <span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : undefined}>{r.off ? t("꺼짐") : r.found ? t("필요 시") : `${tokens(r.size)}`}</span>
                         </button>
                         <div class="tl-more" classList={{ open: open() === r.key }}>
                           <div class="tl-more-in">
