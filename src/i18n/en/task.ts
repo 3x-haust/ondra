@@ -21,6 +21,7 @@ export default {
   "상위 작업: {title}": "Parent: {title}",
   "{name} 메인": "{name} Main",
   "검토": "Review",
+  "변경": "Changes",
   "병합됨": "Merged",
   "완료": "Done",
   "패널": "Panel",
@@ -133,6 +134,7 @@ export default {
   "자동": "Auto",
   "걸린 시간": "Took",
   "진행 시간": "Running for",
+  "작업 시간": "Worked",
   "홈": "Home",
   "이어서 작업": "Continued",
   "가져온 곳": "Imported from",
@@ -319,5 +321,6 @@ export default {
   "나머지|context": "Other",
   "Ondra 확장|one": "Ondra extension",
   "확장|one": "Extension",
+  "검색해서 불러옴": "Loaded on demand",
   "위 메시지에 없는 토큰": "Tokens not in the messages above",
 } satisfies Record<string, string>;

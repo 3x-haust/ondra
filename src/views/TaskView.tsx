@@ -2,7 +2,7 @@
 import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
-import { createEffect, createSignal, For, type JSX, on, onMount, Show, untrack } from "solid-js";
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import { addMemory } from "../engine/memory";
@@ -14,7 +14,7 @@ import { sendSide } from "../engine/aside";
 import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { fsFiles } from "../lib/native";
-import { discarded, planCount, taskDiff, workedMs } from "../state/progress";
+import { discarded, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard, DiscardGlyph } from "../ui/Review";
 import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
 import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
@@ -75,9 +75,9 @@ function Todos(props: { t: Task }) {
         <ol class="todos-list">
           <For each={props.t.plan}>
             {(p) => (
-              <li class={`todo ${p.state}`}>
+              <li class={`todo ${stepState(p, props.t)}`}>
                 <span class="todo-box">
-                  <Show when={p.state === "done"} fallback={<Show when={p.state === "now"}><i /></Show>}>
+                  <Show when={p.state === "done"} fallback={<Show when={stepState(p, props.t) === "now"}><i /></Show>}>
                     <Icon name="check" size={10} stroke={3} />
                   </Show>
                 </span>
@@ -175,6 +175,37 @@ function setDraft(text: string) {
   el.focus();
 }
 
+/** The project crumb stays while there is room for it: it goes away (whole) only when the
+ *  title would be cut, and comes back once the free space in the header can hold it again. */
+function useCrumbFit(deps: () => unknown) {
+  const [tight, setTight] = createSignal(false);
+  let head: HTMLElement | undefined;
+  let need = 0;
+  const check = () => {
+    if (!head) return;
+    const proj = head.querySelector<HTMLElement>(".crumbs > .crumb-proj");
+    const sep = head.querySelector<HTMLElement>(".crumbs > .crumb-sep");
+    const title = head.querySelector<HTMLElement>(".crumbs > h1");
+    const spacer = head.querySelector<HTMLElement>(":scope > .spacer");
+    if (!proj || !title || !spacer) return;
+    if (!tight()) {
+      const gap = parseFloat(getComputedStyle(proj.parentElement!).columnGap) || 0;
+      need = proj.offsetWidth + (sep?.offsetWidth ?? 0) + gap * 2;
+      if (title.scrollWidth > title.clientWidth + 1) setTight(true);
+    } else if (spacer.offsetWidth >= need) setTight(false);
+  };
+  const later = () => requestAnimationFrame(check);
+  const ro = new ResizeObserver(later);
+  onCleanup(() => ro.disconnect());
+  createEffect(on(deps, later, { defer: true }));
+  const ref = (el: HTMLElement) => {
+    head = el;
+    ro.observe(el);
+    queueMicrotask(() => el.querySelectorAll(":scope > .spacer").forEach((x) => ro.observe(x)));
+  };
+  return [tight, ref] as const;
+}
+
 export function TaskView(props: { id: string }) {
   const t = () => taskById(props.id);
   return (
@@ -184,6 +215,8 @@ export function TaskView(props: { id: string }) {
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
         createEffect(on(() => task().unread, (u) => u && updateTask(task().id, (x) => (x.unread = false))));
         const ready = () => task().worktree?.state === "open" && (task().status === "done" || task().status === "paused" || task().status === "failed");
+        // merge / discard are for finished work: a paused, failed or running task only shows what it changed so far
+        const inReview = () => task().status === "done" && task().worktree?.state === "open";
         const diff = () => taskDiff(task());
         const [merging, setMerging] = createSignal(false);
         const openPanel = (tab: PanelTab) => showTool(tab);
@@ -237,7 +270,7 @@ export function TaskView(props: { id: string }) {
               </div>,
             );
           // the changes tab already has merge / discard
-          else if (ready() && !(panelOpen() && panelTab() === "changes"))
+          else if (inReview() && !(panelOpen() && panelTab() === "changes"))
             out.push(
               <div class="strip">
                 <Icon name="branch" size={14} />
@@ -265,12 +298,26 @@ export function TaskView(props: { id: string }) {
                 </button>
               </div>,
             );
+          // not finished yet: just what it changed so far, no merge
+          else if (!inReview() && task().worktree?.state === "open" && diff().files.length && !(panelOpen() && panelTab() === "changes"))
+            out.push(
+              <button class="strip" onClick={() => openPanel("changes")}>
+                <Icon name="diff" size={14} />
+                <b>{tr("변경")}</b>
+                <span class="rest">
+                  {tr("파일 {n}개", { n: diff().files.length })} <span class="add">+{diff().add}</span>{" "}
+                  <span class="del">−{diff().del}</span>
+                </span>
+                <Icon name="chevron" size={14} />
+              </button>,
+            );
           if (task().plan.length && task().status !== "done") out.push(<Todos t={task()} />);
           if (task().queue?.length) out.push(<Queued t={task()} />);
           return out.length ? out : undefined;
         };
+        const [tight, headRef] = useCrumbFit(() => [task().title, task().status, renaming()]);
         const head = (
-          <header class="head task-head" data-tauri-drag-region>
+          <header class="head task-head" classList={{ "crumb-tight": tight() }} ref={headRef} data-tauri-drag-region>
             <SidebarToggle />
             <nav class="crumbs" data-tauri-drag-region>
               <Show when={task().parentId ? taskById(task().parentId!) : undefined}>
@@ -407,12 +454,8 @@ export function TaskView(props: { id: string }) {
                     ...(task().status === "failed" ? [{ name: "retry", desc: tr("다시 시도"), icon: "play", run: () => resumeTask(task().id) }] : []),
                     ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
                     ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),
-                    ...(ready()
-                      ? [
-                          { name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) },
-                          { name: "discard", desc: tr("버리기"), icon: "undo", run: () => askDiscard(task()) },
-                        ]
-                      : []),
+                    ...(inReview() && !prOf(task()) ? [{ name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) }] : []),
+                    ...(ready() ? [{ name: "discard", desc: tr("버리기"), icon: "undo", run: () => askDiscard(task()) }] : []),
                     { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim())) },
                     { ...drawCommand(() => task().id), desc: tr("작업 흐름 그림") },
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },

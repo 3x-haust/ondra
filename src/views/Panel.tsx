@@ -15,7 +15,7 @@ import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, 
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
-import { discarded, ended, legTimes, planCount, workedMs } from "../state/progress";
+import { discarded, ended, legTimes, planCount, stepState, workedMs } from "../state/progress";
 import { Icon } from "../ui/Icon";
 import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
@@ -36,6 +36,8 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   const w = () => props.w;
   const [busy, setBusy] = createSignal(false);
   const actionable = () => w().state === "open" && props.t.status !== "running" && props.t.status !== "queued";
+  // merge / discard are for finished work; a paused or failed one keeps its git menu
+  const finished = () => props.t.status === "done";
   return (
     <Switch>
       <Match when={actionable()}>
@@ -43,22 +45,26 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
           <ShipMenu t={props.t} />
           <span class="bc-branch" title={w().branch}>{w().branch}</span>
           <span class="spacer" />
-          <button class="btn sm ghost" onClick={() => askDiscard(props.t)}>{tr("버리기")}</button>
+          <Show when={finished()}>
+            <button class="btn sm ghost" onClick={() => askDiscard(props.t)}>{tr("버리기")}</button>
+          </Show>
           <Show
             when={prOf(props.t)}
             fallback={
-              <button
-                class="btn sm primary"
-                disabled={busy()}
-                onClick={async () => {
-                  setBusy(true);
-                  await mergeTask(props.t.id);
-                  setBusy(false);
-                }}
-              >
-                <Icon name="merge" size={14} />
-                {busy() ? tr("병합 중") : tr("병합")}
-              </button>
+              <Show when={finished()}>
+                <button
+                  class="btn sm primary"
+                  disabled={busy()}
+                  onClick={async () => {
+                    setBusy(true);
+                    await mergeTask(props.t.id);
+                    setBusy(false);
+                  }}
+                >
+                  <Icon name="merge" size={14} />
+                  {busy() ? tr("병합 중") : tr("병합")}
+                </button>
+              </Show>
             }
           >
             {(pr) => <button class="btn sm primary" onClick={() => setPanelTab("pr")}>PR #{pr().n}</button>}
@@ -219,9 +225,9 @@ function Overview(props: { t: Task }) {
           <ol class="todos-list plan-list">
             <For each={t().plan}>
               {(s) => (
-                <li class={`todo ${s.state}`}>
+                <li class={`todo ${stepState(s, t())}`}>
                   <span class="todo-box">
-                    <Show when={s.state === "done"} fallback={<Show when={s.state === "now"}><i /></Show>}>
+                    <Show when={s.state === "done"} fallback={<Show when={stepState(s, t()) === "now"}><i /></Show>}>
                       <Icon name="check" size={10} stroke={3} />
                     </Show>
                   </span>
@@ -283,7 +289,7 @@ function Overview(props: { t: Task }) {
           </dd>
           {/* the header's time, in its precision; a task not started yet, or waiting its turn again, has none */}
           <Show when={t().startedAt && t().status !== "queued"}>
-            <dt>{ended(t()) ? tr("걸린 시간") : tr("진행 시간")}</dt>
+            <dt>{ended(t()) ? tr("걸린 시간") : t().status === "running" || t().status === "waiting" ? tr("진행 시간") : tr("작업 시간")}</dt>
             <dd class="muted">{short(workedMs(t(), now()))}</dd>
           </Show>
           <Show when={t().origin}>

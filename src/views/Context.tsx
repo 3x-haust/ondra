@@ -39,10 +39,10 @@ const ENGINE_SECTION: Record<string, string> = {
   cwd: "작업 폴더",
 };
 
-/** where a tool comes from, in the app's language ("Ondra 확장 · device" → "Ondra extension · device") */
-const sourceText = (label: string) => {
+/** where a tool comes from, in the app's language; not its own name again ("Ondra 확장 · device" for device → "Ondra 확장") */
+const sourceText = (label: string, name: string) => {
   const [head, ...rest] = label.split(" · ");
-  return [t(`${head}|one`), ...rest].join(" · ");
+  return [t(`${head}|one`), ...rest.filter((r) => r !== name)].join(" · ");
 };
 const pct = (n: number, of: number) => (of ? Math.min(100, (n / of) * 100) : 0);
 /** whole percents, as everywhere else: 10%, <1% */
@@ -107,7 +107,7 @@ async function settingsSkills(): Promise<{ name: string; description: string; pa
 }
 
 /** A part that opens to show what is inside; an empty one is a plain row. */
-function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: string; seg?: Seg; children?: JSX.Element; open?: boolean; nested?: boolean; empty?: boolean }) {
+function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: string; note?: string; seg?: Seg; children?: JSX.Element; open?: boolean; nested?: boolean; empty?: boolean }) {
   const [open, setOpen] = createSignal(!!props.open);
   return (
     <div class="cx-part" classList={{ open: open() && !props.empty, nested: props.nested, empty: props.empty }}>
@@ -119,9 +119,14 @@ function Part(props: { title: JSX.Element; size?: number; of?: number; meta?: st
         <span class="cx-part-title">{props.title}</span>
         <Show when={props.meta}><span class="cx-part-meta">{props.meta}</span></Show>
         <span class="spacer" />
-        <Show when={props.size !== undefined}>
-          <span class="cx-part-size">{tokens(props.size!)}</span>
-          <Show when={props.of}><span class="cx-part-share">{share(props.size!, props.of!)}</span></Show>
+        {/* nothing of it sits in the prompt yet: what happens instead, in place of "0 · 0%" */}
+        <Show when={props.note} fallback={
+          <Show when={props.size !== undefined}>
+            <span class="cx-part-size">{tokens(props.size!)}</span>
+            <Show when={props.of}><span class="cx-part-share">{share(props.size!, props.of!)}</span></Show>
+          </Show>
+        }>
+          <span class="cx-part-note">{props.note}</span>
         </Show>
       </button>
       <Show when={!props.empty}>
@@ -199,6 +204,7 @@ function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; on
   });
   const heavy = createMemo(() => [...props.list].sort((a, b) => b.tokens - a.tokens).slice(0, 8));
   const [memOpen, setMemOpen] = createSignal(false);
+  const memTokens = () => props.recalled.reduce((n, m) => n + estimate(m.text), 0);
   return (
     <>
       <div class="cx-talk">
@@ -215,8 +221,9 @@ function Talk(props: { list: CtxMessage[]; total: number; recalled: Memory[]; on
             <Show when={props.recalled.length}><Icon name="chevron" size={12} class="cx-chev" /></Show>
           </span>
           <span class="cx-talk-n">{t("{n}개", { n: props.recalled.length })}</span>
-          <span />
-          <span />
+          {/* the same columns as the rows below, empty when nothing was recalled */}
+          <span class="cx-talk-track"><i style={{ width: `${pct(memTokens(), props.total)}%` }} /></span>
+          <span class="cx-talk-size">{tokens(memTokens())}</span>
         </button>
         <Show when={props.recalled.length}>
           <Fold open={memOpen()}>
@@ -380,7 +387,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
               )}
             </For>
           </Part>
-          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} meta={`${loadedSkills().length}`} empty={!loadedSkills().length}>
+          <Part seg="skills" title={t("스킬")} size={segs().skills} of={total()} note={loadedSkills().length && !segs().skills ? t("검색해서 불러옴") : undefined} meta={`${loadedSkills().length}`} empty={!loadedSkills().length}>
             <div class="cx-list">
               <For each={loadedSkills()}>
                 {(s) => (
@@ -404,7 +411,7 @@ function View(props: { data: Loaded; known?: { tokens: number; window: number };
                 <div class="cx-li">
                   <b>{t.name}</b>
                   <span classList={{ en: !isKorean(t) }} title={t.description}>{toolLine(t)}</span>
-                  <em>{sourceText(toolSource(t).label)}</em>
+                  <em>{sourceText(toolSource(t).label, t.name)}</em>
                   <small>{tokens(t.schemaTokens)}</small>
                 </div>
               )}

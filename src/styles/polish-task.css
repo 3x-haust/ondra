@@ -1050,10 +1050,8 @@
 .files .ft-st.D {
   color: var(--bad-ink);
 }
-/* narrow header: the project crumb goes away whole (never cut to "o."), then the title truncates */
-.task-head {
-  container-type: inline-size;
-}
+/* narrow header: the project crumb goes away whole (never cut to "o.") only when the title
+   would be cut; TaskView measures it */
 .task-head .crumbs > .crumb-proj {
   flex: none;
 }
@@ -1061,11 +1059,9 @@
   flex: 0 1 auto;
   min-width: 48px;
 }
-@container (max-width: 560px) {
-  .task-head .crumbs > .crumb-proj,
-  .task-head .crumbs > .crumb-sep {
-    display: none;
-  }
+.task-head.crumb-tight .crumbs > .crumb-proj,
+.task-head.crumb-tight .crumbs > .crumb-sep {
+  display: none;
 }
 /* short window: the to-do line stays reachable under the first tray (it opens on click) */
 @media (max-height: 800px) {
@@ -1423,4 +1419,14 @@
 }
 .cx-talk-rest .cx-talk-track i {
   opacity: 0.45;
+}
+
+/* ═════════════ round 6 ═════════════ */
+
+/* context sheet: a part with nothing in the prompt yet says how it gets there, where size and share sit */
+.cx-part-note {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
 }
