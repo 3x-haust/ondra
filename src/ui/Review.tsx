@@ -475,7 +475,7 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
               <Show when={props.changed}>
                 <div class="seg sm">
                   <button classList={{ on: mode() === "file" }} onClick={() => setMode("file")}>{tr("파일")}</button>
-                  <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>{tr("변경")}</button>
+                  <button classList={{ on: mode() === "diff" }} onClick={() => setMode("diff")}>{tr("변경|diff")}</button>
                 </div>
               </Show>
               <Show when={text()?.text != null}>

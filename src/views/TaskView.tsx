@@ -50,7 +50,7 @@ function MoreMenu(props: { id: string; openPanel: (tab: PanelTab) => void }) {
       <Show when={open()}>
         <div class="menu" style={{ top: "36px", right: "0" }} onClick={(e) => e.stopPropagation()}>
           <Show when={t().status === "running"}>
-            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">{tr("일시정지")}</span></button>
+            <button onClick={() => (stopTask(t().id), close())}><Icon name="pause" size={14} class="muted" /><span class="row-title">{tr("일시정지|action")}</span></button>
           </Show>
           <Show when={t().status === "paused" || t().status === "failed"}>
             <button onClick={() => (resumeTask(t().id), close())}><Icon name="play" size={14} class="muted" /><span class="row-title">{tr("다시 시작")}</span></button>

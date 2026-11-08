@@ -16,8 +16,6 @@ export default {
   "실패": "Failed",
   "응답 필요": "Needs reply",
   "대기": "Queued",
-  "일시정지": "Paused",
-  "방금": "Now",
   "검토": "Review",
   "진행 중 {n}개": "{n} running",
 
@@ -32,7 +30,6 @@ export default {
   "결과물": "Results",
   "확인 필요": "Needs you",
   "다음": "Next",
-  "프로젝트": "Projects",
   "프로젝트 추가": "Add project",
   "프로젝트 폴더 선택": "Choose a project folder",
   "접기": "Collapse",
@@ -41,10 +38,8 @@ export default {
   "완료된 작업만 있어요": "Only finished tasks",
   "디바이스": "Devices",
   "디바이스 열기": "Open devices",
-  "켜진 기기 없음": "No devices running",
   "전체 {n}개": "{n} total",
   "기타 작업": "Other tasks",
-  "작업": "Tasks",
   "완료 {n}개": "{n} done",
   "보관함 {n}개": "{n} archived",
   "설정": "Settings",
@@ -68,8 +63,6 @@ export default {
   // ⌘K palette
   "앱": "App",
   "이동": "Go to",
-  "보기": "View",
-  "계정": "Accounts",
   "가져오기": "Import",
   "업데이트 확인": "Check for updates",
   "도구 · 권한": "Tools and permissions",
@@ -85,7 +78,6 @@ export default {
   "명령 보기": "Show commands",
   "사이드바 전환": "Toggle sidebar",
   "{name} 워크스페이스로 전환": "Switch to {name}",
-  "워크스페이스": "Workspaces",
   "뒤로": "Back",
   "앞으로": "Forward",
   "이전 작업": "Previous task",
@@ -105,12 +97,9 @@ export default {
   "패널 탭 닫기": "Close panel tab",
   "이전 패널 탭": "Previous panel tab",
   "다음 패널 탭": "Next panel tab",
-  "대화": "Chat",
   "입력창으로 이동": "Focus input",
 
   // shortcut sheet
-  "단축키": "Keyboard shortcuts",
-  "일반": "General",
   "단축키 표시": "Show shortcut hints",
   "⌘ 길게": "Hold ⌘",
   "빠른 요청": "Quick request",
@@ -118,7 +107,6 @@ export default {
 
   // onboarding
   "{name} 시작하기": "Set up {name}",
-  "찾는 중": "Looking",
   "가져올 항목 없음": "Nothing to import",
   "지침 {r} · 스킬 {s} · 메모리 {m} · 세션 {n}": "{r} instructions · {s} skills · {m} memories · {n} sessions",
   "지침 {r} · 스킬 {s} · 메모리 {m} 가져옴": "Imported {r} instructions · {s} skills · {m} memories",
@@ -126,7 +114,6 @@ export default {
   "로그인": "Sign in",
   "앱 제어 권한": "App control",
   "손쉬운 사용": "Accessibility",
-  "화면 기록": "Screen Recording",
   "시작": "Start",
 
   // login
@@ -169,7 +156,6 @@ export default {
   // accounts, plan windows, usage line
   "자동": "Auto",
   "자동 선택": "Picked automatically",
-  "로그인 필요": "Not signed in",
   "계정 관리": "Manage accounts",
   "크레딧": "Credits",
   "크레딧 {n}": "Credits {n}",

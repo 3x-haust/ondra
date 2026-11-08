@@ -3,8 +3,6 @@
 export default {
   // header and ⋯ menu
   "더 보기": "More",
-  "일시정지": "Pause",
-  "다시 시작": "Resume",
   "완료로 표시": "Mark as done",
   "이름 바꾸기": "Rename",
   "고정 해제": "Unpin",
@@ -38,7 +36,6 @@ export default {
   "실패": "Failed",
   "긴급": "Urgent",
   "높음": "High",
-  "보통": "Normal",
   "낮음": "Low",
 
   // above the composer
@@ -47,9 +44,7 @@ export default {
   "수정": "Edit",
   "저장": "Save",
   "취소": "Cancel",
-  "삭제된 작업": "Task deleted",
   "결과물 {n}개": "{n} results",
-  "보기": "View",
   "백그라운드 {n}개": "{n} in background",
   "변경은 PR에 남아요": "Changes stay in the PR",
   "워크트리 정리": "Clean up worktree",
@@ -70,9 +65,6 @@ export default {
   "파일": "Files",
   "셸": "Shell",
   "브라우저": "Browser",
-  "권한: 매번 묻기": "Permission: ask every time",
-  "권한: 편집 허용": "Permission: allow edits",
-  "권한: 전체 권한": "Permission: full access",
 
   // panel tabs
   "흐름": "Flow",
@@ -127,7 +119,6 @@ export default {
   "버리고 닫기": "Discard and close",
   "목록": "Back to list",
   "저장 안 됨": "Unsaved",
-  "변경": "Diff",
   "편집": "Edit",
   "닫기": "Close",
   "파일이 너무 커요": "File too large",
@@ -148,10 +139,7 @@ export default {
   "세션 {n}개": "{n} sessions",
   "폴더": "Folder",
   "우선순위": "Priority",
-  "종류": "Kind",
-  "일반": "Normal",
   "무거운 작업": "Heavy",
-  "계정": "Account",
   "자동": "Auto",
   "걸린 시간": "Took",
   "진행 시간": "Running for",
@@ -193,7 +181,6 @@ export default {
   "미리 볼 수 없음": "No preview",
 
   // PR
-  "방금": "just now",
   "{n}분 전": "{n}m ago",
   "{n}시간 전": "{n}h ago",
   "PR을 불러오지 못했어요": "Couldn't load the PR",
@@ -201,9 +188,7 @@ export default {
   "초안": "Draft",
   "닫힘": "Closed",
   "GitHub에서 열기": "Open on GitHub",
-  "검사": "Checks",
   "검사 {ok}/{all}": "Checks {ok}/{all}",
-  "충돌": "Conflict",
   "승인": "Approved",
   "수정 요청": "Changes requested",
   "리뷰 대기": "Review required",
@@ -214,7 +199,6 @@ export default {
   "진행 중 {n}": "{n} running",
   "통과 {n}": "{n} passed",
   "나머지 {n}개": "{n} more",
-  "대화": "Conversation",
   "코멘트 없음": "No comments",
   "변경이 커서 앞부분만 보여요": "Large diff · showing the start",
   "코드 코멘트": "Code comments",
@@ -225,7 +209,6 @@ export default {
   // issues
   "내 이슈": "Assigned",
   "내가 작성": "Authored",
-  "작업 중": "Agent working",
   "최근": "Recent",
   "필터": "Filter",
   "프로젝트 없음": "No project",
@@ -250,7 +233,6 @@ export default {
   "새 커밋": "New",
 
   // btw and side chat
-  "작업": "Task",
   "메인": "Main",
   "보는 중": "Looking",
   "대화에는 남지 않아요": "Not kept in the conversation",
@@ -263,7 +245,6 @@ export default {
   "기본 스킬": "Built-in skill",
   "스킬": "Skills",
   "한 일을 그림으로 보기": "Draw what it did",
-  "프로젝트": "Projects",
   "프로젝트 추가": "Add project",
   "프로젝트 폴더": "Project folder",
   "옆에서": "On the side",
@@ -283,7 +264,6 @@ export default {
   // context sheet
   "메모리에서 열기": "Open in Memory",
   "도구 결과": "Tool result",
-  "없음": "None",
   "가장 큰 항목": "Largest",
   "(내용 없음)": "(empty)",
   "마지막 요청 {n}": "Last request {n}",
@@ -294,7 +274,6 @@ export default {
   "지시 파일": "Instruction files",
   "{n}개 · 이름과 설명": "{n} · names and descriptions",
   "메모리": "Memory",
-  "도구": "Tools",
   "메시지 {n}개": "{n} messages",
   "불러오지 못했어요": "Couldn't load",
   "추가 지시": "Extra instructions",
@@ -311,17 +290,10 @@ export default {
   "기본 규칙": "Base rules",
   "문서 안내": "Docs",
   "작업 폴더": "Working folder",
-  "요청": "Request",
   "답변": "Answer",
   "직접 실행한 명령": "Command you ran",
   "정리한 요약": "Compaction summary",
   "갈래 요약": "Branch summary",
   "알림": "Notice",
   "시스템 변경": "System change",
-  "규칙": "Rule",
-  "취향": "Preference",
-  "결정": "Decision",
-  "사실": "Fact",
-  "방법": "Procedure",
-  "배운 점": "Lesson",
 } satisfies Record<string, string>;

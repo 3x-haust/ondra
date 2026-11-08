@@ -1,6 +1,5 @@
 export default {
   // general
-  "일반": "General",
   "테마": "Theme",
   "시스템": "System",
   "라이트": "Light",
@@ -19,7 +18,6 @@ export default {
   "늘리기": "Increase",
   "공통 지침": "Global instructions",
   "모든 작업에 적용할 지침": "Instructions for every task",
-  "워크스페이스": "Workspaces",
   "추가": "Add",
   "현재": "Current",
   "작업 {n}개": "{n} tasks",
@@ -32,7 +30,6 @@ export default {
   "최신 버전": "Up to date",
   "릴리스 노트": "Release notes",
   "업데이트 확인": "Check for updates",
-  "다시 시작": "Restart",
   "{v} 설치": "Install {v}",
 
   // workspace sheet
@@ -42,7 +39,6 @@ export default {
   "만들기": "Create",
   "이름": "Name",
   "기본 폴더": "Folder",
-  "변경": "Change",
   "CLI 로그인": "CLI login",
   "CLI 로그인 폴더": "CLI login folder",
   "Mac 기본": "Mac default",
@@ -52,16 +48,13 @@ export default {
   "Aside 계정": "Aside account",
   "커밋 작성자": "Commit author",
   "이메일": "Email",
-  "규칙": "Rules",
   "워크스페이스를 삭제했어요": "Workspace deleted",
   "작업과 프로젝트 {n}개는 {to} 워크스페이스로 옮겨요": "{n} tasks and projects move to {to}",
   "삭제할까요?": "Delete?",
   "삭제": "Delete",
 
   // accounts
-  "계정": "Accounts",
   "계정 이름": "Account name",
-  "로그인 필요": "Sign-in required",
   "{p} · 이 Mac의 기본 로그인": "{p} · this Mac's default login",
   "사용 기록 없음": "No usage yet",
   "캐시 적중률": "Cache hit rate",
@@ -78,10 +71,8 @@ export default {
   "가져오기": "Import",
   "가져왔어요 · 지침 {r} · 스킬 {s} · 메모리 {m}": "Imported · {r} instructions · {s} skills · {m} memories",
   "찾은 도구": "Detected tools",
-  "찾는 중": "Searching",
   "다시 찾기": "Rescan",
   "찾은 도구 없음": "No tools found",
-  "없음": "Not found",
   "지침 {a} · 스킬 {b} · 메모리 {c} · 세션 {d}": "{a} instructions · {b} skills · {c} memories · {d} sessions",
   "로그인됨": "Signed in",
   "지침": "Instructions",
@@ -107,11 +98,9 @@ export default {
   "손쉬운 사용": "Accessibility",
   "다른 앱 조작에 필요": "Needed to control other apps",
   "허용": "Allow",
-  "화면 기록": "Screen recording",
   "앱 화면 캡처에 필요": "Needed to capture app screens",
 
   // shortcuts
-  "단축키": "Shortcuts",
   "버튼 단축키 표시": "Show shortcuts on buttons",
   "⌘ 길게": "Hold ⌘",
   "어디서든 요청": "Request from anywhere",
@@ -175,7 +164,6 @@ export default {
   "응답 마칠 때": "On reply end",
 
   // tools
-  "도구": "Tools",
   "도구 {n}개 · {tok} 토큰": "{n} tools · {tok} tokens",
   "새로고침": "Refresh",
   "검색": "Search",
