@@ -861,6 +861,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   }
   const carries = taskById(id)?.follows;
   if (!resume && carries && !taskById(id)?.worktree && finished(taskById(carries))) takeBranch(id, carries);
+  // carrying on in a folder another finished job's branch lives in (a sibling of the job it follows)
+  if (!resume) claimBranch(id);
   // it had already said done when Ondra went down: it is over, don't prompt it again
   const said = taskById(id);
   if (resume && said?.saidDone && !unread(said).length && !said.pending?.length) {
@@ -1619,6 +1621,8 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
 }
 
 function finish(id: string, summary: string, run?: Run) {
+  // it worked in a finished job's branch folder: the branch (and its merge) ends up here
+  claimBranch(id);
   // its subagents are for it: once it is done, ones that never started go away
   // and running ones stop (a review that runs after its job ended is wasted)
   for (const k of activeKids(id)) {
@@ -1871,6 +1875,20 @@ export function createTask(f: {
 }
 
 /** The job it carries on gives it its branch and worktree. */
+const inside = (dir: string, root: string) => !!root && (dir === root || dir.startsWith(`${root.replace(/\/+$/, "")}/`));
+
+/**
+ * A job working in another job's open worktree takes its branch once that job is
+ * finished: merge and discard live on the newest job in the folder, so an older
+ * card doesn't sit there as 검토 while the work goes on elsewhere.
+ */
+export function claimBranch(id: string) {
+  const t = taskById(id);
+  if (!t || t.parentId || t.answer || t.worktree) return;
+  const holder = state.tasks.find((x) => x.id !== id && x.worktree?.state === "open" && inside(t.cwd, x.worktree.path));
+  if (holder && finished(holder)) takeBranch(id, holder.id);
+}
+
 function takeBranch(id: string, prevId: string) {
   const prev = taskById(prevId);
   const w = prev?.worktree;
