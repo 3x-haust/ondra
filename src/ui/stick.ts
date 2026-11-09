@@ -3,15 +3,6 @@
  * (the input grows, its tray opens) or its content grows: the messages move up
  * instead of sliding under the input.
  */
-let holding = false;
-let holdTimer: ReturnType<typeof setTimeout> | undefined;
-export const isHolding = () => holding;
-/** For the next moment, a chat that changes size stays where it is. */
-export function holdScroll(ms = 600) {
-  holding = true;
-  clearTimeout(holdTimer);
-  holdTimer = setTimeout(() => (holding = false), ms);
-}
 
 /**
  * Follow the newest content the way Codex does: the chat stays pinned to the
@@ -31,8 +22,8 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     onStick?.(v);
   };
   const follow = () => {
-    // opening the to-do list leaves the chat where it is
-    if (!stuck || holding) return;
+    // a tray opening under it pushes the chat up, closing lets it back down
+    if (!stuck) return;
     ours = true;
     el.scrollTop = el.scrollHeight;
     last = gap();

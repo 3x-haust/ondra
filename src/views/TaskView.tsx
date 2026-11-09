@@ -1,5 +1,4 @@
 // One job: title and state, the transcript, whatever waits on you docked
-import { holdScroll } from "../ui/stick";
 // above its own input, and the side panel (changes / files / terminal / web).
 import { Fold } from "../ui/Fold";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
@@ -64,7 +63,7 @@ function Todos(props: { t: Task }) {
   const cur = () => props.t.plan[count().now] ?? props.t.plan.find((p) => p.state !== "done");
   return (
     <div class="todos" classList={{ closed: !open() }}>
-      <button class="todos-head" onClick={() => { holdScroll(); setOpen(!open()); }} aria-expanded={open()}>
+      <button class="todos-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
         <Icon name="list" size={14} />
         <b>{tr("할 일")}</b>
         <span class="num">{count().label}</span>
