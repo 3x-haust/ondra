@@ -40,3 +40,47 @@ export function commandKind(cmd: string): "poll" | "check" | "other" {
   if (ps.some((p) => CHECK.test(p) && !look(p))) return "check";
   return "other";
 }
+
+// Searches and listings walk a folder tree: from a small project folder they are
+// quick, from ~ or / they can run for many minutes and print nothing.
+//   `rg foo src | head` still counts: rg walks src either way, and while it prints
+//   it isn't stalled. Plain `grep foo file` and `ls` read one place: not searches.
+const WALK = /^(?:\S*\/)?(find|fd|fdfind|rg|ag|mdfind|locate|tree|du)(?=\s|$)/;
+const LS_R = /^(?:\S*\/)?ls(?=\s)(?:.*\s)?(-[a-zA-Z]*R|--recursive)/;
+const GREP_R = /^(?:\S*\/)?[ef]?grep(?=\s)(?:.*\s)?(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive)(?=\s|$)/;
+
+/** `$(…)`, backticks and `<(…)` run their own commands: `list=$(find .)` is a find */
+const unwrap = (cmd: string) => cmd.replace(/\$\(|`|<\(/g, "\n");
+// a quote cut by the chain split (`rg 'a|b'`) leaves a stray mark: drop it too
+const words = (s: string) => (s.match(/'[^']*'|"[^"]*"|\S+/g) ?? []).map((w) => w.replace(/^['"]|['"]$/g, ""));
+
+/**
+ * The first search or listing in a shell command: its program and first
+ * argument, as they show in `ps` (no argument when the shell rewrites it:
+ * variables, globs; `~` stays for the caller to expand).
+ */
+export function searchCall(cmd: string): { program: string; arg?: string } | undefined {
+  const p = parts(unwrap(cmd))
+    .map((x) => x.replace(/^((sudo|env|nohup|nice|builtin|do|then|else)\s+)+/, ""))
+    .find((x) => WALK.test(x) || LS_R.test(x) || GREP_R.test(x));
+  if (!p) return undefined;
+  const [first, arg] = words(p);
+  const program = first.split("/").pop()!;
+  return { program, arg: arg && !/[$*?[{`]/.test(arg) ? arg : undefined };
+}
+
+/** A command that walks folders looking for files or text (find, rg, grep -r, du, ls -R, mdfind, tree …). */
+export const isSearch = (cmd: string) => !!searchCall(cmd);
+
+/** How long a search may go without new output before Ondra stops it. */
+export const SEARCH_STALL_MS = 90_000;
+
+/**
+ * A running search whose output hasn't changed for SEARCH_STALL_MS: it is walking
+ * a folder far too big (~, Library), not about to finish. Background commands
+ * and anything that isn't a search are never stale.
+ */
+export function searchStalled(s: { command: string; startedAt: number; changedAt?: number; endedAt?: number; background?: boolean }, now: number, ms = SEARCH_STALL_MS): boolean {
+  if (s.endedAt || s.background || !isSearch(s.command)) return false;
+  return now - Math.max(s.startedAt, s.changedAt ?? 0) >= ms;
+}

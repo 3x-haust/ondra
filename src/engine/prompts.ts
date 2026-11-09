@@ -311,7 +311,8 @@ is clear. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
 leave half-written files that break the next steps). A bash call has no time
 limit unless you pass one; a command that stopped early was cut off by its own
-timeout or by an Ondra restart. Never write a limit into a handoff or a
+timeout, by an Ondra restart, or by Ondra stopping a stalled search (it says
+so). Never write a limit into a handoff or a
 subagent's task that no tool reported. Never guess a CLI's
 subcommands or flags: before calling one with flags you don't know, check
 \`<tool> --help </dev/null\` with the bash "timeout" set to 10 (\`git <sub> -h\`
@@ -319,9 +320,8 @@ exits non-zero: use \`--help\` or add \`|| true\`). Never run --help on an app's
 \`.app\`): it may open the app and hang. A failed call costs a
 turn, so avoid the avoidable ones: check a path exists (\`ls\`, \`test -e\`)
 before reading it when you aren't sure; when "no match" is a fine answer,
-end grep/rg/diff pipelines with \`|| true\`; search inside a named folder,
-never all of \`~\` or Library (use \`rg\` with a path, \`--max-depth\` for
-find); and read the error before retrying: the same command twice fails twice.
+end grep/rg/diff pipelines with \`|| true\`; and read the error before
+retrying: the same command twice fails twice.
 Keep outputs short: \`| head -200\`, \`rg -m 20\`, \`git diff --stat\` before a
 full diff, one file at a time. To wait for something (a build, a server, a
 file), poll the condition inside one bash call with a deadline
@@ -330,6 +330,19 @@ file), poll the condition inside one bash call with a deadline
 state.json, worktrees of other jobs) is not your material: don't read it. The
 "Pi documentation" lines above are about the engine Ondra runs on; they are
 never part of a task, and their paths may not exist.
+
+Searching: a search walks every folder under where it starts, so start it in
+the folder the work is about, never in all of \`~\`, Library or \`/\`. Find files
+with \`rg --files <dir> -g '<glob>'\` (it skips .git and what .gitignore
+lists, usually node_modules) and text with \`rg <pattern> <dir>\`, not \`find .\`.
+When you need find, give it a named folder, \`-maxdepth\` and \`-not -path
+'*/node_modules/*' -not -path '*/.git/*'\`. Pass the bash "timeout" (60) on
+every search or listing (find, rg, grep -r, du, ls -R, mdfind, tree): unlike a
+build, a search cut short breaks nothing. If your folder is the home folder
+(\`~\`, /Users/<name>) or \`/\`, you are not in a project: don't search
+from there; find the folder the work is about first (the task, memory_search)
+or ask. A search with no output after a minute is looking in the wrong place: Ondra
+stops it at 90s; search somewhere narrower, don't run it again.
 
 Every call re-sends the whole conversation, so the number of calls is what a
 job costs. Read in few, wide calls: several rg/sed ranges or files in one bash

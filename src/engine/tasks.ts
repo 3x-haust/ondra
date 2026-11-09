@@ -11,13 +11,13 @@ import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceBy
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
-import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
+import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
-import { commandKind } from "./commandKind";
+import { commandKind, SEARCH_STALL_MS, searchCall, searchStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -75,6 +75,10 @@ interface Run {
   pendingHandoff?: Handoff;
   /** a review it asked for was refused (one per job): said again as a prompt if the turn ended waiting for it */
   refused?: string;
+  /** toolCallId → when that shell's output last changed (the search watchdog) */
+  changed?: Map<string, number>;
+  /** searches the watchdog already tried to stop */
+  searchStops?: Set<string>;
 }
 
 
@@ -939,7 +943,9 @@ function handlers(id: string, run: Run) {
           if (typeof tail !== "string") break;
           updateTask(id, (t) => {
             const sh = t.shells.find((s) => s.id === ev.toolCallId);
-            if (sh) sh.tail = tail.slice(-TAIL);
+            if (!sh) return;
+            if (sh.tail !== tail.slice(-TAIL)) (run.changed ??= new Map()).set(ev.toolCallId, Date.now());
+            sh.tail = tail.slice(-TAIL);
           });
           break;
         }
@@ -1751,6 +1757,38 @@ export function createAnswer(f: { space: Task["space"]; question: string; text: 
  * go in at once.
  */
 /**
+ * The search watchdog: a find/rg/du … that has printed nothing new for
+ * SEARCH_STALL_MS is walking a folder far too big (all of ~, Library). Only that
+ * command is stopped, never the job, a build or a background command, and the
+ * agent is told why so it searches somewhere narrower.
+ */
+function stopStalledSearches() {
+  const now = Date.now();
+  for (const [id, run] of runs) {
+    if (!run.streaming) continue;
+    for (const s of taskById(id)?.shells ?? []) {
+      if (!run.tools.has(s.id) || run.searchStops?.has(s.id)) continue;
+      if (searchStalled({ ...s, changedAt: run.changed?.get(s.id) }, now)) void stopSearch(id, run, s);
+    }
+  }
+}
+
+async function stopSearch(id: string, run: Run, s: Shell) {
+  (run.searchStops ??= new Set()).add(s.id);
+  const call = searchCall(s.command);
+  if (!call) return;
+  const stopped = await agentStopCommand(agentOf(id), call.program, call.arg).catch(() => 0);
+  if (!stopped || runs.get(id) !== run) return;
+  const cmd = s.command.replace(/\s+/g, " ").trim();
+  updateTask(id, (t) => push(t, { kind: "note", text: "검색 멈춤 · 1분 넘게 결과 없음" }));
+  if (run.streaming)
+    void request(agentOf(id), {
+      type: "steer",
+      message: `(Ondra) Stopped \`${cmd.length > 120 ? `${cmd.slice(0, 120)}…` : cmd}\` after ${SEARCH_STALL_MS / 1000}s with no output: it was walking too big a folder. Search a named project folder with rg --files / rg, skip node_modules/.git/Library.`,
+    }).catch(() => {});
+}
+
+/**
  * Catches the two loops that waste a job's time: the same command failing again
  * with no file changed in between, and re-running a check that already passed
  * when nothing changed since. The agent is told once per command, at most 3 times a run.
@@ -2113,6 +2151,7 @@ export function startScheduler() {
   // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
   setTimeout(() => void watchPrs(), 40_000);
   setInterval(() => void watchPrs(), 3 * 60_000);
+  setInterval(stopStalledSearches, 10_000);
   createRoot(() => {
     createEffect(
       on(

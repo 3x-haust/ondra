@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
-import { commandKind } from "./commandKind";
+import { commandKind, isSearch, SEARCH_STALL_MS, searchCall, searchStalled } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound, riskyChange } from "./proof";
 import { closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
 
@@ -26,6 +26,62 @@ describe("commandKind", () => {
   it("changing things is neither", () => {
     for (const c of ["git push origin main", "gh api repos/a/b/issues -f title=x", "curl -X POST https://x/y", "git checkout -b x", "gh pr merge 3 --merge"])
       expect(commandKind(c), c).toBe("other");
+  });
+});
+
+describe("isSearch", () => {
+  it("finds, greps, listings and sizes that walk folders", () => {
+    for (const c of [
+      "find . -name x",
+      "list=$(find . -name '*.html' -not -path '*/node_modules/*')",
+      "cd web && find src -type f",
+      "timeout 30 rg foo",
+      "du -sh ~/*",
+      "ls -R",
+      "ls -laR src",
+      "grep -r foo .",
+      "grep -rn --include=*.ts foo src",
+      "mdfind x",
+      "for f in `find . -name '*.md'`; do wc -l $f; done",
+      "sudo find / -name x",
+      "/usr/bin/find . -type d",
+      "tree -L 3",
+      // rg walks src whether or not head cuts its output: a search (a quick one stops long before the watchdog)
+      "rg foo src | head",
+    ])
+      expect(isSearch(c), c).toBe(true);
+  });
+  it("not builds, tests, git, or one-file reads", () => {
+    for (const c of ["pnpm build", "vitest run", "git log --oneline -5", "git grep foo", "grep foo package.json", "cat a.txt | grep x", "ls -la", "echo 'find . -name x'", "cargo test", "pnpm dev"])
+      expect(isSearch(c), c).toBe(false);
+  });
+  it("names the program and first argument as ps shows them", () => {
+    expect(searchCall("list=$(find . -name '*.html')")).toEqual({ program: "find", arg: "." });
+    expect(searchCall("cd web && /usr/bin/find src -type f")).toEqual({ program: "find", arg: "src" });
+    expect(searchCall("timeout 30 rg 'a b' src")).toEqual({ program: "rg", arg: "a b" });
+    expect(searchCall("find ~ -name x")).toEqual({ program: "find", arg: "~" });
+    // the shell rewrites globs and variables: no argument to match on
+    expect(searchCall("du -sh ~/*")).toEqual({ program: "du", arg: "-sh" });
+    expect(searchCall("find $HOME -name x")).toEqual({ program: "find", arg: undefined });
+  });
+});
+
+describe("searchStalled", () => {
+  const at = 1_000_000;
+  const find = { command: "find . -name '*.html'", startedAt: at };
+  it("a search with no new output for the limit", () => {
+    expect(searchStalled(find, at + SEARCH_STALL_MS - 1)).toBe(false);
+    expect(searchStalled(find, at + SEARCH_STALL_MS)).toBe(true);
+    // output came in since: counted from then
+    expect(searchStalled({ ...find, changedAt: at + 60_000 }, at + SEARCH_STALL_MS)).toBe(false);
+    expect(searchStalled({ ...find, changedAt: at + 60_000 }, at + 60_000 + SEARCH_STALL_MS)).toBe(true);
+  });
+  it("never a finished, background or non-search command", () => {
+    const late = at + 10 * SEARCH_STALL_MS;
+    expect(searchStalled({ ...find, endedAt: at + 1000 }, late)).toBe(false);
+    expect(searchStalled({ ...find, background: true }, late)).toBe(false);
+    for (const command of ["pnpm build", "pnpm test", "cargo build --release", "npm install", "sleep 600"])
+      expect(searchStalled({ command, startedAt: at }, late), command).toBe(false);
   });
 });
 

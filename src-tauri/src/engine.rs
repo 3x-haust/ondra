@@ -437,6 +437,88 @@ pub fn agent_kill(engine: State<'_, Engine>, id: String) {
     }
 }
 
+/// One process from `ps`.
+struct PsRow {
+    pid: i32,
+    ppid: i32,
+    command: String,
+}
+
+fn ps_rows() -> Vec<PsRow> {
+    let Ok(out) = Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid=,command="]).stdin(Stdio::null()).stderr(Stdio::null()).output() else {
+        return vec![];
+    };
+    String::from_utf8_lossy(&out.stdout).lines().filter_map(parse_ps).collect()
+}
+
+fn parse_ps(line: &str) -> Option<PsRow> {
+    let (pid, rest) = line.trim_start().split_once(char::is_whitespace)?;
+    let (ppid, command) = rest.trim_start().split_once(char::is_whitespace).unwrap_or((rest.trim(), ""));
+    Some(PsRow { pid: pid.parse().ok()?, ppid: ppid.parse().ok()?, command: command.trim().to_string() })
+}
+
+/// `command` runs `program` (any path to it) with `arg` somewhere in its arguments.
+fn runs_program(command: &str, program: &str, arg: Option<&str>) -> bool {
+    let (first, rest) = command.split_once(char::is_whitespace).unwrap_or((command, ""));
+    first.rsplit('/').next() == Some(program) && arg.is_none_or(|a| rest.contains(a))
+}
+
+/// The processes below `root` (never `root` itself) that run `program` with `arg`.
+fn matching_below(rows: &[PsRow], root: i32, program: &str, arg: Option<&str>) -> Vec<i32> {
+    let mut below = vec![root];
+    let mut i = 0;
+    while i < below.len() {
+        let parent = below[i];
+        i += 1;
+        for r in rows {
+            if r.ppid == parent && r.pid > 1 && !below.contains(&r.pid) {
+                below.push(r.pid);
+            }
+        }
+    }
+    rows.iter()
+        .filter(|r| r.pid != root && below[1..].contains(&r.pid) && runs_program(&r.command, program, arg))
+        .map(|r| r.pid)
+        .collect()
+}
+
+fn signal(sig: &str, pid: i32) {
+    let _ = Command::new("/bin/kill").args([sig, &pid.to_string()]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+}
+
+/// Stop one command a job's shell is running (a search walking all of ~), not the
+/// job: only processes under that job's engine whose command line is `program`
+/// with `arg`. SIGTERM, then SIGKILL after 2s for the ones still there. Returns
+/// how many were signalled.
+#[tauri::command]
+pub fn agent_stop_command(engine: State<'_, Engine>, id: String, program: String, arg: Option<String>) -> Result<usize, String> {
+    let root = engine.procs.lock().unwrap().get(&id).map(|p| p.child.id() as i32).ok_or("에이전트가 실행 중이 아닙니다")?;
+    if program.trim().is_empty() || program.contains('/') {
+        return Ok(0);
+    }
+    // the shell expanded `~` before the program saw it
+    let arg = arg.filter(|a| !a.is_empty()).map(|a| match a.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => format!("{}{rest}", home().display()),
+        _ => a,
+    });
+    let pids = matching_below(&ps_rows(), root, &program, arg.as_deref());
+    for pid in &pids {
+        signal("-TERM", *pid);
+    }
+    if !pids.is_empty() {
+        let first = pids.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            // the same processes, still under the same engine (a pid can be reused)
+            let still = matching_below(&ps_rows(), root, &program, arg.as_deref());
+            for pid in first.iter().filter(|p| still.contains(p)) {
+                signal("-KILL", *pid);
+            }
+        });
+    }
+    Ok(pids.len())
+}
+
 #[tauri::command]
 pub fn agent_alive(engine: State<'_, Engine>) -> Vec<String> {
     engine.procs.lock().unwrap().keys().cloned().collect()
@@ -497,4 +579,40 @@ pub async fn engine_models(app: AppHandle, account_id: String) -> Result<Vec<Str
     let _ = child.kill();
     let _ = child.wait();
     Ok(models)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows(list: &[(i32, i32, &str)]) -> Vec<PsRow> {
+        list.iter().map(|(pid, ppid, c)| PsRow { pid: *pid, ppid: *ppid, command: c.to_string() }).collect()
+    }
+
+    #[test]
+    fn reads_ps_lines() {
+        let r = parse_ps("  412     1 /usr/bin/find . -name *.html").unwrap();
+        assert_eq!((r.pid, r.ppid, r.command.as_str()), (412, 1, "/usr/bin/find . -name *.html"));
+        assert!(parse_ps("PID PPID COMMAND").is_none());
+    }
+
+    #[test]
+    fn stops_only_the_search_under_the_job() {
+        let all = rows(&[
+            (100, 1, "/Applications/Ondra.app/Contents/MacOS/ondra-engine --mode rpc"),
+            (200, 100, "/bin/bash -c list=$(find . -name '*.html')"),
+            (201, 200, "find . -name *.html"),
+            (300, 100, "/bin/bash -c pnpm dev"),
+            (301, 300, "node vite"),
+            (400, 1, "find . -name *.html"),
+            (500, 1, "/usr/bin/find / -name x"),
+        ]);
+        assert_eq!(matching_below(&all, 100, "find", Some(".")), vec![201]);
+        assert_eq!(matching_below(&all, 100, "find", None), vec![201]);
+        assert!(matching_below(&all, 100, "ondra-engine", None).is_empty());
+        assert!(matching_below(&all, 100, "rg", None).is_empty());
+        assert!(matching_below(&all, 100, "find", Some("/Users")).is_empty());
+        assert!(runs_program("/opt/homebrew/bin/rg --files /Users/me/src", "rg", Some("--files")));
+        assert!(!runs_program("/bin/bash -c rg foo", "rg", None));
+    }
 }

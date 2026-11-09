@@ -355,6 +355,7 @@ pub fn run() {
             engine::agent_spawn,
             engine::agent_send,
             engine::agent_kill,
+            engine::agent_stop_command,
             engine::agent_alive,
             engine::engine_models,
             #[cfg(target_os = "macos")]
