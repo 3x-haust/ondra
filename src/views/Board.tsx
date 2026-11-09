@@ -246,11 +246,15 @@ function Card(props: { t: Task; byProject: boolean }) {
   const job = () => props.t;
   const st = () => stateOf(job());
   const gone = () => discarded(job());
-  /** the state in the column's words (a discarded one sits under 완료 but says 버림) */
-  const word = () => (gone() ? "버림" : STATE_WORD[st()]);
+  /** merged by Ondra: its changes are in, nothing of it is left to count or check */
+  const merged = () => !gone() && job().worktree?.state === "merged";
+  /** the state in the column's words (under 완료, a discarded one says 버림 and a merged one 병합됨) */
+  const word = () => (gone() ? "버림" : merged() ? "병합됨" : STATE_WORD[st()]);
+  /** finished with checks it couldn't do: the canvas card's badge */
+  const unchecked = () => job().status === "done" && !gone() && !merged() && !!job().unverified?.length;
   const kids = () => state.tasks.filter((k) => k.parentId === job().id);
-  /** thrown away: nothing of it is left to count */
-  const diff = () => (gone() ? { add: 0, del: 0 } : changes(job()));
+  /** thrown away or merged: nothing of it is left to count */
+  const diff = () => (gone() || merged() ? { add: 0, del: 0 } : changes(job()));
   const [talk, setTalk] = createSignal(false);
   const [msg, setMsg] = createSignal("");
   const [sent, setSent] = createSignal(0);
@@ -301,18 +305,18 @@ function Card(props: { t: Task; byProject: boolean }) {
       <Icon name={icon} size={14} />
     </button>
   );
-  /** under 완료 a discarded card says 버림 where its changes would be */
-  const goneWord = () => gone() && !props.byProject;
-  const foot = () => !!(kids().length || diff().add || diff().del || sent() || goneWord());
+  /** under 완료 a discarded (or merged) card says so where its changes would be */
+  const goneWord = () => (gone() || merged()) && !props.byProject;
+  const foot = () => !!(kids().length || diff().add || diff().del || sent() || goneWord() || unchecked());
 
   return (
-    <article class={`bcard tone-${st()}`} classList={{ talking: talk() }} onClick={() => openTask(job().id)} onContextMenu={cardMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
+    <article class={`bcard tone-${st()}${talk() ? " talking" : ""}`} onClick={() => openTask(job().id)} onContextMenu={cardMenu(job().id)} tabindex="0" onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && openTask(job().id)}>
       <div class="bc-top">
         <span class="bc-glyph" title={props.byProject ? undefined : t(word())}>
           <Glyph t={job()} />
         </span>
         {/* grouped by project, no column says the state: the card does */}
-        <Show when={props.byProject}><span class={`bc-state tone-${gone() ? "discarded" : st()}`}>{t(word())}</span></Show>
+        <Show when={props.byProject}><span class={`bc-state tone-${gone() ? "discarded" : merged() ? "merged" : st()}`}>{t(word())}</span></Show>
         <IssueTag t={job()} />
         <Show when={!props.byProject}><span class="bc-proj">{projectOf(job())?.name ?? t("기타")}</span></Show>
         <span class="spacer" />
@@ -322,6 +326,10 @@ function Card(props: { t: Task; byProject: boolean }) {
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
       <Show when={foot()}>
         <div class="bc-meta">
+          {/* what it couldn't check, first in the line under the title (the top row has no room) */}
+          <Show when={unchecked()}>
+            <span class="unverified-badge" title={job().unverified!.join("\n")}>{t("{n}개 확인 안 됨", { n: job().unverified!.length })}</span>
+          </Show>
           <Kids t={job()} class="bc-kids" />
           <Show when={diff().add || diff().del}>
             <span class="bc-diff">
@@ -329,7 +337,7 @@ function Card(props: { t: Task; byProject: boolean }) {
               <Show when={diff().del}> <span class="del">−{diff().del}</span></Show>
             </span>
           </Show>
-          <Show when={goneWord()}><span class="bc-state tone-discarded">{t("버림")}</span></Show>
+          <Show when={goneWord()}><span class={`bc-state tone-${gone() ? "discarded" : "merged"}`}>{t(word())}</span></Show>
           <Show when={sent()}><span class="bc-sent">{t("보냄 {n}", { n: sent() })}</span></Show>
         </div>
       </Show>

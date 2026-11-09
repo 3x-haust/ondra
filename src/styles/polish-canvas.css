@@ -1818,16 +1818,17 @@
   border-radius: var(--r-sm);
 }
 
-/* ── side sheet: the title has its own row (two lines at most); the actions sit at its right when
-   it fits there, on the row under it otherwise */
+/* ── side sheet: the title (two lines at most) with open / close at the right of its first row;
+   the task's actions (버리기 · 병합, 다시 시작, …) on the row under it */
 .cv-dr-head {
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   column-gap: var(--s-8);
-  row-gap: var(--s-4);
+  row-gap: var(--s-8);
 }
 .cv-dr-name {
-  flex: 1 1 auto;
+  grid-column: 1;
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -1850,10 +1851,99 @@
   text-overflow: clip;
   overflow-wrap: anywhere;
 }
-.cv-dr-tools {
-  flex: none;
+.cv-dr-win {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   align-items: center;
+  gap: 2px;
+}
+.cv-dr-head .cv-dr-open + .icon-btn {
+  margin-left: 0;
+}
+.cv-dr-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: var(--s-8);
-  margin-left: auto;
+}
+/* what was asked, in full */
+.cv-dr-ask {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── steps: a command reads as code on the card as in the sheet */
+.cv-act-row .tg.cmd {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+/* ── lane meter: discarded is its own part, quieter than queued */
+.cv-proj-meter i.t-gone {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* ── canvas header legend: the words go first when the header is narrow (the glyph, count and tooltip stay) */
+.canvas-view .head {
+  container-type: inline-size;
+}
+.canvas-view .head-title {
+  flex: none;
+  white-space: nowrap;
+}
+.canvas-view .cv-legend {
+  min-width: 0;
+  overflow: hidden;
+}
+.canvas-view .cv-legend > span {
+  flex: none;
+  white-space: nowrap;
+}
+@container (max-width: 900px) {
+  :root:lang(en) .canvas-view .cv-legend .lb {
+    display: none;
+  }
+}
+@container (max-width: 780px) {
+  .canvas-view .cv-legend .lb {
+    display: none;
+  }
+}
+
+/* ── light mode: the lines read over the dot grid (a stronger ink, a longer dash than a dot) */
+:root[data-theme="light"] .cv-edge:not(.hot) path {
+  stroke-dasharray: 6 4;
+}
+:root[data-theme="light"] .cv-edge.t-live:not(.hot) path {
+  stroke: color-mix(in srgb, var(--ink) 38%, transparent);
+}
+:root[data-theme="light"] .cv-edge.t-done:not(.hot) path,
+:root[data-theme="light"] .cv-edge.t-idle:not(.hot) path {
+  stroke: color-mix(in srgb, var(--ink) 28%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .cv-edge:not(.hot) path {
+    stroke-dasharray: 6 4;
+  }
+  :root:not([data-theme="dark"]) .cv-edge.t-live:not(.hot) path {
+    stroke: color-mix(in srgb, var(--ink) 38%, transparent);
+  }
+  :root:not([data-theme="dark"]) .cv-edge.t-done:not(.hot) path,
+  :root:not([data-theme="dark"]) .cv-edge.t-idle:not(.hot) path {
+    stroke: color-mix(in srgb, var(--ink) 28%, transparent);
+  }
+}
+
+/* ── board: a finished card's "확인 안 됨" leads its bottom line */
+.bc-meta .unverified-badge {
+  flex: none;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-sm);
+  line-height: 18px;
 }
