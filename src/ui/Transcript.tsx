@@ -1,6 +1,6 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
 import { noteText, nowText } from "../engine/describe";
-import { holdScroll, keepBottom } from "./stick";
+import { holdScroll, keepBottom, toBottomSent } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
@@ -769,6 +769,9 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
       if (scroller.scrollHeight - top > scroller.clientHeight + 4) scroller.scrollTo({ top });
     }, wait);
   onMount(() => settled() && toAnswer(80));
+  // what the user sends always shows: a new message (or one queued for the next turn) takes the chat to the bottom
+  const sent = () => props.task.entries.filter((e) => e.kind === "user" && !e.by).length + (props.task.queue ?? []).filter((q) => !q.by).length;
+  createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(scroller)), { defer: true }));
   createEffect(on(settled, (s, was) => s && was === false && toAnswer(520), { defer: true }));
   const queuePos = () => {
     const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);

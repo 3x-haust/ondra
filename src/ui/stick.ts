@@ -23,6 +23,9 @@ export function holdScroll(ms = 600, at: Element | null = null) {
  * follows again only once they are back at the very bottom (or press "맨 아래로").
  * `onStick` hears when following turns on or off.
  */
+/** Tell a chat kept by keepBottom that the user just sent: it goes to the bottom and follows again. */
+export const toBottomSent = (el: HTMLElement | undefined) => el?.dispatchEvent(new Event("sent"));
+
 export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void): () => void {
   let stuck = true;
   let ours = false; // the scroll we just made ourselves
@@ -56,6 +59,14 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   const onKey = (e: KeyboardEvent) => {
     if (["PageUp", "Home", "ArrowUp"].includes(e.key) && !(e.target as HTMLElement).closest?.("input, textarea, [contenteditable]")) set(false);
   };
+  // the user sent something: back to the bottom and following, wherever they were
+  const onSent = () => {
+    set(true);
+    ours = true;
+    el.scrollTop = el.scrollHeight;
+    last = gap();
+  };
+  el.addEventListener("sent", onSent);
   const ro = new ResizeObserver(follow);
   ro.observe(el);
   // the content growing too (an image or a question card arriving after the
@@ -79,5 +90,6 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     el.removeEventListener("touchstart", onTouchStart);
     el.removeEventListener("touchmove", onTouchMove);
     el.removeEventListener("keydown", onKey);
+    el.removeEventListener("sent", onSent);
   };
 }
