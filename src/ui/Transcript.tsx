@@ -1,17 +1,18 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
 import { noteText, nowText } from "../engine/describe";
-import { keepBottom } from "./stick";
+import { holdScroll, keepBottom } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
-import { createEffect, onCleanup, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
 import { kidsOf, state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
 import { describeBrowser, describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
-import { BlockView } from "./Blocks";
+import { BlockView, type ProofBlock } from "./Blocks";
+import { vizOf } from "./viz";
 import { discarded, withDiff } from "../state/progress";
 import { long, now, short, statusLabel } from "./bits";
 import { Icon } from "./Icon";
@@ -152,7 +153,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
             {(g) => (
               <div class="blocks">
                 <For each={chunkLinks(g().blocks)}>
-                  {(c) => (Array.isArray(c) ? <div class="blk blk-links"><For each={c}>{(b) => <BlockView block={b} />}</For></div> : <BlockView block={withDiff(c, props.task)} />)}
+                  {(c) => (Array.isArray(c) ? <div class="blk blk-links"><For each={c}>{(b) => <BlockView block={b} />}</For></div> : <BlockView block={withDiff(c, props.task)} task={props.task} />)}
                 </For>
               </div>
             )}
@@ -172,6 +173,55 @@ const assigner = (t: Task) => {
 
 /** Explanations drawn as pictures: they stay in view when the work folds. */
 const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence", "steps", "page", "flow", "deps", "classes", "er", "arch", "states", "diff", "tests", "options", "trace", "git"]);
+/** what a finished turn shows after its answer, folded: the pictures that explained the work
+ *  (a page it ended with is the result itself, and numbers and proof stay in view) */
+const isPicture = (b: Block) => (VISUAL.has(b.type) && b.type !== "page") || b.type === "timeline" || !!vizOf(b.type);
+
+/** a finished turn's pictures: one line under the answer that opens them all */
+function PictureFold(props: { entries: Entry[]; task: Task }) {
+  const [open, setOpen] = createSignal(false);
+  return (
+    <div class="work-fold pic-fold" classList={{ open: open() }}>
+      <button class="work-head" onClick={() => (holdScroll(800), setOpen(!open()))} aria-expanded={open()}>
+        <span>{tr("그림 {n}개", { n: props.entries.length })}</span>
+        <Icon name="chevron" size={14} class="chev" />
+      </button>
+      <Fold open={open()}>
+        <div class="work-body">
+          <Items entries={props.entries} task={props.task} live={false} />
+        </div>
+      </Fold>
+    </div>
+  );
+}
+
+/**
+ * The closing summary of a finished turn, answer first: its words and what it proved stay in view,
+ * the pictures move to one fold after them. A checklist the job ended with joins its evidence
+ * (one list: each line proven, or not checked with why). Without words, the blocks are the answer.
+ */
+function summaryParts(lead: Entry[], pictures: Entry[]): { lead: Entry[]; pictures: Entry[] } {
+  const said = lead.some((e) => e.kind === "text");
+  const folded = said ? lead.filter((e) => e.kind === "block" && isPicture(e.block)) : [];
+  let shown = lead.filter((e) => !folded.includes(e));
+  const ev = shown.filter((e): e is Entry & { kind: "block" } => e.kind === "block" && e.block.type === "evidence");
+  const lists = shown.filter((e): e is Entry & { kind: "block" } => e.kind === "block" && e.block.type === "checklist");
+  if (ev.length && lists.length) {
+    const last = ev[ev.length - 1];
+    const checks = lists.flatMap((l) => (l.block.type === "checklist" ? (l.block.items ?? []).map((it) => ({ label: String(it.label ?? ""), done: !!it.done })) : []));
+    const merged = { ...last, block: { ...last.block, checks } as ProofBlock } as Entry;
+    shown = shown.filter((e) => !lists.includes(e as Entry & { kind: "block" })).map((e) => (e === last ? merged : e));
+  }
+  // the proof comes right under the words it backs
+  const proof = shown.filter((e) => e.kind === "block" && e.block.type === "evidence");
+  const at = shown.map((e) => e.kind).lastIndexOf("text");
+  if (proof.length && at >= 0) {
+    const rest = shown.filter((e) => !proof.includes(e));
+    const i = rest.map((e) => e.kind).lastIndexOf("text");
+    shown = [...rest.slice(0, i + 1), ...proof, ...rest.slice(i + 1)];
+  }
+  return { lead: shown, pictures: [...pictures, ...folded] };
+}
 
 /**
  * While the job isn't finished you see everything, with nothing to fold or unfold
@@ -203,7 +253,12 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
     while (i > tailStart() && body()[i - 1].kind === "note") i--;
     return i;
   });
-  const rest = () => [...body().slice(0, tailStart()).filter(stays), ...body().slice(tailStart(), notesFrom())];
+  // what stayed out of the work fold: errors where they happened, pictures in the fold after the answer
+  const parts = createMemo(() => {
+    const mid = body().slice(0, tailStart()).filter(stays);
+    return summaryParts([...mid.filter((e) => e.kind === "error"), ...body().slice(tailStart(), notesFrom())], mid.filter((e) => e.kind === "block"));
+  });
+  const rest = () => parts().lead;
   const after = () => body().slice(notesFrom());
   const answer = () => {
     const r = rest();
@@ -260,9 +315,14 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
             </Show>
           </div>
         </Show>
+        {/* where a finished job's answer starts: the thread opens here when the rest doesn't fit */}
+        <Show when={props.last}><span class="answer-at" aria-hidden="true" /></Show>
         <Items entries={rest()} task={props.task} live={false} />
         <Show when={report()}>
           <Markdown class="msg-text" text={report()} />
+        </Show>
+        <Show when={parts().pictures.length}>
+          <PictureFold entries={parts().pictures} task={props.task} />
         </Show>
         {/* the end of the job: one row with the end line ("19분 동안 작업"), the answer's actions on hover,
             then the notes (병합, 버림, 메모리); an action row with nothing shown takes no room */}
@@ -313,6 +373,21 @@ const VERB: Record<ToolCall["kind"], [string, string]> = {
 };
 
 type ToolEntry = Entry & { kind: "tool" };
+
+/** What a working task is doing this moment, as its running call's row says it ("테스트 중"), if one runs. */
+export function liveVerb(t: Task): string | undefined {
+  if (t.status !== "running") return undefined;
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "user") return undefined;
+    if (e.kind !== "tool" || e.tool.endedAt || e.tool.stopped) continue;
+    const x = e.tool;
+    if (x.note) return tr("메모리에 쓰는 중");
+    if (x.kind === "bash" || x.kind === "browser") return (x.kind === "browser" ? describeBrowser(x.target ?? "") : describeCommand(x.target ?? "")).now;
+    return tr(VERB[x.kind][0]);
+  }
+  return undefined;
+}
 
 /**
  * Which calls belong on one line: reads/searches ("살펴봄", Codex's Explored),
@@ -679,6 +754,16 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
     return last?.kind === "tool" && !last.tool.endedAt;
   };
   const [stick, setStick] = createSignal(true);
+  // a finished job opens on its answer, not below its proof: when the end doesn't fit, its first line is at the top
+  const toAnswer = (wait: number) =>
+    setTimeout(() => {
+      const at = scroller?.querySelector<HTMLElement>(".answer-at");
+      if (!at) return;
+      const top = at.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16;
+      if (scroller.scrollHeight - top > scroller.clientHeight + 4) scroller.scrollTo({ top });
+    }, wait);
+  onMount(() => settled() && toAnswer(80));
+  createEffect(on(settled, (s, was) => s && was === false && toAnswer(520), { defer: true }));
   const queuePos = () => {
     const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
     const i = q.findIndex((t) => t.id === props.task.id);

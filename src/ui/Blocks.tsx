@@ -1,6 +1,9 @@
 // Result blocks the agents send (see skills/visual-report): drawn, not read.
-import { ErrorBoundary, For, Match, Show, Switch } from "solid-js";
-import type { Block, Evidence } from "../state/types";
+import { createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js";
+import type { Block, Evidence, Task } from "../state/types";
+import { homeDir } from "../state/store";
+import { expand, tilde } from "../engine/rpc";
+import { mainCommand } from "../engine/describe";
 import { fileSrc, openUrl, pageSrc } from "../lib/native";
 import { previewFile } from "../state/ui";
 import { Icon } from "./Icon";
@@ -13,6 +16,8 @@ import { vizOf } from "./viz";
 import { t } from "../i18n";
 
 type Of<T extends Block["type"]> = Extract<Block, { type: T }>;
+/** an evidence block with the checklist the job ended with folded in (see Transcript) */
+export type ProofBlock = Of<"evidence"> & { checks?: { label: string; done: boolean }[] };
 
 function openRef(ref: string) {
   if (/^https?:\/\//.test(ref)) openUrl(ref);
@@ -92,53 +97,183 @@ function Compare(props: { b: Of<"compare"> }) {
   );
 }
 
-const EVIDENCE_LABEL: Record<string, string> = { test: "테스트", build: "빌드", run: "실행", shot: "화면", file: "파일", link: "링크" };
+const EVIDENCE_LABEL: Record<string, string> = { test: "테스트", build: "빌드", run: "실행", shot: "화면", file: "파일|proof", link: "링크" };
+const RUNS = new Set(["test", "build", "run"]);
+const MISMATCH = new Set(["no-run", "failed", "stale", "missing", "unread"]);
+/** how much a row proves: checked against the session, a file that is there, the job's word, or only the record */
+type Mark = "ok" | "exists" | "self" | "none" | "bad";
+const markOf = (e: Evidence): Mark =>
+  (e.check && MISMATCH.has(e.check)) || e.ok === false
+    ? "bad"
+    : e.check === "ran" || e.check === "read" || (e.check === "exists" && e.kind === "shot")
+      ? "ok"
+      : e.check === "exists"
+        ? "exists"
+        : e.check === "self"
+          ? "self"
+          : "none";
+const MARK_LABEL: Record<Exclude<Mark, "bad">, string> = { ok: "확인됨", exists: "파일 있음", self: "작업이 한 말", none: "기록만 있음" };
 
-/** What the job actually ran or produced, and what it could not check. */
-function EvidenceView(props: { items: Evidence[]; unverified?: string[] }) {
+/** words to match a to-do line against a proof ("스크린샷은" meets "스크린샷") */
+const words = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
+const near = (a: string, b: string) => {
+  const B = words(b);
+  return words(a).some((x) => B.some((y) => x.startsWith(y) || y.startsWith(x)));
+};
+const sameLine = (s: string) => s.trim().replace(/[.。!]+$/, "").replace(/\s+/g, " ").toLowerCase();
+
+/** "/Users/me/ondra-wt/src/a.ts" → "src/a.ts": inside the project, else "~/…" */
+export function relPath(ref: string, task?: Task): string {
+  const clean = ref.replace(/\/+$/, "");
+  if (!/^[/~]/.test(clean)) return clean;
+  const abs = expand(clean);
+  const home = expand("~");
+  const roots = task ? [task.worktree?.path, homeDir(task), expand(task.cwd)].filter((r): r is string => !!r && r.length > 1 && r !== home) : [];
+  // where the job worked: the folder all the files it touched share
+  if (task) {
+    const dirs = task.entries.flatMap((e) => (e.kind === "tool" && /^\//.test(e.tool.detail ?? "") && e.tool.kind !== "bash" ? [e.tool.detail!.split("\n")[0].split("/").slice(0, -1)] : []));
+    if (dirs.length > 1) {
+      const root = dirs
+        .reduce((a, d) => {
+          let i = 0;
+          while (i < a.length && a[i] === d[i]) i++;
+          return a.slice(0, i);
+        })
+        .join("/");
+      if (root.length > 1 && root !== home) roots.push(root);
+    }
+  }
+  for (const r of roots.map((x) => expand(x).replace(/\/+$/, ""))) if (abs.startsWith(`${r}/`)) return abs.slice(r.length + 1);
+  return tilde(abs);
+}
+
+/** a command as one short line: the part doing the work */
+const shortCmd = (ref: string) => {
+  const c = mainCommand(ref).replace(/\s+/g, " ");
+  return c.length > 60 ? `${c.slice(0, 59)}…` : c;
+};
+
+type Row = { e: Evidence; title?: string };
+
+/**
+ * What the job proved, one list right under its answer: what doesn't hold first (in the attention colour,
+ * with why), the screenshots as pictures, each run with its command and its real result line, then what
+ * it could not check, once each. A to-do checklist the job ended with folds in: a done line takes the
+ * proof that backs it (or reads as the job's word), an open line joins what wasn't checked.
+ */
+export function ProofView(props: { items: Evidence[]; unverified?: string[]; checks?: { label: string; done: boolean }[]; task?: Task }) {
+  const [allShots, setAllShots] = createSignal(false);
+  const built = () => {
+    const items = props.items.filter((e) => e && typeof e.ref === "string");
+    const titles = new Map<Evidence, string>();
+    const extra: Row[] = [];
+    const open: string[] = [];
+    for (const c of props.checks ?? []) {
+      if (!c.done) {
+        open.push(c.label);
+        continue;
+      }
+      const e = items.find((x) => !titles.has(x) && x.kind !== "shot" && near(c.label, `${x.note ?? ""} ${x.out ?? ""} ${x.ref} ${EVIDENCE_LABEL[x.kind] ?? ""} ${t(EVIDENCE_LABEL[x.kind] ?? x.kind)}`));
+      if (e) titles.set(e, c.label);
+      else extra.push({ e: { kind: "", ref: "", check: "self" }, title: c.label });
+    }
+    const rows = items.map((e): Row => ({ e, title: titles.get(e) }));
+    const bad = rows.filter((r) => markOf(r.e) === "bad");
+    const shots = rows.filter((r) => r.e.kind === "shot" && markOf(r.e) !== "bad");
+    const rest = [...rows.filter((r) => r.e.kind !== "shot" && markOf(r.e) !== "bad"), ...extra];
+    // what it couldn't check, each once: an open to-do line that the job's own reason covers goes
+    const why = props.unverified ?? [];
+    const left = [...open.filter((o) => !why.some((u) => near(o, u))), ...why];
+    const seen = new Set<string>();
+    const unchecked = left.filter((u) => u.trim() && !seen.has(sameLine(u)) && (seen.add(sameLine(u)), true));
+    return { bad, shots, rest, unchecked };
+  };
+  const SHOWN = 4;
+  const shots = () => {
+    const s = built().shots;
+    return allShots() || s.length <= SHOWN ? s : s.slice(-SHOWN);
+  };
   const open = (e: Evidence) => {
-    if (e.kind === "shot" || /\.(png|jpe?g|gif|webp)$/i.test(e.ref)) openImage(e.ref);
+    if (e.kind === "shot" || /\.(png|jpe?g|gif|webp)$/i.test(e.ref)) openImage(e.ref, built().shots.map((r) => r.e.ref));
     else openRef(e.ref);
   };
   const clickable = (e: Evidence) => /^(https?:\/\/|\/|~)/.test(e.ref);
-  return (
-    <div class="blk blk-evidence">
-      <div class="blk-label">
-        {t("증거 {n}개", { n: props.items.length })}
-        {props.unverified?.length ? ` · ${t("{n}개 확인 안 됨", { n: props.unverified.length })}` : ""}
+  const where = (e: Evidence) => (/^https?:\/\//.test(e.ref) ? e.ref.replace(/^https?:\/\/(www\.)?/, "") : relPath(e.ref, props.task));
+  const row = (r: Row) => {
+    const e = r.e;
+    const m = markOf(e);
+    const runs = RUNS.has(e.kind);
+    // a claim in words (not a command, path or link) is its own title
+    const prose = !runs && !clickable(e) && !EVIDENCE_LABEL[e.kind];
+    const title = r.title ?? (runs ? undefined : e.note) ?? (prose ? e.ref : EVIDENCE_LABEL[e.kind] ? t(EVIDENCE_LABEL[e.kind]) : e.kind);
+    return (
+      <div class={`pf-row ${m}`}>
+        <span class="pf-mark" aria-hidden="true">
+          <Switch fallback={<i />}>
+            <Match when={m === "ok"}><Icon name="check" size={10} stroke={3} /></Match>
+            <Match when={m === "bad"}><Icon name="x" size={10} stroke={3} /></Match>
+          </Switch>
+        </span>
+        <span class="pf-title">{title}</span>
+        <Show when={e.ref && !(prose && title === e.ref)}>
+          <Show
+            when={runs}
+            fallback={
+              <Show when={clickable(e)} fallback={<code class="pf-ref" title={e.ref}>{e.ref}</code>}>
+                <button class="pf-ref link" title={e.ref} onClick={() => open(e)}>{where(e)}</button>
+              </Show>
+            }
+          >
+            <code class="pf-ref" title={e.ref}>{shortCmd(e.ref)}</code>
+            <Show when={e.out}><span class="pf-out">{e.out}</span></Show>
+          </Show>
+        </Show>
+        <Show when={runs && !e.out && r.title && e.note}><span class="pf-note">{e.note}</span></Show>
+        <span class="pf-badge">{m === "bad" ? (e.why ? t(e.why) : t("불일치")) : t(MARK_LABEL[m])}</span>
       </div>
-      <For each={props.items}>
-        {(e) => (
-          <div class="ev-row" classList={{ bad: e.ok === false }}>
-            <span class="ev-mark"><Icon name={e.ok === false ? "x" : "check"} size={11} stroke={3} /></span>
-            <span class="ev-kind">{EVIDENCE_LABEL[e.kind] ? t(EVIDENCE_LABEL[e.kind]) : e.kind}</span>
-            <Show when={clickable(e)} fallback={<code class="ev-ref" title={e.ref}>{e.ref}</code>}>
-              <button class="ev-ref link" title={e.ref} onClick={() => open(e)}>{e.ref.replace(/^https?:\/\/(www\.)?/, "").split("/").slice(-2).join("/")}</button>
+    );
+  };
+  return (
+    <div class="blk blk-proof">
+      <Show when={built().bad.length || built().shots.length || built().rest.length}>
+        <div class="blk-label">{t("확인|proof")}</div>
+        <For each={built().bad}>{row}</For>
+        <Show when={built().shots.length}>
+          <div class="pf-shots">
+            <Show when={!allShots() && built().shots.length > SHOWN}>
+              <button class="pf-more" onClick={() => setAllShots(true)}>{t("+{n}장", { n: built().shots.length - SHOWN })}</button>
             </Show>
-            <Show when={e.why ?? e.note}><span class="ev-note">{e.why ?? e.note}</span></Show>
-            <Show when={e.check}>
-              <span class={`ev-check ${e.check}`} title={t(e.check === "ran" ? "실행 기록과 일치" : e.check === "exists" ? "파일 있음" : e.check === "read" ? "열어 본 페이지" : e.check === "self" ? "작업이 보고한 내용" : "기록과 불일치")}>
-                {t(e.check === "ran" || e.check === "exists" || e.check === "read" ? "확인됨" : e.check === "self" ? "자가 보고" : "불일치")}
-              </span>
-            </Show>
+            <For each={shots()}>
+              {(r) => (
+                <figure class="pf-shot">
+                  <button onClick={() => open(r.e)} title={r.e.note ?? t("크게 보기")}>
+                    <img src={fileSrc(r.e.ref)} alt={r.e.note ?? ""} loading="lazy" />
+                  </button>
+                  <figcaption>
+                    <Show when={markOf(r.e) === "ok"} fallback={<span class="pf-badge">{t(MARK_LABEL[markOf(r.e) as Exclude<Mark, "bad">])}</span>}>
+                      <Icon name="check" size={10} stroke={3} />
+                    </Show>
+                    <span>{r.title ?? r.e.note ?? t("화면")}</span>
+                  </figcaption>
+                </figure>
+              )}
+            </For>
           </div>
-        )}
-      </For>
-      <For each={props.unverified ?? []}>
-        {(u) => (
-          <div class="ev-row todo">
-            <span class="ev-mark">?</span>
-            <span class="ev-kind">{t("확인 안 됨")}</span>
-            <span class="ev-note">{u}</span>
-          </div>
-        )}
-      </For>
+        </Show>
+        <For each={built().rest}>{row}</For>
+      </Show>
+      <Show when={built().unchecked.length}>
+        <div class="blk-label pf-left-label">{t("확인 못 한 것")}</div>
+        <ul class="pf-left">
+          <For each={built().unchecked}>{(u) => <li>{u}</li>}</For>
+        </ul>
+      </Show>
     </div>
   );
 }
 
 /** A block, and under it the one line the agent wrote to say what it shows. */
-export function BlockView(props: { block: Block }) {
+export function BlockView(props: { block: Block; task?: Task }) {
   // the takeaway goes under the picture as plain text; older diff / options
   // blocks carried it as note / why
   const say = () => {
@@ -149,9 +284,9 @@ export function BlockView(props: { block: Block }) {
   // a block an agent got wrong is left out; it never takes the rest of the app down with it
   return (
     <ErrorBoundary fallback={() => null}>
-      <Show when={say()} fallback={<BlockBody block={props.block} />}>
+      <Show when={say()} fallback={<BlockBody block={props.block} task={props.task} />}>
         <figure class="blk-fig">
-          <BlockBody block={props.block} />
+          <BlockBody block={props.block} task={props.task} />
           <p class="blk-say">{say()}</p>
         </figure>
       </Show>
@@ -159,7 +294,7 @@ export function BlockView(props: { block: Block }) {
   );
 }
 
-function BlockBody(props: { block: Block }) {
+function BlockBody(props: { block: Block; task?: Task }) {
   const b = () => props.block;
   const as = <T extends Block["type"]>(t: T) => (b().type === t ? (b() as Of<T>) : false);
   return (
@@ -335,7 +470,7 @@ function BlockBody(props: { block: Block }) {
       <Match when={as("groups")}>{(x) => <Groups label={x().label} groups={x().groups ?? []} links={x().links} />}</Match>
       <Match when={as("sequence")}>{(x) => <Sequence label={x().label} actors={x().actors ?? []} steps={x().steps ?? []} />}</Match>
       <Match when={as("steps")}>{(x) => <Steps label={x().label} items={x().items ?? []} />}</Match>
-      <Match when={as("evidence")}>{(x) => <EvidenceView items={x().items ?? []} unverified={x().unverified} />}</Match>
+      <Match when={as("evidence")}>{(x) => <ProofView items={x().items ?? []} unverified={x().unverified} checks={(x() as ProofBlock).checks} task={props.task} />}</Match>
       <Match when={vizOf(b().type)}>{(s) => s().render(b())}</Match>
     </Switch>
   );

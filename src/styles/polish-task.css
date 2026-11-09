@@ -1063,12 +1063,6 @@
 .task-head.crumb-tight .crumbs > .crumb-sep {
   display: none;
 }
-/* short window: the to-do line stays reachable under the first tray (it opens on click) */
-@media (max-height: 800px) {
-  .task-view .strips > .todos:not(.queued) {
-    display: block;
-  }
-}
 
 /* ───────────── flow: the sidebar's status glyphs on the branches ───────────── */
 .graph .g-at {
@@ -1470,4 +1464,343 @@
 }
 .needs-menu .needs-mem .needs-word {
   font-variant-numeric: tabular-nums;
+}
+
+/* ═════════════ clarity: a finished task leads with its answer ═════════════ */
+
+/* proof under the answer: each line checked or not, how, and the real result */
+.blk-proof {
+  gap: 0;
+}
+.blk-proof > .blk-label {
+  margin-bottom: var(--s-4);
+}
+.pf-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  min-width: 0;
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+  line-height: 20px;
+}
+.pf-mark {
+  flex: none;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--hover);
+  color: var(--ink-3);
+}
+.pf-mark > i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pf-row.ok .pf-mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pf-row.bad .pf-mark {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+.pf-row.self .pf-mark {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-4);
+}
+.pf-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.pf-ref,
+.pf-out {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--fs-xs) var(--mono);
+  color: var(--ink-3);
+}
+button.pf-ref {
+  padding: 0;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+button.pf-ref:hover {
+  color: var(--ink);
+}
+.pf-out {
+  color: var(--ink);
+}
+.pf-ref + .pf-out::before {
+  content: "· ";
+  color: var(--ink-4);
+}
+.pf-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+.pf-badge {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--s-8);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.pf-row.ok .pf-badge {
+  color: var(--accent-text);
+}
+.pf-row.bad .pf-badge {
+  color: var(--warn-ink);
+}
+.pf-row.self .pf-badge,
+.pf-row.none .pf-badge {
+  color: var(--ink-4);
+}
+/* screenshots: the pictures themselves, the last few in a row */
+.pf-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-8);
+  padding: var(--s-6) 0;
+}
+.pf-shot {
+  margin: 0;
+  width: 152px;
+  min-width: 0;
+}
+.pf-shot > button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.pf-shot img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  object-fit: cover;
+  object-position: top;
+  background: var(--hover);
+}
+.pf-shot > button:hover img {
+  opacity: 0.92;
+}
+.pf-shot figcaption {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  min-width: 0;
+}
+.pf-shot figcaption > .icon {
+  flex: none;
+  color: var(--accent);
+}
+.pf-shot figcaption > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-shot figcaption .pf-badge {
+  margin: 0;
+  padding: 0;
+  color: var(--ink-4);
+}
+.pf-more {
+  width: 56px;
+  height: 96px;
+  border-radius: var(--r-md);
+  background: var(--hover);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pf-more:hover {
+  background: var(--active);
+  color: var(--ink);
+}
+/* what it couldn't check: once each, after the proof */
+.blk-proof > .pf-left-label:not(:first-child) {
+  margin-top: var(--s-10);
+}
+.pf-left {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pf-left li {
+  position: relative;
+  padding: 3px 0 3px 24px;
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--ink-2);
+}
+.pf-left li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--warn);
+}
+
+/* the pictures that explained the work: one line after the answer */
+.pic-fold .work-body {
+  padding-top: var(--s-12);
+}
+
+/* the trays as one line over the input: each part opens its own view */
+.tray-box {
+  width: 100%;
+}
+.tray-box + .strip,
+.strip + .tray-box,
+.tray-box + div.queued {
+  border-top: 1px solid var(--line-soft);
+}
+.tray-box .todos-list {
+  padding: var(--s-10) var(--s-14) var(--s-4);
+}
+.tray {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--s-4) var(--s-6);
+  font-size: var(--fs-sm);
+}
+.tray-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tray-seg:hover,
+.tray-seg.on {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tray-seg > .icon {
+  flex: none;
+  color: var(--ink-3);
+}
+.tray-seg b {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.tray-seg .num {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.tray-seg code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: var(--fs-xs) var(--mono);
+  color: var(--ink-2);
+}
+.tray-seg.bg {
+  flex-shrink: 2;
+}
+.tray-seg .todos-chev {
+  margin-left: -2px;
+}
+.tray-seg {
+  position: relative;
+}
+.tray-seg + .tray-seg::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: var(--line);
+}
+.tray-seg:hover::before,
+.tray-seg:hover + .tray-seg::before,
+.tray-seg.on::before,
+.tray-seg.on + .tray-seg::before {
+  opacity: 0;
+}
+
+/* header pill while it works: step · to-dos · time; the time, then the count, give way before the title does */
+.task-head {
+  container: task-head / inline-size;
+}
+.task-head .status-chip.running {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.task-head .status-chip .chip-step {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-head .status-chip .chip-todo,
+.task-head .status-chip .chip-time {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@container task-head (max-width: 680px) {
+  .task-head .status-chip .chip-time {
+    display: none;
+  }
+}
+@container task-head (max-width: 560px) {
+  .task-head .status-chip .chip-todo {
+    display: none;
+  }
+}
+
+/* the panel gives way before the conversation does: the chat keeps 520px, the panel takes the rest
+   (down to 320px) */
+.app .panel {
+  min-width: 0;
+  max-width: max(320px, calc(100vw - var(--sidebar-w) - 520px - 2 * var(--gut)));
+}
+.app.sb-hidden .panel {
+  max-width: max(320px, calc(100vw - 520px - 3 * var(--gut)));
+}
+
+/* diffs: a wrapped line continues under its own code, a step in, never at the left edge */
+.dv-code {
+  padding-left: calc(var(--ind, 0ch) + 2ch);
+  text-indent: calc(-1 * (var(--ind, 0ch) + 2ch));
+  overflow-wrap: break-word;
 }
