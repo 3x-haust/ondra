@@ -45,7 +45,7 @@ const diffTheme = EditorView.theme({
   ".cg-ln-a .cm-gutterElement": { padding: "0 4px 0 12px", minWidth: "4ch", textAlign: "right", color: "var(--ink-4)" },
   ".cg-sign": { width: "14px" },
   ".cg-sign .cm-gutterElement": { textAlign: "center", color: "var(--ink-3)" },
-  ".cg-stack > div": { height: "20px" },
+  ".cg-stack > div": { height: "22px" },
   // where one side has no lines for the other's: VS Code's diagonal fill
   ".cm-mergeSpacer": {
     backgroundColor: "transparent",
@@ -62,7 +62,7 @@ const diffTheme = EditorView.theme({
     background: "var(--code-sep)",
     color: "var(--ink-3)",
     fontFamily: "var(--font)",
-    fontSize: "12px",
+    fontSize: "var(--fs-xs)",
     cursor: "default",
     userSelect: "none",
   },
