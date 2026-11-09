@@ -263,6 +263,8 @@ export default {
   "작업 끝나면 다시 시작": "Restart after jobs",
   "작업이 끝나면 다시 시작해요": "Restarts when jobs finish",
   "업데이트하지 못했어요 · {why}": "Couldn't update · {why}",
+  "{v} 받는 중": "Downloading {v}",
+  "{v} 받는 중 · {p}%": "Downloading {v} · {p}%",
   "업데이트 서버가 잠시 응답하지 않아요. 조금 뒤 다시 눌러 주세요": "The update server isn't answering right now. Try again in a little while.",
 
   // memgit.ts
