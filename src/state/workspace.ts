@@ -6,7 +6,9 @@ import { batch, createEffect, untrack } from "solid-js";
 import { projectById, setSpace, state, taskById } from "./store";
 import type { SpaceId } from "./types";
 import { devicesIn } from "./devices";
-import { activeTab, panelOpen, previewPath, ptabs, setActiveTab, setPanelOpen, setPreviewPath, setPtabs, setView, view, type PTab, type View } from "./ui";
+import { activeTab, blankPane, layout, newPaneId, panelOpen, previewPath, ptabs, setActiveTab, setLayout, setPanelOpen, setPreviewPath, setPtabs, setView, view, type PTab, type View } from "./ui";
+import * as L from "./layout";
+import { keepLayout, layoutOf } from "./panes";
 
 interface Place {
   panel: boolean;
@@ -32,6 +34,9 @@ export function carried(v: View, space: SpaceId): View {
   if (v.name === "devices" && v.device) return devicesIn(space).some((d) => d.id === v.device) ? v : { name: "devices" };
   return v;
 }
+
+/** A screen that can be shown in `space` (its job or project is that space's). */
+const inSpace = (v: View, space: SpaceId) => (v.name === "task" ? taskById(v.id)?.space === space : v.name === "main" && v.project ? projectById(v.project)?.space === space : true);
 
 /** The space a screen belongs to, if it belongs to one. */
 function spaceOfView(v: View): SpaceId | undefined {
@@ -64,9 +69,20 @@ export function switchSpace(id: SpaceId, then?: View, leaving: View = view()) {
     localStorage.setItem(KEY, JSON.stringify(places));
   } catch {}
   const p = places[id];
+  // this space's panes as they were, the focused one back on the screen that was this space's own
+  const l = layout();
+  const f = l.panes[l.focus];
+  keepLayout(state.space, f.view === leaving ? l : { ...l, panes: { ...l.panes, [l.focus]: { ...f, view: leaving, past: f.past[f.past.length - 1] === leaving ? f.past.slice(0, -1) : f.past, ahead: [] } } });
+  const there = layoutOf(id, (v) => inSpace(v, id));
+  const split = (x: typeof l) => L.leaves(x.root).length > 1;
   batch(() => {
     setSpace(id);
-    setView(then ?? carried(leaving, id));
+    // the other space's split panes come back; one pane carries the screen over, as before splits
+    if (there && split(there)) {
+      setLayout(there);
+      if (then) setView(then);
+    } else if (split(l)) setLayout(L.single(newPaneId(), blankPane(then ?? carried(leaving, id))));
+    else setView(then ?? carried(leaving, id));
     if (p) {
       setPtabs(p.tabs?.length ? p.tabs : [{ id: 1, kind: "flow" }]);
       setActiveTab(p.tab ?? p.tabs?.[0]?.id ?? 1);

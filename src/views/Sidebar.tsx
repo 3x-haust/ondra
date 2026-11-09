@@ -10,9 +10,10 @@ import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setMemoryFocus, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, openTask, setHoverTask, setMemoryFocus, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
-import { ago, compact, newTaskOpen, setNewTaskOpen, soon, taskTitle } from "../ui/bits";
+import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
+import { openInSplit, startTaskDrag } from "./PaneControls";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -50,8 +51,6 @@ export function changes(t: Task) {
   return taskDiff(t);
 }
 
-// the new-task screen (and the 새 작업 highlight) ends when you leave Main, whatever MainView is doing
-onLeaveMain(() => setNewTaskOpen(null));
 
 const openId = () => {
   const v = view();
@@ -135,7 +134,9 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
-        onClick={() => openTask(t().id)}
+        // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
+        onClick={(e) => (e.altKey || e.metaKey ? void openInSplit(t().id) : openTask(t().id))}
+        onPointerDown={(e) => startTaskDrag(e, t().id)}
         onMouseEnter={() => setHoverTask(props.kid ? t().parentId! : t().id)}
         onMouseLeave={() => setHoverTask(null)}
         onContextMenu={(e) => {

@@ -13,10 +13,12 @@ import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "..
 import { noModifiers, viewKey } from "../lib/shortcuts";
 import { spaceById, state } from "../state/store";
 import type { SpaceId } from "../state/types";
-import { openTask, setView, toast, view } from "../state/ui";
+import { openTask, setView, toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { ago } from "../ui/bits";
 import { t } from "../i18n";
+import { PaneControls } from "./PaneControls";
+import { usePaneFocused, useView } from "../state/panes";
 
 type Filter = "all" | "ios" | "android";
 /** "iOS 26.3", "Android 에뮬레이터", "iOS 26.3 · 실제 기기" — the OS is already in the runtime */
@@ -558,10 +560,11 @@ function LiveCard(props: { d: Device; hidden: boolean; onOpen: () => void }) {
 
 /** One device, large, driven from here. */
 function Control(props: { d: Device; onClose: () => void }) {
+  const focused = usePaneFocused();
   onMount(() => {
     void deviceRecording().then(setRecording);
     const k = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !viewKey(e) || !noModifiers(e)) return;
+      if (e.key !== "Escape" || !focused() || !viewKey(e) || !noModifiers(e)) return;
       e.preventDefault();
       props.onClose();
     };
@@ -602,7 +605,8 @@ const byRuntime = (a: string, b: string) => {
 export function Devices() {
   const [filter, setFilter] = createSignal<Filter>("all");
   // the open device lives in the view, so the sidebar can open one and light only that row
-  const focus = () => { const v = view(); return v.name === "devices" ? v.device : undefined; };
+  const here = useView();
+  const focus = () => { const v = here(); return v.name === "devices" ? v.device : undefined; };
   const setFocus = (device?: string) => setView({ name: "devices", device });
   const focused = () => devices().find((d) => d.id === focus() && d.booted);
   onMount(() => void refreshDevices());
@@ -633,6 +637,7 @@ export function Devices() {
           </For>
         </div>
         <button class="icon-btn" title={t("새로고침")} aria-label={t("새로고침")} onClick={() => void refreshDevices()}><Icon name="refresh" size={16} /></button>
+        <PaneControls />
       </div>
       <Show when={focused()} keyed>
         {(d) => <Control d={d} onClose={() => setFocus(undefined)} />}

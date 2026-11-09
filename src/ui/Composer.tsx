@@ -6,6 +6,8 @@
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
+import { focusId } from "../state/ui";
+import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { asQuote } from "./quote";
 import { openImage } from "./Lightbox";
@@ -15,8 +17,9 @@ import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { midTrim } from "./bits";
 import { t } from "../i18n";
 
-/** The composer on screen receives dropped files (there is one per view). */
-let dropInto: ((paths: string[]) => void) | null = null;
+/** The composers on screen that take dropped files: the focused pane's gets them (the last one shown outside panes). */
+const drops: { pane?: string; add: (paths: string[]) => void }[] = [];
+const dropTarget = () => [...drops].reverse().find((d) => !d.pane || d.pane === focusId()) ?? drops[drops.length - 1];
 const [dragging, setDragging] = createSignal(false);
 let listening = false;
 async function listenDrops() {
@@ -25,11 +28,11 @@ async function listenDrops() {
   const { getCurrentWebview } = await import("@tauri-apps/api/webview");
   await getCurrentWebview().onDragDropEvent((e) => {
     const p = e.payload;
-    if (p.type === "enter" || p.type === "over") setDragging(!!dropInto);
+    if (p.type === "enter" || p.type === "over") setDragging(!!dropTarget());
     else if (p.type === "leave") setDragging(false);
     else if (p.type === "drop") {
       setDragging(false);
-      if (p.paths.length) dropInto?.(p.paths);
+      if (p.paths.length) dropTarget()?.add(p.paths);
     }
   });
 }
@@ -160,12 +163,12 @@ export function Composer(props: {
     setFiles((f) => [...f, ...paths.filter((p) => !f.includes(p))]);
     el?.focus();
   };
+  const pane = usePane();
   onMount(() => {
-    dropInto = add;
+    const me = { pane: pane?.id, add };
+    drops.push(me);
+    onCleanup(() => drops.splice(drops.indexOf(me), 1));
     void listenDrops();
-  });
-  onCleanup(() => {
-    if (dropInto === add) dropInto = null;
   });
 
   const grow = () => {
@@ -462,7 +465,7 @@ export function Composer(props: {
       </Show>
       <form
         class="composer"
-        classList={{ big: props.big, drop: dragging() && dropInto === add }}
+        classList={{ big: props.big, drop: dragging() && dropTarget()?.add === add }}
         onSubmit={(e) => {
           e.preventDefault();
           send();
@@ -537,7 +540,8 @@ export function Composer(props: {
           id={props.id}
           ref={(r) => {
             el = r;
-            if (props.autofocus) setTimeout(() => r.focus(), 30);
+            // a pane beside the focused one doesn't take the cursor when it opens
+            if (props.autofocus) setTimeout(() => (!pane || pane.focused()) && r.focus(), 30);
           }}
           rows={1}
           value={text()}
@@ -711,7 +715,7 @@ export function Composer(props: {
             </Show>
           </Show>
         </div>
-        <Show when={dragging() && dropInto === add}>
+        <Show when={dragging() && dropTarget()?.add === add}>
           <div class="drop-hint">{t("놓아서 첨부")}</div>
         </Show>
       </form>

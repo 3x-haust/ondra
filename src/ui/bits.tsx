@@ -1,7 +1,6 @@
 // Small shared pieces: status dot and labels, time formatting, a ticking clock.
 import { createSignal, Show } from "solid-js";
 import type { Status, Task } from "../state/types";
-import type { View } from "../state/ui";
 import { openUrl } from "../lib/native";
 import { lang, t } from "../i18n";
 import { cutTitle } from "../engine/describe";
@@ -41,7 +40,7 @@ export function IssueTag(props: { t: Task }) {
 
 /** The sidebar's 새 작업 screen, open in the main pane (its project, if one is picked, and the view it was opened
  *  from, to go back to). MainView owns it; the sidebar highlights it. */
-export const [newTaskOpen, setNewTaskOpen] = createSignal<{ project?: string; from?: View } | null>(null);
+export { newTaskOpen, setNewTaskOpen } from "../state/ui";
 
 /** A task title from what was typed: its first line, up to 80 characters like any task title (cut at a word
  *  boundary with "…" past `max`). */

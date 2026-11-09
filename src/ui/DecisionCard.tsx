@@ -4,7 +4,8 @@ import { projectById, state, taskById } from "../state/store";
 import type { Block, Decision, Task } from "../state/types";
 import { inBrowserShare } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
-import { openBrowser, openTask, view } from "../state/ui";
+import { openBrowser, openTask, paneEl, type View } from "../state/ui";
+import { usePaneFocused, useView } from "../state/panes";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
@@ -34,8 +35,7 @@ export function AnsweredCard(props: { q: string; a: string }) {
 const ownDrafts = new Map<string, string>();
 
 /** the task's project chat is the view: its crumb would only repeat the header */
-const inOwnProject = (x: { project?: string }) => {
-  const v = view();
+const inOwnProject = (x: { project?: string }, v: View) => {
   return v.name === "main" && !!x.project && v.project === x.project;
 };
 
@@ -111,10 +111,13 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
     if (v) void send(v);
   };
   /** something is being written in an input on screen: a number is part of it, never an answer */
-  const composing = () => [...document.querySelectorAll<HTMLTextAreaElement>(".composer textarea")].some((x) => x.value.trim());
+  const composing = () => [...(paneEl() ?? document).querySelectorAll<HTMLTextAreaElement>(".composer textarea")].some((x) => x.value.trim());
   // a number pressed anywhere (not while typing, nothing half-written in the input) answers with that choice
+  const here = useView();
+  const focused = usePaneFocused();
   const anywhere = (e: KeyboardEvent) => {
-    if (props.keys === false || !viewKey(e) || !noModifiers(e) || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
+    // a card in a pane beside the focused one doesn't answer its keys
+    if (props.keys === false || !focused() || !viewKey(e) || !noModifiers(e) || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
     const el = document.activeElement;
     if (el && list?.contains(el)) return; // handled by `keys`
     if (composing()) return;
@@ -175,7 +178,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
     <button class="decision-src" onClick={() => openTask(p.x.id)} title={p.x.title}>
       {/* where it runs: its project (badge and name), 기타 when it has none;
           in that project's own chat the header already says it, so only the task */}
-      <Show when={!inOwnProject(p.x)}>
+      <Show when={!inOwnProject(p.x, here())}>
         <Show when={p.x.project ? projectById(p.x.project!) : undefined} fallback={<span>{tr("프로젝트 없음")}</span>}>
           {(pr) => (
             <>

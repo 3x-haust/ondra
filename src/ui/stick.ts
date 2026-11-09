@@ -5,12 +5,15 @@
  */
 
 let holding = false;
+/** what was clicked: only the chat holding it stays put (another pane's chat keeps following) */
+let holdAt: Element | null = null;
 let holdTimer: ReturnType<typeof setTimeout> | undefined;
 /** For the next moment, a chat that changes size stays where it is: a fold opened inside the thread, read where it was clicked. */
-export function holdScroll(ms = 600) {
+export function holdScroll(ms = 600, at: Element | null = null) {
   holding = true;
+  holdAt = at;
   clearTimeout(holdTimer);
-  holdTimer = setTimeout(() => (holding = false), ms);
+  holdTimer = setTimeout(() => ((holding = false), (holdAt = null)), ms);
 }
 
 /**
@@ -33,7 +36,7 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   const follow = () => {
     // a tray opening under it pushes the chat up, closing lets it back down;
     // a fold opened inside the thread stays where it was clicked
-    if (!stuck || holding) return;
+    if (!stuck || (holding && (!holdAt || el.contains(holdAt)))) return;
     ours = true;
     el.scrollTop = el.scrollHeight;
     last = gap();

@@ -21,7 +21,7 @@ export function ShortcutHints(props: { commands: () => ShortcutCommand[]; enable
     anchors = [];
     for (const el of document.querySelectorAll<HTMLElement>("[data-shortcut]")) {
       const command = commands.get(el.dataset.shortcut!);
-      if (!command?.shortcut || command.enabled?.() === false || el.closest('[inert], :disabled, [aria-disabled="true"]')) continue;
+      if (!command?.shortcut || command.enabled?.() === false || el.closest('[inert], :disabled, [aria-disabled="true"], .main.split .pane:not(.focused)')) continue;
       const r = el.getBoundingClientRect();
       const x = r.left + r.width / 2;
       const y = r.top + r.height / 2;

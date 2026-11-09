@@ -2,10 +2,10 @@ import { binding, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts
 import { nextWaiting, stepFork } from "../views/Sidebar";
 import { state, taskById } from "./store";
 import { switchSpace } from "./workspace";
+import { canClosePane, closeFocused, hasAttention, nextAttention, splitNew } from "../views/PaneControls";
 import { stepZoom } from "./zoom";
 import { t } from "../i18n";
-import { setNewTaskOpen } from "../ui/bits";
-import { activeTab, canStep, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
+import { activeTab, canStep, equalizePanes, gotoPane, inPane, paneCount, resizePane, toggleZoom, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
 
 /** a place still there to go back to (a job can be deleted meanwhile) */
 const exists = (v: View) => v.name !== "task" || !!taskById(v.id);
@@ -13,14 +13,16 @@ const job = () => { const v = view(); return v.name === "task" ? taskById(v.id) 
 /** the panel shows beside Main and a task only (canvas, memory, results, devices and settings have none) */
 const panelAvailable = () => view().name === "main" || view().name === "task";
 const visiblePanel = () => panelAvailable() && panelOpen();
-const input = () => document.querySelector<HTMLTextAreaElement>('main .composer textarea:not(:disabled)');
+const many = () => paneCount() > 1 && view().name !== "settings";
+const notSettings = () => view().name !== "settings";
+const input = () => inPane<HTMLTextAreaElement>('.composer textarea:not(:disabled)');
 /** after ⌘[ / ⌘]: back on Main or a task, the cursor is in its composer (as ⌘0 leaves it) */
 const step = (dir: -1 | 1) => {
   if (!stepView(dir, exists)) return;
   setTimeout(() => {
     const v = view();
-    const id = v.name === "task" ? "task-input" : v.name === "main" ? (document.getElementById("new-task-input") ? "new-task-input" : "main-input") : null;
-    if (id) document.querySelector<HTMLTextAreaElement>(`#${id}:not(:disabled)`)?.focus();
+    const id = v.name === "task" ? "task-input" : v.name === "main" ? (inPane("#new-task-input") ? "new-task-input" : "main-input") : null;
+    if (id) inPane<HTMLTextAreaElement>(`#${id}:not(:disabled)`)?.focus();
   }, 30);
 };
 const stepTab = (dir: number) => {
@@ -31,7 +33,7 @@ const stepTab = (dir: number) => {
 /** the canvas in its board layout (the canvas keeps the layout as a tab of its own header) */
 function showBoard() {
   setView({ name: "board" });
-  requestAnimationFrame(() => document.querySelector<HTMLElement>('.cv-mode [role="tab"]:last-child:not([aria-selected="true"])')?.click());
+  requestAnimationFrame(() => inPane<HTMLElement>('.cv-mode [role="tab"]:last-child:not([aria-selected="true"])')?.click());
 }
 export function showCommands() {
   setPaletteMode("commands");
@@ -51,7 +53,7 @@ export function appCommands(): ShortcutCommand[] {
     command("sidebar", "사이드바 열기·닫기", "일반", "panelLeft", toggleSidebar),
     command("zoomIn", "화면 크게", "일반", "plus", () => stepZoom(1), undefined, true),
     command("zoomOut", "화면 작게", "일반", "minus", () => stepZoom(-1), undefined, true),
-    command("main", "메인", "이동", "message", () => (setNewTaskOpen(null), goMain()), undefined, true),
+    command("main", "메인", "이동", "message", () => goMain(), undefined, true),
     command("new", "새 작업", "이동", "compose", () => void import("../views/MainView").then((m) => m.startNewTask()), undefined, true),
     command("board", "캔버스", "이동", "canvas", () => setView(view().name === "board" ? { name: "main" } : { name: "board" }), undefined, true),
     { id: "boardList", label: t("보드"), section: t("이동"), icon: "board", run: showBoard },
@@ -85,5 +87,18 @@ export function appCommands(): ShortcutCommand[] {
     command("previousTab", "이전 패널 탭", "패널", "back", () => stepTab(-1), () => visiblePanel() && ptabs().length > 1),
     command("nextTab", "다음 패널 탭", "패널", "arrow", () => stepTab(1), () => visiblePanel() && ptabs().length > 1),
     command("focusInput", "메시지 입력", "대화|section", "message", () => input()?.focus(), () => !!input()),
+    // panes (Ghostty's split actions); the sidebar, palette and ⌘K act on the focused one
+    command("splitRight", "오른쪽으로 나누기", "창", "splitRight", () => splitNew("right"), notSettings, true),
+    command("splitDown", "아래로 나누기", "창", "splitDown", () => splitNew("down"), notSettings, true),
+    command("previousPane", "이전 창", "창", "back", () => gotoPane("previous"), many, true),
+    command("nextPane", "다음 창", "창", "arrow", () => gotoPane("next"), many, true),
+    ...([["Left", "left", "왼쪽 창"], ["Right", "right", "오른쪽 창"], ["Up", "up", "위 창"], ["Down", "down", "아래 창"]] as const).map(([k, dir, label]) =>
+      command(`focusPane${k}`, label, "창", "arrow", () => gotoPane(dir), many, true)),
+    command("zoomPane", "창 확대", "창", "zoom", toggleZoom, many, true),
+    ...([["Left", "left", "왼쪽으로 크기 조절"], ["Right", "right", "오른쪽으로 크기 조절"], ["Up", "up", "위로 크기 조절"], ["Down", "down", "아래로 크기 조절"]] as const).map(([k, dir, label]) =>
+      command(`resizePane${k}`, label, "창", "splitRight", () => resizePane(dir), many, true)),
+    command("equalizePanes", "창 크기 맞추기", "창", "equal", () => equalizePanes(), many, true),
+    command("closePane", "창 닫기", "창", "x", closeFocused, canClosePane, true),
+    command("attentionPane", "다음 내 차례 창으로", "창", "hand", nextAttention, hasAttention, true),
   ];
 }

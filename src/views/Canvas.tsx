@@ -24,6 +24,8 @@ import { Board, BoardGroup, cardMenu, Kids, LinesChanged, NewTask, StateGlyph } 
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
 import { lang, t } from "../i18n";
+import { PaneControls } from "./PaneControls";
+import { usePaneFocused } from "../state/panes";
 
 // ───────────── geometry
 
@@ -1074,6 +1076,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
 // ───────────── the canvas
 
 export function Canvas() {
+  const focused = usePaneFocused();
   const space = () => state.space;
   const [vpSize, setVpSize] = createSignal({ w: 800, h: 600 });
   onMount(() => remeasure(0));
@@ -1489,7 +1492,7 @@ export function Canvas() {
     const target = e.target;
     if (!(target instanceof Element) || (target !== document.body && !target.closest(".canvas-view"))) return;
     if (target.closest('button, a[href], [tabindex], [role="button"], [role="tab"]')) return;
-    if (!viewKey(e) || e.metaKey || e.ctrlKey || e.altKey || mode() !== "canvas") return;
+    if (!viewKey(e) || !focused() || e.metaKey || e.ctrlKey || e.altKey || mode() !== "canvas") return;
     if (e.shiftKey && e.code === "Digit1") (e.preventDefault(), (before = undefined), fit(true, true));
     else if (e.shiftKey && e.code === "Digit0") (e.preventDefault(), actual());
     else if (!e.metaKey && (e.key === "=" || e.key === "+")) step(1);
@@ -1731,6 +1734,7 @@ export function Canvas() {
         </Show>
         <Show when={mode() === "list"}><BoardGroup /></Show>
         <NewTask project={() => (mode() === "canvas" ? selProject() : undefined)} />
+        <PaneControls />
       </header>
 
       <Show when={mode() === "canvas"} fallback={<Board embedded />}>

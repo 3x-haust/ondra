@@ -161,13 +161,13 @@ describe("Ghostty import", () => {
   it("reads the split and tab actions Ondra has", () => {
     const found = parseGhostty(config).map(({ id, chord }) => [id, chordLabel(chord)]);
     expect(found).toEqual([
-      ["nextTab", "⇧⌘]"], ["newTab", "⌃⌥T"], ["zoomIn", "⌘="], ["zoomOut", "⌘−"], ["newTab", "⌘Q"], ["commands", "⇧⌘P"],
+      ["nextTab", "⇧⌘]"], ["newTab", "⌃⌥T"], ["zoomIn", "⌘="], ["zoomOut", "⌘−"], ["newTab", "⌘Q"], ["splitRight", "⌘D"], ["commands", "⇧⌘P"],
     ]);
   });
 
   it("applies them, leaving out what macOS keeps and moving what collides", () => {
     const { next, count } = importGhostty({}, config);
-    expect(count).toBe(5);
+    expect(count).toBe(6);
     expect(binding("nextTab", next)).toEqual(chord("shift+cmd+BracketRight"));
     // ⇧⌘] was 다음 작업's
     expect(binding("nextJob", next)).toBeUndefined();

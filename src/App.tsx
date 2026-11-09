@@ -1,10 +1,13 @@
-import { createSignal, createEffect, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, paletteOpen, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { closePanel, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { keepPanes } from "./state/panes";
+import { Panes } from "./views/Panes";
+import { menuClose } from "./views/PaneControls";
 import { appCommands } from "./state/commands";
 import { applyZoom, zoom } from "./state/zoom";
 import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
@@ -16,11 +19,6 @@ import { scan } from "./engine/importer";
 import { startRpc } from "./engine/rpc";
 import { startScheduler } from "./engine/tasks";
 import { notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
-import { MainView } from "./views/MainView";
-import { Canvas } from "./views/Canvas";
-import { MemoryView } from "./views/Memory";
-import { ResultsView } from "./views/Results";
-import { Devices } from "./views/Devices";
 import { watchDevices } from "./state/devices";
 import { Onboarding } from "./views/Onboarding";
 import { Palette } from "./views/Palette";
@@ -28,7 +26,6 @@ import { Lightbox } from "./ui/Lightbox";
 import { SettingsNav, SettingsPage } from "./views/Settings";
 import { Sidebar } from "./views/Sidebar";
 import { Panel } from "./views/Panel";
-import { TaskView } from "./views/TaskView";
 import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
 import { Icon } from "./ui/Icon";
@@ -47,18 +44,6 @@ import "./engine/journal";
 import "./engine/memgit";
 import { lang, t as tr } from "./i18n";
 
-let firstSlide = true;
-/** The center's content slides in from the side it comes from (not on first paint). */
-function Slide(props: { from: 1 | -1; children: JSX.Element }) {
-  let el!: HTMLDivElement;
-  onMount(() => {
-    if (firstSlide) return void (firstSlide = false);
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    el.animate([{ transform: `translateX(${props.from * 24}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 280, easing: "cubic-bezier(.32,.72,0,1)" });
-  });
-  return <div class="slide" ref={el}>{props.children}</div>;
-}
-
 export default function App() {
   const [appVersion, setAppVersion] = createSignal("");
   keepSpaces();
@@ -70,11 +55,11 @@ export default function App() {
     if (v.name !== "settings") lastView = v;
   });
   const back = () => setView(lastView);
-  onMount(() => watchDevices(() => view().name === "devices"));
-  // ⌘W (menu): close the right panel; the window stays
+  onMount(() => watchDevices(() => Object.values(layout().panes).some((p) => p.view.name === "devices")));
   onMount(() => {
     let un: (() => void) | undefined;
-    void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && panelShown() && closePanel()).then((u) => (un = u));
+    // ⌘W (menu): the focused pane when there are several, else the right panel
+    void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && !menuClose() && panelShown() && closePanel()).then((u) => (un = u));
     // ⌘Q tapped, not held (Rust quits once it has been held)
     let hint = 0;
     let unq: (() => void) | undefined;
@@ -92,6 +77,8 @@ export default function App() {
   onCleanup(() => unCapture?.());
   onMount(async () => {
     await loadState();
+    // the panes as they were left, without jobs deleted since
+    createRoot(() => keepPanes(() => state.space, (v) => v.name !== "task" || !!taskById(v.id)));
     if (!location.search.includes("fixture")) seedProjects();
     migrateMemory();
     await startRpc();
@@ -143,7 +130,7 @@ export default function App() {
   // toasts sit centred on the main pane, just above its composer and what is docked on it (or its foot)
   const [toastAt, setToastAt] = createSignal<{ left: number; bottom: number }>();
   const placeToast = () => {
-    const main = document.querySelector<HTMLElement>("main.main");
+    const main = paneEl() ?? document.querySelector<HTMLElement>("main.main");
     if (!main) return;
     const r = main.getBoundingClientRect();
     const box = [...main.querySelectorAll<HTMLElement>(".composer-wrap")].map((c) => c.getBoundingClientRect()).filter((c) => c.height && c.top > r.top + r.height / 2).pop();
@@ -186,14 +173,10 @@ export default function App() {
         <div class="sb-wrap" inert={sidebarAway() || undefined}>
           <Show when={view().name === "settings"} fallback={<Sidebar />}><SettingsNav onBack={back} /></Show>
         </div>
-        <main class="main">
+        <main class="main" classList={{ split: paneCount() > 1 && view().name !== "settings" }}>
           <Show when={view().name === "settings"}><SettingsPage onBack={back} /></Show>
-          <Show when={view().name !== "settings"}>
-          {/* the center is main or the job you picked; it slides over when you switch */}
-          <Show when={view().name === "task" && (view() as { id: string }).id} keyed fallback={<Show when={view().name === "board"} fallback={<Show when={view().name === "devices"} fallback={<Show when={view().name === "memory"} fallback={<Show when={view().name === "results"} fallback={<Slide from={-1}><MainView /></Slide>}><Slide from={-1}><ResultsView /></Slide></Show>}><Slide from={-1}><MemoryView /></Slide></Show>}><Slide from={-1}><Devices /></Slide></Show>}><Slide from={-1}><Canvas /></Slide></Show>}>
-            {(id) => <Slide from={1}><TaskView id={id} /></Slide>}
-          </Show>
-          </Show>
+          {/* the center: split panes, each with its own view (one fills it when alone) */}
+          <Show when={view().name !== "settings"}><Panes /></Show>
         </main>
         <Show when={panelShown()}>
           <Panel t={view().name === "task" ? taskById((view() as { id: string }).id) : undefined} onClose={() => void closePanel()} />
