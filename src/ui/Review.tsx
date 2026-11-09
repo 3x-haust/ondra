@@ -8,7 +8,7 @@ import type { Task } from "../state/types";
 import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { fileSrc, pdfSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, type GitChanges, openInEditor, revealPath } from "../lib/native";
+import { fileSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, openInEditor, pageSrc, pdfSrc, revealPath, type GitChanges } from "../lib/native";
 import { Fold } from "./Fold";
 import { Icon } from "./Icon";
 import { GlyphMark } from "../views/Sidebar";
@@ -382,7 +382,7 @@ export function PreviewPane() {
         <div class="pv-body">
           <Switch>
             <Match when={kind() === "page"}>
-              <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={fileSrc(full())} />}>
+              <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={pageSrc(full())} />}>
                 <iframe class="aframe" src={pdfSrc(full())} title={name()} />
               </Show>
             </Match>

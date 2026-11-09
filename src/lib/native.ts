@@ -427,6 +427,10 @@ export const setTrayCount = (running: number, waiting: number) => call<void>("se
 
 /** A local file (screenshot, recording) as something an <img> can show. */
 export const fileSrc = (path: string) => (inTauri && path.startsWith("/") ? convertFileSrc(path) : path);
+/** A page to show in a frame: like fileSrc, but only the leading "/" is encoded, so the page's relative links
+ *  (its css, scripts, images, other pages) resolve inside its own folder. */
+export const pageSrc = (path: string) =>
+  inTauri && path.startsWith("/") ? convertFileSrc("/") + path.slice(1).split("/").map(encodeURIComponent).join("/") : path;
 export const pdfSrc = (path: string, modified?: number) => `/pdf.html?${new URLSearchParams({ file: fileSrc(path) + (modified === undefined ? "" : `?v=${modified}`) })}`;
 
 export function onEvent<T>(name: string, fn: (payload: T) => void): Promise<UnlistenFn> {
