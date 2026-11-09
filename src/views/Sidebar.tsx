@@ -1,5 +1,6 @@
 // The left side, after T3 Code: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
+import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop, usePop } from "../ui/ModelPicker";
@@ -414,6 +415,7 @@ export function Sidebar() {
   return (
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
+        <UpdateButton />
         <span class="spacer" data-tauri-drag-region />
         <button class="icon-btn" classList={{ on: !!newTaskOpen() && view().name === "main" }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
           <Icon name="compose" size={16} />
@@ -715,6 +717,7 @@ export function SidebarToggle() {
   const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you" || bucket(t) === "failed").length;
   return (
     <Show when={sidebarAway()}>
+      <UpdateButton />
       <button class="icon-btn sb-show" data-shortcut="sidebar" title={`${tr("사이드바 펼치기")} ${shortcutHint("sidebar")}`} aria-label={tr("사이드바 펼치기")} onClick={showSidebar}>
         <Icon name="panelLeft" size={16} />
         <Show when={waiting()}><i class="sb-show-dot" /></Show>
