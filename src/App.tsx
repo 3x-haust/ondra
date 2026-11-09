@@ -78,7 +78,7 @@ export default function App() {
   onMount(async () => {
     await loadState();
     // the panes as they were left, without jobs deleted since
-    createRoot(() => keepPanes(() => state.space, (v) => v.name !== "task" || !!taskById(v.id)));
+    createRoot(() => keepPanes(() => state.space, (v) => (v.name !== "task" && v.name !== "changes") || !!taskById(v.id)));
     if (!location.search.includes("fixture")) seedProjects();
     migrateMemory();
     await startRpc();

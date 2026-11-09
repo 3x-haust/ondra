@@ -192,6 +192,147 @@ pub async fn git_changes(cwd: String, base: Option<String>) -> GitChanges {
     })
 }
 
+/// One side of a changed file, for the changes editor: the file at a commit
+/// (`rev`), or as it is on disk now (`rev` None). Paths are from the repo top,
+/// as `git diff` prints them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileAt {
+    /// None when binary or missing at that side.
+    text: Option<String>,
+    size: u64,
+    binary: bool,
+    /// not there at that side (an added file's old side, a deleted file's new one)
+    missing: bool,
+    /// longer than FILE_CAP: only the start is in `text`
+    cut: bool,
+}
+
+const FILE_CAP: usize = 1024 * 1024;
+
+fn git_bytes(cwd: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .env("PATH", user_path())
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .output()
+        .ok()?;
+    out.status.success().then_some(out.stdout)
+}
+
+fn top_of(cwd: &str) -> String {
+    git(cwd, &["rev-parse", "--show-toplevel"]).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| cwd.to_string())
+}
+
+pub fn file_at(cwd: &str, rev: Option<&str>, path: &str) -> FileAt {
+    let top = top_of(cwd);
+    let bytes = match rev {
+        None => std::fs::read(Path::new(&top).join(path)).ok(),
+        Some(r) => git_bytes(&top, &["show", &format!("{r}:{path}")]),
+    };
+    let Some(mut bytes) = bytes else { return FileAt { text: None, size: 0, binary: false, missing: true, cut: false } };
+    let size = bytes.len() as u64;
+    if bytes.iter().take(8000).any(|b| *b == 0) {
+        return FileAt { text: None, size, binary: true, missing: false, cut: false };
+    }
+    let cut = bytes.len() > FILE_CAP;
+    if cut {
+        let end = bytes[..FILE_CAP].iter().rposition(|b| *b == b'\n').map_or(FILE_CAP, |i| i + 1);
+        bytes.truncate(end);
+    }
+    FileAt { text: Some(String::from_utf8_lossy(&bytes).into_owned()), size, binary: false, missing: false, cut }
+}
+
+#[tauri::command]
+pub async fn git_file_at(cwd: String, rev: Option<String>, path: String) -> FileAt {
+    tauri::async_runtime::spawn_blocking(move || file_at(&cwd, rev.as_deref(), &path))
+        .await
+        .unwrap_or(FileAt { text: None, size: 0, binary: false, missing: true, cut: false })
+}
+
+/// What `from`..`to` changed, in the same shape as `changes` (commits only, nothing on disk).
+pub fn changes_between(cwd: &str, from: &str, to: &str) -> GitChanges {
+    let branch = None;
+    let mut files = vec![];
+    let mut counts: HashMap<String, (u64, u64)> = HashMap::new();
+    if let Some(raw) = git(cwd, &["diff", "--numstat", "-z", from, to]) {
+        // "a\td\tpath\0", or "a\td\t\0old\0new\0" for a rename
+        let mut fields = raw.split('\0');
+        while let Some(head) = fields.next() {
+            let mut parts = head.splitn(3, '\t');
+            let (Some(a), Some(d), Some(p)) = (parts.next(), parts.next(), parts.next()) else { continue };
+            let path = if p.is_empty() {
+                fields.next();
+                fields.next().unwrap_or("").to_string()
+            } else {
+                p.to_string()
+            };
+            counts.insert(path, (a.parse().unwrap_or(0), d.parse().unwrap_or(0)));
+        }
+    }
+    if let Some(raw) = git(cwd, &["diff", "--name-status", "-z", from, to]) {
+        let mut fields = raw.split('\0').filter(|s| !s.is_empty());
+        while let Some(code) = fields.next() {
+            let c = code.chars().next().unwrap_or('M');
+            if c == 'R' || c == 'C' {
+                fields.next();
+            }
+            if let Some(path) = fields.next() {
+                let status = match c { 'A' | 'C' => "A", 'D' => "D", 'R' => "R", _ => "M" };
+                let (add, del) = counts.get(path).copied().unwrap_or((0, 0));
+                files.push(GitFile { path: path.to_string(), add, del, status: status.to_string() });
+            }
+        }
+    }
+    let mut patch = git(cwd, &["diff", from, to]).unwrap_or_default();
+    if patch.len() > PATCH_CAP {
+        patch.truncate(floor_char_boundary(&patch, PATCH_CAP));
+        patch.push_str("\n… (diff truncated)\n");
+    }
+    GitChanges { is_repo: true, branch, files, patch }
+}
+
+/// A merged job's work, after its worktree is gone: the merge `into` made of
+/// `branch` (from the reflog: the commit before it and the one it made), or, while
+/// the branch is still there (a pull request kept it), `base`..`branch`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Merged {
+    from: String,
+    to: String,
+    changes: GitChanges,
+}
+
+pub fn merged(repo: &str, branch: &str, into: Option<&str>, base: &str) -> Option<Merged> {
+    let commit = |r: &str| git(repo, &["rev-parse", "--verify", "-q", &format!("{r}^{{commit}}")]).map(|s| s.trim().to_string());
+    let mut pair: Option<(String, String)> = None;
+    if let Some(into) = into.filter(|s| !s.is_empty()) {
+        if let Some(log) = git(repo, &["reflog", "show", "--format=%H%x09%gs", &format!("refs/heads/{into}")]) {
+            let rows: Vec<(&str, &str)> = log.lines().filter_map(|l| l.split_once('\t')).collect();
+            let tag = format!("merge {branch}:");
+            if let Some(i) = rows.iter().position(|(_, s)| s.starts_with(&tag)) {
+                if let Some((before, _)) = rows.get(i + 1) {
+                    pair = Some((before.to_string(), rows[i].0.to_string()));
+                }
+            }
+        }
+    }
+    if pair.is_none() {
+        if let (Some(b), Some(tip)) = (commit(base), commit(branch)) {
+            pair = Some((b, tip));
+        }
+    }
+    let (from, to) = pair?;
+    let changes = changes_between(repo, &from, &to);
+    Some(Merged { from, to, changes })
+}
+
+#[tauri::command]
+pub async fn git_merged(repo: String, branch: String, into: Option<String>, base: String) -> Option<Merged> {
+    tauri::async_runtime::spawn_blocking(move || merged(&repo, &branch, into.as_deref(), &base)).await.ok().flatten()
+}
+
 #[cfg(test)]
 mod tests {
     /// `cargo test -- --ignored --nocapture git_` against a real repo on this machine.
@@ -206,6 +347,49 @@ mod tests {
         }
         let none = super::changes("/tmp", None);
         assert!(!none.is_repo);
+    }
+
+    fn sh(cwd: &str, args: &[&str]) {
+        assert!(std::process::Command::new("git").args(args).current_dir(cwd).status().unwrap().success(), "git {args:?}");
+    }
+
+    #[test]
+    fn file_at_and_merged() {
+        let root = std::env::temp_dir().join(format!("git-at-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let r = root.display().to_string();
+        sh(&r, &["init", "-q", "-b", "main"]);
+        sh(&r, &["config", "user.email", "t@t"]);
+        sh(&r, &["config", "user.name", "t"]);
+        sh(&r, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(root.join("src/a.ts"), "one\ntwo\n").unwrap();
+        std::fs::write(root.join("old.txt"), "same\nsame\nsame\nsame\n").unwrap();
+        sh(&r, &["add", "-A"]);
+        sh(&r, &["commit", "-q", "-m", "init"]);
+        let base = super::git(&r, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        sh(&r, &["checkout", "-q", "-b", "task/x"]);
+        std::fs::write(root.join("src/a.ts"), "one\nTWO\n").unwrap();
+        std::fs::write(root.join("b.bin"), [0u8, 1, 2]).unwrap();
+        sh(&r, &["mv", "old.txt", "new.txt"]);
+        sh(&r, &["add", "-A"]);
+        sh(&r, &["commit", "-q", "-m", "work"]);
+
+        let at = super::file_at(&r, Some(&base), "src/a.ts");
+        assert_eq!(at.text.as_deref(), Some("one\ntwo\n"));
+        assert_eq!(super::file_at(&r, None, "src/a.ts").text.as_deref(), Some("one\nTWO\n"));
+        assert!(super::file_at(&r, Some(&base), "b.bin").missing);
+        assert!(super::file_at(&r, None, "b.bin").binary);
+
+        sh(&r, &["checkout", "-q", "main"]);
+        sh(&r, &["merge", "-q", "--no-edit", "task/x"]);
+        let m = super::merged(&r, "task/x", Some("main"), &base).expect("found in the reflog");
+        assert_eq!(m.from, base);
+        let mut got: Vec<(String, String)> = m.changes.files.iter().map(|f| (f.status.clone(), f.path.clone())).collect();
+        got.sort();
+        assert_eq!(got, vec![("A".into(), "b.bin".into()), ("M".into(), "src/a.ts".into()), ("R".into(), "new.txt".into())]);
+        assert!(m.changes.patch.contains("rename from old.txt"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 

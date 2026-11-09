@@ -119,57 +119,6 @@ export interface GitChanges {
   /** Unified diff of the working tree against HEAD (untracked files included), capped. */
   patch: string;
 }
-const SAMPLE_PATCH = `diff --git a/src/router.ts b/src/router.ts
-index 1a2b3c4..5d6e7f8 100644
---- a/src/router.ts
-+++ b/src/router.ts
-@@ -12,9 +12,15 @@ export function createRouter(routes: Route[]) {
-   const router = new Router(routes);
- 
--  router.beforeEach((to) => {
--    if (to.meta.auth && !session.user) return "/";
-+  router.beforeEach(async (to) => {
-+    // wait until the saved session is back before deciding
-+    await session.restore();
-+    if (to.meta.auth && !session.user) {
-+      return { path: "/login", query: { next: to.fullPath } };
-+    }
-+    if (to.path === "/login" && session.user) return "/dashboard";
-   });
- 
-   return router;
- }
-@@ -40,6 +46,6 @@ export function guardLinks() {
-   for (const a of document.querySelectorAll("a[data-auth]")) {
--    a.addEventListener("click", block);
-+    a.addEventListener("click", block, { passive: true });
-   }
- }
-diff --git a/src/auth/session.ts b/src/auth/session.ts
-index 9a8b7c6..1f2e3d4 100644
---- a/src/auth/session.ts
-+++ b/src/auth/session.ts
-@@ -3,4 +3,7 @@ let restoring: Promise<void> | null = null;
- export const session = {
-   user: null as User | null,
--  restore: () => load(),
-+  restore() {
-+    restoring ??= load().then((u) => void (this.user = u));
-+    return restoring;
-+  },
- };
-diff --git a/src/auth/session.test.ts b/src/auth/session.test.ts
-new file mode 100644
---- /dev/null
-+++ b/src/auth/session.test.ts
-@@ -0,0 +1,6 @@
-+import { session } from "./session";
-+
-+test("restores once", async () => {
-+  await Promise.all([session.restore(), session.restore()]);
-+  expect(load).toHaveBeenCalledTimes(1);
-+});
-`;
 const README_PATCH = `diff --git a/README.md b/README.md
 --- a/README.md
 +++ b/README.md
@@ -204,25 +153,39 @@ diff --git a/docs/setup.md b/docs/setup.md
 +- pnpm 10
 +- Xcode 명령줄 도구
 `;
-export const gitChanges = (cwd: string, base?: string) =>
-  call<GitChanges>("git_changes", { cwd, base: base ?? null }, base === "readme" ? {
-    isRepo: true,
-    branch: "task/t3",
-    files: [
-      { path: "README.md", add: 6, del: 9, status: "M" },
-      { path: "docs/setup.md", add: 3, del: 1, status: "M" },
-    ],
-    patch: README_PATCH,
-  } : {
-    isRepo: true,
-    branch: "task/t1",
-    files: [
-      { path: "src/router.ts", add: 8, del: 3, status: "M" },
-      { path: "src/auth/session.ts", add: 4, del: 1, status: "M" },
-      { path: "src/auth/session.test.ts", add: 6, del: 0, status: "A" },
-    ],
-    patch: SAMPLE_PATCH,
-  });
+// outside the app: the readme job's own sample, every other job the fixture's changes (fixtureChanges.ts)
+export const gitChanges = (cwd: string, base?: string): Promise<GitChanges> =>
+  inTauri || base === "readme"
+    ? call<GitChanges>("git_changes", { cwd, base: base ?? null }, {
+        isRepo: true,
+        branch: "task/t3",
+        files: [
+          { path: "README.md", add: 6, del: 9, status: "M" },
+          { path: "docs/setup.md", add: 3, del: 1, status: "M" },
+        ],
+        patch: README_PATCH,
+      })
+    : import("../state/fixtureChanges").then((m) => m.fixtureChanges());
+/** One side of a changed file: at commit `rev`, or on disk now (`rev` null). `path` is from the repo top. */
+export interface FileAt {
+  text: string | null;
+  size: number;
+  binary: boolean;
+  /** not there on that side (an added file's old side, a deleted file's new one) */
+  missing: boolean;
+  /** too long: `text` is its start */
+  cut: boolean;
+}
+export const gitFileAt = (cwd: string, rev: string | null, path: string): Promise<FileAt> =>
+  inTauri ? invoke<FileAt>("git_file_at", { cwd, rev, path }) : import("../state/fixtureChanges").then((m) => m.fixtureFileAt(rev, path));
+/** A merged job's work once its worktree is gone: the commits it was merged between, and what changed. */
+export interface Merged {
+  from: string;
+  to: string;
+  changes: GitChanges;
+}
+export const gitMerged = (repo: string, branch: string, into: string | undefined, base: string): Promise<Merged | null> =>
+  inTauri ? invoke<Merged | null>("git_merged", { repo, branch, into: into ?? null, base }) : import("../state/fixtureChanges").then((m) => m.fixtureMerged());
 
 export interface WorktreeInfo {
   repo: string;
