@@ -68,7 +68,7 @@ export default {
   "작업 {n}|board": "Tasks {n}",
   "할 일 {done}/{all}": "To-dos {done}/{all}",
   "할 일 {done}/{n} 완료": "{done} of {n} to-do done|{done} of {n} to-dos done",
-  "작업 {done}/{n} 완료": "{done} of {n} task done|{done} of {n} tasks done",
+  "{n}개 중 {done}개 완료": "{done} of {n} done",
 
   // new task
   "프로젝트|one": "Project",
@@ -94,7 +94,8 @@ export default {
   "첨부 및 기타": "Attach and more",
   "보내기": "Send",
   "보내기 (↵)": "Send (↵)",
-  "중지": "Stop",
+  "응답 중지": "Stop reply",
+  "작업 일시정지": "Pause task",
   "놓아서 첨부": "Drop to attach",
 
   // messages
