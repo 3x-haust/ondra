@@ -16,6 +16,7 @@ import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, soon, statusLabel, taskTitle, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
+import { DotGrid } from "../ui/DotGrid";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { discarded, pausedAt, planCount, stepState, taskDiff } from "../state/progress";
@@ -1755,8 +1756,8 @@ export function Canvas() {
             ref={(el) => ((vp = el), setVpEl(el))}
             onWheel={onWheel}
             onPointerDown={onBgDown}
-            style={{ "background-position": `${pan().x}px ${pan().y}px`, "background-size": `${20 * zoom()}px ${20 * zoom()}px` }}
           >
+            <DotGrid pan={pan()} zoom={zoom()} on={grid()} />
             {/* the cards fade out along the bottom and right edges (and the sheet's), so one running off reads as more beyond */}
             <div class="cv-layer" style={{ "--cv-sheet": selTask() ? `${sheetW(vpSize().w) + 8}px` : "0px", "--cv-fl": fades().l ? `${ROOM}px` : "0px", "--cv-fr": fades().r ? `${selTask() ? SHEET_FADE : FADE}px` : "0px", "--cv-fb": fades().b ? `${FADE}px` : "0px" }}>
             <div class="cv-world" style={{ transform: `translate(${pan().x}px, ${pan().y}px) scale(${zoom()})`, "--cv-z": String(zoom()) }}>
