@@ -1346,3 +1346,16 @@
 .req-state.discarded {
   color: var(--ink-3);
 }
+
+/* round 11: a request waiting on a merge reads 검토 in the sidebar's review blue (class inreview: .review is the
+   changes tab's panel); merged reads like done */
+.req-tag.inreview,
+.req-state.inreview,
+.req-job-time.inreview {
+  color: var(--accent-text);
+}
+.req-tag.merged,
+.req-state.merged,
+.req-tag.discarded {
+  color: var(--ink-3);
+}
