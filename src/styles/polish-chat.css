@@ -1688,3 +1688,18 @@
 .composer-wrap.slim .send {
   margin-left: 0;
 }
+
+/* a thin composer takes its tray away for real: no 40px of empty room left under it */
+.composer-wrap .ctray .ctray-in {
+  transition: height var(--dur) var(--ease), min-height var(--dur) var(--ease);
+}
+.composer-wrap .ctray:not(.open) .ctray-in {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-wrap .ctray .ctray-in {
+    transition: none;
+  }
+}
