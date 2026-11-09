@@ -21,7 +21,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { ago, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
+import { agoIn, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -264,7 +264,7 @@ function Picks(props: { project?: string; wait?: boolean }) {
               >
                 <Icon name="history" size={14} class="hero-pick-ic" />
                 <span class="hero-pick-text">{s.title || t("제목 없음")}</span>
-                <span class="hero-pick-meta">{s.sourceName} · {ago(s.updatedAt)}</span>
+                <span class="hero-pick-meta">{s.sourceName} · {agoIn(s.updatedAt)}</span>
               </button>
             )}
           </For>

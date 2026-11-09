@@ -23,7 +23,7 @@ import {
   spaceGitIdentity,
   spaceTools,
 } from "../lib/native";
-import { ago, now, tokens } from "../ui/bits";
+import { ago, agoIn, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { LoginSheet } from "./Login";
@@ -696,7 +696,7 @@ function Import() {
             <div class="item-row">
               <div class="item-main">
                 <b>{s.title || t("제목 없음")}</b>
-                <p>{s.sourceName} · {tilde(s.cwd) || t("폴더 모름")} · {ago(s.updatedAt)} · {t("메시지 {n}개", { n: s.messages })}</p>
+                <p>{s.sourceName} · {tilde(s.cwd) || t("폴더 모름")} · {agoIn(s.updatedAt)} · {t("메시지 {n}개", { n: s.messages })}</p>
               </div>
               <Show when={!s.done} fallback={<span class="set-note">{t("가져옴")}</span>}>
                 <button class="btn sm" disabled={importing() === s.path} onClick={() => pickUp(s)}>{importing() === s.path ? t("여는 중") : t("이어받기")}</button>
