@@ -1,20 +1,22 @@
-// Updates from GitHub Releases. A while after start, every hour and on coming back, the
-// app asks whether a newer release is out. If so it fetches the package in the background
-// first; once it is ready one notice offers to restart into it (a newer one replaces it,
-// and it closes by itself). Settings shows the same, with how far the download is.
+// Updates from GitHub Releases. A while after start, every 15 minutes, on coming back and
+// on opening Settings, the app asks whether a newer release is out. If so it fetches the
+// package in the background first; once it is ready one notice offers to restart into it
+// (a newer one replaces it, and it closes by itself). Installing always asks once more, so
+// it goes straight to the newest release even when another came out after the last check.
+// Settings shows the same, with how far the download is.
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
 import { flushState } from "../state/store";
 import { t } from "../i18n";
 
-const EVERY = 3600_000;
-/** coming back to the app checks again once this long has passed */
-const AGAIN = 30 * 60_000;
+const EVERY = 15 * 60_000;
+/** coming back to the app (or opening Settings) checks again once this long has passed */
+const AGAIN = 2 * 60_000;
 let shown = "";
 let notice = 0;
 let lastCheck = 0;
-let preparing: Promise<boolean> | null = null;
+let preparing: { version: string; done: Promise<boolean> } | null = null;
 
 export type UpdateState = "idle" | "checking" | "latest" | "installing";
 const [status, setStatus] = createSignal<UpdateState>("idle");
@@ -28,17 +30,22 @@ export { available, checkedAt, progress as updateProgress, ready as updateReady,
 
 void onUpdateProgress((p) => setProgress(p.percent));
 
-function prepare(version: string) {
+function prepare(version: string): Promise<boolean> {
   if (ready() === version) return Promise.resolve(true);
-  preparing ??= prepareUpdate()
-    .catch(() => false)
-    .then((ok) => {
-      preparing = null;
-      setProgress(null);
-      if (ok) setReady(version);
-      return ok;
-    });
-  return preparing;
+  // an older download still going: let it end, then fetch the newer one
+  if (preparing && preparing.version !== version) return preparing.done.then(() => prepare(version));
+  if (!preparing) {
+    const done = prepareUpdate()
+      .catch(() => false)
+      .then((ok) => {
+        preparing = null;
+        setProgress(null);
+        if (ok) setReady(version);
+        return ok;
+      });
+    preparing = { version, done };
+  }
+  return preparing.done;
 }
 
 export async function checkUpdate(manual = false) {
@@ -53,6 +60,8 @@ export async function checkUpdate(manual = false) {
     if (manual) toast(t("최신 버전이에요"));
     return;
   }
+  // a notice for an older version that is no longer the newest goes away
+  if (notice && shown && shown !== next.version) { dropToast(notice); notice = 0; }
   const ok = await prepare(next.version);
   if (!ok || (next.version === shown && !manual)) return;
   shown = next.version;
@@ -65,7 +74,11 @@ export async function installNow() {
   setStatus("installing");
   if (notice) dropToast(notice);
   try {
-    if (preparing) await preparing;
+    // a newer release may have come out since the last check: install that one
+    const next = await checkForUpdate().catch(() => null);
+    setCheckedAt(Date.now());
+    if (next) setAvailable(next.version);
+    if (preparing) await preparing.done;
     // the restart doesn't wait for a save still to come
     await flushState().catch(() => {});
     await installUpdate();
@@ -76,10 +89,15 @@ export async function installNow() {
   }
 }
 
+/** Check again if the last check is a while ago (opening Settings). */
+export function freshen() {
+  if (!lastCheck || Date.now() - lastCheck > AGAIN) void checkUpdate();
+}
+
 export function startUpdates() {
   setTimeout(() => void checkUpdate(), 20_000);
   setInterval(() => void checkUpdate(), EVERY);
   window.addEventListener("focus", () => {
-    if (lastCheck && Date.now() - lastCheck > AGAIN) void checkUpdate();
+    if (lastCheck) freshen();
   });
 }

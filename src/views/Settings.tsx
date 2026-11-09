@@ -34,7 +34,7 @@ import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
-import { available, checkedAt, checkUpdate, installNow, updateProgress, updateReady, updateStatus } from "../engine/update";
+import { available, checkedAt, checkUpdate, freshen, installNow, updateProgress, updateReady, updateStatus } from "../engine/update";
 import { setNotesFor } from "../engine/releaseNotes";
 import { version as appVersion } from "../../package.json";
 import { LogIn } from "lucide-solid";
@@ -201,6 +201,7 @@ function Components() {
 function UpdateRow() {
   // outside the app (fixture) the package's own version
   const [version] = createResource(() => getVersion().catch(() => appVersion));
+  onMount(freshen);
   const pct = () => { const p = updateProgress(); return p === null || p < 0 ? "" : ` ${p}%`; };
   const note = () => {
     const v = available() ?? "";
