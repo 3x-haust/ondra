@@ -1,14 +1,14 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
-import { modelsOf, refreshModels } from "../engine/modelList";
+import { refreshModels } from "../engine/modelList";
 import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
-import { EFFORTS, prettyModel } from "../ui/ModelPicker";
+import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine, tilde } from "../engine/rpc";
@@ -80,6 +80,10 @@ export function GroupTitle(props: { title: string; children?: any }) {
   );
 }
 
+/** the accounts a default model is set for: signed in, the current workspace's first */
+const modelAccounts = () =>
+  state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
+
 // ───────────────── general
 function General() {
   const [editing, setEditing] = createSignal<SpaceId | "new" | null>(null);
@@ -119,26 +123,55 @@ function General() {
             </For>
           </div>
         </Row>
+      </div>
+
+      {/* what every new task starts with: the same model and permission the composer shows (one store) */}
+      <GroupTitle title={t("에이전트|group")} />
+      <div class="set-group">
+        <For each={modelAccounts()}>
+          {(a) => (
+            <Row title={modelAccounts().length > 1 ? `${t("기본 모델")} · ${accountName(a, true)}` : t("기본 모델")}>
+              <ModelPicker
+                accountId={a.id}
+                model={a.model ?? ""}
+                thinking={a.effort || ""}
+                onChange={(m, e) =>
+                  updateAccount(a.id, (x) => {
+                    if (m) x.model = m;
+                    x.effort = e;
+                  })
+                }
+              />
+            </Row>
+          )}
+        </For>
+        <Row title={t("기본 권한")}>
+          <div class="seg">
+            <For each={PERMISSIONS}>
+              {(p) => <button classList={{ on: (state.settings.permission ?? "edits") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
+            </For>
+          </div>
+        </Row>
         <Row title={t("동시 작업 수")}>
           <Stepper value={state.settings.slots.light} min={1} max={10} onChange={(n) => setState("settings", "slots", "light", n)} />
         </Row>
-        <Row title={t("무거운 작업 동시 수")} desc={t("빌드, 시뮬레이터, 앱 조작")}>
+        <Row title={t("빌드·시뮬레이터 작업 동시 수")} desc={t("빌드, 시뮬레이터, 앱 조작")}>
           <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
-        <Row title={t("작업마다 워크트리")}>
-          <Switch_ label={t("작업마다 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
+        <Row title={t("작업마다 새 워크트리")}>
+          <Switch_ label={t("작업마다 새 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
         </Row>
         <Row title={t("PR 리뷰 자동 대응")}>
           <Switch_ label={t("PR 리뷰 자동 대응")} on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
         </Row>
-        <Row title={t("GitHub에 쓰기")}>
-          <Switch_ label={t("GitHub에 쓰기")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
+        <Row title={t("GitHub 푸시·PR 허용")} desc={t("끄면 읽기만 해요")}>
+          <Switch_ label={t("GitHub 푸시·PR 허용")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
         </Row>
         <Row title={t("메모리 자동 저장")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
-        <Row title={t("포커스 지키기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
-          <Switch_ label={t("포커스 지키기")} on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
+        <Row title={t("내 창 앞에 두기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
+          <Switch_ label={t("내 창 앞에 두기")} on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
         </Row>
       </div>
 
@@ -438,7 +471,6 @@ const loginWord = (a: Account) => (signedIn(a) ? "서비스 추가" : "로그인
 
 function AccountRow(props: { id: string; onLogin: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
-  const [models] = createResource(() => (a().providers.length ? props.id : null), modelsOf);
   const [confirm, setConfirm] = createSignal(false);
   const [typed, setTyped] = createSignal<string>();
   const used = () => a().stats.input + a().stats.cacheRead + a().stats.cacheWrite + a().stats.output;
@@ -488,19 +520,6 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         </span>
       </div>
       <div class="acc-line acc-fields">
-        <label class="acc-field">
-          <span>{t("모델")}</span>
-          <select class="select" value={a().model} onChange={(e) => updateAccount(props.id, (x) => (x.model = e.currentTarget.value))}>
-            <option value="" disabled>{t("자동")}</option>
-            <For each={models() ?? (a().model ? [a().model] : [])}>{(m) => <option value={m}>{prettyModel(m)}</option>}</For>
-          </select>
-        </label>
-        <label class="acc-field">
-          <span>{t("추론 강도")}</span>
-          <select class="select" value={a().effort || "high"} onChange={(e) => updateAccount(props.id, (x) => (x.effort = e.currentTarget.value))}>
-            <For each={EFFORTS}>{(x) => <option value={x.id}>{t(x.name)}</option>}</For>
-          </select>
-        </label>
         <label class="acc-field">
           <span>{t("워크스페이스|one")}</span>
           <select class="select" value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
@@ -727,7 +746,7 @@ function Import() {
   );
 }
 
-// ───────────────── permissions (macOS)
+// ───────────────── permissions (macOS): what the agent may do lives in 일반 › 에이전트
 function Permissions() {
   const [status, { refetch }] = createResource(toolStatus);
   const timer = setInterval(() => !document.hidden && refetch(), 3000);
@@ -739,8 +758,7 @@ function Permissions() {
   );
   return (
     <>
-      <h2>{t("권한")}</h2>
-      <GroupTitle title={t("macOS 권한")} />
+      <h2>{t("macOS 권한")}</h2>
       <div class="set-group">
         <Row title={t("손쉬운 사용")} desc={t("다른 앱 조작에 필요")}>
           {perm(status()?.accessibility, async () => { await requestAccessibility(); openPrivacySettings("accessibility"); })}
@@ -798,7 +816,7 @@ function Shortcuts() {
 export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: "general", label: "일반", icon: "gear" },
   { id: "accounts", label: "계정", icon: "key" },
-  { id: "tools", label: "권한", icon: "shield" },
+  { id: "tools", label: "macOS 권한", icon: "shield" },
   { id: "agent-tools", label: "도구", icon: "tools" },
   { id: "skills", label: "스킬", icon: "skill" },
   { id: "hooks", label: "훅", icon: "bolt" },

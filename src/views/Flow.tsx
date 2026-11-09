@@ -160,7 +160,7 @@ export function Flow() {
     if (discarded(t)) return tr("버림");
     if (t.status === "failed") return tr("실패");
     if (t.status === "waiting") return tr("응답 필요");
-    if (bucket(t) === "review") return tr("검토");
+    if (bucket(t) === "review") return tr("병합 필요");
     if (t.status === "queued") return tr("대기");
     if (t.status === "paused") return tr("일시정지");
     if (t.status === "done") return ago(endTime(t));

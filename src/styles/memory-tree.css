@@ -1730,9 +1730,13 @@ button.mc-row:hover {
 }
 
 /* ── round 3 */
-.oc-review { --oc: var(--accent-text); }
+.oc-review { --oc: var(--warn); }
 .mst-c b.accent {
   color: var(--accent-text);
+}
+/* waiting on you (병합 필요): the attention colour, as everywhere */
+.mst-c b.warn {
+  color: var(--warn-ink);
 }
 /* two folders with the same name: the folder each sits in, muted */
 .mt-hint,

@@ -778,9 +778,9 @@ function AnsweredLine(props: { a: Answered }) {
 
 type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "review" | "done"; at: number };
 
-/** A task line's state word: its status, or 검토 (finished, its worktree waiting to be merged), 병합됨, 버림. */
+/** A task line's state word: its status, or 병합 필요 (finished, its worktree waiting to be merged), 병합됨, 버림. */
 type ReqState = Status | "inreview" | "merged" | "discarded";
-const REQ_WORD: Record<ReqState, string> = { ...statusLabel, inreview: "검토", merged: "병합됨", discarded: "버림" };
+const REQ_WORD: Record<ReqState, string> = { ...statusLabel, inreview: "병합 필요", merged: "병합됨", discarded: "버림" };
 const reqState = (t: Task): ReqState =>
   discarded(t) ? "discarded" : t.status === "done" ? (t.worktree?.state === "open" ? "inreview" : t.worktree?.state === "merged" ? "merged" : "done") : t.status;
 

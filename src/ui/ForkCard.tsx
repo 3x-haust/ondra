@@ -64,7 +64,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
   };
   const time = () => {
     const x = t()!;
-    if (x.status === "done") return glyphOf(x) === "inreview" ? tr("검토") : ago(endedAt(x) ?? x.createdAt);
+    if (x.status === "done") return glyphOf(x) === "inreview" ? tr("병합 필요") : ago(endedAt(x) ?? x.createdAt);
     if (x.status === "running") return compact(now() - (x.startedAt ?? x.createdAt));
     return tr(statusLabel[x.status]);
   };

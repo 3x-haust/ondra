@@ -117,8 +117,20 @@ function UsedBy(props: { d: Device }) {
  * A small picture of a running device, refreshed every few seconds while it can be
  * seen. A new screenshot replaces the old one only once it has loaded, so it never blinks.
  */
+/** A device whose screen can't be reached: says so, and the one thing to try (no endless loading line). */
+function NoScreen() {
+  return (
+    <span class="dev-wait dev-lost">
+      <b>{t("연결 안 됨")}</b>
+      <span>{t("끄고 다시 켜 보세요")}</span>
+    </span>
+  );
+}
+
 function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   const [src, setSrc] = createSignal("");
+  /** asked and got no picture (and none before it): not connected */
+  const [lost, setLost] = createSignal(false);
   let alive = true;
   let pending = false;
   // each picture costs the device a full-screen capture: only for cards on screen
@@ -130,10 +142,12 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
     pending = true;
     const p = await deviceShot(props.d).catch(() => "");
     pending = false;
-    if (!alive || !p) return;
+    if (!alive) return;
+    if (!p) return void (!src() && setLost(true));
     const url = `${fileSrc(p)}?v=${Date.now()}`;
     const img = new Image();
-    img.onload = () => alive && setSrc(url);
+    img.onload = () => alive && (setSrc(url), setLost(false));
+    img.onerror = () => alive && !src() && setLost(true);
     img.src = url;
   };
   onMount(() => {
@@ -151,7 +165,7 @@ function Thumb(props: { d: Device; hidden: boolean; onOpen: () => void }) {
   createEffect(on(() => props.hidden, (h) => !h && void grab(), { defer: true }));
   return (
     <button ref={el} class="dev-screen" classList={{ android: props.d.platform === "android" }} onClick={() => props.onOpen()} title={t("열기")}>
-      <Show when={src()} fallback={<span class="dev-wait">{t("불러오는 중…")}</span>}>
+      <Show when={src()} fallback={lost() ? <NoScreen /> : <span class="dev-wait">{t("불러오는 중…")}</span>}>
         <img src={src()} alt={t("{name} 화면", { name: props.d.name })} draggable={false} />
       </Show>
     </button>
@@ -178,6 +192,9 @@ function LiveScreen(props: { d: Device; children?: JSX.Element }) {
   const [mark, setMark] = createSignal<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [, setPolling] = createSignal(false);
+  /** neither the stream nor a screenshot came: not connected (said plainly, not "loading" forever) */
+  const [lost, setLost] = createSignal(false);
+  let misses = 0;
   const turn = () => ios && !!turned()[props.d.id];
   /** size changes snap; only a rotation turns smoothly */
   const [turning, setTurning] = createSignal(false);
@@ -228,9 +245,10 @@ function LiveScreen(props: { d: Device; children?: JSX.Element }) {
       pending = true;
       const p = await deviceShot(props.d).catch(() => "");
       pending = false;
-      if (!alive || !p) return;
+      if (!alive) return;
+      if (!p) return void (!size() && ++misses >= 2 && setLost(true));
       const img = new Image();
-      img.onload = () => alive && paint(img, img.naturalWidth, img.naturalHeight);
+      img.onload = () => alive && (paint(img, img.naturalWidth, img.naturalHeight), setLost(false));
       img.src = `${fileSrc(p)}?v=${Date.now()}`;
     };
     void grab();
@@ -418,7 +436,9 @@ function LiveScreen(props: { d: Device; children?: JSX.Element }) {
           }}
         />
         <Show when={!size()}>
-          <span class="dev-wait">{t("불러오는 중…")}</span>
+          <Show when={lost()} fallback={<span class="dev-wait">{t("불러오는 중…")}</span>}>
+            <NoScreen />
+          </Show>
         </Show>
         <Show when={mark()}>{(m) => <span class="dev-mark" style={{ left: `${m().x * 100}%`, top: `${m().y * 100}%` }} />}</Show>
       </div>

@@ -13,7 +13,7 @@ export const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 export const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
 /** shown with t() */
-export const OUTCOME: Record<Outcome, string> = { done: "완료", failed: "실패", stopped: "중단", review: "검토", discarded: "버림" };
+export const OUTCOME: Record<Outcome, string> = { done: "완료", failed: "실패", stopped: "중단", review: "병합 필요", discarded: "버림" };
 export type Outcome = JournalEntry["outcome"] | "review" | "discarded";
 /** how a finished job ended, as it stands now: a job still waiting to be merged is in review, one whose changes were thrown away is 버림 */
 export function outcomeOf(e: JournalEntry): Outcome {
@@ -45,7 +45,7 @@ export function learnedIn(m: Memory): JournalEntry | undefined {
   return list.find((e) => e.learned?.includes(m.id)) ?? (m.taskId ? list.find((e) => e.taskId === m.taskId) : undefined);
 }
 
-/** compact marks on a piece: path rule, the user's own, came up again, skill, cited files */
+/** compact marks on a piece: path rule, skill, cited files, how often it was used, the user's own */
 export function Badges(props: { m: Memory; globs?: boolean; cites?: boolean }) {
   const m = () => props.m;
   return (
@@ -58,9 +58,9 @@ export function Badges(props: { m: Memory; globs?: boolean; cites?: boolean }) {
       </Show>
       <Show when={m().skill}><span class="mb-i" title={`${t("스킬")} · ${m().skill}`}><Icon name="skill" size={12} /></span></Show>
       <Show when={props.cites && m().cites?.length}><span class="mb-i" title={m().cites!.join("\n")}><Icon name="file" size={12} /></span></Show>
-      {/* "2×": the count keeps out of the name's way; the tooltip says it in words */}
-      <Show when={m().uses > 0}><span class="mb-n" title={t("{n}번 사용", { n: m().uses })}>{m().uses}×</span></Show>
-      <Show when={userOwned(m())}><span class="mb-i mb-user" title={t("사용자")}><Icon name="lock" size={12} /></span></Show>
+      {/* how often it came up, in words: "2번 쓰임" */}
+      <Show when={m().uses > 0}><span class="mb-n">{t("{n}번 쓰임", { n: m().uses })}</span></Show>
+      <Show when={userOwned(m())}><span class="mb-i mb-user" title={t("직접 쓴 메모리")} aria-label={t("직접 쓴 메모리")} role="img"><Icon name="lock" size={12} /></span></Show>
     </span>
   );
 }

@@ -20,7 +20,7 @@ import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { discarded, pausedAt, planCount, stepState, taskDiff } from "../state/progress";
 import { confirmDiscard } from "../ui/taskMenu";
-import { Board, BoardGroup, cardMenu, Kids, NewTask, StateGlyph } from "./Board";
+import { Board, BoardGroup, cardMenu, Kids, LinesChanged, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
 import { lang, t } from "../i18n";
@@ -120,7 +120,7 @@ const [twoCols, setTwoCols] = createSignal(false);
 function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
-  if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "기타", folder: spaceById(space as Task["space"]).folder });
+  if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "프로젝트 없음", folder: spaceById(space as Task["space"]).folder });
   const jobsOf = (p: { id: string }) =>
     roots
       .filter((t) => (p.id === "_" ? !t.project || !projects.some((q) => q.id === t.project && q.id !== "_") : t.project === p.id))
@@ -248,7 +248,7 @@ const ACT: Record<ToolKind | "think" | "write-text" | "wait" | "queued" | "done"
   queued: { icon: "clock", label: "대기" },
   paused: { icon: "pause", label: "일시정지" },
   done: { icon: "done", label: "완료" },
-  review: { icon: "merge", label: "검토" },
+  review: { icon: "merge", label: "병합 필요" },
   failed: { icon: "alert", label: "실패" },
 };
 
@@ -347,15 +347,12 @@ function jobHeight(job: Task, k: number): number {
   return measure(job.title, `<div class="cv-live w-${body ? "summary" : "none"}">${body ? `<p class="cv-text${failedLine(job) ? " muted one" : ""}">${esc(body)}</p>` : '<div class="cv-live-empty"></div>'}</div>`, H.job, k);
 }
 
-/** +8 −3, plain (nothing for a discarded task, its changes are gone, or a merged one: they're in) */
+/** +8 −3줄, plain (nothing for a discarded task, its changes are gone, or a merged one: they're in) */
 function Diff(props: { t: Task }) {
   const d = () => (discarded(props.t) || props.t.worktree?.state === "merged" ? { add: 0, del: 0 } : changes(props.t));
   return (
     <Show when={d().add || d().del}>
-      <span class="cv-diff">
-        <span class="add">+{d().add}</span>
-        <Show when={d().del}><span class="del">−{d().del}</span></Show>
-      </span>
+      <LinesChanged class="cv-diff" add={d().add} del={d().del} />
     </Show>
   );
 }
@@ -566,15 +563,15 @@ const LEGEND = [
   { tone: "live", g: "running", label: "진행 중" },
   { tone: "ask", g: "waiting", label: "응답 필요" },
   { tone: "failed", g: "failed", label: "실패" },
-  { tone: "review", g: "inreview", label: "검토" },
+  { tone: "review", g: "inreview", label: "병합 필요" },
   { tone: "paused", g: "paused", label: "일시정지" },
   { tone: "idle", g: "queued", label: "대기" },
 ] as const;
 
-/** a lane's meter, in the order of its parts (discarded apart from done: it isn't 완료) */
-const METER = ["live", "ask", "failed", "review", "paused", "idle", "done", "gone"];
+/** a project's states, most pressing first (discarded apart from done: it isn't 완료) */
+const METER = ["ask", "review", "failed", "live", "paused", "idle", "done", "gone"];
 
-const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", failed: "실패", review: "검토", paused: "일시정지", idle: "대기", done: "완료", gone: "버림" };
+const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", failed: "실패", review: "병합 필요", paused: "일시정지", idle: "대기", done: "완료", gone: "버림" };
 
 /** The status glyph the sidebar draws (one look everywhere), named in its tooltip. */
 function StatusGlyph(props: { t: Task }) {
@@ -636,8 +633,8 @@ function StatusRow(props: { t: Task; sheet?: boolean; aside?: string; label?: st
     return [props.sheet ? ago(endedAt(props.t)) : c.ms ? long(c.ms) : "", costDetail(c)].filter(Boolean).join(" · ") || undefined;
   };
   /**
-   * The row never wraps. When it runs out of room it drops, in order: the diff, the subagent
-   * count's fraction (⑂ 1/2 → ⑂ 2), the word "할 일" (2/4 stays), the subagent count; only then
+   * The row never wraps. When it runs out of room it drops, in order: the diff, the word "할 일"
+   * (2/4 stays), the subagents' words (서브에이전트 1/2 → ⑂ 2), the subagent count; only then
    * is the state word cut. Two bare fractions never sit side by side, and numbers are never split.
    */
   const [tight, setTight] = createSignal(0);
@@ -665,9 +662,9 @@ function StatusRow(props: { t: Task; sheet?: boolean; aside?: string; label?: st
         <span class="unverified-badge" title={props.t.unverified!.join("\n")}>{t("확인 안 됨 {n}", { n: props.t.unverified!.length })}</span>
       </Show>
       <Show when={step()}>
-        {(p) => <span class="cv-step">{tight() >= 3 ? `· ${p().done}/${p().total}` : `· ${t("할 일 {done}/{all}", { done: p().done, all: p().total })}`}</span>}
+        {(p) => <span class="cv-step">{tight() >= 2 ? `· ${p().done}/${p().total}` : `· ${t("할 일 {done}/{all}", { done: p().done, all: p().total })}`}</span>}
       </Show>
-      <Show when={tight() < 4}><Kids t={props.t} class="cv-meta" short={tight() >= 2} /></Show>
+      <Show when={tight() < 4}><Kids t={props.t} class="cv-meta" short={tight() >= 3} /></Show>
       <span class="spacer" />
       <Show when={tight() < 1}><Diff t={props.t} /></Show>
       <Show when={when()}><span class="cv-when" title={whenTitle()}>{when()}</span></Show>
@@ -725,11 +722,18 @@ function ProjCard(props: { n: Node; space: string }) {
         <span class="cv-title">{p().id === "_" ? t(p().name) : p().name}</span>
       </div>
       <div class="cv-status">
-        <div class="cv-proj-meter" title={METER.filter((k) => count(k)).map((k) => `${t(STATUS[k])} ${count(k)}`).join(" · ") || undefined}>
-          <For each={METER}>{(k) => <Show when={count(k)}><i class={`t-${k}`} style={{ flex: count(k) }} /></Show>}</For>
-          <Show when={!jobs().length}><i class="empty" style={{ flex: 1 }} /></Show>
-        </div>
-        <span class="cv-when">{jobs().length ? t("작업 {n}개", { n: jobs().length }) : t("작업 없음")}</span>
+        {/* the most pressing state in words ("응답 필요 1"), every state and the total in the tooltip;
+            with nothing going on, how many tasks it has */}
+        <Show when={METER.find((k) => count(k) && k !== "done" && k !== "gone")} fallback={<span class="cv-when">{jobs().length ? t("작업 {n}개", { n: jobs().length }) : t("작업 없음")}</span>}>
+          {(k) => (
+            <span
+              class={`cv-proj-state t-${k()}`}
+              title={[...METER.filter((x) => count(x)).map((x) => `${t(STATUS[x])} ${count(x)}`), t("작업 {n}개", { n: jobs().length })].join(" · ")}
+            >
+              {t(STATUS[k()])} {count(k())}
+            </span>
+          )}
+        </Show>
       </div>
     </>
   );
@@ -1696,7 +1700,15 @@ export function Canvas() {
     <div class="view canvas-view">
       <header class="head" data-tauri-drag-region ref={headEl}>
         <SidebarToggle />
-        <span class="head-title">{mode() === "canvas" ? t("캔버스") : t("보드")}</span>
+        {/* the page's two views, by name: the toggle is the title */}
+        <div class="cv-mode" role="tablist" aria-label={t("캔버스")}>
+          <button role="tab" aria-selected={mode() === "canvas"} classList={{ on: mode() === "canvas" }} onClick={() => setMode("canvas")}>
+            {t("캔버스")}
+          </button>
+          <button role="tab" aria-selected={mode() === "list"} classList={{ on: mode() === "list" }} onClick={() => setMode("list")}>
+            {t("보드")}
+          </button>
+        </div>
         <Show when={mode() === "canvas"}>
         {/* the legend draws each state with the sidebar's glyph, so running and review read apart */}
         <span class="board-sum cv-legend" classList={{ bare: bare() }} ref={legendEl}>
@@ -1719,14 +1731,6 @@ export function Canvas() {
         </Show>
         <Show when={mode() === "list"}><BoardGroup /></Show>
         <NewTask project={() => (mode() === "canvas" ? selProject() : undefined)} />
-        <div class="seg sm cv-mode" role="tablist">
-          <button role="tab" aria-selected={mode() === "canvas"} classList={{ on: mode() === "canvas" }} title={t("캔버스")} aria-label={t("캔버스")} onClick={() => setMode("canvas")}>
-            <Icon name="canvas" size={14} />
-          </button>
-          <button role="tab" aria-selected={mode() === "list"} classList={{ on: mode() === "list" }} title={t("보드")} aria-label={t("보드")} onClick={() => setMode("list")}>
-            <Icon name="board" size={14} />
-          </button>
-        </div>
       </header>
 
       <Show when={mode() === "canvas"} fallback={<Board embedded />}>

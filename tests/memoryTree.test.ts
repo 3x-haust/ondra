@@ -10,7 +10,7 @@ const labels = (m: ReturnType<typeof buildModel>) => [...m.homes.values()].filte
 const hints = (m: ReturnType<typeof buildModel>) => [...m.homes.values()].filter((h) => h.kind === "project").map((h) => `${h.label}${h.hint ? ` · ${h.hint}` : ""}`).sort();
 
 describe("project homes", () => {
-  it("keeps the project name for same-name folders and shows the folder each sits in", () => {
+  it("keeps the project name for same-name folders and shows the folder each sits in as a short path", () => {
     const m = buildModel({
       ...base,
       projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }],
@@ -18,15 +18,15 @@ describe("project homes", () => {
     });
     expect(labels(m)).toEqual(["ondra", "ondra"]);
     expect([...m.homes.values()].filter((h) => h.kind === "project").map((h) => h.path).sort()).toEqual(["/u/me/ondra", "/u/work/ondra"]);
-    expect(hints(m)).toEqual(["ondra · me", "ondra · work"]);
+    expect(hints(m)).toEqual(["ondra · /…/me", "ondra · /…/work"]);
   });
-  it("calls the home folder 홈", () => {
+  it("writes the home folder as ~, and a folder under it from ~", () => {
     const m = buildModel({
       ...base,
       projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }],
-      now: { "/Users/me/ondra": { text: "x", at: 1, taskId: "t", title: "t" } },
+      now: { "/Users/me/ondra": { text: "x", at: 1, taskId: "t", title: "t" }, "/Users/me/01_Project/01_Projects/ondra": { text: "x", at: 1, taskId: "t", title: "t" } },
     });
-    expect(hints(m)).toEqual(["ondra · work", "ondra · 홈"]);
+    expect(hints(m)).toEqual(["ondra · /…/work", "ondra · ~", "ondra · ~/…/01_Projects"]);
   });
   it("leaves unique names alone", () => {
     const m = buildModel({ ...base, projects: [{ id: "a", space: "work", name: "ondra", folder: "/u/work/ondra" }] });
