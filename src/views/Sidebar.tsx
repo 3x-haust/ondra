@@ -2,7 +2,7 @@
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
-import { anyPop } from "../ui/ModelPicker";
+import { anyPop, usePop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
@@ -99,13 +99,13 @@ export function Glyph(props: { t: Task; class?: string }) {
 }
 
 /** What a task's row says on the right, and in which tone: its state when it needs something
- *  (응답 필요, 검토, 실패 ...), else how long it has run or when it finished. Sidebar and ⌘K. */
+ *  (응답 필요, 병합 필요, 실패 ...), else how long it has run or when it finished. Sidebar and ⌘K. */
 export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "ask" | "review" | "idle" | "live" | "done" } {
   const b = bucket(x);
   if (discarded(x)) return { text: tr("버림"), tone: "idle" };
   if (x.status === "failed") return { text: tr("실패"), tone: "bad" };
   if (x.status === "waiting" || (b === "you" && !kid)) return { text: tr("응답 필요"), tone: "ask" };
-  if (b === "review") return { text: tr("검토"), tone: "review" };
+  if (b === "review") return { text: tr("병합 필요"), tone: "review" };
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
   if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
   if (x.status === "running") return { text: x.startedAt ? (soon() - x.startedAt < 60_000 ? tr("방금") : compact(soon() - x.startedAt)) : "", tone: "live" };
@@ -271,8 +271,8 @@ function NeedsMenu() {
                 </Show>
                 <span class="row-title">{t.title}</span>
                 {/* the state word in its tone, as on the sidebar row; the project in its own right-aligned column */}
-                <span class={`needs-word tone-${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("검토")}</span>
-                <span class="needs-where">{where(t) ?? tr("기타")}</span>
+                <span class={`needs-word tone-${bucket(t) === "failed" ? "bad" : bucket(t) === "you" ? "ask" : "review"}`}>{bucket(t) === "failed" ? tr("실패") : bucket(t) === "you" ? tr("응답 필요") : tr("병합 필요")}</span>
+                <span class="needs-where">{where(t) ?? tr("프로젝트 없음")}</span>
               </button>
             )}
           </For>
@@ -426,16 +426,7 @@ export function Sidebar() {
         </button>
       </div>
       <Show when={state.spaces.length > 1}>
-      <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
-        <For each={state.spaces}>
-          {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`⌘${state.spaces.indexOf(s) + 1}`} aria-pressed={state.space === s.id}>
-              <span class="space-name">{tr(s.label)}</span>
-              <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
-            </button>
-          )}
-        </For>
-      </div>
+        <SpaceSwitch />
       </Show>
 
       <div
@@ -638,7 +629,7 @@ export function Sidebar() {
         </Fold>
 
         <Show when={loose().length || looseDone().length || archived().length}>
-        <Head id="jobs" label={projectsIn(state.space).length ? tr("기타") : tr("작업")} count={loose().length} />
+        <Head id="jobs" label={projectsIn(state.space).length ? tr("프로젝트 없음") : tr("작업")} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()}>
@@ -668,6 +659,54 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+  );
+}
+
+/** The workspace switcher: the current workspace by name, the others in a menu (⌘1–9 switch directly).
+ *  A dot on it when another workspace has something waiting on you. */
+function SpaceSwitch() {
+  const [open, setOpen] = usePop();
+  const cur = () => state.spaces.find((s) => s.id === state.space);
+  const waits = (id: string) => decisionsIn(id).length > 0;
+  const elsewhere = () => state.spaces.some((s) => s.id !== state.space && waits(s.id));
+  const key = (i: number) => (i < 9 ? `⌘${i + 1}` : "");
+  return (
+    <div class="picker sb-space" onClick={(e) => e.stopPropagation()}>
+      <button
+        class="sb-space-btn"
+        classList={{ on: open() }}
+        aria-haspopup="menu"
+        aria-expanded={open()}
+        aria-label={tr("워크스페이스: {name}", { name: tr(cur()?.label ?? "") })}
+        title={tr("워크스페이스 전환")}
+        onClick={() => setOpen(!open())}
+      >
+        <ProjectBadge name={tr(cur()?.label ?? "")} class="sb-space-badge" />
+        <span class="sb-space-name">{tr(cur()?.label ?? "")}</span>
+        <Show when={elsewhere()}><i class="space-alert" title={tr("다른 워크스페이스에 응답 필요")} /></Show>
+        <Icon name="down" size={14} class="sb-space-chev" />
+      </button>
+      <Show when={open()}>
+        <div class="pop left sb-space-pop" role="menu" aria-label={tr("워크스페이스")}>
+          <div class="pop-label">{tr("워크스페이스")}</div>
+          <For each={state.spaces}>
+            {(s, i) => (
+              <button type="button" role="menuitemradio" aria-checked={s.id === state.space} class="pop-item" data-shortcut={`sp-${s.id}`} onClick={() => (setOpen(false), switchSpace(s.id))}>
+                <ProjectBadge name={tr(s.label)} class="sb-space-badge" />
+                <span class="pop-item-main">{tr(s.label)}</span>
+                <Show when={s.id !== state.space && waits(s.id)}><i class="space-alert" title={tr("응답 필요")} /></Show>
+                <Show when={s.id === state.space}><Icon name="check" size={14} class="sb-space-check" /></Show>
+                <span class="menu-kbd">{key(i())}</span>
+              </button>
+            )}
+          </For>
+          <div class="pop-sep" />
+          <button type="button" role="menuitem" class="pop-item" onClick={() => (setOpen(false), setView({ name: "settings", tab: "general" }))}>
+            <span class="pop-item-main">{tr("워크스페이스 관리")}</span>
+          </button>
+        </div>
+      </Show>
+    </div>
   );
 }
 

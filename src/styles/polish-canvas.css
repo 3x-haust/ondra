@@ -13,16 +13,37 @@
 .canvas-view .cv-progress i {
   border-radius: var(--r-bar);
 }
+/* the page's title is its two views by name: 캔버스 | 보드, the one shown filled */
 .cv-mode {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: calc(-1 * var(--s-8));
+  padding: 2px;
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .cv-mode button {
-  width: 32px;
-  padding: 0;
+  height: 24px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-sm);
   color: var(--ink-3);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.cv-mode button:hover {
+  color: var(--ink);
 }
 .cv-mode button.on {
+  background: var(--active);
   color: var(--ink);
+}
+.cv-mode button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 /* ── canvas: frame */
@@ -44,10 +65,12 @@
 .cv-node.sel {
   box-shadow: 0 0 0 1px var(--accent-line), 0 0 0 3px var(--accent-soft);
 }
-.cv-node.t-ask {
+.cv-node.t-ask,
+.cv-node.t-review {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-ask) 60%, transparent);
 }
-.cv-node.t-ask.sel {
+.cv-node.t-ask.sel,
+.cv-node.t-review.sel {
   box-shadow: 0 0 0 1px var(--c-ask), 0 0 0 3px color-mix(in srgb, var(--c-ask) 16%, transparent);
 }
 .cv-node.dragging {
@@ -150,7 +173,7 @@
   background: currentColor;
 }
 .cv-st.t-review {
-  color: var(--accent-text);
+  color: var(--warn);
 }
 .cv-st.t-review::after {
   inset: 2px;
@@ -195,11 +218,11 @@
   white-space: nowrap;
   color: var(--ink-3);
 }
-.cv-status.s-live .cv-status-text,
-.cv-status.s-review .cv-status-text {
+.cv-status.s-live .cv-status-text {
   color: var(--ink-2);
 }
-.cv-status.s-ask .cv-status-text {
+.cv-status.s-ask .cv-status-text,
+.cv-status.s-review .cv-status-text {
   color: var(--warn-ink);
 }
 .cv-status.failed .cv-status-text {
@@ -1166,8 +1189,8 @@
 }
 :is(.canvas-view, .board-view, .ms-entry) .st-icon.inreview {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--accent-text);
-  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1.5px var(--warn);
+  color: var(--warn);
 }
 :is(.canvas-view, .board-view, .ms-entry) .st-icon.inreview i {
   width: 7px;
@@ -1381,7 +1404,7 @@
   color: var(--ink-2);
 }
 .bc-state.tone-review {
-  color: var(--accent-text);
+  color: var(--warn-ink);
 }
 .bc-state.tone-you {
   color: var(--warn-ink);
@@ -2041,4 +2064,89 @@
 /* ── canvas: a command on a card reads as code at the card's own size (≥ 11px on screen at 75%) */
 .cv-world .cv-node .cv-act-row .tg.cmd {
   font-size: var(--cv-body);
+}
+
+/* ═════════════ clarity ═════════════ */
+
+/* everything that waits on you reads in the attention colour, wherever a task's state shows:
+   병합 필요 (finished, its worktree waiting) beside 응답 필요. The glyph keeps its own shape. */
+.cv-viewport {
+  --c-review: var(--warn);
+}
+.st-icon.inreview,
+.graph .g-glyph.inreview,
+.task-head .status-chip .st-icon.inreview,
+.br-chip .sb-glyph.inreview {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  color: var(--warn);
+}
+.proj-tasks .tone-review .sb-meta,
+.proj-lead.tone-review,
+.req-tag.inreview,
+.req-state.inreview,
+.req-job-time.inreview,
+.graph .g-meta.m-review {
+  color: var(--warn-ink);
+}
+.status-chip.unmerged {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+
+/* a project card says its most pressing state in words, in that state's colour (no unlabelled bar) */
+.cv-proj-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.cv-proj-state.t-ask,
+.cv-proj-state.t-review {
+  color: var(--warn-ink);
+}
+.cv-proj-state.t-failed {
+  color: var(--bad-ink);
+}
+.cv-proj-state.t-live {
+  color: var(--ink-2);
+}
+
+/* devices: a screen that can't be reached says so, with the one thing to try */
+.dev-wait.dev-lost {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-4);
+  padding: var(--s-12);
+  text-align: center;
+  line-height: var(--lh-xs);
+}
+.dev-lost b {
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.dev-lost span {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  text-wrap: balance;
+}
+
+/* lines changed: the numbers in their colours, the unit once after them, quiet ("+9 −10줄") */
+.lines-n,
+.cv-status .lines-n.cv-diff {
+  display: inline;
+  white-space: pre;
+}
+.lines-n .unit {
+  font-family: var(--font);
+  color: var(--ink-3);
+}
+/* a board card's line under the title wraps rather than cutting its numbers */
+.bc-meta {
+  flex-wrap: wrap;
+  row-gap: var(--s-2);
 }

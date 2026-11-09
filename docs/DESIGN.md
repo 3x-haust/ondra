@@ -475,7 +475,9 @@ not the way a chatbot talks.
 | the overview of all tasks | 캔버스 | canvas |
 | a task waiting on the person | 응답 필요 | needs reply |
 | answer it | 응답 | reply |
-| states | 진행 중 · 대기 · 일시정지 · 완료 · 실패 · 검토 | running · queued · paused · done · failed · review |
+| a finished task whose worktree waits for a merge | 병합 필요 | ready to merge |
+| states | 진행 중 · 대기 · 일시정지 · 완료 · 실패 · 병합 필요 | running · queued · paused · done · failed · ready to merge |
+| a task with no project | 프로젝트 없음 | no project |
 | put a task's changes back | 병합 | merge |
 | throw them away | 버리기 | discard |
 | hand an issue to an agent | 작업 만들기 | start task |
@@ -490,11 +492,11 @@ Never: 일 (for a task), 맡기기, 대장, 기억 (as the feature name), 공간
 | Bad | 한국어 | English |
 |---|---|---|
 | 한 번에 하는 일 | 동시 작업 수 | Concurrent tasks |
-| 한 번에 하는 무거운 일 | 무거운 작업 동시 수 | Concurrent heavy tasks |
-| 일마다 따로 작업하기 | 작업마다 워크트리 | Worktree per task |
+| 한 번에 하는 무거운 일 | 빌드·시뮬레이터 작업 동시 수 | Concurrent build and simulator tasks |
+| 일마다 따로 작업하기 | 작업마다 새 워크트리 | New worktree for each task |
 | PR 지켜보기 | PR 리뷰 자동 대응 | Follow up on PR reviews |
 | 자동으로 기억 | 메모리 자동 저장 | Save memories automatically |
-| 일이 띄운 앱은 뒤에 | 포커스 지키기 | Keep my window in front |
+| 일이 띄운 앱은 뒤에 | 내 창 앞에 두기 | Keep my window in front |
 | 일로 맡기기 | 작업 만들기 | Start task |
 | 원래 폴더에 합치기 | 병합 | Merge |
 | 작업이 성공적으로 완료되었습니다. | 완료 | Done |

@@ -43,13 +43,13 @@ export function ResultsView() {
     const task = taskById(r.taskId);
     return !task || !discarded(task);
   }));
-  /** the project of the task a result came from (as the sidebar files it); none: 기타 */
+  /** the project of the task a result came from (as the sidebar files it); none: 프로젝트 없음 */
   const projectOf = (r: ResultEntry) => {
     const task = taskById(r.taskId);
     const id = task ? task.project : r.project;
     return projectById(id, r.space) ? id : undefined;
   };
-  const where = (r: ResultEntry) => projectById(projectOf(r), r.space)?.name ?? t("기타");
+  const where = (r: ResultEntry) => projectById(projectOf(r), r.space)?.name ?? t("프로젝트 없음");
   /** the places results came from, for the filter (only when there is more than one) */
   const places = createMemo(() => {
     const seen = new Map<string, string>();

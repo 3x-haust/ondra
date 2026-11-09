@@ -17,7 +17,7 @@ export interface Home {
   id: string;
   kind: HomeKind;
   label: string;
-  /** the parent folder, when another project home has the same name ("ondra · 01_Projects") */
+  /** the parent folder as a short path, when another project home has the same name ("ondra · ~/…/01_Projects") */
   hint?: string;
   parent?: string;
   space?: SpaceId;
@@ -113,13 +113,16 @@ export const clock = (t: number) => new Date(t).toLocaleTimeString(locale(), { h
 export const homeName = (h: { label: string; hint?: string }) => (h.hint ? `${h.label} · ${h.hint}` : h.label);
 /** the person's home folder ("~", /Users/me, /home/me) */
 const isHomeDir = (dir: string) => !dir || dir === "~" || /^\/(Users|home)\/[^/]+\/?$/.test(dir);
-/** the folder a path sits in, as a short name ("01_Projects", 홈 / Home for the home folder) */
-const parentName = (p: string) => {
+/** the folder a path sits in, as a short path: "~" (the home folder), "~/work", "~/…/01_Projects", "/…/srv" */
+export const parentPath = (p: string) => {
   const parts = p.replace(/\/+$/, "").split("/");
   parts.pop();
   const dir = parts.join("/");
-  if (isHomeDir(dir)) return t("홈");
-  return parts[parts.length - 1];
+  if (isHomeDir(dir)) return "~";
+  const home = /^(~|\/(?:Users|home)\/[^/]+)\//.exec(dir);
+  const rest = (home ? dir.slice(home[0].length) : dir.replace(/^\//, "")).split("/").filter(Boolean);
+  const root = home ? "~/" : "/";
+  return rest.length > 1 ? `${root}…/${rest[rest.length - 1]}` : `${root}${rest[0] ?? ""}`;
 };
 
 /** what matters more first, then newest */
@@ -167,7 +170,7 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
   for (const p of inp.projects) projHome(p.folder, p.name, p.space);
   const nows = new Map<string, { folder: string; home: string; now: ProjectNow }>();
   for (const [folder, now] of Object.entries(inp.now ?? {})) nows.set(folder, { folder, home: projHome(folder).id, now });
-  const homeOf = (m: Memory) => (m.scope === "global" ? homes.get("g")! : m.scope === "space" ? spaceHome(m.space) : projHome(m.project ?? "기타", m.project ? undefined : t("기타")));
+  const homeOf = (m: Memory) => (m.scope === "global" ? homes.get("g")! : m.scope === "space" ? spaceHome(m.space) : projHome(m.project ?? "기타", m.project ? undefined : t("프로젝트 없음")));
   const memById = new Map<string, Memory>();
   for (const m of inp.memory) {
     memById.set(m.id, m);
@@ -182,10 +185,10 @@ export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): 
     for (const f of p.files) if (!seenFile.has(f)) seenFile.add(f), projHome(p.project).files.push(f);
   for (const s of inp.files?.bySpace ?? [])
     for (const f of s.files) if (!seenFile.has(f)) seenFile.add(f), fileHome(f, spaceHome(s.space)).files.push(f);
-  // two folders with the same name: each shows the folder it sits in, muted ("ondra · 01_Projects")
+  // two folders with the same name: each shows the folder it sits in as a short path, muted ("ondra · ~/…/01_Projects")
   const byLabel = new Map<string, Home[]>();
   for (const h of homes.values()) if (h.kind === "project") byLabel.set(h.label, [...(byLabel.get(h.label) ?? []), h]);
-  for (const list of byLabel.values()) if (list.length > 1) for (const h of list) if (h.path) h.hint = parentName(h.path);
+  for (const list of byLabel.values()) if (list.length > 1) for (const h of list) if (h.path) h.hint = parentPath(h.path);
 
   // topic hubs: a tool or service two or more live pieces are about (as the mirror's 주제/)
   const topics = new Map<string, Topic>();

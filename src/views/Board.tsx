@@ -63,13 +63,13 @@ const STATES: { id: string; label: string; tone: string }[] = [
   { id: "paused", label: "일시정지", tone: "paused" },
   { id: "you", label: "응답 필요", tone: "ask" },
   { id: "failed", label: "실패", tone: "failed" },
-  { id: "review", label: "검토", tone: "review" },
+  { id: "review", label: "병합 필요", tone: "review" },
   { id: "done", label: "완료", tone: "done" },
 ];
 const ORDER = ["you", "failed", "review", "running", "paused", "queued", "done"];
 /** a card's state in words (the column's word when grouped by state) */
 const STATE_WORD: Record<string, string> = Object.fromEntries(STATES.map((s) => [s.id, s.label]));
-/** the project a task is filed under, by the same name the sidebar shows (none: 기타) */
+/** the project a task is filed under, by the same name the sidebar shows (none: 프로젝트 없음) */
 const projectOf = (task: Task) => projectsIn(task.space).find((p) => p.id === task.project);
 /** a column's mark: the glyph the sidebar draws for a task in that state */
 const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", failed: "failed", running: "running", paused: "paused", queued: "queued", review: "inreview", done: "done" };
@@ -92,8 +92,8 @@ export function StateGlyph(props: { g: ReturnType<typeof glyphOf> | "discarded" 
   return <Glyph t={{ id: `~${props.g}`, entries: [], plan: [], shells: [], ...SAMPLE[props.g] } as unknown as Task} />;
 }
 
-/** Subagents of a task, one format on the board and the canvas: ⑂ 1/2 while some run, ⑂ 2 when none do
- *  (or `short`, where room is tight: the count alone, the fraction in the tooltip). */
+/** Subagents of a task, one format on the board and the canvas, in words: 서브에이전트 1/2 while some run,
+ *  서브에이전트 2개 when none do (or `short`, where room is tight: ⑂ and the count, the words in the tooltip). */
 export function Kids(props: { t: Task; class?: string; short?: boolean }) {
   const kids = () => kidsOf(props.t.id);
   const live = () => kids().filter((k) => k.status === "running").length;
@@ -103,10 +103,25 @@ export function Kids(props: { t: Task; class?: string; short?: boolean }) {
         class={`kids-n ${props.class ?? ""}`}
         title={live() ? t("서브에이전트 {n}개 중 {live}개 진행 중", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}
       >
-        <Icon name="branch" size={12} />
-        {live() && !props.short ? `${live()}/${kids().length}` : kids().length}
+        <Show when={props.short} fallback={live() ? t("서브에이전트 {live}/{n}", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}>
+          <Icon name="branch" size={12} />
+          {kids().length}
+        </Show>
       </span>
     </Show>
+  );
+}
+
+/** "줄" / " lines" after a number, in the language shown (the number itself is drawn apart, in its colour) */
+const lineUnit = (n: number) => t("{n}줄", { n }).slice(String(n).length);
+/** The lines a task changed, with the unit once, after the last number: +42줄, +9 −10줄 (tooltip: added / removed). */
+export function LinesChanged(props: { add: number; del: number; class?: string }) {
+  return (
+    <span class={`lines-n ${props.class ?? ""}`} title={t("{a}줄 추가 · {d}줄 삭제", { a: props.add, d: props.del })}>
+      <span class="add">+{props.add}</span>
+      <Show when={props.del}>{" "}<span class="del">−{props.del}</span></Show>
+      <span class="unit">{lineUnit(props.del || props.add)}</span>
+    </span>
   );
 }
 
@@ -153,7 +168,7 @@ export function Board(props: { embedded?: boolean } = {}) {
       const paused = all.some((c) => c.id === "paused" && c.tasks.length);
       return all.filter((c) => c.tasks.length || c.id === "done" || (c.id === "queued" && !paused));
     }
-    // by the task's project, in the sidebar's order; tasks without one go last under 기타
+    // by the task's project, in the sidebar's order; tasks without one go last under 프로젝트 없음
     const by = new Map<string, Task[]>();
     for (const x of shown()) {
       const id = projectOf(x)?.id ?? "";
@@ -218,7 +233,7 @@ export function Board(props: { embedded?: boolean } = {}) {
                 <Show when={groupBy() === "state"} fallback={<Icon name="folder" size={14} class="bcol-ic" />}>
                   <StateGlyph g={GLYPH[c.id]} />
                 </Show>
-                <span class="bcol-name">{groupBy() === "state" || !c.label ? t(c.label || "기타") : c.label}</span>
+                <span class="bcol-name" title={groupBy() === "state" || !c.label ? t(c.label || "프로젝트 없음") : c.label}>{groupBy() === "state" || !c.label ? t(c.label || "프로젝트 없음") : c.label}</span>
                 <span class="bcol-n">{doneCount(c)}</span>
                 <Show when={c.id === "done" && hiddenOld()}>
                   <button class="bcol-more" onClick={() => setShowOld(!showOld())}>{showOld() ? t("최근만") : t("이전 {n}개", { n: hiddenOld() })}</button>
@@ -319,7 +334,8 @@ function Card(props: { t: Task; byProject: boolean }) {
         {/* grouped by project, no column says the state: the card does */}
         <Show when={props.byProject}><span class={`bc-state tone-${gone() ? "discarded" : merged() ? "merged" : st()}`}>{t(word())}</span></Show>
         <IssueTag t={job()} />
-        <Show when={!props.byProject}><span class="bc-proj">{projectOf(job())?.name ?? t("기타")}</span></Show>
+        {/* its project's name; a task with none shows nothing there */}
+        <Show when={!props.byProject && projectOf(job())}>{(p) => <span class="bc-proj">{p().name}</span>}</Show>
         <span class="spacer" />
         <Show when={when()}><span class="bc-when">{when()}</span></Show>
       </div>
@@ -342,10 +358,7 @@ function Card(props: { t: Task; byProject: boolean }) {
           </Show>
           <Kids t={job()} class="bc-kids" />
           <Show when={diff().add || diff().del}>
-            <span class="bc-diff">
-              <span class="add">+{diff().add}</span>
-              <Show when={diff().del}> <span class="del">−{diff().del}</span></Show>
-            </span>
+            <LinesChanged class="bc-diff" add={diff().add} del={diff().del} />
           </Show>
           <Show when={goneWord()}><span class={`bc-state tone-${gone() ? "discarded" : "merged"}`}>{t(word())}</span></Show>
           <Show when={sent()}><span class="bc-sent">{t("보냄 {n}", { n: sent() })}</span></Show>

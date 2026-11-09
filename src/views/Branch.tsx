@@ -9,7 +9,7 @@ import { t as tr } from "../i18n";
 export function since(t: Task) {
   if (discarded(t)) return tr("버림");
   if (t.status === "failed") return tr("실패");
-  if (bucket(t) === "review") return tr("검토");
+  if (bucket(t) === "review") return tr("병합 필요");
   // when it ended: merged, when it was merged
   if (t.status === "done") return ago(endedAt(t) ?? t.createdAt);
   if (t.status === "queued") return tr("대기");

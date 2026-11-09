@@ -86,13 +86,12 @@ export function AccountPicker(props: {
         class="st-acc"
         classList={{ on: open() }}
         aria-label={accountName(props.accountId)}
-        title={[accountName(props.accountId), auto() && pool().length > 1 ? t("자동 선택") : ""].filter(Boolean).join(" · ")}
+        title={[auto() ? t("자동 선택") : "", accountName(props.accountId)].filter(Boolean).join(" · ")}
         onClick={(e) => toggle(e.currentTarget)}
       >
-        <Show when={auto() && pool().length > 1} fallback={<><Logos id={props.accountId} /><span class="st-acc-name">{accountName(props.accountId, true)}</span></>}>
-          <Icon name="key" size={14} />
-          <span class="st-acc-name">{t("자동")}</span>
-        </Show>
+        {/* on 자동, it says so and which account the routing is on now: "자동 · ChatGPT" */}
+        <Logos id={props.accountId} />
+        <span class="st-acc-name">{auto() ? `${t("자동")} · ${accountName(props.accountId, true)}` : accountName(props.accountId, true)}</span>
         <Icon name="chevron" size={12} class="st-acc-chev" />
       </button>
       <Show when={open()}>

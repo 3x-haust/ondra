@@ -12,7 +12,7 @@
 // structure, or the local neighbourhood of what's selected; the right side shows
 // one thing, editable, or the saved versions of the memory (MemorySide.tsx).
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { addMemory, faded, inSpace, isLive, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
+import { addMemory, faded, inSpace, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
 import { parseNowKey, projectNow } from "../engine/journal";
 import { tidying, tidyMemory } from "../engine/tidy";
 import { absorbing, absorbNotes, findNotes, notesPending } from "../engine/absorb";
@@ -178,10 +178,6 @@ export function MemoryView() {
   };
   const graph = createMemo(() => buildGraph(model(), graphSel(), match(), q()));
 
-  const counts = () => ({
-    facts: myMemory().filter(isLive).length,
-    files: [...model().homes.values()].reduce((n, h) => n + h.files.length, 0),
-  });
   const tidyTitle = () => {
     const x = state.memoryTidy;
     return x ? `${t("마지막 정리 {when}", { when: agoIn(x.at) })}${x.cursor ? `\n${t("{when}까지 학습", { when: stampOf(x.cursor) })}` : ""}` : t("정리");
@@ -203,12 +199,7 @@ export function MemoryView() {
       <header class="head" data-tauri-drag-region>
         <SidebarToggle />
         <h1 class="head-title">{t("메모리")}</h1>
-        <span class="mem-count">
-          {/* named like the overview's card: the pieces in use now */}
-          <span>{t("적용 중")} <b>{counts().facts}</b></span>
-          <Show when={counts().files}><span>{t("파일")} <b>{counts().files}</b></span></Show>
-          <Show when={myJournal().length}><span>{t("작업 기록")} <b>{myJournal().length}</b></span></Show>
-        </span>
+        {/* the counts live once, in the overview on the right */}
         <span class="spacer" data-tauri-drag-region />
         <Show when={myNotes().length}>
           <button class="btn sm" disabled={absorbing()} onClick={() => void absorbNotes(myNotes())} title={myNotes().map((x) => tilde(x.path)).join("\n")}>
@@ -578,10 +569,13 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     return (!!props.graph.focus && n.ring <= 1 && memCount() <= 36) || z >= 1.8;
   };
   const labelOf = (n: GNode) => (n.kind === "memory" || n.kind === "entry" ? (n.label.length > 22 ? `${n.label.slice(0, 22)}…` : n.label) : n.label);
-  /** the name in less room: a project told apart by its folder keeps its name, tight, with the folder cut
-   *  ("ondra·홈", "ondra·01_Pr…"), so two homes of one repo still read as that repo; long names are cut */
-  const shortOf = (n: GNode) =>
-    n.hint ? `${n.label}·${n.hint.length > 6 ? `${n.hint.slice(0, 5)}…` : n.hint}` : labelOf(n).length > 12 ? `${labelOf(n).slice(0, 11)}…` : labelOf(n);
+  /** the name in less room: a project told apart by its folder keeps its name, tight, with the folder's last
+   *  name cut ("ondra·~", "ondra·01_Pr…"), so two homes of one repo still read as that repo; long names are cut */
+  const shortOf = (n: GNode) => {
+    if (!n.hint) return labelOf(n).length > 12 ? `${labelOf(n).slice(0, 11)}…` : labelOf(n);
+    const last = n.hint.split("/").pop() || n.hint;
+    return `${n.label}·${last.length > 6 ? `${last.slice(0, 5)}…` : last}`;
+  };
   // names never sit on top of each other: the more important one wins, the other fades out
   const FS: Partial<Record<GNode["kind"], number>> = { global: 12, space: 12, project: 12, folder: 12, past: 12, topics: 12, topic: 11, memory: 11, file: 11, entry: 12 };
   /** a name never reads smaller than 11px on screen: zoomed out, it keeps its size (and more of them hide) */

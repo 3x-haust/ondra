@@ -45,6 +45,9 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
   );
 }
 
+/** how full a plan window gets before the line under the input names it (%) */
+const NEAR = 80;
+
 const left = (ms: number) => {
   const m = Math.max(0, Math.round(ms / 60_000));
   if (m < 60) return t("{m}분", { m });
@@ -86,7 +89,10 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     void refreshLimits(props.accountId);
     void loadEmail(props.accountId);
   });
-  const list = () => limitsShown(props.accountId);
+  // a plan window says something only near its cap: then it shows, in the warning colour, in words
+  const list = () => limitsShown(props.accountId).filter((l) => l.used >= NEAR);
+  // credits matter once a window is used up (they're what the work runs on then), or when there is no window
+  const showCredits = () => !!creditsOf(props.accountId) && (!limitsShown(props.accountId).length || list().some((l) => l.used >= 100));
   // the one source for how full the context is: the strip, its tooltip and the sheet all read it
   // a task that hasn't started has no context of its own yet (whatever a kept number says)
   const notStarted = () => {
@@ -140,12 +146,12 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim" data-used={l.used} classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
-            {t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })}
+          <span class="st-lim hot" data-used={l.used} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
+            {l.used >= 100 ? t("{w} 한도 다 씀", { w: windowLabel(l.window) }) : t("{w} 한도 {n}%", { w: windowLabel(l.window), n: Math.round(l.used) })}
           </span>
         )}
       </For>
-      <Show when={creditsOf(props.accountId)}>
+      <Show when={showCredits() && creditsOf(props.accountId)}>
         {(c) => <span class="st-lim st-credits" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
       </Show>
       {/* nothing measured yet (a queued task, a chat before its first word): no context item */}
@@ -158,7 +164,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
             aria-label={t("컨텍스트 {a} / {b}", { a: tokens(x().tokens), b: tokens(x().window) })}
             onClick={() => setCtxOpen(true)}
           >
-            {tokens(x().tokens)} ({ctxShare(x().tokens, x().window)})
+            {t("컨텍스트 {p}", { p: ctxShare(x().tokens, x().window) })}
           </button>
         )}
       </Show>

@@ -311,7 +311,7 @@ export function TaskView(props: { id: string }) {
             out.push(
               <div class="strip keep">
                 <Icon name="branch" size={14} />
-                <b>{tr("검토")}</b>
+                <b>{tr("병합 필요")}</b>
                 <span class="rest">
                   <Show when={diff().files.length} fallback={tr("변경 없음")}>
                     <button class="link-btn" onClick={() => openPanel("changes")}>
@@ -395,7 +395,7 @@ export function TaskView(props: { id: string }) {
             </nav>
             {/* the state first */}
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
-              <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
+              <span class="status-chip unmerged"><Glyph t={task()} />{tr("병합 필요")}</span>
             </Show>
             {/* its changes were thrown away: the muted trash, 버림 · when it ended */}
             <Show when={discarded(task())}>

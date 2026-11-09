@@ -505,7 +505,7 @@ function JournalFolder(props: { model: Model; id: string; onSel: (id: string) =>
         items={[
           { n: list().length, label: t("작업") },
           { n: n("done"), label: t("완료"), tone: "ok" },
-          ...(n("review") ? [{ n: n("review"), label: t("검토"), tone: "accent" }] : []),
+          ...(n("review") ? [{ n: n("review"), label: t("병합 필요"), tone: "warn" }] : []),
           { n: n("failed"), label: t("실패"), tone: n("failed") ? "bad" : "" },
           { n: list().reduce((x, e) => x + (e.learned?.length ?? 0), 0), label: t("배운 것") },
         ]}

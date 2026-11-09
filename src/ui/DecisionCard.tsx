@@ -176,7 +176,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
       {/* where it runs: its project (badge and name), 기타 when it has none;
           in that project's own chat the header already says it, so only the task */}
       <Show when={!inOwnProject(p.x)}>
-        <Show when={p.x.project ? projectById(p.x.project!) : undefined} fallback={<span>{tr("기타")}</span>}>
+        <Show when={p.x.project ? projectById(p.x.project!) : undefined} fallback={<span>{tr("프로젝트 없음")}</span>}>
           {(pr) => (
             <>
               <ProjectBadge name={pr().name} />
