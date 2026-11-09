@@ -25,8 +25,21 @@ struct Progress {
 static READY: Mutex<Option<(String, Vec<u8>)>> = Mutex::new(None);
 static FETCHING: AtomicBool = AtomicBool::new(false);
 
+const LATEST: &str = "https://github.com/3x-haust/ondra/releases/latest/download/latest.json";
+
+/// The newest release, if newer. GitHub's download CDN sometimes caches a failure (a 504) for the
+/// plain address for a while; a second try asks with a query no one else used, which skips that cache.
 async fn latest(app: &AppHandle) -> Result<Option<Update>, String> {
-    app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())
+    let first = app.updater().map_err(|e| e.to_string())?.check().await;
+    match first {
+        Ok(found) => Ok(found),
+        Err(e) => {
+            let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+            let url = tauri::Url::parse(&format!("{LATEST}?at={at}")).map_err(|_| e.to_string())?;
+            let again = app.updater_builder().endpoints(vec![url]).map_err(|x| x.to_string())?.build().map_err(|x| x.to_string())?;
+            again.check().await.map_err(|_| e.to_string())
+        }
+    }
 }
 
 /// Download and verify, telling the window how far along it is.
