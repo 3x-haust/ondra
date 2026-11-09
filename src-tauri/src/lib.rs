@@ -3,6 +3,7 @@
 //!   engine  — agent processes (bundled 3xhaustPi engine, RPC over stdio)
 //!   pty     — in-app terminals (and account login)
 //!   tools   — bundled agent-browser + Chrome, agent-desktop, permissions
+//!   components — the engine, Chrome and the analyzer, kept outside the app (fetched once per version)
 //!   browser — the one shared browser every job uses (own tab, shared logins)
 //!   keychain — sign-in from the macOS keychain without the agent seeing it
 //!   store   — state file, accounts, opening files, inbox folder
@@ -10,6 +11,7 @@
 //!   import  — rules, skills, memory and sessions from other agent tools
 
 mod update;
+mod components;
 mod browser;
 mod inbrowser;
 mod devices;
@@ -287,6 +289,8 @@ pub fn run() {
                 });
             }
             bridge::start(app.handle().clone());
+            // the engine, the browser and the analyzer: in place (or on their way) in the background
+            components::start(app.handle());
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
             // A dev build is a bare executable, not an .app: Stage Manager and
@@ -356,6 +360,8 @@ pub fn run() {
             update::update_check,
             update::update_install,
             update::update_prepare,
+            components::components_status,
+            components::components_wait,
             open_capture,
             hide_capture,
             submit_capture,

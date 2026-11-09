@@ -16,7 +16,8 @@ import { anyPop } from "./ui/ModelPicker";
 import { spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
-import { startRpc } from "./engine/rpc";
+import { refreshEngine, startRpc } from "./engine/rpc";
+import { startComponents } from "./engine/components";
 import { startScheduler } from "./engine/tasks";
 import { applyKeys, notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
 import { watchDevices } from "./state/devices";
@@ -82,6 +83,8 @@ export default function App() {
     if (!location.search.includes("fixture")) seedProjects();
     migrateMemory();
     await startRpc();
+    // the engine, the browser and the analyzer, as each comes in (the engine's version shows once it's here)
+    void startComponents((name) => name === "engine" && void refreshEngine());
     // jobs still running in the engine from before a reload: hear them again
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
     startScheduler();

@@ -138,11 +138,12 @@ macOS 13 이상, Apple silicon만 지원해요. 디바이스 유즈는 Xcode(iOS
 ```sh
 pnpm install
 cp .env.example .env           # 필요하면 값을 채워요
-pnpm bundle                    # agent-browser, agent-desktop, 엔진, 헤드리스 Chrome을 앱에 넣어요
+pnpm bundle                    # agent-browser, agent-desktop, 엔진, 헤드리스 Chrome, 바이너리 분석기를 준비해요
 pnpm tauri dev                 # 개발 실행
-pnpm tauri build && pnpm dmg   # .app, 그다음 설치용 .dmg (pip install ds_store mac_alias)
-pnpm manifest                  # 앱 업데이트용 latest.json (TAURI_SIGNING_PRIVATE_KEY를 넣고 빌드)
+pnpm release notes.md          # 릴리스 빌드: 업데이트 패키지, .dmg, latest.json (scripts/release.mjs 참고)
 ```
+
+- 에이전트 엔진, Chrome, 바이너리 분석기는 컴포넌트예요. 앱이 버전마다 한 번 데이터 폴더로 받아서, 업데이트에는 앱만 들어 있어요. .dmg의 앱은 이걸 안에 갖고 있어서 오프라인에서도 돼요.
 
 - 에이전트 엔진은 [3xhaustpi](https://github.com/3x-haust/3xhaustpi)의 coding-agent를 파일 하나로 빌드한 거예요. 옆 폴더에 두거나 `ONDRA_ENGINE_DIST`로 가리켜요.
 - macOS 27에서는 pid가 -1인 앱(Xcode의 Device Hub)이 떠 있으면 agent-desktop 1.1.0의 모든 명령이 멈춰요. `scripts/patches/`의 패치로 빌드해서 `~/.cache/ondra/agent-desktop-patched`에 두면 bundle 단계가 그걸 써요.

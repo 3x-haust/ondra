@@ -13,6 +13,7 @@ import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine, tilde } from "../engine/rpc";
+import { componentNote, componentOf } from "../engine/components";
 import {
   accountProviders,
   accountRemove,
@@ -208,23 +209,35 @@ function General() {
   );
 }
 
-/** What Ondra runs with: the agent, the browser, app control. A version when known, 없음 when missing. */
+/** What Ondra runs with: the agent, the browser, app control, the analyzer. A version when known,
+ *  how far its download is while one comes in, 없음 when missing. */
 function Components() {
   const [status, { refetch }] = createResource(toolStatus);
   window.addEventListener("focus", refetch);
   onCleanup(() => window.removeEventListener("focus", refetch));
-  const part = (version: string | null | undefined, ready: boolean | undefined) => (
-    <Show when={ready} fallback={<span class="pill warn">{t("없음|missing")}</span>}>
-      <Show when={version && version !== "dev"} fallback={<span class="set-note">{t("준비됨")}</span>}>
-        <span class="set-note">{version}</span>
+  // a component that just came in: its version shows now
+  createEffect(on(() => componentOf("chrome")?.state, (s, was) => s === "ready" && was && was !== "ready" && void refetch()));
+  const part = (version: string | null | undefined, ready: boolean | undefined, component?: string) => {
+    const note = () => componentNote(component ? componentOf(component) : undefined);
+    return (
+      <Show when={!note()} fallback={<span class="set-note">{note()}</span>}>
+        <Show when={ready} fallback={<span class="pill warn">{t("없음|missing")}</span>}>
+          <Show when={version && version !== "dev"} fallback={<span class="set-note">{t("준비됨")}</span>}>
+            <span class="set-note">{version}</span>
+          </Show>
+        </Show>
       </Show>
-    </Show>
-  );
+    );
+  };
+  const analyzer = () => componentOf("binary-analysis");
   return (
     <>
-      <Row title={t("에이전트")}>{part(engine.info.engineVersion, engine.ready)}</Row>
-      <Row title={t("브라우저")}>{part(status()?.browserVersion, !!status()?.browserVersion && status()?.chromeReady)}</Row>
+      <Row title={t("에이전트")}>{part(engine.info.engineVersion, engine.ready, "engine")}</Row>
+      <Row title={t("브라우저")}>{part(status()?.browserVersion, !!status()?.browserVersion && status()?.chromeReady, "chrome")}</Row>
       <Row title={t("앱 조작")}>{part(status()?.desktopVersion, !!status()?.desktopVersion)}</Row>
+      <Show when={analyzer()}>
+        {(c) => <Row title={t("바이너리 분석")}>{part(c().version.split("-")[0], c().state === "ready", "binary-analysis")}</Row>}
+      </Show>
     </>
   );
 }

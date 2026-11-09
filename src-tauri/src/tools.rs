@@ -1,5 +1,5 @@
-//! The tools that ship inside the app: agent-browser (+ a bundled Chrome for
-//! Testing headless shell), agent-desktop (+ its macOS helper). Nothing is
+//! The tools that ship with the app: agent-browser (+ a Chrome for Testing
+//! headless shell, a component: see components.rs), agent-desktop (+ its macOS helper). Nothing is
 //! installed by hand; the only steps macOS insists on are the Accessibility
 //! and Screen Recording grants, which belong to this app because it spawns
 //! the tools.
@@ -126,24 +126,29 @@ pub fn resource(app: &AppHandle, name: &str) -> Option<PathBuf> {
     [bundled, Some(dev)].into_iter().flatten().find(|d| d.is_dir())
 }
 
-/// The Chrome agent-browser drives: the bundled headless shell, else a system Chrome.
+/// The Chrome agent-browser drives: the browser component (see components.rs), the
+/// one an older app kept in its Resources, else a system Chrome.
 pub fn chrome_path(app: &AppHandle) -> Option<PathBuf> {
-    if let Some(dir) = resource(app, "chrome") {
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for e in entries.flatten() {
-                let bin = e.path().join("chrome-headless-shell");
-                if bin.is_file() {
-                    return Some(bin);
-                }
-                let full = e.path().join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
-                if full.is_file() {
-                    return Some(full);
-                }
-            }
-        }
+    if let Some(bin) = crate::components::path(app, "chrome").or_else(|| resource(app, "chrome")).and_then(|d| chrome_in(&d)) {
+        return Some(bin);
     }
     let system = PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
     system.is_file().then_some(system)
+}
+
+/// The Chrome for Testing program inside a folder of it (`<dir>/chrome-*-mac-*/…`).
+pub fn chrome_in(dir: &Path) -> Option<PathBuf> {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let bin = e.path().join("chrome-headless-shell");
+        if bin.is_file() {
+            return Some(bin);
+        }
+        let full = e.path().join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+        if full.is_file() {
+            return Some(full);
+        }
+    }
+    None
 }
 
 /// A Command for agent-browser that finds its skills and its Chrome.
@@ -233,6 +238,11 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     }
     if let Some(helper) = sidecar("agent-desktop-macos-helper") {
         env.push(("AGENT_DESKTOP_MACOS_HELPER_PATH".into(), helper.display().to_string()));
+    }
+    // `ondra-binary` runs the analyzer component; while it is still coming, the folder it will be
+    // in (the launcher waits for it there)
+    if let Some(dir) = crate::components::path(&app, "binary-analysis").or_else(|| crate::components::expected(&app, "binary-analysis")) {
+        env.push(("ONDRA_BINARY_ANALYSIS".into(), dir.display().to_string()));
     }
     // Background host computer use is the default when its signed helper is bundled.
     // The engine's computer extension spawns it on `start`; no VM guest is involved.

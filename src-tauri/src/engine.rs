@@ -221,20 +221,29 @@ pub fn home() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
 }
 
-/// The engine binary shipped next to the app executable.
-pub fn engine_bin() -> Option<PathBuf> {
-    crate::tools::sidecar("ondra-engine")
+/// The engine component's folder: the binary and the support files it reads (see components.rs).
+fn engine_dir(app: &AppHandle) -> Option<PathBuf> {
+    crate::components::path(app, "engine")
+}
+
+/// The engine binary: the engine component, or (an app built before components) next to the app executable.
+/// While the component is still coming in, where it will be: a job's start waits for it (`components_wait`).
+pub fn engine_bin(app: &AppHandle) -> Option<PathBuf> {
+    engine_dir(app)
+        .map(|d| d.join("ondra-engine"))
+        .or_else(|| crate::tools::sidecar("ondra-engine"))
+        .or_else(|| crate::components::expected(app, "engine").map(|d| d.join("ondra-engine")))
 }
 
 /// Support files the engine reads at runtime (themes, wasm, package.json).
 fn engine_assets(app: &AppHandle) -> Option<PathBuf> {
-    crate::tools::resource(app, "engine").filter(|d| d.join("package.json").is_file())
+    engine_dir(app).or_else(|| crate::tools::resource(app, "engine")).filter(|d| d.join("package.json").is_file())
 }
 
 /// A Command for the engine with everything it needs. Extensions are off so
 /// the user's own pi setup never leaks in or breaks a run.
 pub fn engine_command(app: &AppHandle) -> Result<Command, String> {
-    let bin = engine_bin().ok_or("엔진 파일이 앱에 없습니다. 앱을 다시 설치하세요.")?;
+    let bin = engine_bin(app).filter(|b| b.is_file()).ok_or("엔진 파일이 앱에 없습니다. 앱을 다시 설치하세요.")?;
     let mut cmd = Command::new(bin);
     for (k, v) in engine_env(app) {
         cmd.env(k, v);
@@ -292,7 +301,7 @@ pub async fn engine_info(app: AppHandle) -> EngineInfo {
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|s| !s.is_empty())
     });
     EngineInfo {
-        engine_path: engine_bin().map(|p| p.display().to_string()),
+        engine_path: engine_bin(&app).map(|p| p.display().to_string()),
         engine_version: version,
         data_dir: data_dir(&app).display().to_string(),
         home: home().display().to_string(),

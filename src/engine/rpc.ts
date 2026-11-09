@@ -73,6 +73,11 @@ async function start() {
   }));
 }
 
+/** Ask again where the engine is and which version (its component just came in). */
+export async function refreshEngine() {
+  setInfo(await engineInfo());
+}
+
 export const isAlive = (id: string) => alive.has(id);
 export const markAlive = (id: string) => alive.add(id);
 export const markDead = (id: string) => alive.delete(id);

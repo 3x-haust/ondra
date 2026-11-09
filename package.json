@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "bundle": "node scripts/bundle.mjs",
     "dmg": "python3 scripts/dmg/build.py",
-    "manifest": "node scripts/release-manifest.mjs"
+    "manifest": "node scripts/release-manifest.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",

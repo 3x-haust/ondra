@@ -134,6 +134,8 @@ export default {
   "에이전트": "Agent",
   "브라우저": "Browser",
   "앱 조작": "App control",
+  "받는 중 {p}%": "Downloading {p}%",
+  "받지 못했어요 · 잠시 뒤 다시 받아요": "Couldn't download · Trying again soon",
   "macOS 권한": "macOS permissions",
   "손쉬운 사용": "Accessibility",
   "다른 앱 조작에 필요": "Needed to control other apps",

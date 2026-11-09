@@ -5,13 +5,18 @@ const native = vi.hoisted(() => ({
   latest: "0.29.1" as string | null,
   prepared: [] as string[],
   installed: [] as string[],
+  checks: 0,
+  fetches: true,
 }));
 
 vi.mock("../lib/native", () => ({
-  checkForUpdate: async () => (native.latest ? { version: native.latest } : null),
+  checkForUpdate: async () => {
+    native.checks++;
+    return native.latest ? { version: native.latest } : null;
+  },
   prepareUpdate: async () => {
     native.prepared.push(native.latest!);
-    return true;
+    return native.fetches;
   },
   installUpdate: async () => {
     native.installed.push(native.latest!);
@@ -24,17 +29,31 @@ describe("updates go to the newest release", () => {
     native.latest = "0.29.1";
     native.prepared = [];
     native.installed = [];
+    native.fetches = true;
   });
 
-  it("a release that came out after the check is the one shown and installed", async () => {
+  it("a package that is ready installs at once, without asking GitHub again first", async () => {
     const u = await import("./update");
     await u.checkUpdate(true);
     expect(u.available()).toBe("0.29.1");
     expect(u.updateReady()).toBe("0.29.1");
+    const checks = native.checks;
+    await u.installNow();
+    expect(native.checks).toBe(checks);
+    expect(native.installed).toHaveLength(1);
+  });
+
+  it("with nothing ready yet, installing looks for the newest release first", async () => {
+    vi.resetModules();
+    native.fetches = false;
+    const u = await import("./update");
+    await u.checkUpdate(true);
+    expect(u.updateReady()).toBe(null);
     native.latest = "0.30.0";
     await u.installNow();
     expect(u.available()).toBe("0.30.0");
     expect(native.installed).toEqual(["0.30.0"]);
+    native.fetches = true;
   });
 
   it("a newer release found later is fetched, not left at the older one", async () => {

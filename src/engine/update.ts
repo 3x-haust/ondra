@@ -1,8 +1,9 @@
-// Updates from GitHub Releases. A while after start, every 15 minutes, on coming back and
-// on opening Settings, the app asks whether a newer release is out. If so it fetches the
-// package in the background first; once it is ready one notice offers to restart into it
-// (a newer one replaces it, and it closes by itself). Installing always asks once more, so
-// it goes straight to the newest release even when another came out after the last check.
+// Updates from GitHub Releases. Five seconds after start, every 3 minutes, and on coming back or
+// opening Settings (when the last check is half a minute old), the app asks whether a newer release
+// is out. If so it fetches the package in the background right away (only the app: the engine, the
+// browser and the analyzer are components that come separately and seldom); once it is ready one
+// notice offers to restart into it (a newer one replaces it, and it closes by itself). Installing a
+// package that is ready needs no network: it swaps the app and restarts at once.
 // A restart would cut the jobs at work (their commands, servers, checks): while one runs, the
 // notice restarts once none does instead. Settings shows the same, with how far the download
 // is, and still restarts at once when asked.
@@ -12,9 +13,10 @@ import { dropToast, toast } from "../state/ui";
 import { flushState, state } from "../state/store";
 import { t } from "../i18n";
 
-const EVERY = 15 * 60_000;
+const FIRST = 5_000;
+const EVERY = 3 * 60_000;
 /** coming back to the app (or opening Settings) checks again once this long has passed */
-const AGAIN = 2 * 60_000;
+const AGAIN = 30_000;
 /** how often a queued restart looks whether the jobs are done */
 const IDLE_LOOK = 3_000;
 let shown = "";
@@ -114,11 +116,13 @@ export async function installNow() {
   setStatus("installing");
   if (notice) dropToast(notice);
   try {
-    // a newer release may have come out since the last check: install that one
-    const next = await checkForUpdate().catch(() => null);
-    setCheckedAt(Date.now());
-    if (next) setAvailable(next.version);
     if (preparing) await preparing.done;
+    // nothing fetched yet (or it failed): see what's newest now, then it downloads and installs
+    if (!ready()) {
+      const next = await checkForUpdate().catch(() => null);
+      setCheckedAt(Date.now());
+      if (next) setAvailable(next.version);
+    }
     // the restart doesn't wait for a save still to come
     await flushState().catch(() => {});
     await installUpdate();
@@ -138,7 +142,7 @@ export function freshen() {
 }
 
 export function startUpdates() {
-  setTimeout(() => void checkUpdate(), 20_000);
+  setTimeout(() => void checkUpdate(), FIRST);
   setInterval(() => void checkUpdate(), EVERY);
   window.addEventListener("focus", () => {
     if (lastCheck) freshen();
