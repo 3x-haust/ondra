@@ -165,13 +165,12 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
         <div class="decision-ctx"><For each={context()}>{(b) => <BlockView block={b} />}</For></div>
       </Show>
       {/* like Codex: the choices as a list, and a line to answer in your own words */}
-      <div class="decision-list" role="listbox" tabIndex={0} onKeyDown={keys} ref={list}>
+      <div class="decision-list" role="group" aria-label={props.d.question} tabIndex={0} onKeyDown={keys} ref={list}>
         <For each={props.d.options}>
           {(o, i) => (
             <button
               class="decision-opt"
-              role="option"
-              aria-selected={sel() === i()}
+              aria-pressed={sel() === i()}
               classList={{ on: sel() === i(), primary: !!o.primary }}
               onClick={() => select(i())}
             >

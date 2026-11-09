@@ -182,9 +182,9 @@ export function ResultsView() {
         </Show>
         <span class="spacer" data-tauri-drag-region />
         <Show when={places().length > 1}>
-          <div class="res-seg" role="tablist">
-            <button classList={{ on: !proj() }} onClick={() => setProj("")}>{t("전체")}</button>
-            <For each={places()}>{(p) => <button classList={{ on: proj() === `:${p.id}` }} onClick={() => setProj(`:${p.id}`)}>{p.name}</button>}</For>
+          <div class="res-seg" role="group" aria-label={t("프로젝트")}>
+            <button classList={{ on: !proj() }} aria-pressed={!proj()} onClick={() => setProj("")}>{t("전체")}</button>
+            <For each={places()}>{(p) => <button classList={{ on: proj() === `:${p.id}` }} aria-pressed={proj() === `:${p.id}`} onClick={() => setProj(`:${p.id}`)}>{p.name}</button>}</For>
           </div>
         </Show>
         <Show when={all().length}>
