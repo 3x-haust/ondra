@@ -246,6 +246,10 @@ export default {
   // update.ts
   "최신 버전이에요": "You're up to date",
   "{v} 업데이트 준비됨": "Update {v} ready",
+  "업데이트하는 중": "Updating",
+  "{v}로 업데이트 · 다시 시작해요": "Update to {v} · restarts Ondra",
+  "{v}로 업데이트 · 작업이 끝나면 다시 시작해요": "Update to {v} · restarts when jobs finish",
+  "작업이 끝나면 {v}로 다시 시작해요 · 누르면 지금": "Restarts into {v} when jobs finish · press to restart now",
   "작업 끝나면 다시 시작": "Restart after jobs",
   "작업이 끝나면 다시 시작해요": "Restarts when jobs finish",
   "업데이트하지 못했어요 · {why}": "Couldn't update · {why}",

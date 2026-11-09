@@ -104,7 +104,8 @@ export async function checkUpdate(manual = false) {
         },
       }
     : { label: t("다시 시작|update"), run: () => void installNow() };
-  notice = toast(t("{v} 업데이트 준비됨", { v: next.version }), "info", action, { ms: 12_000 });
+  // the button at the top left says it from now on; a check you asked for also answers here
+  if (manual) notice = toast(t("{v} 업데이트 준비됨", { v: next.version }), "info", action, { ms: 8_000 });
 }
 
 export async function installNow() {
