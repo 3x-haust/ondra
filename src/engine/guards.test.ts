@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
-import { commandKind, isSearch, SEARCH_STALL_MS, searchCall, searchStalled } from "./commandKind";
+import { commandKind, isLocalWait, isSearch, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound, riskyChange } from "./proof";
-import { closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
+import { backgroundShells, closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
 
 describe("commandKind", () => {
   it("status looks are polls", () => {
@@ -82,6 +82,81 @@ describe("searchStalled", () => {
     expect(searchStalled({ ...find, background: true }, late)).toBe(false);
     for (const command of ["pnpm build", "pnpm test", "cargo build --release", "npm install", "sleep 600"])
       expect(searchStalled({ command, startedAt: at }, late), command).toBe(false);
+  });
+});
+
+describe("isLocalWait", () => {
+  it("waits for a local server or its ready line", () => {
+    for (const c of [
+      'for i in $(seq 1 60); do grep -q "Ready" /tmp/guest-dev.log && break; sleep 2; done; cd src/app && find . -name page.tsx',
+      "for i in $(seq 1 45); do curl -s -o /dev/null -m 2 localhost:3000 && break; kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break; sleep 2; done; tail -20 /tmp/dev.log",
+      "until curl -sf http://127.0.0.1:5173 >/dev/null; do sleep 1; done",
+      "while ! nc -z localhost 8080; do sleep 1; done",
+      "for i in $(seq 1 30); do lsof -i :3000 >/dev/null && break; sleep 2; done",
+      "for i in $(seq 1 40); do grep -qE 'Local:|ready in' vite.log && break; sleep 1; done",
+      "npx wait-on http://localhost:3000",
+    ])
+      expect(isLocalWait(c), c).toBe(true);
+  });
+  it("not CI, store, build or test waits, nor a plain curl", () => {
+    for (const c of [
+      "for i in $(seq 1 60); do s=$(gh run view 1 --json status -q .status); [ \"$s\" = completed ] && break; sleep 30; done",
+      "sleep 60; gh run view 42 --json status",
+      "for i in $(seq 1 180); do test -f build.exit && break; sleep 2; done; tail -12 build.log",
+      "for i in $(seq 1 120); do grep -q '^EXIT' server-test.log && break; sleep 5; done",
+      "for i in $(seq 1 30); do asc status --app 1 | grep -q READY && break; sleep 60; done",
+      "curl -s localhost:3000/api/health",
+      "pnpm dev",
+    ])
+      expect(isLocalWait(c), c).toBe(false);
+  });
+});
+
+describe("waitStalled", () => {
+  const at = 1_000_000;
+  const wait = { command: 'for i in $(seq 1 300); do grep -q "Ready" /tmp/dev.log && break; sleep 2; done', startedAt: at };
+  it("a local wait with nothing new for the limit", () => {
+    expect(waitStalled(wait, at + WAIT_STALL_MS - 1)).toBe(false);
+    expect(waitStalled(wait, at + WAIT_STALL_MS)).toBe(true);
+    // a loop that prints a line per page is still moving
+    expect(waitStalled({ ...wait, changedAt: at + 100_000 }, at + WAIT_STALL_MS)).toBe(false);
+    expect(waitStalled({ ...wait, changedAt: at + 100_000 }, at + 100_000 + WAIT_STALL_MS)).toBe(true);
+  });
+  it("never a finished command or another kind of wait", () => {
+    const late = at + 10 * WAIT_STALL_MS;
+    expect(waitStalled({ ...wait, endedAt: at + 1000 }, late)).toBe(false);
+    for (const command of ["pnpm build", "pnpm test", "sleep 600", "for i in $(seq 1 60); do gh pr checks 3 && break; sleep 30; done"])
+      expect(waitStalled({ command, startedAt: at }, late), command).toBe(false);
+  });
+});
+
+describe("shellArg", () => {
+  it("the first line of the command, as ps shows the shell running it", () => {
+    expect(shellArg('for i in $(seq 1 60); do grep -q "Ready" /tmp/dev.log && break; sleep 2; done')).toBe('for i in $(seq 1 60); do grep -q "Ready" /tmp/dev.log && break; sleep 2; done');
+    expect(shellArg("cd app && python3 - <<'EOF'\nprint(1)\nEOF")).toBe("cd app && python3 - <<'EOF'");
+    // ps escapes backslashes and tabs: cut before them
+    expect(shellArg("until curl -s localhost:3000; do printf '.\\n'; sleep 1; done")).toBe("until curl -s localhost:3000; do printf '.");
+    expect(shellArg("sleep 5")).toBeUndefined();
+    // a parallel call that starts the same way: matched on what only this one has
+    const cd = 'cd "/Users/me/Library/Application Support/dev.3xhaust.ondra/worktrees/web-tmw1" && ';
+    const wait = `${cd}for i in $(seq 1 60); do grep -qE "Ready|ready in" dev.log && break; sleep 2; done`;
+    expect(shellArg(wait, [`${cd}pnpm build`])).toBe(wait);
+    expect(shellArg(`${cd}grep -q "a\\|Ready" dev.log; sleep 2`, [`${cd}grep -q "a`])).toBe('|Ready" dev.log; sleep 2');
+    // nothing tells them apart: no stop
+    expect(shellArg(wait, [`${wait} && echo up`])).toBeUndefined();
+  });
+});
+
+describe("backgroundShells", () => {
+  it("what the job started in the background, newest first, once each", () => {
+    const sh = (command: string, background = true) => ({ id: command, command, startedAt: 1, tail: "", background });
+    expect(backgroundShells([
+      sh("(nohup bun run dev > /tmp/dev.log 2>&1 &)"),
+      sh("cat a.ts", false),
+      sh("pnpm dev"),
+      sh("(nohup bun run dev > /tmp/dev.log 2>&1 &)"),
+    ])).toEqual(["(nohup bun run dev > /tmp/dev.log 2>&1 &)", "pnpm dev"]);
+    expect(backgroundShells([sh("ls", false)])).toEqual([]);
   });
 });
 

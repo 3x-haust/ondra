@@ -84,3 +84,47 @@ export function searchStalled(s: { command: string; startedAt: number; changedAt
   if (s.endedAt || s.background || !isSearch(s.command)) return false;
   return now - Math.max(s.startedAt, s.changedAt ?? 0) >= ms;
 }
+
+// Waiting for something local to come up: a loop that sleeps until a dev server
+// answers (curl localhost, nc -z, lsof -i) or its log shows it is ready. A local
+// server is up within a minute or two or not at all (it crashed, the port was
+// taken, Ondra restarted). Waits on CI, a store review or a build's exit file
+// are other waits: they keep their own deadlines.
+const LOOP = /\b(for|while|until)\b[\s\S]*\bsleep\b/;
+const LOCAL = /\b(curl|wget)\b[^|;&\n]*(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])|\bnc\s+(-\w+\s+)*-\w*z|\blsof\b[^|;&\n]*-i\s*[:\w]/;
+// what a dev server prints once it is up ("Ready in 2s", "Local: http://…", "listening on 3000");
+// not a store state (READY_FOR_SALE)
+const READY = /listen|local:|started|running (at|on)|localhost|127\.0\.0\.1|https?:\/\/|server|vite|metro|watching|serving/i;
+const isReady = (pattern: string) => /\b[Rr]eady\b/.test(pattern) || READY.test(pattern);
+// grep's pattern (not its file: "server-test.log" waiting for EXIT is a test run)
+const GREP_PATTERN = /\b[ef]?grep\s+(?:(?:-m\s*\d+|-[\w-]+)\s+)*(?:'([^']*)'|"([^"]*)"|([^\s|;&]+))/g;
+const readyGrep = (cmd: string) => [...cmd.matchAll(GREP_PATTERN)].some((m) => isReady(m[1] ?? m[2] ?? m[3] ?? ""));
+
+/** A command that waits for a local server or a "ready" log line. */
+export const isLocalWait = (cmd: string) => /(^|[\s;&|(])(npx\s+)?wait-on\s/.test(cmd) || (LOOP.test(cmd) && (LOCAL.test(cmd) || readyGrep(cmd)));
+
+/** How long a local wait may go without new output before Ondra stops it. */
+export const WAIT_STALL_MS = 120_000;
+
+/**
+ * A wait on a local server or log line that has shown nothing new for
+ * WAIT_STALL_MS: what it waits for isn't coming. A wait that prints as it
+ * goes (one line per page it checks) is still moving.
+ */
+export function waitStalled(s: { command: string; startedAt: number; changedAt?: number; endedAt?: number }, now: number, ms = WAIT_STALL_MS): boolean {
+  if (s.endedAt || !isLocalWait(s.command)) return false;
+  return now - Math.max(s.startedAt, s.changedAt ?? 0) >= ms;
+}
+
+/**
+ * Text that `ps` shows for the shell running this command (`/bin/bash -c <command>`)
+ * and for no other command running beside it: the longest piece of its first line
+ * that ps prints as is (it escapes newlines, tabs and backslashes). Parallel calls
+ * often start alike (`cd <worktree> && …`), so a piece they share never counts.
+ * None long enough to tell them apart: undefined.
+ */
+export function shellArg(cmd: string, others: string[] = []): string | undefined {
+  const pieces = cmd.split("\n")[0].split(/[\t\\]/).map((p) => p.trim());
+  const ok = pieces.filter((p) => p.length >= 12 && !others.some((o) => o.includes(p)));
+  return ok.sort((a, b) => b.length - a.length)[0];
+}

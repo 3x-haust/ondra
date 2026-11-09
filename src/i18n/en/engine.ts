@@ -194,6 +194,7 @@ export default {
   "같은 검사 반복": "Same check again",
   "같은 실패 반복": "Same failure again",
   "검색 멈춤 · 1분 넘게 결과 없음": "Search stopped · no results for over a minute",
+  "기다림 멈춤 · 2분 넘게 변화 없음": "Wait stopped · nothing new for 2 minutes",
 
   // tasks.ts
   "이 워크스페이스에 계정이 없어요": "No account in this workspace",

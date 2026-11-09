@@ -311,8 +311,8 @@ is clear. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
 leave half-written files that break the next steps). A bash call has no time
 limit unless you pass one; a command that stopped early was cut off by its own
-timeout, by an Ondra restart, or by Ondra stopping a stalled search (it says
-so). Never write a limit into a handoff or a
+timeout, by an Ondra restart, or by Ondra stopping a stalled search or wait (it
+says so). Never write a limit into a handoff or a
 subagent's task that no tool reported. Never guess a CLI's
 subcommands or flags: before calling one with flags you don't know, check
 \`<tool> --help </dev/null\` with the bash "timeout" set to 10 (\`git <sub> -h\`
@@ -323,13 +323,24 @@ before reading it when you aren't sure; when "no match" is a fine answer,
 end grep/rg/diff pipelines with \`|| true\`; and read the error before
 retrying: the same command twice fails twice.
 Keep outputs short: \`| head -200\`, \`rg -m 20\`, \`git diff --stat\` before a
-full diff, one file at a time. To wait for something (a build, a server, a
-file), poll the condition inside one bash call with a deadline
-(\`for i in $(seq 1 90); do test -e out && break; sleep 2; done\`), never one
-\`sleep\` per turn. Ondra's own data (its app-support folder: sessions,
+full diff, one file at a time. Ondra's own data (its app-support folder: sessions,
 state.json, worktrees of other jobs) is not your material: don't read it. The
 "Pi documentation" lines above are about the engine Ondra runs on; they are
 never part of a task, and their paths may not exist.
+
+Waiting: poll inside one bash call with a deadline, never one \`sleep\` per
+turn, and stop as soon as what you wait for is gone. Start a server or a long
+check in the background with its output in a log and its pid saved
+(\`bun run dev > /tmp/dev.log 2>&1 & echo $! > /tmp/dev.pid\`), then wait for
+its URL or log line, checking each time that the pid is alive, and print the
+log tail at the end:
+\`for i in $(seq 1 45); do curl -s -o /dev/null -m 2 localhost:3000 && break; kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break; sleep 2; done; tail -20 /tmp/dev.log\`
+A local dev server is up within 90 s or not at all: if it isn't, read the log
+and fix the cause instead of waiting again. A build or test run gets up to 10
+minutes per call, ending as soon as its pid is gone. Only remote work (CI, a
+store review) is worth longer waits. A loop over many pages or files prints a
+line per item: Ondra stops a wait on a local server or log that shows nothing
+new for 2 minutes.
 
 Searching: a search walks every folder under where it starts, so start it in
 the folder the work is about, never in all of \`~\`, Library or \`/\`. Find files
@@ -354,8 +365,8 @@ findings; note P3s instead of fixing them.
 Long checks (a full test suite, a comparison against main, a build of many
 minutes) cost the most, so run each once. First run the tests that cover the
 files you changed; run the whole suite only when the project asks for it
-before a PR. Start a long one with its output in a log file, then wait for
-it in one call as above (up to 10 minutes per call) and read the summary;
+before a PR. Start a long one in the background as above (log and pid), wait
+for it in one call that ends when the pid is gone, and read the summary;
 never kill and restart a check that is still running. Before comparing
 failures with main, memory_search "<repo> failing tests": failures already
 known to fail on main need no second comparison. When failures turn out to

@@ -63,6 +63,23 @@ describe("coding defaults", () => {
     ]) expect(prompt).toContain(rule);
   });
 
+  it("waits end when what they wait for is gone, with deadlines that fit", () => {
+    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
+    for (const rule of [
+      "never one `sleep` per turn, and stop as soon as what you wait for is gone",
+      "`bun run dev > /tmp/dev.log 2>&1 & echo $! > /tmp/dev.pid`",
+      "kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break",
+      "tail -20 /tmp/dev.log",
+      "A local dev server is up within 90 s or not at all",
+      "Only remote work (CI, a store review) is worth longer waits",
+      "Ondra stops a wait on a local server or log that shows nothing new for 2 minutes",
+      "wait for it in one call that ends when the pid is gone",
+    ]) expect(prompt).toContain(rule);
+    // no blanket long poll: the only 10-minute wait is a build or test run's
+    expect(prompt.match(/10 minutes/g)).toHaveLength(1);
+    expect(prompt).toContain("A build or test run gets up to 10 minutes per call");
+  });
+
   it("keeps role boundaries and the routing format", () => {
     expect(SUB_SYSTEM).toContain("Don't start subagents.");
     expect(TASK_SYSTEM).toContain("at most 4 at a time");
@@ -189,6 +206,23 @@ describe("worker prompt delivery", () => {
       const sent = vi.mocked(native.agentSend).mock.calls.find(([, command]) => command.type === "prompt")?.[1];
       expect(sent?.message).toContain(mode === "resume" ? "다시 시작" : mode === "handoff" ? "Reproduced incorrect total" : t.ask);
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
+    });
+
+    it(`tells a resumed ${role} which background commands may be gone`, async () => {
+      const t = task(role === "subagent" ? "parent-task" : undefined);
+      if (t.parentId) setState("tasks", [{ ...task(), id: t.parentId }]);
+      t.shells = [
+        { id: "a", command: "(nohup bun run dev -- -p 3217 > /tmp/dev.log 2>&1 &)", startedAt: 1, endedAt: 2, tail: "", background: true },
+        { id: "b", command: 'for i in $(seq 1 60); do grep -q "Ready" /tmp/dev.log && break; sleep 2; done', startedAt: 3, tail: "" },
+      ];
+      setState("tasks", (list) => [...list, t]);
+
+      await startTask(t.id, true);
+
+      const sent = vi.mocked(native.agentSend).mock.calls.find(([, command]) => command.type === "prompt")?.[1];
+      expect(sent?.message).toContain('그때 돌던 명령 `for i in $(seq 1 60); do grep -q "Ready" /tmp/dev.log && break; sleep 2; done`은 재시작 때문에 끊겼어요');
+      expect(sent?.message).toContain("백그라운드로 띄운 `(nohup bun run dev -- -p 3217 > /tmp/dev.log 2>&1 &)`는 아직 돌 수도, 꺼졌을 수도 있어요");
+      expect(sent?.message).toContain("kill -0");
     });
 
     it.each(["fresh", "resume", "handoff"])(`makes skills searchable by ${role} on %s without loading the catalog`, async (mode) => {

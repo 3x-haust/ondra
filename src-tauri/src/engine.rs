@@ -34,8 +34,19 @@ impl Proc {
 
     fn terminate(&mut self) {
         self.revoke();
+        // What its shell is running right then (a wait loop, a build, a crawl of a
+        // dev server) would run on with nobody reading it, while the resumed job
+        // runs it again. A server an earlier call started is no longer below the
+        // engine (that call ended), so it stays.
+        let running = match self.child.try_wait() {
+            Ok(None) => below(&ps_rows(), self.child.id() as i32),
+            _ => vec![],
+        };
         let _ = self.child.kill();
         let _ = self.child.wait();
+        for pid in running {
+            signal("-KILL", pid);
+        }
     }
 
     fn finish(&mut self) -> Option<i32> {
@@ -124,6 +135,49 @@ impl Engine {
             }
         }
     }
+}
+
+// Processes, from `ps`: what a job's engine runs (its shell's commands) is
+// stopped with it, and one stalled command can be stopped on its own.
+/// One process from `ps`.
+struct PsRow {
+    pid: i32,
+    ppid: i32,
+    command: String,
+}
+
+fn ps_rows() -> Vec<PsRow> {
+    let Ok(out) = std::process::Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid=,command="]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output() else {
+        return vec![];
+    };
+    String::from_utf8_lossy(&out.stdout).lines().filter_map(parse_ps).collect()
+}
+
+fn parse_ps(line: &str) -> Option<PsRow> {
+    let (pid, rest) = line.trim_start().split_once(char::is_whitespace)?;
+    let (ppid, command) = rest.trim_start().split_once(char::is_whitespace).unwrap_or((rest.trim(), ""));
+    Some(PsRow { pid: pid.parse().ok()?, ppid: ppid.parse().ok()?, command: command.trim().to_string() })
+}
+
+/// Every process below `root` (never `root` itself).
+fn below(rows: &[PsRow], root: i32) -> Vec<i32> {
+    let mut below = vec![root];
+    let mut i = 0;
+    while i < below.len() {
+        let parent = below[i];
+        i += 1;
+        for r in rows {
+            if r.ppid == parent && r.pid > 1 && !below.contains(&r.pid) {
+                below.push(r.pid);
+            }
+        }
+    }
+    below.remove(0);
+    below
+}
+
+fn signal(sig: &str, pid: i32) {
+    let _ = std::process::Command::new("/bin/kill").args([sig, &pid.to_string()]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
 }
 
 /// GUI apps start with a bare environment, but the user's tools (git, node,
@@ -437,26 +491,6 @@ pub fn agent_kill(engine: State<'_, Engine>, id: String) {
     }
 }
 
-/// One process from `ps`.
-struct PsRow {
-    pid: i32,
-    ppid: i32,
-    command: String,
-}
-
-fn ps_rows() -> Vec<PsRow> {
-    let Ok(out) = Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid=,command="]).stdin(Stdio::null()).stderr(Stdio::null()).output() else {
-        return vec![];
-    };
-    String::from_utf8_lossy(&out.stdout).lines().filter_map(parse_ps).collect()
-}
-
-fn parse_ps(line: &str) -> Option<PsRow> {
-    let (pid, rest) = line.trim_start().split_once(char::is_whitespace)?;
-    let (ppid, command) = rest.trim_start().split_once(char::is_whitespace).unwrap_or((rest.trim(), ""));
-    Some(PsRow { pid: pid.parse().ok()?, ppid: ppid.parse().ok()?, command: command.trim().to_string() })
-}
-
 /// `command` runs `program` (any path to it) with `arg` somewhere in its arguments.
 fn runs_program(command: &str, program: &str, arg: Option<&str>) -> bool {
     let (first, rest) = command.split_once(char::is_whitespace).unwrap_or((command, ""));
@@ -465,25 +499,11 @@ fn runs_program(command: &str, program: &str, arg: Option<&str>) -> bool {
 
 /// The processes below `root` (never `root` itself) that run `program` with `arg`.
 fn matching_below(rows: &[PsRow], root: i32, program: &str, arg: Option<&str>) -> Vec<i32> {
-    let mut below = vec![root];
-    let mut i = 0;
-    while i < below.len() {
-        let parent = below[i];
-        i += 1;
-        for r in rows {
-            if r.ppid == parent && r.pid > 1 && !below.contains(&r.pid) {
-                below.push(r.pid);
-            }
-        }
-    }
+    let below = below(rows, root);
     rows.iter()
-        .filter(|r| r.pid != root && below[1..].contains(&r.pid) && runs_program(&r.command, program, arg))
+        .filter(|r| below.contains(&r.pid) && runs_program(&r.command, program, arg))
         .map(|r| r.pid)
         .collect()
-}
-
-fn signal(sig: &str, pid: i32) {
-    let _ = Command::new("/bin/kill").args([sig, &pid.to_string()]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
 }
 
 /// Stop one command a job's shell is running (a search walking all of ~), not the
@@ -614,5 +634,53 @@ mod tests {
         assert!(matching_below(&all, 100, "find", Some("/Users")).is_empty());
         assert!(runs_program("/opt/homebrew/bin/rg --files /Users/me/src", "rg", Some("--files")));
         assert!(!runs_program("/bin/bash -c rg foo", "rg", None));
+    }
+
+    #[test]
+    fn stops_only_the_wait_not_the_server_it_waits_for() {
+        let all = rows(&[
+            (100, 1, "/Applications/Ondra.app/Contents/MacOS/ondra-engine --mode rpc"),
+            (200, 100, "/bin/bash -c for i in $(seq 1 60); do grep -q \"Ready\" /tmp/dev.log && break; sleep 2; done"),
+            (201, 200, "sleep 2"),
+            (300, 100, "/bin/bash -c pnpm build"),
+            // started by an earlier call: that shell ended, the server is launchd's now
+            (400, 1, "node /repo/node_modules/.bin/next dev"),
+        ]);
+        let wait = "for i in $(seq 1 60); do grep -q \"Ready\" /tmp/dev.log && break; sleep 2; done";
+        assert_eq!(matching_below(&all, 100, "bash", Some(wait)), vec![200]);
+        // the engine goes: what its calls run goes with it, the server stays
+        let mut gone = below(&all, 100);
+        gone.sort();
+        assert_eq!(gone, vec![200, 201, 300]);
+    }
+
+    #[test]
+    fn a_stopped_engine_takes_its_running_commands_along() {
+        // an "engine" whose shell runs a command, and a server an earlier call left behind
+        let mut child = Command::new("/bin/bash")
+            .args(["-c", "/bin/bash -c 'sleep 31; true' & read _"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut left = Command::new("/bin/sleep").arg("32").spawn().unwrap();
+        let stdin = child.stdin.take().unwrap();
+        let mut running = vec![];
+        for _ in 0..50 {
+            running = below(&ps_rows(), child.id() as i32);
+            if running.len() >= 2 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(running.len() >= 2, "the command and its sleep run below the engine");
+        let mut p = Proc { child, stdin, generation: 0, #[cfg(target_os = "macos")] computer: None };
+        p.terminate();
+        std::thread::sleep(Duration::from_millis(100));
+        let alive: Vec<i32> = ps_rows().iter().map(|r| r.pid).collect();
+        assert!(running.iter().all(|pid| !alive.contains(pid)), "nothing it ran is left");
+        assert!(left.try_wait().unwrap().is_none(), "what it didn't run stays");
+        let _ = left.kill();
+        let _ = left.wait();
     }
 }
