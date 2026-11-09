@@ -4,6 +4,15 @@
  * instead of sliding under the input.
  */
 
+let holding = false;
+let holdTimer: ReturnType<typeof setTimeout> | undefined;
+/** For the next moment, a chat that changes size stays where it is: a fold opened inside the thread, read where it was clicked. */
+export function holdScroll(ms = 600) {
+  holding = true;
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => (holding = false), ms);
+}
+
 /**
  * Follow the newest content the way Codex does: the chat stays pinned to the
  * bottom while things arrive, and the moment the user scrolls up (wheel, touch,
@@ -22,8 +31,9 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     onStick?.(v);
   };
   const follow = () => {
-    // a tray opening under it pushes the chat up, closing lets it back down
-    if (!stuck) return;
+    // a tray opening under it pushes the chat up, closing lets it back down;
+    // a fold opened inside the thread stays where it was clicked
+    if (!stuck || holding) return;
     ours = true;
     el.scrollTop = el.scrollHeight;
     last = gap();
