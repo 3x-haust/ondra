@@ -4,7 +4,7 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
-import { nowText } from "../engine/describe";
+import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
@@ -12,7 +12,6 @@ import { decisionFor, projectsIn, setState, spaceById, state, taskById } from ".
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
-import { describeCommand } from "../engine/describe";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, now, statusLabel, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
@@ -410,38 +409,6 @@ const VERB: Partial<Record<ToolKind, [string, string]>> = {
   other: ["도구 쓰는 중", "도구 씀"],
 };
 
-/** what a browser step does, from its command (agent-browser's verb) or its words ("X 열기"): [going on, done] */
-const BROWSER_VERB: [RegExp, [string, string], boolean][] = [
-  // [the verb, its words, whether what it acts on is worth showing]
-  [/^(open|goto|navigate)$|^열기$/, ["여는 중", "열었음"], true],
-  [/^(click|dblclick)$|^클릭$/, ["클릭 중", "클릭함"], true],
-  [/^(fill|type)$|^입력$/, ["입력 중", "입력함"], true],
-  [/^(press|key)$/, ["키 누르는 중", "키 누름"], true],
-  [/^(hover)$/, ["가리키는 중", "가리킴"], true],
-  [/^(select|check|uncheck)$|^선택$/, ["선택 중", "선택함"], true],
-  [/^(scroll|scrollintoview)$|^스크롤$/, ["스크롤 중", "스크롤함"], false],
-  [/^(screenshot)$|^캡처$/, ["캡처 중", "캡처함"], false],
-  [/^(snapshot|get|eval)$/, ["페이지 읽는 중", "페이지 읽음"], false],
-  [/^(wait)$/, ["기다리는 중", "기다림"], false],
-  [/^(back|forward)$/, ["이동 중", "이동함"], false],
-  [/^(reload)$/, ["새로고침 중", "새로고침함"], false],
-  [/^(close)$/, ["닫는 중", "닫음"], false],
-];
-/** a browser step as the verb of its action and what it acted on: "열었음 acme.dev/pricing", "클릭 중 '프로 시작하기'" */
-function browserStep(raw: string, past: boolean): { label: string; target: string } {
-  const text = raw.replace(/https?:\/\/(?:www\.)?/g, "").trim();
-  // a command ("click @e12", "open acme.dev") or words ("acme.dev/pricing 열기", "‘프로 시작하기’ 클릭")
-  const cmd = text.match(/^([a-z]+)\s*(.*)$/i);
-  const said = text.match(/^(.*?)\s*(열기|클릭|입력|선택|스크롤|캡처)$/);
-  const [verb, rest] = said ? [said[2], said[1]] : cmd ? [cmd[1].toLowerCase(), cmd[2]] : ["", text];
-  const hit = BROWSER_VERB.find(([re]) => re.test(verb));
-  // an element reference (@e12) and the command's flags say nothing to the person
-  const what = rest.replace(/(^|\s)(@e\d+|--?[a-z][\w-]*)(?=\s|$)/gi, " ").replace(/\s+/g, " ").trim();
-  if (hit) return { label: t(hit[1][past ? 1 : 0]), target: hit[2] ? what : "" };
-  if (text) return { label: t("브라우저"), target: text };
-  return { label: t(past ? "브라우저 씀" : "브라우저 쓰는 중"), target: "" };
-}
-
 /** One past or running step of a job, in plain words. */
 function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?: string; note?: boolean; endedAt?: number } }, running = true): { icon: string; label: string; target: string; cmd?: boolean } {
   const x = e.tool;
@@ -455,7 +422,10 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
   }
   if (x.note) return { icon: "write", label: t("기록"), target: x.target };
   // the whole target (the row cuts it with an ellipsis), the address without its scheme
-  if (x.kind === "browser") return { icon, ...browserStep(x.target, past) };
+  if (x.kind === "browser") {
+    const d = describeBrowser(x.target);
+    return { icon, label: past ? d.label : d.now, target: d.target ?? "" };
+  }
   if (x.kind === "other") {
     const named = ({ memory_search: "메모리 검색", subagent: "서브에이전트 실행" } as Record<string, string>)[x.name];
     return { icon, label: named ? t(named) : verb("other"), target: named ? "" : x.name };
