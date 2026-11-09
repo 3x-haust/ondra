@@ -169,7 +169,7 @@ export function fixture(base: AppState): AppState {
         worktree: { repo: "/Users/me/ondra", path: "/Users/me/ondra-wt/t7", branch: "task/t7", base: "abc", sub: "", state: "open" },
       },
       {
-        id: "t4", space: "work", topic: "앱", title: "iOS 시뮬레이터 스크린샷", ask: "x", cwd: "~", status: "queued", priority: 0, weight: "heavy", accountId: "default",
+        id: "t4", space: "work", topic: "앱", title: "iOS 시뮬레이터 스크린샷", ask: "iOS 시뮬레이터에서 앱 화면 스크린샷을 새로 찍어 줘", cwd: "~", status: "queued", priority: 0, weight: "heavy", accountId: "default",
         createdAt: m(2), now: "대기 중", plan: [], legs: [], entries: [], shells: [], inbox: [],
       },
     ],
