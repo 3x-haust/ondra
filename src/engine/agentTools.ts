@@ -51,7 +51,7 @@ const KO_MORE: Record<string, string> = {
 /** One plain line for the bundled skills (their own descriptions are written for the model). */
 const SKILL_LINE: Record<string, string> = {
   "browser-use": "브라우저로 사이트를 열고 다뤄요",
-  "code-review": "끝내기 전에 바뀐 코드를 검토해요",
+  "code-review": "끝내기 전에 바뀐 코드를 설계와 코드 두 관점으로 검토해요",
   "computer-use": "Mac 앱을 뒤에서 조작해요",
   "deep-research": "여러 출처를 읽고 조사해요",
   "device-use": "시뮬레이터와 에뮬레이터에서 앱을 다뤄요",

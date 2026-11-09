@@ -294,3 +294,29 @@ describe("chineseOnly", () => {
     expect(chineseOnly("Running tests")).toBe(false);
   });
 });
+
+describe("교차 검토 in the task prompt and the review skill", () => {
+  it("names the two lenses in step 5, still risky-only, once, before shipping", () => {
+    const p = TASK_SYSTEM.replace(/\s+/g, " ");
+    for (const rule of [
+      "Review: only for a risky change", "at most one per job", "before anything goes out",
+      '{"type":"subagent","review":true,"title":"교차 검토","task":"Review the changes in <folder> against: <the full requirement>"}',
+      "Ondra runs it as 교차 검토: two read-only lenses side by side, 설계 검토",
+      "코드 검토 (contracts, flows, edge cases, failure paths)", "one combined result when both are over",
+      "fix every P1 and P2 (P3 when cheap) and re-run the checks that cover them",
+      "Where the lenses disagree, settle it with one targeted check (read that code, run that test), not another review.",
+    ]) expect(p).toContain(rule);
+    expect(p).not.toContain("Use the code-review skill. Review the changes");
+  });
+
+  it("gives both lenses evidence-first rules and a memory check, in Ondra's own words", () => {
+    const skill = bundledSkills["../../skills/code-review/SKILL.md"].replace(/\s+/g, " ");
+    for (const rule of [
+      "**설계 검토 (design)**", "**코드 검토 (code)**", "https://github.com/sleeplesshan/dual-brain",
+      "the requirement or contract it breaks", "the trigger", "the evidence", "the consequence",
+      "There is no quota. \"P1·P2 없음\"", "generic hardening", "stays settled unless you have new evidence",
+      '"type":"memory-check"', "`confirmed`", "`contradicted`", "`unchecked`", "a contradiction without a quote is dropped",
+    ]) expect(skill).toContain(rule);
+    expect(skill).not.toMatch(/left brain|right brain|dual-brain review/i);
+  });
+});

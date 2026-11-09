@@ -171,6 +171,9 @@ export default {
   "이전 작업의 리뷰가 그대로 유효해요": "The previous task's review still holds",
   "리뷰가 아직 진행 중이에요": "Review still in progress",
   "리뷰는 이미 한 번 받았어요": "Already reviewed once",
+  // 교차 검토: the two review lenses' titles (stored in Korean, shown through taskTitle())
+  "설계 검토": "Design review",
+  "코드 검토": "Code review",
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
   "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
   "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",

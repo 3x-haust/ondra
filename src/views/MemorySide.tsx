@@ -710,7 +710,8 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
         <div class="md-past">
           <b>{t("지난 메모리")}</b>
           <span title={stampOf(m().invalidAt!)}>{ago(m().invalidAt!)}</span>
-          <Show when={m().why}><span>{t(m().why!)}</span></Show>
+          {/* "why · evidence": the reason is Ondra's words, the evidence is the code's */}
+          <Show when={m().why}><span>{m().why!.split(" · ").map((p, i) => (i ? p : t(p))).join(" · ")}</span></Show>
         </div>
       </Show>
       <textarea class="md-text" value={m().text} rows={Math.min(10, Math.ceil(m().text.length / 34) + 1)} onChange={(e) => updateMemory(m().id, e.currentTarget.value)} />
@@ -759,6 +760,10 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
           {m().uses ? t("{n}번", { n: m().uses }) : t("없음|uses")}
           <Show when={useMore().length}><span class="md-sub"> · {useMore().join(" · ")}</span></Show>
         </dd>
+        <Show when={m().verifiedAt}>
+          <dt>{t("확인|verified")}</dt>
+          <dd title={stampOf(m().verifiedAt!)}>{ago(m().verifiedAt!)}</dd>
+        </Show>
         <dt>{t("생성")}</dt>
         <dd title={stampOf(m().createdAt)}>
           {ago(m().createdAt)}

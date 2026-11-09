@@ -11,7 +11,7 @@ import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry 
 import type { Task } from "../state/types";
 import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setMemoryFocus, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
-import { ago, compact, newTaskOpen, setNewTaskOpen, soon } from "../ui/bits";
+import { ago, compact, newTaskOpen, setNewTaskOpen, soon, taskTitle } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -144,7 +144,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
         title={tip()}
       >
         <Glyph t={t()} />
-        <span class="sb-title">{t().title}</span>
+        <span class="sb-title">{taskTitle(t())}</span>
         <Show when={!props.kid && kids().length}>
           <span
             class="sb-kids"

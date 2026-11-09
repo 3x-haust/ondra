@@ -13,7 +13,7 @@ import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { costDetail, jobCost } from "../ui/cost";
-import { ago, compact, IssueTag, long, now, statusLabel, tokens } from "../ui/bits";
+import { ago, compact, IssueTag, long, now, statusLabel, taskTitle, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
@@ -1007,7 +1007,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
                 {(k) => (
                   <li onClick={() => openTask(k.id)} class="link">
                     <StatusGlyph t={k} />
-                    <span class="cv-dr-step">{k.title}</span>
+                    <span class="cv-dr-step">{taskTitle(k)}</span>
                   </li>
                 )}
               </For>

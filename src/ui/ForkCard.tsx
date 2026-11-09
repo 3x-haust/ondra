@@ -5,7 +5,7 @@ import { For, Show } from "solid-js";
 import { kidsOf, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
-import { ago, compact, endedAt, now, short, statusLabel } from "./bits";
+import { ago, compact, endedAt, now, short, statusLabel, taskTitle } from "./bits";
 import { Icon } from "./Icon";
 import { Glyph, glyphOf } from "../views/Sidebar";
 import { costDetail, jobCost } from "./cost";
@@ -83,7 +83,7 @@ export function ForkCard(props: { id: string; compact?: boolean }) {
           {/* the sidebar's glyph, so a queued subagent reads the same here as there (dashed ring) */}
           <Glyph t={x()} class="fork-glyph" />
           <span class="fork-main">
-            <span class="fork-title">{x().title}</span>
+            <span class="fork-title">{taskTitle(x())}</span>
             <Show when={sub()}>
               <span class="fork-line" classList={{ shimmer: x().status === "running" }}>{sub()}</span>
             </Show>

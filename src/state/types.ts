@@ -209,6 +209,11 @@ export interface Task {
   reach?: SpaceId[];
   /** A review subagent: its findings go back to the fork to fix. */
   review?: boolean;
+  /** 교차 검토: which of the two review lenses this is, and the id the pair shares (one combined result) */
+  lens?: "design" | "code";
+  pair?: string;
+  /** what a review lens reported about the memory it was given (applied when the pair is done) */
+  memoryCheck?: MemoryCheck[];
   /** Finished, but some of it was never proven (or no proof at all). */
   unverified?: string[];
   /** The project (folder) it belongs to, if any. */
@@ -427,6 +432,18 @@ export interface Memory {
   cites?: string[];
   /** grown into this skill (a procedure used again and again) */
   skill?: string;
+  /** last checked against the code and found to hold (교차 검토) */
+  verifiedAt?: number;
+}
+
+/** One memory piece as a review lens checked it against the code. */
+export interface MemoryCheck {
+  id: string;
+  status: "confirmed" | "contradicted" | "unchecked";
+  /** where it was checked: path:line and a quote copied from there, a test or a log line */
+  evidence?: string;
+  /** contradicted: what holds now, one sentence */
+  now?: string;
 }
 
 /** 일 기록: what one finished job did, kept as written (searched, never sent whole). */
