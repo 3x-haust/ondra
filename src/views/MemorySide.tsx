@@ -812,7 +812,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
                 <i class="tl-dot" />
                 <button class="tl-body" disabled={x.id === m().id} onClick={() => props.onSel(`m:${x.id}`)} title={x.text}>
                   <span class="tl-text">{x.text}</span>
-                  <em>{x.invalidAt ? `${ago(x.createdAt)} – ${ago(x.invalidAt)}` : ago(x.createdAt)}</em>
+                  <em>{x.invalidAt ? `${ago(x.createdAt)} – ${agoIn(x.invalidAt)}` : ago(x.createdAt)}</em>
                 </button>
               </li>
             )}

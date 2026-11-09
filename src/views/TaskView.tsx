@@ -17,7 +17,7 @@ import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard } from "../ui/Review";
 import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { ago, compact, IssueTag, now, statusLabel } from "../ui/bits";
+import { agoIn, compact, IssueTag, now, statusLabel } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -31,11 +31,6 @@ import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
 
-/** a time inside a phrase: "병합됨 · 방금" / "Merged · just now" */
-const inlineAgo = (at?: number) => {
-  const s = ago(at);
-  return s === tr("방금") ? tr("방금|inline") : s;
-};
 
 function MoreMenu(props: { id: string }) {
   const [open, setOpen] = usePop();
@@ -386,7 +381,7 @@ export function TaskView(props: { id: string }) {
                 <Glyph t={task()} />
                 {tr("버림")}
                 <span class="faint" aria-hidden="true">·</span>
-                <span class="faint">{inlineAgo(endTime(task()))}</span>
+                <span class="faint">{agoIn(endTime(task()))}</span>
               </span>
             </Show>
             <Show when={task().status === "done" && !discarded(task()) && task().worktree?.state !== "open"}>
@@ -395,7 +390,7 @@ export function TaskView(props: { id: string }) {
                 {task().worktree?.state === "merged" ? tr("병합됨") : tr("완료")}
                 {/* "병합됨 · 방금": when it was merged (older tasks without mergedAt: when it finished) */}
                 <span class="faint" aria-hidden="true">·</span>
-                <span class="faint">{inlineAgo(endTime(task()))}</span>
+                <span class="faint">{agoIn(endTime(task()))}</span>
               </span>
             </Show>
             <Show when={task().status !== "done" && !discarded(task())}>
@@ -413,7 +408,7 @@ export function TaskView(props: { id: string }) {
                   {(at) => (
                     <>
                       <span class="faint" aria-hidden="true">·</span>
-                      <span class="faint">{inlineAgo(at())}</span>
+                      <span class="faint">{agoIn(at())}</span>
                     </>
                   )}
                 </Show>

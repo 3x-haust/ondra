@@ -4,7 +4,7 @@ import { state, taskById } from "../state/store";
 import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
 import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
-import { ago, midTrim } from "./bits";
+import { agoIn, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
 import { NO_ACCOUNT, tell } from "../engine/tasks";
 import { goMain, openPanel, toast } from "../state/ui";
@@ -105,7 +105,7 @@ export function BtwCard(props: { scope: string }) {
           </div>
           <Show when={!x().pending && x().answer}>
             <div class="btw-foot">
-              <span class="btw-note" title={t("대화에는 남지 않아요")}>{where(x().scope)} · {ago(x().at)}</span>
+              <span class="btw-note" title={t("대화에는 남지 않아요")}>{where(x().scope)} · {agoIn(x().at)}</span>
               <span class="spacer" />
               <button class="link-btn" onClick={() => (void navigator.clipboard.writeText(x().answer), toast(t("복사했어요")))}>{t("복사")}</button>
               <button class="link-btn" title={shortcutHint("side")} onClick={toSide}>{t("옆 대화로 이어가기")}</button>

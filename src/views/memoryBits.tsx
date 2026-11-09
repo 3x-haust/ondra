@@ -7,7 +7,6 @@ import { state } from "../state/store";
 import { discarded } from "../state/progress";
 import type { JournalEntry, Memory } from "../state/types";
 import { Icon } from "../ui/Icon";
-import { ago } from "../ui/bits";
 import { lang, t } from "../i18n";
 
 export const tilde = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
@@ -24,11 +23,7 @@ export function outcomeOf(e: JournalEntry): Outcome {
   return task?.status === "done" && task.worktree?.state === "open" ? "review" : "done";
 }
 
-/** a relative time inside a phrase ("edited just now"): lower case in English */
-export const agoIn = (at: number) => {
-  const s = ago(at);
-  return s === t("방금") ? t("방금|inline") : s;
-};
+export { agoIn } from "../ui/bits";
 
 /** "11월 5일 14:32" / "Nov 5, 14:32" (year added when it isn't this year) */
 export function stampOf(at: number) {
