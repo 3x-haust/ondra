@@ -182,7 +182,7 @@ function PictureFold(props: { entries: Entry[]; task: Task }) {
   const [open, setOpen] = createSignal(false);
   return (
     <div class="work-fold pic-fold" classList={{ open: open() }}>
-      <button class="work-head" onClick={() => (holdScroll(800), setOpen(!open()))} aria-expanded={open()}>
+      <button class="work-head" onClick={(e) => (holdScroll(800, e.currentTarget), setOpen(!open()))} aria-expanded={open()}>
         <span>{tr("그림 {n}개", { n: props.entries.length })}</span>
         <Icon name="chevron" size={14} class="chev" />
       </button>

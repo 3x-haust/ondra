@@ -1,0 +1,237 @@
+/* ───────────── split panes (src/views/Panes.tsx) ─────────────
+   One pane looks like the center always did. Split, the center's card gives way to one card
+   per pane with the gutter between them; the gutter is the divider you drag. */
+.panes {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.pane {
+  --ring: var(--warn);
+  position: absolute;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  outline: none;
+}
+.panes:not(.still) > .pane {
+  transition: left var(--dur) var(--ease), top var(--dur) var(--ease), width var(--dur) var(--ease), height var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.pane > .slide {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.pane > .slide > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.pane.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app .main.split,
+.app.sb-hidden .main.split {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.main.split .pane {
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-r);
+  box-shadow: var(--card-shadow);
+}
+.main.split .pane.focused {
+  border-color: var(--line);
+}
+/* the panes you aren't in: their header steps back */
+.main.split .pane .head > * {
+  transition: opacity var(--dur) var(--ease);
+}
+.main.split .pane:not(.focused) .head > * {
+  opacity: 0.55;
+}
+.main.split .pane:not(.focused):hover .head > * {
+  opacity: 0.8;
+}
+/* a job that needs you, in a pane you aren't looking at: a still ring until you go there */
+.main.split .pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--ring);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity var(--dur) var(--ease);
+}
+.main.split .pane.ring::after {
+  opacity: 1;
+}
+.pane.ring-bad {
+  --ring: var(--bad);
+}
+
+/* only the top-left pane sits under the window buttons when the sidebar is away */
+.app.sb-hidden .main.split .pane:not(.corner) .head {
+  padding-left: var(--s-20);
+}
+.main.split .pane:not(.corner) .sb-show,
+.main.split .pane:not(.corner) .update-btn {
+  display: none;
+}
+
+/* the divider: the gutter between two panes, a line while it is pointed at or dragged */
+.pane-div {
+  position: absolute;
+  z-index: 6;
+  touch-action: none;
+}
+.pane-div.by-row {
+  cursor: col-resize;
+}
+.pane-div.by-col {
+  cursor: row-resize;
+}
+.pane-div::after {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
+}
+.pane-div.by-col::after {
+  inset: -3px 0;
+}
+.pane-div::before {
+  content: "";
+  position: absolute;
+  border-radius: 1px;
+  background: var(--accent-line);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.pane-div.by-row::before {
+  top: var(--card-r);
+  bottom: var(--card-r);
+  left: calc(50% - 1px);
+  width: 2px;
+}
+.pane-div.by-col::before {
+  left: var(--card-r);
+  right: var(--card-r);
+  top: calc(50% - 1px);
+  height: 2px;
+}
+.pane-div:hover::before,
+.pane-div.on::before {
+  opacity: 1;
+}
+
+/* a job dragged from the sidebar: where it lands */
+.pane-drop {
+  position: absolute;
+  z-index: 7;
+  border-radius: var(--card-r);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent-line);
+  pointer-events: none;
+  transition: left var(--dur) var(--ease), top var(--dur) var(--ease), width var(--dur) var(--ease), height var(--dur) var(--ease);
+}
+.pane-ghost {
+  position: fixed;
+  z-index: var(--z-overlay);
+  max-width: 260px;
+  padding: var(--s-4) var(--s-10);
+  border-radius: var(--r-pill);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+body.pane-dragging,
+body.pane-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* a pane's own controls at the end of its header */
+.pane-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex: none;
+  min-width: 0;
+}
+.pane-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.pane .head:hover .pane-tools,
+.main.split .pane:hover .pane-tools,
+.main.split .pane.focused .pane-tools,
+.pane-tools:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.pane-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: var(--h-xs);
+  padding: 0 var(--s-8);
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  transition: background var(--dur-fast);
+}
+button.pane-state:hover {
+  background: var(--accent-line);
+}
+.pane-state.quiet {
+  background: var(--bubble);
+  color: var(--ink-3);
+}
+
+/* a narrow pane: the input's chips give up their words before they run into each other */
+.pane {
+  container: pane / inline-size;
+}
+@container pane (max-width: 480px) {
+  .composer .perm-chip {
+    font-size: 0;
+    gap: 0;
+  }
+  .composer .model-chip .model-name {
+    max-width: 11ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .composer .model-chip .model-effort {
+    display: none;
+  }
+  .tray {
+    overflow: hidden;
+  }
+  .tray-seg {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

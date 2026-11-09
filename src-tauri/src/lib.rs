@@ -245,7 +245,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 focus::install(move || handle.state::<engine::Engine>().pids());
             }
-            // ⌘W closes the right panel, not the window (the window hides with ⌘H or its button)
+            // ⌘W closes the focused split pane, else the right panel; never the window (it hides with ⌘H or its button)
             #[cfg(target_os = "macos")]
             {
                 let menu = Menu::default(app.handle())?;
@@ -260,7 +260,7 @@ pub fn run() {
                         }
                         if text.contains("Close") {
                             sub.remove(&item)?;
-                            let panel = MenuItem::with_id(app, "close-panel", "패널 닫기", true, Some("CmdOrCtrl+W"))?;
+                            let panel = MenuItem::with_id(app, "close-panel", "닫기", true, Some("CmdOrCtrl+W"))?;
                             sub.insert(&panel, i)?;
                         }
                     }

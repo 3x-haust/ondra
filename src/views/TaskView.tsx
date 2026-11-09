@@ -7,7 +7,7 @@ import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, hadTab, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, hadTab, inPane, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
 import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
@@ -29,6 +29,8 @@ import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
+import { PaneControls } from "./PaneControls";
+import { usePaneFocused } from "../state/panes";
 
 
 function MoreMenu(props: { id: string }) {
@@ -208,7 +210,7 @@ function Queued(props: { t: Task }) {
 }
 /** put text back in this view's composer */
 function setDraft(text: string) {
-  const el = document.querySelector<HTMLTextAreaElement>(".view .dock textarea, .dock textarea");
+  const el = inPane<HTMLTextAreaElement>(".view .dock textarea, .dock textarea");
   if (!el) return;
   el.value = text;
   el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -259,6 +261,9 @@ function useCrumbFit(deps: () => unknown) {
 
 export function TaskView(props: { id: string }) {
   const t = () => taskById(props.id);
+  // the panel shows the focused pane's tools: for a pane beside it, it isn't open
+  const focused = usePaneFocused();
+  const mine = () => panelOpen() && focused();
   // another task starts with its to-do list shut
   createEffect(on(() => props.id, () => setTodos(false)));
   return (
@@ -278,7 +283,7 @@ export function TaskView(props: { id: string }) {
           const x = task();
           if (isAlive(`t:${x.id}`)) void rawStats(`t:${x.id}`);
           // (first visit only: coming back shows the tab you left it on)
-          if (!panelOpen() || hadTab(x.id)) return;
+          if (!panelOpen() || !focused() || hadTab(x.id)) return;
           if (x.status === "done" && x.worktree?.state === "open" && panelTab() === "flow") showTool("changes");
           else if (x.browser && x.shot && x.status === "running" && panelTab() === "flow") showTool("browser");
         });
@@ -306,7 +311,7 @@ export function TaskView(props: { id: string }) {
               </div>,
             );
           // the changes tab already has merge / discard
-          else if (inReview() && !(panelOpen() && panelTab() === "changes"))
+          else if (inReview() && !(mine() && panelTab() === "changes"))
             out.push(
               <div class="strip keep">
                 <Icon name="branch" size={14} />
@@ -336,9 +341,9 @@ export function TaskView(props: { id: string }) {
             );
           // not finished yet: what it changed so far (no merge), the to-dos, what it made and what runs
           // in the background, as one line
-          const changes = !inReview() && task().worktree?.state === "open" && diff().files.length > 0 && !(panelOpen() && panelTab() === "changes");
+          const changes = !inReview() && task().worktree?.state === "open" && diff().files.length > 0 && !(mine() && panelTab() === "changes");
           const made = artifacts[task().id] ?? [];
-          const shown = made.length && !(panelOpen() && panelTab() === "artifacts") ? made.length : 0;
+          const shown = made.length && !(mine() && panelTab() === "artifacts") ? made.length : 0;
           if (changes || shown || bg().length || (task().plan.length && task().status !== "done"))
             out.push(<Tray t={task()} changes={changes} made={shown} bg={bg()} open={openPanel} />);
           if (task().queue?.length) out.push(<Queued t={task()} />);
@@ -451,9 +456,10 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <MoreMenu id={task().id} />
-              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={withHint(tr("패널"), "panel")} onClick={togglePanel}>
+              <button class="icon-btn" classList={{ on: mine() }} data-shortcut="panel" title={withHint(tr("패널"), "panel")} onClick={togglePanel}>
                 <Icon name="panel" size={16} />
               </button>
+              <PaneControls />
             </div>
           </header>
         );

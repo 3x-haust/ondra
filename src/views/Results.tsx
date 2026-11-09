@@ -6,7 +6,7 @@ import { pinResult, removeResults, restoreResults, resultCopy, resultPreview, re
 import { ignoredKey } from "../lib/shortcuts";
 import { projectById, state, taskById } from "../state/store";
 import type { ResultEntry } from "../state/types";
-import { openTask, setJumpMsg, setView, toast, view } from "../state/ui";
+import { openTask, setJumpMsg, setView, toast } from "../state/ui";
 import { BlockView } from "../ui/Blocks";
 import { discarded, withDiff } from "../state/progress";
 import { Icon } from "../ui/Icon";
@@ -15,6 +15,8 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { anyPop, closePops } from "../ui/ModelPicker";
 import { SidebarToggle } from "./Sidebar";
 import { lang, t } from "../i18n";
+import { PaneControls } from "./PaneControls";
+import { useView } from "../state/panes";
 
 const locale = () => (lang() === "en" ? "en-US" : "ko-KR");
 /** days back from today: 0 today, 1 yesterday */
@@ -62,8 +64,9 @@ export function ResultsView() {
     const l = all().filter((r) => (!p || (projectOf(r) ?? "") === p.slice(1)) && (!n || resultText(r).toLowerCase().includes(n)));
     return [...l.filter((r) => r.pinned), ...l.filter((r) => !r.pinned)];
   });
+  const here = useView();
   const sel = createMemo<ResultEntry | undefined>(() => {
-    const v = view();
+    const v = here();
     const id = v.name === "results" ? v.id : undefined;
     return list().find((r) => r.id === id) ?? list()[0];
   });
@@ -193,6 +196,7 @@ export function ResultsView() {
             <input ref={searchEl} placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && (setQ(""), listEl?.focus())} />
           </div>
         </Show>
+        <PaneControls />
       </header>
       <Show when={all().length} fallback={<div class="pane-empty res-none"><Icon name="inbox" size={20} /><span>{t("결과물 없음")}</span></div>}>
         <div class="res-body">

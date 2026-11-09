@@ -4,7 +4,7 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 import { kidsOf, taskById } from "../state/store";
-import { goMain, openPanel, openTask, toast, view } from "../state/ui";
+import { goMain, openPanel, openTask, shownIn, splitPane, toast, view } from "../state/ui";
 import { archiveTask, discardTask, duplicateTask, finishTask, mergeTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 import { expand } from "../engine/rpc";
 import { discarded, taskDiff } from "../state/progress";
@@ -42,6 +42,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
   const groups: MenuItem[][] = [
     [
       ...(isOpen(id) ? [] : [{ id: "open", label: t("열기"), icon: "arrow", run: () => openTask(id) }]),
+      ...(shownIn({ name: "task", id }, "") ? [] : [{ id: "split", label: t("옆 창에 열기"), icon: "splitRight", kbd: t("⌥ 클릭"), run: () => void splitPane("right", { view: { name: "task", id } }) }]),
       { id: "rename", label: t("이름 바꾸기"), icon: "pencil", kbd: "F2", run: () => (openTask(id), startRename(id)) },
       { id: "pin", label: x.pinned ? t("고정 해제") : t("고정"), icon: "pin", run: () => togglePin(id) },
     ],

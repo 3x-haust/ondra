@@ -14,14 +14,15 @@ import { discarded } from "../state/progress";
 import { fsFiles, pickFolder } from "../lib/native";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
-import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
+import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, toast, togglePanel, view, type Draft } from "../state/ui";
+import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { agoIn, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, short, soon, statusLabel, titleOf } from "../ui/bits";
+import { agoIn, compact, endedAt, midTrim, now, short, soon, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -30,12 +31,13 @@ import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { matchesShortcut, noModifiers, shortcutHint, shortcuts, withHint } from "../lib/shortcuts";
+import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
 import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
+import { PaneControls } from "./PaneControls";
 
 /** "{task}에 전달했어요" with the task name in bold */
 function withName(key: string, name: string) {
@@ -53,7 +55,7 @@ function withName(key: string, name: string) {
 
 /** Put text in the main input as if typed (the user still presses send). */
 function fill(text: string) {
-  const el = document.getElementById("main-input") as HTMLTextAreaElement | null;
+  const el = inPane<HTMLTextAreaElement>("#main-input");
   if (!el) return;
   el.value = text;
   el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -305,36 +307,40 @@ function AccountModel(props: { accountId: string; up?: boolean }) {
 
 // ───────────── new task
 /** Every 새 작업 (sidebar, ⌘N, canvas, board, a project's menu): a blank task to write, in a project picked here. Any move elsewhere ends it. */
-const drafting = newTaskOpen;
-const setDrafting = setNewTaskOpen;
-// any move elsewhere (another view, another workspace) ends it, whether or not Main is still mounted
-createRoot(() => createEffect(on([view, () => state.space], () => setDrafting(null), { defer: true })));
-/** the project each workspace's unsent new task was written for: it comes back with its text */
+// Each pane has its own (state/ui.ts): any move elsewhere in that pane ends it. Another workspace
+// ends it too while the center is one pane (split panes come back with the workspace).
+createRoot(() => createEffect(on(() => state.space, () => paneCount() < 2 && setNewTaskOpen(null), { defer: true })));
+/** what a pane's new task is typed into (each pane keeps its own text) */
+const newKey = (pane: string) => `new:${state.space}:${pane}`;
+/** the project each pane's unsent new task was written for: it comes back with its text */
 const draftProject = new Map<string, string | undefined>();
 createRoot(() => createEffect(() => {
-  const d = drafting();
-  if (d) draftProject.set(state.space, d.project);
+  for (const [id, p] of Object.entries(layout().panes)) if (p.draft) draftProject.set(newKey(id), p.draft.project);
 }));
-/** × and Esc: close it and go back to where it was opened from */
-function closeNewTask() {
-  const from = drafting()?.from;
-  setDrafting(null);
-  if (from) setView(from);
+/** × and Esc: close it and go back to where it was opened from (a pane opened for it closes) */
+function closeNewTask(pane = focusId()) {
+  const p = paneState(pane);
+  if (p?.fresh && paneCount() > 1) return void closePane(pane);
+  const from = p?.draft?.from;
+  setPaneDraft(pane, null);
+  if (from) setPaneView(pane, from);
 }
 /** Open the new-task screen. `preset` picks its project (a project's menu, the canvas lane); without
  *  it the project in view carries over. A project from the other workspace switches to it first. */
 export function startNewTask(preset?: string) {
   const v = view();
+  const pane = focusId();
   const p = preset ? projectById(preset) : undefined;
   if (p && p.space !== state.space) switchSpace(p.space, { name: "main" });
   // an unsent draft keeps the project it was written for; else the project in view carries over
-  const kept = !preset && hasDraft(`new:${state.space}`) && draftProject.has(state.space);
-  const project = preset ?? (kept ? draftProject.get(state.space) : v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
+  const kept = !preset && hasDraft(newKey(pane)) && draftProject.has(newKey(pane));
+  const project = preset ?? (kept ? draftProject.get(newKey(pane)) : v.name === "main" ? v.project : v.name === "task" ? taskById(v.id)?.project : undefined);
   // reopened over itself: keep where it first came from
-  const from = drafting()?.from ?? v;
-  setView({ name: "main" });
-  setDrafting({ project: project && projectById(project)?.space === state.space ? project : undefined, from });
-  setTimeout(() => document.getElementById("new-task-input")?.focus(), 30);
+  const from = newTaskOpen()?.from ?? v;
+  // in the focused pane, even when another pane shows Main
+  setPaneView(focusId(), { name: "main" });
+  setNewTaskOpen({ project: project && projectById(project)?.space === state.space ? project : undefined, from });
+  setTimeout(() => inPane<HTMLTextAreaElement>("#new-task-input")?.focus(), 30);
 }
 
 /** Which project a new task runs in: a chip and its menu, like the permission one. */
@@ -388,7 +394,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
   );
 }
 
-function NewTask(props: { project?: string; onProject: (id?: string) => void }) {
+function NewTask(props: { project?: string; onProject: (id?: string) => void; pane: string }) {
   const p = () => (props.project ? projectById(props.project) : undefined);
   const account = () => chooseAccount(state.space, p()?.name ?? "");
   const send = (text: string) => {
@@ -402,7 +408,8 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
       isolate: state.settings.isolate,
       accountId: account(),
     });
-    setDrafting(null);
+    setPaneDraft(props.pane, null);
+    focusPane(props.pane);
     openTask(id);
   };
   return (
@@ -410,7 +417,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
       <div class="hero">
         <Composer
           id="new-task-input"
-          draftKey={`new:${state.space}`}
+          draftKey={newKey(props.pane)}
           big
           popDown
           autofocus
@@ -435,6 +442,12 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void }) 
 /** Main's conversation: every message, with the jobs each reply started as chips. */
 export function MainView() {
   let box!: HTMLDivElement;
+  const pane = usePane();
+  const here = useView();
+  const pid = pane?.id ?? focusId();
+  const focused = usePaneFocused();
+  const drafting = () => paneDraft(pid);
+  const setDrafting = (d: Draft | null) => setPaneDraft(pid, d);
   const openRoot = () => {
     const v = view();
     let t = v.name === "task" ? taskById(v.id) : undefined;
@@ -442,7 +455,7 @@ export function MainView() {
     return t?.id;
   };
   const project = () => {
-    const v = view();
+    const v = here();
     const p = v.name === "main" ? projectById(v.project) : undefined;
     return p && p.space === state.space ? p : undefined;
   };
@@ -558,23 +571,16 @@ export function MainView() {
   // Esc closes it in one press while nothing is written, even from its input (which would only blur);
   // an open menu, or a written draft, takes the Esc first
   const esc = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !drafting() || e.defaultPrevented || !noModifiers(e) || e.isComposing) return;
+    if (e.key !== "Escape" || !drafting() || !focused() || e.defaultPrevented || !noModifiers(e) || e.isComposing) return;
     if (document.querySelector(".new-task-page :is(.pop, .cpick, .plus-menu)")) return;
-    const input = document.getElementById("new-task-input") as HTMLTextAreaElement | null;
+    const input = inPane<HTMLTextAreaElement>("#new-task-input", pid);
     if (input?.value.trim() && document.activeElement === input) return;
     e.preventDefault();
     e.stopPropagation();
-    closeNewTask();
+    closeNewTask(pid);
   };
   window.addEventListener("keydown", esc, true);
   onCleanup(() => window.removeEventListener("keydown", esc, true));
-  // going to Main while a new task is open (its sidebar row, ⌘0, the palette) lands on Main: the
-  // view is already "main", so nothing else would close the draft
-  const toMain = (e: Event) => drafting() && (e.target as Element | null)?.closest?.('[data-shortcut="main"]') && setDrafting(null);
-  const mainKey = (e: KeyboardEvent) => drafting() && matchesShortcut(e, shortcuts.main) && setDrafting(null);
-  window.addEventListener("click", toMain, true);
-  window.addEventListener("keydown", mainKey, true);
-  onCleanup(() => (window.removeEventListener("click", toMain, true), window.removeEventListener("keydown", mainKey, true)));
 
   return (
     <div class="view main-view">
@@ -585,11 +591,15 @@ export function MainView() {
               <SidebarToggle />
               <h1 class="head-title">{t("새 작업")}</h1>
               <span class="spacer" data-tauri-drag-region />
-              <button class="icon-btn" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={closeNewTask}>
-                <Icon name="x" size={16} />
-              </button>
+              {/* a pane opened for it closes with its own ✕ */}
+              <Show when={!(paneState(pid)?.fresh && paneCount() > 1)}>
+                <button class="icon-btn" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => closeNewTask(pid)}>
+                  <Icon name="x" size={16} />
+                </button>
+              </Show>
+              <PaneControls />
             </header>
-            <NewTask project={d().project} onProject={(id) => setDrafting({ ...drafting()!, project: id })} />
+            <NewTask pane={pid} project={d().project} onProject={(id) => setDrafting({ ...drafting()!, project: id })} />
           </>
         )}
       </Show>
@@ -612,9 +622,10 @@ export function MainView() {
           </span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} onClick={togglePanel}>
+        <button class="icon-btn" classList={{ on: panelOpen() && focused() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} onClick={togglePanel}>
           <Icon name="panel" size={16} />
         </button>
+        <PaneControls />
       </header>
       <Show
         when={msgs().length}

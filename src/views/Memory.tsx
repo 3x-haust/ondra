@@ -11,6 +11,8 @@
 // › piece, plus 주제 and 지난 기억) and 일 기록 by month and day; the graph shows the
 // structure, or the local neighbourhood of what's selected; the right side shows
 // one thing, editable, or the saved versions of the memory (MemorySide.tsx).
+import { PaneControls } from "./PaneControls";
+import { usePaneFocused } from "../state/panes";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { addMemory, faded, inSpace, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
 import { parseNowKey, projectNow } from "../engine/journal";
@@ -112,6 +114,7 @@ const setOpen = (key: string, v: boolean) => {
 };
 
 export function MemoryView() {
+  const focused = usePaneFocused();
   // each space is its own workspace: only what belongs to this one (and what every job shares)
   const mySpaces = () => state.spaces.filter((s) => s.id === state.space);
   const myProjects = () => (state.projects ?? []).filter((p) => p.space === state.space);
@@ -140,7 +143,7 @@ export function MemoryView() {
     void findNotes();
     // Esc goes back from a local graph to the whole structure
     const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !sel() || !viewKey(e) || !noModifiers(e)) return;
+      if (e.key !== "Escape" || !sel() || !focused() || !viewKey(e) || !noModifiers(e)) return;
       e.preventDefault();
       setSel("");
     };
@@ -223,6 +226,7 @@ export function MemoryView() {
             setQ("");
           }} />
         </div>
+        <PaneControls />
       </header>
       <div class="mem-body" style={{ "--mt-w": `${widths().tree}px`, "--md-w": `${widths().detail}px` }}>
         <MemTree model={tree()} full={model()} sel={sel()} onSel={setSel} searching={!!match()} />
