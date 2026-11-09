@@ -760,7 +760,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
     return last?.kind === "tool" && !last.tool.endedAt;
   };
   const [stick, setStick] = createSignal(true);
-  // a finished job opens on its answer, not below its proof: when the end doesn't fit, its first line is at the top
+  // a finished job opens on its answer, not below its proof: when the end doesn't fit, its first line is at the top.
+  // Only on opening it: a reply finishing while the user watches stays at the bottom, where they are.
   const toAnswer = (wait: number) =>
     setTimeout(() => {
       const at = scroller?.querySelector<HTMLElement>(".answer-at");
@@ -771,8 +772,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   onMount(() => settled() && toAnswer(80));
   // what the user sends always shows: a new message (or one queued for the next turn) takes the chat to the bottom
   const sent = () => props.task.entries.filter((e) => e.kind === "user" && !e.by).length + (props.task.queue ?? []).filter((q) => !q.by).length;
-  createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(scroller)), { defer: true }));
-  createEffect(on(settled, (s, was) => s && was === false && toAnswer(520), { defer: true }));
+  // (not deferred: a deferred `on` never learns the first value, so the very first send would go unnoticed)
+  createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(scroller))));
   const queuePos = () => {
     const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
     const i = q.findIndex((t) => t.id === props.task.id);

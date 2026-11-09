@@ -30,6 +30,10 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   let stuck = true;
   let ours = false; // the scroll we just made ourselves
   let last = 0;
+  /** right after the user sends, the chat is held at the bottom whatever moves (the job restarting
+   *  re-lays the thread, folds open, the composer shrinks): nothing may carry it up */
+  let pinUntil = 0;
+  const pinned = () => Date.now() < pinUntil;
   const gap = () => el.scrollHeight - el.scrollTop - el.clientHeight;
   const set = (v: boolean) => {
     if (v === stuck) return;
@@ -39,28 +43,35 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   const follow = () => {
     // a tray opening under it pushes the chat up, closing lets it back down;
     // a fold opened inside the thread stays where it was clicked
-    if (!stuck || (holding && (!holdAt || el.contains(holdAt)))) return;
+    if (!pinned() && (!stuck || (holding && (!holdAt || el.contains(holdAt))))) return;
     ours = true;
     el.scrollTop = el.scrollHeight;
     last = gap();
   };
   const onScroll = () => {
     const d = gap();
+    if (pinned() && d > 4) {
+      ours = true;
+      el.scrollTop = el.scrollHeight;
+      last = gap();
+      return;
+    }
     if (ours) ours = false;
     else if (d <= 4) set(true);
     else if (d > last + 1) set(false); // moved up (scrollbar, find, focus …)
     last = d;
   };
   // intent beats the race with streaming content: let go before the scroll lands
-  const onWheel = (e: WheelEvent) => e.deltaY < 0 && set(false);
+  const onWheel = (e: WheelEvent) => e.deltaY < 0 && ((pinUntil = 0), set(false));
   let touchY = 0;
   const onTouchStart = (e: TouchEvent) => (touchY = e.touches[0]?.clientY ?? 0);
-  const onTouchMove = (e: TouchEvent) => (e.touches[0]?.clientY ?? 0) > touchY && set(false);
+  const onTouchMove = (e: TouchEvent) => (e.touches[0]?.clientY ?? 0) > touchY && ((pinUntil = 0), set(false));
   const onKey = (e: KeyboardEvent) => {
-    if (["PageUp", "Home", "ArrowUp"].includes(e.key) && !(e.target as HTMLElement).closest?.("input, textarea, [contenteditable]")) set(false);
+    if (["PageUp", "Home", "ArrowUp"].includes(e.key) && !(e.target as HTMLElement).closest?.("input, textarea, [contenteditable]")) (pinUntil = 0), set(false);
   };
   // the user sent something: back to the bottom and following, wherever they were
   const onSent = () => {
+    pinUntil = Date.now() + 2500;
     set(true);
     ours = true;
     el.scrollTop = el.scrollHeight;
