@@ -89,6 +89,9 @@ const runs = new Map<string, Run>();
 export const agentOf = (taskId: string) => `t:${taskId}`;
 // a long job's transcript keeps its newest entries; reaching this trims, it never ends the job
 const MAX_ENTRIES = 600;
+/** tool calls without a step update before a fork is asked where it is, and how often */
+export const PLAN_QUIET = 20;
+export const PLAN_NUDGES = 2;
 const MAX_SHELLS = 40;
 const TAIL = 3000;
 const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
@@ -1134,10 +1137,13 @@ function handlers(id: string, run: Run) {
           const out = ev.result?.content?.find?.((c: any) => c.type === "text")?.text;
           const done = taskById(id)?.entries.find((x) => x.id === entryId);
           if (done?.kind === "tool") loopGuard(id, run, done.tool, !ev.isError);
-          // a plan that stopped moving: ask where it is (at most three times a session)
+          // a fork's plan that stopped moving: ask where it is. Subagents and reviews
+          // aren't asked (their list is short-lived), and a fork at most twice a session:
+          // 225 reminders in 312 sessions bought a status line, not a fix.
           run.quietTools = (run.quietTools ?? 0) + 1;
-          const plan = taskById(id)?.plan ?? [];
-          if (run.streaming && run.quietTools >= 12 && (run.planNudges ?? 0) < 3 && plan.some((s) => s.state !== "done")) {
+          const job = taskById(id);
+          const plan = job?.plan ?? [];
+          if (run.streaming && !job?.parentId && run.quietTools >= PLAN_QUIET && (run.planNudges ?? 0) < PLAN_NUDGES && plan.some((s) => s.state !== "done")) {
             run.quietTools = 0;
             run.planNudges = (run.planNudges ?? 0) + 1;
             void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${plan.map((s, i) => `${i}. [${s.state}] ${s.text}`).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
@@ -1538,6 +1544,15 @@ function lastText(t: Task): string {
   return "";
 }
 
+/**
+ * Evidence that sends the job back: a run that never happened or failed, a file that
+ * isn't there, a screenshot from before the last code change (what it shows is old).
+ * A run from before the last edit and a link not opened here are only listed as
+ * unverified on the card: 13 send-backs for them in Nov 5–9 cost 37 turns and led
+ * to one fix.
+ */
+export const blocking = (e: Evidence) => e.check === "no-run" || e.check === "failed" || e.check === "missing" || (e.kind === "shot" && e.check === "stale");
+
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
@@ -1574,8 +1589,10 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
       }
     }
   });
-  const bad = checked.filter((e) => e.why);
-  const proven = checked.some((e) => !e.why) || (run.unverified ?? []).length > 0;
+  // stale runs and unopened links don't send the job back; finish lists every `why` as unverified
+  const bad = checked.filter((e) => e.why && blocking(e));
+  const soft = checked.filter((e) => e.why && !blocking(e));
+  const proven = checked.some((e) => !e.why) || soft.length > 0 || (run.unverified ?? []).length > 0;
   // the answer says it looked at the screen: something in the session has to show it did
   const said = [run.done ?? "", lastText(t)].join("\n");
   const claim = unbackedClaim(t, said, checked, run.unverified ?? []);

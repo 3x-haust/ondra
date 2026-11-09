@@ -1,6 +1,6 @@
 ---
 name: visual-report
-description: How to report progress and results inside Ondra. Read before your first message in any task — Ondra draws these blocks instead of showing raw text. Also for reports, charts, graphs and diagrams (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화) — its More charts catalog lists every figure type.
+description: Pictures, charts and report documents inside Ondra — diagrams of code and systems, charts, graphs and visual reports (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화). The task prompt already covers plan, now, done and the everyday result blocks; read this for any other picture type. Its More charts catalog lists every figure type.
 ---
 
 # Visual report
@@ -26,13 +26,13 @@ Keep prose to a few sentences; put lists, numbers and results in blocks.
 |---|---|---|
 | `plan` | `steps: string[]` (2–6, short) | first message, and when the plan changes |
 | `now` | `text`, `step` (0-based index into plan) | whenever what you are doing changes |
-| `ask` | `question`, `options: string[]` (2–4), `context?: Block[]` | before risky/irreversible actions or real ambiguity — then **end your turn** |
+| `ask` | `question`, `options: {label, note}[]` (2–3, recommendation first), `context?: Block[]` | before risky/irreversible actions or real ambiguity — then **end your turn** |
 | `remember` | `text`, `scope: "project" \| "space" \| "global"` | a lasting preference or fact future tasks need |
 | `done` | `summary` (one line), `evidence: {kind, ref, ok, note?}[]`, `unverified?: string[]` | the whole task is finished — last block. `kind`: test, build, run, shot, file, link. Only what you really ran; the rest goes in `unverified` |
-| `handoff` | `did: string[]`, `next`, `evidence: {kind, ref}[]` | stopping partway; a fresh session continues from this card alone |
+| `handoff` | `did: string[]`, `found?`, `next`, `doneWhen?`, `evidence: {kind, ref}[]` | only when Ondra says the context is nearly full; a fresh session continues from this card alone |
 
-Every turn ends with exactly one of `ask`, `done` or `handoff`, unless the
-user is mid-conversation with you and simply asked a question.
+A job ends with `done`, `ask` or (when Ondra asks for one) `handoff`. Waiting
+on a subagent or the user is no handoff: just end the turn.
 
 ## Result blocks
 
@@ -82,6 +82,27 @@ or cause (Tversky); long LLM answers are easier to grasp as diagrams
 - Box labels are short nouns/verbs; notes ≤ ~6 words.
 - Before/after: two pictures with the same boxes in the same order.
 - A straight chain of boxes is `steps`, not `diagram`.
+
+## Pictures of code and systems
+
+| question | type | fields |
+|---|---|---|
+| the code that matters in a change | `diff` | `path`, `ref` (absolute path:line), `note`, `hunks: {at, lines: ["-old", " same", "+new"]}[]` (1–3 hunks, ≤ 20 lines) |
+| a test run (always when something failed) | `tests` | `suites: {name, pass, fail, skip, ms}[]`, `failures: {name, ref, msg}[]` |
+| several approaches, which you chose | `options` | `criteria: string[]`, `options: {name, scores: string[], chosen?, note?}[]`, `why` |
+| logic that branches or retries | `flow` | `nodes: {id, label, kind: start\|end\|step\|decision\|io, note?}[]`, `edges: {from, to, label}[]` (예 / 아니오 / a verb) |
+| a status, lifecycle or reducer | `states` | `initial`, `states: {id, label, note?, final?}[]`, `transitions: {from, to, event, guard?}[]` |
+| database tables and relations | `er` | `tables: {name, columns: {name, type, pk?, fk?, null?}[]}[]`, `relations: {from, to, card: 1-n\|1-1\|n-n, label?}[]` |
+| running systems: services, DBs, queues | `arch` | `zones: {id, label}[]`, `nodes: {id, label, zone, kind: user\|gateway\|service\|function\|db\|cache\|queue\|storage\|external, note?, logo?}[]`, `edges: {from, to, label, async?}[]` (real product names get their `logo`, e.g. `postgresql`) |
+| which module uses which, cycles | `deps` | `nodes: {id, label, group?, ref?}[]`, `edges: {from, to, kind: call\|import}[]` |
+| types and how they relate | `classes` | `classes: {name, kind, fields: string[], methods: string[]}[]`, `relations: {from, to, kind: extends\|implements\|owns\|has\|uses, card?: [a, b]}[]` |
+| where the time goes in a request | `trace` | `unit`, `spans: {id, label, start, dur, parent?, service?, error?}[]` |
+| branches, commits, merges | `git` | `commits: {id, branch, msg, parents: string[], tag?}[]` (oldest first) |
+
+Every box is something you read or changed: `state` new / changed / gone for
+what the work touched, `ref` = absolute path:line for code, `by`: user / agent
+for who decided it. When a change spans several parts, one such picture of how
+the part works now and where the change goes (3–9 nodes) replaces a paragraph.
 
 ## More charts
 
