@@ -2,7 +2,7 @@
 // so it can't go out of date, and shows the user's bindings. The names are the ones Settings › 단축키 shows.
 import { createMemo, createSignal, For, onCleanup } from "solid-js";
 import { appCommands } from "../state/commands";
-import { shortcutLabel, type ShortcutCommand } from "../lib/shortcuts";
+import { chordLabel, HELD, matchesShortcut, shortcutLabel, type Shortcut, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts";
 import { Icon } from "../ui/Icon";
 import { setView } from "../state/ui";
 import { t } from "../i18n";
@@ -10,13 +10,17 @@ import { t } from "../i18n";
 const [open, setOpen] = createSignal(false);
 export { open as sheetOpen, setOpen as setSheetOpen };
 
-/** keys that aren't commands, as [Korean name, keys]: show both with t() (Settings › 단축키 lists the same) */
-export const SHORTCUT_EXTRAS: [string, string][] = [
-  ["단축키 힌트", "⌘ 길게"],
-  ["어디서든 요청", "⌥ Space"],
-  ["단축키 목록", "?"],
-  ["종료", "⌘Q 길게"],
+/** keys that aren't commands, as [id, Korean name] (Settings › 단축키 lists the same) */
+export const SHORTCUT_EXTRAS: [ShortcutId, string][] = [
+  ["hints", "단축키 힌트"],
+  ["capture", "어디서든 요청"],
+  ["quit", "종료"],
 ];
+/** the keys an id answers to now ("⌘ 길게" for a hold; "" when unbound), or `chord`'s */
+export function keyText(id: ShortcutId, chord?: Shortcut): string {
+  const keys = chord ? chordLabel(chord) : shortcutLabel(id);
+  return keys && HELD.includes(id) ? t("{keys} 길게", { keys }) : keys;
+}
 
 export function ShortcutSheet() {
   const groups = createMemo(() => {
@@ -28,7 +32,7 @@ export function ShortcutSheet() {
   });
   const close = () => setOpen(false);
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" || e.key === "?") {
+    if (e.key === "Escape" || matchesShortcut(e, "keys")) {
       e.preventDefault();
       e.stopPropagation();
       close();
@@ -50,11 +54,11 @@ export function ShortcutSheet() {
         <div class="keysheet-cols">
           <section>
             <h4>{general()}</h4>
-            <For each={SHORTCUT_EXTRAS}>
-              {([label, keys]) => (
+            <For each={SHORTCUT_EXTRAS.filter(([id]) => keyText(id))}>
+              {([id, label]) => (
                 <div class="keysheet-row">
                   <span>{t(label)}</span>
-                  <kbd>{t(keys)}</kbd>
+                  <kbd>{keyText(id)}</kbd>
                 </div>
               )}
             </For>

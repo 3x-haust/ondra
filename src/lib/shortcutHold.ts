@@ -1,23 +1,36 @@
-import { ignoredKey } from "./shortcuts";
+import { binding, ignoredKey, type Shortcut } from "./shortcuts";
 
-/** Observe keys without consuming them; a chord cancels the hint until the next press. */
-export function watchShortcutHold(target: EventTarget, allowed: () => boolean, show: () => void, hide: () => void) {
+const MODIFIER = /^(Meta|Control|Alt|Shift)(Left|Right)?$/;
+const held = (e: KeyboardEvent) => ({ meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey });
+type Mods = ReturnType<typeof held>;
+const MODS = ["meta", "ctrl", "alt", "shift"] as const;
+/** every modifier `a` has, `b` has too */
+const within = (a: Mods | Shortcut, b: Mods | Shortcut) => MODS.every((m) => !a[m] || !!b[m]);
+
+/**
+ * Observe keys without consuming them: the hint shows while the modifiers bound to `hints`
+ * (⌘ by default, Settings › 단축키) are held on their own. A chord cancels it until they are let go.
+ */
+export function watchShortcutHold(target: EventTarget, allowed: () => boolean, show: () => void, hide: () => void, chord: () => Shortcut | undefined = () => binding("hints")) {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let held = false;
+  let armed = false;
   const cancel = () => {
     clearTimeout(timer);
     timer = undefined;
     hide();
   };
-  const reset = () => { held = false; cancel(); };
+  const reset = () => { armed = false; cancel(); };
   const down = (event: Event) => {
     const e = event as KeyboardEvent;
-    if (e.key !== "Meta" || !e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || ignoredKey(e)) {
+    const want = chord();
+    const now = held(e);
+    if (!want || !MODIFIER.test(e.code) || ignoredKey(e) || !within(now, want)) {
       cancel();
       return;
     }
-    if (held) return;
-    held = true;
+    // ⌥ of ⌥⌘ so far: wait for the rest
+    if (!within(want, now) || armed) return;
+    armed = true;
     if (!allowed()) return;
     timer = setTimeout(() => {
       timer = undefined;
@@ -25,8 +38,8 @@ export function watchShortcutHold(target: EventTarget, allowed: () => boolean, s
     }, 500);
   };
   const up = (event: Event) => {
-    const e = event as KeyboardEvent;
-    if (e.key === "Meta" || !e.metaKey) reset();
+    const want = chord();
+    if (!want || !within(want, held(event as KeyboardEvent))) reset();
   };
   const listeners: [string, EventListener][] = [
     ["keydown", down], ["keyup", up], ["blur", reset], ["visibilitychange", reset],

@@ -1,4 +1,4 @@
-import { createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
@@ -10,20 +10,20 @@ import { Panes } from "./views/Panes";
 import { menuClose } from "./views/PaneControls";
 import { appCommands } from "./state/commands";
 import { applyZoom, zoom } from "./state/zoom";
-import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
-import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
+import { keyText, ShortcutSheet, sheetOpen } from "./views/ShortcutSheet";
+import { binding, chordText, dispatchShortcut, NATIVE, noModifiers, shortcutContext, shortcutLabel, shortcutOverlay, viewKey } from "./lib/shortcuts";
 import { anyPop } from "./ui/ModelPicker";
 import { spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
 import { startRpc } from "./engine/rpc";
 import { startScheduler } from "./engine/tasks";
-import { notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
+import { applyKeys, notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
 import { watchDevices } from "./state/devices";
 import { Onboarding } from "./views/Onboarding";
 import { Palette } from "./views/Palette";
 import { Lightbox } from "./ui/Lightbox";
-import { SettingsNav, SettingsPage } from "./views/Settings";
+import { recordingKeys, SettingsNav, SettingsPage } from "./views/Settings";
 import { Sidebar } from "./views/Sidebar";
 import { Panel } from "./views/Panel";
 import { migrateMemory } from "./engine/memory";
@@ -60,11 +60,11 @@ export default function App() {
     let un: (() => void) | undefined;
     // ⌘W (menu): the focused pane when there are several, else the right panel
     void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && !menuClose() && panelShown() && closePanel()).then((u) => (un = u));
-    // ⌘Q tapped, not held (Rust quits once it has been held)
+    // Quit's key tapped, not held (Rust quits once it has been held)
     let hint = 0;
     let unq: (() => void) | undefined;
     void onEvent("quit:hold", () => {
-      if (Date.now() - hint > 4000) toast(tr("⌘Q를 길게 눌러 종료"));
+      if (Date.now() - hint > 4000) toast(tr("{keys} 눌러 종료", { keys: keyText("quit") }));
       hint = Date.now();
     }).then((u) => (unq = u));
     onCleanup(() => (un?.(), unq?.()));
@@ -113,11 +113,6 @@ export default function App() {
     if (!loaded() || !state.onboarded || anyPop()) return;
     const ctx = shortcutContext(e);
     if (dispatchShortcut(e, appCommands(), ctx)) return;
-    if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey && !ctx.editing && !ctx.local && !ctx.overlay && !e.isComposing) {
-      e.preventDefault();
-      setSheetOpen(true);
-      return;
-    }
     // Local views handle Escape first; only an unclaimed Escape closes the panel.
     if (e.key === "Escape" && noModifiers(e) && viewKey(e) && panelShown()) {
       e.preventDefault();
@@ -160,6 +155,20 @@ export default function App() {
   createEffect(() => {
     void setFocusGuard(state.settings.focusGuard);
   });
+  // the keys the native side answers to (quick input, Quit, Close), live and from the next launch;
+  // none while Settings › 단축키 records one, so the page can take them
+  const nativeKeys = createMemo(() => {
+    const text = (id: (typeof NATIVE)[number]) => { const b = !recordingKeys() && binding(id); return b ? chordText(b) : null; };
+    return loaded() ? JSON.stringify({ capture: text("capture"), quit: text("quit"), closePane: text("closePane") }) : "";
+  });
+  createEffect(on(nativeKeys, (json, before) => {
+    if (!json) return;
+    const keys = JSON.parse(json) as Parameters<typeof applyKeys>[0];
+    void applyKeys(keys, !recordingKeys()).then((failed) => {
+      // said when it is changed, not at every launch
+      if (before && keys.capture && failed.includes("capture")) toast(tr("{keys}는 다른 앱이 쓰고 있어요", { keys: shortcutLabel("capture") }), "bad");
+    });
+  }));
   createEffect(() => {
     document.documentElement.lang = lang();
     const t = state.settings.theme;

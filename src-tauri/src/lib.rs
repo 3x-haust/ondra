@@ -31,13 +31,14 @@ mod fs;
 mod devbridge;
 mod bridge;
 mod embed;
+mod keys;
 
 use tauri::{
     AppHandle, Emitter, Manager, RunEvent, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 
 const TRAY_ID: &str = "main";
 
@@ -45,7 +46,8 @@ const TRAY_ID: &str = "main";
 // window (show, focus, title) and its page as a webview (events), never as a
 // single "webview window", which a window with two webviews isn't.
 /// ⌘Q quits only when held, like Chrome: a tap shows a hint and does nothing.
-/// Choosing Quit from the menu with the mouse quits at once.
+/// Choosing Quit from the menu with the mouse quits at once. Quit can be on another
+/// key (keys.rs); one hold_to_quit can't watch quits at once.
 #[cfg(target_os = "macos")]
 fn hold_to_quit(app: &AppHandle) {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -56,8 +58,12 @@ fn hold_to_quit(app: &AppHandle) {
         fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
         fn CGEventSourceSecondsSinceLastEventType(state: i32, kind: u32) -> f64;
     }
-    // combined session state; kVK_ANSI_Q; key down and left mouse down events
-    let held = || unsafe { CGEventSourceKeyState(0, 12) };
+    // combined session state; the key's code (kVK_ANSI_Q by default); key down and left mouse down events
+    let Some(key) = keys::quit_key() else {
+        app.exit(0);
+        return;
+    };
+    let held = move || unsafe { CGEventSourceKeyState(0, key) };
     let by_key = unsafe { CGEventSourceSecondsSinceLastEventType(0, 10) < CGEventSourceSecondsSinceLastEventType(0, 1) };
     if !by_key {
         app.exit(0);
@@ -216,14 +222,12 @@ fn drop_launcher_logins() {
 pub fn run() {
     drop_launcher_logins();
     load_env();
-    let capture_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, shortcut, event| {
-                    if shortcut == &capture_shortcut && event.state() == ShortcutState::Pressed {
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed && keys::is_capture(app, shortcut) {
                         toggle_capture(app);
                     }
                 })
@@ -232,7 +236,10 @@ pub fn run() {
         .manage(engine::Engine::default())
         .manage(pty::Ptys::default())
         .manage(browser::Shared::default())
+        .manage(keys::Native::default())
         .setup(move |app| {
+            // the keys Settings › 단축키 set, before the page loads (keys.rs)
+            let bound = keys::load(app.handle());
             #[cfg(target_os = "macos")]
             {
                 app.manage(computer_setup::ComputerState::default());
@@ -255,13 +262,15 @@ pub fn run() {
                         let text = item.as_predefined_menuitem().and_then(|p| p.text().ok()).unwrap_or_default();
                         if text.starts_with("Quit") {
                             sub.remove(&item)?;
-                            let quit = MenuItem::with_id(app, "quit-hold", &text, true, Some("CmdOrCtrl+Q"))?;
+                            let quit = MenuItem::with_id(app, "quit-hold", &text, true, bound.quit.as_deref().and_then(keys::accelerator))?;
                             sub.insert(&quit, i)?;
+                            keys::track(app.handle(), keys::Role::Quit, quit);
                         }
                         if text.contains("Close") {
                             sub.remove(&item)?;
-                            let panel = MenuItem::with_id(app, "close-panel", "닫기", true, Some("CmdOrCtrl+W"))?;
+                            let panel = MenuItem::with_id(app, "close-panel", "닫기", true, bound.close_pane.as_deref().and_then(keys::accelerator))?;
                             sub.insert(&panel, i)?;
+                            keys::track(app.handle(), keys::Role::Close, panel);
                         }
                     }
                 }
@@ -294,9 +303,6 @@ pub fn run() {
                 let _ = std::process::Command::new("/usr/bin/osascript").args(["-l", "JavaScript", "-e", &js]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
             }
 
-            if let Err(e) = app.global_shortcut().register(capture_shortcut) {
-                eprintln!("⌥Space is taken by another app ({e}); quick input stays in the menu");
-            }
 
             // The display name comes only from `productName` in tauri.conf.json.
             let name = app.package_info().name.clone();
@@ -307,9 +313,13 @@ pub fn run() {
             }
 
             let open = MenuItem::with_id(app, "open", format!("{name} 열기"), true, None::<&str>)?;
-            let capture = MenuItem::with_id(app, "capture", "빠른 입력  ⌥Space", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "종료", true, Some("CmdOrCtrl+Q"))?;
+            let capture = MenuItem::with_id(app, "capture", keys::capture_title(&bound), true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "종료", true, bound.quit.as_deref().and_then(keys::accelerator))?;
             let menu = Menu::with_items(app, &[&open, &capture, &PredefinedMenuItem::separator(app)?, &quit])?;
+            keys::track(app.handle(), keys::Role::Capture, capture);
+            keys::track(app.handle(), keys::Role::Quit, quit);
+            // the global hotkey, and the hold-to-quit key
+            keys::apply(app.handle(), &bound);
 
             TrayIconBuilder::with_id(TRAY_ID)
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
@@ -350,6 +360,7 @@ pub fn run() {
             hide_capture,
             submit_capture,
             set_tray_count,
+            keys::keys_apply,
             focus::focus_guard,
             engine::engine_info,
             engine::agent_spawn,

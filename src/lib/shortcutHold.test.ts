@@ -89,6 +89,28 @@ describe("hold Command to reveal shortcuts", () => {
     expect(hide).toHaveBeenCalled();
   });
 
+  it("follows the hold the user bound", () => {
+    stop();
+    let bound: { code: string; alt?: boolean; meta?: boolean } | undefined = { code: "", alt: true, meta: true };
+    stop = watchShortcutHold(target, allowed, show, hide, () => bound);
+    // ⌘ alone isn't it; ⌥ joining makes it
+    target.dispatchEvent(key());
+    vi.advanceTimersByTime(500);
+    expect(show).not.toHaveBeenCalled();
+    target.dispatchEvent(key("keydown", { key: "Alt", code: "AltLeft", altKey: true }));
+    vi.advanceTimersByTime(500);
+    expect(show).toHaveBeenCalledTimes(1);
+    // letting ⌥ go ends it
+    target.dispatchEvent(key("keyup", { key: "Alt", code: "AltLeft", altKey: false }));
+    expect(hide).toHaveBeenCalled();
+    // unbound: nothing shows
+    bound = undefined;
+    target.dispatchEvent(key("keyup", { metaKey: false }));
+    target.dispatchEvent(key());
+    vi.advanceTimersByTime(500);
+    expect(show).toHaveBeenCalledTimes(1);
+  });
+
   it("cleans up timers and listeners on unmount", () => {
     target.dispatchEvent(key());
     stop();

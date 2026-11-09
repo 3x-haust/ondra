@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setState, state } from "../state/store";
-import { assign, changed, chordOf, conflictOf, importGhostty, moveTo, parseGhostty, refusal, reset } from "./keybindings";
+import { assign, changed, chordOf, conflictOf, moveTo, refusal, reset } from "./keybindings";
 import {
   binding, chordLabel, chordText, dispatchShortcut, matchesShortcut, parseChord, shortcutHint, shortcutLabel, shortcuts, UNBOUND,
   type Shortcut, type ShortcutCommand,
@@ -23,7 +23,18 @@ describe("chord text", () => {
   });
   it("writes modifiers in one order and rejects anything else", () => {
     expect(chordText({ code: "KeyD", shift: true, meta: true, ctrl: true, alt: true })).toBe("ctrl+alt+shift+cmd+KeyD");
-    for (const bad of ["", "cmd+", "hyper+KeyD", "cmd+cmd+KeyD", "cmd+d", UNBOUND]) expect(parseChord(bad)).toBeUndefined();
+    for (const bad of ["", "cmd+", "hyper+KeyD", "cmd+cmd+KeyD", "cmd+d", "alt+cmd+cmd", UNBOUND]) expect(parseChord(bad)).toBeUndefined();
+  });
+  it("keeps modifiers held on their own as a chord with no key", () => {
+    expect(chordText({ code: "", alt: true, meta: true })).toBe("alt+cmd");
+    expect(parseChord("alt+cmd")).toEqual({ code: "", alt: true, meta: true });
+    expect(chordLabel(chord("alt+cmd"))).toBe("⌥⌘");
+    // it is held, never pressed
+    expect(matchesShortcut(press(chord("cmd")), chord("cmd"))).toBe(false);
+  });
+  it("shows the sheet's own key as ?", () => {
+    expect(chordLabel(shortcuts.keys)).toBe("?");
+    expect(chordLabel(chord("ctrl+shift+Slash"))).toBe("⌃⇧/");
   });
   it("shows ⌃⌥⇧⌘ in the macOS order with key glyphs", () => {
     expect(chordLabel(chord("ctrl+alt+shift+cmd+KeyD"))).toBe("⌃⌥⇧⌘D");
@@ -123,9 +134,8 @@ describe("changing a binding", () => {
 
 describe("refused chords", () => {
   it.each([
-    "cmd+KeyQ", "cmd+KeyH", "alt+cmd+KeyH", "cmd+KeyM", "cmd+Tab", "cmd+Space", "ctrl+Space", "ctrl+cmd+KeyF", "shift+cmd+Digit4", "ctrl+ArrowLeft",
+    "cmd+KeyH", "alt+cmd+KeyH", "cmd+KeyM", "cmd+Tab", "cmd+Space", "ctrl+Space", "ctrl+cmd+KeyF", "shift+cmd+Digit4", "ctrl+ArrowLeft",
     "cmd+KeyC", "cmd+KeyV", "cmd+KeyX", "cmd+KeyZ", "shift+cmd+KeyZ", "cmd+KeyA", "cmd+Backspace", "alt+ArrowLeft", "shift+cmd+ArrowRight",
-    "alt+Space", "cmd+KeyW",
   ])("%s", (text) => {
     expect(refusal(chord(text), "sidebar")).toBeTruthy();
   });
@@ -139,39 +149,46 @@ describe("refused chords", () => {
   it("allows the app's own chords and a command's own ⌘W", () => {
     for (const [id, s] of Object.entries(shortcuts)) expect(refusal(s, id)).toBeUndefined();
     for (const text of ["cmd+KeyD", "shift+cmd+KeyD", "alt+cmd+ArrowLeft", "ctrl+cmd+ArrowUp", "shift+cmd+Enter", "ctrl+KeyW"]) expect(refusal(chord(text))).toBeUndefined();
-    expect(refusal(chord("cmd+KeyW"), "sidebar")).toBe("앱 메뉴가 쓰는 단축키예요");
+  });
+
+  it("takes a hold of modifiers alone for the hints, and only there", () => {
+    expect(refusal(chord("alt+cmd"), "hints")).toBeUndefined();
+    expect(refusal(chord("ctrl"), "hints")).toBeUndefined();
+    // ⇧ alone is held while typing a capital
+    expect(refusal(chord("shift"), "hints")).toBe("⌘, ⌃, ⌥ 중 하나와 함께 눌러 주세요");
+    expect(refusal(chord("cmd+KeyB"), "hints")).toBe("⌘, ⌃, ⌥만 길게 눌러 주세요");
+    expect(refusal(chord("alt+cmd"), "sidebar")).toBe("키를 함께 눌러 주세요");
+    // no press holds the same modifiers alone
+    expect(conflictOf(chord("alt+cmd"), "hints", {})).toBeUndefined();
   });
 });
 
-describe("Ghostty import", () => {
-  const config = [
-    "# splits and tabs",
-    "font-size = 13",
-    "keybind = cmd+shift+]=next_tab",
-    'keybind = "ctrl+alt+t=new_tab"',
-    "keybind = cmd+==increase_font_size:1",
-    "keybind = super+minus=decrease_font_size:1",
-    "keybind = global:cmd+grave_accent=toggle_quick_terminal",
-    "keybind = ctrl+a>n=new_window",
-    "keybind = cmd+q=new_tab",
-    "keybind = cmd+d=new_split:right",
-    "keybind = cmd+shift+p=toggle_command_palette",
-  ].join("\n");
-
-  it("reads the split and tab actions Ondra has", () => {
-    const found = parseGhostty(config).map(({ id, chord }) => [id, chordLabel(chord)]);
-    expect(found).toEqual([
-      ["nextTab", "⇧⌘]"], ["newTab", "⌃⌥T"], ["zoomIn", "⌘="], ["zoomOut", "⌘−"], ["newTab", "⌘Q"], ["splitRight", "⌘D"], ["commands", "⇧⌘P"],
-    ]);
+describe("keys that weren't commands", () => {
+  it("are table ids: the native ones collide like any other", () => {
+    expect(conflictOf(chord("alt+Space"), "sidebar", {})).toBe("capture");
+    expect(conflictOf(chord("cmd+KeyQ"), "sidebar", {})).toBe("quit");
+    expect(conflictOf(chord("cmd+KeyW"), "sidebar", {})).toBe("closePane");
+    // moved off ⌘W, the menu's Close leaves it free
+    expect(conflictOf(chord("cmd+KeyW"), "sidebar", { closePane: "alt+cmd+KeyW" })).toBeUndefined();
+    expect(refusal(chord("cmd+KeyQ"), "sidebar")).toBeUndefined();
+    expect(refusal(chord("ctrl+alt+Space"), "capture")).toBe("macOS가 쓰는 단축키예요");
   });
 
-  it("applies them, leaving out what macOS keeps and moving what collides", () => {
-    const { next, count } = importGhostty({}, config);
-    expect(count).toBe(6);
-    expect(binding("nextTab", next)).toEqual(chord("shift+cmd+BracketRight"));
-    // ⇧⌘] was 다음 작업's
-    expect(binding("nextJob", next)).toBeUndefined();
-    expect(binding("newTab", next)).toEqual(chord("ctrl+alt+KeyT"));
-    expect(next.zoomIn).toBeUndefined();
+  it("binds ⌘1–9 by place, each on its own", () => {
+    expect(shortcutHint("ws3")).toBe("⌘3");
+    const next = moveTo({}, "ws1", chord("ctrl+Digit1"));
+    expect(binding("ws1", next)).toEqual(chord("ctrl+Digit1"));
+    expect(binding("ws2", next)).toBe(shortcuts.ws2);
+    expect(conflictOf(chord("cmd+Digit2"), "sidebar", next)).toBe("ws2");
+  });
+
+  it("lets the ? sheet move to a chord and back", () => {
+    expect(refusal(shortcuts.keys, "keys")).toBeUndefined();
+    expect(refusal(shortcuts.keys, "sidebar")).toBe("⌘, ⌃, ⌥ 중 하나와 함께 눌러 주세요");
+    const next = assign({}, "keys", chord("cmd+Slash"));
+    expect(matchesShortcut(press(chord("cmd+Slash")), "keys")).toBe(false);
+    setState("settings", { keybindings: next });
+    expect(matchesShortcut(press(chord("cmd+Slash")), "keys")).toBe(true);
+    expect(matchesShortcut(press(shortcuts.keys), "keys")).toBe(false);
   });
 });

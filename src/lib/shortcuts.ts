@@ -1,4 +1,5 @@
 export interface Shortcut {
+  /** the physical key (e.code); "" for modifiers held on their own (hints) */
   code: string;
   meta?: boolean;
   ctrl?: boolean;
@@ -73,8 +74,25 @@ export const shortcuts = {
   closePane: cmd("KeyW"),
   // cmux's jump to the latest unread
   attentionPane: cmd("KeyU", true),
+  // ⌘1–9: the workspace in that place in the sidebar
+  ws1: cmd("Digit1"), ws2: cmd("Digit2"), ws3: cmd("Digit3"), ws4: cmd("Digit4"), ws5: cmd("Digit5"),
+  ws6: cmd("Digit6"), ws7: cmd("Digit7"), ws8: cmd("Digit8"), ws9: cmd("Digit9"),
+  // the `?` sheet
+  keys: { code: "Slash", shift: true },
+  // held, not pressed: modifiers alone show every button's key (shortcutHold.ts)
+  hints: { code: "", meta: true },
+  // the native side's (src-tauri/src/keys.rs): quick input from any app, a global hotkey,
+  // and the app menu's Quit, which quits once held. closePane is the menu's Close too.
+  capture: { code: "Space", alt: true },
+  quit: cmd("KeyQ"),
 } satisfies Record<string, Shortcut>;
 export type ShortcutId = keyof typeof shortcuts;
+/** kept down rather than pressed: shown as "⌘ 길게" */
+export const HELD: readonly string[] = ["hints", "quit"];
+/** bound to modifiers alone */
+export const modifierHold = (id: string) => id === "hints";
+/** the ids Rust applies (keys.rs): the global hotkey and the app menu's items */
+export const NATIVE = ["capture", "quit", "closePane"] as const satisfies readonly ShortcutId[];
 
 // ───────────── the user's bindings over the table
 // Settings › 단축키 keeps overrides by id in state.settings.keybindings: a chord as
@@ -84,15 +102,17 @@ export const UNBOUND = "none";
 export type Overrides = Readonly<Record<string, string | undefined>>;
 
 const MODS = [["ctrl", "ctrl"], ["alt", "alt"], ["shift", "shift"], ["cmd", "meta"]] as const;
-/** a chord as stored: modifiers in macOS order, then the physical key (e.code) */
+/** a chord as stored: modifiers in macOS order, then the physical key (e.code); modifiers alone for a hold */
 export function chordText(s: Shortcut): string {
-  return [...MODS.filter(([, k]) => s[k]).map(([name]) => name), s.code].join("+");
+  return [...MODS.filter(([, k]) => s[k]).map(([name]) => name), s.code].filter(Boolean).join("+");
 }
 /** the stored text back to a chord; undefined if it isn't one */
 export function parseChord(text: string): Shortcut | undefined {
   const parts = text.split("+");
-  const code = parts.pop();
-  if (!code || !/^[A-Z][A-Za-z0-9]*$/.test(code)) return undefined;
+  // "alt+cmd": modifiers held on their own
+  const held = MODS.some(([name]) => name === parts[parts.length - 1]);
+  const code = held ? "" : parts.pop()!;
+  if (!held && !/^[A-Z][A-Za-z0-9]*$/.test(code)) return undefined;
   const s: Shortcut = { code };
   for (const p of parts) {
     const mod = MODS.find(([name]) => name === p);
@@ -138,6 +158,7 @@ export function keyGlyph(code: string): string {
 }
 /** a chord as written, modifiers in the macOS order ⌃⌥⇧⌘ */
 export function chordLabel(s: Shortcut): string {
+  if (s.code === "Slash" && s.shift && !s.meta && !s.ctrl && !s.alt) return "?";
   return `${s.ctrl ? "⌃" : ""}${s.alt ? "⌥" : ""}${s.shift ? "⇧" : ""}${s.meta ? "⌘" : ""}${keyGlyph(s.code)}`;
 }
 /** what a chord shows now: a table chord shows the user's binding ("" when unbound) */
@@ -157,7 +178,7 @@ export const noModifiers = (e: KeyboardEvent) => !e.metaKey && !e.ctrlKey && !e.
 /** a table chord or id matches the user's binding for it */
 export function matchesShortcut(e: KeyboardEvent, chord: Shortcut | ShortcutId): boolean {
   const s = effective(chord);
-  return !!s && !ignoredKey(e) && e.code === s.code && e.metaKey === !!s.meta && e.ctrlKey === !!s.ctrl && e.shiftKey === !!s.shift && e.altKey === !!s.alt;
+  return !!s && !!s.code && !ignoredKey(e) && e.code === s.code && e.metaKey === !!s.meta && e.ctrlKey === !!s.ctrl && e.shiftKey === !!s.shift && e.altKey === !!s.alt;
 }
 
 const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]';
@@ -179,8 +200,6 @@ export interface ShortcutCommand {
   section: string;
   icon: string;
   shortcut?: Shortcut;
-  /** keys shown for a command the table can't match (the `?` sheet) */
-  keys?: string;
   inInput?: boolean;
   enabled?: () => boolean;
   run: () => void;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { dispatchShortcut, matchesShortcut, shortcutHint, shortcutLabel, shortcuts, type Shortcut, type ShortcutCommand, type ShortcutContext } from "./shortcuts";
+import { dispatchShortcut, matchesShortcut, NATIVE, shortcutHint, shortcutLabel, shortcuts, type Shortcut, type ShortcutCommand, type ShortcutContext } from "./shortcuts";
 
 function key(s: Shortcut, extra: Partial<KeyboardEvent> = {}): KeyboardEvent {
   const e = {
@@ -15,7 +15,8 @@ const action = (extra: Partial<ShortcutCommand> = {}): ShortcutCommand => ({
 });
 
 describe("app keyboard shortcuts", () => {
-  it.each(Object.entries(shortcuts))("matches the exact %s chord", (_id, chord) => {
+  // hints is held, never pressed (shortcutHold.test.ts)
+  it.each(Object.entries(shortcuts).filter(([id]) => id !== "hints"))("matches the exact %s chord", (_id, chord) => {
     expect(matchesShortcut(key(chord), chord)).toBe(true);
     for (const modifier of ["metaKey", "ctrlKey", "altKey", "shiftKey"] as const) {
       const e = key(chord);
@@ -92,7 +93,8 @@ describe("app keyboard shortcuts", () => {
   });
 
   it("does not claim OS and text editing chords", () => {
-    const commands = Object.values(shortcuts).map((shortcut) => action({ shortcut }));
+    // the native side's keys aren't the page's commands
+    const commands = Object.entries(shortcuts).filter(([id]) => !(NATIVE as readonly string[]).includes(id)).map(([, shortcut]) => action({ shortcut }));
     for (const code of ["KeyQ", "KeyH", "KeyM", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyA", "Space", "Tab"]) {
       expect(dispatchShortcut(key({ code, meta: true }), commands, context)).toBe(false);
     }
