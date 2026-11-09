@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORK_ENDED, PROJECT_ENDED } from "./captain";
+import { FORK_ENDED, FORK_REPORT, PROJECT_ENDED } from "./captain";
 import { CAPTAIN_SYSTEM } from "./prompts";
 
 // The chat shows each job main started or relayed to as a row that keeps up with it,
@@ -39,5 +39,14 @@ describe("main when a job ends", () => {
     expect(CAPTAIN_SYSTEM).toContain("Never\nreturn zero routes for a message that isn't empty.");
     expect(CAPTAIN_SYSTEM).toMatch(/ended is not a message[\s\S]*\{"reply":"","routes":\[\]\}/);
     expect(CAPTAIN_SYSTEM).not.toContain("end your report on it");
+  });
+});
+
+describe("a project's own chat", () => {
+  it("still reports what a fork came back with, under its row", () => {
+    expect(FORK_REPORT).toContain("Tell the user what came out");
+    expect(FORK_REPORT).toContain("your report goes under it");
+    expect(FORK_REPORT).toContain('"CI 결과는 기다리지 않았어요" stays that');
+    expect(FORK_REPORT).not.toContain('{"reply":"","routes":[]}');
   });
 });
