@@ -290,6 +290,8 @@ export function openPanel(tab: PanelTab, file?: string, mode: "diff" | "file" = 
 }
 /** A page the in-app browser should open next (it takes it when shown). */
 export const [browserTarget, setBrowserTarget] = createSignal<string | null>(null);
+/** The page the panel's browser shows now ("" when none), for 기본 브라우저에서 열기 in the palette. */
+export const [browserPage, setBrowserPage] = createSignal("");
 /** The in-app browser in the right panel, next to the conversation; opens `url` when given. */
 export function openBrowser(url?: string) {
   if (url) setBrowserTarget(url);

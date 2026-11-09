@@ -549,6 +549,8 @@ export interface Settings {
   forkThinking: string;
   /** Permission for new jobs. */
   permission: Permission;
+  /** where links open: the app's own browser (missing = inside) or the system's default one */
+  links?: "inside" | "outside";
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */

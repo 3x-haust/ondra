@@ -5,7 +5,8 @@ import type { Task } from "../state/types";
 import { projectById, projectsIn, spaceById, state } from "../state/store";
 import { createTask } from "../engine/tasks";
 import { expand } from "../engine/rpc";
-import { ghIssue, ghIssues, openUrl, spaceEnv } from "../lib/native";
+import { ghIssue, ghIssues, spaceEnv } from "../lib/native";
+import { linkMenu, openLink } from "./links";
 import { openTask, toast, view } from "../state/ui";
 import { ago } from "./bits";
 import { Fold } from "./Fold";
@@ -208,7 +209,7 @@ function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>;
         </span>
         <span class="iss-acts" onClick={(e) => e.stopPropagation()}>
           <button class="btn sm" onClick={start}>{job() ? t("작업 보기") : t("작업 만들기")}</button>
-          <button class="icon-btn sm" title={t("GitHub에서 열기")} onClick={() => void openUrl(props.i.url)}><Icon name="external" size={14} /></button>
+          <button class="icon-btn sm" title={t("GitHub에서 열기")} onClick={(e) => void openLink(props.i.url, { event: e })} onContextMenu={linkMenu(props.i.url)}><Icon name="external" size={14} /></button>
         </span>
       </div>
       <Fold open={props.open}>
