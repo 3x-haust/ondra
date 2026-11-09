@@ -11,7 +11,7 @@ import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, setHoverTask, setMemoryFocus, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
-import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
 import { openInSplit, startTaskDrag } from "./PaneControls";
 import { bootedDevices, devices, usedBy } from "../state/devices";
@@ -431,7 +431,7 @@ export function Sidebar() {
       <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
         <For each={state.spaces}>
           {(s) => (
-            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`⌘${state.spaces.indexOf(s) + 1}`} aria-pressed={state.space === s.id}>
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={shortcutHint(`ws${state.spaces.indexOf(s) + 1}` as ShortcutId) || undefined} aria-pressed={state.space === s.id}>
               <span class="space-name">{tr(s.label)}</span>
               <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
             </button>

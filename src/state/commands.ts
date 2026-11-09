@@ -60,7 +60,7 @@ export function appCommands(): ShortcutCommand[] {
   return [
     command("search", "검색", "일반", "search", () => { setPaletteMode("all"); setPaletteOpen(true); }, undefined, true),
     command("commands", "명령 보기", "일반", "list", showCommands, undefined, true),
-    { id: "keys", label: t("단축키 목록"), section: t("일반"), icon: "keyboard", keys: "?", run: () => void import("../views/ShortcutSheet").then((m) => m.setSheetOpen(true)) },
+    command("keys", "단축키 목록", "일반", "keyboard", () => void import("../views/ShortcutSheet").then((m) => m.setSheetOpen(true))),
     { id: "keybindings", label: t("단축키 설정"), section: t("일반"), icon: "keyboard", run: () => setView({ name: "settings", tab: "shortcuts" }) },
     command("sidebar", "사이드바 열기·닫기", "일반", "panelLeft", toggleSidebar),
     command("zoomIn", "화면 크게", "일반", "plus", () => stepZoom(1), undefined, true),
@@ -78,7 +78,7 @@ export function appCommands(): ShortcutCommand[] {
     command("previousJob", "이전 작업", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1), true),
     command("nextJob", "다음 작업", "이동", "arrow", () => { const t = stepFork(state.space, 1); if (t) openTask(t.id); }, () => !!stepFork(state.space, 1), true),
     command("waiting", "다음 내 차례", "이동", "hand", () => { const t = nextWaiting(state.space); if (t) openTask(t.id); }, () => !!nextWaiting(state.space), true),
-    ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? { code: `Digit${i + 1}`, meta: true } : undefined, inInput: true, run: () => switchSpace(s.id) })),
+    ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? binding(`ws${i + 1}`) : undefined, inInput: true, run: () => switchSpace(s.id) })),
     // the panel and every tab it can show, in one section
     command("panel", "패널 열기·닫기", "패널", "panel", togglePanel, panelAvailable, true),
     command("flow", "작업 흐름", "패널", "branch", () => openPanel("flow"), panelAvailable, true),

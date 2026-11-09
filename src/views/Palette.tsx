@@ -47,7 +47,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
 
   // commands come with their labels already in the current language (appCommands)
   const places: Item[] = [
-    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, keys: c.shortcut ? shortcutLabel(c.shortcut) : c.keys })),
+    ...props.commands.filter((c) => c.id !== "search").map((c) => ({ ...c, keys: c.shortcut ? shortcutLabel(c.shortcut) : undefined })),
     { id: "s-accounts", label: tr("계정"), icon: "key", section: tr("설정"), run: () => setView({ name: "settings", tab: "accounts" }) },
     { id: "s-agent-tools", label: tr("도구"), icon: "tools", section: tr("설정"), run: () => setView({ name: "settings", tab: "agent-tools" }) },
     { id: "s-tools", label: tr("권한"), icon: "shield", section: tr("설정"), run: () => setView({ name: "settings", tab: "tools" }) },

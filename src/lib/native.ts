@@ -402,6 +402,10 @@ export const hideCapture = () => call<void>("hide_capture");
 export const submitCapture = (text: string, space: string) => call<void>("submit_capture", { text, space });
 export const setFocusGuard = (on: boolean) => call<void>("focus_guard", { on });
 export const setTrayCount = (running: number, waiting: number) => call<void>("set_tray_count", { running, waiting });
+/** The keys Rust answers to, as chord text (null: unbound): quick input's global hotkey, the menu's Quit
+ * (held) and Close; with `save`, kept for the next launch too. Resolves to what couldn't be taken ("capture"). */
+export const applyKeys = (keys: { capture: string | null; quit: string | null; closePane: string | null }, save = true) =>
+  call<string[]>("keys_apply", { keys, save }, []);
 
 /** A local file (screenshot, recording) as something an <img> can show. */
 export const fileSrc = (path: string) => (inTauri && path.startsWith("/") ? convertFileSrc(path) : path);

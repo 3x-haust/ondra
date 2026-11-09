@@ -2,7 +2,7 @@
 // toasts, sheets, account picker and usage line.
 export default {
   // app-level toasts and notifications
-  "⌘Q를 길게 눌러 종료": "Hold ⌘Q to quit",
+  "{keys} 눌러 종료": "{keys} to quit",
   "메인에 보냈어요": "Sent to Main",
   "응답이 필요해요": "Needs your reply",
   "답변했어요": "Answered",
@@ -132,12 +132,11 @@ export default {
   "단축키": "Shortcuts",
   "일반": "General",
   "단축키 힌트": "Shortcut hints",
-  "⌘ 길게": "Hold ⌘",
+  "{keys} 길게": "Hold {keys}",
   "어디서든 요청": "Request from anywhere",
   "단축키 목록": "Shortcut list",
   "단축키 설정": "Customize shortcuts",
   "종료": "Quit",
-  "⌘Q 길게": "Hold ⌘Q",
 
   // onboarding
   "{name} 시작하기": "Set up {name}",
