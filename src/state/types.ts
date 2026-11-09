@@ -384,6 +384,8 @@ export interface Memory {
   links?: string[];
   /** the job it was learned in */
   taskId?: string;
+  /** the finished jobs it was learned from (the quiet pass checked a quote from them); older pieces have only taskId */
+  sources?: string[];
   updatedAt?: number;
   lastUsed?: number;
   /** no longer true: kept as history, never sent again */
@@ -449,6 +451,28 @@ export interface JournalEntry {
   text: string;
   /** pieces the quiet pass learned from it */
   learned?: string[];
+}
+
+/**
+ * 확인 필요: what the quiet pass learned contradicts one of the user's own pieces.
+ * Nothing changes until the user picks: keep theirs, or use the new one.
+ */
+export interface MemoryConflict {
+  id: string;
+  at: number;
+  space: SpaceId;
+  /** the user's own piece */
+  mine: string;
+  /** a piece already kept that contradicts it (held out until the user picks) */
+  theirs?: string;
+  /** or a new piece the pass would have saved (not saved) */
+  text?: string;
+  kind?: MemoryKind;
+  scope?: "space" | "project";
+  project?: string;
+  sources?: string[];
+  /** what the user picked; kept a while so the same thing isn't asked again */
+  done?: "mine" | "new";
 }
 
 /** 지금: what was last going on in one project (resume aid, kept short). */
@@ -524,7 +548,9 @@ export interface AppState {
   absorbed?: Record<string, string>;
   /** per space: the account new work uses ("auto" or missing = route automatically) */
   accountPick?: Record<string, string>;
-  memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number };
+  memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number; /** conflicts with the user's own pieces it asked about */ held?: number };
+  /** 확인 필요: learned pieces that contradict the user's own, waiting for the user */
+  memoryConflicts?: MemoryConflict[];
   /** 일 기록, newest last (capped) */
   journal?: JournalEntry[];
   /** 지금, by project folder */

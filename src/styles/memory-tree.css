@@ -1299,6 +1299,59 @@ button.md-kinds .chip:hover,
   font-weight: var(--fw-medium);
 }
 
+/* 확인 필요: the user's own piece, the learned one against it, and the two choices */
+.mc-list {
+  display: grid;
+}
+.mc {
+  display: grid;
+  gap: 1px;
+  padding: 4px 0 8px;
+}
+.mc + .mc {
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.mc-row {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink-2);
+  text-align: left;
+  min-width: 0;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+button.mc-row:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.mc-row em {
+  font-style: normal;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.mc-row span {
+  overflow-wrap: anywhere;
+}
+.mc-row small {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.mc-acts {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px 0;
+}
+.mc-acts .btn.sm {
+  height: 26px;
+  font-size: var(--fs-xs);
+}
+
 /* 정리 */
 .md-tidy {
   display: grid;

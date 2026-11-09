@@ -127,6 +127,11 @@ export const faded = (m: Memory) => strength(m) < 0.25;
 /** so faded the tidy pass retires it */
 export const forgotten = (m: Memory) => !m.pinned && strength(m) < 0.06;
 
+/** the finished jobs a piece came from: its sources, or (older pieces) the job it was learned in */
+export const sourcesOf = (m: Memory): string[] => (m.sources?.length ? m.sources : m.taskId ? [m.taskId] : []);
+/** both pieces' sources, once each (a merged piece keeps where both came from) */
+export const unionSources = (a: Memory, b: { sources?: string[]; taskId?: string }) => [...new Set([...sourcesOf(a), ...sourcesOf(b as Memory)])];
+
 /** the words a piece is found by: its text, plus related words and topics from the tidy pass */
 const findWords = (m: Memory) => tokens([m.text, ...(m.keys ?? []), ...(m.about ?? [])].join(" "));
 
@@ -142,6 +147,8 @@ type AddOpts = {
   /** id of a memory this one corrects: that one is retired */
   replaces?: string;
   taskId?: string;
+  /** the finished jobs it was learned from (provenance) */
+  sources?: string[];
   /** brought in from this file */
   from?: string;
   keys?: string[];
@@ -286,6 +293,8 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
         seen: (m.seen ?? 1) + 1,
         importance: Math.min(5, Math.max(m.importance ?? 3, opts.importance ?? (opts.pinned ? 5 : 3))),
         paths: opts.paths?.length ? [...new Set([...(m.paths ?? []), ...opts.paths])] : m.paths,
+        // learned again from other jobs: where it came from grows (the user's own piece stays as they kept it)
+        sources: opts.sources?.length && !userOwned(m) ? unionSources(m, { sources: opts.sources }) : m.sources,
         by: (m.by === "user" || by === "user" ? "user" : "agent") as Memory["by"],
       }));
       ids.push(dup.id);
@@ -316,6 +325,7 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
       project: scope === "project" ? opts.project : undefined,
       source: opts.source ?? "ondra",
       taskId: opts.taskId,
+      sources: opts.sources?.length ? [...new Set(opts.sources)] : undefined,
       from: opts.from,
       keys: opts.keys?.length ? opts.keys : undefined,
       about: opts.about?.length ? opts.about : undefined,
@@ -616,6 +626,7 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
       ...(m.paths?.length ? { paths: m.paths } : {}),
       ...(m.cites?.length ? { cites: m.cites.map((c) => c.replace(/^\/Users\/[^/]+/, "~")) } : {}),
       ...(m.skill ? { skill: m.skill } : {}),
+      ...(m.sources?.length ? { jobs: m.sources } : {}),
       created: new Date(m.createdAt).toISOString().slice(0, 10),
       ...(m.updatedAt && m.updatedAt - m.createdAt > 60_000 ? { updated: new Date(m.updatedAt).toISOString().slice(0, 10) } : {}),
       uses: m.uses,
