@@ -742,7 +742,7 @@ button.chip:hover,
 /* ───────────── composer ───────────── */
 .dock {
   flex-shrink: 0;
-  padding: 0 var(--s-24) var(--s-20);
+  padding: 0 var(--s-24) var(--s-12);
 }
 .dock-inner {
   max-width: var(--chat-w);
