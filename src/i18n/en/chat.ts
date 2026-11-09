@@ -129,6 +129,10 @@ export default {
   "명령 {n}개 실행 중": "Running {n} command|Running {n} commands",
   "브라우저 {n}번 씀": "Used the browser once|Used the browser {n} times",
   "실패 {n}": "{n} failed",
+  // a call Ondra stopped (a search with no output, a wait that saw nothing new): not a failure
+  "멈춤|tool": "Stopped",
+  // a run of browser steps named by the one going on: how many it holds
+  "{n}단계|count": "{n} step|{n} steps",
   "메모리에 쓰는 중": "Saving to memory",
   "메모리에 저장함": "Saved to memory",
   "(내용 없음)": "(empty)",

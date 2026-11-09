@@ -194,75 +194,94 @@ export function mainCommand(cmd: string): string {
   return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
 }
 
+/**
+ * A command without the package runner in front of it, so the tool it runs picks the verb:
+ * `npx vitest run`, `bunx …`, `pnpm exec|dlx …`, `yarn dlx …`, `npm exec -- …` → `vitest run`.
+ * `pnpm vitest` (a bin run straight from pnpm/yarn/bun) loses the runner too.
+ */
+function unrun(k: string): string {
+  const s = k
+    .replace(/^(?:npx|bunx|pnpx|(?:pnpm|bun|npm)\s+(?:exec|dlx|x)|yarn\s+(?:dlx|exec))\s+(?:--?[\w-]+(?:=\S+)?\s+)*(?:--\s+)?/, "")
+    .trim();
+  return s.replace(/^(?:pnpm|yarn|bun)\s+(?:-s\s+|--silent\s+)?(?=(?:vitest|jest|playwright|eslint|prettier|tsc|biome|wait-on|mocha|cypress)\b)/, "");
+}
+
 export function describeCommand(cmd: string): Said {
   const c = cmd.trim();
   const waits = /\b(until|while)\b[\s\S]*\bsleep\b|\bfor\b[\s\S]*\bseq\b[\s\S]*\bsleep\b/.test(c);
   if (/\baside\s+repl\b/.test(c)) {
     const h = host(c);
-    return h ? S("Aside로 {h} 보기", "Aside로 {h} 보는 중", h, { h }) : S("Aside 브라우저", "Aside 브라우저 쓰는 중");
+    return h ? S("Aside로 {h} 봄", "Aside로 {h} 보는 중", h, { h }) : S("Aside 브라우저 씀", "Aside 브라우저 쓰는 중");
   }
-  if (/\bpr-media\.sh\b/.test(c)) return S("PR에 사진 넣기", "PR에 사진 넣는 중");
+  if (/\bpr-media\.sh\b/.test(c)) return S("PR에 사진 넣음", "PR에 사진 넣는 중");
   if (/\bgh\b/.test(c)) {
-    if (/\bactions\b|\bgh\s+run\b/.test(c)) return waits ? S("GitHub 빌드 기다리기", "GitHub 빌드 기다리는 중") : S("GitHub 빌드 확인", "GitHub 빌드 확인 중");
-    if (/\bgh\s+pr\s+create\b/.test(c)) return S("PR 올리기", "PR 올리는 중");
-    if (/\bgh\s+pr\s+merge\b/.test(c)) return S("PR 병합", "PR 병합 중");
-    if (/\bgh\s+pr\s+(edit|comment|review)\b/.test(c)) return S("PR 고치기", "PR 고치는 중");
-    if (/\bgh\s+pr\b|\/pulls\b/.test(c)) return S("PR 확인", "PR 확인 중");
-    if (/\bgh\s+issue\b|\/issues\b/.test(c)) return S("이슈 확인", "이슈 확인 중");
-    if (/\bgh\s+release\b|\/releases\b/.test(c)) return S("릴리스 확인", "릴리스 확인 중");
-    return S("GitHub 조회", "GitHub 조회 중");
+    if (/\bactions\b|\bgh\s+run\b/.test(c)) return waits ? S("GitHub 빌드 기다림", "GitHub 빌드 기다리는 중") : S("GitHub 빌드 확인함", "GitHub 빌드 확인 중");
+    if (/\bgh\s+pr\s+create\b/.test(c)) return S("PR 올림", "PR 올리는 중");
+    if (/\bgh\s+pr\s+merge\b/.test(c)) return S("PR 병합함", "PR 병합 중");
+    if (/\bgh\s+pr\s+(edit|comment|review)\b/.test(c)) return S("PR 고침", "PR 고치는 중");
+    if (/\bgh\s+pr\b|\/pulls\b/.test(c)) return S("PR 확인함", "PR 확인 중");
+    if (/\bgh\s+issue\b|\/issues\b/.test(c)) return S("이슈 확인함", "이슈 확인 중");
+    if (/\bgh\s+release\b|\/releases\b/.test(c)) return S("릴리스 확인함", "릴리스 확인 중");
+    return S("GitHub 조회함", "GitHub 조회 중");
   }
-  if (waits) return S("기다리기", "기다리는 중");
-  const k = core(c);
+  if (waits) return S("기다림", "기다리는 중");
+  const k = unrun(core(c));
+  if (/^wait-on\b/.test(k)) {
+    const on = host(k) ?? words(k).slice(1).find((w) => !w.startsWith("-"))?.replace(/^(?:tcp|http-get|https?-get|file):/, "");
+    return S("기다림", "기다리는 중", on);
+  }
+  if (/^(vitest|jest|mocha|ava|pytest|playwright\s+test|cypress\s+run)\b|^(pnpm|npm|yarn|bun)\s+(?:-\S+\s+)*(run\s+)?test\b|^(cargo|go|swift|deno)\s+test\b|^xcodebuild\b.*\btest\b|^python3?\s+-m\s+pytest\b/.test(k))
+    return S("테스트 돌림", "테스트 실행 중");
   const git = k.match(/^git\s+(?:-C\s+\S+\s+)?(\w[\w-]*)/)?.[1];
   if (git) {
     const G: Record<string, [string, string]> = {
-      push: ["올리기", "올리는 중"],
-      commit: ["커밋", "커밋하는 중"],
-      add: ["커밋 준비", "커밋 준비 중"],
-      diff: ["바뀐 곳 보기", "바뀐 곳 보는 중"],
-      status: ["바뀐 곳 보기", "바뀐 곳 보는 중"],
-      log: ["기록 보기", "기록 보는 중"],
-      show: ["기록 보기", "기록 보는 중"],
-      clone: ["저장소 받기", "저장소 받는 중"],
-      fetch: ["최신 받기", "최신 받는 중"],
-      pull: ["최신 받기", "최신 받는 중"],
-      merge: ["병합", "병합 중"],
-      rebase: ["리베이스", "리베이스 중"],
-      checkout: ["브랜치 준비", "브랜치 준비 중"],
-      switch: ["브랜치 준비", "브랜치 준비 중"],
-      worktree: ["워크트리 준비", "워크트리 준비 중"],
+      push: ["올림", "올리는 중"],
+      commit: ["커밋함", "커밋하는 중"],
+      add: ["커밋 준비함", "커밋 준비 중"],
+      diff: ["바뀐 곳 봄", "바뀐 곳 보는 중"],
+      status: ["바뀐 곳 봄", "바뀐 곳 보는 중"],
+      log: ["기록 봄", "기록 보는 중"],
+      show: ["기록 봄", "기록 보는 중"],
+      clone: ["저장소 받음", "저장소 받는 중"],
+      fetch: ["최신 받음", "최신 받는 중"],
+      pull: ["최신 받음", "최신 받는 중"],
+      merge: ["병합함", "병합 중"],
+      rebase: ["리베이스함", "리베이스 중"],
+      checkout: ["브랜치 준비함", "브랜치 준비 중"],
+      switch: ["브랜치 준비함", "브랜치 준비 중"],
+      worktree: ["워크트리 준비함", "워크트리 준비 중"],
     };
-    const [l, n] = G[git] ?? ["git", "git 실행 중"];
+    const [l, n] = G[git] ?? ["git 실행함", "git 실행 중"];
     return S(l, n);
   }
   if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(build|bundle)\b|\bcargo\s+build\b|\bxcodebuild\b|\bgradlew\b|\b(vite|next|tauri)\s+build\b|\bexpo\s+(export|prebuild)\b|\beas\s+build\b/.test(k))
-    return S("빌드", "빌드 중");
-  if (/\b(pnpm|npm|yarn|bun)\s+(install|i|add|ci)\b|\bpip3?\s+install\b|\bbrew\s+install\b|\bcargo\s+add\b|\bpod\s+install\b/.test(k)) return S("설치", "설치하는 중");
-  if (/\b(typecheck|lint|eslint|biome|prettier|clippy)\b|\btsc\b|\bcargo\s+check\b/.test(k)) return S("검사|lint", "검사하는 중");
-  if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|\btauri\s+dev\b/.test(k)) return S("앱 띄우기", "앱 띄우는 중");
+    return S("빌드함", "빌드 중");
+  if (/\b(pnpm|npm|yarn|bun)\s+(install|i|add|ci)\b|\bpip3?\s+install\b|\bbrew\s+install\b|\bcargo\s+add\b|\bpod\s+install\b/.test(k)) return S("설치함", "설치하는 중");
+  if (/^prettier\b/.test(k) && !/\s--(check|list-different)\b|\s-[cl]\b/.test(k)) return S("정리함", "정리하는 중");
+  if (/\b(typecheck|lint|eslint|biome|prettier|clippy)\b|\btsc\b|\bcargo\s+check\b/.test(k)) return S("검사함", "검사하는 중");
+  if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|\btauri\s+dev\b/.test(k)) return S("앱 띄움", "앱 띄우는 중");
   if (/^(curl|wget|http)\b/.test(k)) {
     const h = host(k);
-    return h ? S("{h} 요청", "{h} 요청 중", h, { h }) : S("웹 요청", "웹 요청 중");
+    return h ? S("{h} 요청함", "{h} 요청 중", h, { h }) : S("웹 요청함", "웹 요청 중");
   }
-  if (/^(python3?|node|deno|bun|ruby|swift|osascript)\s+(-\s*<<|-[ce]\b|<<)/.test(k) || /^(python3?|node)\s+-\s*$/.test(k)) return S("스크립트로 처리", "스크립트로 처리하는 중");
+  if (/^(python3?|node|deno|bun|ruby|swift|osascript)\s+(-\s*<<|-[ce]\b|<<)/.test(k) || /^(python3?|node)\s+-\s*$/.test(k)) return S("스크립트로 처리함", "스크립트로 처리하는 중");
   const script = k.match(/^(?:python3?|node|deno|bun|ruby|bash|sh|zsh|swift)\s+(?:-\S+\s+)*['"]?([^\s'"]+)/)?.[1];
-  if (script) return S("{p} 실행", "{p} 실행 중", undefined, { p: script.split("/").pop()! });
-  if (/^(pdftoppm|pdftotext|pdfinfo|qpdf|pdfimages)\b/.test(k)) return S("PDF 확인", "PDF 확인 중", file(k));
-  if (/^(ffmpeg|ffprobe)\b/.test(k)) return S("영상 처리", "영상 처리 중", file(k));
-  if (/^(sips|magick|convert|cwebp|pngquant)\b/.test(k)) return S("이미지 처리", "이미지 처리 중", file(k));
-  if (/^(psql|mysql|sqlite3|supabase|prisma)\b/.test(k)) return S("데이터베이스 조회", "데이터베이스 조회 중");
-  if (/^docker\b/.test(k)) return S("도커", "도커 쓰는 중");
-  if (/^(xcrun|simctl|adb|emulator)\b/.test(k)) return S("기기 다루기", "기기 다루는 중");
-  if (/^(cp|mv|rm|ln|rsync|tar|zip|unzip|ditto)\b/.test(k)) return S("파일 정리", "파일 정리 중", file(k));
-  if (/^(find|fd|locate|mdfind)\b/.test(k)) return S("파일 찾기", "파일 찾는 중");
-  if (/^(grep|egrep|rg|ag|ack|git\s+grep)\b/.test(k)) return S("검색", "검색 중", file(k));
-  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴보기", "살펴보는 중", file(k));
-  if (/^open\b/.test(k)) return S("열기", "여는 중", host(k) ?? file(k));
-  if (/^(sleep|wait)\b/.test(k)) return S("기다리기", "기다리는 중");
+  if (script) return S("{p} 실행함", "{p} 실행 중", undefined, { p: script.split("/").pop()! });
+  if (/^(pdftoppm|pdftotext|pdfinfo|qpdf|pdfimages)\b/.test(k)) return S("PDF 확인함", "PDF 확인 중", file(k));
+  if (/^(ffmpeg|ffprobe)\b/.test(k)) return S("영상 처리함", "영상 처리 중", file(k));
+  if (/^(sips|magick|convert|cwebp|pngquant)\b/.test(k)) return S("이미지 처리함", "이미지 처리 중", file(k));
+  if (/^(psql|mysql|sqlite3|supabase|prisma)\b/.test(k)) return S("데이터베이스 조회함", "데이터베이스 조회 중");
+  if (/^docker\b/.test(k)) return S("도커 씀", "도커 쓰는 중");
+  if (/^(xcrun|simctl|adb|emulator)\b/.test(k)) return S("기기 다룸", "기기 다루는 중");
+  if (/^(cp|mv|rm|ln|rsync|tar|zip|unzip|ditto)\b/.test(k)) return S("파일 정리함", "파일 정리 중", file(k));
+  if (/^(find|fd|locate|mdfind)\b/.test(k)) return S("파일 찾음", "파일 찾는 중");
+  if (/^(grep|egrep|rg|ag|ack|git\s+grep)\b/.test(k)) return S("검색함", "검색 중", file(k));
+  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴봄", "살펴보는 중", file(k));
+  if (/^open\b/.test(k)) return S("열었음", "여는 중", host(k) ?? file(k));
+  if (/^(sleep|wait)\b/.test(k)) return S("기다림", "기다리는 중");
   // a program's name, never shell syntax ("list=$(find")
   const prog = k.match(/^['"]?([^\s'"]+)/)?.[1]?.split("/").pop();
-  return prog && /^[\w.@+-]+$/.test(prog) ? S("{p} 실행", "{p} 실행 중", undefined, { p: prog }) : S("명령 실행", "명령 실행 중");
+  return prog && /^[\w.@+-]+$/.test(prog) ? S("{p} 실행함", "{p} 실행 중", undefined, { p: prog }) : S("명령 실행함", "명령 실행 중");
 }
 
 /**
@@ -290,6 +309,7 @@ const BROWSER_VERBS = {
   pdf: ["PDF로 저장함", "PDF로 저장 중"],
   eval: ["스크립트 실행함", "스크립트 실행 중"],
   wait: ["기다림", "기다리는 중"],
+  load: ["페이지 로드 기다림", "페이지 로드 기다리는 중"],
   verify: ["확인함", "확인 중"],
   back: ["뒤로 감", "뒤로 가는 중"],
   forward: ["앞으로 감", "앞으로 가는 중"],
@@ -332,7 +352,7 @@ function element(sel: string | undefined): string | undefined {
 }
 
 /** flags that take the next word as their value */
-const FLAG_VALUE = /^--(session|profile|timeout|port|cdp|headers|executable-path|proxy|user-agent|state|name|account)$/;
+const FLAG_VALUE = /^--(session|profile|timeout|port|cdp|headers|executable-path|proxy|user-agent|state|name|account|load|url|text|fn)$/;
 
 /** one agent-browser command (its words after `agent-browser` and its --flags) */
 function browserStep(w: string[]): { action: BrowserAction; target?: string } {
@@ -359,8 +379,15 @@ function browserStep(w: string[]): { action: BrowserAction; target?: string } {
       return { action, target: (cmd === "pdf" ? rest[0] : rest[1])?.split("/").pop() };
     case "scroll":
       return { action, target: cmd === "scrollintoview" ? element(rest[0]) : undefined };
-    case "wait":
+    case "wait": {
+      // wait --load <state>: the page loading, not a quoted "networkidle"; --url / --text: what it waits for
+      const flag = (f: string) => w[w.indexOf(f) + 1];
+      if (w.includes("--load")) return { action: "load" };
+      if (w.includes("--url")) return { action, target: flag("--url") ? address(flag("--url")) : undefined };
+      if (w.includes("--text")) return { action, target: quoted(flag("--text") ?? "") };
+      if (w.includes("--fn")) return { action };
       return { action, target: rest[0] && !/^\d+$/.test(rest[0]) ? element(rest[0]) : undefined };
+    }
     case "tab":
       if (rest[0] === "new") return { action: "open", target: rest[1] ? address(rest[1]) : undefined };
       return { action };
@@ -412,7 +439,7 @@ export function describeBrowser(cmd: string): Said & { action: BrowserAction } {
       .map((p) => p.replace(/^.*?\bagent-browser\s+/, ""))
       .filter((p) => p && !/^(sleep|echo|cd|timeout|true)\b/.test(p))
       .map((p) => browserStep(words(p)));
-    step = steps.find((s) => !["read", "screenshot", "wait", "verify", "other"].includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? steps[0] ?? { action: "other" };
+    step = steps.find((s) => !["read", "screenshot", "wait", "load", "verify", "other"].includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? steps[0] ?? { action: "other" };
   }
   const [label, now] = BROWSER_VERBS[step.action];
   return { label: t(label), now: t(now), nowKo: step.target ? `${now} ${step.target}` : now, target: step.target, action: step.action };

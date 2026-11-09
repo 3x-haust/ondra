@@ -95,6 +95,32 @@ const lastAt = (es: Entry[], ok: (e: Entry) => boolean) => {
 /** A call left open on a task that isn't working (paused, failed, stopped) isn't running: it shows as stopped. */
 const halted = (t: Task) => t.status !== "running" && t.status !== "waiting";
 
+/** What Ondra's watchdog stopped, by the note it leaves: a search that printed nothing, a wait that saw nothing new. */
+type Halt = "search" | "wait";
+const HALT_NOTES: [string, Halt][] = [["검색 멈춤", "search"], ["기다림 멈춤", "wait"]];
+const SEARCHY = /(^|[\s;&|(])(find|fd|rg|grep|egrep|ag|ack|du|locate|mdfind|tree|ls\s+-\w*R)\b/;
+
+/**
+ * The calls Ondra stopped (not failures: the agent is told why and goes on). The note is pushed
+ * while the call still runs, so the call is just before it: the last command since the request
+ * that does what the note says (a search for 검색 멈춤), else the last command.
+ */
+function haltsOf(entries: Entry[]): Map<string, Halt> {
+  const out = new Map<string, Halt>();
+  entries.forEach((e, i) => {
+    const kind = e.kind === "note" ? HALT_NOTES.find(([p]) => e.text.startsWith(p))?.[1] : undefined;
+    if (!kind) return;
+    const before: ToolEntry[] = [];
+    for (let j = i - 1; j >= 0 && entries[j].kind !== "user"; j--) {
+      const x = entries[j];
+      if (x.kind === "tool" && x.tool.name === "bash" && !out.has(x.id)) before.push(x);
+    }
+    const hit = before.find((x) => (kind === "search" ? SEARCHY.test(x.tool.detail ?? x.tool.target) : !SEARCHY.test(x.tool.detail ?? x.tool.target))) ?? before[0];
+    if (hit) out.set(hit.id, kind);
+  });
+  return out;
+}
+
 /** How many rows a run of entries shows: tool runs fold into one line each, links into one list. */
 function rowCount(entries: Entry[]): number {
   let n = 0;
@@ -106,6 +132,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
   // by position: the thread grows at its end, so a row keeps its place (and its open fold) while lines stream in
   const items = createMemo<Item[]>((prev) => keep(prev, group(props.entries), sameItem));
   const stopped = () => halted(props.task);
+  const halts = createMemo(() => haltsOf(props.task.entries));
   return (
     <Index each={items()}>
       {(item) => (
@@ -114,8 +141,8 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
             {(g) => (
               <Index each={runs(g().tools)}>
                 {(r) => (
-                  <Show when={r().length > 1} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} />}>
-                    <ToolGroup tools={r()} shells={props.task.shells} stopped={stopped()} />
+                  <Show when={r().length > 1} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} halt={halts().get(r()[0].id)} />}>
+                    <ToolGroup tools={r()} shells={props.task.shells} stopped={stopped()} halts={halts()} />
                   </Show>
                 )}
               </Index>
@@ -311,11 +338,14 @@ function runs(tools: ToolEntry[]): ToolEntry[][] {
  * commands", Codex's "파일 수정함 ⌄"): what was done, counted per kind; open it
  * for each call. While one runs, the line says which.
  */
-function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean }) {
+function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
   const [open, setOpen] = createSignal(false);
-  const open_ = () => props.tools.find((t) => !t.tool.endedAt);
+  /** Ondra stopped it: neither running nor failed */
+  const halt = (t: ToolEntry) => props.halts?.get(t.id);
+  const open_ = () => props.tools.find((t) => !t.tool.endedAt && !halt(t));
   const live = () => (props.stopped ? undefined : open_());
-  const failed = () => props.tools.filter((t) => t.tool.ok === false).length;
+  const failed = () => props.tools.filter((t) => t.tool.ok === false && !halt(t)).length;
+  const halts = () => props.tools.filter((t) => halt(t)).length;
   const fam = () => familyOf(props.tools[0])!;
   const names = (list: (string | undefined)[]) => {
     const seen = [...new Set(list.filter((n): n is string => !!n))];
@@ -345,7 +375,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
     }
     // commands too, as Claude Code does ("Ran 5 shell commands")
     // while running, the ones still running, not the ones already done
-    if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.filter((t) => !t.tool.endedAt).length });
+    if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.filter((t) => !t.tool.endedAt && !halt(t)).length });
     return done ? tr("브라우저 {n}번 씀", { n: props.tools.length }) : tr("브라우저 쓰는 중");
   };
   // what it touched; for commands the one running now (or the last), for the browser the step's target or the sites
@@ -361,14 +391,17 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
         <span class="tool-target" classList={{ cmd: fam() === "run" }}>{detail()}</span>
         <span class="tool-end">
+          {/* a browser step named by its verb ("클릭 중 ‘프로 시작하기’") says how many steps the row holds */}
+          <Show when={step()}><span class="tool-count">{tr("{n}단계|count", { n: props.tools.length })}</span></Show>
           <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
-          <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped)}><span class="tool-stopped">{tr("중단됨")}</span></Show>
+          <Show when={halts() && !failed()}><span class="tool-stopped">{tr("멈춤|tool")}</span></Show>
+          <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped && !halt(e))}><span class="tool-stopped">{tr("중단됨")}</span></Show>
         </span>
         <Icon name="chevron" size={12} class="tool-chev" />
       </button>
       <Fold open={open()}>
         <div class="explore-body">
-          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} />}</For>
+          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} halt={halt(e)} />}</For>
         </div>
       </Fold>
     </div>
@@ -391,12 +424,14 @@ function shortName(t: ToolCall) {
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
 }
 
-function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean }) {
+function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean; halt?: Halt }) {
   const t = () => props.e.tool;
   const shell = () => (t().shellId ? props.shells.find((s) => s.id === t().shellId) : undefined);
-  /** never finished, and the task stopped working: not running any more */
-  const cut = () => !!t().stopped || (!t().endedAt && !!props.stopped);
-  const running = () => !t().endedAt && !props.stopped;
+  /** never finished, and the task stopped working: not running any more (Ondra's stop says 멈춤 instead) */
+  const cut = () => !props.halt && (!!t().stopped || (!t().endedAt && !!props.stopped));
+  const running = () => !t().endedAt && !props.stopped && !props.halt;
+  /** how long it took or has run: nothing under a second ("0초째" says nothing) */
+  const took = () => (t().endedAt ?? now()) - props.e.at;
   const browser = () => (t().kind === "browser" ? describeBrowser(t().target ?? "") : undefined);
   const what = () => ((b) => (b && b.action !== "other" ? (b.target ?? "") : shortName(t())))(browser());
   const [open, setOpen] = createSignal(false);
@@ -408,7 +443,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   let pre: HTMLPreElement | undefined;
   createEffect(on(() => shell()?.tail, () => queueMicrotask(() => pre && (pre.scrollTop = pre.scrollHeight))));
   return (
-    <div class="tool" classList={{ bad: t().ok === false }}>
+    <div class="tool" classList={{ bad: t().ok === false && !props.halt, halted: !!props.halt }}>
       <button class="tool-row click" onClick={click} title={t().detail}>
         <Show when={running()} fallback={<Icon name={t().note ? "memory" : ICON[t().kind]} size={14} />}>
           <span class="spin" />
@@ -416,17 +451,24 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
         <span class="tool-verb" classList={{ shimmer: running() }}>
           {t().note
             ? running() ? tr("메모리에 쓰는 중") : cut() ? tr("메모리") : tr("메모리에 저장함")
-            : t().kind === "bash" || t().kind === "browser"
+            : props.halt === "search"
+              ? tr("검색함") // stopped with nothing found: it searched, it didn't find
+              : t().kind === "bash" || t().kind === "browser"
               ? ((d) => (running() ? d.now : d.label))(browser() ?? describeCommand(t().target ?? ""))
               : tr(VERB[t().kind][running() ? 0 : 1])}
         </span>
         <span class="tool-target" classList={{ cmd: !t().note && (t().kind === "bash" || t().kind === "test") }}>{what()}</span>
         {/* one trailing column on every row: the time (on hover), the counts, or 중단됨 end at the same edge */}
         <span class="tool-end">
-          <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
-          <Show when={cut()} fallback={<span class="tool-time">{t().endedAt ? short(t().endedAt! - props.e.at) : tr("{d}째", { d: short(now() - props.e.at) })}</span>}>
-            <span class="tool-stopped">{tr("중단됨")}</span>
-          </Show>
+          <Switch>
+            <Match when={props.halt}><span class="tool-stopped">{tr("멈춤|tool")}</span></Match>
+            <Match when={cut()}><span class="tool-stopped">{tr("중단됨")}</span></Match>
+            <Match when={took() >= 1000}>
+              <span class="tool-time">{t().endedAt ? short(took()) : tr("{d}째", { d: short(took()) })}</span>
+            </Match>
+          </Switch>
+          {/* after the time (shown on hover), so 실패 keeps the row's end like 멈춤 and 중단됨 */}
+          <Show when={t().ok === false && !props.halt}><span class="tool-fail">{tr("실패")}</span></Show>
           <Show when={t().add || t().del}>
             <span class="tool-stat"><span class="add">+{t().add ?? 0}</span><Show when={t().del}> <span class="del">−{t().del}</span></Show></span>
           </Show>
@@ -446,7 +488,9 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
               <>
                 {s().tail.trim() || (s().endedAt ? tr("출력 없음") : tr("출력 대기 중…"))}
                 <Show when={s().endedAt}>
-                  <span class="exit" classList={{ bad: s().ok === false, cut: !!s().stopped }}>{s().stopped ? tr("중단됨") : s().ok === false ? tr("실패") : tr("완료")} · {long((s().endedAt ?? 0) - s().startedAt)}</span>
+                  <span class="exit" classList={{ bad: s().ok === false && !props.halt, cut: !!s().stopped || !!props.halt }}>
+                    {props.halt ? tr("멈춤|tool") : s().stopped ? tr("중단됨") : s().ok === false ? tr("실패") : tr("완료")} · {long((s().endedAt ?? 0) - s().startedAt)}
+                  </span>
                 </Show>
               </>
             )}
@@ -488,6 +532,7 @@ function noteIcon(text: string): string {
   if (/^(기억함|메모리에? 저장) · /.test(text)) return "memory";
   if (text.startsWith("모델")) return "refresh";
   if (text.startsWith("검색 멈춤")) return "search";
+  if (text.startsWith("기다림 멈춤")) return "clock";
   return "dot";
 }
 
