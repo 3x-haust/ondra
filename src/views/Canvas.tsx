@@ -8,7 +8,7 @@ import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
-import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
+import { decisionFor, projectsIn, setState, spaceById, kidsOf, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
@@ -76,7 +76,7 @@ const subFolded = (k: Task) => k.status === "done" && !k.pinned;
 function tone(t: Task): string {
   if (discarded(t)) return "done";
   if (t.status === "failed") return "failed";
-  const kids = state.tasks.filter((k) => k.parentId === t.id);
+  const kids = kidsOf(t.id);
   if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "ask";
   if (t.status === "running" || kids.some((k) => k.status === "running")) return "live";
   if (t.status === "paused") return "paused";
@@ -144,7 +144,7 @@ function layout(space: string, open: string[], k = untrack(sizeAt), two = untrac
         nodes.push({ id: t.id, kind: "job", x: X.job, y, w: W.job, h, task: t, hug: quiet(t) });
         edges.push({ from: `p:${p.id}`, to: t.id, tone: tone(t) });
         let ky = y + h + GAP.sub;
-        const kids = state.tasks.filter((k) => k.parentId === t.id);
+        const kids = kidsOf(t.id);
         const kidsDone = kids.filter(subFolded);
         const sub = (k: Task) => {
           nodes.push({ id: k.id, kind: "sub", x: X.job + SUB_INDENT, y: ky, w: W.job - SUB_INDENT, h: H.sub, task: k });
@@ -636,7 +636,7 @@ function StatusRow(props: { t: Task; sheet?: boolean; aside?: string }) {
     for (let k = 1; k <= 4 && cut(); k++) setTight(k);
   };
   createEffect(
-    on([() => statusText(props.t), step, when, () => changes(props.t).add + changes(props.t).del, () => state.tasks.filter((k) => k.parentId === props.t.id).map((k) => k.status).join(), lang, zoomNow, measured], () =>
+    on([() => statusText(props.t), step, when, () => changes(props.t).add + changes(props.t).del, () => kidsOf(props.t.id).map((k) => k.status).join(), lang, zoomNow, measured], () =>
       queueMicrotask(refit),
     ),
   );
@@ -689,8 +689,16 @@ function SubCard(props: { n: Node }) {
 
 function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
-  const jobs = () => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id));
-  const count = (k: string) => jobs().filter((x) => (discarded(x) ? "gone" : tone(x)) === k).length;
+  const jobs = createMemo(() => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id)));
+  const counts = createMemo(() => {
+    const n: Record<string, number> = {};
+    for (const x of jobs()) {
+      const k = discarded(x) ? "gone" : tone(x);
+      n[k] = (n[k] ?? 0) + 1;
+    }
+    return n;
+  });
+  const count = (k: string) => counts()[k] ?? 0;
   const busy = () => p().id !== "_" && state.captain.some((m) => m.space === props.space && m.project === p().id && m.pending);
   return (
     <>
@@ -768,7 +776,7 @@ function FileRow(props: { path: string; add: number; del: number; onOpen: () => 
 /** Opens from the right when a job is picked, like a service panel. */
 function Drawer(props: { t: Task; onClose: () => void }) {
   const job = () => props.t;
-  const kids = () => state.tasks.filter((k) => k.parentId === job().id);
+  const kids = () => kidsOf(job().id);
   /** the last steps, newest first, in the card's words (verb + target) */
   const recent = () =>
     job()

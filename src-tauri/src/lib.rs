@@ -381,6 +381,8 @@ pub fn run() {
             store::artifacts_list,
             store::reverse_trace,
             store::state_save,
+            store::state_save_parts,
+            store::state_flushed,
             store::artifacts_dir,
             store::pick_folder,
             store::reveal_path,
@@ -478,6 +480,12 @@ pub fn run() {
 
     app.run(|app, event| match event {
         RunEvent::Reopen { .. } => show_main(app),
+        // the last change is saved before the app goes (an update's restart saved it already)
+        RunEvent::ExitRequested { code, api, .. } if code != Some(tauri::RESTART_EXIT_CODE) => {
+            if store::hold_quit_for_save(app, code.unwrap_or(0)) {
+                api.prevent_exit();
+            }
+        }
         // Never leave agent or terminal processes behind.
         RunEvent::Exit => kill_children(app),
         _ => {}

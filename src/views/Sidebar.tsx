@@ -4,14 +4,14 @@ import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
-import { addProject, decisionsIn, projectsIn, removeProject, renameProject, state, taskById, tasksIn } from "../state/store";
+import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
 import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
-import { ago, compact, newTaskOpen, now, setNewTaskOpen } from "../ui/bits";
+import { ago, compact, newTaskOpen, setNewTaskOpen, soon } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
 import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -26,7 +26,7 @@ export type Bucket = "you" | "failed" | "review" | "work" | "done";
 export function bucket(t: Task): Bucket {
   // its changes were thrown away: nothing left to do or look at
   if (discarded(t)) return "done";
-  const kids = state.tasks.filter((k) => k.parentId === t.id);
+  const kids = kidsOf(t.id);
   if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   // a subagent that failed under a job that has finished anyway needs nothing from you
   if (t.status === "failed" || (t.status !== "done" && kids.some((k) => k.status === "failed"))) return "failed";
@@ -107,7 +107,7 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
   if (b === "review") return { text: tr("검토"), tone: "review" };
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
   if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
-  if (x.status === "running") return { text: x.startedAt ? (now() - x.startedAt < 60_000 ? tr("방금") : compact(now() - x.startedAt)) : "", tone: "live" };
+  if (x.status === "running") return { text: x.startedAt ? (soon() - x.startedAt < 60_000 ? tr("방금") : compact(soon() - x.startedAt)) : "", tone: "live" };
   // merged: when it was merged (older tasks without mergedAt: when it finished)
   return { text: ago(endTime(x)), tone: "done" };
 }
@@ -115,7 +115,7 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
 // ───────────── one row per job (T3-style thread list)
 function Row(props: { t: Task; kid?: boolean; index: number }) {
   const t = () => props.t;
-  const kids = () => state.tasks.filter((k) => k.parentId === t().id).sort((a, b) => a.createdAt - b.createdAt);
+  const kids = () => [...kidsOf(t().id)].sort((a, b) => a.createdAt - b.createdAt);
   const [open, setOpen] = createSignal<boolean | undefined>(undefined);
   const showKids = () => open() ?? (openRoot() === t().id || kids().some((k) => k.status === "waiting" || k.status === "failed"));
   const b = () => bucket(t());
@@ -380,13 +380,13 @@ export function Sidebar() {
   const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs fold away under their group after a few minutes; opening one
   // doesn't move it back up: it shows where it is, in its group's done fold
-  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < now() - DONE_FOR;
-  const shown = () => roots().filter((t) => !old(t));
+  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < soon() - DONE_FOR;
+  const shown = createMemo(() => roots().filter((t) => !old(t)));
   const filed = (t: Task) => !!t.project && projectsIn(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
-  const loose = () => shown().filter((t) => !filed(t));
-  const looseDone = () => roots().filter((t) => old(t) && !filed(t));
-  const needs = () => roots().filter(needsYou).length;
+  const loose = createMemo(() => shown().filter((t) => !filed(t)));
+  const looseDone = createMemo(() => roots().filter((t) => old(t) && !filed(t)));
+  const needs = createMemo(() => roots().filter(needsYou).length);
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -506,8 +506,8 @@ export function Sidebar() {
               // top-level tasks only, like every running count (a subagent is part of its task)
               const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
-              const jobs = () => shown().filter((t) => t.project === p.id);
-              const done = () => roots().filter((t) => old(t) && t.project === p.id);
+              const jobs = createMemo(() => shown().filter((t) => t.project === p.id));
+              const done = createMemo(() => roots().filter((t) => old(t) && t.project === p.id));
               // the number and the fold go by what the row holds: its jobs and its done fold
               const all = () => jobs().length + done().length;
               const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));

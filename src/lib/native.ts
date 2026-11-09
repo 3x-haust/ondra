@@ -88,6 +88,14 @@ export const ptyClose = (id: string) => call<void>("pty_close", { id });
 // ───────────────────────── state & files ─────────────────────────
 export const stateLoad = () => call<string | null>("state_load", undefined, null);
 export const stateSave = (json: string) => call<void>("state_save", { json });
+/**
+ * Save the state from its parts (see state/persist.ts): the state without its tasks, every
+ * task's slot in order, and the tasks' JSON the native side doesn't hold yet. Returns the
+ * slots it still lacks (nothing written then).
+ */
+export const stateSaveParts = (head: string, order: string[], tasks: Record<string, string>) => call<string[]>("state_save_parts", { head, order, tasks }, []);
+/** The app is quitting and waits for the last save: it has been written. */
+export const stateFlushed = () => call<void>("state_flushed");
 export const artifactsDir = (workerId: string) => call<string>("artifacts_dir", { workerId }, "/tmp/ondra/artifacts");
 export const pickFolder = (prompt: string) => call<string | null>("pick_folder", { prompt }, null);
 export const revealPath = (path: string) => call<void>("reveal_path", { path });

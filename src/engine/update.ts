@@ -5,6 +5,7 @@
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
+import { flushState } from "../state/store";
 import { t } from "../i18n";
 
 const EVERY = 3600_000;
@@ -65,6 +66,8 @@ export async function installNow() {
   if (notice) dropToast(notice);
   try {
     if (preparing) await preparing;
+    // the restart doesn't wait for a save still to come
+    await flushState().catch(() => {});
     await installUpdate();
   } catch (e) {
     setStatus("idle");

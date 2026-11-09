@@ -6,7 +6,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { arrows, calls, cellDepths, depth, emptyTrace, fnAt, hex, readTrace, shortName, span, type RBinary, type ROp, type RStep, type RTrace } from "../engine/reverse";
 import { reverseTrace } from "../lib/native";
-import { state } from "../state/store";
+import { kidsOf } from "../state/store";
 import type { Task } from "../state/types";
 import { tokenize, type Tok } from "../ui/highlight";
 import { now } from "../ui/bits";
@@ -50,7 +50,7 @@ const n = (x: number) => x.toLocaleString(uiLang() === "en" ? "en-US" : "ko-KR")
 function useTrace(t: () => Task) {
   const [trace, setTrace] = createSignal<RTrace>(emptyTrace());
   const offsets = new Map<string, number>();
-  const ids = () => [t().id, ...state.tasks.filter((k) => k.parentId === t().id).map((k) => k.id)];
+  const ids = () => [t().id, ...kidsOf(t().id).map((k) => k.id)];
   let busy = false;
   const load = async () => {
     if (busy) return;
@@ -69,7 +69,7 @@ function useTrace(t: () => Task) {
     }
   };
   createEffect(on(() => t().id, () => (offsets.clear(), setTrace(emptyTrace()), void load())));
-  const live = () => [t(), ...state.tasks.filter((k) => k.parentId === t().id)].some((x) => x.status === "running");
+  const live = () => [t(), ...kidsOf(t().id)].some((x) => x.status === "running");
   const timer = setInterval(() => live() && void load(), 1500);
   onCleanup(() => clearInterval(timer));
   return { trace, live };

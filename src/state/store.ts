@@ -1,9 +1,10 @@
 // The one app store, saved to disk (debounced). Live-only data (streaming
 // text, which panel is open) lives in `ui.ts`, not here.
-import { createEffect, createRoot, createSignal } from "solid-js";
-import { createStore, produce, reconcile } from "solid-js/store";
-import { inTauri, stateLoad, stateSave } from "../lib/native";
+import { createEffect, createMemo, createRoot, createSignal } from "solid-js";
+import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "solid-js/store";
+import { inTauri, onEvent, stateFlushed, stateLoad, stateSaveParts } from "../lib/native";
 import { fixture } from "./fixture";
+import { debounce, Saver, unpackTask } from "./persist";
 import type { Account, AppState, SpaceId, Task } from "./types";
 
 /**
@@ -66,12 +67,55 @@ export const freshState = (): AppState => ({
   settings: { slots: { light: 3, heavy: 1 }, captainModel: "", theme: "system", instructions: "", learn: true, isolate: true, focusGuard: true, forkModel: "", forkThinking: "", permission: "edits", watchPullRequests: false },
 });
 
-const [state, setState] = createStore<AppState>(freshState());
+const [state, writeState] = createStore<AppState>(freshState());
+const saver = new Saver();
+const saveSoon = debounce(() => void save());
+/** Every write to the store goes through here: it notes what changed and saves a moment later. */
+const setState = ((...args: unknown[]) => {
+  saver.mark(args, unwrap(state));
+  saveSoon.poke();
+  return (writeState as (...a: unknown[]) => void)(...args);
+}) as SetStoreFunction<AppState>;
 export { state, setState };
 
 export const [loaded, setLoaded] = createSignal(false);
 
+let saving: Promise<void> = Promise.resolve();
+/** Serialize what changed (off the reactive path) and hand it to the native side, one save at a time. */
+function save(): Promise<void> {
+  if (!loaded()) {
+    saveSoon.poke();
+    return saving;
+  }
+  saving = saving.then(async () => {
+    const parts = saver.build(unwrap(state));
+    if (!inTauri) return saver.sentAll(parts.order);
+    try {
+      let missing = await stateSaveParts(parts.head, parts.order, parts.tasks);
+      if (missing.length) {
+        // the native side started fresh (or dropped some): send those too
+        const more = Object.fromEntries(missing.map((k) => [k, saver.text(k) ?? "null"]));
+        missing = await stateSaveParts(parts.head, parts.order, more);
+      }
+      if (missing.length) throw new Error(`state save: ${missing.length} tasks missing`);
+      saver.sentAll(parts.order);
+    } catch (e) {
+      saver.reset();
+      saveSoon.poke();
+      console.error("state not saved", e);
+    }
+  });
+  return saving;
+}
+/** Save now whatever waits (before quitting or restarting into an update). */
+export async function flushState() {
+  saveSoon.flush();
+  await saving;
+}
+
 export async function loadState() {
+  // quitting: the app waits (a moment at most) for the last save
+  void onEvent("state:flush", () => void flushState().finally(() => void stateFlushed()));
   if (!inTauri && location.search.includes("fixture")) {
     setState(reconcile(fixture(freshState())));
     const { setCtx } = await import("./ctx");
@@ -92,6 +136,7 @@ export async function loadState() {
           reconcile({
             ...base,
             ...parsed,
+            tasks: (parsed.tasks ?? []).map(unpackTask),
             settings: { ...base.settings, ...parsed.settings },
             accounts: parsed.accounts.map((a) => ({ ...base.accounts[0], ...a, badModels: a.badModels ?? [] })),
             // the request queue lives in memory: a reply still "thinking" when the app closed never comes back
@@ -111,10 +156,13 @@ export async function loadState() {
 
 /** Every task carries the project `taskProject` finds, so each place that reads `task.project` agrees. */
 export function fileTasks() {
+  // one write for all of them: the lists redraw once, not once per task
+  const moves = new Map<string, string | undefined>();
   for (const t of state.tasks) {
     const p = taskProject(t);
-    if (p !== t.project && (p || !t.project)) setState("tasks", (x) => x.id === t.id, "project", p);
+    if (p !== t.project && (p || !t.project)) moves.set(t.id, p);
   }
+  if (moves.size) setState("tasks", (x) => moves.has(x.id), produce((x: Task) => void (x.project = moves.get(x.id))));
 }
 
 createRoot(() => {
@@ -125,14 +173,26 @@ createRoot(() => {
     void (state.projects ?? []).map((p) => p.folder);
     queueMicrotask(fileTasks);
   });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    const json = JSON.stringify(state);
-    if (!loaded()) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => stateSave(json), 500);
-  });
 });
+
+/** Tasks by id and each task's subagents, kept up to date as tasks come and go (not on every streamed line). */
+const index = createRoot(() =>
+  createMemo(() => {
+    const byId = new Map<string, Task>();
+    const kids = new Map<string, Task[]>();
+    for (const t of state.tasks) {
+      if (!byId.has(t.id)) byId.set(t.id, t);
+      const p = t.parentId;
+      if (p) {
+        const l = kids.get(p);
+        if (l) l.push(t);
+        else kids.set(p, [t]);
+      }
+    }
+    return { byId, kids };
+  }),
+);
+const none: Task[] = [];
 
 // ── reads ──
 export const spaceById = (id: SpaceId) => state.spaces.find((s) => s.id === id)!;
@@ -203,7 +263,9 @@ export function removeProject(id: string) {
   setState("tasks", (t) => t.project === id && t.space === p.space, "project", undefined);
   setState("captain", (l) => l.filter((m) => !(m.space === p.space && m.project === id)));
 }
-export const taskById = (id: string) => state.tasks.find((t) => t.id === id);
+export const taskById = (id: string) => index().byId.get(id);
+/** a task's subagents, in the order they were made (the tasks list's order) */
+export const kidsOf = (id: string): Task[] => index().kids.get(id) ?? none;
 export const accountById = (id: string) => state.accounts.find((a) => a.id === id);
 export const accountsIn = (space: SpaceId) => state.accounts.filter((a) => a.space === space);
 export const decisionsIn = (space: SpaceId) => state.decisions.filter((d) => taskById(d.taskId)?.space === space);
