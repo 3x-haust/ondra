@@ -1544,6 +1544,48 @@
 }
 /* folded sidebar: it sits before the show-sidebar button in the header */
 .head .update-btn { margin: 0 var(--s-4) 0 0; }
+.update-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+/* downloading: a quiet button whose ring fills with the download; solid blue once it's in */
+.update-btn {
+  position: relative;
+}
+.update-btn.loading {
+  background: transparent;
+  color: var(--accent);
+}
+.update-ring {
+  position: absolute;
+  inset: 0;
+  width: 22px;
+  height: 22px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.update-ring circle {
+  fill: none;
+  stroke-width: 2;
+}
+.update-ring .track {
+  stroke: var(--line);
+}
+.update-ring .arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-slow, 240ms) var(--ease, ease-out);
+}
+.update-pct {
+  margin: 0 var(--s-4) 0 calc(-1 * var(--s-2));
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-ring .arc { transition: none; }
+}
 .keysheet-head .btn.sm {
   margin-right: var(--s-4);
   color: var(--ink-3);
