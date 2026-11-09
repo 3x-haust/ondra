@@ -2,7 +2,7 @@
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
 import { isNetError, waitOnline } from "./net";
-import { cutTitle, describeCommand } from "./describe";
+import { cutTitle, describeBrowser, describeCommand } from "./describe";
 import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
@@ -301,7 +301,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     }
     case "bash": {
       const cmd: string = args?.command ?? "";
-      if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: "브라우저 사용 중" };
+      if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: describeBrowser(cmd).nowKo };
       if (/\bagent-desktop\b/.test(cmd)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
       if (/\b(test|vitest|jest|pytest|cargo test|xcodebuild test|go test)\b/.test(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
       return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).nowKo };
