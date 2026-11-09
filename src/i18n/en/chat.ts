@@ -45,6 +45,8 @@ export default {
   "다시 시도": "Try again",
   "응답을 받지 못했어요": "No response",
   "{task}에 전달했어요": "Sent to {task}",
+  // after a job's title in Main's row for it: main passed the user's words on
+  "전달함|row": "sent",
   "{task} 멈춤": "Stopped {task}",
   "메모리에 저장했어요": "Saved to memory",
   "앱을 시작하지 못했어요": "Couldn't start the app",

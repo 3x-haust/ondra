@@ -2076,7 +2076,7 @@
 .st-icon.inreview,
 .graph .g-glyph.inreview,
 .task-head .status-chip .st-icon.inreview,
-.br-chip .sb-glyph.inreview {
+.job-row .sb-glyph.inreview {
   box-shadow: inset 0 0 0 1.5px currentColor;
   color: var(--warn);
 }

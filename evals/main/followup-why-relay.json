@@ -7,4 +7,4 @@
     { "from": "captain", "text": "[→ t-shot]" }
   ],
   "messages": [{ "event": "fork", "text": "Fork t-shot \"요메이츠 앱샷 기능\" finished.\nSummary: 앱샷이 사진 한 장으로 붙어요\nWhat it reported:\n앱샷 기능을 만들었어요. 이제 사진 한 장만 붙어요.\n\n**원인** 앱샷이 창 대신 스테이지 매니저의 썸네일을 찍고 있었어요. 그래서 맨 앞에 있던 Ghostty 아이콘이 찍혔어요.\n**고친 것** 찍을 창을 id로 골라 그 창만 찍어요.\n**확인** 개발판 앱에서 찍어 보니 입력창에 칩 하나만 붙었어요. CI 결과는 기다리지 않았어요.\nUser follow-ups since then (answer every question in them, the 왜 first):\n- 왜 앱에서 앱샷 했는데 고스티 로고가 나오지??" }],
-  "expect": [{ "answerIncludesAny": ["스테이지 매니저", "Stage Manager"], "new": 0 }] }
+  "expect": [{ "answerIncludesAny": ["스테이지 매니저", "Stage Manager"], "new": 0, "maxAnswer": 240 }] }

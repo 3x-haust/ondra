@@ -113,6 +113,14 @@ function check(step, x) {
     const t = routes.filter((r) => r?.kind === "answer").map((r) => r.text ?? "").join(" ");
     need(x.answerIncludesAny.some((w) => t.includes(w)), `answer mentions none of ${x.answerIncludesAny.join(", ")}`);
   }
+  // a job's end that needs nothing from the user: its row in the chat says it, main adds nothing
+  if (x.quiet) need(!routes.length && !String(step.reply ?? "").trim(), `expected nothing added, got ${kinds.join(", ") || `reply "${step.reply}"`}`);
+  // at most a short line: no blocks, and the answer text within this many characters
+  if (x.maxAnswer) {
+    const ans = routes.filter((r) => r?.kind === "answer");
+    const len = ans.map((r) => r.text ?? "").join(" ").length;
+    need(len <= x.maxAnswer && !ans.some((r) => (r.blocks ?? []).length), `answer is ${len} chars${ans.some((r) => (r.blocks ?? []).length) ? " with blocks" : ""}, expected one short line (≤ ${x.maxAnswer})`);
+  }
   if (x.after) need(news.some((r) => Array.isArray(r.after) && r.after.length), "expected a job that waits (after)");
   if (x.noAfter) need(!news.some((r) => Array.isArray(r.after) && r.after.length), "a job waits (after) that should start now");
   return out;

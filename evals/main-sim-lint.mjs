@@ -6,7 +6,9 @@ export function lint(step, c, real = false) {
   const ids = new Set([...(c.tasks ?? []).map((t) => t.id), ...Array.from({ length: 20 }, (_, i) => `sim-t${i + 1}`)]);
   const spaces = ["work", "home"];
   if (step.error) return out;
-  if (!routes.length) out.push("lint: no routes");
+  // a job's end that needs nothing from the user may add nothing (its row in the chat says it)
+  const event = (c.messages ?? []).some((m) => typeof m === "object" && m?.text === step.text);
+  if (!routes.length && !event) out.push("lint: no routes");
   if (/할까요\?|원하시면|해 드릴까요/.test(step.reply ?? "")) out.push(`lint: offers work as a question: "${step.reply}"`);
   for (const r of routes) {
     if (!r || !["answer", "ask", "append", "stop", "new", "remember"].includes(r.kind)) out.push(`lint: unknown route ${JSON.stringify(r)?.slice(0, 80)}`);

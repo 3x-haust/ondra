@@ -1995,43 +1995,6 @@ kbd:empty {
   max-height: none;
 }
 
-/* chips under main's reply: the jobs it started */
-.br-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-6);
-  margin-top: var(--s-10);
-}
-.br-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-6);
-  height: var(--h-sm);
-  max-width: 100%;
-  padding: 0 var(--s-10) 0 var(--s-8);
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--card);
-  font-size: var(--fs-xs);
-}
-.br-chip:hover {
-  border-color: var(--ink-4);
-}
-.br-chip.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.br-chip-title {
-  font-weight: var(--fw-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.br-chip-meta {
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ───────────── settings sheet ───────────── */
 .settings-overlay {
   position: fixed;

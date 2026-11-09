@@ -923,7 +923,6 @@
 .st-icon.done:not(.discarded) {
   color: var(--accent-text);
 }
-.br-chip-meta.review,
 .fork-card.review .fork-time {
   color: var(--accent-text);
 }
@@ -1094,6 +1093,90 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Main: each job a reply started or relayed to, one quiet line that keeps up with it
+   (its step, then its own result line and screenshot). Several stack tightly. */
+.job-rows {
+  display: grid;
+  gap: var(--s-2);
+  justify-items: start;
+  margin-left: calc(-1 * var(--s-8));
+}
+.job-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  max-width: 100%;
+  min-width: 0;
+  min-height: var(--h-sm);
+  padding: var(--s-2) var(--s-8);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.job-row:hover,
+.job-row.active {
+  background: var(--hover);
+}
+.job-row > .sb-glyph {
+  flex: none;
+}
+/* the title keeps its room; what follows it gives way first */
+.job-row .job-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 24em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+.job-row:hover .job-title {
+  color: var(--ink);
+}
+.job-row.past .job-title {
+  font-weight: var(--fw-regular);
+}
+.job-row .job-detail {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease);
+}
+/* a step under way stays faint; a result reads a step stronger */
+.job-row.tone-live .job-detail {
+  color: var(--ink-4);
+}
+.job-row .job-word {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.job-row.tone-ask .job-word {
+  color: var(--warn-ink);
+}
+.job-row.tone-bad .job-word {
+  color: var(--bad-ink);
+}
+.job-row.tone-review .job-word {
+  color: var(--warn-ink);
+}
+.job-row .job-shot {
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  object-position: top;
+  box-shadow: 0 0 0 1px var(--line);
+  animation: fade var(--dur) var(--ease);
 }
 
 /* a task's input while it works: pause, two bars */

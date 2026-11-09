@@ -55,7 +55,9 @@ function observation(scope: string): string {
     const chat = state.captain
       .filter((m) => inChat(m, id) && !m.pending)
       .slice(-16)
-      .map((m) => (m.from === "me" ? `user: ${clip(m.text ?? "", 500)}` : `main: ${clip([m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[새 일 ${taskById(r.taskId ?? "")?.title ?? ""}]` : ""))].filter(Boolean).join(" "), 700)}`));
+      .map((m) => (m.from === "me" ? `user: ${clip(m.text ?? "", 500)}` : `main: ${clip([m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[새 일 ${taskById(r.taskId ?? "")?.title ?? ""}]` : ""))].filter(Boolean).join(" "), 700)}`))
+      // main reacting to a job's end may add nothing
+      .filter((l) => l !== "main: ");
     const jobs = state.tasks
       .filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived)
       .slice(-20)
@@ -116,7 +118,9 @@ function chatLines(key: string, n: number): string[] {
       m.from === "me"
         ? `user: ${clip(m.text ?? "", 500)}`
         : `main: ${clip([m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[새 일 ${taskById(r.taskId ?? "")?.title ?? ""}]` : ""))].filter(Boolean).join(" "), 700)}`,
-    );
+    )
+    // main reacting to a job's end may add nothing
+    .filter((l) => l !== "main: ");
 }
 
 /**

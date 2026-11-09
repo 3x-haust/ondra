@@ -1,0 +1,8 @@
+{ "note": "A job that finished as asked: its row in the chat shows its result, main adds nothing", "space": "work",
+  "tasks": [{ "id": "t-copy", "title": "대시보드 문구 다듬기", "topic": "ondra", "status": "done", "summary": "인사말과 카드 이름을 짧게 바꿨어요" }],
+  "chat": [
+    { "from": "me", "text": "대시보드 인사말이랑 카드 이름 좀 짧게" },
+    { "from": "captain", "text": "바로 다듬을게요 [fork t-copy]" }
+  ],
+  "messages": [{ "event": "fork", "text": "Fork t-copy \"대시보드 문구 다듬기\" finished.\nSummary: 인사말과 카드 이름을 짧게 바꿨어요\nEvidence: shot: /tmp/dashboard.png | test: pnpm test\nWhat it reported:\n인사말을 한 줄로 줄이고 카드 이름을 두 글자씩 맞췄어요. 개발 서버에서 대시보드를 열어 확인했고 테스트도 통과했어요.\nIts result blocks:\n[picture] /tmp/dashboard.png 바뀐 대시보드" }],
+  "expect": [{ "quiet": true }] }

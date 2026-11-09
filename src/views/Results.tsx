@@ -1,4 +1,4 @@
-// Results: what finished jobs came back with, as main reported them. A list on
+// Results: what finished jobs came back with, in their own words. A list on
 // the left (pinned first, then newest by day), the report on the right.
 // Pick several with ⌘/⇧-click; ⌫ removes them (with undo), ↑↓ move.
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
@@ -73,7 +73,18 @@ export function ResultsView() {
   /** what an action applies to: the picked rows, or the one in view */
   const targets = () => (picked().length > 1 ? picked() : sel() ? [sel()!.id] : []);
   const many = () => picked().length > 1;
-  const inChat = (r: ResultEntry) => state.captain.some((m) => m.id === r.id);
+  /** where the chat shows it: what main said about it, else the job's row (older results: main's report) */
+  const chatMsg = (r: ResultEntry) => {
+    const by = (id?: string) => (id ? state.captain.find((m) => m.id === id) : undefined);
+    return by(r.msg) ?? by(r.id) ?? [...state.captain].reverse().find((m) => m.space === r.space && (m.routes ?? []).some((x) => (x.kind === "new" || x.kind === "append") && x.taskId === r.taskId));
+  };
+  const inChat = (r: ResultEntry) => !!chatMsg(r);
+  const showInChat = (r: ResultEntry) => {
+    const m = chatMsg(r);
+    if (!m) return;
+    setJumpMsg(m.id);
+    setView({ name: "main", project: m.project });
+  };
   const group = (r: ResultEntry) => (r.pinned ? t("고정됨") : dayOf(r.at));
 
   const go = (id: string) => {
@@ -284,7 +295,7 @@ export function ResultsView() {
                         <Tool icon="pin" label={r.pinned ? t("고정 해제") : t("고정")} on={r.pinned} run={() => pinResult(r.id, !r.pinned)} />
                         <Tool icon="copy" label={t("복사")} run={() => void copy(r)} />
                         <Show when={inChat(r)}>
-                          <Tool icon="message" label={t("대화에서 보기")} run={() => (setJumpMsg(r.id), setView({ name: "main", project: r.project }))} />
+                          <Tool icon="message" label={t("대화에서 보기")} run={() => showInChat(r)} />
                         </Show>
                         <span class="res-tools-sep" />
                         <Tool icon="trash" label={t("삭제")} danger run={() => remove([r.id])} />
@@ -331,7 +342,7 @@ export function ResultsView() {
                     </button>
                   </Show>
                   <Show when={inChat(r()!)}>
-                    <button onClick={() => (setJumpMsg(r()!.id), setView({ name: "main", project: r()!.project }), closeMenu())}>
+                    <button onClick={() => (showInChat(r()!), closeMenu())}>
                       <Icon name="message" size={14} class="muted" />
                       <span class="row-title">{t("대화에서 보기")}</span>
                     </button>
