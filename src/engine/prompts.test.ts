@@ -7,7 +7,11 @@ import type { Task } from "../state/types";
 import { CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
+import { REVIEW_FIX } from "./crosscheck";
 import { pauseTask, startTask } from "./tasks";
+
+const bundledSkills = import.meta.glob<string>("../../skills/*/SKILL.md", { query: "?raw", import: "default", eager: true });
+const flat = (s: string) => s.replace(/\s+/g, " ");
 
 const task = (parentId?: string): Task => ({
   id: "coding-task", space: "home", topic: "Example", title: "Fix calculation",
@@ -52,43 +56,69 @@ describe("coding defaults", () => {
   });
 
   it("keeps searches out of ~ and short, without cutting builds short", () => {
-    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
-    for (const rule of [
-      "rg --files <dir> -g '<glob>'", "not `find .`", "-maxdepth",
-      "-not -path '*/node_modules/*' -not -path '*/.git/*'",
-      'Pass the bash "timeout" (60) on every search or listing',
-      "you are not in a project: don't search from there",
-      "Ondra stops it at 90s",
-      'Don\'t pass a short "timeout" to anything that renders, converts, builds, installs or downloads',
-    ]) expect(prompt).toContain(rule);
+    const p = flat(TASK_SYSTEM);
+    for (const rule of ["rg --files <dir> -g '<glob>'", "not `find .`", "-maxdepth", "-not -path '*/node_modules/*' -not -path '*/.git/*'", '"timeout" (60)', "90s"])
+      expect(p).toContain(rule);
+    expect(p).toMatch(/home folder or `\/`, you are not in a project/);
+    expect(p).toMatch(/short "timeout" to anything that renders, converts, builds, installs or downloads/);
   });
 
   it("waits end when what they wait for is gone, with deadlines that fit", () => {
-    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
+    const p = flat(TASK_SYSTEM);
     for (const rule of [
-      "never one `sleep` per turn, and stop as soon as what you wait for is gone",
+      "never one `sleep` per turn",
       "`bun run dev > /tmp/dev.log 2>&1 & echo $! > /tmp/dev.pid`",
       "kill -0 $(cat /tmp/dev.pid) 2>/dev/null || break",
       "tail -20 /tmp/dev.log",
-      "A local dev server is up within 90 s or not at all",
-      "Only remote work (CI, a store review) is worth longer waits",
-      "Ondra stops a wait on a local server or log that shows nothing new for 2 minutes",
+      "90 s", "2 minutes",
       "wait for it in one call that ends when the pid is gone",
-    ]) expect(prompt).toContain(rule);
+    ]) expect(p).toContain(rule);
     // no blanket long poll: the only 10-minute wait is a build or test run's
-    expect(prompt.match(/10 minutes/g)).toHaveLength(1);
-    expect(prompt).toContain("A build or test run gets up to 10 minutes per call");
+    expect(p.match(/10 minutes/g)).toHaveLength(1);
+    expect(p).toMatch(/build or test run gets up to 10 minutes/);
+    expect(p).toMatch(/Only remote work \(CI, a store review\)/);
   });
 
   it("checks a rule over many pages by the rule, not by crawling a dev server", () => {
-    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
-    for (const rule of [
-      "test the rule itself (a unit test over the route list, e.g. the middleware's matcher)",
-      "open only a few representative pages",
-      "build once and serve the production build (`next build && next start`)",
-      "a few at a time (`xargs -P 4`), one output line per page",
-      "never one by one on a dev server",
-    ]) expect(prompt).toContain(rule);
+    const p = flat(TASK_SYSTEM);
+    for (const rule of ["the middleware's matcher", "a few representative pages", "`next build && next start`", "`xargs -P 4`", "never one by one on a dev server"])
+      expect(p).toContain(rule);
+  });
+
+  it("asks before what leaves the machine, keeps logins and Ondra's own data off limits", () => {
+    const p = flat(TASK_SYSTEM);
+    for (const act of ["git push", "merge", "deploy", "publish", "deleting data", "payments", "account changes"]) expect(p).toContain(act);
+    expect(p).toContain('{"type":"ask"');
+    expect(p).toContain("sign in only through the keychain");
+    expect(p).toMatch(/Ondra's own data \(its app-support folder[^)]*\) is not your material/);
+    expect(p).toContain("never authorize pushing");
+  });
+
+  it("asks for parallel tool calls and few, wide reads", () => {
+    for (const prompt of [TASK_SYSTEM, SUB_SYSTEM]) expect(flat(prompt)).toContain("parallel tool calls");
+    expect(flat(TASK_SYSTEM)).toMatch(/never re-read an unchanged file/);
+  });
+
+  it("keeps the always-on worker prompts small", () => {
+    // ~4 chars a token: 8.1k tokens before, 5.4k after; the catalog of pictures lives in the visual-report skill
+    expect(TASK_SYSTEM.length).toBeLessThan(23_000);
+    expect(SUB_SYSTEM.length).toBeLessThan(8_000);
+    for (const type of ["arch", "er", "deps", "classes", "trace", "states"]) {
+      expect(TASK_SYSTEM).not.toContain(`{"type":"${type}"`);
+      expect(bundledSkills["../../skills/visual-report/SKILL.md"]).toContain(`| \`${type}\` |`);
+    }
+    // everyday result blocks stay in the prompt so a report needs no skill read
+    for (const type of ["plan", "now", "tests", "checklist", "diff", "table", "done", "handoff", "ask"]) expect(TASK_SYSTEM).toContain(`{"type":"${type}"`);
+  });
+
+  it("doesn't send every job to read a skill it already has in short", () => {
+    const report = bundledSkills["../../skills/visual-report/SKILL.md"];
+    expect(report).not.toMatch(/Read before your first message in any task/);
+    // a test run is no reason to read the test-writing skill
+    for (const prompt of [TASK_SYSTEM, SUB_SYSTEM, CAPTAIN_SYSTEM]) {
+      expect(prompt).toMatch(/writing tests or setting up CI → test-ci/);
+      expect(prompt).not.toMatch(/- tests or CI → test-ci/);
+    }
   });
 
   it.each([
@@ -120,7 +150,6 @@ describe("coding defaults", () => {
   });
 });
 
-const bundledSkills = import.meta.glob<string>("../../skills/*/SKILL.md", { query: "?raw", import: "default", eager: true });
 const mimikyuFile = "../../skills/mimikyu/SKILL.md";
 const mimikyuPath = decodeURIComponent(new URL(mimikyuFile, import.meta.url).pathname);
 
@@ -297,16 +326,26 @@ describe("chineseOnly", () => {
 
 describe("교차 검토 in the task prompt and the review skill", () => {
   it("names the two lenses in step 5, still risky-only, once, before shipping", () => {
-    const p = TASK_SYSTEM.replace(/\s+/g, " ");
+    const p = flat(TASK_SYSTEM);
     for (const rule of [
       "Review: only for a risky change", "at most one per job", "before anything goes out",
       '{"type":"subagent","review":true,"title":"교차 검토","task":"Review the changes in <folder> against: <the full requirement>"}',
-      "Ondra runs it as 교차 검토: two read-only lenses side by side, 설계 검토",
-      "코드 검토 (contracts, flows, edge cases, failure paths)", "one combined result when both are over",
-      "fix every P1 and P2 (P3 when cheap) and re-run the checks that cover them",
-      "Where the lenses disagree, settle it with one targeted check (read that code, run that test), not another review.",
+      "설계 검토", "코드 검토", "one combined result", "never your own verdict", "one targeted check",
     ]) expect(p).toContain(rule);
     expect(p).not.toContain("Use the code-review skill. Review the changes");
+  });
+
+  it("says the same about P3 findings as the message that delivers them", () => {
+    // the prompt once said "P3 when cheap" while the review result said not to fix P3s
+    expect(flat(TASK_SYSTEM)).toMatch(/Fix every P1 and P2, note P3s/);
+    expect(REVIEW_FIX).toContain("P3는 고치지 말고");
+    expect(TASK_SYSTEM).not.toContain("P3 when cheap");
+  });
+
+  it("keeps the plan check before building a multi-part feature", () => {
+    const p = flat(TASK_SYSTEM);
+    expect(p).toContain('{"type":"subagent","plan_review":true,"title":"계획 검토"');
+    expect(p).toMatch(/never a fix or a small change/);
   });
 
   it("gives both lenses evidence-first rules and a memory check, in Ondra's own words", () => {
