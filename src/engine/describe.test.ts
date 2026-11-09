@@ -4,19 +4,53 @@ import { cutTitle, describeBrowser as b, mainCommand, noteText, nowText, unwrapC
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
-    expect(d(`aside repl --account u5 "const pb = await openTab('https://play.google.com/console/u/0'); console.log(1)"`).label).toBe("Aside로 play.google.com 보기");
-    expect(d(`date -u +%H:%MZ; gh api repos/a/b/actions/jobs/12771658931 --jq '.status'`).label).toBe("GitHub 빌드 확인");
-    expect(d(`for i in $(seq 1 7); do s=$(gh api repos/a/b/actions/jobs/1 --jq .status); [ "$s" = completed ] && break; sleep 60; done`).label).toBe("GitHub 빌드 기다리기");
-    expect(d(`gh pr create --base dev --title x --body y`).label).toBe("PR 올리기");
-    expect(d(`cd /x && git push -u origin feat/a`).label).toBe("올리기");
-    expect(d(`python3 - <<'PY'\nprint(1)\nPY`).label).toBe("스크립트로 처리");
-    expect(d(`python3 '/Users/me/artifacts/build_report.py' --out x`).label).toBe("build_report.py 실행");
-    expect(d(`pdftoppm -png -r 80 report.pdf page`).label).toBe("PDF 확인");
-    expect(d(`pnpm -s typecheck && pnpm -s test`).label).toBe("검사");
+    expect(d(`aside repl --account u5 "const pb = await openTab('https://play.google.com/console/u/0'); console.log(1)"`).label).toBe("Aside로 play.google.com 봄");
+    expect(d(`date -u +%H:%MZ; gh api repos/a/b/actions/jobs/12771658931 --jq '.status'`).label).toBe("GitHub 빌드 확인함");
+    expect(d(`for i in $(seq 1 7); do s=$(gh api repos/a/b/actions/jobs/1 --jq .status); [ "$s" = completed ] && break; sleep 60; done`).label).toBe("GitHub 빌드 기다림");
+    expect(d(`gh pr create --base dev --title x --body y`).label).toBe("PR 올림");
+    expect(d(`cd /x && git push -u origin feat/a`).label).toBe("올림");
+    expect(d(`python3 - <<'PY'\nprint(1)\nPY`).label).toBe("스크립트로 처리함");
+    expect(d(`python3 '/Users/me/artifacts/build_report.py' --out x`).label).toBe("build_report.py 실행함");
+    expect(d(`pdftoppm -png -r 80 report.pdf page`).label).toBe("PDF 확인함");
+    expect(d(`pnpm -s typecheck && pnpm -s test`).label).toBe("검사함");
     expect(d(`curl -s https://api.example.com/v1/x`).target).toBe("api.example.com");
-    expect(d(`sed -n 1,80p src/views/Canvas.tsx`)).toMatchObject({ label: "살펴보기", target: "Canvas.tsx" });
-    expect(d(`export FOO=1; jq . data.json`).label).toBe("살펴보기");
-    expect(d(`weird-tool --flag`).label).toBe("weird-tool 실행");
+    expect(d(`sed -n 1,80p src/views/Canvas.tsx`)).toMatchObject({ label: "살펴봄", target: "Canvas.tsx" });
+    expect(d(`export FOO=1; jq . data.json`).label).toBe("살펴봄");
+    expect(d(`weird-tool --flag`).label).toBe("weird-tool 실행함");
+  });
+
+  it("says a done step in its past form", () => {
+    setState("settings", "language", "ko");
+    expect(d("sleep 5").label).toBe("기다림");
+    expect(d("find src -name '*.ts'").label).toBe("파일 찾음");
+    expect(d("rg isAuthed src").label).toBe("검색함");
+    expect(d("pnpm install").label).toBe("설치함");
+    expect(d("pnpm build").label).toBe("빌드함");
+    expect(d("git commit -m x").label).toBe("커밋함");
+    expect(d("git status").label).toBe("바뀐 곳 봄");
+    setState("settings", "language", "en");
+    expect(d("sleep 5")).toMatchObject({ label: "Waited", now: "Waiting" });
+    expect(d("git push").label).toBe("Pushed");
+    expect(d("rg x").label).toBe("Searched");
+    setState("settings", "language", "ko");
+  });
+
+  it("looks past package runners for the tool they run", () => {
+    setState("settings", "language", "ko");
+    expect(d("npx vitest run")).toMatchObject({ label: "테스트 돌림", now: "테스트 실행 중" });
+    expect(d("npx playwright test e2e/login.spec.ts").label).toBe("테스트 돌림");
+    expect(d("pnpm exec vitest run auth").label).toBe("테스트 돌림");
+    expect(d("bunx jest").label).toBe("테스트 돌림");
+    expect(d("yarn dlx prettier --write src").label).toBe("정리함");
+    expect(d("npx prettier --check .").label).toBe("검사함");
+    expect(d("npx -y tsc --noEmit").label).toBe("검사함");
+    expect(d("pnpm -s test").label).toBe("테스트 돌림");
+    expect(d("npx wait-on http://localhost:3000 && curl -s localhost:3000/api/checkout")).toMatchObject({ label: "기다림", now: "기다리는 중", target: "localhost:3000" });
+    expect(d("npx wait-on tcp:5173").target).toBe("5173");
+    setState("settings", "language", "en");
+    expect(d("npx prettier --write .").label).toBe("Formatted");
+    expect(d("npx vitest run").label).toBe("Ran tests");
+    setState("settings", "language", "ko");
   });
 });
 
@@ -34,12 +68,18 @@ describe("describeBrowser", () => {
     expect(b("snapshot -i").label).toBe("페이지 읽음");
     expect(b("screenshot /tmp/a.png")).toMatchObject({ label: "화면 캡처함", target: undefined });
     expect(b("set viewport 1440 900").target).toBe("1440×900");
+    // waiting for the page to load, not a quoted load state
+    expect(b("wait --load networkidle")).toMatchObject({ label: "페이지 로드 기다림", now: "페이지 로드 기다리는 중", target: undefined });
+    expect(b("wait --url https://acme.dev/done").target).toBe("acme.dev/done");
+    expect(b("wait 1000")).toMatchObject({ label: "기다림", target: undefined });
     // a chain: the step that does something, not the look around it
     expect(b("open https://acme.dev && agent-browser --session s wait 1000 && agent-browser snapshot -i")).toMatchObject({ label: "열었음", target: "acme.dev" });
     expect(b("cookies clear")).toMatchObject({ label: "브라우저 씀", action: "other" });
     setState("settings", "language", "en");
     expect(b("open https://acme.dev/pricing")).toMatchObject({ label: "Opened", now: "Opening", nowKo: "여는 중 acme.dev/pricing" });
     expect(b("‘프로 시작하기’ 클릭").now).toBe("Clicking");
+    expect(b("wait --load networkidle").label).toBe("Waited for page load");
+    expect(nowText("페이지 로드 기다리는 중")).toBe("Waiting for page load");
     expect(nowText("클릭 중 ‘Start Pro’")).toBe("Clicking ‘Start Pro’");
     setState("settings", "language", "ko");
   });
@@ -48,23 +88,23 @@ describe("describeBrowser", () => {
 describe("shell wrappers", () => {
   it("names the real program, never the assignment or subshell around it", () => {
     setState("settings", "language", "ko");
-    expect(d(`list=$(find . -name '*.html')`)).toMatchObject({ label: "파일 찾기", now: "파일 찾는 중" });
+    expect(d(`list=$(find . -name '*.html')`)).toMatchObject({ label: "파일 찾음", now: "파일 찾는 중" });
     expect(mainCommand(`list=$(find . -name '*.html')`)).toBe(`find . -name '*.html'`);
-    expect(d("cd web && pnpm build").label).toBe("빌드");
+    expect(d("cd web && pnpm build").label).toBe("빌드함");
     expect(mainCommand("cd web && pnpm build")).toBe("pnpm build");
-    expect(d("FOO=1 BAR=2 node x.js").label).toBe("x.js 실행");
+    expect(d("FOO=1 BAR=2 node x.js").label).toBe("x.js 실행함");
     expect(mainCommand("FOO=1 BAR=2 node x.js")).toBe("node x.js");
-    expect(d("timeout 30 rg foo")).toMatchObject({ label: "검색", now: "검색 중" });
+    expect(d("timeout 30 rg foo")).toMatchObject({ label: "검색함", now: "검색 중" });
     expect(mainCommand("timeout 30 rg foo")).toBe("rg foo");
-    expect(d("(cd a; ls)").label).toBe("살펴보기");
+    expect(d("(cd a; ls)").label).toBe("살펴봄");
     expect(mainCommand("(cd a; ls)")).toBe("ls");
     expect(unwrapCommand("sudo env time npm test")).toBe("npm test");
     expect(unwrapCommand("out=`git rev-parse HEAD`")).toBe("git rev-parse HEAD");
     expect(unwrapCommand("echo $(date)")).toBe("echo $(date)");
     expect(unwrapCommand("FOO=1")).toBe("");
     // shell syntax never becomes the verb
-    expect(d("x=$(./weird)").label).toBe("weird 실행");
-    expect(d(`"$BIN" --all`).label).toBe("명령 실행");
+    expect(d("x=$(./weird)").label).toBe("weird 실행함");
+    expect(d(`"$BIN" --all`).label).toBe("명령 실행함");
     setState("settings", "language", "en");
     expect(d(`list=$(find . -name '*.html')`).now).toBe("Finding files");
     expect(d(`"$BIN" --all`).now).toBe("Running a command");
@@ -119,6 +159,8 @@ describe("noteText", () => {
     setState("settings", "language", "en");
     expect(noteText("변경을 버렸어요")).toBe("Changes discarded");
     expect(noteText("변경 버림")).toBe("Changes discarded");
+    expect(noteText("검색 멈춤 · 1분 넘게 결과 없음")).toBe("Stopped searching · no output for over a minute");
+    expect(noteText("기다림 멈춤 · 2분 넘게 변화 없음")).toBe("Stopped waiting · nothing changed for over 2 minutes");
     expect(noteText("일시정지")).toBe("Paused");
     expect(noteText("main에 병합 · 워크트리 정리")).toBe("Merged into main · worktree removed");
     expect(noteText("main에 병합했어요")).toBe("Merged into main · worktree removed");

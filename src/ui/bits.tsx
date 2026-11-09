@@ -58,19 +58,15 @@ export function endedAt(x: Task): number | undefined {
 }
 
 const [tick, setTick] = createSignal(Date.now());
-const [slowTick, setSlowTick] = createSignal(Date.now());
-setInterval(() => {
-  const t = Date.now();
-  setTick(t);
-  if (t - slowTick() >= 15_000) setSlowTick(t);
-}, 1000);
+setInterval(() => setTick(Date.now()), 1000);
 /** Current time, updated every second. */
 export const now = tick;
 /**
- * Current time for labels that only change by the minute (3분 전, 2시간째), updated every
- * 15 seconds: a list of hundreds of jobs doesn't redo every row each second.
+ * The same clock, for labels that change by the minute (3분 전, 2시간째). One clock for every
+ * time on screen: the sidebar's "13분째" and the header's never disagree, as a slower tick let
+ * them for up to a quarter minute. A row whose text didn't change isn't redrawn.
  */
-export const soon = slowTick;
+export const soon = tick;
 
 const locale = () => (lang() === "en" ? "en-US" : "ko-KR");
 
@@ -92,10 +88,10 @@ export function long(ms: number) {
   return m % 60 ? t("{h}시간 {m}분", { h: Math.floor(m / 60), m: m % 60 }) : t("{n}시간", { n: m / 60 });
 }
 
-/** 방금, 3분 전, 2시간 전, 어제, 4일 전, then the date */
+/** 방금, 3분 전, 2시간 전, 어제, 4일 전, then the date. Whole minutes passed, as compact() counts them. */
 export function ago(at?: number) {
   if (!at) return "";
-  const m = Math.max(0, Math.round((soon() - at) / 60_000));
+  const m = Math.max(0, Math.floor((soon() - at) / 60_000));
   if (m < 1) return t("방금");
   if (m < 60) return t("{n}분 전", { n: m });
   const h = Math.floor(m / 60);
@@ -103,6 +99,15 @@ export function ago(at?: number) {
   const d = Math.floor(h / 24);
   if (d === 1) return t("어제|ago");
   return d < 30 ? t("{n}일 전", { n: d }) : new Date(at).toLocaleDateString(locale(), { month: "short", day: "numeric" });
+}
+
+/**
+ * ago() inside a phrase, after a "·" or a word ("병합됨 · 방금" / "Merged · just now", "edited just now"):
+ * one rule for every inline time, sentence case only where a label starts with it.
+ */
+export function agoIn(at?: number) {
+  const s = ago(at);
+  return s === t("방금") ? t("방금|inline") : s;
 }
 
 /** "~/01_Project/…/ondra": long paths keep their start and their end */
