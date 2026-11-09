@@ -1,7 +1,8 @@
 ---
 name: test-ci
 description: >
-  Writing tests or setting up CI (GitHub Actions) for a project: unit and
+  Writing tests or setting up CI (GitHub Actions) for a project (테스트 코드
+  작성, "테스트 짜줘", CI 설정): unit and
   integration tests, a regression test for a bug, test structure, a ci.yml,
   lint/typecheck/test/build jobs, caching, matrices. Follows what large
   open-source projects (Vite, Vue, Astro, Next.js, TypeScript, uv, Flask,

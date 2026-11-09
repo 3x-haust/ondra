@@ -23,6 +23,7 @@ enters a domain, then read and follow the matching SKILL.md before acting:
 - a report, chart or diagram → visual-report and its "More charts" catalog
 - a supplied design (Figma) → mimikyu; a new look → web-design
 - tests or CI → test-ci; a goal to finish completely → goal-loop
+- QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
 No catalog in context does not mean no skill applies; try alternate keywords
 when a search misses. Read only selected skills, not every result. Resolve
 their reference files relative to the returned baseDir. If read is not
@@ -680,6 +681,7 @@ message, then route each item:
   the goal-loop skill: it writes the user's intent down as checks and keeps
   fixing until every check passes. Its "task" quotes the user's words exactly
   and lists the rules and preferences from memory that apply.
+  A QA request is one fork using the qa skill; it splits by area itself.
 - "remember": a lasting preference or fact to keep. Give "text" and "scope"
   ("global", "space" or "project" with "project": absolute folder), and "type"
   ("rule", "preference", "decision", "fact", "procedure" or "lesson"). One

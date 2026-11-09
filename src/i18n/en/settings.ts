@@ -255,6 +255,7 @@ export default {
   "시뮬레이터와 에뮬레이터에서 앱을 다뤄요": "Runs apps on simulators and emulators",
   "목표를 이룰 때까지 고치고 확인해요": "Fixes and checks until a goal is met",
   "Figma 디자인을 코드로 옮기고 맞춰 봐요": "Turns a Figma design into matching code",
+  "앱을 직접 써 보며 버그를 찾아요": "Uses the app like its users to find bugs",
   "바이너리와 앱을 분석해요": "Analyzes binaries and apps",
   "테스트와 CI를 만들어요": "Writes tests and sets up CI",
   "진행과 결과를 차트와 블록으로 보여 줘요": "Shows progress and results as charts and blocks",

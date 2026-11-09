@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
@@ -7,7 +7,8 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({ loadSkills: () => ({ skills:
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
 import { freshState, setState } from "../src/state/store";
 import type { Task } from "../src/state/types";
-import { handoffPrompt, taskPrompt } from "../src/engine/prompts";
+import { CAPTAIN_SYSTEM, handoffPrompt, SUB_SYSTEM, TASK_SYSTEM, taskPrompt } from "../src/engine/prompts";
+import { skillLine } from "../src/engine/agentTools";
 import { messageHint, searchSkills, SkillRouter, skillHint, taskQuery, toolHint, triggersOf, type Triggers } from "./skills";
 
 // The bundled skills as the engine reads them: name and (folded) description from the frontmatter.
@@ -33,7 +34,7 @@ const top = (query: string) => searchSkills(bundled, query, 3).map((s) => s.name
 
 describe("skill matching", () => {
   it("reads every bundled skill", () => {
-    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu"]));
+    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa"]));
   });
 
   it("maps a question about how another tool works to reverse engineering", () => {
@@ -47,6 +48,14 @@ describe("skill matching", () => {
     ["피그마 그대로 만들어줘", "mimikyu"],
     ["매출 차트 보고서 만들어줘", "visual-report"],
     ["메모 앱에서 버튼 눌러줘 컴퓨터유즈로", "computer-use"],
+    ["이 웹앱 QA 해줘", "qa"],
+    ["앱 화면 다 눌러봐", "qa"],
+    ["버그 찾아줘", "qa"],
+    ["출시 전에 점검해줘", "qa"],
+    ["완벽하게 테스트해줘", "qa"],
+    ["find bugs in the checkout flow", "qa"],
+    ["dogfood the site before launch", "qa"],
+    ["테스트 짜줘", "test-ci"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
     expect(skillHint(bundled, query)).toContain(`- ${skill}:`);
@@ -145,5 +154,27 @@ describe("skill router", () => {
     expect(messageHint([re], true)).toContain("# Skills for this task");
     expect(messageHint([], false)).toBe("");
     expect(toolHint(re, "runs a command of its domain")).toContain(re.filePath);
+  });
+});
+
+describe("qa skill", () => {
+  const qa = bundled.find((s) => s.name === "qa")!;
+  const body = readFileSync(qa.filePath, "utf8");
+
+  it("is named for QA requests in every role's skill list", () => {
+    for (const prompt of [CAPTAIN_SYSTEM, TASK_SYSTEM, SUB_SYSTEM]) expect(prompt).toMatch(/QA[^\n]*→ qa/);
+    expect(skillLine(qa)).toBe("앱을 직접 써 보며 버그를 찾아요");
+  });
+
+  it("drives each surface through the skill that owns it and ships its helpers", () => {
+    for (const skill of ["browser-use", "device-use", "computer-use", "test-ci", "goal-loop", "visual-report"]) expect(body).toContain(`\`${skill}\``);
+    expect(statSync(join(qa.baseDir, "sweep.sh")).mode & 0o111).not.toBe(0);
+    expect(readFileSync(join(qa.baseDir, "references", "checklist.md"), "utf8")).toContain("## Inputs");
+  });
+
+  it("reports only unless asked to fix, and keeps real accounts and passwords out", () => {
+    expect(body).toMatch(/Report-only\*\* \(default\)/);
+    expect(body).toContain("Never** use real customers' accounts");
+    expect(body).toContain("Never type, paste or print a password");
   });
 });
