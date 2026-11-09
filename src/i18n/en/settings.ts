@@ -39,6 +39,7 @@ export default {
   "릴리스 노트": "Release notes",
   "업데이트 확인": "Check for updates",
   "{v} 설치": "Install {v}",
+  "지금 다시 시작": "Restart now",
 
   // workspace sheet
   "새 워크스페이스": "New workspace",

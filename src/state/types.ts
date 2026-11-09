@@ -167,6 +167,12 @@ export interface Task {
   inbox: string[];
   /** said while it was working: goes in, in order, once the current work is done (Codex queue) */
   queue?: { id: string; text: string; at: number }[];
+  /** sent to its running engine (a subagent's result, the user's words) and not taken by the model
+   * yet: an engine that dies (a restart) loses them, so the next session is given them.
+   * `from`: the subagent whose result it is; `shown`: the words in the thread when they differ */
+  pending?: { text: string; from?: string; shown?: string }[];
+  /** on a subagent: its fork took its result */
+  taken?: number;
   summary?: string;
   error?: string;
   /** Imported from another tool's session. */

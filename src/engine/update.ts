@@ -3,16 +3,20 @@
 // package in the background first; once it is ready one notice offers to restart into it
 // (a newer one replaces it, and it closes by itself). Installing always asks once more, so
 // it goes straight to the newest release even when another came out after the last check.
-// Settings shows the same, with how far the download is.
+// A restart would cut the jobs at work (their commands, servers, checks): while one runs, the
+// notice restarts once none does instead. Settings shows the same, with how far the download
+// is, and still restarts at once when asked.
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
-import { flushState } from "../state/store";
+import { flushState, state } from "../state/store";
 import { t } from "../i18n";
 
 const EVERY = 15 * 60_000;
 /** coming back to the app (or opening Settings) checks again once this long has passed */
 const AGAIN = 2 * 60_000;
+/** how often a queued restart looks whether the jobs are done */
+const IDLE_LOOK = 3_000;
 let shown = "";
 let notice = 0;
 let lastCheck = 0;
@@ -26,7 +30,31 @@ const [checkedAt, setCheckedAt] = createSignal(0);
 const [progress, setProgress] = createSignal<number | null>(null);
 /** the newer version is downloaded and verified: installing is just a restart */
 const [ready, setReady] = createSignal<string | null>(null);
-export { available, checkedAt, progress as updateProgress, ready as updateReady, status as updateStatus };
+/** a restart is waiting for the jobs at work to end */
+const [queued, setQueued] = createSignal(false);
+export { available, checkedAt, progress as updateProgress, queued as restartQueued, ready as updateReady, status as updateStatus };
+
+/** A job is at work (not one waiting for the user): restarting now would cut it. */
+export const jobsWorking = () => state.tasks.some((t) => !t.parentId && t.status === "running");
+
+let idle: ReturnType<typeof setInterval> | undefined;
+/** Restart into the update once no job is at work: now when none is. */
+export function restartWhenIdle() {
+  if (!jobsWorking()) return void installNow();
+  if (queued()) return;
+  setQueued(true);
+  let quiet = 0;
+  idle = setInterval(() => {
+    // twice in a row: a job that ends often hands over to the next one right away
+    quiet = jobsWorking() ? 0 : quiet + 1;
+    if (quiet >= 2) void installNow();
+  }, IDLE_LOOK);
+}
+const unqueue = () => {
+  clearInterval(idle);
+  idle = undefined;
+  setQueued(false);
+};
 
 void onUpdateProgress((p) => setProgress(p.percent));
 
@@ -63,14 +91,25 @@ export async function checkUpdate(manual = false) {
   // a notice for an older version that is no longer the newest goes away
   if (notice && shown && shown !== next.version) { dropToast(notice); notice = 0; }
   const ok = await prepare(next.version);
-  if (!ok || (next.version === shown && !manual)) return;
+  // a restart already waits for the jobs: it installs the newest then
+  if (!ok || queued() || (next.version === shown && !manual)) return;
   shown = next.version;
   if (notice) dropToast(notice);
-  notice = toast(t("{v} 업데이트 준비됨", { v: next.version }), "info", { label: t("다시 시작"), run: () => void installNow() }, { ms: 12_000 });
+  const action = jobsWorking()
+    ? {
+        label: t("작업 끝나면 다시 시작"),
+        run: () => {
+          restartWhenIdle();
+          if (queued()) toast(t("작업이 끝나면 다시 시작해요"));
+        },
+      }
+    : { label: t("다시 시작|update"), run: () => void installNow() };
+  notice = toast(t("{v} 업데이트 준비됨", { v: next.version }), "info", action, { ms: 12_000 });
 }
 
 export async function installNow() {
   if (status() === "installing") return;
+  unqueue();
   setStatus("installing");
   if (notice) dropToast(notice);
   try {

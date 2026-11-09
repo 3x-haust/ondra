@@ -34,7 +34,7 @@ import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
-import { available, checkedAt, checkUpdate, freshen, installNow, updateProgress, updateReady, updateStatus } from "../engine/update";
+import { available, checkedAt, checkUpdate, freshen, installNow, jobsWorking, restartQueued, restartWhenIdle, updateProgress, updateReady, updateStatus } from "../engine/update";
 import { setNotesFor } from "../engine/releaseNotes";
 import { version as appVersion } from "../../package.json";
 import { LogIn } from "lucide-solid";
@@ -208,6 +208,7 @@ function UpdateRow() {
     return updateStatus() === "checking" ? t("확인 중")
       : updateProgress() !== null ? t("{v} 받는 중", { v }) + pct()
       : updateStatus() === "installing" ? t("다시 시작하는 중")
+      : restartQueued() ? t("작업이 끝나면 다시 시작해요")
       : updateReady() && updateReady() === available() ? t("{v} 준비됨", { v })
       : available() ? t("{v} 있음", { v })
       : checkedAt() ? t("최신 버전")
@@ -223,7 +224,15 @@ function UpdateRow() {
           when={available()}
           fallback={<button class="btn sm" disabled={updateStatus() === "checking"} onClick={() => void checkUpdate(true)}>{t("업데이트 확인")}</button>}
         >
-          <button class="btn primary sm" onClick={() => void installNow()}>{updateReady() === available() ? t("다시 시작|update") : t("{v} 설치", { v: available()! })}</button>
+          {/* a restart cuts the jobs at work: by default it waits for them; queued, it can still go now */}
+          <Show
+            when={!restartQueued()}
+            fallback={<button class="btn sm" onClick={() => void installNow()}>{t("지금 다시 시작")}</button>}
+          >
+            <button class="btn primary sm" onClick={() => (jobsWorking() ? restartWhenIdle() : void installNow())}>
+              {updateReady() !== available() ? t("{v} 설치", { v: available()! }) : jobsWorking() ? t("작업 끝나면 다시 시작") : t("다시 시작|update")}
+            </button>
+          </Show>
         </Show>
       </Show>
     </Row>

@@ -31,13 +31,35 @@ function bare(part: string): string {
 
 const parts = (cmd: string) => cmd.split(/;|&&|\|\||\||\n/).map(bare).filter(Boolean);
 
+/** a heredoc's body is a script's text (python, a file being written), not commands */
+const dropHeredocs = (cmd: string) => cmd.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?(\n\s*\2\s*(?=\n|$)|$)/g, "<<$2");
+/** the chain's commands, each without the loop or group word in front of it (`do vitest run`) */
+const steps = (cmd: string) => parts(dropHeredocs(cmd)).map((p) => p.replace(/^((do|then|else|elif|\{|\()\s+)+/, "")).filter(Boolean);
+
+// Reading, printing and searching run nothing, whatever they read: `sed -n 1,18p
+// src/__tests__/a.test.tsx` is no test, `rg "next build"` no build, `ls build` no
+// check. Nor are the shell's own `test -f` and `[`.
+const READS = /^(?:\S*\/)?(sed|cat|head|tail|less|more|bat|nl|wc|ls|tree|stat|file|rg|grep|egrep|fgrep|ag|ack|awk|jq|yq|cut|sort|uniq|diff|echo|printf|find|fd|du|which|pwd|test|\[)(?=\s|$)|^git\s+(grep|log|show|diff|status|blame)\b/;
+export const onlyReads = (part: string) => READS.test(part);
+/** paths and file names in a command (`src/a.test.ts`, `./gradlew`): what it reads or writes, not what it runs */
+const noPaths = (p: string) => p.replace(/(['"]?)[^\s'"]*(\/|\.[A-Za-z]{1,5}\b)[^\s'"]*\1/g, " ");
+const TEST = /\b(test|vitest|jest|pytest|mocha|cargo test|go test)\b/;
+/** a script named for tests (`bash scripts/test.sh`, `./test-e2e.sh`, `python3 test_api.py`) */
+const TEST_SCRIPT = /^(?:(?:bash|sh|zsh|node|python3?|bun|deno|tsx)\s+)?(?:\S*\/)?(?:[^\s/]*[-_.])?tests?(?:[-_.][^\s/]*)?\.(sh|m?js|cjs|ts|py)(\s|$)/;
+
+/** A command that runs tests (`pnpm test`, `bunx vitest run src/a.test.ts`, `cargo test`), not one that reads a test file. */
+export const isTestRun = (cmd: string) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && (TEST.test(noPaths(p)) || TEST_SCRIPT.test(p)));
+
+/** A command that runs `program` itself, not one that reads or searches for its name (`rg agent-browser`). */
+export const runsProgram = (cmd: string, program: RegExp) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && program.test(p));
+
 export function commandKind(cmd: string): "poll" | "check" | "other" {
-  const ps = parts(cmd);
+  const ps = steps(cmd);
   if (!ps.length) return "other";
   const look = (p: string) => (STATUS.some((re) => re.test(p)) && !MUTATE.test(` ${p}`)) || HELP.test(p);
   const waits = (p: string) => WAIT.test(p);
   if (ps.every((p) => look(p) || waits(p)) && ps.some((p) => look(p) || /^(sleep|tail|pgrep|ps|date)\b/.test(p))) return "poll";
-  if (ps.some((p) => CHECK.test(p) && !look(p))) return "check";
+  if (ps.some((p) => CHECK.test(p) && !look(p) && !onlyReads(p))) return "check";
   return "other";
 }
 
