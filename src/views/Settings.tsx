@@ -89,7 +89,6 @@ const modelAccounts = () =>
 
 // ───────────────── general
 function General() {
-  const [editing, setEditing] = createSignal<SpaceId | "new" | null>(null);
   // a quiet "저장됨" for a moment after the instructions change
   const [saved, setSaved] = createSignal(false);
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -200,24 +199,6 @@ function General() {
           />
         </div>
       </div>
-
-      <GroupTitle title={t("워크스페이스")}>
-        <button class="btn ghost sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} />{t("추가")}</button>
-      </GroupTitle>
-      <div class="set-group">
-        <For each={state.spaces}>
-          {(s) => (
-            <button class="sp-row" onClick={() => setEditing(s.id)}>
-              <b>{t(s.label)}</b>
-              <Show when={state.space === s.id}><span class="sp-now">{t("현재")}</span></Show>
-              <span class="sp-folder" classList={{ word: !s.folder || s.folder === "~" }} title={s.folder}>{folderName(s.folder)}</span>
-              <span class="sp-n">{t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}</span>
-              <Icon name="chevron" size={14} class="sp-go" />
-            </button>
-          )}
-        </For>
-      </div>
-      <Show when={editing()}>{(id) => <SpaceSheet id={id()} onClose={() => setEditing(null)} />}</Show>
 
       <GroupTitle title={t("정보|about")} />
       <div class="set-group">
@@ -620,16 +601,30 @@ function Accounts() {
     void refreshModels(p.id, true);
     void loadEmail(p.id).catch(() => {});
   };
+  // each workspace with its own accounts: its name, folder and instructions are set here too
+  const [editing, setEditing] = createSignal<SpaceId | "new" | null>(null);
   return (
     <>
-      <h2>{t("계정")}</h2>
+      <div class="set-h2-row">
+        <h2>{t("계정과 워크스페이스")}</h2>
+        <span class="spacer" />
+        <button class="btn ghost sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} />{t("워크스페이스 추가")}</button>
+      </div>
       <For each={state.spaces}>
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
+              <Show when={state.space === s.id}><span class="sp-now">{t("현재")}</span></Show>
               <button class="btn ghost sm" disabled={!!pending()} onClick={() => add(s.id)}><Icon name="plus" size={14} />{t("계정 추가")}</button>
             </GroupTitle>
             <div class="set-group">
+              <button class="sp-row" onClick={() => setEditing(s.id)} title={t("워크스페이스 설정")}>
+                <Icon name="folder" size={14} class="sp-ic" />
+                <span class="sp-folder" classList={{ word: !s.folder || s.folder === "~" }} title={s.folder}>{folderName(s.folder)}</span>
+                <span class="sp-n">{t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}</span>
+                <span class="sp-edit">{t("워크스페이스 설정")}</span>
+                <Icon name="chevron" size={14} class="sp-go" />
+              </button>
               <For each={state.accounts.filter((a) => a.space === s.id)} fallback={<Show when={pending()?.space !== s.id}><div class="empty-line">{t("계정 없음")}</div></Show>}>
                 {(a) => <AccountRow id={a.id} onLogin={() => setLogin({ id: a.id, title: loginWord(a) })} />}
               </For>
@@ -647,6 +642,7 @@ function Accounts() {
         )}
       </For>
       <Show when={login()}>{(l) => <LoginSheet accountId={l().id} title={t(l().title)} onClose={() => void closed()} />}</Show>
+      <Show when={editing()}>{(id) => <SpaceSheet id={id()} onClose={() => setEditing(null)} />}</Show>
     </>
   );
 }
@@ -961,7 +957,7 @@ function Shortcuts() {
 
 export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: "general", label: "일반", icon: "gear" },
-  { id: "accounts", label: "계정", icon: "key" },
+  { id: "accounts", label: "계정과 워크스페이스", icon: "key" },
   { id: "tools", label: "macOS 권한", icon: "shield" },
   { id: "agent-tools", label: "도구", icon: "tools" },
   { id: "skills", label: "스킬", icon: "skill" },

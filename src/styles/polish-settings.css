@@ -847,3 +847,35 @@
   background: var(--bad-soft);
   color: var(--bad-ink);
 }
+
+/* accounts & workspaces: the title row with its add button, each workspace's own settings row */
+.settings-inner .set-h2-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+}
+.settings-inner .set-h2-row h2 {
+  margin-bottom: 0;
+}
+.settings-inner .set-group-title .sp-now {
+  margin-right: var(--s-4);
+}
+.settings-inner .sp-row .sp-ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.settings-inner .sp-row .sp-edit {
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.settings-inner .set-h2-row {
+  margin-bottom: var(--s-16);
+}
+.settings-inner .sp-row:has(.sp-edit) .sp-folder {
+  flex: 0 1 auto;
+}
+.settings-inner .sp-row:has(.sp-edit) .sp-n {
+  margin-left: var(--s-8);
+  color: var(--ink-3);
+}
