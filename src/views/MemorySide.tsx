@@ -293,7 +293,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
       </Show>
       <Show when={kinds().length > 1 || (kinds().length && info().type !== "kind")}>
         <H>{t("종류")}</H>
-        <div class="ms-rows">
+        <div class="ms-rows ms-kinds">
           <For each={kinds()}>
             {(k) => (
               <button class={`ms-row ms-kind mk-${k.id}`} disabled={!kindTarget(k.id)} onClick={() => kindTarget(k.id) && props.onSel(kindTarget(k.id)!)}>
@@ -359,7 +359,7 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
   );
 }
 
-/** 확인 필요: a learned piece says otherwise than the user's own; the user picks (theirs is replaced only after a second click) */
+/** 확인 필요: a learned piece says otherwise than the user's own; the user picks (theirs is replaced only after a second click, and can be undone) */
 function Conflicts(props: { onSel: (id: string) => void }) {
   const list = () => conflictsIn(state.space);
   const [ask, setAsk] = createSignal<string>();
@@ -368,6 +368,21 @@ function Conflicts(props: { onSel: (id: string) => void }) {
     const m = mem(c.theirs);
     return { text: m?.text ?? c.text ?? "", kind: m ? kindOf(m) : (c.kind ?? "fact"), jobs: m ? sourcesOf(m).length : (c.sources?.length ?? 0), id: m?.id };
   };
+  const replace = (id: string) => {
+    setAsk();
+    const undo = useNew(id);
+    toast(t("메모리 바꿈"), "info", undo && { label: t("되돌리기"), run: undo });
+  };
+  /** the learned text, its job count kept whole with its dot (it never wraps apart) */
+  const Text = (p: { c: MemoryConflict }) => (
+    <span>
+      {other(p.c).text}
+      <Show when={other(p.c).jobs}>
+        {" "}
+        <small>· {t("작업 {n}개", { n: other(p.c).jobs })}</small>
+      </Show>
+    </span>
+  );
   return (
     <Show when={list().length}>
       <H n={list().length}>{t("확인 필요|memory")}</H>
@@ -384,25 +399,41 @@ function Conflicts(props: { onSel: (id: string) => void }) {
                 fallback={
                   <div class={`mc-row mk-${other(c).kind}`}>
                     <em>{t("새 것")}</em>
-                    <span>{other(c).text}<Show when={other(c).jobs}><small> · {t("작업 {n}개", { n: other(c).jobs })}</small></Show></span>
+                    <Text c={c} />
                   </div>
                 }
               >
                 <button class={`mc-row mk-${other(c).kind}`} onClick={() => props.onSel(`m:${other(c).id}`)} title={other(c).text}>
                   <em>{t("새 것")}</em>
-                  <span>{other(c).text}<Show when={other(c).jobs}><small> · {t("작업 {n}개", { n: other(c).jobs })}</small></Show></span>
+                  <Text c={c} />
                 </button>
               </Show>
-              <div class="mc-acts">
-                <button class="btn sm ghost" onClick={() => keepMine(c.id)}>{t("내 것 유지")}</button>
-                <button class="btn sm ghost" aria-expanded={ask() === c.id} onClick={() => setAsk(ask() === c.id ? undefined : c.id)}>{t("새 것으로")}</button>
-              </div>
-              <Fold open={ask() === c.id}>
-                <div class="mc-acts">
-                  <button class="btn sm primary" onClick={() => (useNew(c.id), setAsk())}>{t("바꾸기")}</button>
-                  <button class="btn sm ghost" onClick={() => setAsk()}>{t("취소")}</button>
+              {/* 새 것으로 asks once more in the same row: 바꾸기 / 취소 and what happens to yours */}
+              <Show
+                when={ask() === c.id}
+                fallback={
+                  <div class="mc-acts">
+                    <button class="btn sm" onClick={() => keepMine(c.id)}>{t("내 것 유지")}</button>
+                    <button
+                      class="btn sm"
+                      onClick={(e) => {
+                        // from the keyboard, focus goes on to 바꾸기 (the button pressed is gone)
+                        const box = e.detail === 0 ? e.currentTarget.closest(".mc") : null;
+                        setAsk(c.id);
+                        box?.querySelector<HTMLElement>(".mc-acts .primary")?.focus();
+                      }}
+                    >
+                      {t("새 것으로")}
+                    </button>
+                  </div>
+                }
+              >
+                <div class="mc-acts ask" onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setAsk())}>
+                  <button class="btn sm primary" onClick={() => replace(c.id)}>{t("바꾸기")}</button>
+                  <button class="btn sm" onClick={() => setAsk()}>{t("취소")}</button>
+                  <span class="mc-note">{t("내 메모리를 내려요")}</span>
                 </div>
-              </Fold>
+              </Show>
             </div>
           )}
         </For>
@@ -431,8 +462,8 @@ function TidyLine() {
               <dd title={stampOf(x().at)}>{ago(x().at)}</dd>
             </Show>
             <Show when={x().cursor}>
-              <dt>{t("학습 범위")}</dt>
-              <dd>{t("{when}까지", { when: stampOf(x().cursor!) })}</dd>
+              <dt>{t("학습")}</dt>
+              <dd>{t("{when}까지|tidy", { when: stampOf(x().cursor!) })}</dd>
             </Show>
             <Show when={parts().length}>
               <dt>{t("변경")}</dt>
@@ -669,7 +700,8 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const useMore = () =>
     [
       (m().seen ?? 1) > 1 ? t("같은 내용 {n}번 더 저장|inline", { n: m().seen! - 1 }) : "",
-      m().lastUsed ? t("마지막 {when}", { when: agoIn(m().lastUsed!) }) : "",
+      // never used: just 없음 (a restored piece has no use to date)
+      m().uses && m().lastUsed ? t("마지막 {when}", { when: agoIn(m().lastUsed!) }) : "",
     ].filter(Boolean);
   return (
     <div class="md-in">
@@ -724,7 +756,7 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
         </Show>
         <dt>{t("사용|property")}</dt>
         <dd>
-          {m().uses ? t("{n}번", { n: m().uses }) : t("없음")}
+          {m().uses ? t("{n}번", { n: m().uses }) : t("없음|uses")}
           <Show when={useMore().length}><span class="md-sub"> · {useMore().join(" · ")}</span></Show>
         </dd>
         <dt>{t("생성")}</dt>

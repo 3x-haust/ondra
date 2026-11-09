@@ -1338,18 +1338,29 @@ button.mc-row:hover {
 .mc-row span {
   overflow-wrap: anywhere;
 }
+/* "· 작업 2개" stays whole: the line breaks before it, never between the dot and the count */
 .mc-row small {
   font-size: var(--fs-2xs);
   color: var(--ink-3);
+  white-space: nowrap;
 }
+/* the two choices, and in their place 바꾸기 · 취소 with what happens to yours: buttons start under 내 것 / 새 것 */
 .mc-acts {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   padding: 4px 8px 0;
 }
 .mc-acts .btn.sm {
-  height: 26px;
+  height: 24px;
+  padding: 0 var(--s-8);
   font-size: var(--fs-xs);
+}
+.mc-note {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-left: 2px;
 }
 
 /* 정리 */
@@ -1370,7 +1381,11 @@ button.mc-row:hover {
 .md-dots {
   gap: 0 !important;
 }
-.md-dots span + span::before {
+/* each part whole; the dot trails a part, so a wrapped line never starts with one */
+.md-dots span {
+  white-space: nowrap;
+}
+.md-dots span:not(:last-child)::after {
   content: "·";
   margin: 0 6px;
   color: var(--ink-4);
@@ -1765,4 +1780,36 @@ button.mc-row:hover {
   .mem-body > :nth-child(2) {
     display: none;
   }
+}
+
+/* 종류: one label column as wide as the longest kind (Preference never cuts), the bars start together */
+.ms-kinds {
+  grid-template-columns: max-content max-content minmax(24px, 1fr) max-content;
+}
+/* the row's 8px insets live on the dot and the count (a subgrid's padding would push them out of their tracks) */
+.ms-kinds .ms-kind {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: 8px;
+  padding: 0;
+}
+.ms-kinds .ms-kind i {
+  margin-left: 8px;
+}
+.ms-kinds .ms-kind > span:first-of-type {
+  width: auto;
+  min-width: 44px;
+  overflow: visible;
+}
+.ms-kinds .ms-kind em {
+  width: auto;
+  min-width: 16px;
+  margin-right: 8px;
+}
+
+/* 변경 wraps onto more lines: its first line stays level with the label */
+.md-tidy .mp dd.md-dots {
+  align-content: flex-start;
+  padding: 4px 0;
 }

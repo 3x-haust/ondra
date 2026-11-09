@@ -128,11 +128,11 @@ export function MemoryView() {
     },
   );
   const [sel, setSel] = createSignal<string>("");
-  // opened from elsewhere (context viewer, a job): select that piece
+  // opened from elsewhere (context viewer, a job): select that piece; "" = the overview (내 차례's 메모리 확인)
   createEffect(() => {
     const id = memoryFocus();
-    if (id) {
-      setSel(`m:${id}`);
+    if (id !== null) {
+      setSel(id ? `m:${id}` : "");
       setMemoryFocus(null);
     }
   });

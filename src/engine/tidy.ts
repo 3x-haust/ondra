@@ -332,10 +332,12 @@ export function keepMine(id: string) {
   settle(id, "mine");
 }
 
-/** use the learned piece instead: the user's own is retired (they confirmed), replaced by it */
-export function useNew(id: string) {
+/** use the learned piece instead: the user's own is retired (they confirmed), replaced by it.
+ *  Returns an undo: yours back as it was, the new one gone again (held, or never saved), the question open again. */
+export function useNew(id: string): (() => void) | undefined {
   const c = (state.memoryConflicts ?? []).find((x) => x.id === id && !x.done);
   if (!c) return;
+  const before = new Map(state.memory.map((m) => [m.id, JSON.stringify(m)]));
   const user = state.memory.find((m) => m.id === c.mine && isLive(m));
   // retired first, so the new piece isn't counted as the same thing again
   if (user) retireMemory(user.id, undefined, "새 메모리로 바꿨어요");
@@ -346,6 +348,19 @@ export function useNew(id: string) {
       addMemory(c.text, c.scope ?? "space", { space: c.space, project: c.project, kind: c.kind, sources: c.sources, taskId: c.sources?.[0], source: "ondra", by: "agent", importance: 3, quiet: true }) ?? undefined;
   if (user && next) setState("memory", (m) => m.id === user.id, { supersededBy: next });
   settle(id, "new");
+  // what this changed: pieces added, and pieces whose fields changed (put back whole)
+  const added = new Set(state.memory.filter((m) => !before.has(m.id)).map((m) => m.id));
+  const changed = new Map(
+    state.memory.filter((m) => before.has(m.id) && before.get(m.id) !== JSON.stringify(m)).map((m) => [m.id, JSON.parse(before.get(m.id)!) as Memory]),
+  );
+  return () => {
+    setState("memory", (l) => l.filter((m) => !added.has(m.id)).map((m) => changed.get(m.id) ?? m));
+    // asked again, back in its place among the open ones
+    setState("memoryConflicts", (l) => {
+      const all = (l ?? []).map((x) => (x.id === id ? { ...x, done: undefined } : x));
+      return [...all.filter((x) => !x.done).sort((a, b) => a.at - b.at), ...all.filter((x) => x.done)];
+    });
+  };
 }
 
 /**
@@ -493,7 +508,7 @@ export const tidyParts = (x: { learned?: number; merged?: number; retired?: numb
     x.learned && tr("새 메모리 {n}", { n: x.learned }),
     x.merged && tr("병합 {n}", { n: x.merged }),
     x.retired && tr("내림 {n}", { n: x.retired }),
-    x.held && tr("확인 필요 {n}", { n: x.held }),
+    x.held && tr("물어봄 {n}", { n: x.held }),
     x.keyed && tr("관련어 {n}", { n: x.keyed }),
   ].filter((p): p is string => !!p);
 

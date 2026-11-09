@@ -393,8 +393,8 @@ export function retireMemory(id: string, by?: string, why?: string) {
 }
 
 export function restoreMemory(id: string) {
-  // back in use: fresh again, so it doesn't fade straight back out
-  setState("memory", (m) => m.id === id, { invalidAt: undefined, supersededBy: undefined, why: undefined, lastUsed: Date.now() });
+  // back in use: fresh again, so it doesn't fade straight back out (changed now, not used: no lastUsed)
+  setState("memory", (m) => m.id === id, { invalidAt: undefined, supersededBy: undefined, why: undefined, updatedAt: Date.now() });
 }
 
 /** Counted only for pieces that really went into a prompt. */

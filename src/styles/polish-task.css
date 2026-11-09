@@ -1454,3 +1454,20 @@
 .task-head .sb-show {
   flex-shrink: 0;
 }
+
+/* ═════════════ round 13: memory ═════════════ */
+
+/* 내 차례 popover: the 메모리 확인 row after the tasks, its icon in the glyph column */
+.needs-menu .menu-sep {
+  grid-column: 1 / -1;
+}
+.needs-menu .needs-mem-ic {
+  justify-self: center;
+  color: var(--ink-3);
+}
+.needs-menu .needs-mem:hover .needs-mem-ic {
+  color: var(--ink);
+}
+.needs-menu .needs-mem .needs-word {
+  font-variant-numeric: tabular-nums;
+}

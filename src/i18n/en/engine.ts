@@ -226,7 +226,7 @@ export default {
   "병합 {n}": "{n} merged",
   "내림 {n}": "{n} retired",
   "관련어 {n}": "{n} keyword|{n} keywords",
-  "확인 필요 {n}": "{n} to review",
+  "물어봄 {n}": "{n} asked",
   "메모리 정리 · {parts}": "Memory tidied · {parts}",
   "정리할 메모리가 없어요": "Nothing to tidy",
 
