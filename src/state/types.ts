@@ -210,7 +210,8 @@ export interface Task {
   /** A review subagent: its findings go back to the fork to fix. */
   review?: boolean;
   /** 교차 검토: which of the two review lenses this is, and the id the pair shares (one combined result) */
-  lens?: "design" | "code";
+  /** 교차 검토 (design, code) or 계획 검토 (scope, fit) */
+  lens?: "design" | "code" | "scope" | "fit";
   pair?: string;
   /** what a review lens reported about the memory it was given (applied when the pair is done) */
   memoryCheck?: MemoryCheck[];

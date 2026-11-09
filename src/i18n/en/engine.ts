@@ -174,6 +174,9 @@ export default {
   // 교차 검토: the two review lenses' titles (stored in Korean, shown through taskTitle())
   "설계 검토": "Design review",
   "코드 검토": "Code review",
+  "계획 검토": "Plan review",
+  "범위 검토": "Scope check",
+  "실행 검토": "Fit check",
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
   "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
   "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",

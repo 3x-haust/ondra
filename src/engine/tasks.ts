@@ -19,7 +19,7 @@ import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./pr
 import { prose, readFences } from "./fences";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
-import { CROSSCHECK, crosscheckMessage, lensesOf, lensKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
+import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -407,6 +407,24 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (t.parentId || !(b.task || b.title)) break;
         const live = state.tasks.filter((x) => x.parentId === t.id && x.status !== "done" && x.status !== "failed").length;
         if (live >= 6) break;
+        // 계획 검토: two fresh readers of the plan, once per job, before it builds
+        if (b.plan_review === true || /계획 검토|plan review/i.test(String(b.title ?? ""))) {
+          const had = state.tasks.find((x) => x.parentId === t.id && isPlan(x) && x.status !== "failed");
+          if (had) {
+            const jobId = t.id;
+            const message = reviewGoing(had)
+              ? "(Ondra) The plan review is still running. Its result comes to you by itself: go on with what doesn't depend on it, or end your turn and wait."
+              : "(Ondra) This plan was already reviewed once; its result is above. Don't start another: fix the plan and build.";
+            run.refused = message;
+            queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
+            break;
+          }
+          const ids = planKids(String(b.task ?? b.title)).map((k) => spawnChild(t, k.title, k.ask, false, k.extra).id);
+          const last = t.entries[t.entries.length - 1];
+          if (last?.kind === "spawn") last.childIds.push(...ids);
+          else push(t, { kind: "spawn", childIds: ids });
+          break;
+        }
         const review = b.review === true || /code-review|리뷰|교차 검토|crosscheck/i.test(String(b.title ?? ""));
         // one review per job: after it, the job fixes the findings and re-runs its checks
         const had = review ? state.tasks.find((x) => x.parentId === t.id && x.review && x.status !== "failed") : undefined;
@@ -500,7 +518,7 @@ const activeKids = (id: string) => childrenOf(id).filter((t) => t.status === "qu
 
 /** how a subagent's result to its fork begins (the same in every message carrying it) */
 const resultHead = (child: Task) =>
-  child.pair ? CROSSCHECK : child.status === "done" ? (child.review ? `리뷰 결과가 왔어요 ("${child.title}")` : `서브에이전트 "${child.title}" 완료`) : `서브에이전트 "${child.title}" 실패`;
+  child.pair ? reviewName(child) : child.status === "done" ? (child.review ? `리뷰 결과가 왔어요 ("${child.title}")` : `서브에이전트 "${child.title}" 완료`) : `서브에이전트 "${child.title}" 실패`;
 
 /** A subagent's result as its fork reads it. */
 function resultMessage(child: Task, left: number, memory?: { lines: string[]; split: string[] }) {

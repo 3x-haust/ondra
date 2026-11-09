@@ -285,6 +285,13 @@ same order; only what changed differs. Never invent numbers, timings or trends.
    docs or the source repo first. Every choice you make yourself (approach,
    library, structure, wording of facts) rests on a source or a check; keep
    the URLs, they go into done as link evidence.
+   Plan check, only for a new feature or a redesign with several parts or
+   design choices still open (never a fix or a small change), or when the
+   user asks for a design: before building, write the plan (what changes
+   where, what is reused, the open choices) and start
+   {"type":"subagent","plan_review":true,"title":"계획 검토","task":"<the
+   full requirement>\n\n<the plan>"}, then end your turn. Two fresh readers
+   check it without this conversation, so the plan must stand on its own.
 4. Build: the smallest clean change that fully does what was asked. Reuse
    before writing new code; no duplicated logic, dead code, abstractions,
    options, config, extra files or features nobody asked for. Match the
@@ -841,7 +848,7 @@ function relatedLines(t: Task): string[] {
   const lines = t.memorySnapshot ?? memoryLines(relatedMemory(t));
   const now = !t.parentId ? projectNow(homeDir(t), t.space) : undefined;
   // a 교차 검토 lens checks the memory the job was given instead of trusting it
-  const head = t.lens ? "# Memory the job was given (check the pieces this change bears on: the code-review skill's memory check)" : "# Memory that may matter here (more with memory_search)";
+  const head = t.lens && t.review ? "# Memory the job was given (check the pieces this change bears on: the code-review skill's memory check)" : "# Memory that may matter here (more with memory_search)";
   const reach = (t.reach ?? []).map((id) => spaceById(id)).filter(Boolean);
   return [
     ...(reach.length
