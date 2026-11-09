@@ -9,7 +9,7 @@ import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, onLeaveMain, openTask, setHoverTask, setMemoryFocus, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, setNewTaskOpen, soon } from "../ui/bits";
 import { bootedDevices, devices, usedBy } from "../state/devices";
@@ -17,6 +17,7 @@ import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { Fold } from "../ui/Fold";
 import { archiveTask, togglePin } from "../engine/tasks";
+import { conflictsIn } from "../engine/tidy";
 import { t as tr } from "../i18n";
 
 export type Bucket = "you" | "failed" | "review" | "work" | "done";
@@ -222,6 +223,9 @@ const [renamingProject, setRenamingProject] = createSignal<string | null>(null);
 
 /** 내 차례: the tasks waiting on you, in a popover beside the row (§9.8) */
 const [needsMenu, setNeedsMenu] = createSignal<{ x: number; y: number; keyboard?: boolean } | null>(null);
+/** memory conflicts wait on the user too: one 메모리 확인 row in 내 차례, a count on 메모리 */
+const memAsks = () => conflictsIn(state.space).length;
+const openMemoryAsks = () => (setMemoryFocus(""), setView({ name: "memory" }));
 function NeedsMenu() {
   let el!: HTMLDivElement;
   const close = () => {
@@ -246,7 +250,7 @@ function NeedsMenu() {
   });
   const list = () => forkOrder(state.space).filter((t) => !t.archived && needsYou(t));
   const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
-  createEffect(() => needsMenu() && !list().length && close());
+  createEffect(() => needsMenu() && !list().length && !memAsks() && close());
   return (
     <Show when={needsMenu()}>
       {(m) => (
@@ -255,7 +259,7 @@ function NeedsMenu() {
           class="menu ctx-menu needs-menu"
           role="menu"
           aria-label={tr("내 차례")}
-          style={{ left: `${m().x}px`, top: `${Math.max(8, Math.min(m().y, window.innerHeight - 16 - list().length * 28))}px` }}
+          style={{ left: `${m().x}px`, top: `${Math.max(8, Math.min(m().y, window.innerHeight - 16 - (list().length + (memAsks() ? 1 : 0)) * 28))}px` }}
           onClick={(e) => e.stopPropagation()}
         >
           <For each={list()}>
@@ -272,6 +276,14 @@ function NeedsMenu() {
               </button>
             )}
           </For>
+          <Show when={memAsks()}>
+            <Show when={list().length}><div class="menu-sep" role="separator" /></Show>
+            <button role="menuitem" class="needs-mem" onClick={() => (openMemoryAsks(), close())}>
+              <Icon name="memory" size={14} class="needs-mem-ic" />
+              <span class="row-title">{tr("메모리 확인")}</span>
+              <span class="needs-word tone-ask">{memAsks()}</span>
+            </button>
+          </Show>
         </div>
       )}
     </Show>
@@ -387,6 +399,9 @@ export function Sidebar() {
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
   const looseDone = createMemo(() => roots().filter((t) => old(t) && !filed(t)));
   const needs = createMemo(() => roots().filter(needsYou).length);
+  // 내 차례 counts memory conflicts too; the popover has a row per task and one 메모리 확인 row
+  const turn = () => needs() + memAsks();
+  const turnRows = () => needs() + (memAsks() ? 1 : 0);
   const boardLive = () => roots().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -453,7 +468,9 @@ export function Sidebar() {
         <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} data-shortcut="memory">
           <Icon name="memory" size={16} class="sb-main-ic" />
           <span class="sb-title">{tr("메모리")}</span>
-          <kbd class="sb-kbd">{shortcutHint("memory")}</kbd>
+          <Show when={memAsks()} fallback={<kbd class="sb-kbd">{shortcutHint("memory")}</kbd>}>
+            <span class="sb-need" title={tr("확인 필요 {n}개", { n: memAsks() })}>{memAsks()}</span>
+          </Show>
         </button>
         <button class="sb-row sb-main" classList={{ on: view().name === "results" }} onClick={() => setView({ name: "results" })} data-shortcut="results">
           <Icon name="inbox" size={16} class="sb-main-ic" />
@@ -464,14 +481,14 @@ export function Sidebar() {
         {/* the row stays when nothing waits (greyed, no count), so nothing below it moves */}
           <button
             class="sb-row sb-main sb-todo"
-            classList={{ open: !!needsMenu(), empty: !needs() }}
-            aria-haspopup={needs() > 1 ? "menu" : undefined}
-            aria-expanded={needs() > 1 ? !!needsMenu() : undefined}
-            aria-disabled={!needs()}
+            classList={{ open: !!needsMenu(), empty: !turn() }}
+            aria-haspopup={turnRows() > 1 ? "menu" : undefined}
+            aria-expanded={turnRows() > 1 ? !!needsMenu() : undefined}
+            aria-disabled={!turn()}
             onClick={(e) => {
               e.stopPropagation();
-              if (!needs()) return;
-              if (needs() === 1) return void openTask(nextWaiting(state.space)!.id);
+              if (!turn()) return;
+              if (turnRows() === 1) return void (needs() ? openTask(nextWaiting(state.space)!.id) : openMemoryAsks());
               if (needsMenu()) return setNeedsMenu(null);
               const r = e.currentTarget.getBoundingClientRect();
               setNeedsMenu({ x: r.right + 8, y: r.top - 4, keyboard: e.detail === 0 });
@@ -481,7 +498,7 @@ export function Sidebar() {
           >
             <Icon name="hand" size={16} class="sb-main-ic" />
             <span class="sb-title">{tr("내 차례")}</span>
-            <Show when={needs()}><span class="sb-need">{needs()}</span></Show>
+            <Show when={turn()}><span class="sb-need">{turn()}</span></Show>
           </button>
         <Head id="projects" label={tr("프로젝트")} count={projectsIn(state.space).length}>
           <Show when={projectsIn(state.space).length}>

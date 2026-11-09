@@ -249,8 +249,37 @@ describe("what goes against the user's own pieces waits for the user", () => {
     expect(state.memory.find((m) => m.id === "u")).toMatchObject({ supersededBy: "x" });
   });
 
+  it("undo after use new: yours back as it was, the new one gone, asked again", () => {
+    reset([user()], [job("a", { summary: "pnpm-lock.yaml이 있어서 pnpm install로 설치했어요. 잘 돌아가요. 끝." })]);
+    run({ learn: [{ job: "a", quote: "pnpm install로 설치했어요", text: "acme는 pnpm으로 설치해요", kind: "fact", against: "u" }] }, ["a"], ["a"]);
+    const before = JSON.stringify(state.memory);
+    const undo = useNew(conflictsIn("work")[0].id)!;
+    expect(byText("acme는 pnpm으로 설치해요")).toBeTruthy();
+    undo();
+    expect(JSON.stringify(state.memory)).toBe(before);
+    expect(conflictsIn("work")).toMatchObject([{ mine: "u", text: "acme는 pnpm으로 설치해요" }]);
+  });
+
+  it("undo after use new on a held piece: it is held again", () => {
+    reset([user(), auto()]);
+    run({ conflict: [{ mine: "u", new: "x" }] }, []);
+    const undo = useNew(conflictsIn("work")[0].id)!;
+    undo();
+    expect(state.memory.find((m) => m.id === "x")!.invalidAt).toBeTruthy();
+    expect(state.memory.find((m) => m.id === "u")!.invalidAt).toBeUndefined();
+    expect(state.memory.find((m) => m.id === "u")!.supersededBy).toBeUndefined();
+    expect(conflictsIn("work")).toMatchObject([{ mine: "u", theirs: "x" }]);
+  });
+
+  it("a piece brought back isn't counted as used", () => {
+    reset([user(), auto()]);
+    run({ conflict: [{ mine: "u", new: "x" }] }, []);
+    useNew(conflictsIn("work")[0].id);
+    expect(state.memory.find((m) => m.id === "x")!.lastUsed).toBeUndefined();
+  });
+
   it("says what the pass did in one line", () => {
     setState("settings", "language", "ko");
-    expect(tidyParts({ learned: 3, merged: 1, retired: 1, held: 1 }).join(" · ")).toBe("새 메모리 3 · 병합 1 · 내림 1 · 확인 필요 1");
+    expect(tidyParts({ learned: 3, merged: 1, retired: 1, held: 1 }).join(" · ")).toBe("새 메모리 3 · 병합 1 · 내림 1 · 물어봄 1");
   });
 });
