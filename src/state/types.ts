@@ -331,6 +331,8 @@ export interface Evidence {
   /** what the app found in the session: ran / exists / read (checked), self (the job's word), or why it doesn't hold */
   check?: "ran" | "exists" | "read" | "self" | "no-run" | "failed" | "stale" | "missing" | "unread";
   why?: string;
+  /** for a run: the result line from its real output ("Tests 12 passed"), not the job's word */
+  out?: string;
 }
 
 export interface Decision {
