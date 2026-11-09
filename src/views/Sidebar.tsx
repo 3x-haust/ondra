@@ -3,7 +3,7 @@
 import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
-import { anyPop, usePop } from "../ui/ModelPicker";
+import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
@@ -429,7 +429,16 @@ export function Sidebar() {
         </button>
       </div>
       <Show when={state.spaces.length > 1}>
-        <SpaceSwitch />
+      <div class="space-seg" style={{ "grid-template-columns": `repeat(${Math.min(3, state.spaces.length)}, minmax(0, 1fr))` }}>
+        <For each={state.spaces}>
+          {(s) => (
+            <button classList={{ on: state.space === s.id }} onClick={() => switchSpace(s.id)} data-shortcut={`sp-${s.id}`} title={`⌘${state.spaces.indexOf(s) + 1}`} aria-pressed={state.space === s.id}>
+              <span class="space-name">{tr(s.label)}</span>
+              <Show when={s.id !== state.space && decisionsIn(s.id).length}><i class="space-alert" /></Show>
+            </button>
+          )}
+        </For>
+      </div>
       </Show>
 
       <div
@@ -662,54 +671,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
-  );
-}
-
-/** The workspace switcher: the current workspace by name, the others in a menu (⌘1–9 switch directly).
- *  A dot on it when another workspace has something waiting on you. */
-function SpaceSwitch() {
-  const [open, setOpen] = usePop();
-  const cur = () => state.spaces.find((s) => s.id === state.space);
-  const waits = (id: string) => decisionsIn(id).length > 0;
-  const elsewhere = () => state.spaces.some((s) => s.id !== state.space && waits(s.id));
-  const key = (i: number) => (i < 9 ? `⌘${i + 1}` : "");
-  return (
-    <div class="picker sb-space" onClick={(e) => e.stopPropagation()}>
-      <button
-        class="sb-space-btn"
-        classList={{ on: open() }}
-        aria-haspopup="menu"
-        aria-expanded={open()}
-        aria-label={tr("워크스페이스: {name}", { name: tr(cur()?.label ?? "") })}
-        title={tr("워크스페이스 전환")}
-        onClick={() => setOpen(!open())}
-      >
-        <ProjectBadge name={tr(cur()?.label ?? "")} class="sb-space-badge" />
-        <span class="sb-space-name">{tr(cur()?.label ?? "")}</span>
-        <Show when={elsewhere()}><i class="space-alert" title={tr("다른 워크스페이스에 응답 필요")} /></Show>
-        <Icon name="down" size={14} class="sb-space-chev" />
-      </button>
-      <Show when={open()}>
-        <div class="pop left sb-space-pop" role="menu" aria-label={tr("워크스페이스")}>
-          <div class="pop-label">{tr("워크스페이스")}</div>
-          <For each={state.spaces}>
-            {(s, i) => (
-              <button type="button" role="menuitemradio" aria-checked={s.id === state.space} class="pop-item" data-shortcut={`sp-${s.id}`} onClick={() => (setOpen(false), switchSpace(s.id))}>
-                <ProjectBadge name={tr(s.label)} class="sb-space-badge" />
-                <span class="pop-item-main">{tr(s.label)}</span>
-                <Show when={s.id !== state.space && waits(s.id)}><i class="space-alert" title={tr("응답 필요")} /></Show>
-                <Show when={s.id === state.space}><Icon name="check" size={14} class="sb-space-check" /></Show>
-                <span class="menu-kbd">{key(i())}</span>
-              </button>
-            )}
-          </For>
-          <div class="pop-sep" />
-          <button type="button" role="menuitem" class="pop-item" onClick={() => (setOpen(false), setView({ name: "settings", tab: "general" }))}>
-            <span class="pop-item-main">{tr("워크스페이스 관리")}</span>
-          </button>
-        </div>
-      </Show>
-    </div>
   );
 }
 
