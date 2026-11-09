@@ -101,7 +101,7 @@ export function Kids(props: { t: Task; class?: string; short?: boolean }) {
     <Show when={kids().length}>
       <span
         class={`kids-n ${props.class ?? ""}`}
-        title={live() ? t("서브에이전트 {live}/{n}개 진행 중", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}
+        title={live() ? t("서브에이전트 {n}개 중 {live}개 진행 중", { live: live(), n: kids().length }) : t("서브에이전트 {n}개", { n: kids().length })}
       >
         <Icon name="branch" size={12} />
         {live() && !props.short ? `${live()}/${kids().length}` : kids().length}
