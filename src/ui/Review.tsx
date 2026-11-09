@@ -100,6 +100,12 @@ function withMark(toks: Tok[], mark?: [number, number]): (Tok & { em?: boolean }
 }
 
 /** one line of code, coloured when tokens are ready, with the changed part marked */
+/** how far a line's code is indented, in characters (a tab is two, as the diff draws it) */
+const indent = (text: string) => {
+  const lead = /^[ \t]*/.exec(text)?.[0] ?? "";
+  return Math.min(40, [...lead].reduce((n, c) => n + (c === "\t" ? 2 : 1), 0));
+};
+
 export function CodeText(props: { text: string; toks?: Tok[]; mark?: [number, number] }) {
   // runs: consecutive parts with the same em flag, so a marked change is one block
   const runs = () => {
@@ -113,7 +119,7 @@ export function CodeText(props: { text: string; toks?: Tok[]; mark?: [number, nu
   };
   const tok = (t: Tok) => (t.c ? <span class="tk" style={{ color: t.c, "--d": t.d ?? t.c }}>{t.text}</span> : t.text);
   return (
-    <span class="dv-code">
+    <span class="dv-code" style={{ "--ind": `${indent(props.text)}ch` }}>
       <For each={runs()}>{(r) => (r.em ? <span class="em">{r.parts.map(tok)}</span> : r.parts.map(tok))}</For>
       <Show when={!props.text}>{" "}</Show>
     </span>

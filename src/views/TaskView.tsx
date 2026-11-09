@@ -3,7 +3,7 @@
 import { Fold } from "../ui/Fold";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, state, taskById, updateTask } from "../state/store";
-import type { Task } from "../state/types";
+import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { usesReverse } from "../engine/reverse";
 import { artifacts, loadArtifacts } from "../state/artifacts";
@@ -12,6 +12,7 @@ import { goMain, hadTab, openPanel as showTool, openTask, panelOpen, panelTab, s
 import { sendSide } from "../engine/aside";
 import { shortcutHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
+import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard } from "../ui/Review";
@@ -24,7 +25,7 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
-import { Transcript } from "../ui/Transcript";
+import { liveVerb, Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
@@ -56,37 +57,77 @@ function MoreMenu(props: { id: string }) {
   );
 }
 
-/** The whole to-do list while it works (OmO-style): done, now, next. One line until opened. */
-function Todos(props: { t: Task }) {
-  const [open, setOpen] = createSignal(false);
-  const count = () => planCount(props.t.plan);
-  const cur = () => props.t.plan[count().now] ?? props.t.plan.find((p) => p.state !== "done");
+/** The whole to-do list (OmO-style): done, now, next. Opens from its part of the tray line. */
+function TodoList(props: { t: Task }) {
   return (
-    <div class="todos" classList={{ closed: !open() }}>
-      <button class="todos-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
-        <Icon name="list" size={14} />
-        <b>{tr("할 일")}</b>
-        <span class="num">{count().label}</span>
-        <Show when={!open() && cur()}><span class="rest">{cur()!.text}</span></Show>
-        <span class="spacer" />
-        <Icon name="chevron" size={13} class={`todos-chev ${open() ? "on" : ""}`} />
-      </button>
-      <Fold open={open()}>
-        <ol class="todos-list">
-          <For each={props.t.plan}>
-            {(p) => (
-              <li class={`todo ${stepState(p, props.t)}`}>
-                <span class="todo-box">
-                  <Show when={p.state === "done"} fallback={<Show when={stepState(p, props.t) === "now"}><i /></Show>}>
-                    <Icon name="check" size={10} stroke={3} />
-                  </Show>
-                </span>
-                <span class="todo-text">{p.text}</span>
-              </li>
-            )}
-          </For>
-        </ol>
-      </Fold>
+    <ol class="todos-list">
+      <For each={props.t.plan}>
+        {(p) => (
+          <li class={`todo ${stepState(p, props.t)}`}>
+            <span class="todo-box">
+              <Show when={p.state === "done"} fallback={<Show when={stepState(p, props.t) === "now"}><i /></Show>}>
+                <Icon name="check" size={10} stroke={3} />
+              </Show>
+            </span>
+            <span class="todo-text">{p.text}</span>
+          </li>
+        )}
+      </For>
+    </ol>
+  );
+}
+
+/**
+ * What goes on beside the conversation, as one line over the input ("변경 3파일 +18 −4 · 할 일 2/4 ·
+ * pnpm dev 실행 중"): each part opens its own view, the to-do list right above the line.
+ */
+// (the list stays open or shut while the line redraws: its state lives with the view)
+const [todos, setTodos] = createSignal(false);
+function Tray(props: { t: Task; changes: boolean; made: number; bg: Shell[]; open: (tab: PanelTab) => void }) {
+  const diff = () => taskDiff(props.t);
+  const plan = () => props.t.plan.length > 0 && props.t.status !== "done";
+  const count = () => planCount(props.t.plan);
+  const cmds = () => props.bg.map((s) => s.command.replace(/\s*&\s*$/, ""));
+  return (
+    <div class="tray-box keep">
+      <Show when={plan()}>
+        <Fold open={todos()}>
+          <TodoList t={props.t} />
+        </Fold>
+      </Show>
+      <div class="tray">
+        <Show when={props.changes}>
+          <button class="tray-seg" title={tr("변경 사항 열기")} onClick={() => props.open("changes")}>
+            <Icon name="diff" size={14} />
+            <b>{tr("변경")}</b>
+            <span>{tr("{n}파일", { n: diff().files.length })}</span>
+            <span class="add">+{diff().add}</span>
+            <span class="del">−{diff().del}</span>
+          </button>
+        </Show>
+        <Show when={plan()}>
+          <button class="tray-seg" classList={{ on: todos() }} aria-expanded={todos()} onClick={() => setTodos(!todos())}>
+            <Icon name="list" size={14} />
+            <b>{tr("할 일")}</b>
+            <span class="num">{count().label}</span>
+            <Icon name="chevron" size={12} class={`todos-chev ${todos() ? "on" : ""}`} />
+          </button>
+        </Show>
+        <Show when={props.made}>
+          <button class="tray-seg" onClick={() => props.open("artifacts")}>
+            <Icon name="inbox" size={14} />
+            <b>{tr("결과물 {n}개", { n: props.made })}</b>
+          </button>
+        </Show>
+        <Show when={props.bg.length}>
+          <button class="tray-seg bg" title={cmds().join("\n")} onClick={() => props.open("terminal")}>
+            <Icon name="terminal" size={14} />
+            <code>{cmds()[0]}</code>
+            <Show when={cmds().length > 1}><span class="num">+{cmds().length - 1}</span></Show>
+            <span>{tr("실행 중|bg")}</span>
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -219,6 +260,8 @@ function useCrumbFit(deps: () => unknown) {
 
 export function TaskView(props: { id: string }) {
   const t = () => taskById(props.id);
+  // another task starts with its to-do list shut
+  createEffect(on(() => props.id, () => setTodos(false)));
   return (
     <Show when={t()} fallback={<div class="pane-empty">{tr("삭제된 작업")}</div>}>
       {(task) => {
@@ -292,41 +335,21 @@ export function TaskView(props: { id: string }) {
                 </button>
               </div>,
             );
-          // not finished yet: just what it changed so far, no merge
-          else if (!inReview() && task().worktree?.state === "open" && diff().files.length && !(panelOpen() && panelTab() === "changes"))
-            out.push(
-              <button class="strip keep" onClick={() => openPanel("changes")}>
-                <Icon name="diff" size={14} />
-                <b>{tr("변경")}</b>
-                <span class="rest">
-                  {tr("파일 {n}개", { n: diff().files.length })} <span class="add">+{diff().add}</span>{" "}
-                  <span class="del">−{diff().del}</span>
-                </span>
-                <Icon name="chevron" size={14} />
-              </button>,
-            );
+          // not finished yet: what it changed so far (no merge), the to-dos, what it made and what runs
+          // in the background, as one line
+          const changes = !inReview() && task().worktree?.state === "open" && diff().files.length > 0 && !(panelOpen() && panelTab() === "changes");
           const made = artifacts[task().id] ?? [];
-          if (made.length && !(panelOpen() && panelTab() === "artifacts"))
-            out.push(
-              <button class="strip" onClick={() => openPanel("artifacts")}>
-                <Icon name="inbox" size={14} />
-                <b>{tr("결과물 {n}개", { n: made.length })}</b>
-                <span class="rest">{made[0].name}</span>
-                <span class="strip-act">{tr("보기")}</span>
-              </button>,
-            );
-          if (bg().length)
-            out.push(
-              <button class="strip" onClick={() => openPanel("terminal")}>
-                <Icon name="terminal" size={14} />
-                <b>{tr("백그라운드")}</b>
-                <span class="rest"><code>{bg().map((s) => s.command.replace(/\s*&\s*$/, "")).join("  ·  ")}</code></span>
-                <Icon name="chevron" size={14} />
-              </button>,
-            );
-          if (task().plan.length && task().status !== "done") out.push(<Todos t={task()} />);
+          const shown = made.length && !(panelOpen() && panelTab() === "artifacts") ? made.length : 0;
+          if (changes || shown || bg().length || (task().plan.length && task().status !== "done"))
+            out.push(<Tray t={task()} changes={changes} made={shown} bg={bg()} open={openPanel} />);
           if (task().queue?.length) out.push(<Queued t={task()} />);
           return out.length ? out : undefined;
+        };
+        /** the running call's verb, else the to-do it is on, else what it last said it was doing */
+        const step = () => {
+          const x = task();
+          const cur = x.plan.find((p) => p.state === "now");
+          return liveVerb(x) ?? cur?.text ?? (nowText(x.now) || tr(statusLabel[x.status]));
         };
         const [crumbFit, headRef] = useCrumbFit(() => [task().title, task().status, task().project, task().worktree?.state, renaming()]);
         const head = (
@@ -398,9 +421,18 @@ export function TaskView(props: { id: string }) {
                 <Show when={task().status === "running"} fallback={<Glyph t={task()} />}>
                   <StatusIcon t={task()} size="sm" />
                 </Show>
-                {tr(statusLabel[task().status])}
+                {/* working: what it does now and how far along it is, said once, here
+                    ("테스트 중 · 할 일 2/4 · 13분째"); the time goes first when the header is short */}
+                <Show when={task().status === "running"} fallback={tr(statusLabel[task().status])}>
+                  <span class="chip-step" title={step()}>{step()}</span>
+                  <Show when={task().plan.length}>
+                    <span class="faint chip-todo" aria-hidden="true">·</span>
+                    <span class="chip-todo">{tr("할 일 {done}/{all}", { done: planCount(task().plan).done, all: task().plan.length })}</span>
+                  </Show>
+                </Show>
                 <Show when={task().status === "running" && task().startedAt}>
-                  <span class="faint">{compact(workedMs(task(), now()))}</span>
+                  <span class="faint chip-time" aria-hidden="true">·</span>
+                  <span class="faint chip-time">{compact(workedMs(task(), now()))}</span>
                 </Show>
                 {/* "일시정지 · 6분 전": since it paused */}
                 <Show when={pausedAt(task())}>
