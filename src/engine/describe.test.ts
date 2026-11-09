@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { setState } from "../state/store";
-import { cutTitle, mainCommand, noteText, nowText, describeCommand as d } from "./describe";
+import { cutTitle, describeBrowser as b, mainCommand, noteText, nowText, unwrapCommand, describeCommand as d } from "./describe";
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
@@ -17,6 +17,58 @@ describe("describeCommand", () => {
     expect(d(`sed -n 1,80p src/views/Canvas.tsx`)).toMatchObject({ label: "살펴보기", target: "Canvas.tsx" });
     expect(d(`export FOO=1; jq . data.json`).label).toBe("살펴보기");
     expect(d(`weird-tool --flag`).label).toBe("weird-tool 실행");
+  });
+});
+
+describe("describeBrowser", () => {
+  it("names the step by its action, verb first, with what it worked on", () => {
+    setState("settings", "language", "ko");
+    expect(b("open https://www.acme.dev/pricing/")).toMatchObject({ label: "열었음", now: "여는 중", target: "acme.dev/pricing", action: "open" });
+    expect(b("acme.dev/pricing 열기")).toMatchObject({ label: "열었음", target: "acme.dev/pricing" });
+    expect(b("‘프로 시작하기’ 클릭")).toMatchObject({ now: "클릭 중", target: "‘프로 시작하기’", nowKo: "클릭 중 ‘프로 시작하기’" });
+    expect(b(`click "text=Start Pro"`).target).toBe("‘Start Pro’");
+    expect(b("click @e3")).toMatchObject({ label: "클릭함", target: undefined, action: "click" });
+    expect(b(`fill @e2 "me@acme.dev"`)).toMatchObject({ label: "입력함", target: "‘me@acme.dev’" });
+    expect(b("press Enter")).toMatchObject({ label: "키 누름", target: "Enter" });
+    expect(b(`find role button click --name "Sign in"`)).toMatchObject({ label: "클릭함", target: "‘Sign in’" });
+    expect(b("snapshot -i").label).toBe("페이지 읽음");
+    expect(b("screenshot /tmp/a.png")).toMatchObject({ label: "화면 캡처함", target: undefined });
+    expect(b("set viewport 1440 900").target).toBe("1440×900");
+    // a chain: the step that does something, not the look around it
+    expect(b("open https://acme.dev && agent-browser --session s wait 1000 && agent-browser snapshot -i")).toMatchObject({ label: "열었음", target: "acme.dev" });
+    expect(b("cookies clear")).toMatchObject({ label: "브라우저 씀", action: "other" });
+    setState("settings", "language", "en");
+    expect(b("open https://acme.dev/pricing")).toMatchObject({ label: "Opened", now: "Opening", nowKo: "여는 중 acme.dev/pricing" });
+    expect(b("‘프로 시작하기’ 클릭").now).toBe("Clicking");
+    expect(nowText("클릭 중 ‘Start Pro’")).toBe("Clicking ‘Start Pro’");
+    setState("settings", "language", "ko");
+  });
+});
+
+describe("shell wrappers", () => {
+  it("names the real program, never the assignment or subshell around it", () => {
+    setState("settings", "language", "ko");
+    expect(d(`list=$(find . -name '*.html')`)).toMatchObject({ label: "파일 찾기", now: "파일 찾는 중" });
+    expect(mainCommand(`list=$(find . -name '*.html')`)).toBe(`find . -name '*.html'`);
+    expect(d("cd web && pnpm build").label).toBe("빌드");
+    expect(mainCommand("cd web && pnpm build")).toBe("pnpm build");
+    expect(d("FOO=1 BAR=2 node x.js").label).toBe("x.js 실행");
+    expect(mainCommand("FOO=1 BAR=2 node x.js")).toBe("node x.js");
+    expect(d("timeout 30 rg foo")).toMatchObject({ label: "검색", now: "검색 중" });
+    expect(mainCommand("timeout 30 rg foo")).toBe("rg foo");
+    expect(d("(cd a; ls)").label).toBe("살펴보기");
+    expect(mainCommand("(cd a; ls)")).toBe("ls");
+    expect(unwrapCommand("sudo env time npm test")).toBe("npm test");
+    expect(unwrapCommand("out=`git rev-parse HEAD`")).toBe("git rev-parse HEAD");
+    expect(unwrapCommand("echo $(date)")).toBe("echo $(date)");
+    expect(unwrapCommand("FOO=1")).toBe("");
+    // shell syntax never becomes the verb
+    expect(d("x=$(./weird)").label).toBe("weird 실행");
+    expect(d(`"$BIN" --all`).label).toBe("명령 실행");
+    setState("settings", "language", "en");
+    expect(d(`list=$(find . -name '*.html')`).now).toBe("Finding files");
+    expect(d(`"$BIN" --all`).now).toBe("Running a command");
+    setState("settings", "language", "ko");
   });
 });
 

@@ -1359,3 +1359,9 @@
 .req-tag.discarded {
   color: var(--ink-3);
 }
+
+/* ═════════════ work lines: a command reads as code, cut at the row's end ═════════════ */
+.tool-row .tool-target.cmd {
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+}

@@ -40,6 +40,8 @@ export function nowText(now: string | undefined): string {
   // a bar would read as t()'s context mark: model text keeps it
   const plain = now.includes("|") ? now : t(now);
   if (plain !== now) return plain;
+  // a browser step as describeBrowser() stores it: "클릭 중 ‘프로 시작하기’"
+  for (const [, ing] of Object.values(BROWSER_VERBS)) if (now.startsWith(`${ing} `)) return `${t(ing)} ${now.slice(ing.length + 1)}`;
   for (const { f, keys, re } of FORM_RES) {
     const m = now.match(re);
     if (!m) continue;
@@ -139,9 +141,39 @@ export function cutTitle(s: string, max = 80): string {
   return `${cut.replace(/[\s,.;:·…\-–—(/]+$/, "")}…`;
 }
 
+/**
+ * One command without what wraps it: leading `VAR=…` assignments (and `export`/`local`
+ * of a `$(…)`), `$(`, backticks, `(`, `{`, `sudo`, `env`, `time`, `timeout N`, `nohup`,
+ * and the closing `)`/backtick they leave. `list=$(find . -name '*.html')` → `find . -name '*.html'`;
+ * a bare assignment (`FOO=1`) comes back empty.
+ */
+export function unwrapCommand(part: string): string {
+  let s = part.trim();
+  for (let before = ""; before !== s; ) {
+    before = s;
+    s = s
+      .replace(/^(?:export|local|declare|readonly)\s+(?=[A-Za-z_]\w*=(?:\$\(|`))/, "")
+      .replace(/^[A-Za-z_]\w*=(?=\$\(|`)/, "")
+      .replace(/^[A-Za-z_]\w*=(?:'[^']*'|"[^"]*"|[^\s'"`$()]*)(?:\s+|$)/, "")
+      .replace(/^(?:\$\(|`|\(|\{)\s*/, "")
+      .replace(/^(?:sudo|env|time|nohup|exec|command|builtin|do|then|else)\s+/, "")
+      .replace(/^timeout\s+(?:-\S+\s+)*\d+(?:\.\d+)?[smhd]?\s+/, "")
+      .replace(/^cd\s+(?:'[^']*'|"[^"]*"|\S+)\s*(?:&&|;)\s*/, "")
+      .trim();
+  }
+  // closers the stripped openers left: only when they don't pair with something inside
+  const count = (c: string) => s.split(c).length - 1;
+  for (let before = ""; before !== s; ) {
+    before = s;
+    if (/[)}]\s*$/.test(s) && count("(") + count("{") < count(")") + count("}")) s = s.replace(/\s*[)}]\s*$/, "");
+    if (/`\s*$/.test(s) && count("`") % 2) s = s.replace(/\s*`\s*$/, "");
+  }
+  return s.trim();
+}
+
 /** The part of a command that matters: no `cd …`, env settings, `date`, echo. */
 function core(cmd: string): string {
-  const parts = cmd.split(/\s*(?:&&|;|\n)\s*/).map((p) => p.trim()).filter(Boolean);
+  const parts = cmd.split(/\s*(?:&&|;|\n)\s*/).map(unwrapCommand).filter(Boolean);
   const skip = /^(cd|export|set|source|\.|echo|printf|date|true|:|mkdir|unset|local|R=|[A-Z_][A-Z0-9_]*=\S*$)/;
   return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
 }
@@ -154,7 +186,7 @@ function core(cmd: string): string {
 export function mainCommand(cmd: string): string {
   const parts = cmd
     .split(/\s*(?:&&|\|\||;|\n|\|)\s*/)
-    .map((p) => p.trim().replace(/^[({]\s*/, "").replace(/^(?:do|then|else|nohup|exec|command|time|sudo)\s+/, "").replace(/\s*&?\s*[)}]?\s*&?$/, "").trim())
+    .map((p) => unwrapCommand(p.trim().replace(/\s*&\s*$/, "")).replace(/\s*&$/, ""))
     .filter(Boolean);
   const skip = /^(cd|export|set|source|\.|echo|printf|date|true|false|:|mkdir|unset|local|pkill|killall|kill|sleep|wait|for|while|until|if|fi|done|break|continue|pgrep|lsof|test|\[|[A-Z_][A-Z0-9_]*=\S*$)(\s|$)/;
   return parts.find((p) => !skip.test(p)) ?? parts[0] ?? cmd;
@@ -221,9 +253,165 @@ export function describeCommand(cmd: string): Said {
   if (/^docker\b/.test(k)) return S("도커", "도커 쓰는 중");
   if (/^(xcrun|simctl|adb|emulator)\b/.test(k)) return S("기기 다루기", "기기 다루는 중");
   if (/^(cp|mv|rm|ln|rsync|tar|zip|unzip|ditto)\b/.test(k)) return S("파일 정리", "파일 정리 중", file(k));
-  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|grep|rg|find|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴보기", "살펴보는 중", file(k));
+  if (/^(find|fd|locate|mdfind)\b/.test(k)) return S("파일 찾기", "파일 찾는 중");
+  if (/^(grep|egrep|rg|ag|ack|git\s+grep)\b/.test(k)) return S("검색", "검색 중", file(k));
+  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴보기", "살펴보는 중", file(k));
   if (/^open\b/.test(k)) return S("열기", "여는 중", host(k) ?? file(k));
   if (/^(sleep|wait)\b/.test(k)) return S("기다리기", "기다리는 중");
+  // a program's name, never shell syntax ("list=$(find")
   const prog = k.match(/^['"]?([^\s'"]+)/)?.[1]?.split("/").pop();
-  return prog ? S("{p} 실행", "{p} 실행 중", undefined, { p: prog }) : S("명령 실행", "명령 실행 중");
+  return prog && /^[\w.@+-]+$/.test(prog) ? S("{p} 실행", "{p} 실행 중", undefined, { p: prog }) : S("명령 실행", "명령 실행 중");
+}
+
+/**
+ * Browser steps by action: [done, going on now] as t() keys. The verb leads and the
+ * target follows ("열었음 acme.dev/pricing", "클릭 중 ‘프로 시작하기’"), so a row reads
+ * the same in both languages. "브라우저 씀" is only for an action this doesn't know.
+ */
+const BROWSER_VERBS = {
+  open: ["열었음", "여는 중"],
+  read: ["페이지 읽음", "페이지 읽는 중"],
+  click: ["클릭함", "클릭 중"],
+  dblclick: ["더블클릭함", "더블클릭 중"],
+  type: ["입력함", "입력 중"],
+  press: ["키 누름", "키 누르는 중"],
+  hover: ["가리킴", "가리키는 중"],
+  focus: ["포커스함", "포커스 중"],
+  check: ["체크함", "체크 중"],
+  uncheck: ["체크 해제함", "체크 해제 중"],
+  select: ["선택함", "선택 중"],
+  drag: ["끌어다 놓음", "끌어다 놓는 중"],
+  upload: ["파일 올림", "파일 올리는 중"],
+  download: ["내려받음", "내려받는 중"],
+  scroll: ["스크롤함", "스크롤 중"],
+  screenshot: ["화면 캡처함", "화면 캡처 중"],
+  pdf: ["PDF로 저장함", "PDF로 저장 중"],
+  eval: ["스크립트 실행함", "스크립트 실행 중"],
+  wait: ["기다림", "기다리는 중"],
+  verify: ["확인함", "확인 중"],
+  back: ["뒤로 감", "뒤로 가는 중"],
+  forward: ["앞으로 감", "앞으로 가는 중"],
+  reload: ["새로고침함", "새로고침 중"],
+  tab: ["탭 전환함", "탭 전환 중"],
+  close: ["브라우저 닫음", "브라우저 닫는 중"],
+  set: ["브라우저 설정함", "브라우저 설정 중"],
+  connect: ["브라우저 연결함", "브라우저 연결 중"],
+  mouse: ["마우스 조작함", "마우스 조작 중"],
+  other: ["브라우저 씀", "브라우저 쓰는 중"],
+} as const satisfies Record<string, readonly [string, string]>;
+export type BrowserAction = keyof typeof BROWSER_VERBS;
+const BROWSER_ALIAS: Record<string, BrowserAction> = {
+  open: "open", goto: "open", navigate: "open", read: "read", snapshot: "read", get: "read",
+  click: "click", tap: "click", dblclick: "dblclick", type: "type", fill: "type", keyboard: "type",
+  press: "press", key: "press", hover: "hover", focus: "focus", check: "check", uncheck: "uncheck",
+  select: "select", drag: "drag", upload: "upload", download: "download", scroll: "scroll",
+  scrollintoview: "scroll", screenshot: "screenshot", pdf: "pdf", eval: "eval", wait: "wait", is: "verify",
+  back: "back", forward: "forward", reload: "reload", tab: "tab", close: "close", set: "set",
+  connect: "connect", mouse: "mouse",
+};
+const alias = (w: string): BrowserAction | undefined => (Object.prototype.hasOwnProperty.call(BROWSER_ALIAS, w.toLowerCase()) ? BROWSER_ALIAS[w.toLowerCase()] : undefined);
+/** stored descriptions ("acme.dev/pricing 열기", "‘프로 시작하기’ 클릭"): the verb comes last */
+const BROWSER_KO: Record<string, BrowserAction> = { 열기: "open", 클릭: "click", 입력: "type", 선택: "select", 스크롤: "scroll", 캡처: "screenshot" };
+
+/** words of a command, quotes taken off ('a b', "a b", ‘a b’ stay one word) */
+const words = (s: string) => [...s.matchAll(/'([^']*)'|"([^"]*)"|‘([^’]*)’|“([^”]*)”|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5]);
+/** an address without its scheme, www or trailing slash */
+const address = (s: string) => s.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "");
+const quoted = (s: string) => {
+  const x = s.replace(/\s+/g, " ").trim();
+  return x ? `‘${[...x].length > 40 ? `${[...x].slice(0, 39).join("")}…` : x}’` : undefined;
+};
+/** what a selector points at, in words: text=Start Pro, [name="Start Pro"], a bare label; refs (@e3) say nothing */
+function element(sel: string | undefined): string | undefined {
+  if (!sel || /^@?e\d+$/.test(sel)) return undefined;
+  const named = sel.match(/(?:name|aria-label|title|placeholder)\s*[=:]\s*["']?([^"'\]]+)/)?.[1] ?? sel.match(/^(?:text|label)\s*[=:]\s*["']?(.+?)["']?$/)?.[1];
+  if (named) return quoted(named);
+  return /^[#.[]|[>~:=[\]]/.test(sel) ? sel : quoted(sel);
+}
+
+/** flags that take the next word as their value */
+const FLAG_VALUE = /^--(session|profile|timeout|port|cdp|headers|executable-path|proxy|user-agent|state|name|account)$/;
+
+/** one agent-browser command (its words after `agent-browser` and its --flags) */
+function browserStep(w: string[]): { action: BrowserAction; target?: string } {
+  const args = w.filter((x, i) => !x.startsWith("--") && !FLAG_VALUE.test(w[i - 1] ?? ""));
+  const [cmd = "", ...rest] = args;
+  const name = w.find((_, i) => w[i - 1] === "--name");
+  let action: BrowserAction = alias(cmd) ?? "other";
+  switch (action) {
+    case "open":
+      return { action, target: rest[0] ? address(rest[0]) : undefined };
+    case "read":
+      return { action, target: cmd === "read" && rest[0] && /[./]/.test(rest[0]) ? address(rest[0]) : undefined };
+    case "type":
+      // type/fill <sel> <text>, keyboard type <text>
+      return { action, target: quoted(rest.slice(1).join(" ")) ?? (cmd === "keyboard" ? undefined : element(rest[0])) };
+    case "press":
+      return { action, target: rest[0] };
+    case "select":
+      return { action, target: quoted(rest.slice(1).join(", ")) ?? element(rest[0]) };
+    case "upload":
+      return { action, target: rest.slice(1).map((f) => f.split("/").pop()).join(", ") || undefined };
+    case "download":
+    case "pdf":
+      return { action, target: (cmd === "pdf" ? rest[0] : rest[1])?.split("/").pop() };
+    case "scroll":
+      return { action, target: cmd === "scrollintoview" ? element(rest[0]) : undefined };
+    case "wait":
+      return { action, target: rest[0] && !/^\d+$/.test(rest[0]) ? element(rest[0]) : undefined };
+    case "tab":
+      if (rest[0] === "new") return { action: "open", target: rest[1] ? address(rest[1]) : undefined };
+      return { action };
+    case "set":
+      return { action, target: rest[0] === "viewport" && rest[2] ? `${rest[1]}×${rest[2]}` : rest[0] === "device" ? rest.slice(1).join(" ") || undefined : undefined };
+    case "click":
+    case "dblclick":
+    case "hover":
+    case "focus":
+    case "check":
+    case "uncheck":
+      return { action, target: name ? quoted(name) : element(rest[0]) };
+    case "other":
+      // find <locator> <value> <action> [text]: the action at the end, on what was found
+      if (cmd === "find") {
+        const at = rest.findIndex((x, i) => i >= 1 && !!alias(x));
+        if (at > 0) {
+          action = alias(rest[at])!;
+          const text = rest.slice(at + 1).join(" ");
+          return { action, target: action === "type" && text ? quoted(text) : quoted(name ?? (/^(first|last|nth)$/.test(rest[0]) ? rest[at - 1] : rest[1])) };
+        }
+      }
+      return { action };
+    default:
+      return { action };
+  }
+}
+
+/**
+ * A browser step in plain words, from what was run (`open https://acme.dev/pricing`,
+ * `click @e3`, a chain of agent-browser calls) or a stored description
+ * ("acme.dev/pricing 열기"). `label` is the step done ("열었음"), `now` the step going
+ * on ("여는 중"), `target` what it worked on ("acme.dev/pricing", "‘프로 시작하기’");
+ * show them verb first. `action` is "other" when it isn't one this knows ("브라우저 씀").
+ */
+export function describeBrowser(cmd: string): Said & { action: BrowserAction } {
+  const c = cmd.trim();
+  const ko = c.match(/^(.+?)\s+(열기|클릭|입력|선택|스크롤|캡처)$/);
+  let step: { action: BrowserAction; target?: string };
+  if (ko) {
+    const action = BROWSER_KO[ko[2]];
+    const x = ko[1].trim();
+    step = { action, target: action === "open" ? address(x) : /^['"‘“]/.test(x) ? quoted(words(x).join(" ")) : x };
+  } else if (/^(https?:\/\/|www\.)/.test(c)) step = { action: "open", target: address(c.split(/\s/)[0]) };
+  else {
+    // a chain: the step that does something (open a page, click) over the looking around it
+    const steps = c
+      .split(/\s*(?:&&|\|\||;|\n|\|)\s*/)
+      .map((p) => p.replace(/^.*?\bagent-browser\s+/, ""))
+      .filter((p) => p && !/^(sleep|echo|cd|timeout|true)\b/.test(p))
+      .map((p) => browserStep(words(p)));
+    step = steps.find((s) => !["read", "screenshot", "wait", "verify", "other"].includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? steps[0] ?? { action: "other" };
+  }
+  const [label, now] = BROWSER_VERBS[step.action];
+  return { label: t(label), now: t(now), nowKo: step.target ? `${now} ${step.target}` : now, target: step.target, action: step.action };
 }
