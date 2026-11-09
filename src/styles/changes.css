@@ -50,7 +50,7 @@
   align-items: center;
   justify-content: center;
   width: 22px;
-  height: 22px;
+  height: 26px;
   padding: 0;
   border-radius: 5px;
   color: var(--ink-3);
@@ -81,7 +81,7 @@
   width: 16px;
   height: 16px;
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -110,7 +110,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -132,12 +132,12 @@
   overflow-y: auto;
   padding-bottom: var(--s-16);
   outline: 0;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .scm-row {
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 26px;
   padding: 0 0 0 4px;
   color: var(--ink-2);
   cursor: pointer;
@@ -177,7 +177,7 @@
   align-items: center;
   justify-content: center;
   width: 16px;
-  height: 22px;
+  height: 26px;
   color: var(--ink-3);
 }
 .scm-row.group {
@@ -198,7 +198,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   margin-left: 0.5em;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--ink-4);
 }
 .scm-fill {
@@ -223,8 +223,8 @@
   border-radius: 11px;
   background: var(--active);
   color: var(--ink-2);
-  font-size: 11px;
-  line-height: 18px;
+  font-size: var(--fs-2xs);
+  line-height: 20px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -233,12 +233,12 @@
   width: 14px;
   margin-right: 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-xs);
 }
 .scm-none {
   padding: var(--s-8) 20px;
   color: var(--ink-4);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 /* VS Code's git decoration colours: the name and the letter */
@@ -317,7 +317,7 @@
   padding: 0 4px 0 10px;
   border-right: 1px solid var(--line-soft);
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   user-select: none;
 }
@@ -355,7 +355,7 @@
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 20px;
+  height: 22px;
   padding: 0;
   border-radius: 4px;
   color: var(--ink-3);
@@ -381,18 +381,18 @@
   flex: none;
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 26px;
   padding: 0 var(--s-12);
   overflow: hidden;
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 .eg-crumb {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 20px;
+  height: 22px;
   padding: 0 3px;
   border-radius: 3px;
   color: inherit;
@@ -412,7 +412,7 @@ button.eg-crumb:hover {
   padding: 3px var(--s-12);
   background: color-mix(in oklab, var(--warn) 10%, var(--code-surface));
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-xs);
 }
 .eg-body {
   position: relative;
@@ -423,14 +423,14 @@ button.eg-crumb:hover {
 }
 .cg-note {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .eg-empty {
   flex: 1;
   display: grid;
   place-items: center;
   color: var(--ink-4);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .eg-empty dl {
   display: grid;
@@ -444,7 +444,7 @@ button.eg-crumb:hover {
 .eg-empty dd {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-xs);
 }
 
 /* the diff: CodeMirror, the sash between the sides, the overview ruler at the right edge */
@@ -464,10 +464,10 @@ button.eg-crumb:hover {
   overflow-y: auto;
 }
 .cg-cm .cm-editor {
-  font-size: 12px;
+  font-size: var(--fs-code);
 }
 .cg-cm .cm-scroller {
-  line-height: 20px;
+  line-height: 22px;
 }
 .cg-cm .cm-content {
   padding: 0 0 24px;
@@ -543,12 +543,12 @@ button.eg-crumb:hover {
   flex: none;
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 26px;
   padding: 0 var(--s-6);
   border-top: 1px solid var(--line-soft);
   background: var(--sidebar);
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -556,7 +556,7 @@ button.eg-crumb:hover {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 22px;
+  height: 26px;
   padding: 0 var(--s-6);
   font-variant-numeric: tabular-nums;
 }
