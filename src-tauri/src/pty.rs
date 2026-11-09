@@ -160,7 +160,7 @@ pub fn pty_open(
 /// The engine's interactive UI for one account, with `/login` typed in.
 #[tauri::command]
 pub fn pty_open_login(app: AppHandle, ptys: State<'_, Ptys>, id: String, account_id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let bin = engine_bin().ok_or("엔진 파일이 앱에 없습니다")?;
+    let bin = engine_bin(&app).filter(|b| b.is_file()).ok_or("엔진 파일이 앱에 없습니다")?;
     let mut cmd = CommandBuilder::new(bin);
     cmd.arg("--no-extensions");
     cmd.cwd(home());

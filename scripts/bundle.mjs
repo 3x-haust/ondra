@@ -1,18 +1,21 @@
-// Puts everything Ondra needs inside the app bundle, so installing the app is
-// the only step a user takes:
+// Puts everything Ondra needs in place, so installing the app is the only step a user takes:
 //   • agent-browser, agent-desktop (+ macOS helper)   → src-tauri/binaries/<name>-<triple>
 //   • agent-browser built-in skills                    → src-tauri/resources/agent-browser-skills
-//   • the agent engine (3xhaustPi coding agent, one binary) → binaries/ondra-engine-<triple>
-//     and its support files                            → src-tauri/resources/engine
+// and the components, which live outside the app's update package (scripts/components.mjs):
+//   • the agent engine (3xhaustPi coding agent, one binary, and its support files) → src-tauri/resources/engine
 //   • Chrome for Testing (headless shell)              → src-tauri/resources/chrome
+//   • the binary analyzer                              → src-tauri/resources/binary-analysis
+// A development build runs them from there. A release build (`tauri build`, `--release`) also packs each
+// version once and writes src-tauri/resources/components.json, which the app reads to fetch them.
 // Idempotent: anything already up to date is left alone.
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stageComputerAssets } from "./computer-assets.mjs";
 import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
+import { pack, plan, previousManifest, treeHash } from "./components.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -90,10 +93,12 @@ if (!existsSync(join(engineDist, "pi"))) {
   log("building engine binary (npm run build:binary)…");
   execFileSync("npm", ["run", "build:binary"], { cwd: pkg, stdio: "inherit" });
 }
-copyBin("ondra-engine", join(engineDist, "pi"));
 const engineRes = join(resDir, "engine");
 rmSync(engineRes, { recursive: true, force: true });
 mkdirSync(engineRes, { recursive: true });
+// the engine component is one folder: the binary next to the files it reads
+copyFileSync(join(engineDist, "pi"), join(engineRes, "ondra-engine"));
+chmodSync(join(engineRes, "ondra-engine"), 0o755);
 for (const item of ["package.json", "theme", "assets", "export-html", "photon_rs_bg.wasm"]) {
   const src = join(engineDist, item);
   if (existsSync(src)) cpSync(src, join(engineRes, item), { recursive: true });
@@ -106,6 +111,8 @@ for (const item of ["README.md", "docs", "examples"]) {
 log("engine assets");
 
 // ── Chrome for Testing (headless shell), cached so it downloads once ──
+// Pinned: a new version is a new component every user downloads, so it changes only when bumped here.
+const CHROME_VERSION = process.env.ONDRA_CHROME_VERSION ?? "157.0.8103.38";
 const variant = process.env.ONDRA_CHROME_VARIANT ?? "chrome-headless-shell";
 const platform = nodeArch === "arm64" ? "mac-arm64" : "mac-x64";
 const chromeDest = join(resDir, "chrome");
@@ -113,42 +120,19 @@ const stamp = join(chromeDest, ".version");
 const cache = join(homedir(), ".cache", "ondra-build");
 mkdirSync(cache, { recursive: true });
 
-async function latest() {
-  const res = await fetch("https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json");
-  if (!res.ok) throw new Error(`chrome-for-testing index: HTTP ${res.status}`);
-  const stable = (await res.json()).channels.Stable;
-  const dl = stable.downloads[variant].find((d) => d.platform === platform);
-  return { version: stable.version, url: dl.url };
-}
-
-function cachedZip() {
-  const zips = readdirSync(cache).filter((f) => f.startsWith(`${variant}-${platform}-`) && f.endsWith(".zip")).sort();
-  return zips.length ? join(cache, zips[zips.length - 1]) : null;
-}
-
-let zip = null;
-let version = null;
-try {
-  const info = await latest();
-  version = info.version;
-  zip = join(cache, `${variant}-${platform}-${version}.zip`);
-  if (!existsSync(zip)) {
-    log(`downloading ${variant} ${version}…`);
-    const res = await fetch(info.url);
-    if (!res.ok) throw new Error(`download: HTTP ${res.status}`);
-    writeFileSync(`${zip}.part`, Buffer.from(await res.arrayBuffer()));
-    execFileSync("mv", [`${zip}.part`, zip]);
-  }
-} catch (e) {
-  zip = cachedZip();
-  if (!zip) {
-    console.error(`bundle: could not get Chrome (${e.message}) and nothing cached`);
+const zip = join(cache, `${variant}-${platform}-${CHROME_VERSION}.zip`);
+if (!existsSync(zip)) {
+  const url = `https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${platform}/${variant}-${platform}.zip`;
+  log(`downloading ${variant} ${CHROME_VERSION}…`);
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`bundle: could not get Chrome ${CHROME_VERSION} (HTTP ${res.status})`);
     process.exit(1);
   }
-  version = zip.slice(zip.lastIndexOf("-") + 1, -4);
-  log(`offline, using cached ${version}`);
+  writeFileSync(`${zip}.part`, Buffer.from(await res.arrayBuffer()));
+  execFileSync("mv", [`${zip}.part`, zip]);
 }
-const want = `${variant} ${version}`;
+const want = `${variant} ${CHROME_VERSION}`;
 if (existsSync(stamp) && readFileSync(stamp, "utf8") === want) {
   log(`chrome (up to date: ${want})`);
 } else {
@@ -162,4 +146,27 @@ if (existsSync(stamp) && readFileSync(stamp, "utf8") === want) {
   } catch {}
   writeFileSync(stamp, want);
   log(`chrome → resources/chrome (${want})`);
+}
+
+// ── components.json: what a release build of the app fetches, and from where ──
+const manifestFile = join(resDir, "components.json");
+// `tauri build` runs `pnpm bundle --release` (tauri.conf.json beforeBuildCommand)
+if (process.argv.includes("--release")) {
+  const conf = JSON.parse(readFileSync(join(tauri, "tauri.conf.json"), "utf8"));
+  const enginePkg = JSON.parse(readFileSync(join(engineRes, "package.json"), "utf8"));
+  const analyzer = JSON.parse(readFileSync(join(resDir, "binary-analysis", "manifest.json"), "utf8"));
+  const ditto = (from) => (dir) => execFileSync("ditto", [from, dir]);
+  // in the order a first run needs them: no job runs without the engine
+  const built = [
+    pack({ name: "engine", version: `${enginePkg.version}-${treeHash(engineRes)}`, fill: ditto(engineRes), sign: ["ondra-engine"], log }),
+    pack({ name: "chrome", version: variant === "chrome-headless-shell" ? CHROME_VERSION : `${CHROME_VERSION}-${variant}`, fill: ditto(chromeDest), log }),
+    // the analyzer's files are signed in place by bundle-binary-analysis.mjs
+    pack({ name: "binary-analysis", version: `${analyzer.version}-${analyzer.recipe.slice(0, 12)}`, fill: ditto(join(resDir, "binary-analysis")), log }),
+  ];
+  const { manifest, upload } = plan(built, await previousManifest(), `v${conf.version}`);
+  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  log(`components.json (new in this release: ${upload.join(", ") || "none"})`);
+} else {
+  // development builds run the components from src-tauri/resources and fetch nothing
+  writeFileSync(manifestFile, `${JSON.stringify({ components: [] }, null, 2)}\n`);
 }

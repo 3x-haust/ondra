@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// latest.json for the in-app updater, written next to the release build:
-//   TAURI_SIGNING_PRIVATE_KEY=… pnpm tauri build   # makes Ondra.app.tar.gz and its .sig
+// latest.json for the in-app updater, written next to the release build (scripts/release.mjs runs it):
 //   node scripts/release-manifest.mjs [notes.md]   # → src-tauri/target/release/bundle/macos/latest.json
-// Upload latest.json and Ondra.app.tar.gz to the GitHub release v<version>; the app
-// reads releases/latest/download/latest.json.
+// It points at Ondra.app.tar.gz of the GitHub release v<version>; the app reads
+// releases/latest/download/latest.json.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

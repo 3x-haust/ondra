@@ -211,6 +211,9 @@ pub async fn browser_check(app: AppHandle, space: Option<String>) -> Result<u16,
 }
 
 fn ensure_checked(app: &AppHandle, space: &str, force: bool) -> Result<u16, String> {
+    // on a first run without the browser in the app, it may still be downloading: wait for it
+    // (before taking the lock, so nothing else waits behind this)
+    crate::components::wait_usable(app, "chrome", Duration::from_secs(15 * 60));
     let shared = app.state::<Shared>();
     let mut all = shared.0.lock().map_err(|_| "browser lock".to_string())?;
     let inner = all.entry(space_key(space)).or_default();

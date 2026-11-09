@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm bundle && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm bundle && pnpm build",
+    "beforeBuildCommand": "pnpm bundle --release && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -58,7 +58,6 @@
       "binaries/agent-browser",
       "binaries/agent-desktop",
       "binaries/agent-desktop-macos-helper",
-      "binaries/ondra-engine",
       "binaries/ondra-binary",
       "binaries/ondra-simhelper",
       "binaries/ondra-cuhost"
@@ -76,9 +75,7 @@
     "resources": {
       "dmg/background.tiff": "dmg-background.tiff",
       "resources/agent-browser-skills/": "agent-browser-skills/",
-      "resources/engine/": "engine/",
-      "resources/binary-analysis/": "binary-analysis/",
-      "resources/chrome/": "chrome/",
+      "resources/components.json": "components.json",
       "resources/computer/": "computer/",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"

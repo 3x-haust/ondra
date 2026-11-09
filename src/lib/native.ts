@@ -31,7 +31,11 @@ export const engineInfo = () =>
  * added. Events arrive as `agent:event` {id, ev}; exit as `agent:exit`.
  * An env entry named PATH is prepended to the user's login-shell PATH.
  */
-export const agentSpawn = (id: string, cwd: string, args: string[], env: Env) => call<void>("agent_spawn", { id, cwd, args, env });
+export const agentSpawn = async (id: string, cwd: string, args: string[], env: Env) => {
+  // a first run whose engine is still coming in waits for it here
+  await componentGate("engine");
+  return call<void>("agent_spawn", { id, cwd, args, env });
+};
 /** Write one JSON command line to the agent's stdin. */
 export const agentSend = (id: string, command: Record<string, unknown>) => call<void>("agent_send", { id, command });
 export const agentKill = (id: string) => call<void>("agent_kill", { id });
@@ -298,7 +302,11 @@ export const toolStatus = () =>
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
 /** Env every worker gets: bundled tools on PATH, its tab in the shared browser, keychain sign-in, artifacts dir. */
-export const workerEnv = (workerId: string, space?: string) => call<Env>("worker_env", { workerId, space: space ?? null }, []);
+export const workerEnv = async (workerId: string, space?: string) => {
+  // every job gets the shared browser: one whose browser is still coming in waits for it
+  if (workerId !== "tools") await componentGate("chrome");
+  return call<Env>("worker_env", { workerId, space: space ?? null }, []);
+};
 /** SKILL.md paths passed to workers with --skill. */
 export const workerSkills = () => call<string[]>("worker_skills", undefined, []);
 type SpaceRef = { id: string; cliHome?: string };
@@ -530,11 +538,32 @@ export const bridgeReply = (id: number, value: string) => call<void>("bridge_rep
 /** ONDRA_BRIDGE + its token, for main's engine (workers get them in workerEnv) */
 export const bridgeEnv = () => call<Env>("bridge_env", undefined, []);
 
+// ───────────────────────── components (engine, browser, analyzer) ─────────────────────────
+/** One of the big parts that live outside the app (see src-tauri/src/components.rs). */
+export interface ComponentStatus {
+  name: "engine" | "chrome" | "binary-analysis" | string;
+  version: string;
+  state: "queued" | "copying" | "downloading" | "ready" | "failed";
+  /** 0–100 while downloading */
+  percent: number;
+  size: number;
+  error: string | null;
+}
+/** Each component of this build and how far it is (empty in development builds). */
+export const componentsStatus = () => call<ComponentStatus[]>("components_status", undefined, []);
+export const onComponents = (f: (list: ComponentStatus[]) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<ComponentStatus[]>("components:status", (e) => f(e.payload)) : Promise.resolve(() => {});
+/** Resolves once a usable copy of the component is here (or it failed for now). */
+export const componentsWait = (name: string) => call<ComponentStatus["state"]>("components_wait", { name }, "ready");
+let componentGate: (name: string) => Promise<unknown> = componentsWait;
+/** What a job start does to wait for a component (the app adds a notice to it). */
+export const setComponentGate = (gate: (name: string) => Promise<unknown>) => void (componentGate = gate);
+
 /** A newer release on GitHub, or null (always null in development builds). */
 export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);
 /** Fetch the newer release's package in the background; true once it is ready to install. */
 export const prepareUpdate = () => call<boolean>("update_prepare", {}, false);
-/** Install it (fetching it first if needed); the app restarts on success. */
+/** Install it (the package fetched before, else fetched now); the app restarts on success. */
 export const installUpdate = () => call<void>("update_install");
 /** How far the package download is: 0–100, or -1 when the size isn't known. */
 export const onUpdateProgress = (f: (p: { version: string; percent: number }) => void): Promise<UnlistenFn> =>

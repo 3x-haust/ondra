@@ -15,7 +15,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const contents = resolve(process.argv[2], "Contents");
 const resources = join(contents, "Resources");
 const bundled = join(resources, "app-skills");
-const engine = join(contents, "MacOS", "ondra-engine");
+// the engine component inside the dmg's app; an app built before components had it in MacOS
+const engineDir = [join(resources, "components", "engine"), join(resources, "engine")].find((d) => existsSync(join(d, "package.json"))) ?? join(resources, "engine");
+const engine = [join(engineDir, "ondra-engine"), join(contents, "MacOS", "ondra-engine")].find(existsSync) ?? join(engineDir, "ondra-engine");
 const mimikyu = join(bundled, "mimikyu", "SKILL.md");
 const search = join(resources, "app-extensions", "skills.ts");
 
@@ -50,7 +52,7 @@ try {
       HOME: home,
       PATH: process.env.PATH,
       PI_CODING_AGENT_DIR: join(home, ".pi", "agent"),
-      PI_PACKAGE_DIR: join(resources, "engine"),
+      PI_PACKAGE_DIR: engineDir,
       PI_OFFLINE: "1",
       PI_TELEMETRY: "0",
       ONDRA_SKILL_PATHS: JSON.stringify(paths),

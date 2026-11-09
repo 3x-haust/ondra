@@ -82,11 +82,30 @@ impl Drop for Scratch {
     fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
 }
 
+/// Ondra keeps the engine as a component outside the app and names its folder in
+/// ONDRA_BINARY_ANALYSIS. On a first run it may still be downloading; Ondra touches
+/// `.fetching` next to it while it is, so wait for it as long as that stays fresh.
+fn component() -> Option<PathBuf> {
+    let dir = PathBuf::from(env::var_os("ONDRA_BINARY_ANALYSIS").filter(|d| !d.is_empty())?);
+    let fetching = dir.parent()?.join(".fetching");
+    let fresh = || fs::metadata(&fetching).and_then(|m| m.modified()).ok().and_then(|t| SystemTime::now().duration_since(t).ok()).is_some_and(|age| age < Duration::from_secs(30));
+    let started = Instant::now();
+    let mut told = false;
+    while !dir.join("bin/radare2").is_file() && fresh() && started.elapsed() < Duration::from_secs(15 * 60) {
+        if !told {
+            eprintln!("Waiting for Ondra to finish downloading the analysis engine...");
+            told = true;
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
+    Some(dir)
+}
+
 fn resources() -> Result<PathBuf, String> {
     let exe = env::current_exe().map_err(|e| e.to_string())?;
     let parent = exe.parent().ok_or("Executable has no parent")?;
-    // Installed .app, then Tauri's local binaries/ or target/{debug,release}/.
-    for path in [parent.join("../Resources/binary-analysis"), parent.join("../resources/binary-analysis"), parent.join("../../resources/binary-analysis")] {
+    // Ondra's component, then the installed .app, then Tauri's local binaries/ or target/{debug,release}/.
+    for path in component().into_iter().chain([parent.join("../Resources/binary-analysis"), parent.join("../resources/binary-analysis"), parent.join("../../resources/binary-analysis")]) {
         if path.join("bin/radare2").is_file() {
             return fs::canonicalize(path).map_err(|e| e.to_string());
         }
