@@ -1801,3 +1801,22 @@ button.pf-ref:hover {
   text-indent: calc(-1 * (var(--ind, 0ch) + 2ch));
   overflow-wrap: break-word;
 }
+
+/* the tray never lets one part run into the next: the running command gives way first (its text
+   ends in …), then the others clip at their own edge; nothing draws outside its segment */
+.tray {
+  overflow: hidden;
+}
+.tray-seg {
+  overflow: hidden;
+}
+.tray-seg > * {
+  flex: none;
+}
+.tray-seg.bg {
+  flex: 0 50 auto;
+}
+.tray-seg.bg > code {
+  flex: 0 1 auto;
+  min-width: 2ch;
+}
