@@ -743,7 +743,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-resize" onPointerDown={drag} />
       <div class="panel-bar" data-tauri-drag-region>
-        <div class="ptabs" ref={bar} role="tablist">
+        <div class="ptabs" ref={bar} role="tablist" data-tauri-drag-region>
           <span class="tab-ind" classList={{ on: ind().on }} style={{ transform: `translateX(${ind().x}px)`, width: `${ind().w}px` }} />
           <For each={ptabs()}>
             {(x) => {
