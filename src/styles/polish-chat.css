@@ -1397,3 +1397,17 @@
 .convo > .reply:last-child .reply-body > .reply-foot {
   margin-bottom: 0;
 }
+
+/* where a Main reply came from ("레비오사 웹에서") sits on its own line above it, so the
+   reply keeps the column's full width and left edge instead of being pushed right */
+.reply:has(> .reply-from) {
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.reply > .reply-from {
+  margin-bottom: 0;
+}
+.reply:has(> .reply-from) > .reply-body {
+  align-self: stretch;
+  min-width: 0;
+}

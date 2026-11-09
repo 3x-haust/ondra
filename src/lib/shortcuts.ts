@@ -41,11 +41,13 @@ export const shortcuts = {
   nextTab: ctrl("Tab"),
   previousTab: ctrl("Tab", true),
   focusInput: cmd("Enter", true),
+  zoomIn: cmd("Equal"),
+  zoomOut: cmd("Minus"),
 } satisfies Record<string, Shortcut>;
 export type ShortcutId = keyof typeof shortcuts;
 
 export function shortcutLabel(s: Shortcut): string {
-  const key = ({ Comma: ",", Period: ".", Backslash: "\\", Backquote: "`", BracketLeft: "[", BracketRight: "]", Tab: "⇥", Enter: "↵" } as Record<string, string>)[s.code] ?? s.code.replace(/^(Key|Digit)/, "");
+  const key = ({ Comma: ",", Period: ".", Backslash: "\\", Backquote: "`", BracketLeft: "[", BracketRight: "]", Equal: "=", Minus: "−", Tab: "⇥", Enter: "↵" } as Record<string, string>)[s.code] ?? s.code.replace(/^(Key|Digit)/, "");
   return `${s.ctrl ? "⌃" : ""}${s.alt ? "⌥" : ""}${s.meta ? "⌘" : ""}${s.shift ? "⇧" : ""}${key}`;
 }
 export const shortcutHint = (id: ShortcutId) => shortcutLabel(shortcuts[id]);

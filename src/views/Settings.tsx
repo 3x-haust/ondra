@@ -1,4 +1,5 @@
 // Settings: general, accounts, import from other tools, skills, tools.
+import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { modelsOf, refreshModels } from "../engine/modelList";
 import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
@@ -101,6 +102,13 @@ function General() {
           <div class="seg">
             <For each={[["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as const}>
               {([v, l]) => <button classList={{ on: state.settings.theme === v }} onClick={() => setState("settings", "theme", v)}>{t(l)}</button>}
+            </For>
+          </div>
+        </Row>
+        <Row title={t("화면 크기")} desc={t("⌘= 크게 · ⌘− 작게")}>
+          <div class="seg">
+            <For each={ZOOMS}>
+              {(z) => <button classList={{ on: Math.abs(zoom() - z) < 0.001 }} onClick={() => setZoom(z)}>{`${Math.round(z * 100)}%`}</button>}
             </For>
           </div>
         </Row>
