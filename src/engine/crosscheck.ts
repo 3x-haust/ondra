@@ -19,6 +19,38 @@ export const LENSES = [
   },
 ] as const;
 
+export const PLAN_REVIEW = "계획 검토";
+
+// what both plan readers are, and how they answer
+const FRESH =
+  "You read a plan as a newcomer, not its author: you have the requirement, the plan below and the repository, not the conversation that produced them. Read only; change nothing.";
+const PLAN_OUT =
+  "Answer with findings, most serious first, one line each: `- P1|P2|P3 <section or \`path:line\`> — <what's wrong> → <what to change>`. P1: it would build the wrong thing or break something; P2: a gap the builder would trip on; P3: worth a line. A choice only the user can make (a trade-off, not a fact you could check) goes on its own line as `- 질문: …`. Nothing to fix: say so in one line.";
+
+/** 계획 검토: two fresh readers of a plan before anything is built. */
+export const PLAN_LENSES = [
+  {
+    lens: "scope",
+    title: "범위 검토",
+    how: `${FRESH} Check it from above: does it solve the root problem the requirement states, not a symptom; is any part not needed now (options, abstractions, config, caching, structure "for later"); does the code already have something that does a part of it (search before you say so, and name the file); does a choice box the project in. Whether names and steps match the code is the other reader's job. ${PLAN_OUT}`,
+  },
+  {
+    lens: "fit",
+    title: "실행 검토",
+    how: `${FRESH} First write, in your own words, what the plan proposes and how the existing code works (2–4 sentences each): the author compares it with what they meant, so a wrong paraphrase is a finding. Then check it against the code: every file, function, command or table it says exists does, and works as it says (read it); every step says what changes where, so the builder never has to make a design decision; open choices (data shape, errors, migration, what happens to existing data and users) are named. A file it says it will create is not a finding. Scope and reuse are the other reader's job. ${PLAN_OUT}`,
+  },
+] as const;
+
+/** the two readers a plan_review block starts: the requirement and the plan, nothing else */
+export function planKids(ask: string): { title: string; ask: string; extra: Partial<Task> }[] {
+  const pair = uid("x");
+  return PLAN_LENSES.map((l) => ({ title: l.title, ask: `${l.how}\n\n${ask}`, extra: { lens: l.lens, pair } }));
+}
+
+/** a lens of a plan review (not a code review) */
+export const isPlan = (k: Task) => k.lens === "scope" || k.lens === "fit";
+const setOf = (group: Task[]) => (group.some(isPlan) ? PLAN_LENSES : LENSES);
+
 /** The two lens subagents one review block starts: the job's requirement, each with its lens and the memory the job was given. */
 export function lensKids(job: Task, ask: string): { title: string; ask: string; extra: Partial<Task> }[] {
   const pair = uid("x");
@@ -30,7 +62,7 @@ const active = (x: Task) => x.status === "queued" || x.status === "running" || x
 
 /** both lenses of the review this one belongs to (just itself for a single, older review) */
 export const lensesOf = (k: Task): Task[] => (k.pair ? state.tasks.filter((x) => x.parentId === k.parentId && x.pair === k.pair) : [k]);
-export const reviewName = (k: Task) => (k.pair ? CROSSCHECK : k.title);
+export const reviewName = (k: Task) => (!k.pair ? k.title : isPlan(k) ? PLAN_REVIEW : CROSSCHECK);
 /** a lens of it still works */
 export const reviewGoing = (k: Task) => lensesOf(k).some(active);
 
@@ -44,7 +76,7 @@ const missing = (k?: Task) => (!k ? "시작 안 됨" : k.status === "failed" ? `
 /** What each lens found, one section per lens; a lens that didn't finish says so. */
 export function lensText(group: Task[]): string {
   if (group.length === 1 && !group[0].pair) return group[0].result ?? group[0].summary ?? "";
-  return LENSES.map((l) => {
+  return setOf(group).map((l) => {
     const k = group.find((x) => x.lens === l.lens);
     const why = missing(k);
     return `# ${l.title}\n${why ? `(빠졌어요: ${why})` : (k!.result ?? k!.summary ?? "(적은 게 없어요)").trim()}`;
@@ -83,6 +115,7 @@ export const REVIEW_FIX =
  * how to settle a disagreement (one targeted check, not another review).
  */
 export function crosscheckMessage(group: Task[], memory: { lines: string[]; split: string[] }): string {
+  if (group.some(isPlan)) return planMessage(group);
   const done = group.filter((k) => k.status === "done");
   if (!done.length) {
     const why = LENSES.map((l) => `${l.title}: ${missing(group.find((x) => x.lens === l.lens))}`).join(" · ");
@@ -107,10 +140,29 @@ export function crosscheckMessage(group: Task[], memory: { lines: string[]; spli
   ].join("\n");
 }
 
+/** What to do with a plan review's findings. */
+export const PLAN_FIX =
+  "계획을 이 결과대로 고쳐 줘(P1·P2는 꼭, P3는 쉬우면). 사용자만 정할 수 있는 질문이 있으면 decision 하나로 묻고 답을 기다려. 없으면 바로 만들기 시작해. 계획 검토는 다시 띄우지 마.";
+
+function planMessage(group: Task[]): string {
+  const done = group.filter((k) => k.status === "done");
+  if (!done.length) return `${PLAN_REVIEW}가 둘 다 실패했어요. 다시 띄우지 말고 계획대로 만들기 시작해.`;
+  const gone = PLAN_LENSES.filter((l) => !done.some((k) => k.lens === l.lens)).map((l) => l.title);
+  return [
+    `${PLAN_REVIEW} 결과가 왔어요 (${PLAN_LENSES.map((l) => l.title).join(" · ")}):`,
+    "",
+    lensText(group),
+    "",
+    ...(gone.length ? [`${gone.join(", ")}는 빠졌어요. 다시 띄우지 마.`] : []),
+    PLAN_FIX,
+  ].join("\n");
+}
+
 /** One line for the resume summary: the pair as one review. */
 export function crosscheckLine(group: Task[], clip: (s: string, n: number) => string): string {
-  const where = LENSES.map((l) => `${l.title} ${group.find((x) => x.lens === l.lens)?.status ?? "missing"}`).join(", ");
-  if (group.some(active)) return `- review "${CROSSCHECK}": still running (${where}). Its combined result comes to you by itself; don't start it again and never ask the user for it.`;
-  if (!group.some((k) => k.status === "done")) return `- review "${CROSSCHECK}": failed (${clip(lensText(group).replace(/\s+/g, " "), 300)})`;
-  return `- review "${CROSSCHECK}": done (${where}).\n${clip(lensText(group), 4000)}`;
+  const name = reviewName(group[0]);
+  const where = setOf(group).map((l) => `${l.title} ${group.find((x) => x.lens === l.lens)?.status ?? "missing"}`).join(", ");
+  if (group.some(active)) return `- review "${name}": still running (${where}). Its combined result comes to you by itself; don't start it again and never ask the user for it.`;
+  if (!group.some((k) => k.status === "done")) return `- review "${name}": failed (${clip(lensText(group).replace(/\s+/g, " "), 300)})`;
+  return `- review "${name}": done (${where}).\n${clip(lensText(group), 4000)}`;
 }

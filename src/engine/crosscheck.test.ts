@@ -291,3 +291,56 @@ describe("a resumed job sees both lenses", () => {
     expect(handoffPrompt(state.tasks[0])).toContain('- review "교차 검토": still running (설계 검토 done, 코드 검토 running). Its combined result comes to you by itself');
   });
 });
+
+const PLAN = block({ type: "subagent", plan_review: true, title: "계획 검토", task: "Add webhook retries.\n\n1. src/hooks.ts: retry 3 times with backoff." });
+
+describe("계획 검토: two fresh readers of the plan before building", () => {
+  it("starts 범위 검토 and 실행 검토 with the plan only, as neither a code review nor a memory check", async () => {
+    await harness((agent, n) => (agent === "t:job" && n === 1 ? `Planning.\n${PLAN}` : undefined));
+    setState("tasks", [job({ memorySnapshot: SNAPSHOT })]);
+    await startTask("job", true);
+
+    await vi.waitFor(() => expect(kids()).toHaveLength(2));
+    const [scope, fit] = [kids().find((k) => k.lens === "scope")!, kids().find((k) => k.lens === "fit")!];
+    expect([scope.title, fit.title]).toEqual(["범위 검토", "실행 검토"]);
+    expect(scope.pair).toBe(fit.pair);
+    expect(scope.review || fit.review).toBeFalsy();
+    for (const k of [scope, fit]) {
+      expect(k.ask).toContain("retry 3 times with backoff");
+      expect(k.ask).toContain("not the conversation");
+      expect(k.memorySnapshot).toBeUndefined();
+      expect(taskPrompt(k)).not.toContain("# Memory the job was given");
+    }
+    expect(fit.ask).toContain("in your own words");
+  });
+
+  it("sends one plan result telling the job to fix the plan, ask once, then build", async () => {
+    await harness((agent, n) => {
+      if (agent === "t:job") return n === 1 ? `Planning.\n${PLAN}` : n === 2 ? `Again.\n${PLAN}` : undefined;
+      if (agent === kidAgent("범위 검토")) return block({ type: "done", summary: "끝", result: "- P2 `src/retry.ts:1` — 이미 재시도 함수가 있어요 → 그걸 써요" });
+      if (agent === kidAgent("실행 검토")) return block({ type: "done", summary: "끝", result: "- 질문: 실패한 웹훅을 버릴지 쌓아둘지" });
+    });
+    setState("tasks", [job()]);
+    await startTask("job", true);
+    await runLenses();
+
+    await vi.waitFor(() => expect([...sent("t:job"), ...sent("t:job", "follow_up")].some((m) => m.includes("계획 검토 결과가 왔어요"))).toBe(true));
+    const m = [...sent("t:job"), ...sent("t:job", "follow_up")].find((x) => x.includes("계획 검토 결과가 왔어요"))!;
+    expect(m).toContain("# 범위 검토\n- P2 `src/retry.ts:1`");
+    expect(m).toContain("# 실행 검토\n- 질문:");
+    expect(m).toContain("decision 하나로 묻고");
+    expect(m).not.toContain("교차 검토");
+    expect(m).not.toContain("P1·P2만 고쳐 줘");
+    // a second plan review is refused, and no new readers start
+    await new Promise((r) => setTimeout(r, 30));
+    expect(kids()).toHaveLength(2);
+  });
+
+  it("doesn't count as the job's code review", async () => {
+    await harness((agent, n) => (agent === "t:job" && n === 1 ? `Planning.\n${PLAN}\n${REVIEW}` : undefined));
+    setState("tasks", [job()]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(kids()).toHaveLength(4));
+    expect(kids().map((k) => k.lens).sort()).toEqual(["code", "design", "fit", "scope"]);
+  });
+});
