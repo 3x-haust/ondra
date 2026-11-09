@@ -1,4 +1,6 @@
-/* the changes editor (views/Changes.tsx, ui/DiffEditor.tsx): files on the left, the diff on the right */
+/* the changes editor (views/Changes.tsx, ui/DiffEditor.tsx), laid out as VS Code's: the Source Control
+   view, the editor group (tabs, breadcrumbs, the diff), a status bar. VS Code's density: 22px rows,
+   13px text, 35px tabs. */
 .cg-view {
   position: relative;
   overflow: clip;
@@ -19,22 +21,6 @@
   color: var(--ink-3);
   font-size: var(--fs-sm);
 }
-.cg-total {
-  display: inline-flex;
-  gap: var(--s-6);
-  flex: none;
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-.cg-total .add,
-.cg-n .add {
-  color: var(--ok-ink);
-}
-.cg-total .del,
-.cg-n .del {
-  color: var(--bad-ink);
-}
 .cg-pill {
   flex: none;
   padding: 1px var(--s-8);
@@ -43,8 +29,9 @@
   color: var(--ink-2);
   font-size: var(--fs-2xs);
 }
-.cg-mode {
-  flex: none;
+.cg-view.narrow .cg-job,
+.cg-view.narrow .cg-pill {
+  display: none;
 }
 .cg-empty {
   flex: 1;
@@ -56,196 +43,425 @@
   border-top: 1px solid var(--line-soft);
 }
 
-/* the file list */
-.cg-side {
-  width: clamp(200px, 24%, 300px);
+/* a small icon button, as VS Code's actions: 22px, the icon alone */
+.cg-act {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--ink-3);
+}
+.cg-act:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.cg-act.on {
+  background: var(--active);
+  color: var(--ink);
+}
+.cg-act:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.cg-act:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* a file's icon: Seti's glyph in a 16px box */
+.cg-fi {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+/* ───────────── the Source Control view */
+.scm {
   flex: none;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  background: var(--sidebar);
   border-right: 1px solid var(--line-soft);
-  background: var(--bg);
 }
-.cg-filter {
-  position: static;
-  margin: var(--s-10) var(--s-10) var(--s-6);
-  height: var(--h-sm);
+.scm-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 35px;
+  padding: 0 var(--s-8) 0 20px;
 }
-.cg-list {
+.scm-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* the view's actions show while the pointer or the keys are in it */
+.scm-title-acts {
+  display: flex;
+  gap: 2px;
+  visibility: hidden;
+}
+.scm:hover .scm-title-acts,
+.scm:focus-within .scm-title-acts {
+  visibility: visible;
+}
+.scm-tree {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--s-6) var(--s-16);
+  padding-bottom: var(--s-16);
   outline: 0;
+  font-size: 13px;
 }
-.cg-group + .cg-group {
-  margin-top: var(--s-6);
-}
-.cg-dir {
+.scm-row {
   display: flex;
   align-items: center;
-  gap: var(--s-6);
-  padding: var(--s-6) var(--s-8) var(--s-2);
-  color: var(--ink-4);
-  font-size: var(--fs-2xs);
-  font-family: var(--mono);
-  min-width: 0;
+  height: 22px;
+  padding: 0 0 0 4px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
 }
-.cg-dir span {
+.scm-row:hover {
+  background: var(--hover);
+}
+.scm-row.sel {
+  background: var(--active);
+  color: var(--ink);
+}
+.scm-tree:focus .scm-row.sel {
+  background: var(--accent-soft);
+}
+.scm-tree:focus .scm-row.focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+/* an indent guide per level, under the folder's twistie (the group's own level has none) */
+.scm-guide {
+  flex: none;
+  align-self: stretch;
+  width: 8px;
+  border-right: 1px solid var(--line-soft);
+}
+.scm-guide.first {
+  border-right-color: transparent;
+}
+.scm-tree:hover .scm-guide:not(.first) {
+  border-right-color: var(--line);
+}
+.scm-twistie {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  color: var(--ink-3);
+}
+.scm-row.group {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.scm-row .cg-fi {
+  margin-right: 6px;
+}
+.scm-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scm-dir {
+  min-width: 0;
+  flex: 0 100 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 0.5em;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.scm-fill {
+  flex: 1;
+  min-width: 4px;
+}
+.scm-acts {
+  display: none;
+  gap: 2px;
+  margin-right: 2px;
+}
+.scm-row:hover .scm-acts,
+.scm-tree:focus .scm-row.focus .scm-acts {
+  display: flex;
+}
+.scm-badge {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 12px;
+  padding: 0 5px;
+  border-radius: 11px;
+  background: var(--active);
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.scm-st {
+  flex: none;
+  width: 14px;
+  margin-right: 12px;
+  text-align: center;
+  font-size: 12px;
+}
+.scm-none {
+  padding: var(--s-8) 20px;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+
+/* VS Code's git decoration colours: the name and the letter */
+.scm-row.st-M .scm-name,
+.scm-row.st-M .scm-st,
+.eg-tab.st-M .eg-tab-label {
+  color: var(--warn-ink);
+}
+.scm-row.st-A .scm-name,
+.scm-row.st-A .scm-st,
+.scm-row.st-U .scm-name,
+.scm-row.st-U .scm-st,
+.scm-row.st-R .scm-name,
+.scm-row.st-R .scm-st,
+.eg-tab.st-A .eg-tab-label,
+.eg-tab.st-U .eg-tab-label,
+.eg-tab.st-R .eg-tab-label {
+  color: var(--ok-ink);
+}
+.scm-row.st-D .scm-name,
+.scm-row.st-D .scm-st,
+.eg-tab.st-D .eg-tab-label {
+  color: var(--bad-ink);
+}
+.scm-row.st-D .scm-name,
+.eg-tab.st-D .eg-tab-label {
+  text-decoration: line-through;
+}
+
+/* the edge between the view and the editor: drag it */
+.cg-vsash {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  width: 4px;
+  margin: 0 -2px;
+  cursor: col-resize;
+}
+.cg-vsash:hover,
+.cg-vsash:active {
+  background: var(--accent);
+}
+
+/* ───────────── the editor group */
+.eg {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--code-surface);
+  outline: 0;
+}
+.eg-bar {
+  flex: none;
+  display: flex;
+  height: 35px;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--line-soft);
+}
+.eg-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+}
+.eg-tab {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 80px;
+  max-width: 280px;
+  height: 35px;
+  padding: 0 4px 0 10px;
+  border-right: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.eg-tab.active {
+  height: 36px;
+  background: var(--code-surface);
+  color: var(--ink);
+}
+/* the active tab's top line, while the group has the focus */
+.eg:focus-within .eg-tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+}
+.eg-tab.preview .eg-tab-label {
+  font-style: italic;
+}
+.eg-tab-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
-  text-align: left;
 }
-.cg-file {
-  width: 100%;
-  height: var(--h-sm);
-  display: flex;
+.eg-tab:not(.active) .eg-tab-label {
+  opacity: 0.8;
+}
+.eg-tab-x {
+  flex: none;
+  display: inline-flex;
   align-items: center;
-  gap: var(--s-8);
-  padding: 0 var(--s-8) 0 var(--s-24);
-  border-radius: var(--r-sm);
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  text-align: left;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--ink-3);
+  visibility: hidden;
 }
-.cg-file:hover {
+.eg-tab.active .eg-tab-x,
+.eg-tab:hover .eg-tab-x,
+.eg-tab-x:focus-visible {
+  visibility: visible;
+}
+.eg-tab-x:hover {
   background: var(--hover);
   color: var(--ink);
 }
-.cg-file.on {
-  background: var(--row-selected, var(--active));
-  box-shadow: var(--row-selected-shadow, none);
-  color: var(--ink);
-}
-.cg-list:focus-visible .cg-file.on {
-  box-shadow: inset 0 0 0 1px var(--accent-line);
-}
-.cg-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cg-name.gone {
-  text-decoration: line-through;
-  text-decoration-color: var(--ink-4);
-}
-.cg-n {
-  display: inline-flex;
-  gap: var(--s-4);
-  flex: none;
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  font-variant-numeric: tabular-nums;
-}
-.cg-st {
-  flex: none;
-  width: 12px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-strong);
-  color: var(--accent);
-}
-.cg-st.A {
-  color: var(--ok-ink);
-}
-.cg-st.D {
-  color: var(--bad-ink);
-}
-.cg-none {
-  padding: var(--s-16) var(--s-10);
-  color: var(--ink-4);
-  font-size: var(--fs-sm);
-}
-
-/* the diff */
-.cg-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--code-surface);
-}
-.cg-bar {
+.eg-acts {
   flex: none;
   display: flex;
-  align-items: center;
-  gap: var(--s-6);
-  height: 38px;
-  padding: 0 var(--s-8) 0 var(--s-12);
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--card);
-  font-size: var(--fs-xs);
-  min-width: 0;
-}
-.cg-path {
-  flex: 0 1 auto;
-  font-family: var(--mono);
-}
-.cg-old {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink-4);
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-}
-.cg-nav {
-  display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding: 0 var(--s-8) 0 var(--s-4);
+}
+.eg-crumbs {
   flex: none;
-}
-.cg-nav + .cg-nav {
-  margin-left: var(--s-4);
-  padding-left: var(--s-6);
-  border-left: 1px solid var(--line-soft);
-}
-.cg-at {
-  min-width: 44px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--s-12);
+  overflow: hidden;
   color: var(--ink-3);
-  font-size: var(--fs-2xs);
-  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  white-space: nowrap;
 }
-.cg-bar .icon-btn:disabled {
-  opacity: 0.35;
-  pointer-events: none;
+.eg-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 3px;
+  border-radius: 3px;
+  color: inherit;
 }
-.cg-cut {
-  flex: none;
-  padding: var(--s-6) var(--s-12);
-  border-bottom: 1px solid var(--line-soft);
-  background: color-mix(in oklab, var(--warn) 10%, var(--card));
+button.eg-crumb:hover {
+  color: var(--ink);
+}
+.eg-crumb.last {
   color: var(--ink-2);
-  font-size: var(--fs-xs);
+}
+.eg-sep {
+  flex: none;
+  color: var(--ink-4);
+}
+.eg-note {
+  flex: none;
+  padding: 3px var(--s-12);
+  background: color-mix(in oklab, var(--warn) 10%, var(--code-surface));
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.eg-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .cg-note {
   flex: 1;
+  font-size: 13px;
 }
-.cg-editor {
+.eg-empty {
   flex: 1;
-  min-height: 0;
-  position: relative;
+  display: grid;
+  place-items: center;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+.eg-empty dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: var(--s-8) var(--s-16);
+  margin: 0;
+}
+.eg-empty dt {
+  text-align: right;
+}
+.eg-empty dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* the diff: CodeMirror, the sash between the sides, the overview ruler at the right edge */
+.cg-de {
+  position: absolute;
+  inset: 0;
 }
 .cg-cm {
   position: absolute;
-  inset: 0;
+  inset: 0 14px 0 0;
 }
 .cg-cm > .cm-editor,
 .cg-cm > .cm-mergeView {
   height: 100%;
 }
 .cg-cm > .cm-mergeView {
-  overflow: auto;
+  overflow-y: auto;
 }
 .cg-cm .cm-editor {
   font-size: 12px;
@@ -254,46 +470,93 @@
   line-height: 20px;
 }
 .cg-cm .cm-content {
-  padding: 4px 0 24px;
+  padding: 0 0 24px;
+}
+/* the line between the sides goes all the way down, however short the file */
+.cg-cm .cm-mergeViewEditors {
+  min-height: 100%;
+}
+.cg-cm .cm-mergeViewEditor {
+  min-width: 0;
 }
 .cg-cm .cm-mergeViewEditor + .cm-mergeViewEditor {
   border-left: 1px solid var(--line-soft);
 }
-
-/* a narrow pane: the list comes over the diff when asked for */
-.cg-view.narrow .cg-side {
+.cg-sash {
   position: absolute;
-  z-index: 3;
   top: 0;
   bottom: 0;
+  z-index: 3;
+  width: 4px;
+  margin-left: -2px;
+  cursor: col-resize;
+}
+.cg-sash:hover,
+.cg-de.sashing .cg-sash {
+  background: var(--accent);
+}
+.cg-de.sashing {
+  cursor: col-resize;
+  user-select: none;
+}
+.cg-ruler {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  border-left: 1px solid var(--line-soft);
+  cursor: default;
+}
+.cg-rm {
+  position: absolute;
   left: 0;
-  width: min(300px, 86%);
-  box-shadow: var(--shadow-pop, 0 8px 24px rgb(0 0 0 / 0.16));
-  transform: translateX(-104%);
-  visibility: hidden;
-  transition: transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+  right: 0;
+  min-height: 2px;
 }
-.cg-view.narrow.list-open .cg-side {
-  transform: none;
-  visibility: visible;
-  transition: transform var(--dur) var(--ease);
+.cg-rm.del {
+  right: 50%;
+  background: var(--bad);
 }
-.cg-view.snap .cg-side {
-  transition: none !important;
+.cg-rm.add {
+  left: 50%;
+  background: var(--ok);
 }
-.cg-view.narrow .cg-body {
-  position: relative;
+.cg-rm.mod {
+  background: var(--accent);
 }
-.cg-view.narrow .cg-job,
-.cg-view.narrow .cg-pill,
-.cg-view.narrow .cg-total,
-.cg-view.narrow .cg-bar .cg-n,
-.cg-view.narrow .cg-old {
+.cg-thumb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+}
+.cg-thumb.all {
   display: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .cg-view.narrow .cg-side,
-  .cg-view.narrow.list-open .cg-side {
-    transition: none;
-  }
+.cg-ruler:hover .cg-thumb {
+  background: color-mix(in oklab, var(--ink) 16%, transparent);
+}
+
+/* ───────────── the status bar */
+.cg-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--s-6);
+  border-top: 1px solid var(--line-soft);
+  background: var(--sidebar);
+  color: var(--ink-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cg-si {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 var(--s-6);
+  font-variant-numeric: tabular-nums;
 }

@@ -21,6 +21,8 @@ export interface MenuItem {
   icon: string;
   kbd?: string;
   danger?: boolean;
+  /** a setting turned on or off (✓ when on, the icon is not shown) */
+  checked?: boolean;
   run: () => void;
 }
 export type MenuEntry = MenuItem | "sep";
@@ -123,8 +125,15 @@ export function MenuList(props: { items: MenuEntry[]; done: () => void }) {
         it === "sep" ? (
           <div class="menu-sep" />
         ) : (
-          <button role="menuitem" classList={{ danger: !!it.danger }} onClick={() => (props.done(), it.run())}>
-            <Icon name={it.icon} size={16} />
+          <button
+            role={it.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+            aria-checked={it.checked}
+            classList={{ danger: !!it.danger, check: it.checked !== undefined }}
+            onClick={() => (props.done(), it.run())}
+          >
+            <Show when={it.checked !== undefined} fallback={<Icon name={it.icon} size={16} />}>
+              <span class="menu-check"><Show when={it.checked}><Icon name="check" size={16} /></Show></span>
+            </Show>
             <span class="row-title">{it.label}</span>
             <Show when={it.kbd}><span class="menu-kbd">{it.kbd}</span></Show>
           </button>

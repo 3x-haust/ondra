@@ -23,6 +23,15 @@ describe("app keyboard shortcuts", () => {
     }
   });
 
+  it("gives the changes editor VS Code's keys, as ids that can be rebound", () => {
+    expect(shortcutLabel("nextChange")).toBe("F7");
+    expect(shortcutLabel("previousChange")).toBe("⇧F7");
+    expect(shortcutLabel("nextFileChange")).toBe("⌥F5");
+    expect(shortcutLabel("previousFileChange")).toBe("⌥⇧F5");
+    expect(matchesShortcut(key({ code: "F7" }), "nextChange")).toBe(true);
+    expect(matchesShortcut(key({ code: "F7", shift: true }), "nextChange")).toBe(false);
+  });
+
   it("keeps every chord unique", () => {
     const labels = Object.values(shortcuts).map(shortcutLabel);
     expect(new Set(labels).size).toBe(labels.length);

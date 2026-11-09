@@ -510,6 +510,14 @@
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
 }
+/* a setting in a menu: ✓ where the icon goes when it is on */
+.menu-check {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-2);
+}
 .menu-sep,
 .pop-sep {
   height: 1px;
