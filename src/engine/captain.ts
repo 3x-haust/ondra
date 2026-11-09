@@ -702,6 +702,16 @@ export const FORK_ENDED = [
   "\"Not verified\" items stay in its result, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Don't redo finished work.",
 ].join("\n");
 
+/**
+ * A project's own chat is about that project's work alone, so there main still reports what a
+ * fork came back with, under the fork's row (Main, across projects, keeps to the row).
+ */
+export const FORK_REPORT = [
+  "The chat shows this fork as a row (a click opens its full result); your report goes under it.",
+  "Tell the user what came out, short and visual (blocks), as an \"answer\": the result first (for something built: does it work, seen running, in one plain line, \"돼요\" / \"아직 돌려 보진 못했어요\" / \"안 돼요\"; then the screenshots or files the fork made, so they can see it), then what fits the work (the cause, what changed, how it was checked; what went out and its status; links). Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first.",
+  "Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
+].join("\n");
+
 /** What main does when a project it handed work to has finished: its jobs show as rows here too. */
 export const PROJECT_ENDED = [
   "The chat already shows each of these jobs as one row that updates by itself (title, the job's own one-line summary, its screenshot; a click opens the full result), here and in the project's chat. Don't retell what came out and never point the user to the project's chat. A job marked \"no row in your chat\" (a next step the project started) is the exception: give its result in one line.",
@@ -773,7 +783,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
-  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", FORK_ENDED);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
   else out.push("", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, recap: false });
   keepSent(space, sentOf.get(space));
