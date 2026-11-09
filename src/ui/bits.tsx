@@ -49,6 +49,9 @@ export function titleOf(text: string, max = 80): string {
   return cutTitle((text.split("\n").find((l) => l.trim()) ?? text).trim(), max);
 }
 
+/** A task's title as shown: a 교차 검토 lens's title is Ondra's own words, so it follows the app's language. */
+export const taskTitle = (x: Task) => (x.lens ? t(x.title) : x.title);
+
 /** When a finished task ended, as its "병합됨 · …" / "버림 · …" time says: merged, when it was merged; discarded,
  *  when the changes were thrown away (older tasks without those: when it finished). */
 export function endedAt(x: Task): number | undefined {

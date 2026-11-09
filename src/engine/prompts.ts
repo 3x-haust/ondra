@@ -5,6 +5,7 @@ import { projectNow } from "./journal";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall, siteWords } from "./memory";
+import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
 
 const SKILL_DISCOVERY = `# Skills
@@ -293,13 +294,18 @@ same order; only what changed differs. Never invent numbers, timings or trends.
    nothing that shipped. Size alone is no reason, and audits, boundary checks
    or "contract investigations" are never separate jobs. A review the job you carry on already got still holds when you
    haven't changed code since (a version bump or a release is not a change
-   to review): go straight to shipping. Start one review subagent
-   {"type":"subagent","review":true,"title":"코드 리뷰","task":"Use the
-   code-review skill. Review the changes in <folder> against: <the full
-   requirement>"} and end your turn. Give it the requirement and where the
+   to review): go straight to shipping. Start one review
+   {"type":"subagent","review":true,"title":"교차 검토","task":"Review the
+   changes in <folder> against: <the full requirement>"} and end your turn.
+   Ondra runs it as 교차 검토: two read-only lenses side by side, 설계 검토
+   (does the approach solve the whole problem and fit the project) and 코드
+   검토 (contracts, flows, edge cases, failure paths), and sends you one
+   combined result when both are over. Give it the requirement and where the
    change is, never your own verdict (tests you passed, why it is right,
    numbers you got): it reads the code fresh. When its findings arrive, fix
    every P1 and P2 (P3 when cheap) and re-run the checks that cover them.
+   Where the lenses disagree, settle it with one targeted check (read that
+   code, run that test), not another review.
 6. Prove: follow Coding work for reproduction, regression checks and final
    verification. Use the cheapest checks that cover the changed behavior
    and the repository's required checks. Refresh evidence after relevant
@@ -832,6 +838,8 @@ export function relatedMemory(t: Task): Memory[] {
 function relatedLines(t: Task): string[] {
   const lines = t.memorySnapshot ?? memoryLines(relatedMemory(t));
   const now = !t.parentId ? projectNow(homeDir(t), t.space) : undefined;
+  // a 교차 검토 lens checks the memory the job was given instead of trusting it
+  const head = t.lens ? "# Memory the job was given (check the pieces this change bears on: the code-review skill's memory check)" : "# Memory that may matter here (more with memory_search)";
   const reach = (t.reach ?? []).map((id) => spaceById(id)).filter(Boolean);
   return [
     ...(reach.length
@@ -842,15 +850,15 @@ function relatedLines(t: Task): string[] {
           "Use it for what the user asked; don't carry it further than that.",
         ]
       : []),
-    ...(lines.length ? ["", "# Memory that may matter here (more with memory_search)", ...lines] : []),
+    ...(lines.length ? ["", head, ...lines] : []),
     ...(now && now.taskId !== t.id ? ["", "# Last time in this folder", now.text] : []),
   ];
 }
 
 /**
  * The sub-agents an earlier session started: still running ones report back by
- * themselves; a finished review's findings are here, since that session's
- * context is gone.
+ * themselves; a finished review's findings are here (both lenses of a 교차
+ * 검토, as one review), since that session's context is gone.
  */
 function kidLines(t: Task): string[] {
   const kids = state.tasks.filter((k) => k.parentId === t.id);
@@ -858,6 +866,11 @@ function kidLines(t: Task): string[] {
   const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const out = ["", "# Sub-agents started earlier"];
   for (const k of kids) {
+    if (k.pair) {
+      const pair = kids.filter((x) => x.pair === k.pair);
+      if (pair[0] === k) out.push(crosscheckLine(pair, clip));
+      continue;
+    }
     const what = k.review ? "review" : "sub-agent";
     if (k.status === "done") out.push(`- ${what} "${k.title}": done. ${clip(k.review ? (k.result ?? k.summary ?? "") : (k.summary ?? ""), k.review ? 3000 : 300)}`);
     else if (k.status === "failed") out.push(`- ${what} "${k.title}": failed (${clip(k.error ?? "", 160)})`);

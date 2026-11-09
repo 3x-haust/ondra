@@ -249,7 +249,7 @@ export default {
 
   // skills: one line for the bundled ones
   "브라우저로 사이트를 열고 다뤄요": "Opens and works with sites in a browser",
-  "끝내기 전에 바뀐 코드를 검토해요": "Reviews the changes before a task is done",
+  "끝내기 전에 바뀐 코드를 설계와 코드 두 관점으로 검토해요": "Reviews the changes for design and code before a task is done",
   "Mac 앱을 뒤에서 조작해요": "Works Mac apps in the background",
   "여러 출처를 읽고 조사해요": "Researches a topic across many sources",
   "시뮬레이터와 에뮬레이터에서 앱을 다뤄요": "Runs apps on simulators and emulators",

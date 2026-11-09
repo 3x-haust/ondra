@@ -200,6 +200,11 @@ const words = (v: unknown, max: number, len: number) =>
 
 /** keep pending ones, and the last answers so the same thing isn't asked again */
 const keepConflicts = (l: MemoryConflict[]) => [...l.filter((c) => !c.done), ...l.filter((c) => c.done).slice(-40)];
+/** 확인 필요: put one in front of the user (the quiet pass and 교차 검토 both ask this way) */
+export const queueConflict = (space: SpaceId, c: Omit<MemoryConflict, "id" | "at" | "space">, at = Date.now()) =>
+  setState("memoryConflicts", (l) => keepConflicts([...(l ?? []), { id: uid("c"), at, space, ...c }]));
+/** the same new text was already asked about for this piece (and not taken) */
+export const askedBefore = (mine: string, text: string) => (state.memoryConflicts ?? []).some((c) => c.mine === mine && !!c.text && flat(c.text) === flat(text) && c.done !== "new");
 
 /** Check the model's plan and apply what holds up. */
 export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
@@ -209,7 +214,7 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
   const now = Date.now();
   const conflicts = () => state.memoryConflicts ?? [];
   const ask = (c: Omit<MemoryConflict, "id" | "at" | "space">) => {
-    setState("memoryConflicts", (l) => keepConflicts([...(l ?? []), { id: uid("c"), at: now, space: seen.space, ...c }]));
+    queueConflict(seen.space, c, now);
     n.held++;
   };
   /** a piece already kept says otherwise than the user's own: out of use until the user picks */
@@ -277,8 +282,7 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
     const sources = jobs.map((j) => j.id);
     const against = live(p.against);
     if (against && userOwned(against) && !against.invalidAt) {
-      const same = (c: MemoryConflict) => c.mine === against.id && !!c.text && flat(c.text) === flat(text) && c.done !== "new";
-      if (!conflicts().some(same)) ask({ mine: against.id, text, kind, scope, project: scope === "project" ? folder : undefined, sources });
+      if (!askedBefore(against.id, text)) ask({ mine: against.id, text, kind, scope, project: scope === "project" ? folder : undefined, sources });
       return;
     }
     const before = state.memory.length;

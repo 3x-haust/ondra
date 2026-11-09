@@ -17,7 +17,7 @@ import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard } from "../ui/Review";
 import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
-import { agoIn, compact, IssueTag, now, statusLabel } from "../ui/bits";
+import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -356,7 +356,7 @@ export function TaskView(props: { id: string }) {
               </Show>
               <Show
                 when={renaming() === task().id}
-                fallback={<h1 title={task().title} onDblClick={() => setRenaming(task().id)}>{task().title}</h1>}
+                fallback={<h1 title={taskTitle(task())} onDblClick={() => setRenaming(task().id)}>{taskTitle(task())}</h1>}
               >
                 <input
                   class="title-edit"

@@ -149,12 +149,14 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
   );
 }
 
-/** A review child that reported P1/P2 problems and nothing was fixed after it finished. */
+/** A review (either lens of a 교차 검토) that reported P1/P2 problems and nothing was fixed after it finished. */
 export function reviewUnresolved(t: Task, kids: Task[]): boolean {
   const reviews = kids.filter((k) => k.review && k.status === "done").sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0));
   const last = reviews[reviews.length - 1];
   if (!last) return false;
-  if (!reviewFound(`${last.summary ?? ""}\n${last.result ?? ""}`)) return false;
+  // 교차 검토: either lens of the pair can report one
+  const group = last.pair ? reviews.filter((k) => k.pair === last.pair) : [last];
+  if (!group.some((k) => reviewFound(`${k.summary ?? ""}\n${k.result ?? ""}`))) return false;
   const editAt = lastCodeEdit(t);
   return editAt < 0 || (t.entries[editAt]?.at ?? 0) < (last.finishedAt ?? 0);
 }

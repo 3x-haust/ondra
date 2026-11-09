@@ -19,6 +19,8 @@ import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./pr
 import { prose, readFences } from "./fences";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
+import { CROSSCHECK, crosscheckMessage, lensesOf, lensKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
+import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
@@ -405,7 +407,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (t.parentId || !(b.task || b.title)) break;
         const live = state.tasks.filter((x) => x.parentId === t.id && x.status !== "done" && x.status !== "failed").length;
         if (live >= 6) break;
-        const review = b.review === true || /code-review|리뷰/i.test(String(b.title ?? ""));
+        const review = b.review === true || /code-review|리뷰|교차 검토|crosscheck/i.test(String(b.title ?? ""));
         // one review per job: after it, the job fixes the findings and re-runs its checks
         const had = review ? state.tasks.find((x) => x.parentId === t.id && x.review && x.status !== "failed") : undefined;
         // the job this carries on was reviewed and this one changed no code since: that review still holds
@@ -413,19 +415,20 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (before) {
           push(t, { kind: "note", text: "이전 작업의 리뷰가 그대로 유효해요" });
           const jobId = t.id;
-          const message = `(Ondra) The job this carries on was already reviewed ("${before.title}") and its findings were fixed there; you haven't changed code since. That review covers this: don't start another one, go on with the next step.`;
+          const message = `(Ondra) The job this carries on was already reviewed ("${reviewName(before)}") and its findings were fixed there; you haven't changed code since. That review covers this: don't start another one, go on with the next step.`;
           run.refused = message;
           queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
         if (had) {
-          const going = had.status !== "done";
+          // 교차 검토: the pair is one review, going while either lens is
+          const going = reviewGoing(had);
           push(t, { kind: "note", text: going ? "리뷰가 아직 진행 중이에요" : "리뷰는 이미 한 번 받았어요" });
           const jobId = t.id;
           // a new session may not know about it: say where it is, and what it found
           const message = going
-            ? `(Ondra) A review is already running ("${had.title}"). Its findings come to you by themselves when it ends. Don't start another one and never ask the user for them: go on with what doesn't depend on it, or end your turn and wait.`
-            : `(Ondra) This job was already reviewed once ("${had.title}"). Don't start another review. What it found:\n\n${had.result ?? had.summary ?? "(nothing written)"}\n\nFix P1·P2 only, re-run the tests that cover them, and finish.`;
+            ? `(Ondra) A review is already running ("${reviewName(had)}"). Its findings come to you by themselves when it ends. Don't start another one and never ask the user for them: go on with what doesn't depend on it, or end your turn and wait.`
+            : `(Ondra) This job was already reviewed once ("${reviewName(had)}"). Don't start another review. What it found:\n\n${lensText(lensesOf(had)) || "(nothing written)"}\n\nFix P1·P2 only, re-run the tests that cover them, and finish.`;
           if (!going) {
             run.refused = message;
             // it carries the findings: kept until taken, like the result itself
@@ -434,12 +437,19 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
-        const child = spawnChild(t, String(b.title ?? "서브에이전트"), String(b.task ?? b.title), review);
+        const ask = String(b.task ?? b.title);
+        // a review is 교차 검토: its two lenses start side by side
+        const kids = review ? lensKids(t, ask) : [{ title: String(b.title ?? "서브에이전트"), ask, extra: {} }];
+        const ids = kids.map((k) => spawnChild(t, k.title, k.ask, review, k.extra).id);
         const last = t.entries[t.entries.length - 1];
-        if (last?.kind === "spawn") last.childIds.push(child.id);
-        else push(t, { kind: "spawn", childIds: [child.id] });
+        if (last?.kind === "spawn") last.childIds.push(...ids);
+        else push(t, { kind: "spawn", childIds: ids });
         break;
       }
+      case "memory-check":
+        // a review lens's check of the memory it was given: applied once its pair is over
+        if (t.review) t.memoryCheck = readMemoryCheck(b.items);
+        break;
       default:
         if (b.type === "shot" && b.path) t.shot = b.path;
         push(t, { kind: "block", block: b as Block });
@@ -452,7 +462,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
 // ─────────────────────────────── subagents
 
 /** A subagent of a fork: same folder (and worktree), account and model; never isolated itself. */
-function spawnChild(parent: Task, title: string, ask: string, review = false): Task {
+function spawnChild(parent: Task, title: string, ask: string, review = false, extra: Partial<Task> = {}): Task {
   const child: Task = {
     id: uid("t"),
     space: parent.space,
@@ -478,6 +488,7 @@ function spawnChild(parent: Task, title: string, ask: string, review = false): T
     model: parent.model,
     thinking: parent.thinking,
     permission: parent.permission,
+    ...extra,
   };
   setState("tasks", (list) => [...list, child]);
   queueMicrotask(schedule);
@@ -489,14 +500,15 @@ const activeKids = (id: string) => childrenOf(id).filter((t) => t.status === "qu
 
 /** how a subagent's result to its fork begins (the same in every message carrying it) */
 const resultHead = (child: Task) =>
-  child.status === "done" ? (child.review ? `리뷰 결과가 왔어요 ("${child.title}")` : `서브에이전트 "${child.title}" 완료`) : `서브에이전트 "${child.title}" 실패`;
+  child.pair ? CROSSCHECK : child.status === "done" ? (child.review ? `리뷰 결과가 왔어요 ("${child.title}")` : `서브에이전트 "${child.title}" 완료`) : `서브에이전트 "${child.title}" 실패`;
 
 /** A subagent's result as its fork reads it. */
-function resultMessage(child: Task, left: number) {
-  const body =
-    child.status === "done"
+function resultMessage(child: Task, left: number, memory?: { lines: string[]; split: string[] }) {
+  const body = child.pair
+    ? crosscheckMessage(lensesOf(child), memory ?? { lines: [], split: [] })
+    : child.status === "done"
       ? child.review
-        ? `${resultHead(child)}:\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
+        ? `${resultHead(child)}:\n\n${child.result ?? child.summary ?? ""}\n\n${REVIEW_FIX}`
         : `${resultHead(child)}: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
       : `${resultHead(child)}: ${child.error ?? "알 수 없는 오류"}`;
   return `${body}\n\n(남은 서브에이전트: ${left}개)`;
@@ -516,7 +528,8 @@ function unhold(id: string, text: string) {
 }
 const markTaken = (kids: string[]) => {
   const at = Date.now();
-  for (const k of new Set(kids)) updateTask(k, (c) => (c.taken = at));
+  const all = new Set(kids.flatMap((k) => { const c = taskById(k); return c?.pair ? lensesOf(c).map((x) => x.id) : [k]; }));
+  for (const k of all) updateTask(k, (c) => (c.taken = at));
 };
 /** The model took these: a subagent whose result it was is marked as heard. */
 function heard(id: string, gone: { text: string; from?: string }[]) {
@@ -549,9 +562,9 @@ function missedReviews(t: Task): Task[] {
   return childrenOf(t.id).filter(
     (k) =>
       k.review &&
-      k.status === "done" &&
+      (k.pair ? !reviewGoing(k) && lensesOf(k)[0]?.id === k.id : k.status === "done") &&
       !k.taken &&
-      !(t.pending ?? []).some((p) => p.from === k.id) &&
+      !(t.pending ?? []).some((p) => p.from && (p.from === k.id || (k.pair && lensesOf(k).some((x) => x.id === p.from)))) &&
       !t.inbox.some((m) => m.startsWith(resultHead(k))) &&
       !t.entries.some((e) => e.kind === "turn" && e.at > (k.finishedAt ?? 0)),
   );
@@ -609,8 +622,11 @@ async function untaken(id: string, run: Run, agent: string): Promise<boolean> {
 async function deliver(child: Task) {
   const parent = child.parentId ? taskById(child.parentId) : undefined;
   if (!parent) return;
+  // 교차 검토: nothing until the other lens is over too, then one message for both
+  if (child.pair && reviewGoing(child)) return;
+  const memory = child.pair ? await settleMemory(parent, lensesOf(child)) : undefined;
   const left = activeKids(parent.id).length;
-  const message = resultMessage(child, left);
+  const message = resultMessage(child, left, memory);
   const run = runs.get(parent.id);
   const agent = agentOf(parent.id);
   if (!run || !isAlive(agent) || parent.status === "paused" || parent.status === "done" || parent.status === "failed") {
@@ -1515,7 +1531,8 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   if (changed && risky && out && !state.tasks.some((x) => x.parentId === t.id && x.review && x.status === "done"))
     run.unverified = [...(run.unverified ?? []), "리뷰 없이 내보냈어요"];
   const kids = state.tasks.filter((x) => x.parentId === t.id);
-  const reviewed = !needsReview || kids.some((x) => x.review && x.status === "done");
+  const reviewed = !needsReview || reviewSettled(kids);
+  const reviewing = !reviewed && kids.some((x) => x.review && reviewGoing(x));
   const unresolved = changed && reviewed && !out && reviewUnresolved(t, kids);
   // check the evidence of this done against the session, and show the result on its block
   const checked = await checkEvidence(t, run.evidence ?? []);
@@ -1535,7 +1552,11 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   if (!needs.length) return null;
   const lines = [
     "끝내기 전에 빠진 게 있어요.",
-    changed && !reviewed ? "- 코드를 바꿨는데 리뷰를 안 받았어요. 리뷰 서브에이전트({\"type\":\"subagent\",\"review\":true,…, code-review 스킬})를 띄우고 결과를 받아 고쳐 줘." : "",
+    changed && !reviewed
+      ? reviewing
+        ? "- 교차 검토가 아직 끝나지 않았어요. 다른 리뷰를 띄우지 말고 턴을 끝내 기다렸다가, 결과가 오면 고치고 끝내 줘."
+        : "- 코드를 바꿨는데 리뷰를 안 받았어요. 교차 검토({\"type\":\"subagent\",\"review\":true,…})를 한 번 띄우고 결과를 받아 고쳐 줘."
+      : "",
     unresolved ? "- 리뷰에서 P1·P2가 나왔는데 그 뒤로 고친 게 없어요. 고치고, 고친 걸 다시 확인해 줘." : "",
     !proven ? "- done에 evidence가 없어요. 실제로 돌린 테스트·빌드·실행·스크린샷을 evidence에 넣고, 확인 못 한 건 unverified에 적어 줘." : "",
     ...bad.map((e) => `- evidence «${e.ref}»: ${e.why}. ${e.check === "missing" ? "파일을 실제로 만들거나 경로를 고쳐 줘." : e.kind === "shot" ? "지금 화면을 다시 찍어 그 사진을 넣어 줘." : "지금 실제로 돌리고 그 결과를 적어 줘."}`),

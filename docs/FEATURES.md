@@ -41,7 +41,7 @@
 | btw 기록 | `/btw` 만 치면 지난 btw, ‹ ›로 앞뒤 이동, 앱을 껐다 켜도 남음 | Claude Code | `aside.ts` |
 | 디자인 구현 | 피그마 링크·"디자인 구현" 요청은 메인이 mimikyu 스킬로 맡김 | — | `prompts.ts` |
 | 일하는 순서 | 계획 → 그림(구조·흐름, 파일:줄) → 조사(쓸 수 있는 코드 찾기) → 개발(재사용·깔끔) → 리뷰 서브에이전트 → 증거 | gajae-code, Whiteboard | `prompts.ts` |
-| 리뷰 | 코드를 바꾼 일은 끝내기 전에 리뷰 서브에이전트(code-review 스킬)가 보고, 결과가 일에게 돌아가 고침 | Matt Pocock code-review | `skills/code-review`, `tasks.ts` |
+| 교차 검토 | 위험한 변경은 끝내기 전에 두 읽기 전용 서브에이전트(설계 검토 · 코드 검토, code-review 스킬)가 나란히 보고, 합친 결과 하나가 일에게 돌아가 고침. 받은 메모리도 코드와 대조해 확인 표시·내림·확인 필요로 나눔 | Matt Pocock code-review, sleeplesshan dual-brain | `skills/code-review`, `crosscheck.ts`, `memcheck.ts`, `tasks.ts` |
 | 증거 | done의 증거를 앱이 세션 기록과 대조(그 명령을 실제로 돌렸나·통과했나·그 뒤 코드가 바뀌었나·파일이 있나). 안 맞으면 이유와 함께 최대 2번 돌려보내고, 남은 건 "확인 안 됨". 각 증거에 앱이 확인/자가 신고/안 맞음 표시. 리뷰에서 P1·P2가 나왔는데 안 고치면 돌려보냄 | OmO claim-receipt, gajae-code | `proof.ts`, `tasks.ts`, `Blocks.tsx` |
 | 그림 블록 | 상자와 화살표로 구조·흐름. 새로/바뀜/없앰, 요청/AI 판단 표시. 일이 끝나도 접히지 않음. 메인 답에도 씀 | Whiteboard | `Diagram.tsx` |
 | 기록 | now.md·context·memory 같은 메모 파일 쓰기는 코드 수정이 아니라 "기록했어요" 줄로, 눌러서 내용 보기 | — | `Transcript.tsx` |
