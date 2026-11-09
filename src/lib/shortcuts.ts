@@ -34,6 +34,13 @@ export const shortcuts = {
   changes: ctrl("KeyG", true),
   // the changes in the full-size editor (⌃⇧G is the panel's tab, as VS Code's source control)
   changesEditor: { code: "KeyG", meta: true, alt: true },
+  // inside the changes editor, on VS Code's keys: F7 / ⇧F7 through the changes (on into the next or
+  // previous file), ⌥F5 / ⇧⌥F5 to the next or previous changed file. Its tabs close and cycle on the
+  // pane's and the panel's keys (closePane ⌘W, nextTab / previousTab ⌃Tab) while it has the focus.
+  nextChange: { code: "F7" },
+  previousChange: { code: "F7", shift: true },
+  nextFileChange: { code: "F5", alt: true },
+  previousFileChange: { code: "F5", alt: true, shift: true },
   pr: cmd("KeyR", true),
   files: cmd("KeyP"),
   terminal: ctrl("Backquote"),

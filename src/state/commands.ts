@@ -19,6 +19,9 @@ function toggleChanges() {
   if (v.name === "changes") openTask(v.id);
   else if (v.name === "task") openChanges(v.id);
 }
+/** F7 and the rest from the palette: the changes editor in the focused pane does them */
+const inChanges = () => view().name === "changes";
+const changesKey = (id: string) => () => inPane(".cg-view")?.dispatchEvent(new CustomEvent("cg-command", { detail: id }));
 /** the panel shows beside Main and a task only (canvas, memory, results, devices and settings have none) */
 const panelAvailable = () => view().name === "main" || view().name === "task";
 const visiblePanel = () => panelAvailable() && panelOpen();
@@ -90,6 +93,11 @@ export function appCommands(): ShortcutCommand[] {
     // the page the panel's browser shows, in the system's browser
     { id: "browserOutside", label: t("이 페이지를 기본 브라우저에서 열기"), section: t("패널"), icon: "external", run: () => void openExternal(browserPage()), enabled: () => visiblePanel() && panelTab() === "browser" && !!browserPage() },
     command("changesEditor", "변경 사항 에디터", "이동", "diff", toggleChanges, () => !!changesJob(), true),
+    // the changes editor's own keys, as VS Code's diff editor has them
+    command("nextChange", "다음 변경", "변경 사항", "arrowDown", changesKey("nextChange"), inChanges),
+    command("previousChange", "이전 변경", "변경 사항", "arrowUp", changesKey("previousChange"), inChanges),
+    command("nextFileChange", "다음 파일", "변경 사항", "arrow", changesKey("nextFileChange"), inChanges),
+    command("previousFileChange", "이전 파일", "변경 사항", "back", changesKey("previousFileChange"), inChanges),
     ...([
       ["artifacts", "결과물 탭", "inbox"], ["changes", "변경 사항", "diff"], ["pr", "PR", "pr"],
       ["files", "파일", "file"], ["terminal", "터미널", "shell"], ["overview", "작업 정보", "list"],

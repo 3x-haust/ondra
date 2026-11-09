@@ -1,6 +1,6 @@
 // What every pane can do, from its header, the keyboard and the sidebar: split, zoom, close,
 // go to the one that needs you, and take a job dragged from the sidebar.
-import { createSignal, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import * as L from "../state/layout";
 import { closePane, equalizePanes, focusPane, layout, paneCount, paneRoom, setPaneView, splitPane, toggleZoom, view, type View } from "../state/ui";
 import { usePane } from "../state/panes";
@@ -34,9 +34,19 @@ let closedAt = 0;
 export function closeFocused() {
   if (closePane()) closedAt = Date.now();
 }
+// A view that closes something of its own on ⌘W before its pane goes (the changes editor's tabs, while
+// its editor has the focus): true when it did.
+const ownClose = new Set<() => boolean>();
+export function claimClose(f: () => boolean) {
+  ownClose.add(f);
+  onCleanup(() => ownClose.delete(f));
+}
+/** the key closed something itself: the menu's ⌘W that follows it is the same press */
+export const closedHere = () => void (closedAt = Date.now());
 /** ⌘W from the app menu: the focused pane when there are several, else the panel (false: not handled here). */
 export function menuClose(): boolean {
   if (Date.now() - closedAt < 400) return true; // the key itself already closed one
+  for (const f of ownClose) if (f()) return closedHere(), true;
   if (!canClosePane()) return false;
   closeFocused();
   return true;
