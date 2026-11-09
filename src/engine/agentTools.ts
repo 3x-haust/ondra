@@ -57,6 +57,7 @@ const SKILL_LINE: Record<string, string> = {
   "device-use": "시뮬레이터와 에뮬레이터에서 앱을 다뤄요",
   "goal-loop": "목표를 이룰 때까지 고치고 확인해요",
   mimikyu: "Figma 디자인을 코드로 옮기고 맞춰 봐요",
+  qa: "앱을 직접 써 보며 버그를 찾아요",
   "reverse-engineering": "바이너리와 앱을 분석해요",
   "test-ci": "테스트와 CI를 만들어요",
   "visual-report": "진행과 결과를 차트와 블록으로 보여 줘요",
