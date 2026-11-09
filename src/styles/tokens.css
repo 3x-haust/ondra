@@ -123,7 +123,7 @@
   --panel-w: 440px;
   --head-h: 52px;
   --sidebar-w: 264px;
-  --chat-w: 736px; /* T3: 46rem */
+  --chat-w: 880px; /* wide enough that a report, a table or code reads without wrapping every few words */
   --traffic-w: 84px; /* room for the macOS window buttons */
 
   /* ── motion ── */

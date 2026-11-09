@@ -61,6 +61,8 @@ export default {
   "작업 흐름 열기": "Open flow",
   "메모리 열기": "Open memory",
   "설정 열기": "Open settings",
+  "이 대화 비우기 · 작업과 결과는 그대로": "Clear this chat · jobs and results stay",
+  "대화를 비웠어요": "Chat cleared",
   "권한: {name}": "Permission: {name}",
   "메모리에 저장": "Save to memory",
   "설정": "Settings",
