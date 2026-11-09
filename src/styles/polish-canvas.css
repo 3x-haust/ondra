@@ -1889,7 +1889,7 @@
   background: color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
-/* ── canvas header legend: the words go first when the header is narrow (the glyph, count and tooltip stay) */
+/* ── canvas header legend: the words go only when they overflow (Canvas.tsx fitLegend); the glyph, count and tooltip stay */
 .canvas-view .head {
   container-type: inline-size;
 }
@@ -1905,15 +1905,8 @@
   flex: none;
   white-space: nowrap;
 }
-@container (max-width: 900px) {
-  :root:lang(en) .canvas-view .cv-legend .lb {
-    display: none;
-  }
-}
-@container (max-width: 780px) {
-  .canvas-view .cv-legend .lb {
-    display: none;
-  }
+.canvas-view .cv-legend.bare .lb {
+  display: none;
 }
 
 /* ── light mode: the lines read over the dot grid (a stronger ink, a longer dash than a dot) */
@@ -1940,10 +1933,55 @@
   }
 }
 
-/* ── board: a finished card's "확인 안 됨" leads its bottom line */
+/* ── board: a finished card's "확인 안 됨" leads its bottom line (and is the first to give way) */
 .bc-meta .unverified-badge {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 0 var(--s-6);
   border-radius: var(--r-sm);
   line-height: 18px;
+}
+
+/* ── canvas: the cards fade out along the view's bottom and right edges and along the sheet's left edge
+   (Canvas.tsx FADE), so a card running off reads as "more there"; nothing shows in the sheet's inset */
+.cv-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  --cv-fade: 20px;
+  -webkit-mask-image:
+    linear-gradient(to bottom, #000 calc(100% - var(--cv-fade)), transparent),
+    linear-gradient(to right, #000 calc(100% - var(--cv-sheet, 0px) - var(--cv-fade)), transparent calc(100% - var(--cv-sheet, 0px)));
+  mask-image:
+    linear-gradient(to bottom, #000 calc(100% - var(--cv-fade)), transparent),
+    linear-gradient(to right, #000 calc(100% - var(--cv-sheet, 0px) - var(--cv-fade)), transparent calc(100% - var(--cv-sheet, 0px)));
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+/* a narrow view gives the sheet less width (Canvas.tsx sheetW), so a card still fits whole beside it */
+.cv-drawer {
+  width: min(400px, max(320px, calc(100% - 300px)), calc(100% - 80px));
+}
+
+/* ── board: what a running task is on, in one line; the diff never wraps (the "확인 안 됨" badge gives way first) */
+.bcard.tone-running .bc-line {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bc-meta {
+  min-width: 0;
+}
+.bc-meta > * {
+  flex: none;
+}
+.bc-meta > .unverified-badge {
+  flex: 0 1 auto;
+}
+.bc-diff {
+  white-space: nowrap;
 }

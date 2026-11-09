@@ -4,7 +4,7 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
-import { nowText } from "../engine/describe";
+import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
@@ -12,7 +12,6 @@ import { decisionFor, projectsIn, setState, spaceById, state, taskById } from ".
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
-import { describeCommand } from "../engine/describe";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, now, statusLabel, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
@@ -28,10 +27,14 @@ import { lang, t } from "../i18n";
 
 // ───────────── geometry
 
-const W = { main: 168, proj: 220, job: 288, sub: 236 };
+const W = { main: 168, proj: 200, job: 288, sub: 236 };
 const H = { main: 84, proj: 84, job: 196, sub: 72, more: 40 };
-const X = { main: 0, proj: 248, job: 560 };
-const GAP = { job: 28, col: 24, sub: 12, proj: 56 };
+const X = { main: 0, proj: 216, job: 472 };
+const GAP = { job: 28, col: 24, sub: 12, proj: 56, lanes: 48 };
+/** how far over the top of the lanes the line to a second column's lane runs */
+const BUS = 20;
+/** a second column of lanes starts this far right of the first */
+const COL = X.job + W.job + GAP.lanes - X.proj;
 const SUB_INDENT = 28;
 
 type Kind = "main" | "proj" | "job" | "sub" | "more";
@@ -55,6 +58,8 @@ interface Edge {
   from: string;
   to: string;
   tone: string;
+  /** Main to a lane in the second column: over the top of the first, never across a card */
+  over?: boolean;
 }
 
 /** the map, or the same tasks as columns by state */
@@ -88,8 +93,12 @@ const RANK: Record<string, number> = { ask: 0, failed: 1, live: 2, review: 3, pa
  */
 const [ranks, setRanks] = createSignal<Record<string, number>>({});
 const rankOf = (t: Task) => ranks()[t.id] ?? RANK[tone(t)];
-const snapRanks = (space: string) =>
+const snapRanks = (space: string) => {
+  for (const k in laneCol) delete laneCol[k];
   setRanks(Object.fromEntries(state.tasks.filter((t) => t.space === space && !t.parentId).map((t) => [t.id, RANK[tone(t)]])));
+};
+/** which of two columns each lane went to (kept like the ranks, so lanes don't swap columns as work moves on) */
+const laneCol: Record<string, number> = {};
 /** the zoom the canvas is at, for what has to be measured at the size it's drawn */
 const [zoomNow, setZoomNow] = createSignal(1);
 /**
@@ -99,20 +108,19 @@ const [zoomNow, setZoomNow] = createSignal(1);
  */
 const sizeOf = (z: number) => stepUnder(Math.max(z, 0.75));
 const sizeAt = () => sizeOf(zoomNow());
+/** lanes in two columns: the view holds both at the first view's zoom */
+const [twoCols, setTwoCols] = createSignal(false);
 
 /**
- * Lanes top to bottom, a lane's cards in one column (a job's subagents stacked under it).
- * Main and each project sit at the top of what they lead to, so a lane that grows (a fold
- * opened) only grows downward: nothing above it moves, and nothing is re-centred.
+ * Lanes top to bottom, a lane's cards in one column (a job's subagents stacked under it). With `two`
+ * (a wide view), the lanes flow into two columns of lanes, top-aligned: each lane, in order, goes to
+ * the shorter column (as they are folded, at the first view's zoom) and stays in it until the canvas is opened or tidied again. Main and each
+ * project sit at the top of what they lead to, so a lane that grows only grows downward.
  */
-function layout(space: string, open: string[], k = untrack(sizeAt)): { nodes: Node[]; edges: Edge[] } {
+function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "기타", folder: spaceById(space as Task["space"]).folder });
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-  let y = 0;
-  const projNodes: Node[] = [];
   const jobsOf = (p: { id: string }) =>
     roots
       .filter((t) => (p.id === "_" ? !t.project || !projects.some((q) => q.id === t.project && q.id !== "_") : t.project === p.id))
@@ -120,12 +128,15 @@ function layout(space: string, open: string[], k = untrack(sizeAt)): { nodes: No
   // the lane that needs the person most comes first (the sidebar's order between equals)
   const laneRank = (p: { id: string }) => Math.min(7, ...jobsOf(p).filter((t) => !folded(t)).map(rankOf));
   const lanes = projects.map((p, i) => ({ p, i, r: laneRank(p) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.p);
-  for (const p of lanes) {
+  /** one lane from y = 0: its cards, its lines, and how far down the next lane starts */
+  const lane = (p: (typeof projects)[number], open: string[], k: number) => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
+    let y = 0;
     const all = jobsOf(p);
     // finished jobs fold into one "완료 N개" card per project; unfolded, they come out under it
     const done = all.filter(folded);
     const jobs = all.filter((t) => !folded(t));
-    const top = y;
     /** one column: each job, then its own sub-jobs under it */
     const place = (list: Task[]) => {
       for (const t of list) {
@@ -156,15 +167,26 @@ function layout(space: string, open: string[], k = untrack(sizeAt)): { nodes: No
       y += H.more + GAP.job;
       if (open.includes(p.id)) place(done);
     }
+    nodes.push({ id: `p:${p.id}`, kind: "proj", x: X.proj, y: 0, w: W.proj, h: H.proj, project: p });
+    edges.push({ from: "main", to: `p:${p.id}`, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "failed") ? "failed" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
     // a lane is never shorter than its project card (a short card beside it would pull the next lane in)
-    y = Math.max(y, top + H.proj + GAP.job);
-    const pn: Node = { id: `p:${p.id}`, kind: "proj", x: X.proj, y: top, w: W.proj, h: H.proj, project: p };
-    projNodes.push(pn);
-    nodes.push(pn);
-    edges.push({ from: "main", to: pn.id, tone: jobs.some((t) => tone(t) === "ask") ? "ask" : jobs.some((t) => tone(t) === "failed") ? "failed" : jobs.some((t) => tone(t) === "live") ? "live" : jobs.length ? "done" : "idle" });
-    y += GAP.proj - GAP.job;
+    return { nodes, edges, next: Math.max(y, H.proj + GAP.job) + GAP.proj - GAP.job };
+  };
+  const nodes: Node[] = [{ id: "main", kind: "main", x: X.main, y: 0, w: W.main, h: H.main }];
+  const edges: Edge[] = [];
+  const tops = two ? [0, 0] : [0];
+  /** where each column has got to, with every lane folded (what decides the column) */
+  const weight = two ? [0, 0] : [0];
+  for (const p of lanes) {
+    const c = two ? (laneCol[p.id] ?? (weight[1] < weight[0] ? 1 : 0)) : 0;
+    // kept once the cards are measured on screen (before that their heights are a guess)
+    if (two && typeof document !== "undefined" && document.querySelector(".canvas-view")) laneCol[p.id] = c;
+    const l = lane(p, open, k);
+    weight[c] += two ? lane(p, [], READ_ZOOM).next : 0;
+    for (const n of l.nodes) nodes.push({ ...n, x: n.x + c * COL, y: n.y + tops[c] });
+    for (const e of l.edges) edges.push(c && e.from === "main" ? { ...e, over: true } : e);
+    tops[c] += l.next;
   }
-  nodes.unshift({ id: "main", kind: "main", x: X.main, y: projNodes.length ? Math.min(...projNodes.map((n) => n.y)) : 0, w: W.main, h: H.main });
   // where the user put things wins
   const moved = state.canvas ?? {};
   for (const n of nodes) {
@@ -180,20 +202,20 @@ const boxOf = (list: Node[]) => ({
   y0: Math.min(...list.map((n) => n.y)), y1: Math.max(...list.map((n) => n.y + n.h)),
 });
 /**
- * The camera's one margin (screen px): the air between a card in view and the edge of what's
- * visible. Every move (first view, fit-all, pick, zoom step, resize, a layout change, the sheet)
- * uses it. A card out of view stays PEEK past the edge, so not even its border shows.
+ * The camera's air (screen px) between a card it puts in view and the edge: ROOM at the top and left,
+ * FAR at the bottom and right (and the sheet's edge), where the view fades out over FADE.
  */
-const ROOM = 12;
-const PEEK = 2;
-/** the first view's zoom, and the step under it when that shows more of what needs the person */
+const ROOM = 16;
+const FADE = 20;
+const FAR = FADE + 8;
+/** the sheet's width in a view `w` wide (see .cv-drawer): narrower in a narrow view, so a card fits beside it */
+const sheetW = (w: number) => Math.min(400, Math.max(320, w - 300), w - 80);
+/** the first view's zoom (it never goes under it) */
 const READ_ZOOM = 0.75;
 /** fit-all never goes under this */
 const FLOOR_ZOOM = 0.5;
 /** the first view's priority: needs a reply, failed, running, review, paused */
 const FIRST = ["ask", "failed", "live", "review", "paused"];
-/** an empty top this tall (screen px) is worth a step down the ladder */
-const BIG_TOP = 48;
 /** the zoom steps − and + (and ⌘− ⌘+) move along */
 const LADDER = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2];
 /** the ladder's step at or under `z` (the zoom itself under the first step) */
@@ -400,7 +422,10 @@ function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?
   }
   if (x.note) return { icon: "write", label: t("기록"), target: x.target };
   // the whole target (the row cuts it with an ellipsis), the address without its scheme
-  if (x.kind === "browser") return { icon, label: verb("browser"), target: x.target.replace(/https?:\/\/(?:www\.)?/g, "").trim() };
+  if (x.kind === "browser") {
+    const d = describeBrowser(x.target);
+    return { icon, label: past ? d.label : d.now, target: d.target ?? "" };
+  }
   if (x.kind === "other") {
     const named = ({ memory_search: "메모리 검색", subagent: "서브에이전트 실행" } as Record<string, string>)[x.name];
     return { icon, label: named ? t(named) : verb("other"), target: named ? "" : x.name };
@@ -576,12 +601,13 @@ const discardedAt = (task: Task) => (discarded(task) ? (task.discardedAt ?? task
 const endedAt = (task: Task) =>
   discarded(task) ? discardedAt(task) : task.status === "done" || task.status === "failed" ? (mergedAt(task) ?? task.finishedAt) : undefined;
 
-function StatusRow(props: { t: Task; sheet?: boolean }) {
+function StatusRow(props: { t: Task; sheet?: boolean; aside?: string }) {
   const tn = () => tone(props.t);
   /** where it is in its plan, while it isn't finished: 진행 중 · 할 일 2/4 */
   const step = () => (props.t.plan.length && props.t.status !== "done" ? planCount(props.t.plan) : undefined);
   /** running: for how long; finished: when (on a card) or what it took (in the sheet) */
   const when = () => {
+    if (props.aside) return props.aside;
     if (props.t.status === "running" && props.t.startedAt) return compact(now() - props.t.startedAt);
     const at = endedAt(props.t);
     if (!at) return "";
@@ -789,11 +815,20 @@ function Drawer(props: { t: Task; onClose: () => void }) {
   });
   createEffect(on(() => job().title, () => queueMicrotask(() => titleEl && setCut(titleEl.scrollHeight > titleEl.clientHeight + 1 || /(…|\.\.\.)$/.test(job().title.trim())))));
   /** what was asked, in full: for a task that hasn't started (or is paused) and wherever the title is cut */
-  const request = () => {
+  const asked = () => {
     const ask = job().ask?.trim() ?? "";
     if (!ask) return "";
     if (cut()) return ask;
     return (job().status === "paused" || job().status === "queued") && !same(ask, job().title) ? ask : "";
+  };
+  const queued = () => job().status === "queued";
+  /** a queued task's request sits in its state box (with its place in the queue), not in a section of its own */
+  const request = () => (queued() ? "" : asked());
+  /** its place in the queue: next, or how many tasks are ahead of it */
+  const ahead = () => {
+    const q = state.tasks.filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+    const i = q.findIndex((x) => x.id === job().id);
+    return i < 0 ? "" : i === 0 ? t("다음 차례") : t("앞에 작업 {n}개", { n: i });
   };
   const [merging, setMerging] = createSignal(false);
   const [msg, setMsg] = createSignal("");
@@ -864,7 +899,8 @@ function Drawer(props: { t: Task; onClose: () => void }) {
           when={ended() && outcome().text}
           fallback={
             <div class="cv-dr-now">
-              <StatusRow t={job()} sheet />
+              <StatusRow t={job()} sheet aside={queued() ? ahead() : undefined} />
+              <Show when={queued() && asked()}><p class="cv-dr-ask">{asked()}</p></Show>
               {/* a job waiting on the user is answered right here */}
               <Show
                 when={decisionFor(job().id)}
@@ -872,7 +908,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
                   <Show
                     when={job().status === "running" && liveMode(job()) === "act"}
                     // a card's words that are only the request: the 요청 section below says it in full
-                    fallback={<Show when={!(request() && liveMode(job()) === "summary" && !job().summary && !job().error)}><Live t={job()} /></Show>}
+                    fallback={<Show when={!(asked() && liveMode(job()) === "summary" && !job().summary && !job().error)}><Live t={job()} /></Show>}
                   >
                     <Show when={nowLine()}><p class="cv-dr-line">{nowLine()}</p></Show>
                   </Show>
@@ -1013,7 +1049,7 @@ export function Canvas() {
   onMount(() => remeasure(0));
   // the order is taken when the canvas opens and when the workspace changes
   createEffect(on(space, (sp) => untrack(() => snapRanks(sp))));
-  const graph = createMemo(() => layout(space(), unfolded(), sizeAt()));
+  const graph = createMemo(() => layout(space(), unfolded(), sizeAt(), twoCols()));
   /** projects that have finished jobs folded away (or unfolded) */
   const foldable = () => graph().nodes.filter((n) => n.kind === "more").map((n) => n.project!.id);
   const allOpen = () => foldable().length > 0 && foldable().every((id) => unfolded().includes(id));
@@ -1091,56 +1127,41 @@ export function Canvas() {
     const p = n?.kind === "proj" ? n.project!.id : n && projectOf(n);
     return p && p !== "_" ? p : undefined;
   };
+  type Area = { w: number; h: number };
   /** the part of the view no sheet covers (the sheet's width and inset: see .cv-drawer) */
-  const area = (sheet: boolean, v = vpSize()) => ({ w: sheet ? v.w - 8 - Math.min(400, v.w - 80) : v.w, h: v.h });
-  /**
-   * The camera never cuts a card. From the candidate views (the current one, and every one that puts
-   * an edge just past a card or a margin before it), the nearest where every card is whole (with the
-   * margin) or out of view (PEEK past the edge). `tries` are taken in order: each asks that a box be
-   * whole in view (and `lockY`: that the view only moves sideways); the last resort keeps nothing
-   * but still cuts nothing. Moving up or down costs more than moving sideways.
-   */
-  type Try = { b?: ReturnType<typeof boxOf>; lockY?: boolean };
-  const settle = (ns: Node[], z: number, p: P, a: { w: number; h: number }, tries: Try[] = [{}]): P => {
-    const m = ROOM / z, e = PEEK / z, W = a.w / z, H = a.h / z;
-    const X0 = -p.x / z, Y0 = -p.y / z;
-    const xs = new Set([X0]), ys = new Set([Y0]);
-    for (const n of ns) {
-      xs.add(n.x - m).add(n.x + n.w + e).add(n.x + n.w + m - W).add(n.x - e - W);
-      ys.add(n.y - m).add(n.y + n.h + e).add(n.y + n.h + m - H).add(n.y - e - H);
-    }
-    /** along one axis: 1 whole (with the margin), 0 out of view, -1 cut */
-    const along = (lo: number, len: number, s: number, L: number) =>
-      lo >= s + m - 0.01 && lo + len <= s + L - m + 0.01 ? 1 : lo + len <= s - e + 0.01 || lo >= s + L + e - 0.01 ? 0 : -1;
-    const view = (X: number, Y: number) => {
-      let shown = 0;
-      for (const n of ns) {
-        const ix = along(n.x, n.w, X, W), iy = along(n.y, n.h, Y, H);
-        if (ix === 0 || iy === 0) continue;
-        if (ix < 0 || iy < 0) return -1;
-        shown++;
-      }
-      return shown;
+  const area = (sheet: boolean, v = vpSize()): Area => ({ w: sheet ? v.w - 8 - sheetW(v.w) : v.w, h: v.h });
+  /** card `n` is whole in area `a` at zoom `z` (with the air around it) */
+  const fitsIn = (n: Node, a: Area, z: number) => n.w * z <= a.w - ROOM - FAR + 0.5 && n.h * z <= a.h - ROOM - FAR + 0.5;
+  /** the least move of `p` that puts card `n` whole in area `a` (its top and left first when it can't be) */
+  const reveal = (n: Node, z: number, p: P, a: Area): P => {
+    const along = (lo: number, len: number, off: number, L: number) => {
+      const end = (lo + len) * z + off;
+      if (end > L - FAR) off -= end - (L - FAR);
+      return lo * z + off < ROOM ? ROOM - lo * z : off;
     };
-    const holds = (t: Try, X: number, Y: number) =>
-      !(t.lockY && Math.abs(Y - Y0) > 0.01) && !(t.b && !(t.b.x0 >= X + m - 0.01 && t.b.x1 <= X + W - m + 0.01 && t.b.y0 >= Y + m - 0.01 && t.b.y1 <= Y + H - m + 0.01));
-    // already right where it is: nothing to look for
-    if (holds(tries[0] ?? {}, X0, Y0) && view(X0, Y0) > 0) return p;
-    const pairs: [number, number, number][] = [];
-    for (const Y of ys) for (const X of xs) pairs.push([X, Y, (3 * Math.abs(Y - Y0) + Math.abs(X - X0)) * z]);
-    pairs.sort((u, v) => u[2] - v[2]);
-    const seen = new Map<number, number>();
-    for (const t of tries) {
-      for (let i = 0; i < pairs.length; i++) {
-        const [X, Y] = pairs[i];
-        if (!holds(t, X, Y)) continue;
-        let v = seen.get(i);
-        if (v === undefined) seen.set(i, (v = view(X, Y)));
-        // a view with nothing in it isn't a view of the work
-        if (v > 0) return { x: -X * z, y: -Y * z };
-      }
+    return { x: along(n.x, n.w, p.x, a.w), y: along(n.y, n.h, p.y, a.h) };
+  };
+  /** the card nearest the middle of area `a` (of those `keep` lets through) */
+  const nearest = (ns: Node[], z: number, p: P, a: Area, keep: (n: Node) => boolean = () => true) => {
+    let best: Node | undefined, far = Infinity;
+    for (const n of ns) {
+      if (!keep(n)) continue;
+      const l = n.x * z + p.x, t = n.y * z + p.y, r = l + n.w * z, b = t + n.h * z;
+      // how far the middle is from the card, then from the card's own middle
+      const d = Math.hypot(Math.max(l - a.w / 2, 0, a.w / 2 - r), Math.max(t - a.h / 2, 0, a.h / 2 - b)) * 1e4 + Math.hypot((l + r - a.w) / 2, (t + b - a.h) / 2);
+      if (d < far) (far = d), (best = n);
     }
-    return p;
+    return best;
+  };
+  /** the cards at zoom `z` (their words measured at that size) */
+  const at = (z: number) => layout(space(), unfolded(), sizeOf(z)).nodes;
+  /** the zoom at or under `z`, on the ladder, at which card `id` is whole beside the sheet */
+  const roomFor = (id: string, z: number, a: Area) => {
+    for (const s of [z, ...[...LADDER].reverse().filter((s) => s < z - 0.001)]) {
+      const n = at(s).find((x) => x.id === id);
+      if (!n || fitsIn(n, a, s)) return s;
+    }
+    return LADDER[0];
   };
   /** move the view to `next`, gliding (unless motion is reduced) */
   const panTo = (next: P, z = zoom()) => {
@@ -1158,90 +1179,49 @@ export function Canvas() {
   };
   let glideTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(glideTimer));
-  /** a lane: its project card and every card under it */
-  const laneOf = (n: Node, ns = graph().nodes) => {
-    const pid = n.kind === "proj" ? n.project!.id : n.kind === "more" && !n.task ? n.project!.id : projectOf(n);
-    return ns.filter((x) => (x.kind === "proj" ? x.project!.id : x.kind === "more" && !x.task ? x.project!.id : projectOf(x)) === pid && x.kind !== "main");
-  };
-  /** what fits in the view (less its margin) at the zoom */
-  const fits = (b: ReturnType<typeof boxOf>, a: { w: number; h: number }, z = zoom()) => (b.x1 - b.x0) * z <= a.w - ROOM * 2 && (b.y1 - b.y0) * z <= a.h - ROOM * 2;
-  /** whole in the view (any air) along y */
-  const wholeY = (b: ReturnType<typeof boxOf>, a: { w: number; h: number }, z = zoom(), p = pan()) => b.y0 * z + p.y >= -0.5 && b.y1 * z + p.y <= a.h + 0.5;
-  /**
-   * What the camera keeps while a card is picked: its lane when the lane fits, else the card. When
-   * the lane (or the card) is already whole top to bottom, the view only moves sideways (if at all).
-   */
-  const keepPicked = (n: Node, ns: Node[], z: number, p: P, a: { w: number; h: number }): Try[] => {
-    const card = boxOf([ns.find((x) => x.id === n.id) ?? n]);
-    const lane = boxOf(laneOf(n, ns));
-    const tries: Try[] = [];
-    const laneFits = fits(lane, a, z);
-    if (laneFits && wholeY(lane, a, z, p)) tries.push({ b: lane, lockY: true });
-    if (wholeY(card, a, z, p)) tries.push({ b: card, lockY: true });
-    if (laneFits) tries.push({ b: lane });
-    tries.push({ b: card }, {});
-    return tries;
-  };
-  /** the picked card's node, when it's on the canvas and its sheet is open */
+  /** the picked task card, when it's on the canvas (its sheet is open) */
   const picked = () => {
     const id = sel();
     const n = id ? byId().get(id) : undefined;
     return n?.task ? n : undefined;
   };
-  /** the camera after anything moved under it (or the view changed size): as little as it can */
-  const keep = (ns = graph().nodes, z = zoom(), p = pan()) => {
-    const n = picked();
-    const a = area(!!n);
-    return settle(ns, z, p, a, n ? keepPicked(n, ns, z, p, a) : [{ lockY: true }, {}]);
-  };
   /**
-   * Pick a task card: its side sheet opens, and the view moves (as little as it can) so the card's
-   * lane is in view beside it, or the card alone when the lane doesn't fit; nothing is left cut.
+   * Zoom to `z` about card `id` (its middle stays where it is on screen). A picked card then ends whole
+   * beside the sheet, the zoom going down the ladder until it can.
    */
+  const zoomAbout = (z: number, id: string | undefined) => {
+    const pk = picked(), a = area(!!pk), z0 = zoom(), p0 = pan();
+    if (pk) z = roomFor(pk.id, z, a);
+    const ns = at(z), was = id ? byId().get(id) : undefined, n = id ? ns.find((x) => x.id === id) : undefined;
+    const cx = was ? (was.x + was.w / 2) * z0 + p0.x : a.w / 2, cy = was ? (was.y + was.h / 2) * z0 + p0.y : a.h / 2;
+    const wx = n ? n.x + n.w / 2 : (cx - p0.x) / z0, wy = n ? n.y + n.h / 2 : (cy - p0.y) / z0;
+    let p = { x: cx - wx * z, y: cy - wy * z };
+    const keep = pk && ns.find((x) => x.id === pk.id);
+    if (keep) p = reveal(keep, z, p, a);
+    panTo(p, z);
+  };
+  /** Pick a task card: its sheet opens and the view moves as little as it can to show the card whole beside it. */
   const pick = (n: Node) => {
     setSel(n.id);
     if (!vp) return;
     const a = area(true);
-    panTo(settle(graph().nodes, zoom(), pan(), a, keepPicked(n, graph().nodes, zoom(), pan(), a)));
+    if (roomFor(n.id, zoom(), a) < zoom() - 0.001) return zoomAbout(zoom(), n.id);
+    panTo(reveal(n, zoom(), pan(), a));
   };
-  /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. `all`: every fold at once. */
-  const fold = (next: string[], all = false) => {
+  /** the card a fold or unfold keeps in place (the fold that was pressed) */
+  let holdOn: string | undefined;
+  /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. */
+  const fold = (next: string[], by?: string) => {
+    holdOn = by;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return void setUnfolded(next);
     const before = graph().nodes;
-    const unfoldedBefore = unfolded();
     const after = layout(space(), next).nodes;
-    /** where the view goes: one fold keeps itself (and what came out of it, as much as fits) in view;
-     *  all at once, the view stays and only moves off a card it would cut */
-    const camera = () => {
-      if (!vp) return;
-      const a = area(!!selTask());
-      const was = new Set(before.map((n) => n.id));
-      const opened = after.filter((n) => n.kind === "more" && next.includes(n.project!.id) && !unfoldedBefore.includes(n.project!.id));
-      const closed = after.filter((n) => n.kind === "more" && !next.includes(n.project!.id) && unfoldedBefore.includes(n.project!.id));
-      let must: ReturnType<typeof boxOf> | undefined;
-      if (!all && (opened.length || closed.length)) {
-        const card = (opened[0] ?? closed[0])!;
-        must = boxOf([card]);
-        // what came out under it, as many as fit with it
-        for (const n of after.filter((x) => !was.has(x.id)).sort((p, q) => p.y - q.y)) {
-          const more = boxOf([card, ...after.filter((x) => !was.has(x.id) && x.y <= n.y), n]);
-          if (!fits(more, a)) break;
-          must = more;
-        }
-      }
-      const n = picked();
-      panTo(settle(after, zoom(), pan(), a, must ? [{ b: must }, {}] : n ? keepPicked(n, after, zoom(), pan(), a) : [{ lockY: true }, {}]));
-    };
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setUnfolded(next);
-      return camera();
-    }
     const at = (ns: Node[]) => Object.fromEntries(ns.map((n) => [n.id, pos(n)]));
     const was = at(before);
     const will = Object.fromEntries(after.map((n) => [n.id, { x: n.x, y: n.y }]));
     const card = (ns: Node[], pid?: string) => ns.find((n) => n.kind === "more" && n.project?.id === pid);
     const gone = before.filter((n) => !will[n.id]);
     const born = after.filter((n) => !was[n.id]);
-    camera();
     if (gone.length) {
       // folding: the cards shrink into the stack, then leave
       const to = { ...will };
@@ -1262,102 +1242,71 @@ export function Canvas() {
     }
   };
 
-  /** the person moved or zoomed the view: a resize or the sheet closing no longer refits it */
-  let touched = false;
-  /** the view has been framed once (before that, nothing settles) */
+  /** the view has been framed once (before that, nothing is kept) */
   let framed = false;
   /**
-   * The first view (and 다시 정렬): everything, at the largest step from 100% down to 75% that holds it.
-   * When nothing that big holds it: 75% (or 67% when that shows more of what needs the person, or as
-   * much with less empty room on top), with the cards that need the person most in view (a reply,
-   * failed, running, review, paused). `all` (the % button, ⇧1): everything, down to 50% at most.
-   * Each is a step of the ladder and ends like any other move: every card whole or out of view.
+   * A frame (the first view, the % button, 다시 정렬): the largest step from 100% down to 75% (`all`:
+   * 50%) that holds every card, top-aligned with the air, centred across when it fits across. When
+   * none holds it all: that lowest step, from the top of the lanes (the lane that needs the person most
+   * comes first), and the first card that needs the person (a reply, failed, running, review, paused)
+   * whole in view. A picked card stays whole beside its sheet.
    */
   const fit = (animate = true, all = false) => {
     if (!vp || !graph().nodes.length) return;
-    touched = false;
     const r = { w: vp.clientWidth, h: vp.clientHeight };
     if (!r.w || !r.h) return;
     framed = true;
-    const a = area(!!picked(), r);
-    /** the cards as they are laid out at zoom `z` (their words measured at that size) */
-    const at = (z: number) => layout(space(), unfolded(), sizeOf(z)).nodes;
-    /** the view at `z` that shows box `b` from its top-left (centred across when the cards fit across) */
-    const start = (ns: Node[], z: number, b: ReturnType<typeof boxOf>): P => {
-      const all = boxOf(ns), W = a.w / z, H = a.h / z, m = ROOM / z;
-      const X = (all.x1 - all.x0) + 2 * m <= W ? (all.x0 + all.x1) / 2 - W / 2 : all.x0 - m;
-      const Y = (b.y1 - b.y0) + 2 * m <= H ? Math.min(b.y0 - m, Math.max(all.y0 - m, b.y1 + m - H)) : b.y0 - m;
-      return { x: -X * z, y: -Y * z };
+    const pk = picked();
+    const a = area(!!pk, r);
+    const floor = all ? FLOOR_ZOOM : READ_ZOOM;
+    const steps = LADDER.filter((z) => z <= 1 && z >= floor).reverse();
+    /** every card, and the line over the top of a first column */
+    const box = (ns: Node[]) => {
+      const b = boxOf(ns);
+      return twoCols() ? { ...b, y0: b.y0 - BUS } : b;
     };
-    const go = (z: number, p: P) => {
-      if (animate) panTo(p, z);
-      else batch(() => (setZoom(z), setPan(p)));
-    };
-    // everything, centred, at the largest step that holds it
-    const steps = LADDER.filter((z) => z <= 1 && z >= (all ? FLOOR_ZOOM : READ_ZOOM)).reverse();
-    for (const z of steps) {
-      const ns = at(z), b = boxOf(ns);
-      if (!fits(b, a, z)) continue;
-      return go(z, { x: a.w / 2 - ((b.x0 + b.x1) / 2) * z, y: a.h / 2 - ((b.y0 + b.y1) / 2) * z });
-    }
-    if (all) {
-      const ns = at(FLOOR_ZOOM);
-      return go(FLOOR_ZOOM, settle(ns, FLOOR_ZOOM, start(ns, FLOOR_ZOOM, boxOf(ns)), a));
-    }
-    /** at `z`: the view that keeps the most of what needs the person, how many, and the empty room on top */
-    const frame = (z: number) => {
-      const ns = at(z);
-      const rank = (n: Node) => (n.kind === "job" && n.task ? FIRST.indexOf(tone(n.task)) : -1);
-      // in the order of the priority, each card that can be whole in view with the ones before it
-      const keep: Node[] = [];
-      for (let i = 0; i < FIRST.length; i++)
-        for (const n of ns.filter((n) => rank(n) === i).sort((p, q) => p.y - q.y)) if (fits(boxOf([...keep, n]), a, z)) keep.push(n);
-      // as many of them as can be whole together (the last ones go first), then whatever cuts nothing
-      const tries: Try[] = keep.map((_, i) => ({ b: boxOf(keep.slice(0, keep.length - i)) }));
-      tries.push({});
-      const p = settle(ns, z, start(ns, z, keep.length ? boxOf(keep) : boxOf(ns)), a, tries);
-      const H = a.h, inView = (n: Node) => n.y * z + p.y >= 0 && (n.y + n.h) * z + p.y <= H && n.x * z + p.x >= 0 && (n.x + n.w) * z + p.x <= a.w;
-      const shown = ns.filter(inView);
-      return {
-        z,
-        p,
-        count: shown.filter((n) => rank(n) >= 0).length,
-        top: shown.length ? Math.min(...shown.map((n) => n.y * z + p.y)) : H,
-      };
-    };
-    const f = frame(READ_ZOOM);
-    const g = frame(stepUnder(READ_ZOOM - 0.01));
-    const best = g.count > f.count || (g.count === f.count && f.top > BIG_TOP && g.top < f.top) ? g : f;
-    go(best.z, best.p);
+    let z = steps.find((z) => {
+      const b = box(at(z));
+      return (b.x1 - b.x0) * z <= a.w - ROOM - FAR && (b.y1 - b.y0) * z <= a.h - ROOM - FAR;
+    }) ?? floor;
+    if (pk) z = roomFor(pk.id, z, a);
+    const ns = at(z), b = box(ns);
+    const across = (b.x1 - b.x0) * z <= a.w - ROOM - FAR;
+    let p = { x: across ? (a.w - (b.x1 - b.x0) * z) / 2 - b.x0 * z : ROOM - b.x0 * z, y: ROOM - b.y0 * z };
+    const rank = (n: Node) => (n.kind === "job" && n.task ? FIRST.indexOf(tone(n.task)) : -1);
+    const first = ns.filter((n) => rank(n) >= 0).sort((m, n) => rank(m) - rank(n) || m.y - n.y)[0];
+    if (first) p = reveal(first, z, p, a);
+    const keep = pk && ns.find((n) => n.id === pk.id);
+    if (keep) p = reveal(keep, z, p, a);
+    if (animate) panTo(p, z);
+    else batch(() => (setZoom(z), setPan(p)));
   };
 
-  const zoomAt = (factor: number, cx = (vp?.clientWidth ?? 0) / 2, cy = (vp?.clientHeight ?? 0) / 2) => {
-    touched = true;
-    const z0 = zoom();
-    const z = Math.min(2, Math.max(0.3, z0 * factor));
-    const p = pan();
-    setPan({ x: cx - ((cx - p.x) * z) / z0, y: cy - ((cy - p.y) * z) / z0 });
-    setZoom(z);
+  /** ctrl-wheel: about the pointer (a picked card stays whole beside the sheet) */
+  const zoomAt = (factor: number, cx: number, cy: number) => {
+    const z0 = zoom(), p = pan(), pk = picked(), a = area(!!pk);
+    let z = Math.min(2, Math.max(0.3, z0 * factor));
+    if (pk) z = Math.min(z, (a.w - ROOM - FAR) / pk.w, (a.h - ROOM - FAR) / pk.h);
+    const q = { x: cx - ((cx - p.x) * z) / z0, y: cy - ((cy - p.y) * z) / z0 };
+    batch(() => {
+      setZoom(z);
+      setPan(pk ? reveal(pk, z, q, a) : q);
+    });
   };
 
-  /** to zoom `z` around the middle of what's visible; it ends whole like any move */
-  const zoomTo = (z: number) => {
-    const z0 = zoom();
-    if (Math.abs(z - z0) < 0.001) return;
-    touched = true;
-    const a = area(!!picked());
-    const p0 = pan(), cx = a.w / 2, cy = a.h / 2;
-    const p = { x: cx - ((cx - p0.x) * z) / z0, y: cy - ((cy - p0.y) * z) / z0 };
-    panTo(keep(layout(space(), unfolded(), sizeOf(z)).nodes, z, p), z);
-  };
-  /** one step along the ladder */
+  /** one step along the ladder, about the picked card (or the card nearest the middle) */
   const step = (dir: 1 | -1) => {
     const z0 = zoom();
     const z = dir > 0 ? LADDER.find((s) => s > z0 + 0.001) : [...LADDER].reverse().find((s) => s < z0 - 0.001);
-    if (z) zoomTo(z);
+    if (!z) return;
+    const pk = picked();
+    zoomAbout(z, pk?.id ?? nearest(graph().nodes, z0, pan(), area(!!pk))?.id);
   };
   /** 100% */
-  const actual = () => zoomTo(1);
+  const actual = () => {
+    const pk = picked();
+    zoomAbout(1, pk?.id ?? nearest(graph().nodes, zoom(), pan(), area(!!pk))?.id);
+  };
   /** the % button: a click shows everything, a double click goes to 100% */
   let pctTimer: ReturnType<typeof setTimeout> | undefined;
   const onPct = (e: MouseEvent) => {
@@ -1369,20 +1318,15 @@ export function Canvas() {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    touched = true;
     const r = vp!.getBoundingClientRect();
     if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
     else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
   };
 
   /** a press on the background: it closes the sheet, and may go on into a pan */
-  let pressing = false;
-  let closedWhilePressing = false;
   const onBgDown = (e: PointerEvent) => {
     if (!vp || e.button !== 0 || (e.target as HTMLElement).closest(".cv-node, .cv-ctrl, .cv-drawer, .cv-mini, button")) return;
     const el = vp;
-    pressing = true;
-    closedWhilePressing = false;
     setSel(undefined);
     const start = { x: e.clientX, y: e.clientY, p: pan() };
     let moved = false;
@@ -1390,30 +1334,17 @@ export function Canvas() {
     el.classList.add("grabbing");
     const move = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 3) return;
-      moved = touched = true;
+      moved = true;
       setPan({ x: start.p.x + ev.clientX - start.x, y: start.p.y + ev.clientY - start.y });
     };
     const up = () => {
       el.classList.remove("grabbing");
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
-      pressing = false;
-      // a click that closed the sheet (not a pan): the camera as when the sheet closes
-      if (closedWhilePressing && !moved) sheetClosed();
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
   };
-  /**
-   * The sheet closed (closed, Esc, merged or discarded away): the view the person left alone is
-   * framed again as when opened; one they moved only settles over the area the sheet gave back.
-   */
-  const sheetClosed = () => {
-    if (pressing) return void (closedWhilePressing = true);
-    if (!touched) fit(true);
-    else panTo(keep());
-  };
-  createEffect(on(() => !!picked(), (open, was) => was && !open && queueMicrotask(sheetClosed), { defer: true }));
 
   const onNodeDown = (n: Node, e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -1441,7 +1372,7 @@ export function Canvas() {
       else if (n.kind === "proj") setSel(sel() === n.id ? undefined : n.id);
       else if (n.kind === "more") {
         const id = n.project!.id;
-        fold(unfolded().includes(id) ? unfolded().filter((x) => x !== id) : [...unfolded(), id]);
+        fold(unfolded().includes(id) ? unfolded().filter((x) => x !== id) : [...unfolded(), id], n.id);
       }
       else pick(n);
     };
@@ -1519,6 +1450,16 @@ export function Canvas() {
       return `M ${x} ${y1} L ${x} ${y2 - r} Q ${x} ${y2}, ${x + r} ${y2} L ${pb.x} ${y2}`;
     }
     const x1 = pa.x + a.w, y1 = port(a), x2 = pb.x, y2 = port(b);
+    // to a lane in the second column: up from Main's spine, over the top of the first column, down its gutter
+    if (e.over && x2 - x1 > GAP.lanes) {
+      const s0 = x1 + (X.proj - X.main - W.main) / 2, s1 = x2 - GAP.lanes / 2, r = 10;
+      const top = Math.min(...graph().nodes.map((n) => pos(n).y)) - BUS;
+      const down = `L ${s1} ${y2 - r} Q ${s1} ${y2}, ${s1 + r} ${y2} L ${x2} ${y2}`;
+      const prev = above(y2, pb.x, -Infinity);
+      if (prev !== undefined) return `M ${s1} ${prev - 10} ${down}`;
+      const up = whole ? `M ${x1} ${y1} L ${s0 - r} ${y1} Q ${s0} ${y1}, ${s0} ${y1 - r}` : `M ${s0} ${y1}`;
+      return `${up} L ${s0} ${top + r} Q ${s0} ${top}, ${s0 + r} ${top} L ${s1 - r} ${top} Q ${s1} ${top}, ${s1} ${top + r} ${down}`;
+    }
     if (x2 - x1 < 32) {
       const dx = Math.max(40, (x2 - x1) / 2);
       return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
@@ -1553,40 +1494,60 @@ export function Canvas() {
   createEffect(() => {
     const el = vpEl();
     if (!el || mode() !== "canvas") return;
-    const ro = new ResizeObserver(() => setVpSize({ w: el.clientWidth, h: el.clientHeight }));
+    const size = () => setVpSize({ w: el.clientWidth, h: el.clientHeight });
+    size();
+    const ro = new ResizeObserver(size);
     ro.observe(el);
     // shown (opened, or back from the board): framed as on first open
     const id = requestAnimationFrame(() => fit(false));
-    onCleanup(() => (ro.disconnect(), cancelAnimationFrame(id)));
+    onCleanup(() => (ro.disconnect(), cancelAnimationFrame(id), (framed = false)));
   });
-  /**
-   * The window or a side panel changed size: the view the person left alone is framed again; one
-   * they moved (or one beside an open sheet, which keeps the picked card in view) settles.
-   */
-  let refit = 0;
-  createEffect(on(vpSize, () => {
-    if (!framed) return;
-    cancelAnimationFrame(refit);
-    refit = requestAnimationFrame(() => {
-      if (!touched && !picked()) return fit(false);
-      setPan(keep());
-    });
-  }, { defer: true }));
-  /** a layout change under a still camera (an answer, a pause, a card finishing or growing): it settles */
-  let resettle = 0;
+  // lanes go into two columns while the view holds both at the first view's zoom
+  createEffect(() => setTwoCols(vpSize().w >= (COL + X.job + W.job) * READ_ZOOM + ROOM + FAR));
+  /** what was on screen at the last change: the cards, their size step, the view's size, the picked card */
+  let last: { s: string; at: Map<string, Node>; k: number; v: Area; pid?: string } | undefined;
+  /** a card was just dragged: the camera doesn't chase it */
   let dropped = false;
   /** where the cards are (a running card's words change often; its place and size seldom do) */
   const shape = createMemo(() => graph().nodes.map((n) => `${n.id}:${Math.round(n.x)},${Math.round(n.y)},${n.w},${n.h}`).join("|"));
-  createEffect(on(shape, () => {
-    if (!framed) return;
-    if (dropped) return void (dropped = false);
-    cancelAnimationFrame(resettle);
-    resettle = requestAnimationFrame(() => {
-      if (drag() || glide()) return;
-      panTo(keep());
-    });
-  }, { defer: true }));
-  onCleanup(() => (cancelAnimationFrame(refit), cancelAnimationFrame(resettle)));
+  /**
+   * Whatever moves under a still camera (a card answered, paused, finishing or growing, a fold, the
+   * window or the sheet changing size) keeps what the person was looking at where it is on screen: the
+   * picked card, else the card nearest the middle of the view. Nothing else is solved for; a picked
+   * card still ends whole beside the sheet.
+   */
+  createEffect(
+    on([shape, vpSize, () => picked()?.id], ([s, v, pid]) => {
+      const prev = last;
+      last = { s, at: new Map(untrack(() => graph().nodes).map((n) => [n.id, n])), k: untrack(sizeAt), v, pid };
+      // the fold that was pressed holds until the cards have moved
+      const by = holdOn;
+      if (prev?.s !== s) holdOn = undefined;
+      if (!prev || !framed) return;
+      if (dropped) return void (dropped = false);
+      // a zoom step or a pick placed the view itself
+      if (prev.k !== last.k || (pid && pid !== prev.pid)) return;
+      const now = last.at;
+      untrack(() => {
+        const z = zoom(), p = pan();
+        const id = pid && prev.at.has(pid) ? pid : by && prev.at.has(by) && now.has(by) ? by : nearest([...prev.at.values()], z, p, area(!!prev.pid, prev.v), (n) => now.has(n.id))?.id;
+        const was = id ? prev.at.get(id) : undefined, is = id ? now.get(id) : undefined;
+        if (!was || !is) return;
+        let q = { x: p.x + (was.x - is.x) * z, y: p.y + (was.y - is.y) * z };
+        const a = area(!!pid, v);
+        if (pid) {
+          if (roomFor(pid, z, a) < z - 0.001) return (setPan(q), zoomAbout(z, pid));
+          q = reveal(is, z, q, a);
+        } else if (v !== prev.v) {
+          // a resize: a card that was whole stays whole
+          const a0 = area(!!prev.pid, prev.v);
+          const whole = was.x * z + p.x >= -0.5 && was.y * z + p.y >= -0.5 && (was.x + was.w) * z + p.x <= a0.w + 0.5 && (was.y + was.h) * z + p.y <= a0.h + 0.5;
+          if (whole && fitsIn(is, a, z)) q = reveal(is, z, q, a);
+        }
+        if (Math.abs(q.x - p.x) > 0.5 || Math.abs(q.y - p.y) > 0.5) setPan(q);
+      });
+    }),
+  );
   /** the map only helps when there's room to spare */
   /** everything is already in view: the map would only cover a card */
   const allInView = () => {
@@ -1607,17 +1568,33 @@ export function Canvas() {
   };
   /** the minimap is there when asked for (it would sit on cards otherwise) */
   const [mini, setMini] = createSignal(false);
+  /** the legend's words go only when they don't fit the header (the glyph, count and tooltip stay) */
+  const [bare, setBare] = createSignal(false);
+  let legendEl: HTMLSpanElement | undefined;
+  let headEl: HTMLElement | undefined;
+  const fitLegend = () => {
+    if (!legendEl?.isConnected) return;
+    setBare(false);
+    setBare(legendEl.scrollWidth > legendEl.clientWidth + 0.5);
+  };
+  createEffect(on([counts, lang, mode], () => queueMicrotask(fitLegend)));
+  onMount(() => {
+    if (!headEl) return;
+    const ro = new ResizeObserver(fitLegend);
+    ro.observe(headEl);
+    onCleanup(() => ro.disconnect());
+  });
   /** nothing in this workspace yet: a quiet empty state instead of a lone Main card */
   const empty = () => !state.tasks.some((x) => x.space === space() && !x.parentId && !x.answer && !x.archived);
 
   return (
     <div class="view canvas-view">
-      <header class="head" data-tauri-drag-region>
+      <header class="head" data-tauri-drag-region ref={headEl}>
         <SidebarToggle />
         <span class="head-title">{mode() === "canvas" ? t("캔버스") : t("보드")}</span>
         <Show when={mode() === "canvas"}>
         {/* the legend draws each state with the sidebar's glyph, so running and review read apart */}
-        <span class="board-sum cv-legend">
+        <span class="board-sum cv-legend" classList={{ bare: bare() }} ref={legendEl}>
           <For each={LEGEND}>
             {(l) => (
               <Show when={counts()[l.tone]}>
@@ -1666,6 +1643,8 @@ export function Canvas() {
             onPointerDown={onBgDown}
             style={{ "background-position": `${pan().x}px ${pan().y}px`, "background-size": `${20 * zoom()}px ${20 * zoom()}px` }}
           >
+            {/* the cards fade out along the bottom and right edges (and the sheet's), so one running off reads as more beyond */}
+            <div class="cv-layer" style={{ "--cv-sheet": selTask() ? `${sheetW(vpSize().w) + 8}px` : "0px" }}>
             <div class="cv-world" style={{ transform: `translate(${pan().x}px, ${pan().y}px) scale(${zoom()})`, "--cv-z": String(zoom()) }}>
               <svg class="cv-edges" width="1" height="1">
                 <defs>
@@ -1703,6 +1682,7 @@ export function Canvas() {
                 )}
               </For>
             </div>
+            </div>
 
             <svg
               class="cv-mini"
@@ -1716,7 +1696,6 @@ export function Canvas() {
                 pt.x = e.clientX;
                 pt.y = e.clientY;
                 const w = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-                touched = true;
                 setPan({ x: vpSize().w / 2 - w.x * zoom(), y: vpSize().h / 2 - w.y * zoom() });
               }}
             >
@@ -1740,7 +1719,7 @@ export function Canvas() {
               <i class="cv-ctrl-sep" />
               <button title={t("다시 정렬")} aria-label={t("다시 정렬")} onClick={resetLayout}><Icon name="tidy" size={14} /></button>
               {/* always in place (off when there is nothing to do), so the strip never shifts */}
-              <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} disabled={!foldable().length} onClick={() => fold(allOpen() ? [] : foldable(), true)}>
+              <button title={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} aria-label={allOpen() ? t("완료된 작업 모두 접기") : t("완료된 작업 모두 펼치기")} classList={{ on: allOpen() }} disabled={!foldable().length} onClick={() => fold(allOpen() ? [] : foldable())}>
                 {allOpen() ? <ChevronsDownUp size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" /> : <ChevronsUpDown size={14} stroke-width={1.5} absoluteStrokeWidth class="icon" aria-hidden="true" />}
               </button>
               <button title={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-label={mini() ? t("미니맵 숨기기") : t("미니맵 표시")} aria-pressed={mini()} classList={{ on: mini() }} disabled={!roomy() && !mini()} onClick={() => setMini(!mini())}>
