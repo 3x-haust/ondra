@@ -1,10 +1,10 @@
 // The in-app browser: a real webview (the system's WebKit) laid over this view's
 // page area. This view is its toolbar and keeps the webview on the area it owns;
 // sign-ins made in it are copied to the shared browser the jobs use.
-import { createSignal, onCleanup, onMount } from "solid-js";
-import { inBrowserGo, inBrowserHide, inBrowserShow, onInBrowserPage } from "../lib/native";
+import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { inBrowserGo, inBrowserHide, inBrowserShow, onInBrowserPage, openExternal } from "../lib/native";
 import { state } from "../state/store";
-import { browserTarget, paletteOpen, setBrowserTarget } from "../state/ui";
+import { browserTarget, paletteOpen, setBrowserPage, setBrowserTarget } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 
@@ -37,7 +37,8 @@ export function BrowserView(_props: { embedded?: boolean }) {
     if (key === placed && !target) return;
     placed = key;
     if (hidden) return void inBrowserHide();
-    if (target) setBrowserTarget(null);
+    // the address bar says where it's going before the page reports in
+    if (target) setBrowserTarget(null), setUrl(target);
     inBrowserShow({ x: r.left, y: r.top, w: r.width, h: r.height }, state.space, target ?? undefined)
       .then(() => setFailed(false))
       .catch(() => {
@@ -60,8 +61,11 @@ export function BrowserView(_props: { embedded?: boolean }) {
     });
     onCleanup(() => void off.then((f) => f()));
   });
+  // the palette's 기본 브라우저에서 열기 opens what this shows
+  createEffect(() => setBrowserPage(url()));
   onCleanup(() => {
     alive = false;
+    setBrowserPage("");
     cancelAnimationFrame(frame);
     void inBrowserHide();
   });
@@ -109,6 +113,9 @@ export function BrowserView(_props: { embedded?: boolean }) {
               }}
             />
           </label>
+          <button class="icon-btn sm" title={t("기본 브라우저에서 열기")} aria-label={t("기본 브라우저에서 열기")} disabled={!url()} onClick={() => void openExternal(url())}>
+            <Icon name="external" size={14} />
+          </button>
         </div>
         <div class="bscreen" ref={area}>
           {failed() ? <div class="bempty">{t("브라우저를 열 수 없어요")}</div> : !url() ? <div class="bempty">{t("열린 페이지 없음")}</div> : null}

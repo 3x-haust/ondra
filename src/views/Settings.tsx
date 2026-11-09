@@ -35,6 +35,7 @@ import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
 import { HooksTab } from "./Hooks";
 import { Logo } from "../ui/Logos";
+import { appName } from "../lib/brand";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
 import { available, checkedAt, checkUpdate, freshen, installNow, jobsWorking, restartQueued, restartWhenIdle, updateProgress, updateReady, updateStatus } from "../engine/update";
@@ -123,6 +124,13 @@ function General() {
             <For each={[["system", "시스템"], ["ko", "한국어"], ["en", "English"]] as const}>
               {([v, l]) => <button classList={{ on: (state.settings.language ?? "system") === v }} onClick={() => setState("settings", "language", v)}>{v === "system" ? t(l) : l}</button>}
             </For>
+          </div>
+        </Row>
+        {/* web links: the panel's browser (signed in once, shared with the jobs) or the Mac's own */}
+        <Row title={t("링크 열기")} desc={t("⌘ 클릭하면 기본 브라우저에서 열려요")}>
+          <div class="seg">
+            <button classList={{ on: (state.settings.links ?? "inside") === "inside" }} onClick={() => setState("settings", "links", "inside")}>{t("{name} 안에서", { name: appName() })}</button>
+            <button classList={{ on: state.settings.links === "outside" }} onClick={() => setState("settings", "links", "outside")}>{t("기본 브라우저")}</button>
           </div>
         </Row>
       </div>

@@ -2,7 +2,9 @@
 // URLs or reveal local paths, so nothing an agent writes can run in the app.
 import { Marked, type Tokens } from "marked";
 import { createEffect } from "solid-js";
-import { fileSrc, openUrl } from "../lib/native";
+import { fileSrc } from "../lib/native";
+import { linkTip } from "../lib/links";
+import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
 import { openImage } from "./Lightbox";
 import { langOf, tokenize, toHtml } from "./highlight";
@@ -20,7 +22,10 @@ const make = (github: boolean) => new Marked({
     },
     link({ href, text }: Tokens.Link) {
       const safe = /^https?:\/\//.test(href) || href.startsWith("/") ? href : "";
-      return safe ? `<a data-href="${encodeURI(safe)}">${text}</a>` : text;
+      if (!safe) return text;
+      // where it goes, when the words don't say (a bare URL already does)
+      const tip = linkTip(plain(safe), text);
+      return `<a data-href="${encodeURI(safe)}"${tip ? ` title="${tip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""}>${text}</a>`;
     },
     // local pictures (screenshots the agent took) show inline; remote ones stay a link
     image({ href: raw, text }: Tokens.Image) {
@@ -43,7 +48,7 @@ const plain = (href: string) => { try { return decodeURI(href); } catch { return
 export function Markdown(props: { text: string; class?: string; github?: boolean }) {
   const onClick = (e: MouseEvent) => {
     const remote = (e.target as HTMLElement).closest("img.md-remote") as HTMLImageElement | null;
-    if (remote) return openUrl(decodeURI(remote.dataset.href ?? ""));
+    if (remote) return void openLink(decodeURI(remote.dataset.href ?? ""), { event: e });
     const img = (e.target as HTMLElement).closest("img[data-path]") as HTMLImageElement | null;
     if (img) return openImage(decodeURI(img.dataset.path ?? ""), [...(el?.querySelectorAll<HTMLImageElement>("img[data-path]") ?? [])].map((x) => decodeURI(x.dataset.path ?? "")));
     const a = (e.target as HTMLElement).closest("a[data-href]") as HTMLAnchorElement | null;
@@ -51,7 +56,12 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
     e.preventDefault();
     const href = decodeURI(a.dataset.href ?? "");
     if (href.startsWith("/")) previewFile(href);
-    else openUrl(href);
+    else openLink(href, { event: e });
+  };
+  // a web link's menu: open here, in the default browser, copy
+  const onMenu = (e: MouseEvent) => {
+    const a = (e.target as HTMLElement).closest("a[data-href], img.md-remote") as HTMLElement | null;
+    if (a) linkMenu(decodeURI(a.dataset.href ?? ""))(e);
   };
   let el!: HTMLDivElement;
   // colour fenced code once the HTML is in; a block keeps its plain text until then
@@ -81,5 +91,5 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
       }
     });
   });
-  return <div ref={el} class={`md ${props.class ?? ""}`} onClick={onClick} innerHTML={(props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string} />;
+  return <div ref={el} class={`md ${props.class ?? ""}`} onClick={onClick} onContextMenu={onMenu} innerHTML={(props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string} />;
 }

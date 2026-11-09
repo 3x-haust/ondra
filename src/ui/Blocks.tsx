@@ -4,7 +4,8 @@ import type { Block, Evidence, Task } from "../state/types";
 import { homeDir } from "../state/store";
 import { expand, tilde } from "../engine/rpc";
 import { mainCommand } from "../engine/describe";
-import { fileSrc, openUrl, pageSrc } from "../lib/native";
+import { fileSrc, pageSrc } from "../lib/native";
+import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
@@ -19,8 +20,8 @@ type Of<T extends Block["type"]> = Extract<Block, { type: T }>;
 /** an evidence block with the checklist the job ended with folded in (see Transcript) */
 export type ProofBlock = Of<"evidence"> & { checks?: { label: string; done: boolean }[] };
 
-function openRef(ref: string) {
-  if (/^https?:\/\//.test(ref)) openUrl(ref);
+function openRef(ref: string, e?: MouseEvent) {
+  if (/^https?:\/\//.test(ref)) openLink(ref, { event: e });
   else if (ref.startsWith("/") || ref.startsWith("~")) previewFile(ref);
 }
 
@@ -193,9 +194,9 @@ export function ProofView(props: { items: Evidence[]; unverified?: string[]; che
     const s = built().shots;
     return allShots() || s.length <= SHOWN ? s : s.slice(-SHOWN);
   };
-  const open = (e: Evidence) => {
+  const open = (e: Evidence, ev?: MouseEvent) => {
     if (e.kind === "shot" || /\.(png|jpe?g|gif|webp)$/i.test(e.ref)) openImage(e.ref, built().shots.map((r) => r.e.ref));
-    else openRef(e.ref);
+    else openRef(e.ref, ev);
   };
   const clickable = (e: Evidence) => /^(https?:\/\/|\/|~)/.test(e.ref);
   const where = (e: Evidence) => (/^https?:\/\//.test(e.ref) ? e.ref.replace(/^https?:\/\/(www\.)?/, "") : relPath(e.ref, props.task));
@@ -220,7 +221,7 @@ export function ProofView(props: { items: Evidence[]; unverified?: string[]; che
             when={runs}
             fallback={
               <Show when={clickable(e)} fallback={<code class="pf-ref" title={e.ref}>{e.ref}</code>}>
-                <button class="pf-ref link" title={e.ref} onClick={() => open(e)}>{where(e)}</button>
+                <button class="pf-ref link" title={e.ref} onClick={(ev) => open(e, ev)} onContextMenu={linkMenu(e.ref)}>{where(e)}</button>
               </Show>
             }
           >
@@ -424,7 +425,7 @@ function BlockBody(props: { block: Block; task?: Task }) {
       </Match>
       <Match when={as("link")}>
         {(l) => (
-          <button class="blk blk-link" onClick={() => openRef(l().ref)}>
+          <button class="blk blk-link" onClick={(e) => openRef(l().ref, e)} onContextMenu={linkMenu(l().ref)}>
             <Icon name={l().kind === "pr" ? "pr" : l().kind === "video" ? "video" : l().kind === "file" || l().kind === "doc" ? "file" : "link"} size={15} />
             <span>{l().title}</span>
             <span class="ref" title={l().ref}>{/^[/~]/.test(l().ref) ? l().ref.split("/").slice(-2).join("/") : l().ref.replace(/^https?:\/\/(www\.)?/, "")}</span>

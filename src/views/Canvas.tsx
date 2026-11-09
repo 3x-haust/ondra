@@ -20,6 +20,7 @@ import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { discarded, pausedAt, planCount, stepState, taskDiff } from "../state/progress";
 import { confirmDiscard } from "../ui/taskMenu";
+import { linkMenu, openLink } from "../ui/links";
 import { Board, BoardGroup, cardMenu, Kids, LinesChanged, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
 import { viewKey } from "../lib/shortcuts";
@@ -968,7 +969,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
               <ul class="cv-dr-steps">
                 <For each={outcome().proof}>
                   {(x) => (
-                    <li class="link" onClick={() => (x.kind === "link" ? window.open(x.ref, "_blank") : openTask(job().id))} title={x.ref}>
+                    <li class="link" onClick={(e) => (x.kind === "link" ? void openLink(x.ref, { event: e }) : openTask(job().id))} onContextMenu={x.kind === "link" ? linkMenu(x.ref) : undefined} title={x.ref}>
                       <span class={`cv-dr-ic`}><Icon name={x.kind === "link" ? "link" : x.kind === "shot" ? "monitor" : "file"} size={14} /></span>
                       <span class="cv-dr-step">{x.kind === "link" ? x.ref.replace(/^https?:\/\/(www\.)?/, "") : base(x.ref)}</span>
                     </li>

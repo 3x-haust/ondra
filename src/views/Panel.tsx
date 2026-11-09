@@ -8,10 +8,11 @@ import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, S
 import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
-import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
+import { openLink } from "../ui/links";
+import { toast, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, pageSrc, pdfSrc, revealPath } from "../lib/native";
+import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
@@ -91,7 +92,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
 /** Open a pull request from the job's branch and show it. */
 async function makePr(t: Task) {
   const url = await gitPr(expand(t.cwd), t.title, `${t.ask}\n\n— Ondra`, await gitEnv(t));
-  if (url.startsWith("http")) void openUrl(url);
+  if (url.startsWith("http")) openLink(url);
   return url;
 }
 const prDone = (u: string) => (u ? tr("PR을 열었어요 · {url}", { url: u }) : tr("PR을 열었어요"));
@@ -411,6 +412,9 @@ function BrowserPane(props: { t: Task }) {
   };
 
   const shown = () => url() || (lastPage() ? `https://${lastPage()}` : "");
+  // the palette's 기본 브라우저에서 열기 opens what this shows
+  createEffect(() => setBrowserPage(shown()));
+  onCleanup(() => setBrowserPage(""));
   return (
     <div class="bpane">
       <div class="bbar">
@@ -422,7 +426,7 @@ function BrowserPane(props: { t: Task }) {
         <button class="icon-btn sm" title={tr("주소 복사")} disabled={!shown()} onClick={() => void navigator.clipboard.writeText(shown())}>
           <Icon name="copy" size={14} />
         </button>
-        <button class="icon-btn sm" title={tr("기본 브라우저에서 열기")} disabled={!shown()} onClick={() => void openUrl(shown())}>
+        <button class="icon-btn sm" title={tr("기본 브라우저에서 열기")} disabled={!shown()} onClick={() => void openExternal(shown())}>
           <Icon name="external" size={14} />
         </button>
         <button class="icon-btn sm" title={tr("공유 브라우저")} onClick={() => setPanelShared(true)}>

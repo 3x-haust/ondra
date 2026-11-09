@@ -3,7 +3,7 @@
 // over RPC (get_login_providers / login / login_prompt / login_event).
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { refreshModels } from "../engine/modelList";
-import { accountProviders, agentKill, agentSend, agentSpawn, openUrl } from "../lib/native";
+import { accountProviders, agentKill, agentSend, agentSpawn, openExternal } from "../lib/native";
 import { engine, listen, request } from "../engine/rpc";
 import { accountEnv } from "../engine/tasks";
 import { updateAccount } from "../state/store";
@@ -87,14 +87,16 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
         if (s.kind !== "busy") return;
         if (ev.type === "login_event") {
           const e = ev.event;
+          // a sign-in opens in the system's browser, not the app's: providers refuse embedded
+          // webviews, and the passkeys and saved passwords are there
           if (e.type === "auth_url") {
-            if (opened !== e.url) (opened = e.url), void openUrl(e.url);
+            if (opened !== e.url) (opened = e.url), void openExternal(e.url);
             setStep({ ...s, url: e.url });
           } else if (e.type === "device_code") {
             if (opened !== e.verificationUri) {
               opened = e.verificationUri;
               void navigator.clipboard.writeText(e.userCode).catch(() => {});
-              void openUrl(e.verificationUri);
+              void openExternal(e.verificationUri);
             }
             setStep({ ...s, device: { code: e.userCode, uri: e.verificationUri } });
           } else if (e.type === "progress" || e.type === "info") setStep({ ...s, note: e.message });
@@ -282,7 +284,7 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
                           <code class="login-code">{d().code}</code>
                           <div class="login-acts">
                             <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(d().code), toast(t("복사했어요")))}><Icon name="copy" size={14} />{t("코드 복사")}</button>
-                            <button class="btn sm" onClick={() => void openUrl(d().uri)}><Icon name="link" size={14} />{t("페이지 다시 열기")}</button>
+                            <button class="btn sm" onClick={() => void openExternal(d().uri)}><Icon name="link" size={14} />{t("페이지 다시 열기")}</button>
                           </div>
                           <div class="login-wait"><span class="spin sm" />{t("기다리는 중")}</div>
                         </div>
@@ -293,7 +295,7 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
                         <div class="login-device">
                           <p>{t("브라우저에서 로그인하세요")}</p>
                           <div class="login-acts">
-                            <button class="btn sm" onClick={() => void openUrl(u())}><Icon name="link" size={14} />{t("다시 열기")}</button>
+                            <button class="btn sm" onClick={() => void openExternal(u())}><Icon name="link" size={14} />{t("다시 열기")}</button>
                             <button class="btn sm" onClick={() => (void navigator.clipboard.writeText(u()), toast(t("복사했어요")))}><Icon name="copy" size={14} />{t("링크 복사")}</button>
                           </div>
                           <div class="login-wait"><span class="spin sm" />{t("기다리는 중")}</div>

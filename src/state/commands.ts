@@ -5,7 +5,8 @@ import { switchSpace } from "./workspace";
 import { canClosePane, closeFocused, hasAttention, nextAttention, splitNew } from "../views/PaneControls";
 import { stepZoom } from "./zoom";
 import { t } from "../i18n";
-import { activeTab, canStep, equalizePanes, gotoPane, inPane, paneCount, resizePane, toggleZoom, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
+import { openExternal } from "../lib/native";
+import { activeTab, browserPage, canStep, equalizePanes, gotoPane, inPane, paneCount, resizePane, toggleZoom, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
 
 /** a place still there to go back to (a job can be deleted meanwhile) */
 const exists = (v: View) => v.name !== "task" || !!taskById(v.id);
@@ -78,6 +79,8 @@ export function appCommands(): ShortcutCommand[] {
       }
     }, panelAvailable),
     command("browser", "브라우저", "패널", "globe", () => openBrowser(), panelAvailable, true),
+    // the page the panel's browser shows, in the system's browser
+    { id: "browserOutside", label: t("이 페이지를 기본 브라우저에서 열기"), section: t("패널"), icon: "external", run: () => void openExternal(browserPage()), enabled: () => visiblePanel() && panelTab() === "browser" && !!browserPage() },
     ...([
       ["artifacts", "결과물 탭", "inbox"], ["changes", "변경 사항", "diff"], ["pr", "PR", "pr"],
       ["files", "파일", "file"], ["terminal", "터미널", "shell"], ["overview", "작업 정보", "list"],

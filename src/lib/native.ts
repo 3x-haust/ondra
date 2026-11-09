@@ -99,7 +99,8 @@ export const stateFlushed = () => call<void>("state_flushed");
 export const artifactsDir = (workerId: string) => call<string>("artifacts_dir", { workerId }, "/tmp/ondra/artifacts");
 export const pickFolder = (prompt: string) => call<string | null>("pick_folder", { prompt }, null);
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
-export const openUrl = (url: string) => call<void>("open_url", { url });
+/** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
+export const openExternal = (url: string) => call<void>("open_url", { url });
 export const openInEditor = (path: string) => call<void>("open_in_editor", { path });
 /** `env`: the space's spaceEnv, so the shell runs as that space. */
 export const openInTerminal = (path: string, env: Env = []) => call<void>("open_in_terminal", { path, env });

@@ -6,7 +6,8 @@ import { createMemo, createResource, createSignal, For, Match, onCleanup, onMoun
 import type { Task } from "../state/types";
 import { gitEnv, passPrNote, prOf } from "../engine/tasks";
 import { noteOf, parsePrView, githubBody, type PrCheck, type PrItem, type PrThread, type PrView } from "../engine/prView";
-import { ghPrView, openUrl } from "../lib/native";
+import { ghPrView } from "../lib/native";
+import { linkMenu, openLink } from "./links";
 import { toast } from "../state/ui";
 import { ago, now } from "./bits";
 import { t as tr } from "../i18n";
@@ -113,7 +114,7 @@ function PrBody(props: { v: PrView; t: Task; refresh: () => void; busy: boolean;
           <span class="prv-num">#{v().number}</span>
           <Show when={props.t.issue}>
             {(i) => (
-              <button class="prv-crumb" title={i().title} onClick={() => void openUrl(i().url)}>
+              <button class="prv-crumb" title={i().title} onClick={(e) => void openLink(i().url, { event: e })} onContextMenu={linkMenu(i().url)}>
                 <span class="prv-crumb-sep">›</span>
                 <span class="prv-num">#{i().n}</span>
                 <span class="prv-crumb-title">{i().title}</span>
@@ -123,7 +124,7 @@ function PrBody(props: { v: PrView; t: Task; refresh: () => void; busy: boolean;
           <span class="spacer" />
           <span class="prv-fresh">{freshness(props.at)}</span>
           <button class="icon-btn sm" title={tr("새로고침")} disabled={props.busy} onClick={props.refresh}><Icon name="refresh" size={14} /></button>
-          <button class="icon-btn sm" title={tr("GitHub에서 열기")} onClick={() => void openUrl(v().url)}><Icon name="external" size={14} /></button>
+          <button class="icon-btn sm" title={tr("GitHub에서 열기")} onClick={(e) => void openLink(v().url, { event: e })} onContextMenu={linkMenu(v().url)}><Icon name="external" size={14} /></button>
         </div>
         <div class="prv-title">{v().title}</div>
         <code class="prv-branches" title={`${v().base} ← ${v().head}`}>{v().base} ← {v().head}</code>
@@ -211,7 +212,7 @@ function PrBody(props: { v: PrView; t: Task; refresh: () => void; busy: boolean;
 function CheckRow(props: { c: PrCheck }) {
   const c = () => props.c;
   return (
-    <button class="prv-check" classList={{ [c().state]: true }} disabled={!c().url} onClick={() => c().url && void openUrl(c().url!)}>
+    <button class="prv-check" classList={{ [c().state]: true }} disabled={!c().url} onClick={(e) => c().url && void openLink(c().url!, { event: e })} onContextMenu={linkMenu(c().url)}>
       <span class="prv-mark">
         <Switch fallback={<span class="prv-dot" />}>
           <Match when={c().state === "ok"}><Icon name="check" size={14} /></Match>

@@ -466,9 +466,11 @@ pub fn reveal_path(path: String) {
     let _ = Command::new("/usr/bin/open").arg("-R").arg(path).spawn();
 }
 
+/// The system's default browser for a web page; Mail or the phone for mailto: and tel:.
+/// No other scheme is handed out (an agent's link must not launch an app).
 #[tauri::command]
 pub fn open_url(url: String) {
-    if url.starts_with("https://") || url.starts_with("http://") {
+    if ["https://", "http://", "mailto:", "tel:"].iter().any(|p| url.starts_with(p)) {
         let _ = Command::new("/usr/bin/open").arg(url).spawn();
     }
 }

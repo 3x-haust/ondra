@@ -1,7 +1,7 @@
 // Small shared pieces: status dot and labels, time formatting, a ticking clock.
 import { createSignal, Show } from "solid-js";
 import type { Status, Task } from "../state/types";
-import { openUrl } from "../lib/native";
+import { linkMenu, openLink } from "./links";
 import { lang, t } from "../i18n";
 import { cutTitle } from "../engine/describe";
 
@@ -29,7 +29,8 @@ export function IssueTag(props: { t: Task }) {
           class="issue-tag"
           role="link"
           title={t("GitHub에서 #{n} 열기", { n: i().n })}
-          onClick={(e) => (e.stopPropagation(), void openUrl(i().url))}
+          onClick={(e) => (e.stopPropagation(), void openLink(i().url, { event: e }))}
+          onContextMenu={linkMenu(i().url)}
         >
           #{i().n}
         </span>
