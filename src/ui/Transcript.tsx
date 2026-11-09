@@ -9,7 +9,7 @@ import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types"
 import { live, previewFile } from "../state/ui";
 import { state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
-import { describeCommand, mainCommand } from "../engine/describe";
+import { describeBrowser, describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView } from "./Blocks";
 import { discarded, withDiff } from "../state/progress";
@@ -302,16 +302,26 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
   const live = () => (props.stopped ? undefined : open_());
   const failed = () => props.tools.filter((t) => t.tool.ok === false).length;
   const fam = () => familyOf(props.tools[0])!;
-  const names = (list: ToolEntry[]) => {
-    const seen: string[] = [];
-    for (const t of list) {
-      const n = shortName(t.tool);
-      if (n && !seen.includes(n)) seen.push(n);
-    }
+  const names = (list: (string | undefined)[]) => {
+    const seen = [...new Set(list.filter((n): n is string => !!n))];
     return seen.length > 3 ? tr("{names} 외 {n}개", { names: seen.slice(0, 3).join(", "), n: seen.length - 3 }) : seen.join(", ");
   };
+  // browser steps: the one going on, or the one target they all worked on ("클릭 중 ‘프로 시작하기’",
+  // "열었음 acme.dev/pricing"); several targets read "브라우저 5번 씀" with the sites opened
+  const steps = () => props.tools.map((t) => describeBrowser(t.tool.target ?? ""));
+  const step = () => {
+    if (fam() !== "browser") return undefined;
+    const l = live();
+    if (l) return ((d) => ({ verb: d.now, target: d.target ?? (d.action === "other" ? shortName(l.tool) : "") }))(steps()[props.tools.indexOf(l)]);
+    const on = [...new Set(steps().map((d) => d.target).filter(Boolean))];
+    const d = on.length === 1 ? steps().find((x) => x.target === on[0]) : undefined;
+    return d ? { verb: d.label, target: d.target! } : undefined;
+  };
+  const sites = () => names(steps().map((d) => (d.action === "open" ? d.target?.split("/")[0] : undefined)));
   // "살펴봄 a.ts, b.ts", "파일 3개 수정함", "브라우저 5번 씀"
   const summary = () => {
+    const s = step();
+    if (s) return s.verb;
     const done = !live();
     if (fam() === "explore") return done ? tr("살펴봄") : tr("살펴보는 중");
     if (fam() === "edit") {
@@ -319,11 +329,13 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
       return done ? tr("파일 {n}개 수정함", { n }) : tr("파일 {n}개 수정 중", { n });
     }
     // commands too, as Claude Code does ("Ran 5 shell commands")
-    if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.length });
+    // while running, the ones still running, not the ones already done
+    if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.filter((t) => !t.tool.endedAt).length });
     return done ? tr("브라우저 {n}번 씀", { n: props.tools.length }) : tr("브라우저 쓰는 중");
   };
-  // what it touched; for commands and the browser, the one running now (or the last)
-  const detail = () => (fam() === "explore" || fam() === "edit" ? names(props.tools) : shortName((open_() ?? props.tools[props.tools.length - 1]).tool));
+  // what it touched; for commands the one running now (or the last), for the browser the step's target or the sites
+  const detail = () =>
+    fam() === "explore" || fam() === "edit" ? names(props.tools.map((t) => shortName(t.tool))) : fam() === "browser" ? (step()?.target ?? sites()) : shortName((open_() ?? props.tools[props.tools.length - 1]).tool);
   const lead = () => (fam() === "explore" ? "read" : fam() === "edit" ? "edit" : fam() === "run" ? "bash" : "browser") as ToolCall["kind"];
   return (
     <div class="tool group" classList={{ open: open() }}>
@@ -332,7 +344,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
           <span class="spin" />
         </Show>
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
-        <span class="tool-target">{detail()}</span>
+        <span class="tool-target" classList={{ cmd: fam() === "run" }}>{detail()}</span>
         <span class="tool-end">
           <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
           <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped)}><span class="tool-stopped">{tr("중단됨")}</span></Show>
@@ -351,9 +363,14 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
 /** a short name for what a call touched: a file's name, a command's first words */
 function shortName(t: ToolCall) {
   const x = (t.target ?? "").trim();
-  if (["bash", "test", "browser", "desktop"].includes(t.kind)) {
-    // the command doing the work, not the setup in front of it ("pkill -f …; npm run dev")
-    const head = (t.kind === "bash" || t.kind === "test" ? mainCommand(x) : x.split(/;|&&|\|\||\||\n/)[0].trim()).split(/\s+/).slice(0, 3).join(" ");
+  if (t.kind === "bash" || t.kind === "test") {
+    // the command doing the work, without the setup in front of it or what wraps it
+    // ("pkill -f …; npm run dev", "list=$(find . -name …)" → "find . -name …"); the row cuts it
+    const c = mainCommand(x).replace(/\s+/g, " ");
+    return c.length > 120 ? `${c.slice(0, 119)}…` : c;
+  }
+  if (t.kind === "browser" || t.kind === "desktop") {
+    const head = x.split(/;|&&|\|\||\||\n/)[0].trim().split(/\s+/).slice(0, 3).join(" ");
     return head.length > 36 ? `${head.slice(0, 35)}…` : head;
   }
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
@@ -365,7 +382,8 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   /** never finished, and the task stopped working: not running any more */
   const cut = () => !!t().stopped || (!t().endedAt && !!props.stopped);
   const running = () => !t().endedAt && !props.stopped;
-  const what = () => shortName(t());
+  const browser = () => (t().kind === "browser" ? describeBrowser(t().target ?? "") : undefined);
+  const what = () => ((b) => (b && b.action !== "other" ? (b.target ?? "") : shortName(t())))(browser());
   const [open, setOpen] = createSignal(false);
   const canOpen = () => !!shell() || t().kind === "other" || t().kind === "search" || !!t().note;
   const click = () => {
@@ -383,11 +401,11 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
         <span class="tool-verb" classList={{ shimmer: running() }}>
           {t().note
             ? running() ? tr("메모리에 쓰는 중") : cut() ? tr("메모리") : tr("메모리에 저장함")
-            : t().kind === "bash"
-              ? ((d) => (running() ? d.now : d.label))(describeCommand(t().target ?? ""))
+            : t().kind === "bash" || t().kind === "browser"
+              ? ((d) => (running() ? d.now : d.label))(browser() ?? describeCommand(t().target ?? ""))
               : tr(VERB[t().kind][running() ? 0 : 1])}
         </span>
-        <span class="tool-target">{what()}</span>
+        <span class="tool-target" classList={{ cmd: !t().note && (t().kind === "bash" || t().kind === "test") }}>{what()}</span>
         {/* one trailing column on every row: the time (on hover), the counts, or 중단됨 end at the same edge */}
         <span class="tool-end">
           <Show when={t().ok === false}><span class="tool-fail">{tr("실패")}</span></Show>
