@@ -1380,3 +1380,20 @@
 .thread-inner > .note + .tool {
   margin-top: calc(var(--s-12) - var(--s-24));
 }
+
+/* answer stats sit on the actions' row and never drop to a line of their own (which hung
+   over the space before the composer); when the row is short they end in a fade, and the
+   last reply keeps its full space above the composer */
+.reply-foot {
+  flex-wrap: nowrap;
+}
+.reply-foot .usage-line {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+.convo > .reply:last-child .reply-body > .reply-foot {
+  margin-bottom: 0;
+}
