@@ -75,6 +75,7 @@ const NOTE_FORMS: { key: string; was?: string[] }[] = [
   { key: '"{title}" 작업의 결과를 이어받아 시작해요', was: ['"{title}" 일의 결과를 이어받아 새로 시작해요'] },
   { key: '브랜치 {b}는 "{title}" 작업으로 넘어갔어요', was: ['브랜치 {b}는 "{title}" 일로 넘어갔어요'] },
   { key: '"{title}" 작업으로 넘어가요', was: ['"{title}" 일로 넘어가요'] },
+  { key: "검색 멈춤 · 1분 넘게 결과 없음" },
 ];
 /** what "확인 필요 · …" lists (stored Korean → its key) */
 const PROOF_PARTS: Record<string, string> = {

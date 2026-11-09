@@ -35,6 +35,12 @@ export const agentSpawn = (id: string, cwd: string, args: string[], env: Env) =>
 /** Write one JSON command line to the agent's stdin. */
 export const agentSend = (id: string, command: Record<string, unknown>) => call<void>("agent_send", { id, command });
 export const agentKill = (id: string) => call<void>("agent_kill", { id });
+/**
+ * Stop one command the agent's shell runs, not the agent: the processes under its
+ * engine whose command line is `program` with `arg` (SIGTERM, SIGKILL after 2s).
+ * Resolves to how many were stopped.
+ */
+export const agentStopCommand = (id: string, program: string, arg?: string) => call<number>("agent_stop_command", { id, program, arg: arg ?? null }, 0);
 export const agentAlive = () => call<string[]>("agent_alive", undefined, []);
 /** "provider/model" ids this account can use. */
 export const engineModels = (accountId: string) => call<string[]>("engine_models", { accountId }, ["openai-codex/gpt-5.6-terra"]);

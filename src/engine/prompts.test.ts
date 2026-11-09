@@ -51,6 +51,18 @@ describe("coding defaults", () => {
     ]) expect(prompt.replace(/\s+/g, " ")).toContain(rule);
   });
 
+  it("keeps searches out of ~ and short, without cutting builds short", () => {
+    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
+    for (const rule of [
+      "rg --files <dir> -g '<glob>'", "not `find .`", "-maxdepth",
+      "-not -path '*/node_modules/*' -not -path '*/.git/*'",
+      'Pass the bash "timeout" (60) on every search or listing',
+      "you are not in a project: don't search from there",
+      "Ondra stops it at 90s",
+      'Don\'t pass a short "timeout" to anything that renders, converts, builds, installs or downloads',
+    ]) expect(prompt).toContain(rule);
+  });
+
   it("keeps role boundaries and the routing format", () => {
     expect(SUB_SYSTEM).toContain("Don't start subagents.");
     expect(TASK_SYSTEM).toContain("at most 4 at a time");

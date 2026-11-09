@@ -472,6 +472,7 @@ function noteIcon(text: string): string {
   if (/^워크트리 정리 · |^작업 폴더를 정리/.test(text)) return "pr";
   if (/^(기억함|메모리에? 저장) · /.test(text)) return "memory";
   if (text.startsWith("모델")) return "refresh";
+  if (text.startsWith("검색 멈춤")) return "search";
   return "dot";
 }
 
