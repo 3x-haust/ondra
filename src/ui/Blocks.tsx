@@ -1,7 +1,7 @@
 // Result blocks the agents send (see skills/visual-report): drawn, not read.
 import { ErrorBoundary, For, Match, Show, Switch } from "solid-js";
 import type { Block, Evidence } from "../state/types";
-import { fileSrc, openUrl } from "../lib/native";
+import { fileSrc, openUrl, pageSrc } from "../lib/native";
 import { previewFile } from "../state/ui";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
@@ -304,7 +304,7 @@ function BlockBody(props: { block: Block }) {
               <span class="spacer" />
               <button class="link-btn" onClick={() => previewFile(p().path)}>{t("크게 보기")}</button>
             </div>
-            <iframe class="blk-page-frame" sandbox="allow-scripts" src={fileSrc(p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
+            <iframe class="blk-page-frame" sandbox="allow-scripts" src={pageSrc(p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
           </div>
         )}
       </Match>

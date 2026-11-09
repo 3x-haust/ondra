@@ -11,7 +11,7 @@ import { BrowserView } from "./Browser";
 import { toast, activeTab, closePanelTab, newPanelTab, panelShared, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { browserStreamPort, fileSrc, pdfSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, revealPath } from "../lib/native";
+import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openInTerminal, openUrl, pageSrc, pdfSrc, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
@@ -528,7 +528,7 @@ function ArtifactsPane(props: { t: Task }) {
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
                   <Match when={kindOf(a.name) === "page"}>
-                    <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${fileSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
+                    <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${pageSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
                       <iframe class="aframe" src={pdfSrc(a.path, a.modified)} title={a.name} />
                     </Show>
                   </Match>
