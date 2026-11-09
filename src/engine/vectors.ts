@@ -94,3 +94,37 @@ export function similarity(query: string, m: Memory): number | undefined {
   for (let i = 0; i < q.length; i++) s += q[i] * d[i];
   return s;
 }
+
+/** vectors for other texts (jobs), kept for this run only: they are cheap to rebuild */
+const others = new Map<string, Kept>();
+/**
+ * Cosine of each text with a query, by the same model as memory (jobs_search).
+ * Texts are embedded once per change; empty without the model (words only then).
+ */
+export async function textSimilarity(query: string, items: { id: string; text: string }[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!inTauri || !query.trim() || !items.length) return out;
+  try {
+    await prepareQuery(query);
+    const q = queries.get(query);
+    if (!q) return out;
+    const todo = items.filter((i) => others.get(i.id)?.h !== hash(i.text));
+    for (let i = 0; i < todo.length; i += 48) {
+      const part = todo.slice(i, i + 48);
+      const vs = await embedTexts(part.map((x) => x.text.slice(0, 2000)));
+      if (vs.length !== part.length) break;
+      part.forEach((x, j) => others.set(x.id, { h: hash(x.text), v: Float32Array.from(vs[j]) }));
+    }
+    if (others.size > 3000) for (const k of [...others.keys()].slice(0, others.size - 3000)) others.delete(k);
+    for (const x of items) {
+      const d = others.get(x.id)?.v;
+      if (!d || d.length !== q.length) continue;
+      let s = 0;
+      for (let i = 0; i < q.length; i++) s += q[i] * d[i];
+      out.set(x.id, s);
+    }
+  } catch {
+    /* words only */
+  }
+  return out;
+}

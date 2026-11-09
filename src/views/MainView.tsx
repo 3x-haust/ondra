@@ -1,5 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
-import { nowText } from "../engine/describe";
+import { noteText, nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { keepBottom } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
@@ -81,7 +81,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
-            <span class="shimmer reply-thinking">{t("생각하는 중")} · {short(soon() - props.m.at)}</span>
+            <span class="shimmer reply-thinking">{props.m.step ? noteText(props.m.step) : t("생각하는 중")} · {short(soon() - props.m.at)}</span>
           </Match>
           <Match when={props.m.error}>
             {(err) => (
@@ -99,6 +99,15 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
             )}
           </Match>
           <Match when={true}>
+            {/* the jobs main looked up for this reply (jobs_search, job_read) */}
+            <For each={props.m.steps}>
+              {(s) => (
+                <div class="reply-note">
+                  <Icon name="search" size={14} />
+                  <span>{noteText(s)}</span>
+                </div>
+              )}
+            </For>
             <Show when={props.m.reply}><p class="reply-line">{props.m.reply}</p></Show>
             <Show when={!props.m.reply && !routes().length}>
               <div class="reply-error">

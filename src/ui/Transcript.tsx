@@ -170,6 +170,8 @@ const assigner = (t: Task) => {
   const p = t.parentId ? taskById(t.parentId) : undefined;
   return p ? tr("{name}에서", { name: p.title }) : undefined;
 };
+/** a message another agent sent (main's append, a job's job_tell): who it came from */
+const sender = (e: { by?: string }) => (e.by === "main" ? tr("메인에서") : e.by ? tr("{name}에서", { name: taskById(e.by)?.title ?? e.by }) : undefined);
 
 /** Explanations drawn as pictures: they stay in view when the work folds. */
 const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence", "steps", "page", "flow", "deps", "classes", "er", "arch", "states", "diff", "tests", "options", "trace", "git"]);
@@ -294,7 +296,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
     <>
       <Show when={props.turn.user}>
         {(u) => (
-          <Show when={answerOf(u().text)} fallback={<UserMsg id={u().id} text={u().text} at={u().at} from={assigner(props.task)} onEdit={(t) => void editTurn(props.task.id, u().id, t)} />}>
+          <Show when={answerOf(u().text)} fallback={<UserMsg id={u().id} text={u().text} at={u().at} from={sender(u()) ?? assigner(props.task)} onEdit={(t) => void editTurn(props.task.id, u().id, t)} />}>
             {(a) => <AnsweredCard q={a().q} a={a().a} />}
           </Show>
         )}
@@ -372,6 +374,9 @@ const VERB: Record<ToolCall["kind"], [string, string]> = {
   other: ["도구 쓰는 중", "도구 씀"],
 };
 
+/** job_tell: a message handed to another job ("전달함 비로그인 먼저 쓰기") */
+const TELL: [string, string] = ["전달하는 중", "전달함"];
+
 type ToolEntry = Entry & { kind: "tool" };
 
 /** What a working task is doing this moment, as its running call's row says it ("테스트 중"), if one runs. */
@@ -384,6 +389,7 @@ export function liveVerb(t: Task): string | undefined {
     const x = e.tool;
     if (x.note) return tr("메모리에 쓰는 중");
     if (x.kind === "bash" || x.kind === "browser") return (x.kind === "browser" ? describeBrowser(x.target ?? "") : describeCommand(x.target ?? "")).now;
+    if (x.name === "job_tell") return tr(TELL[0]);
     return tr(VERB[x.kind][0]);
   }
   return undefined;
@@ -530,7 +536,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
               ? tr("검색함") // stopped with nothing found: it searched, it didn't find
               : t().kind === "bash" || t().kind === "browser"
               ? ((d) => (running() ? d.now : d.label))(browser() ?? describeCommand(t().target ?? ""))
-              : tr(VERB[t().kind][running() ? 0 : 1])}
+              : tr((t().name === "job_tell" ? TELL : VERB[t().kind])[running() ? 0 : 1])}
         </span>
         <span class="tool-target" classList={{ cmd: !t().note && (t().kind === "bash" || t().kind === "test") }}>{what()}</span>
         {/* one trailing column on every row: the time (on hover), the counts, or 중단됨 end at the same edge */}
@@ -619,7 +625,7 @@ function EntryView(props: { e: Entry; task: Task }) {
   const as = <K extends Entry["kind"]>(k: K) => (props.e.kind === k ? (props.e as Extract<Entry, { kind: K }>) : undefined);
   return (
     <Switch>
-      <Match when={as("user")}>{(x) => <UserMsg text={x().text} at={x().at} from={assigner(props.task)} />}</Match>
+      <Match when={as("user")}>{(x) => <UserMsg text={x().text} at={x().at} from={sender(x()) ?? assigner(props.task)} />}</Match>
       <Match when={as("text")}>{(x) => <Markdown class="msg-text" text={x().text} />}</Match>
       <Match when={as("turn")}>
         {(x) => (

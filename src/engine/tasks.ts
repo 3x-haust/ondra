@@ -279,6 +279,8 @@ export const chineseOnly = (s: string) => /[\u4e00-\u9fff]/.test(s) && !/[\uac00
 export const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
 const lines = (s: unknown) => (typeof s === "string" && s ? s.split("\n").length : 0);
 
+const jobName = (id: unknown) => (typeof id === "string" ? (taskById(id)?.title ?? id) : "");
+
 /** How a tool call shows up: kind, target, and a "now" line. */
 function describeTool(name: string, args: any): ToolCall & { now: string } {
   const path: string = args?.path ?? args?.file_path ?? args?.filePath ?? "";
@@ -313,6 +315,13 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
       if (isTestRun(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
       return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).nowKo };
     }
+    // other jobs of this space (extensions/jobs.ts): named by what they look for or who they reach
+    case "jobs_search":
+      return { name, kind: "search", target: String(args?.query ?? ""), detail: JSON.stringify(args ?? {}), now: "작업 찾는 중" };
+    case "job_read":
+      return { name, kind: "read", target: jobName(args?.id), detail: JSON.stringify(args ?? {}), now: "작업 살펴보는 중" };
+    case "job_tell":
+      return { name, kind: "other", target: jobName(args?.id), detail: String(args?.message ?? ""), now: "다른 작업에 전달하는 중" };
     default:
       return { name, kind: "other", target: name, detail: JSON.stringify(args ?? {}), now: name };
   }
@@ -1827,6 +1836,8 @@ export function createTask(f: {
   /** a finished job this carries on: its branch is handed over */
   follows?: string;
   issue?: Task["issue"];
+  /** another agent asked for it (see Entry's `by`) */
+  by?: string;
 }): string {
   const id = uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
@@ -1856,7 +1867,7 @@ export function createTask(f: {
     plan: [],
     legs: [],
     entries: [
-      { id: uid("e"), at: Date.now(), kind: "user", text: f.display ?? f.ask },
+      { id: uid("e"), at: Date.now(), kind: "user", text: f.display ?? f.ask, ...(f.by ? { by: f.by } : {}) },
       ...(prev ? [{ id: uid("e"), at: Date.now(), kind: "note" as const, text: `"${prev.title}" 작업의 결과${prev.worktree?.state === "open" ? "와 브랜치" : ""}를 이어받아 시작해요` }] : []),
     ],
     shells: [],
@@ -1943,13 +1954,20 @@ export function dataEnv(t: Task): [string, string][] {
   const data = engine.info.dataDir;
   if (!data) return [];
   const key = t.space.replace(/[^A-Za-z0-9_-]/g, "") || "home";
-  const ids = [t.id, t.follows, t.parentId, ...(t.after ?? []), ...state.tasks.filter((k) => k.parentId === t.id).map((k) => k.id)].filter((x): x is string => !!x);
+  const ids = jobsAllowed(t);
   return [
     ["ONDRA_DATA_DIR", data],
     ["ONDRA_SPACE_KEY", key],
     ["ONDRA_RECIPES_DIR", `${data}/browser/${key}/recipes`],
-    ...(t.reach?.length ? [] : [["ONDRA_JOBS_ALLOWED", [...new Set(ids)].join(",")] as [string, string]]),
+    ...(ids ? [["ONDRA_JOBS_ALLOWED", ids.join(",")] as [string, string]] : []),
   ];
+}
+
+/** The jobs whose logs a job may read (see dataEnv); undefined = no list (the user opened another space to it). */
+export function jobsAllowed(t: Task): string[] | undefined {
+  if (t.reach?.length) return undefined;
+  const ids = [t.id, t.follows, t.parentId, ...(t.after ?? []), ...state.tasks.filter((k) => k.parentId === t.id).map((k) => k.id)].filter((x): x is string => !!x);
+  return [...new Set(ids)];
 }
 
 /** A finished job (not a quick answer): more work on it starts as a new job that follows it. */
@@ -2103,19 +2121,21 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   if (run.streaming) void request(agentOf(id), { type: "steer", message: msg }).catch(() => {});
 }
 
-export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string } = {}) {
+export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string; by?: string } = {}) {
   const t = taskById(id);
   if (!t) return;
   const wasPaused = t.status === "paused";
   const agent = agentOf(id);
   if (!opts.now && t.status === "running" && isAlive(agent)) {
-    updateTask(id, (x) => (x.queue = [...(x.queue ?? []), { id: uid("q"), text: message, at: Date.now() }]));
+    const q = { id: uid("q"), text: opts.shown ?? message, at: Date.now(), ...(opts.by ? { by: opts.by } : {}), ...(opts.shown && opts.shown !== message ? { sent: message } : {}) };
+    updateTask(id, (x) => (x.queue = [...(x.queue ?? []), q]));
     return;
   }
   updateTask(id, (x) => {
     x.saidDone = undefined;
-    // what the user sees in the bubble (a button's label), when the message is meant for the model
-    push(x, { kind: "user", text: opts.shown ?? message });
+    // what the user sees in the bubble (a button's label), when the message is meant for the model;
+    // `by`: another agent sent it (main, or a job through job_tell)
+    push(x, { kind: "user", text: opts.shown ?? message, ...(opts.by ? { by: opts.by } : {}) });
   });
   if (isAlive(agent) && (t.status === "running" || t.status === "waiting")) {
     const run = runs.get(id);
@@ -2147,13 +2167,14 @@ export function steerQueued(id: string, qid: string) {
   const q = taskById(id)?.queue?.find((x) => x.id === qid);
   if (!q) return;
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
-  void tell(id, q.text, { now: true });
+  void tell(id, q.sent ?? q.text, queuedOpts(q));
 }
-/** Change a queued message where it is; an emptied one is taken out. */
+const queuedOpts = (q: NonNullable<Task["queue"]>[number]) => ({ now: true, ...(q.sent ? { shown: q.text } : {}), ...(q.by ? { by: q.by } : {}) });
+/** Change a queued message where it is; an emptied one is taken out. Edited, it is the user's own words. */
 export function editQueued(id: string, qid: string, text: string) {
   const t = text.trim();
   if (!t) return dropQueued(id, qid);
-  updateTask(id, (x) => (x.queue = (x.queue ?? []).map((y) => (y.id === qid ? { ...y, text: t } : y))));
+  updateTask(id, (x) => (x.queue = (x.queue ?? []).map((y) => (y.id === qid ? { id: y.id, at: y.at, text: t } : y))));
 }
 export function dropQueued(id: string, qid: string) {
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
@@ -2163,7 +2184,7 @@ function drainQueue(id: string): boolean {
   const q = taskById(id)?.queue?.[0];
   if (!q) return false;
   updateTask(id, (x) => (x.queue = (x.queue ?? []).slice(1)));
-  void tell(id, q.text, { now: true });
+  void tell(id, q.sent ?? q.text, queuedOpts(q));
   return true;
 }
 

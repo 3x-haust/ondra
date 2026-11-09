@@ -49,7 +49,17 @@ export function fixture(base: AppState): AppState {
       },
       {
         id: "t6", space: "work", topic: "ondra", title: "로고 색 바꾸기", ask: "로고 파란색으로", cwd: "~", status: "done", priority: 3, weight: "light", accountId: "default",
-        createdAt: m(320), startedAt: m(319), finishedAt: m(300), now: "", summary: "로고를 바다색으로 바꿨어요", plan: [], legs: [], entries: [], shells: [], inbox: [],
+        createdAt: m(320), startedAt: m(319), finishedAt: m(300), now: "", summary: "로고를 바다색으로 바꿨어요", plan: [], legs: [], shells: [], inbox: [],
+        entries: [
+          { id: "l1", at: m(320), kind: "user", text: "로고 파란색으로" },
+          { id: "l2", at: m(318), kind: "text", text: "로고를 바다색 계열 파란색으로 바꿨어요." },
+          // messages other agents sent (main's append, a job's job_tell) say who sent them
+          { id: "l3", at: m(310), kind: "user", by: "main", text: "앱 아이콘도 같은 색으로 맞춰 주세요." },
+          { id: "l4", at: m(309), kind: "tool", tool: { name: "job_tell", kind: "other", target: "로그인 리다이렉트 수정", detail: "아이콘 색이 바뀌었어요", ok: true, endedAt: m(308.9) } },
+          { id: "l5", at: m(308), kind: "text", text: "앱 아이콘과 메뉴 막대 아이콘도 맞췄어요." },
+          { id: "l6", at: m(305), kind: "user", by: "t1", text: "로그인 화면 로고도 새 색이에요? 스크린샷에 옛 색이 보여요." },
+          { id: "l7", at: m(304), kind: "text", text: "네, 로그인 화면도 새 색이에요. 캐시된 이미지일 거예요." },
+        ],
         worktree: { repo: "/Users/me/ondra", path: "/x/worktrees/ondra-t6", branch: "task/t6", base: "abc", sub: "", state: "merged" },
       },
       {
@@ -192,6 +202,8 @@ export function fixture(base: AppState): AppState {
       { id: "c5r", at: m(7), space: "work", from: "captain", reply: "둘 다 따로 맡겼어요. 스크린샷은 시뮬레이터가 비면 시작해요.", routes: [{ kind: "new", taskId: "t5" }, { kind: "new", taskId: "t4" }], usage: { input: 120, cacheRead: 11_400, cacheWrite: 0, output: 310, ms: 6_400, tps: 48.4, limits: [{ window: 300, used: 38 }, { window: 10080, used: 31 }] } },
       { id: "c2b", at: m(4), space: "work", from: "me", text: "지금 몇 개 돌아가?" },
       { id: "c2c", at: m(4), space: "work", from: "captain", reply: "", routes: [{ kind: "answer", text: "**2개**가 돌고 있고, 1개는 곧 시작해요. 할 일은 **2개**예요.\n\n- 로그인 리다이렉트 수정: 테스트 중이고, 서브에이전트 2개 중 1개가 끝났어요\n- 요금제 페이지 점검: 결제 버튼을 누르는 중이에요\n- iOS 시뮬레이터 스크린샷: 곧 시작해요\n- 할 일: 4월 회고 초안은 게시할지 답을, README 정리는 확인을 기다려요", blocks: [] }] },
+      { id: "c6", at: m(2), space: "work", from: "me", text: "요금제 점검에 모바일 화면도 보라고 전해 줘" },
+      { id: "c6r", at: m(2), space: "work", from: "captain", reply: "", steps: ["작업 찾음 · 요금제 점검"], routes: [{ kind: "append", taskId: "t5", message: "모바일 화면에서도 결제 버튼을 확인해 주세요." }] },
       { id: "c3", at: m(1), space: "work", from: "me", text: "다음 주 배포 일정 정리해 줘" },
       { id: "c4", at: m(1), space: "work", from: "captain", reply: "", routes: [{ kind: "answer", text: "다음 주는 **화요일 오전**에 스테이징, **목요일 오후**에 운영 배포예요. 로그인 수정이 합쳐져야 목요일에 같이 나가요.", blocks: [] }] },
     ],

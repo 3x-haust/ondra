@@ -35,6 +35,12 @@ pub fn env() -> Vec<(String, String)> {
     }
 }
 
+/// The same env for main's own engine (its job tools), which isn't started as a worker.
+#[tauri::command]
+pub fn bridge_env() -> Vec<(String, String)> {
+    env()
+}
+
 fn token() -> String {
     let mut b = [0u8; 24];
     if let Ok(mut f) = std::fs::File::open("/dev/urandom") {

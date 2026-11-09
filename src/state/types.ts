@@ -100,7 +100,8 @@ export interface ToolCall {
 
 /** One line of a task's transcript. */
 export type Entry =
-  | { id: string; at: number; kind: "user"; text: string }
+  /** `by`: another agent sent it, not the user: "main", or the id of the job that did (job_tell) */
+  | { id: string; at: number; kind: "user"; text: string; by?: string }
   | { id: string; at: number; kind: "text"; text: string }
   | { id: string; at: number; kind: "tool"; tool: ToolCall }
   | { id: string; at: number; kind: "block"; block: Block }
@@ -165,8 +166,9 @@ export interface Task {
   browser?: boolean;
   /** Messages sent while it was not running; delivered on start. */
   inbox: string[];
-  /** said while it was working: goes in, in order, once the current work is done (Codex queue) */
-  queue?: { id: string; text: string; at: number }[];
+  /** said while it was working: goes in, in order, once the current work is done (Codex queue).
+   * `by`: another agent sent it (see Entry); `sent`: what the model gets when it differs from `text` */
+  queue?: { id: string; text: string; at: number; by?: string; sent?: string }[];
   /** sent to its running engine (a subagent's result, the user's words) and not taken by the model
    * yet: an engine that dies (a restart) loses them, so the next session is given them.
    * `from`: the subagent whose result it is; `shown`: the words in the thread when they differ */
@@ -381,6 +383,10 @@ export interface CaptainMessage {
   error?: string;
   /** what this answer cost, kept with it */
   usage?: Usage;
+  /** while pending: the step main is on ("작업 찾는 중 · 리디자인"), as a noteText() line */
+  step?: string;
+  /** the steps main took for this reply (job lookups), as noteText() lines */
+  steps?: string[];
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson";

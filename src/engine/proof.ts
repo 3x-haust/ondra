@@ -119,13 +119,16 @@ function externalShot(t: Task, e: Evidence): boolean {
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
 const RESULT = /\b\d+\s+(passed|passing|failed|failing|tests?|specs?|errors?|warnings?)\b|\b(Tests?|Test Files|Suites?)\b.*\d|\b(built|compiled|bundled|finished|done)\b.*\b(in|s\b|ms\b)|\bexit(ed)?( with)?( code)? \d+|^(ok|PASS|FAIL)\b|[✓✔✗✘]\s*\d/i;
 
+/** words that mark a line as one that may carry a credential: such a line is never shown as proof */
+export const SECRET_WORDS = /(token|secret|password|cookie|api[_-]?key)/i;
+
 /** The line of a command's real output that says how it went ("Tests 12 passed (12)"). */
 export function resultLine(tail: string): string | undefined {
   const lines = tail.replace(ANSI, "").split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return undefined;
-  const hit = [...lines].reverse().find((l) => RESULT.test(l) && !/(token|secret|password|cookie|api[_-]?key)/i.test(l));
+  const hit = [...lines].reverse().find((l) => RESULT.test(l) && !SECRET_WORDS.test(l));
   const line = hit ?? lines[lines.length - 1];
-  return /(token|secret|password|cookie|api[_-]?key)/i.test(line) ? undefined : line.length > 140 ? `${line.slice(0, 140)}…` : line;
+  return SECRET_WORDS.test(line) ? undefined : line.length > 140 ? `${line.slice(0, 140)}…` : line;
 }
 
 // "I checked it in the browser" and the like: a claim that needs a screen behind it

@@ -158,6 +158,9 @@ Browser: the browser-use skill (agent-browser is bundled; one shared browser,
 your own tab, logins kept; sign in only through the keychain). Phones: the
 device tool (start → do → look → stop) makes this job's own simulator or
 emulator; never touch the user's others. Other tools: tool_search.
+Other jobs of this space, running or past (a job the user names, what an
+earlier job did, work going on next to yours): jobs_search, job_read, and
+job_tell to send one a message (load them with tool_search).
 ${COMPUTER}
 Web: web_search and web_fetch; public pages need no browser. A page behind a
 login (Notion, Google Docs, an admin): memory_search how this user reads that
@@ -371,6 +374,7 @@ never \`~\` or \`/\`.
 
 # Tools
 Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
+Your fork and the other jobs of this space: jobs_search and job_read (through tool_search).
 ${COMPUTER}
 Web: web_search and web_fetch. Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
@@ -440,7 +444,12 @@ message, then route each item:
   self-contained "message" for that fork's agent. Before routing, read what
   the message and any picture or link actually say (the feature, screen,
   words in the shot) and compare it with every fork listed (title, topic,
-  branch, what it did), not just the latest one. It is the same work when it
+  branch, what it did), not just the latest one. A job the user names or
+  points at that isn't listed (older, another project of this space, a
+  subagent: "리디자인에 전달해") is found with jobs_search, never with memory
+  or git; append to the id it finds (any job of this space takes an append),
+  and if nothing matches, say so and ask which one. A question about such a
+  job ("그거 어떻게 됐어?") is answered from jobs_search and job_read. It is the same work when it
   is about what that fork is making or made: its feature or bug, a fix to its
   result, a question about its output, its next step ("PR까지 올려", "사진이
   이상해"). Then append to it, and name that work in "reply". A fork that
