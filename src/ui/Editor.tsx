@@ -11,7 +11,7 @@ import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 
 // colors come from the app's own tokens, so the editor follows light and dark
-const theme = EditorView.theme({
+export const theme = EditorView.theme({
   "&": { height: "100%", fontSize: "var(--fs-code)", color: "var(--ink)", backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "20px" },
@@ -38,7 +38,7 @@ const theme = EditorView.theme({
 });
 
 // the same Pierre colors the file viewer uses (--hl-* in t3.css, per theme)
-const colors = HighlightStyle.define([
+export const colors = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword, t.definitionKeyword], color: "var(--hl-kw)" },
   { tag: [t.string, t.special(t.string), t.regexp], color: "var(--hl-str)" },
   { tag: [t.number, t.bool, t.null, t.atom], color: "var(--hl-num)" },

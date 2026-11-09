@@ -7,7 +7,7 @@ import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, hadTab, inPane, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, hadTab, inPane, openChanges, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
 import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
@@ -98,7 +98,7 @@ function Tray(props: { t: Task; changes: boolean; made: number; bg: Shell[]; ope
       </Show>
       <div class="tray">
         <Show when={props.changes}>
-          <button class="tray-seg" title={tr("변경 사항 열기")} onClick={() => props.open("changes")}>
+          <button class="tray-seg" title={withHint(tr("변경 사항 에디터"), "changesEditor")} onClick={() => openChanges(props.t.id)}>
             <Icon name="diff" size={14} />
             <b>{tr("변경")}</b>
             <span>{tr("{n}파일", { n: diff().files.length })}</span>

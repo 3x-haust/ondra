@@ -15,6 +15,7 @@ import "./styles/context.css";
 import "./styles/viz.css";
 import "./styles/reverse.css";
 import "./styles/panes.css";
+import "./styles/changes.css";
 import App from "./App";
 import { Capture } from "./views/Capture";
 import { VizGallery } from "./views/VizGallery";

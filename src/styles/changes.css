@@ -1,0 +1,299 @@
+/* the changes editor (views/Changes.tsx, ui/DiffEditor.tsx): files on the left, the diff on the right */
+.cg-view {
+  position: relative;
+  overflow: clip;
+  background: var(--bg);
+}
+.cg-head {
+  gap: var(--s-6);
+}
+.cg-head .head-title {
+  flex: none;
+}
+.cg-job {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.cg-total {
+  display: inline-flex;
+  gap: var(--s-6);
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cg-total .add,
+.cg-n .add {
+  color: var(--ok-ink);
+}
+.cg-total .del,
+.cg-n .del {
+  color: var(--bad-ink);
+}
+.cg-pill {
+  flex: none;
+  padding: 1px var(--s-8);
+  border-radius: var(--r-pill);
+  background: var(--active);
+  color: var(--ink-2);
+  font-size: var(--fs-2xs);
+}
+.cg-mode {
+  flex: none;
+}
+.cg-empty {
+  flex: 1;
+}
+.cg-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* the file list */
+.cg-side {
+  width: clamp(200px, 24%, 300px);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.cg-filter {
+  position: static;
+  margin: var(--s-10) var(--s-10) var(--s-6);
+  height: var(--h-sm);
+}
+.cg-list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--s-6) var(--s-16);
+  outline: 0;
+}
+.cg-group + .cg-group {
+  margin-top: var(--s-6);
+}
+.cg-dir {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding: var(--s-6) var(--s-8) var(--s-2);
+  color: var(--ink-4);
+  font-size: var(--fs-2xs);
+  font-family: var(--mono);
+  min-width: 0;
+}
+.cg-dir span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.cg-file {
+  width: 100%;
+  height: var(--h-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: 0 var(--s-8) 0 var(--s-24);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+.cg-file:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.cg-file.on {
+  background: var(--row-selected, var(--active));
+  box-shadow: var(--row-selected-shadow, none);
+  color: var(--ink);
+}
+.cg-list:focus-visible .cg-file.on {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.cg-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cg-name.gone {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-4);
+}
+.cg-n {
+  display: inline-flex;
+  gap: var(--s-4);
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+.cg-st {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-strong);
+  color: var(--accent);
+}
+.cg-st.A {
+  color: var(--ok-ink);
+}
+.cg-st.D {
+  color: var(--bad-ink);
+}
+.cg-none {
+  padding: var(--s-16) var(--s-10);
+  color: var(--ink-4);
+  font-size: var(--fs-sm);
+}
+
+/* the diff */
+.cg-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--code-surface);
+}
+.cg-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 38px;
+  padding: 0 var(--s-8) 0 var(--s-12);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--card);
+  font-size: var(--fs-xs);
+  min-width: 0;
+}
+.cg-path {
+  flex: 0 1 auto;
+  font-family: var(--mono);
+}
+.cg-old {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+}
+.cg-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.cg-nav + .cg-nav {
+  margin-left: var(--s-4);
+  padding-left: var(--s-6);
+  border-left: 1px solid var(--line-soft);
+}
+.cg-at {
+  min-width: 44px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+.cg-bar .icon-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.cg-cut {
+  flex: none;
+  padding: var(--s-6) var(--s-12);
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in oklab, var(--warn) 10%, var(--card));
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+.cg-note {
+  flex: 1;
+}
+.cg-editor {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.cg-cm {
+  position: absolute;
+  inset: 0;
+}
+.cg-cm > .cm-editor,
+.cg-cm > .cm-mergeView {
+  height: 100%;
+}
+.cg-cm > .cm-mergeView {
+  overflow: auto;
+}
+.cg-cm .cm-editor {
+  font-size: 12px;
+}
+.cg-cm .cm-scroller {
+  line-height: 20px;
+}
+.cg-cm .cm-content {
+  padding: 4px 0 24px;
+}
+.cg-cm .cm-mergeViewEditor + .cm-mergeViewEditor {
+  border-left: 1px solid var(--line-soft);
+}
+
+/* a narrow pane: the list comes over the diff when asked for */
+.cg-view.narrow .cg-side {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(300px, 86%);
+  box-shadow: var(--shadow-pop, 0 8px 24px rgb(0 0 0 / 0.16));
+  transform: translateX(-104%);
+  visibility: hidden;
+  transition: transform var(--dur) var(--ease), visibility 0s linear var(--dur);
+}
+.cg-view.narrow.list-open .cg-side {
+  transform: none;
+  visibility: visible;
+  transition: transform var(--dur) var(--ease);
+}
+.cg-view.snap .cg-side {
+  transition: none !important;
+}
+.cg-view.narrow .cg-body {
+  position: relative;
+}
+.cg-view.narrow .cg-job,
+.cg-view.narrow .cg-pill,
+.cg-view.narrow .cg-total,
+.cg-view.narrow .cg-bar .cg-n,
+.cg-view.narrow .cg-old {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-view.narrow .cg-side,
+  .cg-view.narrow.list-open .cg-side {
+    transition: none;
+  }
+}

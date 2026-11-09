@@ -27,7 +27,7 @@ const places: Record<string, Place> = (() => {
 
 /** The screen to show in `space` when you switch to it from `v`: the same one when that space has it. */
 export function carried(v: View, space: SpaceId): View {
-  if (v.name === "task") return taskById(v.id)?.space === space ? v : { name: "main" };
+  if (v.name === "task" || v.name === "changes") return taskById(v.id)?.space === space ? v : { name: "main" };
   if (v.name === "main") return v.project && projectById(v.project, space) ? v : { name: "main" };
   // a result is one space's own: that space's list opens at its first
   if (v.name === "results") return v.id ? { name: "results" } : v;
@@ -36,11 +36,11 @@ export function carried(v: View, space: SpaceId): View {
 }
 
 /** A screen that can be shown in `space` (its job or project is that space's). */
-const inSpace = (v: View, space: SpaceId) => (v.name === "task" ? taskById(v.id)?.space === space : v.name === "main" && v.project ? projectById(v.project)?.space === space : true);
+const inSpace = (v: View, space: SpaceId) => (v.name === "task" || v.name === "changes" ? taskById(v.id)?.space === space : v.name === "main" && v.project ? projectById(v.project)?.space === space : true);
 
 /** The space a screen belongs to, if it belongs to one. */
 function spaceOfView(v: View): SpaceId | undefined {
-  if (v.name === "task") return taskById(v.id)?.space;
+  if (v.name === "task" || v.name === "changes") return taskById(v.id)?.space;
   if (v.name === "main" && v.project) return projectById(v.project)?.space;
   return undefined;
 }

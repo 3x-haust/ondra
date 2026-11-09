@@ -11,6 +11,7 @@ import { MainView } from "./MainView";
 import { Canvas } from "./Canvas";
 import { MemoryView } from "./Memory";
 import { ResultsView } from "./Results";
+import { ChangesView } from "./Changes";
 import { Devices } from "./Devices";
 import { TaskView } from "./TaskView";
 import { t } from "../i18n";
@@ -43,7 +44,11 @@ function Body() {
       <Show when={is("board")} fallback={
         <Show when={is("devices")} fallback={
           <Show when={is("memory")} fallback={
-            <Show when={is("results")} fallback={<Slide from={-1} first={isFirst}><MainView /></Slide>}>
+            <Show when={is("results")} fallback={
+              <Show when={is("changes")} fallback={<Slide from={-1} first={isFirst}><MainView /></Slide>}>
+                <Slide from={1} first={isFirst}><ChangesView /></Slide>
+              </Show>
+            }>
               <Slide from={-1} first={isFirst}><ResultsView /></Slide>
             </Show>
           }><Slide from={-1} first={isFirst}><MemoryView /></Slide></Show>

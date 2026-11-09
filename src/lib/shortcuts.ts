@@ -32,6 +32,8 @@ export const shortcuts = {
   side: cmd("KeyJ"),
   artifacts: cmd("KeyO", true),
   changes: ctrl("KeyG", true),
+  // the changes in the full-size editor (⌃⇧G is the panel's tab, as VS Code's source control)
+  changesEditor: { code: "KeyG", meta: true, alt: true },
   pr: cmd("KeyR", true),
   files: cmd("KeyP"),
   terminal: ctrl("Backquote"),

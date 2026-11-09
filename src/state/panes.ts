@@ -21,7 +21,7 @@ export const usePaneFocused = (): Accessor<boolean> => usePane()?.focused ?? (()
 
 // ── kept between launches
 const KEY = "ondra.panes";
-const NAMES = new Set(["main", "task", "board", "devices", "memory", "results"]);
+const NAMES = new Set(["main", "task", "board", "devices", "memory", "results", "changes"]);
 const read = (): Record<string, unknown> => {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? "{}") ?? {};

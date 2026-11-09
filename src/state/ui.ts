@@ -17,6 +17,8 @@ export type View =
   | { name: "memory" }
   /** what finished jobs came back with */
   | { name: "results"; id?: string }
+  /** a job's changes in a full-size diff editor, on one of its files */
+  | { name: "changes"; id: string; path?: string }
   | { name: "settings"; tab?: SettingsTab };
 
 export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools";
@@ -73,7 +75,8 @@ function updatePane(id: string, f: (p: PaneState) => PaneState) {
 // Where you have been, for ⌘[ and ⌘]: each move to another place is kept; moving
 // within one place (another result, another settings tab) replaces it. Every pane has its own.
 const HISTORY = 50;
-const samePlace = (a: View, b: View) => a.name === b.name && (a.name === "task" || a.name === "main" ? JSON.stringify(a) === JSON.stringify(b) : true);
+const samePlace = (a: View, b: View) =>
+  a.name === b.name && (a.name === "task" || a.name === "main" ? JSON.stringify(a) === JSON.stringify(b) : a.name === "changes" ? a.id === (b as { id: string }).id : true);
 /** Show a view in one pane (its new-task screen closes, as on any move). */
 export function setPaneView(id: string, v: View) {
   const p = layout().panes[id];
@@ -92,7 +95,7 @@ export function shownIn(v: View, except = layout().focus): string | undefined {
   return L.leaves(l.root).find((id) => {
     const p = l.panes[id];
     if (id === except || p.draft) return false;
-    if (v.name === "task" || v.name === "main") return p.view.name === v.name && samePlace(p.view, v);
+    if (v.name === "task" || v.name === "main" || v.name === "changes") return p.view.name === v.name && samePlace(p.view, v);
     return p.view.name === v.name;
   });
 }
@@ -345,6 +348,8 @@ export function toggleSidebar() {
 }
 
 export const openTask = (id: string) => setView({ name: "task", id });
+/** A job's changes in the full-size editor, on `path` (from the repo top) when given; the pane already showing them moves to it. */
+export const openChanges = (id: string, path?: string) => setView(path ? { name: "changes", id, path } : { name: "changes", id });
 export const goMain = (project?: string) => {
   const v: View = project ? { name: "main", project } : { name: "main" };
   // the new-task screen over this same chat closes (it is already the view, so nothing else would)

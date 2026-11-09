@@ -5,7 +5,7 @@
 import { confirmDiscard } from "./taskMenu";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
-import { panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
+import { openChanges, panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
 import { fileSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, openInEditor, pageSrc, pdfSrc, revealPath, type GitChanges } from "../lib/native";
@@ -14,54 +14,12 @@ import { Icon } from "./Icon";
 import { GlyphMark } from "../views/Sidebar";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
+import { withHint } from "../lib/shortcuts";
 import { discarded, rememberDiff } from "../state/progress";
 
-// ───────────── diff model ─────────────
-export type Line = { kind: "ctx" | "add" | "del"; old?: number; new?: number; text: string };
-type Hunk = { head: string; where: string; lines: Line[] };
-export type DiffFile = { path: string; status: "A" | "M" | "D" | "R"; binary: boolean; add: number; del: number; hunks: Hunk[] };
-
-export function parsePatch(patch: string): DiffFile[] {
-  const out: DiffFile[] = [];
-  for (const sec of patch.split(/^(?=diff --git )/m)) {
-    if (!sec.startsWith("diff --git")) continue;
-    const rows = sec.split("\n");
-    const m = rows[0].match(/^diff --git a\/(.*) b\/(.*)$/);
-    const f: DiffFile = { path: m?.[2] ?? rows[0], status: "M", binary: false, add: 0, del: 0, hunks: [] };
-    let h: Hunk | null = null;
-    let o = 0;
-    let n = 0;
-    for (const r of rows.slice(1)) {
-      if (!h) {
-        if (r.startsWith("new file")) f.status = "A";
-        else if (r.startsWith("deleted file")) f.status = "D";
-        else if (r.startsWith("rename from")) f.status = "R";
-        else if (r.startsWith("Binary files")) f.binary = true;
-      }
-      const hh = r.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$/);
-      if (hh) {
-        o = +hh[1];
-        n = +hh[2];
-        h = { head: r, where: hh[3].trim(), lines: [] };
-        f.hunks.push(h);
-        continue;
-      }
-      if (!h || r.startsWith("\\")) continue;
-      if (r.startsWith("+")) {
-        h.lines.push({ kind: "add", new: n++, text: r.slice(1) });
-        f.add++;
-      } else if (r.startsWith("-")) {
-        h.lines.push({ kind: "del", old: o++, text: r.slice(1) });
-        f.del++;
-      } else if (r.startsWith(" ") || r === "") {
-        if (r === "" && h.lines.length && rows[rows.length - 1] === r) continue;
-        h.lines.push({ kind: "ctx", old: o++, new: n++, text: r.slice(1) });
-      }
-    }
-    out.push(f);
-  }
-  return out;
-}
+// ───────────── diff model (diffModel.ts) ─────────────
+import { parsePatch, type DiffFile, type Hunk, type Line } from "./diffModel";
+export { parsePatch, type DiffFile, type Line };
 
 const split = (p: string) => {
   const i = p.lastIndexOf("/");
@@ -69,10 +27,10 @@ const split = (p: string) => {
 };
 const STATUS: Record<DiffFile["status"], string> = { A: "새 파일", M: "수정", D: "삭제", R: "이름 바뀜" };
 
-/** Changes of a task, refreshed when its tools finish. */
-export function useChanges(t: () => Task) {
+/** Changes of a task, refreshed when its tools finish (only while `enabled` says so). */
+export function useChanges(t: () => Task, enabled: () => boolean = () => true) {
   const [data, { refetch }] = createResource(
-    () => [expand(t().cwd), t().worktree?.state === "open" ? t().worktree!.base : undefined] as const,
+    () => enabled() && ([expand(t().cwd), t().worktree?.state === "open" ? t().worktree!.base : undefined] as const),
     ([cwd, base]) => gitChanges(cwd, base),
   );
   createEffect(on(() => t().entries.filter((e) => e.kind === "tool" && e.tool.endedAt).length, () => refetch(), { defer: true }));
@@ -189,7 +147,8 @@ function HunkView(props: { h: Hunk; toks?: (Tok[] | undefined)[]; annot?: (l: Li
 }
 
 /** `annot`: something to show under a line (a PR's line comments); `remote`: the file isn't in a local folder */
-export function DiffCard(props: { f: DiffFile; root: string; open: boolean; toggle: () => void; ref?: (el: HTMLElement) => void; annot?: (l: Line) => JSX.Element | undefined; remote?: boolean; badge?: JSX.Element }) {
+/** `big`: opens the file in the full-size changes editor */
+export function DiffCard(props: { f: DiffFile; root: string; open: boolean; toggle: () => void; ref?: (el: HTMLElement) => void; annot?: (l: Line) => JSX.Element | undefined; remote?: boolean; badge?: JSX.Element; big?: () => void }) {
   const [dir, name] = split(props.f.path);
   const big = () => props.f.add + props.f.del > 600;
   const [force, setForce] = createSignal(false);
@@ -224,6 +183,21 @@ export function DiffCard(props: { f: DiffFile; root: string; open: boolean; togg
           </span>
         </Show>
         {props.badge}
+        <Show when={props.big}>
+          {(open) => (
+            <button
+              class="dv-open"
+              title={tr("크게 보기|diff")}
+              aria-label={tr("크게 보기|diff")}
+              onClick={(e) => {
+                e.stopPropagation();
+                open()();
+              }}
+            >
+              <Icon name="zoom" size={13} />
+            </button>
+          )}
+        </Show>
         <Show when={!props.remote}>
         <button
           class="dv-open"
@@ -311,11 +285,17 @@ export function ChangesPane(props: { t: Task; top?: any }) {
               <button class="icon-btn sm" title={tr("새로고침")} onClick={() => refetch()}>
                 <Icon name="refresh" size={14} />
               </button>
+              <Show when={files().length}>
+                <button class="btn sm ghost rv-big" title={withHint(tr("에디터로 열기"), "changesEditor")} onClick={() => openChanges(props.t.id)}>
+                  <Icon name="zoom" size={13} />
+                  {tr("에디터로 열기")}
+                </button>
+              </Show>
             </div>
             <Show when={files().length} fallback={<div class="pane-empty">{tr("변경 없음")}</div>}>
               <div class="rv-files">
                 <For each={files()}>
-                  {(f) => <DiffCard f={f} root={expand(props.t.cwd)} open={isOpen(f.path)} toggle={() => toggle(f.path)} ref={(el) => refs.set(f.path, el)} />}
+                  {(f) => <DiffCard f={f} root={expand(props.t.cwd)} open={isOpen(f.path)} toggle={() => toggle(f.path)} ref={(el) => refs.set(f.path, el)} big={() => openChanges(props.t.id, f.path)} />}
                 </For>
               </div>
             </Show>

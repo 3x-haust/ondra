@@ -6,11 +6,19 @@ import { canClosePane, closeFocused, hasAttention, nextAttention, splitNew } fro
 import { stepZoom } from "./zoom";
 import { t } from "../i18n";
 import { openExternal } from "../lib/native";
-import { activeTab, browserPage, canStep, equalizePanes, gotoPane, inPane, paneCount, resizePane, toggleZoom, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
+import { activeTab, browserPage, canStep, equalizePanes, gotoPane, inPane, paneCount, resizePane, toggleZoom, closePanel, closePanelTab, goMain, newPanelTab, openBrowser, openChanges, openPanel, openTask, panelOpen, panelTab, ptabs, setActiveTab, setPaletteMode, setPaletteOpen, setView, stepView, togglePanel, toggleSidebar, view, type View } from "./ui";
 
 /** a place still there to go back to (a job can be deleted meanwhile) */
-const exists = (v: View) => v.name !== "task" || !!taskById(v.id);
+const exists = (v: View) => (v.name !== "task" && v.name !== "changes") || !!taskById(v.id);
 const job = () => { const v = view(); return v.name === "task" ? taskById(v.id) : undefined; };
+/** the job whose changes the editor opens: the one on screen, or the one it already shows */
+const changesJob = () => { const v = view(); return v.name === "task" || v.name === "changes" ? taskById(v.id) : undefined; };
+/** the changes editor and the job's chat, back and forth */
+function toggleChanges() {
+  const v = view();
+  if (v.name === "changes") openTask(v.id);
+  else if (v.name === "task") openChanges(v.id);
+}
 /** the panel shows beside Main and a task only (canvas, memory, results, devices and settings have none) */
 const panelAvailable = () => view().name === "main" || view().name === "task";
 const visiblePanel = () => panelAvailable() && panelOpen();
@@ -81,6 +89,7 @@ export function appCommands(): ShortcutCommand[] {
     command("browser", "브라우저", "패널", "globe", () => openBrowser(), panelAvailable, true),
     // the page the panel's browser shows, in the system's browser
     { id: "browserOutside", label: t("이 페이지를 기본 브라우저에서 열기"), section: t("패널"), icon: "external", run: () => void openExternal(browserPage()), enabled: () => visiblePanel() && panelTab() === "browser" && !!browserPage() },
+    command("changesEditor", "변경 사항 에디터", "이동", "diff", toggleChanges, () => !!changesJob(), true),
     ...([
       ["artifacts", "결과물 탭", "inbox"], ["changes", "변경 사항", "diff"], ["pr", "PR", "pr"],
       ["files", "파일", "file"], ["terminal", "터미널", "shell"], ["overview", "작업 정보", "list"],

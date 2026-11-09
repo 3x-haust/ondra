@@ -397,6 +397,8 @@ pub fn run() {
             store::memory_git_show,
             store::paths_exist,
             git::git_changes,
+            git::git_file_at,
+            git::git_merged,
             worktree::worktree_create,
             fs::fs_files,
             fs::fs_repos,
