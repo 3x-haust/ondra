@@ -1601,3 +1601,8 @@
 .keysheet-head .btn.sm:hover {
   color: var(--ink);
 }
+/* in the sidebar it sits at the right end of the 설정 row */
+.app .sidebar .sb-foot { gap: var(--s-4); }
+.app .sidebar .sb-foot .update-wrap,
+.app .sidebar .sb-foot > .update-btn { margin: 0 var(--s-6) 0 0; }
+.app .sidebar .sb-foot .update-btn { margin: 0; }
