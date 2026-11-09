@@ -2,11 +2,12 @@
 // is going on in a project, a file), a folder's summary, the overview, or the
 // saved versions of the memory as a timeline.
 import { createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js";
-import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, updateMemory, userOwned } from "../engine/memory";
+import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, sourcesOf, updateMemory, userOwned } from "../engine/memory";
+import { conflictsIn, keepMine, tidyParts, useNew } from "../engine/tidy";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
 import { fsRead, openInEditor, revealPath } from "../lib/native";
 import { setState, state, taskById } from "../state/store";
-import type { JournalEntry, Memory, MemoryKind } from "../state/types";
+import type { JournalEntry, Memory, MemoryConflict, MemoryKind } from "../state/types";
 import { openTask, previewFile, toast } from "../state/ui";
 import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
@@ -270,6 +271,9 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
           ].filter((x, i) => i === 0 || x.n)}
         />
       </Show>
+      <Show when={all()}>
+        <Conflicts onSel={props.onSel} />
+      </Show>
       <Show when={nows().length}>
         <H>{t("최근")}</H>
         <div class="ms-list">
@@ -355,19 +359,65 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
   );
 }
 
+/** 확인 필요: a learned piece says otherwise than the user's own; the user picks (theirs is replaced only after a second click) */
+function Conflicts(props: { onSel: (id: string) => void }) {
+  const list = () => conflictsIn(state.space);
+  const [ask, setAsk] = createSignal<string>();
+  const mem = (id?: string) => (id ? state.memory.find((m) => m.id === id) : undefined);
+  const other = (c: MemoryConflict) => {
+    const m = mem(c.theirs);
+    return { text: m?.text ?? c.text ?? "", kind: m ? kindOf(m) : (c.kind ?? "fact"), jobs: m ? sourcesOf(m).length : (c.sources?.length ?? 0), id: m?.id };
+  };
+  return (
+    <Show when={list().length}>
+      <H n={list().length}>{t("확인 필요|memory")}</H>
+      <div class="mc-list">
+        <For each={list()}>
+          {(c) => (
+            <div class="mc">
+              <button class={`mc-row mk-${kindOf(mem(c.mine)!)}`} onClick={() => props.onSel(`m:${c.mine}`)} title={mem(c.mine)?.text}>
+                <em>{t("내 것")}</em>
+                <span>{mem(c.mine)?.text}</span>
+              </button>
+              <Show
+                when={other(c).id}
+                fallback={
+                  <div class={`mc-row mk-${other(c).kind}`}>
+                    <em>{t("새 것")}</em>
+                    <span>{other(c).text}<Show when={other(c).jobs}><small> · {t("작업 {n}개", { n: other(c).jobs })}</small></Show></span>
+                  </div>
+                }
+              >
+                <button class={`mc-row mk-${other(c).kind}`} onClick={() => props.onSel(`m:${other(c).id}`)} title={other(c).text}>
+                  <em>{t("새 것")}</em>
+                  <span>{other(c).text}<Show when={other(c).jobs}><small> · {t("작업 {n}개", { n: other(c).jobs })}</small></Show></span>
+                </button>
+              </Show>
+              <div class="mc-acts">
+                <button class="btn sm ghost" onClick={() => keepMine(c.id)}>{t("내 것 유지")}</button>
+                <button class="btn sm ghost" aria-expanded={ask() === c.id} onClick={() => setAsk(ask() === c.id ? undefined : c.id)}>{t("새 것으로")}</button>
+              </div>
+              <Fold open={ask() === c.id}>
+                <div class="mc-acts">
+                  <button class="btn sm primary" onClick={() => (useNew(c.id), setAsk())}>{t("바꾸기")}</button>
+                  <button class="btn sm ghost" onClick={() => setAsk()}>{t("취소")}</button>
+                </div>
+              </Fold>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
 /** when the quiet pass last ran, what it did, and up to which finished job it has learned */
 function TidyLine() {
   const tidy = () => state.memoryTidy;
   const parts = () => {
     const x = tidy();
     if (!x) return [];
-    return [
-      x.learned && t("학습 {n}", { n: x.learned }),
-      x.merged && t("병합 {n}", { n: x.merged }),
-      x.retired && t("내림 {n}", { n: x.retired }),
-      x.keyed && t("관련어 {n}", { n: x.keyed }),
-      x.skills && t("스킬 {n}", { n: x.skills }),
-    ].filter((p): p is string => !!p);
+    return [...tidyParts(x), ...(x.skills ? [t("스킬 {n}", { n: x.skills })] : [])];
   };
   return (
     <Show when={tidy()?.at || parts().length}>
@@ -609,8 +659,12 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
   const linked = () => (m().links ?? []).map((l) => props.model.memById.get(l)).filter((x): x is Memory => !!x);
   const chain = createMemo(() => chainOf(props.model, m()));
   const homeLabel = () => (props.model.homes.get(home()) ? homeName(props.model.homes.get(home())!) : t("워크스페이스|one"));
-  const entry = () => learnedIn(m());
-  const task = () => (m().taskId ? state.tasks.find((t) => t.id === m().taskId) : undefined);
+  /** the finished jobs it came from (older pieces: the one job it was learned in) */
+  const sources = () => {
+    const s = sourcesOf(m());
+    const e = learnedIn(m());
+    return s.length ? s : e ? [e.taskId] : [];
+  };
   /** the use row: "2번", then quietly "같은 내용 1번 더 저장 · 마지막 3분 전", the parts that apply (seen counts the first save too) */
   const useMore = () =>
     [
@@ -692,25 +746,30 @@ function Piece(props: { model: Model; m: Memory; onSel: (id: string) => void }) 
           </For>
         </div>
       </Show>
-      <Show when={entry() || task()}>
-        <H>{t("배운 작업")}</H>
-        <Show
-          when={entry()}
-          fallback={
-            <button class={`ms-entry`} onClick={() => openTask(m().taskId!)}>
-              <Icon name="arrow" size={12} />
-              <span>{task()!.title}</span>
-            </button>
-          }
-        >
-          {(e) => (
-            <button class={`ms-entry oc-${outcomeOf(e())}`} onClick={() => props.onSel(entryId(e()))} title={e().ask}>
-              <i />
-              <span>{e().title || e().ask}</span>
-              <em>{dayLabel(e().at, true)}</em>
-            </button>
-          )}
-        </Show>
+      <Show when={sources().length}>
+        <H>{t("출처 · 작업 {n}개", { n: sources().length })}</H>
+        <div class="ms-list">
+          <For each={sources()}>
+            {(id) => {
+              const e = () => (state.journal ?? []).find((j) => j.taskId === id);
+              const task = () => taskById(id);
+              const at = () => e()?.at ?? task()?.finishedAt;
+              // opens the task; a deleted one still has its entry in 작업 기록
+              return (
+                <button
+                  class={`ms-entry oc-${e() ? outcomeOf(e()!) : "done"}`}
+                  disabled={!task() && !e()}
+                  onClick={() => (task() ? openTask(id) : e() && props.onSel(entryId(e()!)))}
+                  title={task()?.ask ?? e()?.ask ?? t("삭제된 작업")}
+                >
+                  <i />
+                  <span>{task()?.title || e()?.title || t("삭제된 작업")}</span>
+                  <Show when={at()}><em>{dayLabel(at()!, true)}</em></Show>
+                </button>
+              );
+            }}
+          </For>
+        </div>
       </Show>
       <Show when={chain().length > 1}>
         <H>{t("변경 이력")}</H>

@@ -246,6 +246,17 @@ export default {
   "새 기억과 달라서 내렸어요": "Replaced by a newer memory",
   "오래 안 써서 흐려졌어요": "Faded from disuse",
   "가리키던 코드가 사라졌어요": "The code it pointed to is gone",
+  "확인 필요|memory": "Needs review",
+  "내 메모리와 달라서 확인 중이에요": "Differs from yours · waiting for you",
+  "내 메모리와 달라서 내렸어요": "Retired · you kept yours",
+  "새 메모리로 바꿨어요": "Replaced by the new one",
+  "내 것": "Yours",
+  "새 것": "New",
+  "내 것 유지": "Keep mine",
+  "새 것으로": "Use new",
+  "바꾸기": "Replace",
+  "출처 · 작업 {n}개": "Source · {n} task|Source · {n} tasks",
+  "확인 필요 {n}": "{n} to review",
 
   // ── devices
   "디바이스": "Devices",
