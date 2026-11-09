@@ -11,7 +11,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
-import { decide, mergeTask, resumeTask, tell } from "../engine/tasks";
+import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { describeCommand } from "../engine/describe";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, now, statusLabel, tokens } from "../ui/bits";
@@ -179,11 +179,21 @@ const boxOf = (list: Node[]) => ({
   x0: Math.min(...list.map((n) => n.x)), x1: Math.max(...list.map((n) => n.x + n.w)),
   y0: Math.min(...list.map((n) => n.y)), y1: Math.max(...list.map((n) => n.y + n.h)),
 });
-/** room around the cards when the view is framed */
-const INSET = { top: 24, bottom: 24, side: 32 };
-/** everything is shown when it fits at this zoom or more; otherwise READ_ZOOM (readability beats fitting) */
-const MIN_ZOOM = 0.75;
+/**
+ * The camera's one margin (screen px): the air between a card in view and the edge of what's
+ * visible. Every move (first view, fit-all, pick, zoom step, resize, a layout change, the sheet)
+ * uses it. A card out of view stays PEEK past the edge, so not even its border shows.
+ */
+const ROOM = 12;
+const PEEK = 2;
+/** the first view's zoom, and the step under it when that shows more of what needs the person */
 const READ_ZOOM = 0.75;
+/** fit-all never goes under this */
+const FLOOR_ZOOM = 0.5;
+/** the first view's priority: needs a reply, failed, running, review, paused */
+const FIRST = ["ask", "failed", "live", "review", "paused"];
+/** an empty top this tall (screen px) is worth a step down the ladder */
+const BIG_TOP = 48;
 /** the zoom steps − and + (and ⌘− ⌘+) move along */
 const LADDER = [0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2];
 /** the ladder's step at or under `z` (the zoom itself under the first step) */
@@ -234,7 +244,7 @@ const bodyText = (job: Task) => {
 };
 
 /** finished with checks it couldn't do (a discarded task's checks no longer matter) */
-const unchecked = (job: Task) => job.status === "done" && !discarded(job) && !!job.unverified?.length;
+const unchecked = (job: Task) => job.status === "done" && !discarded(job) && job.worktree?.state !== "merged" && !!job.unverified?.length;
 
 /** a failed card says why in one muted line, in place of any preview */
 const failedLine = (job: Task) => job.status === "failed" && !discarded(job) && !!bodyText(job);
@@ -306,9 +316,9 @@ function jobHeight(job: Task, k: number): number {
   return measure(job.title, `<div class="cv-live w-${body ? "summary" : "none"}">${body ? `<p class="cv-text${failedLine(job) ? " muted one" : ""}">${esc(body)}</p>` : '<div class="cv-live-empty"></div>'}</div>`, H.job, k);
 }
 
-/** +8 −3, plain (nothing for a discarded task: its changes are gone) */
+/** +8 −3, plain (nothing for a discarded task, its changes are gone, or a merged one: they're in) */
 function Diff(props: { t: Task }) {
-  const d = () => (discarded(props.t) ? { add: 0, del: 0 } : changes(props.t));
+  const d = () => (discarded(props.t) || props.t.worktree?.state === "merged" ? { add: 0, del: 0 } : changes(props.t));
   return (
     <Show when={d().add || d().del}>
       <span class="cv-diff">
@@ -378,21 +388,24 @@ const VERB: Partial<Record<ToolKind, [string, string]>> = {
 };
 
 /** One past or running step of a job, in plain words. */
-function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?: string; note?: boolean; endedAt?: number } }): { icon: string; label: string; target: string } {
+function said(e: { tool: { kind: ToolKind; name: string; target: string; detail?: string; note?: boolean; endedAt?: number } }, running = true): { icon: string; label: string; target: string; cmd?: boolean } {
   const x = e.tool;
   const icon = ACT[x.kind]?.icon ?? "tools";
-  const verb = (k: ToolKind) => t((VERB[k] ?? VERB.other!)[x.endedAt ? 1 : 0]);
+  /** going on only while its task runs (a paused or finished task's last step is over) */
+  const past = !!x.endedAt || !running;
+  const verb = (k: ToolKind) => t((VERB[k] ?? VERB.other!)[past ? 1 : 0]);
   if (x.kind === "bash") {
     const d = describeCommand(x.detail ?? x.target);
-    return { icon, label: x.endedAt ? d.label : d.now, target: d.target && !d.label.includes(d.target) ? d.target : "" };
+    return { icon, label: past ? d.label : d.now, target: d.target && !d.label.includes(d.target) ? d.target : "", cmd: true };
   }
   if (x.note) return { icon: "write", label: t("기록"), target: x.target };
-  if (x.kind === "browser") return { icon, label: verb("browser"), target: x.target.match(/https?:\/\/(?:www\.)?([^/\s"']+)/)?.[1] ?? x.target.split(/\s+/)[0] ?? "" };
+  // the whole target (the row cuts it with an ellipsis), the address without its scheme
+  if (x.kind === "browser") return { icon, label: verb("browser"), target: x.target.replace(/https?:\/\/(?:www\.)?/g, "").trim() };
   if (x.kind === "other") {
     const named = ({ memory_search: "메모리 검색", subagent: "서브에이전트 실행" } as Record<string, string>)[x.name];
     return { icon, label: named ? t(named) : verb("other"), target: named ? "" : x.name };
   }
-  return { icon, label: verb(x.kind), target: x.target };
+  return { icon, label: verb(x.kind), target: x.target, cmd: x.kind === "test" };
 }
 
 /**
@@ -431,7 +444,7 @@ function Activity(props: { t: Task }) {
               <div class="cv-act-row" classList={{ open: open(), bad: e()?.tool.ok === false }}>
                 <Icon name={s().icon} size={11} />
                 <span class="lb">{s().label}</span>
-                <Show when={s().target}><span class="tg">{s().target}</span></Show>
+                <Show when={s().target}><span class="tg" classList={{ cmd: !!s().cmd }} title={s().target}>{s().target}</span></Show>
               </div>
             );
           }}
@@ -524,10 +537,10 @@ const LEGEND = [
   { tone: "idle", g: "queued", label: "대기" },
 ] as const;
 
-/** a lane's meter, in the order of its parts */
-const METER = ["live", "ask", "failed", "review", "paused", "idle", "done"];
+/** a lane's meter, in the order of its parts (discarded apart from done: it isn't 완료) */
+const METER = ["live", "ask", "failed", "review", "paused", "idle", "done", "gone"];
 
-const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", failed: "실패", review: "검토", paused: "일시정지", idle: "대기", done: "완료" };
+const STATUS: Record<string, string> = { live: "진행 중", ask: "응답 필요", failed: "실패", review: "검토", paused: "일시정지", idle: "대기", done: "완료", gone: "버림" };
 
 /** The status glyph the sidebar draws (one look everywhere), named in its tooltip. */
 function StatusGlyph(props: { t: Task }) {
@@ -577,7 +590,8 @@ function StatusRow(props: { t: Task; sheet?: boolean }) {
   const whenTitle = () => {
     if (!endedAt(props.t)) return undefined;
     const c = jobCost(props.t);
-    return (props.sheet ? [ago(endedAt(props.t)), costDetail(c)] : [tookLine(props.t), costDetail(c)]).filter(Boolean).join(" · ") || undefined;
+    // the time once, the tokens once (with their parts): "19분 · 토큰 48K (입력 …)"
+    return [props.sheet ? ago(endedAt(props.t)) : c.ms ? long(c.ms) : "", costDetail(c)].filter(Boolean).join(" · ") || undefined;
   };
   /**
    * The row never wraps. When it runs out of room it drops, in order: the diff, the subagent
@@ -602,7 +616,7 @@ function StatusRow(props: { t: Task; sheet?: boolean }) {
   );
   onMount(() => requestAnimationFrame(refit));
   return (
-    <div class={`cv-status s-${tn()}`} classList={{ failed: props.t.status === "failed" && !discarded(props.t) }} ref={row}>
+    <div class={`cv-status s-${tn()}${props.t.status === "failed" && !discarded(props.t) ? " failed" : ""}`} ref={row}>
       <span class="cv-status-text">{t(statusText(props.t))}</span>
       {/* on a card, the state first, then what it couldn't check (the sheet says it in a line of its own) */}
       <Show when={!props.sheet && unchecked(props.t)}>
@@ -650,7 +664,7 @@ function SubCard(props: { n: Node }) {
 function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
   const jobs = () => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id));
-  const count = (k: string) => jobs().filter((x) => tone(x) === k).length;
+  const count = (k: string) => jobs().filter((x) => (discarded(x) ? "gone" : tone(x)) === k).length;
   const busy = () => p().id !== "_" && state.captain.some((m) => m.space === props.space && m.project === p().id && m.pending);
   return (
     <>
@@ -761,6 +775,26 @@ function Drawer(props: { t: Task; onClose: () => void }) {
     return !j.plan.length && j.now ? nowText(j.now) : "";
   };
   const review = () => tone(job()) === "review";
+  /** the title is cut (by its two lines here, or with "…" when it was named) */
+  const [cut, setCut] = createSignal(false);
+  let titleEl: HTMLSpanElement | undefined;
+  onMount(() => {
+    if (!titleEl) return;
+    const el = titleEl;
+    const check = () => setCut(el.scrollHeight > el.clientHeight + 1 || /(…|\.\.\.)$/.test(job().title.trim()));
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    check();
+    onCleanup(() => ro.disconnect());
+  });
+  createEffect(on(() => job().title, () => queueMicrotask(() => titleEl && setCut(titleEl.scrollHeight > titleEl.clientHeight + 1 || /(…|\.\.\.)$/.test(job().title.trim())))));
+  /** what was asked, in full: for a task that hasn't started (or is paused) and wherever the title is cut */
+  const request = () => {
+    const ask = job().ask?.trim() ?? "";
+    if (!ask) return "";
+    if (cut()) return ask;
+    return (job().status === "paused" || job().status === "queued") && !same(ask, job().title) ? ask : "";
+  };
   const [merging, setMerging] = createSignal(false);
   const [msg, setMsg] = createSignal("");
   const say = () => {
@@ -771,35 +805,13 @@ function Drawer(props: { t: Task; onClose: () => void }) {
   };
   return (
     <aside class="cv-drawer" onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
-      {/* the title on its own row (two lines at most); the actions beside it only when it fits there */}
+      {/* the title (two lines at most) with open / close on its first row; the task's actions on the row under it */}
       <header class="cv-dr-head">
         <div class="cv-dr-name">
           <StatusGlyph t={job()} />
-          <span class="cv-dr-title" title={job().title}>{job().title}</span>
+          <span class="cv-dr-title" ref={titleEl} title={job().title}>{job().title}</span>
         </div>
-        <div class="cv-dr-tools">
-          <Show when={job().status === "failed" && !discarded(job())}>
-            <button class="btn primary sm cv-dr-retry" onClick={() => void resumeTask(job().id)}>
-              <Icon name="refresh" size={14} />
-              {t("다시 시도")}
-            </button>
-          </Show>
-          {/* waiting on a merge: the review bar's two actions, with its confirm */}
-          <Show when={review()}>
-            <button class="btn sm ghost cv-dr-discard" onClick={() => confirmDiscard(job().id)}>{t("버리기")}</button>
-            <button
-              class="btn sm primary cv-dr-merge"
-              disabled={merging()}
-              onClick={async () => {
-                setMerging(true);
-                await mergeTask(job().id);
-                setMerging(false);
-              }}
-            >
-              <Icon name="merge" size={14} />
-              {merging() ? t("병합 중") : t("병합")}
-            </button>
-          </Show>
+        <div class="cv-dr-win">
           <button class="icon-btn sm cv-dr-open" title={t("작업 열기 (⏎)")} aria-label={t("작업 열기")} onClick={() => openTask(job().id)}>
             <Icon name="external" size={14} />
           </button>
@@ -807,6 +819,45 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             <Icon name="x" size={14} />
           </button>
         </div>
+        <Show when={(job().status === "failed" || job().status === "paused" || job().status === "queued" || review()) && !discarded(job())}>
+          <div class="cv-dr-tools">
+            {/* the same actions the task view and the board give it */}
+            <Show when={job().status === "failed"}>
+              <button class="btn primary sm cv-dr-retry" onClick={() => void resumeTask(job().id)}>
+                <Icon name="refresh" size={14} />
+                {t("다시 시도")}
+              </button>
+            </Show>
+            <Show when={job().status === "paused"}>
+              <button class="btn primary sm" onClick={() => void resumeTask(job().id)}>
+                <Icon name="play" size={14} />
+                {t("다시 시작")}
+              </button>
+            </Show>
+            <Show when={job().status === "queued"}>
+              <button class="btn primary sm" onClick={() => void startTask(job().id)}>
+                <Icon name="play" size={14} />
+                {t("지금 시작")}
+              </button>
+            </Show>
+            {/* waiting on a merge: the review bar's two actions, with its confirm */}
+            <Show when={review()}>
+              <button class="btn sm ghost cv-dr-discard" onClick={() => confirmDiscard(job().id)}>{t("버리기")}</button>
+              <button
+                class="btn sm primary cv-dr-merge"
+                disabled={merging()}
+                onClick={async () => {
+                  setMerging(true);
+                  await mergeTask(job().id);
+                  setMerging(false);
+                }}
+              >
+                <Icon name="merge" size={14} />
+                {merging() ? t("병합 중") : t("병합")}
+              </button>
+            </Show>
+          </div>
+        </Show>
       </header>
       <div class="cv-dr-body">
         <Show
@@ -818,7 +869,11 @@ function Drawer(props: { t: Task; onClose: () => void }) {
               <Show
                 when={decisionFor(job().id)}
                 fallback={
-                  <Show when={job().status === "running" && liveMode(job()) === "act"} fallback={<Live t={job()} />}>
+                  <Show
+                    when={job().status === "running" && liveMode(job()) === "act"}
+                    // a card's words that are only the request: the 요청 section below says it in full
+                    fallback={<Show when={!(request() && liveMode(job()) === "summary" && !job().summary && !job().error)}><Live t={job()} /></Show>}
+                  >
                     <Show when={nowLine()}><p class="cv-dr-line">{nowLine()}</p></Show>
                   </Show>
                 }
@@ -855,6 +910,12 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             </section>
           </Show>
         </Show>
+        <Show when={request()}>
+          <section>
+            <h4>{t("요청")}</h4>
+            <p class="cv-dr-ask">{request()}</p>
+          </section>
+        </Show>
         <Show when={job().plan.length}>
           <section>
             <h4>{t("할 일")}</h4>
@@ -879,11 +940,11 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             <ul class="cv-dr-steps cv-dr-acts">
               <For each={recent()}>
                 {(e) => {
-                  const s = () => said(e);
-                  /** a command reads as code; everything else in the card's sans */
-                  const cmd = () => e.tool.kind === "bash" || e.tool.kind === "test";
+                  const s = () => said(e, job().status === "running");
+                  /** a command reads as code (as on the card); everything else in the card's sans */
+                  const cmd = () => !!s().cmd;
                   return (
-                    <li classList={{ bad: e.tool.ok === false, open: !e.tool.endedAt }}>
+                    <li classList={{ bad: e.tool.ok === false, open: !e.tool.endedAt && job().status === "running" }}>
                       <span class="cv-dr-ic"><Icon name={s().icon} size={14} /></span>
                       <span class="lb">{s().label}</span>
                       <Show when={s().target}><span class="tg" classList={{ cmd: cmd() }} title={s().target}>{s().target}</span></Show>
@@ -1030,63 +1091,109 @@ export function Canvas() {
     const p = n?.kind === "proj" ? n.project!.id : n && projectOf(n);
     return p && p !== "_" ? p : undefined;
   };
-  /** the part of the view no sheet covers (the sheet's width and inset: see .cv-drawer), and the air kept at its edges */
-  const ROOM = 16;
-  const area = (sheet: boolean) => {
-    const v = vpSize();
-    return { w: sheet ? v.w - 8 - Math.min(400, v.w - 80) - 8 : v.w, h: v.h };
-  };
+  /** the part of the view no sheet covers (the sheet's width and inset: see .cv-drawer) */
+  const area = (sheet: boolean, v = vpSize()) => ({ w: sheet ? v.w - 8 - Math.min(400, v.w - 80) : v.w, h: v.h });
   /**
-   * The camera never cuts a card: the pan nearest `p` (at zoom `z`, over `a`) that keeps `must`
-   * in view and leaves every edge in a gap, so each card is whole or out of view.
+   * The camera never cuts a card. From the candidate views (the current one, and every one that puts
+   * an edge just past a card or a margin before it), the nearest where every card is whole (with the
+   * margin) or out of view (PEEK past the edge). `tries` are taken in order: each asks that a box be
+   * whole in view (and `lockY`: that the view only moves sideways); the last resort keeps nothing
+   * but still cuts nothing. Moving up or down costs more than moving sideways.
    */
-  const settle = (ns: Node[], z: number, p: P, a: { w: number; h: number }, must?: ReturnType<typeof boxOf>): P => {
-    const m = ROOM / z;
-    /** along one axis: the view's start nearest `o` that cuts none of `spans` and holds `need` */
-    const solve = (o: number, len: number, spans: [number, number][], need?: [number, number]) => {
-      const bad: [number, number][] = [];
-      // an edge keeps clear of a card on both sides: one just out of view doesn't peek in (a fold's stack)
-      for (const [lo, hi] of spans) bad.push([lo - m, hi + m], [lo - m - len, hi + m - len]);
-      let min = -Infinity, max = Infinity;
-      if (need) {
-        min = need[1] + m - len;
-        max = need[0] - m;
-        // too big to hold: its start in view
-        if (min > max) min = max;
-      }
-      const ok = (c: number) => c >= min - 0.01 && c <= max + 0.01 && !bad.some(([lo, hi]) => c > lo + 0.01 && c < hi - 0.01);
-      const tries = [o, min, max, ...bad.flat()].filter(Number.isFinite);
-      let best: number | undefined;
-      for (const c of tries) if (ok(c) && (best === undefined || Math.abs(c - o) < Math.abs(best - o))) best = c;
-      return best ?? Math.min(max, Math.max(min, o));
-    };
-    const w = a.w / z, h = a.h / z;
-    let x = -p.x / z, y = -p.y / z;
-    const across = (lo: number, hi: number, s: number, len: number) => hi > s && lo < s + len;
-    for (let i = 0; i < 3; i++) {
-      y = solve(y, h, ns.filter((n) => across(n.x, n.x + n.w, x, w)).map((n) => [n.y, n.y + n.h]), must && [must.y0, must.y1]);
-      x = solve(x, w, ns.filter((n) => across(n.y, n.y + n.h, y, h)).map((n) => [n.x, n.x + n.w]), must && [must.x0, must.x1]);
+  type Try = { b?: ReturnType<typeof boxOf>; lockY?: boolean };
+  const settle = (ns: Node[], z: number, p: P, a: { w: number; h: number }, tries: Try[] = [{}]): P => {
+    const m = ROOM / z, e = PEEK / z, W = a.w / z, H = a.h / z;
+    const X0 = -p.x / z, Y0 = -p.y / z;
+    const xs = new Set([X0]), ys = new Set([Y0]);
+    for (const n of ns) {
+      xs.add(n.x - m).add(n.x + n.w + e).add(n.x + n.w + m - W).add(n.x - e - W);
+      ys.add(n.y - m).add(n.y + n.h + e).add(n.y + n.h + m - H).add(n.y - e - H);
     }
-    return { x: -x * z, y: -y * z };
+    /** along one axis: 1 whole (with the margin), 0 out of view, -1 cut */
+    const along = (lo: number, len: number, s: number, L: number) =>
+      lo >= s + m - 0.01 && lo + len <= s + L - m + 0.01 ? 1 : lo + len <= s - e + 0.01 || lo >= s + L + e - 0.01 ? 0 : -1;
+    const view = (X: number, Y: number) => {
+      let shown = 0;
+      for (const n of ns) {
+        const ix = along(n.x, n.w, X, W), iy = along(n.y, n.h, Y, H);
+        if (ix === 0 || iy === 0) continue;
+        if (ix < 0 || iy < 0) return -1;
+        shown++;
+      }
+      return shown;
+    };
+    const holds = (t: Try, X: number, Y: number) =>
+      !(t.lockY && Math.abs(Y - Y0) > 0.01) && !(t.b && !(t.b.x0 >= X + m - 0.01 && t.b.x1 <= X + W - m + 0.01 && t.b.y0 >= Y + m - 0.01 && t.b.y1 <= Y + H - m + 0.01));
+    // already right where it is: nothing to look for
+    if (holds(tries[0] ?? {}, X0, Y0) && view(X0, Y0) > 0) return p;
+    const pairs: [number, number, number][] = [];
+    for (const Y of ys) for (const X of xs) pairs.push([X, Y, (3 * Math.abs(Y - Y0) + Math.abs(X - X0)) * z]);
+    pairs.sort((u, v) => u[2] - v[2]);
+    const seen = new Map<number, number>();
+    for (const t of tries) {
+      for (let i = 0; i < pairs.length; i++) {
+        const [X, Y] = pairs[i];
+        if (!holds(t, X, Y)) continue;
+        let v = seen.get(i);
+        if (v === undefined) seen.set(i, (v = view(X, Y)));
+        // a view with nothing in it isn't a view of the work
+        if (v > 0) return { x: -X * z, y: -Y * z };
+      }
+    }
+    return p;
   };
   /** move the view to `next`, gliding (unless motion is reduced) */
-  const panTo = (next: P) => {
+  const panTo = (next: P, z = zoom()) => {
     const p = pan();
-    if (Math.abs(next.x - p.x) < 0.5 && Math.abs(next.y - p.y) < 0.5) return;
-    touched = true;
+    if (Math.abs(next.x - p.x) < 0.5 && Math.abs(next.y - p.y) < 0.5 && Math.abs(z - zoom()) < 0.001) return;
     if (vp && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
       vp.classList.add("glide");
-      setTimeout(() => vp?.classList.remove("glide"), 260);
+      clearTimeout(glideTimer);
+      glideTimer = setTimeout(() => vp?.classList.remove("glide"), 260);
     }
-    setPan(next);
+    batch(() => {
+      setZoom(z);
+      setPan(next);
+    });
   };
+  let glideTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(glideTimer));
   /** a lane: its project card and every card under it */
   const laneOf = (n: Node, ns = graph().nodes) => {
     const pid = n.kind === "proj" ? n.project!.id : n.kind === "more" && !n.task ? n.project!.id : projectOf(n);
     return ns.filter((x) => (x.kind === "proj" ? x.project!.id : x.kind === "more" && !x.task ? x.project!.id : projectOf(x)) === pid && x.kind !== "main");
   };
-  /** what fits in the view (less its air) at the zoom */
-  const fits = (b: ReturnType<typeof boxOf>, a: { w: number; h: number }) => (b.x1 - b.x0) * zoom() <= a.w - ROOM * 2 && (b.y1 - b.y0) * zoom() <= a.h - ROOM * 2;
+  /** what fits in the view (less its margin) at the zoom */
+  const fits = (b: ReturnType<typeof boxOf>, a: { w: number; h: number }, z = zoom()) => (b.x1 - b.x0) * z <= a.w - ROOM * 2 && (b.y1 - b.y0) * z <= a.h - ROOM * 2;
+  /** whole in the view (any air) along y */
+  const wholeY = (b: ReturnType<typeof boxOf>, a: { w: number; h: number }, z = zoom(), p = pan()) => b.y0 * z + p.y >= -0.5 && b.y1 * z + p.y <= a.h + 0.5;
+  /**
+   * What the camera keeps while a card is picked: its lane when the lane fits, else the card. When
+   * the lane (or the card) is already whole top to bottom, the view only moves sideways (if at all).
+   */
+  const keepPicked = (n: Node, ns: Node[], z: number, p: P, a: { w: number; h: number }): Try[] => {
+    const card = boxOf([ns.find((x) => x.id === n.id) ?? n]);
+    const lane = boxOf(laneOf(n, ns));
+    const tries: Try[] = [];
+    const laneFits = fits(lane, a, z);
+    if (laneFits && wholeY(lane, a, z, p)) tries.push({ b: lane, lockY: true });
+    if (wholeY(card, a, z, p)) tries.push({ b: card, lockY: true });
+    if (laneFits) tries.push({ b: lane });
+    tries.push({ b: card }, {});
+    return tries;
+  };
+  /** the picked card's node, when it's on the canvas and its sheet is open */
+  const picked = () => {
+    const id = sel();
+    const n = id ? byId().get(id) : undefined;
+    return n?.task ? n : undefined;
+  };
+  /** the camera after anything moved under it (or the view changed size): as little as it can */
+  const keep = (ns = graph().nodes, z = zoom(), p = pan()) => {
+    const n = picked();
+    const a = area(!!n);
+    return settle(ns, z, p, a, n ? keepPicked(n, ns, z, p, a) : [{ lockY: true }, {}]);
+  };
   /**
    * Pick a task card: its side sheet opens, and the view moves (as little as it can) so the card's
    * lane is in view beside it, or the card alone when the lane doesn't fit; nothing is left cut.
@@ -1095,8 +1202,7 @@ export function Canvas() {
     setSel(n.id);
     if (!vp) return;
     const a = area(true);
-    const lane = boxOf(laneOf(n));
-    panTo(settle(graph().nodes, zoom(), pan(), a, fits(lane, a) ? lane : boxOf([n])));
+    panTo(settle(graph().nodes, zoom(), pan(), a, keepPicked(n, graph().nodes, zoom(), pan(), a)));
   };
   /** Fold or unfold finished jobs: they slide into (or out of) the project's "끝난 일" card. `all`: every fold at once. */
   const fold = (next: string[], all = false) => {
@@ -1122,7 +1228,8 @@ export function Canvas() {
           must = more;
         }
       }
-      panTo(settle(after, zoom(), pan(), a, must));
+      const n = picked();
+      panTo(settle(after, zoom(), pan(), a, must ? [{ b: must }, {}] : n ? keepPicked(n, after, zoom(), pan(), a) : [{ lockY: true }, {}]));
     };
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setUnfolded(next);
@@ -1155,121 +1262,73 @@ export function Canvas() {
     }
   };
 
-  /** the person moved or zoomed the view: a window resize no longer refits it */
+  /** the person moved or zoomed the view: a resize or the sheet closing no longer refits it */
   let touched = false;
+  /** the view has been framed once (before that, nothing settles) */
+  let framed = false;
   /**
-   * `all`: everything in view (the button, ⇧1). Otherwise everything when it fits at 75% or more.
-   * When it doesn't: 75%, or 67% when that keeps every card that needs the person (a reply, failed,
-   * running work) and 75% doesn't; with as many of those in view as fit. The zoom is always a step
-   * of the ladder, and both edges fall in gaps: a card is whole or out of view, never cut.
+   * The first view (and 다시 정렬): everything, at the largest step from 100% down to 75% that holds it.
+   * When nothing that big holds it: 75% (or 67% when that shows more of what needs the person, or as
+   * much with less empty room on top), with the cards that need the person most in view (a reply,
+   * failed, running, review, paused). `all` (the % button, ⇧1): everything, down to 50% at most.
+   * Each is a step of the ladder and ends like any other move: every card whole or out of view.
    */
   const fit = (animate = true, all = false) => {
     if (!vp || !graph().nodes.length) return;
     touched = false;
-    const r = vp.getBoundingClientRect();
-    if (!r.width || !r.height) return;
+    const r = { w: vp.clientWidth, h: vp.clientHeight };
+    if (!r.w || !r.h) return;
+    framed = true;
+    const a = area(!!picked(), r);
     /** the cards as they are laid out at zoom `z` (their words measured at that size) */
     const at = (z: number) => layout(space(), unfolded(), sizeOf(z)).nodes;
-    const aw = r.width - INSET.side * 2, ah = r.height - INSET.top - INSET.bottom;
-    const xAt = (ns: Node[], z: number) => {
-      const b = boxOf(ns);
-      return (b.x1 - b.x0) * z <= aw ? INSET.side + (aw - (b.x1 - b.x0) * z) / 2 - b.x0 * z : INSET.side - b.x0 * z;
+    /** the view at `z` that shows box `b` from its top-left (centred across when the cards fit across) */
+    const start = (ns: Node[], z: number, b: ReturnType<typeof boxOf>): P => {
+      const all = boxOf(ns), W = a.w / z, H = a.h / z, m = ROOM / z;
+      const X = (all.x1 - all.x0) + 2 * m <= W ? (all.x0 + all.x1) / 2 - W / 2 : all.x0 - m;
+      const Y = (b.y1 - b.y0) + 2 * m <= H ? Math.min(b.y0 - m, Math.max(all.y0 - m, b.y1 + m - H)) : b.y0 - m;
+      return { x: -X * z, y: -Y * z };
     };
-    if (animate) vp.classList.add("glide");
-    const done = (z: number, ns: Node[], y: number) => {
-      setZoom(z);
-      setPan({ x: xAt(ns, z), y });
-      if (animate) setTimeout(() => vp?.classList.remove("glide"), 260);
+    const go = (z: number, p: P) => {
+      if (animate) panTo(p, z);
+      else batch(() => (setZoom(z), setPan(p)));
     };
-    // the tallest the cards get is at 75% (zoomed in, their words are smaller)
-    const ns = at(READ_ZOOM);
-    const b = boxOf(ns);
-    const whole = Math.min(1, aw / (b.x1 - b.x0), ah / (b.y1 - b.y0));
-    // everything fits: all of it, centred, at the ladder's step that holds it
-    if (all || whole >= MIN_ZOOM) {
-      const z = Math.max(0.3, stepUnder(whole));
-      const now = at(z), nb = boxOf(now);
-      return done(z, now, INSET.top + (ah - (nb.y1 - nb.y0) * z) / 2 - nb.y0 * z);
+    // everything, centred, at the largest step that holds it
+    const steps = LADDER.filter((z) => z <= 1 && z >= (all ? FLOOR_ZOOM : READ_ZOOM)).reverse();
+    for (const z of steps) {
+      const ns = at(z), b = boxOf(ns);
+      if (!fits(b, a, z)) continue;
+      return go(z, { x: a.w / 2 - ((b.x0 + b.x1) / 2) * z, y: a.h / 2 - ((b.y0 + b.y1) / 2) * z });
     }
-    /** no card crosses this line */
-    const clearAt = (s: number) => !ns.some((n) => n.y < s - 0.5 && n.y + n.h > s + 0.5);
-    const parent = (n: Node) => (n.kind === "sub" ? n.task?.parentId : n.kind === "more" && n.task ? n.task.id : undefined);
-    const top = (id: string) => ns.find((n) => n.id === id)?.y;
-    // the view starts at the top of a task card (not a subagent or a folded pill, whose task
-    // would be out of view) that no other card crosses
-    const starts = [...new Set([b.y0, ...ns.filter((n) => n.kind === "job" || n.kind === "proj").map((n) => n.y)])]
-      .filter((s) => clearAt(s) && !ns.some((n) => n.y >= s && parent(n) && (top(parent(n)!) ?? s) < s))
-      .sort((p, q) => p - q);
-    /** how far above `s` the view reaches: up to `cap`, less when a card ends closer */
-    const padAt = (s: number, z: number, cap: number) => {
-      const above = ns.filter((n) => n.y + n.h <= s).map((n) => n.y + n.h);
-      return above.length ? Math.max(0, Math.min(cap, (s - Math.max(...above)) * z - 2)) : cap;
-    };
-    /** the stretches no card crosses, top to bottom (the last one runs on) */
-    const gaps: [number, number][] = [];
-    {
-      let end = -Infinity;
-      for (const n of [...ns].sort((p, q) => p.y - q.y)) {
-        if (n.y > end) gaps.push([end, n.y]);
-        end = Math.max(end, n.y + n.h);
-      }
-      gaps.push([end, Infinity]);
+    if (all) {
+      const ns = at(FLOOR_ZOOM);
+      return go(FLOOR_ZOOM, settle(ns, FLOOR_ZOOM, start(ns, FLOOR_ZOOM, boxOf(ns)), a));
     }
-    /** the view at zoom `z`: where it starts, and whether every card that needs the person is in it */
-    const frame = (z: number, cap: number) => {
-      // the most the view holds: a little air above the first card and under the last
-      const room = (r.height - 12) / z;
-      let keep: Node[] = [];
-      let every = true;
-      for (const tn of ["ask", "failed", "live"]) {
-        const more = ns.filter((n) => n.task && n.kind !== "more" && tone(n.task) === tn);
-        if (!more.length) continue;
-        const nb = boxOf([...keep, ...more]);
-        if (nb.y1 - nb.y0 > room) {
-          every = false;
-          // none kept yet: as many of these as fit from the first
-          if (!keep.length) keep = more.filter((n) => n.y + n.h <= boxOf(more).y0 + room);
-          break;
-        }
-        keep = [...keep, ...more];
-      }
-      const k = keep.length ? boxOf(keep) : undefined;
-      // the first start that keeps those cards in view, nearest the top
-      const want = k && k.y1 - b.y0 > room ? k.y1 - room : b.y0;
-      const order = [...starts].sort((p, q) => Math.abs(p - want) - Math.abs(q - want) || p - q);
-      for (const s of order) {
-        if (k && (s > k.y0 + 0.5 || s + room < k.y1 - 0.5)) continue;
-        // the room above the first card can give (down to 8px), so the bottom edge can reach a gap
-        const most = padAt(s, z, cap);
-        if (most < 8) continue;
-        const lo = Math.max(s + (r.height - most) / z, k ? k.y1 : s), hi = s + (r.height - 8) / z;
-        for (const g of gaps) {
-          const a = Math.max(lo, g[0]), c = Math.min(hi, g[1]);
-          if (a > c) continue;
-          // the inset above the first card when the gap allows it, and a little air at both ends of the gap
-          const lo2 = Math.max(a, g[0] + 8), hi2 = Math.min(c, g[1] - 8);
-          const target = s + (r.height - INSET.top) / z;
-          const line = lo2 <= hi2 ? Math.min(hi2, Math.max(lo2, target)) : Math.min(c, Math.max(a, target));
-          const pad = r.height - (line - s) * z;
-          return { y: pad - s * z, every };
-        }
-      }
-      return undefined;
+    /** at `z`: the view that keeps the most of what needs the person, how many, and the empty room on top */
+    const frame = (z: number) => {
+      const ns = at(z);
+      const rank = (n: Node) => (n.kind === "job" && n.task ? FIRST.indexOf(tone(n.task)) : -1);
+      // in the order of the priority, each card that can be whole in view with the ones before it
+      const keep: Node[] = [];
+      for (let i = 0; i < FIRST.length; i++)
+        for (const n of ns.filter((n) => rank(n) === i).sort((p, q) => p.y - q.y)) if (fits(boxOf([...keep, n]), a, z)) keep.push(n);
+      // as many of them as can be whole together (the last ones go first), then whatever cuts nothing
+      const tries: Try[] = keep.map((_, i) => ({ b: boxOf(keep.slice(0, keep.length - i)) }));
+      tries.push({});
+      const p = settle(ns, z, start(ns, z, keep.length ? boxOf(keep) : boxOf(ns)), a, tries);
+      const H = a.h, inView = (n: Node) => n.y * z + p.y >= 0 && (n.y + n.h) * z + p.y <= H && n.x * z + p.x >= 0 && (n.x + n.w) * z + p.x <= a.w;
+      const shown = ns.filter(inView);
+      return {
+        z,
+        p,
+        count: shown.filter((n) => rank(n) >= 0).length,
+        top: shown.length ? Math.min(...shown.map((n) => n.y * z + p.y)) : H,
+      };
     };
-    // 75%, else the step under it when only that keeps every card that needs the person; the
-    // room above the first card grows (past the inset) only when no edge lands in a gap otherwise
-    const caps = [INSET.top, INSET.top * 3, r.height / 3];
-    for (const z of [READ_ZOOM, stepUnder(READ_ZOOM - 0.01)])
-      for (const cap of caps) {
-        const f = frame(z, cap);
-        if (f?.every) return done(z, ns, f.y);
-      }
-    for (const cap of caps) {
-      const f = frame(READ_ZOOM, cap);
-      if (f) return done(READ_ZOOM, ns, f.y);
-    }
-    const s = starts.find((v) => v >= b.y0) ?? b.y0;
-    done(READ_ZOOM, ns, padAt(s, READ_ZOOM, INSET.top) - s * READ_ZOOM);
+    const f = frame(READ_ZOOM);
+    const g = frame(stepUnder(READ_ZOOM - 0.01));
+    const best = g.count > f.count || (g.count === f.count && f.top > BIG_TOP && g.top < f.top) ? g : f;
+    go(best.z, best.p);
   };
 
   const zoomAt = (factor: number, cx = (vp?.clientWidth ?? 0) / 2, cy = (vp?.clientHeight ?? 0) / 2) => {
@@ -1281,17 +1340,24 @@ export function Canvas() {
     setZoom(z);
   };
 
-  /** one step along the ladder, from the view's centre */
+  /** to zoom `z` around the middle of what's visible; it ends whole like any move */
+  const zoomTo = (z: number) => {
+    const z0 = zoom();
+    if (Math.abs(z - z0) < 0.001) return;
+    touched = true;
+    const a = area(!!picked());
+    const p0 = pan(), cx = a.w / 2, cy = a.h / 2;
+    const p = { x: cx - ((cx - p0.x) * z) / z0, y: cy - ((cy - p0.y) * z) / z0 };
+    panTo(keep(layout(space(), unfolded(), sizeOf(z)).nodes, z, p), z);
+  };
+  /** one step along the ladder */
   const step = (dir: 1 | -1) => {
     const z0 = zoom();
-    const next = dir > 0 ? LADDER.find((s) => s > z0 + 0.001) : [...LADDER].reverse().find((s) => s < z0 - 0.001);
-    if (next) zoomAt(next / z0);
+    const z = dir > 0 ? LADDER.find((s) => s > z0 + 0.001) : [...LADDER].reverse().find((s) => s < z0 - 0.001);
+    if (z) zoomTo(z);
   };
-  /** 100%, around the view's centre */
-  const actual = () => {
-    if (vp && !matchMedia("(prefers-reduced-motion: reduce)").matches) vp.classList.add("glide"), setTimeout(() => vp?.classList.remove("glide"), 260);
-    zoomAt(1 / zoom());
-  };
+  /** 100% */
+  const actual = () => zoomTo(1);
   /** the % button: a click shows everything, a double click goes to 100% */
   let pctTimer: ReturnType<typeof setTimeout> | undefined;
   const onPct = (e: MouseEvent) => {
@@ -1309,25 +1375,45 @@ export function Canvas() {
     else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
   };
 
+  /** a press on the background: it closes the sheet, and may go on into a pan */
+  let pressing = false;
+  let closedWhilePressing = false;
   const onBgDown = (e: PointerEvent) => {
     if (!vp || e.button !== 0 || (e.target as HTMLElement).closest(".cv-node, .cv-ctrl, .cv-drawer, .cv-mini, button")) return;
     const el = vp;
+    pressing = true;
+    closedWhilePressing = false;
     setSel(undefined);
     const start = { x: e.clientX, y: e.clientY, p: pan() };
+    let moved = false;
     el.setPointerCapture(e.pointerId);
     el.classList.add("grabbing");
     const move = (ev: PointerEvent) => {
-      touched = true;
+      if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 3) return;
+      moved = touched = true;
       setPan({ x: start.p.x + ev.clientX - start.x, y: start.p.y + ev.clientY - start.y });
     };
     const up = () => {
       el.classList.remove("grabbing");
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
+      pressing = false;
+      // a click that closed the sheet (not a pan): the camera as when the sheet closes
+      if (closedWhilePressing && !moved) sheetClosed();
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
   };
+  /**
+   * The sheet closed (closed, Esc, merged or discarded away): the view the person left alone is
+   * framed again as when opened; one they moved only settles over the area the sheet gave back.
+   */
+  const sheetClosed = () => {
+    if (pressing) return void (closedWhilePressing = true);
+    if (!touched) fit(true);
+    else panTo(keep());
+  };
+  createEffect(on(() => !!picked(), (open, was) => was && !open && queueMicrotask(sheetClosed), { defer: true }));
 
   const onNodeDown = (n: Node, e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -1345,6 +1431,8 @@ export function Canvas() {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       const d = drag();
+      // a card the person put somewhere stays where they put it: the camera doesn't chase it
+      if (moved && d) dropped = true;
       if (moved && d) setState("canvas", (c) => ({ ...(c ?? {}), [`${space()}:${n.id}`]: { x: Math.round(d.x), y: Math.round(d.y) } }));
       setDrag(null);
       if (moved) return;
@@ -1471,13 +1559,34 @@ export function Canvas() {
     const id = requestAnimationFrame(() => fit(false));
     onCleanup(() => (ro.disconnect(), cancelAnimationFrame(id)));
   });
-  // the window or a side panel changed size: keep the untouched view fitted
+  /**
+   * The window or a side panel changed size: the view the person left alone is framed again; one
+   * they moved (or one beside an open sheet, which keeps the picked card in view) settles.
+   */
   let refit = 0;
   createEffect(on(vpSize, () => {
-    if (touched) return;
+    if (!framed) return;
     cancelAnimationFrame(refit);
-    refit = requestAnimationFrame(() => fit(false));
+    refit = requestAnimationFrame(() => {
+      if (!touched && !picked()) return fit(false);
+      setPan(keep());
+    });
   }, { defer: true }));
+  /** a layout change under a still camera (an answer, a pause, a card finishing or growing): it settles */
+  let resettle = 0;
+  let dropped = false;
+  /** where the cards are (a running card's words change often; its place and size seldom do) */
+  const shape = createMemo(() => graph().nodes.map((n) => `${n.id}:${Math.round(n.x)},${Math.round(n.y)},${n.w},${n.h}`).join("|"));
+  createEffect(on(shape, () => {
+    if (!framed) return;
+    if (dropped) return void (dropped = false);
+    cancelAnimationFrame(resettle);
+    resettle = requestAnimationFrame(() => {
+      if (drag() || glide()) return;
+      panTo(keep());
+    });
+  }, { defer: true }));
+  onCleanup(() => (cancelAnimationFrame(refit), cancelAnimationFrame(resettle)));
   /** the map only helps when there's room to spare */
   /** everything is already in view: the map would only cover a card */
   const allInView = () => {
@@ -1487,6 +1596,15 @@ export function Canvas() {
     return ns.every((n) => { const q = pos(n); const x = q.x * z + p.x, y = q.y * z + p.y; return x >= 0 && y >= 0 && x + n.w * z <= v.w && y + n.h * z <= v.h; });
   };
   const roomy = () => vpSize().w >= 640 && vpSize().h >= 460 && !allInView();
+  /** the part of the map in view, inside the map's frame (none when the view is off the cards) */
+  const miniView = () => {
+    const b = bounds(), z = zoom(), p = pan(), a = area(!!picked());
+    // a map pixel in world units: the frame's stroke stays inside the map
+    const k = Math.max(b.w / 136, b.h / 84);
+    const x0 = Math.max(b.x + k, -p.x / z), y0 = Math.max(b.y + k, -p.y / z);
+    const x1 = Math.min(b.x + b.w - k, (a.w - p.x) / z), y1 = Math.min(b.y + b.h - k, (a.h - p.y) / z);
+    return x1 - x0 > 1 && y1 - y0 > 1 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : undefined;
+  };
   /** the minimap is there when asked for (it would sit on cards otherwise) */
   const [mini, setMini] = createSignal(false);
   /** nothing in this workspace yet: a quiet empty state instead of a lone Main card */
@@ -1503,7 +1621,7 @@ export function Canvas() {
           <For each={LEGEND}>
             {(l) => (
               <Show when={counts()[l.tone]}>
-                <span><StateGlyph g={l.g} />{t(l.label)} <b>{counts()[l.tone]}</b></span>
+                <span title={`${t(l.label)} ${counts()[l.tone]}`}><StateGlyph g={l.g} /><span class="lb">{t(l.label)}</span> <b>{counts()[l.tone]}</b></span>
               </Show>
             )}
           </For>
@@ -1557,7 +1675,7 @@ export function Canvas() {
                 </defs>
                 <For each={[...graph().edges].sort((p, q) => +hot(p) - +hot(q))}>
                   {(e) => (
-                    <g class={`cv-edge t-${e.tone}`} style={{ opacity: fade()?.[e.to] }} classList={{ hot: hot(e), dim: !!lineage() && !hot(e) }}>
+                    <g class={`cv-edge t-${e.tone}${hot(e) ? " hot" : !!lineage() ? " dim" : ""}`} style={{ opacity: fade()?.[e.to] }}>
                       <path d={edgePath(e, hot(e))} marker-end="url(#cv-arrow)" />
                     </g>
                   )}
@@ -1570,8 +1688,8 @@ export function Canvas() {
                   const n = node();
                   return (
                   <div
-                    class={`cv-node cv-${n.kind}${node().task ? ` t-${tone(node().task!)}` : ""}`}
-                    classList={{ sel: sel() === n.id, dragging: drag()?.id === n.id, dim: dim(n.id) }}
+                    // one class string (a class beside a classList would drop sel / dim when the tone changes)
+                    class={`cv-node cv-${n.kind}${node().task ? ` t-${tone(node().task!)}` : ""}${sel() === n.id ? " sel" : ""}${drag()?.id === n.id ? " dragging" : ""}${dim(n.id) ? " dim" : ""}`}
                     style={{ left: `${pos(node()).x}px`, top: `${pos(node()).y}px`, width: `${node().w}px`, height: node().hug ? "auto" : `${node().h}px`, "max-height": `${node().h}px`, opacity: fade()?.[n.id] }}
                     onPointerDown={(e) => onNodeDown(node(), e)}
                     onDblClick={() => (n.kind === "proj" ? goMain(n.project!.id === "_" ? undefined : n.project!.id) : n.task && openTask(n.id))}
@@ -1603,7 +1721,7 @@ export function Canvas() {
               }}
             >
               <For each={graph().nodes}>{(n) => <rect class={n.task ? `t-${tone(n.task)}` : `k-${n.kind}`} x={pos(n).x} y={pos(n).y} width={n.w} height={n.h} rx={12} />}</For>
-              <rect class="cv-mini-vp" x={-pan().x / zoom()} y={-pan().y / zoom()} width={vpSize().w / zoom()} height={vpSize().h / zoom()} rx={8} />
+              <Show when={miniView()}>{(r) => <rect class="cv-mini-vp" x={r().x} y={r().y} width={r().w} height={r().h} rx={8} />}</Show>
             </svg>
 
             <Show when={selTask()} keyed>
