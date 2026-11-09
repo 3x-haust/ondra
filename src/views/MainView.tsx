@@ -13,7 +13,7 @@ import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
 import { fsFiles, pickFolder } from "../lib/native";
 import { expand, tilde } from "../engine/rpc";
-import type { CaptainMessage, Status, Task } from "../state/types";
+import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { hoverTask, jumpMsg, openPanel, openTask, panelOpen, setHoverTask, setJumpMsg, setView, toast, togglePanel, view } from "../state/ui";
 import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -21,7 +21,7 @@ import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { agoIn, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, statusLabel, titleOf } from "../ui/bits";
+import { agoIn, compact, endedAt, midTrim, newTaskOpen, now, setNewTaskOpen, short, soon, statusLabel, titleOf } from "../ui/bits";
 import { BlockView } from "../ui/Blocks";
 import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
@@ -79,7 +79,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
-            <span class="shimmer reply-thinking">{t("생각하는 중")}</span>
+            <span class="shimmer reply-thinking">{t("생각하는 중")} · {short(soon() - props.m.at)}</span>
           </Match>
           <Match when={props.m.error}>
             {(err) => (
@@ -199,15 +199,28 @@ function SetupNotice(props: { quiet?: boolean }) {
   );
 }
 
-function Hero(props: { project?: string; composer: JSX.Element }) {
+function Hero(props: { project?: string; composer: JSX.Element; asks: Decision[] }) {
   return (
     <div class="page hero-page">
       <div class="hero">
         <SetupNotice />
+        <AskDock list={props.asks} />
         {props.composer}
         <Picks project={props.project} wait />
       </div>
     </div>
+  );
+}
+
+/** What the jobs of this chat are asking, attached above the input: answered here, no need to open the job,
+ *  and the newest messages stay in sight above it. The first takes the number keys. */
+function AskDock(props: { list: Decision[] }) {
+  return (
+    <Show when={props.list.length}>
+      <div class="ask-dock">
+        <For each={props.list}>{(d, i) => <DecisionCard d={d} dock keys={i() === 0} />}</For>
+      </div>
+    </Show>
   );
 }
 
@@ -606,7 +619,7 @@ export function MainView() {
       <Show
         when={msgs().length}
         fallback={
-          <Show when={project()} fallback={<Hero composer={composer(true)} />}>
+          <Show when={project()} fallback={<Hero composer={composer(true)} asks={asks()} />}>
             {(p) => (
               <>
                 {/* a project with nothing said yet: its tasks (in the strip they keep once something is said),
@@ -615,13 +628,13 @@ export function MainView() {
                 <div class="thread proj-empty">
                   <div class="thread-inner convo">
                     <For each={answered()}>{(a) => <AnsweredLine a={a} />}</For>
-                    <For each={asks()}>{(d) => <DecisionCard d={d} crumb={!stripShows(p().id, d.taskId, true)} />}</For>
                     <Picks project={p().id} />
                   </div>
                 </div>
                 <div class="dock">
                   <div class="dock-inner">
                     <SetupNotice />
+                    <AskDock list={asks()} />
                     {composer(false)}
                   </div>
                 </div>
@@ -659,13 +672,12 @@ export function MainView() {
                 </Show>
               )}
             </For>
-            {/* what the jobs of this chat are asking: answered here, no need to open the job */}
-            <For each={asks()}>{(d) => <DecisionCard d={d} crumb={!(project() && stripShows(project()!.id, d.taskId))} />}</For>
           </div>
         </div>
         <div class="dock">
           <div class="dock-inner">
             <SetupNotice quiet={msgs().some((m) => isNoAccount(m.error))} />
+            <AskDock list={asks()} />
             {composer(false)}
           </div>
         </div>
@@ -686,11 +698,6 @@ const projectTasks = (project: string) =>
 
 /** a long list folded or open, per project, while the app runs */
 const [stripOpen, setStripOpen] = createSignal<Record<string, boolean>>({});
-/** the project's strip shows this task's row (`all`: nothing said yet, the whole list shows) */
-const stripShows = (project: string, taskId: string, all = false) => {
-  const list = projectTasks(project);
-  return list.some((x) => x.id === taskId) && (all || list.length <= 3 || !!stripOpen()[project]);
-};
 
 /**
  * A project's tasks above its conversation. Up to three are rows; more fold into one line like
@@ -863,10 +870,16 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   });
   /** every task the list shows, once */
   const listed = () => [...new Set(reqs().flatMap((r) => r.tasks))];
-  // the head counts the tasks below it, by the words the sidebar uses, most pressing first
-  // (검토 is its own word, and a discarded task is counted as 버림, never as 완료)
+  // the order a row picks its word by, most pressing first (검토 is its own word, and a discarded task
+  // is 버림, never 완료)
   const ORDER: ReqState[] = ["waiting", "failed", "running", "inreview", "queued", "paused", "done", "merged", "discarded"];
-  const counts = () => ORDER.map((st) => [st, listed().filter((t) => reqState(t) === st).length, tr(REQ_WORD[st])] as const).filter(([, n]) => n);
+  /** the closed strip: what needs you first, then what runs (응답 필요 1 · 검토 1 · 진행 중 2). Only when
+   *  nothing is left to do does it count what is waiting its turn or over */
+  const counts = () => {
+    const of = (sts: ReqState[]) => sts.map((st) => [st, listed().filter((t) => reqState(t) === st).length, tr(REQ_WORD[st])] as const).filter(([, n]) => n);
+    const now = of(["waiting", "failed", "inreview", "running", "paused"]);
+    return now.length ? now : of(["queued", "done", "merged", "discarded"]);
+  };
   // what the job says it is doing now (its status line), not its title again
   // never the state word again (the row ends with it): "실패" beside 실패, "응답 필요" beside 응답 필요
   // ("대기 중" / "일시정지됨" are the state word too)
@@ -878,7 +891,6 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const s = (t.status === "waiting" ? nowText(t.now) : t.intent || nowText(t.now)).trim();
     return s && s !== t.title && !sameAsState(s, t.status) ? s : "";
   };
-  const working = () => listed().filter((t) => t.status === "running");
   /** what the row says: its most pressing task's word. Finished: every task of it discarded reads 버림 (the
    *  muted trash), every one kept merged reads 병합됨, never 완료 */
   const rowState = (r: Req): ReqState => {
@@ -923,12 +935,17 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     <Show when={reqs().length}>
       <div class="req-board" ref={board} classList={{ open: open() }}>
         <button class="req-head" onClick={() => setOpen(!open())} aria-expanded={open()}>
+          {/* what each task is doing is said on its own row, opened */}
           <span class="req-sum">
-            <span class="req-total">{t("작업 {n}|board", { n: listed().length })}</span>
-            <For each={counts()}>{([st, n, word]) => <span class={`req-tag ${st}`}>{word} {n}</span>}</For>
+            <For each={counts()}>
+              {([st, n, word], i) => (
+                <>
+                  <Show when={i()}><span class="req-sep">·</span></Show>
+                  <span class={`req-tag ${st}`}>{word} {n}</span>
+                </>
+              )}
+            </For>
           </span>
-          {/* what is being worked on right now, in one line (the same open or closed, so the head never changes width) */}
-          <Show when={working()[0]}>{(x) => <span class="req-now">{x().title}<Show when={doing(x())}> · {doing(x())}</Show></span>}</Show>
           <Icon name="chevron" size={12} class="req-chev" />
         </button>
         <Show when={open()}>
@@ -960,9 +977,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                         </>
                       }
                     >
-                      <span class="req-steps" title={t("작업 {done}/{n} 완료", { done: r.tasks.filter((x) => x.status === "done").length, n: r.tasks.length })}>
-                        {r.tasks.filter((x) => x.status === "done").length}/{r.tasks.length}
-                      </span>
+                      <span class="req-steps">{t("{n}개 중 {done}개 완료", { done: r.tasks.filter((x) => x.status === "done").length, n: r.tasks.length })}</span>
                     </Show>
                     <span class={`req-state ${rowState(r)}`}>{tr(REQ_WORD[rowState(r)])}</span>
                   </button>

@@ -407,15 +407,29 @@
 .reply-body .reply-note .icon {
   color: var(--ink-3);
 }
-/* the request board: a count, then state words in their tone */
+/* the request board, closed: what needs you (in its tone), then what runs (plain) */
 .req-head .req-sum {
   display: inline-flex;
   align-items: center;
-  gap: var(--s-8);
+  gap: var(--s-6);
+  min-width: 0;
+  white-space: nowrap;
 }
-.req-head .req-total {
+.req-head .req-tag {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.req-head .req-tag.running,
+.req-head .req-tag.paused {
   color: var(--ink-2);
+}
+.req-head .req-tag.waiting,
+.req-head .req-tag.failed,
+.req-head .req-tag.inreview {
   font-weight: var(--fw-medium);
+}
+.req-head .req-sep {
+  color: var(--ink-4);
 }
 
 /* ═════════════ fork cards: rows in one group card ═════════════ */
@@ -1238,16 +1252,13 @@
   padding: var(--s-6) var(--s-10);
 }
 
-/* the recommended answer: marked at the row's end, never preselected */
+/* the recommended answer: marked beside its label, never preselected */
 .decision .decision-rec {
   flex: none;
-  margin-left: auto;
+  margin-left: var(--s-6);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);
   color: var(--accent-text);
-}
-.decision .decision-opt:has(.decision-note) .decision-rec {
-  margin-top: 3px;
 }
 
 /* the first plan window dropped for width: the one after it reads as the first (no dot) */
@@ -1410,4 +1421,255 @@
 .reply:has(> .reply-from) > .reply-body {
   align-self: stretch;
   min-width: 0;
+}
+
+/* ═════════════ Main: questions attached above the input ═════════════ */
+/* the newest messages stay in sight above them; a long list of questions scrolls in place */
+.ask-dock {
+  display: grid;
+  gap: var(--s-6);
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.hero > .ask-dock {
+  width: 100%;
+  margin-bottom: var(--s-10);
+}
+.decision.dock {
+  gap: var(--s-8);
+  padding: var(--s-10) var(--s-12);
+  border-radius: var(--r-xl);
+  animation: ask-in var(--dur-slow) var(--ease-drawer);
+}
+@keyframes ask-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .decision.dock {
+    animation-duration: 120ms;
+  }
+}
+.decision.dock .decision-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+  min-height: var(--h-xs);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+.decision.dock .decision-head.more {
+  cursor: pointer;
+}
+.decision.dock .decision-head > .icon {
+  flex: none;
+  color: var(--warn-ink);
+}
+.decision.dock.stalled .decision-head > .icon {
+  color: var(--ink-3);
+}
+.decision.dock .decision-q-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+/* opened, the whole question reads */
+.decision.dock.open .decision-head {
+  align-items: flex-start;
+}
+.decision.dock.open .decision-head > .icon {
+  margin-top: 4px;
+}
+.decision.dock.open .decision-q-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.decision.dock .decision-head .decision-src {
+  flex: 0 1 auto;
+  max-width: 40%;
+  margin: 0;
+  color: var(--ink-3);
+}
+/* the project keeps its name; the task's title gives way */
+.decision.dock .decision-head .decision-src > :not(.decision-src-title) {
+  flex: none;
+  white-space: nowrap;
+}
+.decision.dock.open .decision-head .decision-src {
+  margin-top: 3px;
+}
+.decision.dock .decision-head .decision-src:hover {
+  color: var(--ink);
+}
+.decision.dock .decision-more {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--h-2xs);
+  height: var(--h-2xs);
+  margin-right: calc(-1 * var(--s-4));
+  border-radius: var(--r-xs);
+  color: var(--ink-3);
+}
+.decision.dock .decision-head:hover .decision-more {
+  color: var(--ink);
+  background: var(--hover);
+}
+.decision.dock .decision-more .icon {
+  transition: transform var(--dur) var(--ease);
+}
+.decision.dock.open .decision-more .icon {
+  transform: rotate(90deg);
+}
+/* opened: what the job said folds in between the question and the answers, and scrolls inside */
+.decision.dock .decision-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: calc(-1 * var(--s-8));
+  opacity: 0;
+  transition: grid-template-rows var(--dur) var(--ease), margin-top var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+.decision.dock.open .decision-fold {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  opacity: 1;
+}
+.decision.dock .decision-fold-in {
+  display: grid;
+  gap: var(--s-8);
+  min-height: 0;
+  padding-bottom: var(--s-4);
+  overflow: hidden;
+}
+.decision.dock .decision-ctx {
+  max-height: min(200px, 22vh);
+  overflow-y: auto;
+  padding-left: calc(14px + var(--s-8));
+}
+.decision.dock .decision-notes {
+  display: grid;
+  gap: var(--s-2);
+  padding-left: calc(14px + var(--s-8));
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+.decision.dock .decision-notes p {
+  margin: 0;
+}
+.decision.dock .decision-notes b {
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .decision.dock .decision-fold,
+  .decision.dock .decision-more .icon {
+    transition-duration: 0s;
+  }
+}
+/* the answers, one button each: a click answers */
+.decision-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+}
+.decision-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  max-width: 100%;
+  height: var(--h-sm);
+  padding: 0 var(--s-10) 0 var(--s-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.decision-chip:hover {
+  background: var(--hover);
+  border-color: var(--input);
+}
+.decision-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-color: var(--accent);
+}
+.decision .decision-chip .decision-n {
+  width: 18px;
+  height: 18px;
+  font-size: var(--fs-2xs);
+}
+.decision-chip .decision-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decision .decision-chip .decision-rec {
+  margin-left: 0;
+}
+.decision-chip.own {
+  color: var(--ink-2);
+}
+.decision .decision-chips .decision-login {
+  height: var(--h-sm);
+  padding: 0 var(--s-10);
+}
+/* your own words, in the buttons' place */
+.decision-own-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex: 1;
+  min-width: 0;
+  height: var(--h-sm);
+  padding: 0 var(--s-4) 0 var(--s-10);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+}
+.decision .decision-own-line .decision-input {
+  height: 20px;
+  font-size: var(--fs-sm);
+}
+.decision .decision-own-line .decision-input::placeholder {
+  color: var(--ink-4);
+}
+.decision-go,
+.decision-back {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--h-2xs);
+  height: var(--h-2xs);
+  border-radius: var(--r-xs);
+}
+.decision-go {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.decision-go:hover {
+  background: var(--accent-hover);
+}
+.decision-back {
+  color: var(--ink-3);
+}
+.decision-back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* the list's own line: its answer button sits at the row's end */
+.decision .decision-own .decision-go {
+  margin-left: auto;
 }

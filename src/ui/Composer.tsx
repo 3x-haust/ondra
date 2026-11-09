@@ -98,7 +98,7 @@ export function Composer(props: {
   /** while the agent works and nothing is typed, the send button stops it */
   running?: boolean;
   onStop?: () => void;
-  /** what that button does: a task's input pauses it (일시정지), Main's stops its reply (중지) */
+  /** what that button does, said on it: a task's input pauses the task (it can be resumed), Main's stops its reply */
   stopKind?: "pause" | "stop";
   /** strips docked on top of the input (plan progress, background commands…) */
   top?: JSX.Element;
@@ -608,12 +608,12 @@ export function Composer(props: {
             <Show
               when={props.stopKind === "stop"}
               fallback={
-                <button class="send stop pause" type="button" onClick={() => props.onStop?.()} aria-label={t("일시정지|action")} title={t("일시정지|action")}>
+                <button class="send stop pause" type="button" onClick={() => props.onStop?.()} aria-label={t("작업 일시정지")} title={t("작업 일시정지")}>
                   <span class="pause-glyph"><b /><b /></span>
                 </button>
               }
             >
-              <button class="send stop" type="button" onClick={() => props.onStop?.()} aria-label={t("중지")} title={t("중지")}>
+              <button class="send stop" type="button" onClick={() => props.onStop?.()} aria-label={t("응답 중지")} title={t("응답 중지")}>
                 <i />
               </button>
             </Show>
