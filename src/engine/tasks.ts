@@ -18,7 +18,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agent
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
-import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
+import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange, unbackedClaim } from "./proof";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -396,7 +396,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         t.saidDone = run.done;
         if (b.result) t.result = String(b.result).slice(0, 8000);
         const items: Evidence[] = Array.isArray(b.evidence) ? b.evidence.filter((e: any) => e && e.ref).map((e: any) => ({ kind: String(e.kind ?? "file"), ref: String(e.ref), ok: e.ok !== false, note: e.note ? String(e.note) : undefined })) : [];
-        const unverified = Array.isArray(b.unverified) ? b.unverified.map(String).filter(Boolean) : [];
+        const unverified: string[] = [...new Set<string>(Array.isArray(b.unverified) ? b.unverified.map((u: unknown) => String(u).trim()).filter(Boolean) : [])];
         // a later done replaces what it proves again (same kind + ref)
         run.evidence = [...(run.evidence ?? []).filter((o) => !items.some((n) => n.kind === o.kind && n.ref === o.ref)), ...items];
         run.unverified = unverified;
@@ -1528,6 +1528,16 @@ function reviewedBefore(t: Task): Task | undefined {
   return undefined;
 }
 
+/** the job's last words to the user, without its blocks */
+function lastText(t: Task): string {
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "text") return e.text.replace(/```blocks[\s\S]*?```/g, "");
+    if (e.kind === "user") return "";
+  }
+  return "";
+}
+
 async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
@@ -1566,7 +1576,10 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   });
   const bad = checked.filter((e) => e.why);
   const proven = checked.some((e) => !e.why) || (run.unverified ?? []).length > 0;
-  const needs = [changed && !reviewed && "리뷰", unresolved && "리뷰 지적", !proven && "증거", bad.length && "증거 안 맞음"].filter(Boolean) as string[];
+  // the answer says it looked at the screen: something in the session has to show it did
+  const said = [run.done ?? "", lastText(t)].join("\n");
+  const claim = unbackedClaim(t, said, checked, run.unverified ?? []);
+  const needs = [changed && !reviewed && "리뷰", unresolved && "리뷰 지적", !proven && "증거", bad.length && "증거 안 맞음", claim && "확인 안 한 말"].filter(Boolean) as string[];
   if (!needs.length) return null;
   const lines = [
     "끝내기 전에 빠진 게 있어요.",
@@ -1577,6 +1590,11 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
       : "",
     unresolved ? "- 리뷰에서 P1·P2가 나왔는데 그 뒤로 고친 게 없어요. 고치고, 고친 걸 다시 확인해 줘." : "",
     !proven ? "- done에 evidence가 없어요. 실제로 돌린 테스트·빌드·실행·스크린샷을 evidence에 넣고, 확인 못 한 건 unverified에 적어 줘." : "",
+    claim
+      ? claim.why.startsWith("unverified")
+        ? `- 답에는 "${claim.claim}"라고 했는데 ${claim.why}. 둘 중 맞는 쪽으로 고쳐 줘: 둘 다 맞으면 unverified에 무엇을 확인 못 했는지 정확히 적어.`
+        : `- 답에 "${claim.claim}"라고 했는데 ${claim.why}. 지금 실제로 화면에서 확인하고 스크린샷을 evidence에 넣거나, 답에서 그 말을 빼고 unverified에 적어 줘.`
+      : "",
     ...bad.map((e) => `- evidence «${e.ref}»: ${e.why}. ${e.check === "missing" ? "파일을 실제로 만들거나 경로를 고쳐 줘." : e.kind === "shot" ? "지금 화면을 다시 찍어 그 사진을 넣어 줘." : "지금 실제로 돌리고 그 결과를 적어 줘."}`),
     "안 해 본 걸 했다고 하지 말고, 못 한 건 unverified에 적은 뒤 다시 done으로 끝내 줘.",
   ];

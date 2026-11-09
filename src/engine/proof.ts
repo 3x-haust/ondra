@@ -44,14 +44,14 @@ export function lastCodeEdit(t: Task): number {
   return -1;
 }
 
-function ranCommand(t: Task, ref: string): { at: number; ok: boolean } | null {
+function ranCommand(t: Task, ref: string): { at: number; ok: boolean; shellId?: string } | null {
   const want = norm(ref.replace(/^\$\s*/, ""));
   if (want.length < 2) return null;
   for (let i = t.entries.length - 1; i >= 0; i--) {
     const x = toolAt(t.entries[i]);
     if (!x || (x.kind !== "bash" && x.kind !== "test")) continue;
     const cmd = norm(x.detail ?? x.target ?? "");
-    if (cmd.includes(want) || (cmd.length > 4 && want.includes(cmd))) return { at: i, ok: x.ok !== false };
+    if (cmd.includes(want) || (cmd.length > 4 && want.includes(cmd))) return { at: i, ok: x.ok !== false, shellId: x.shellId };
   }
   return null;
 }
@@ -116,6 +116,49 @@ function externalShot(t: Task, e: Evidence): boolean {
   return external(near) && !/https?:\/\/(localhost|127\.|0\.0\.0\.0)/.test(near);
 }
 
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
+const RESULT = /\b\d+\s+(passed|passing|failed|failing|tests?|specs?|errors?|warnings?)\b|\b(Tests?|Test Files|Suites?)\b.*\d|\b(built|compiled|bundled|finished|done)\b.*\b(in|s\b|ms\b)|\bexit(ed)?( with)?( code)? \d+|^(ok|PASS|FAIL)\b|[✓✔✗✘]\s*\d/i;
+
+/** The line of a command's real output that says how it went ("Tests 12 passed (12)"). */
+export function resultLine(tail: string): string | undefined {
+  const lines = tail.replace(ANSI, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return undefined;
+  const hit = [...lines].reverse().find((l) => RESULT.test(l) && !/(token|secret|password|cookie|api[_-]?key)/i.test(l));
+  const line = hit ?? lines[lines.length - 1];
+  return /(token|secret|password|cookie|api[_-]?key)/i.test(line) ? undefined : line.length > 140 ? `${line.slice(0, 140)}…` : line;
+}
+
+// "I checked it in the browser" and the like: a claim that needs a screen behind it
+const SAW = /(브라우저|화면|직접|실제로|눌러|클릭).{0,24}(확인했|확인함|봤어|봤고|봤습|눌러\s?봤|열어\s?봤)|(checked|verified|tested|confirmed|clicked through)[^.\n]{0,30}\b(in the browser|on screen|by hand|manually|in the app)/i;
+const NOT = /(않|안\s|안했|못|없|아니|not|never|didn't|without)/i;
+
+/** sentences of the answer that say the job looked at the screen itself */
+export function sawClaims(text: string): string[] {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .split(/(?<=[.!?。])\s+|\n+/)
+    .map((x) => x.trim())
+    .filter((x) => SAW.test(x) && !NOT.test(x));
+}
+
+/**
+ * The answer says it looked at the screen, but nothing in the session backs it:
+ * no fresh screenshot and no browser or desktop step after the last code change,
+ * or its own unverified list says it didn't.
+ */
+export function unbackedClaim(t: Task, text: string, checked: Evidence[], unverified: string[]): { claim: string; why: string } | null {
+  const claim = sawClaims(text)[0];
+  if (!claim) return null;
+  const denied = unverified.find((u) => /(브라우저|화면|직접|screen|browser|by hand)/i.test(u) && NOT.test(u));
+  if (denied) return { claim, why: `unverified에는 "${denied}"라고 적었어요` };
+  const shot = checked.some((e) => e.kind === "shot" && !e.why);
+  // "opened the two URLs and checked": a page read here backs it, unless it says it looked at a screen
+  if (!/(브라우저|화면|눌러|클릭|screen|browser|click)/i.test(claim) && checked.some((e) => e.check === "read")) return null;
+  const edited = lastCodeEdit(t);
+  const looked = t.entries.some((e, i) => i > edited && e.kind === "tool" && (e.tool.kind === "browser" || e.tool.kind === "desktop") && e.tool.ok !== false);
+  return shot || looked ? null : { claim, why: "화면을 본 기록(브라우저 조작이나 스크린샷)이 없어요" };
+}
+
 /** Each item gets `check`; anything not backed by the session gets ok:false and a reason. */
 export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidence[]> {
   const edited = lastCodeEdit(t);
@@ -127,7 +170,9 @@ export async function checkEvidence(t: Task, items: Evidence[]): Promise<Evidenc
         if (!r.ok) return { ...e, ok: false, check: "failed", why: "마지막 실행이 실패했어요" };
         // a status look (a CI run, a store review, a URL) says nothing about the code: it doesn't go stale
         if (edited > r.at && commandKind(e.ref) !== "poll") return { ...e, ok: false, check: "stale", why: "돌린 뒤에 코드가 바뀌었어요" };
-        return { ...e, ok: true, check: "ran" };
+        const sh = r.shellId ? t.shells.find((x) => x.id === r.shellId) : undefined;
+        const out = sh?.tail ? resultLine(sh.tail) : undefined;
+        return { ...e, ok: true, check: "ran", ...(out ? { out } : {}) };
       }
       if (e.kind === "file" || e.kind === "shot" || /^[/~]/.test(e.ref)) {
         const path = expand(e.ref.replace(/:\d+(:\d+)?$/, ""));
