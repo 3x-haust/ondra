@@ -17,7 +17,7 @@ import { allowedDevices, refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
-import { commandKind, SEARCH_STALL_MS, searchCall, searchStalled } from "./commandKind";
+import { commandKind, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -75,10 +75,11 @@ interface Run {
   pendingHandoff?: Handoff;
   /** a review it asked for was refused (one per job): said again as a prompt if the turn ended waiting for it */
   refused?: string;
-  /** toolCallId → when that shell's output last changed (the search watchdog) */
+  /** toolCallId → when that shell's output last changed (the search and wait watchdog) */
   changed?: Map<string, number>;
-  /** searches the watchdog already tried to stop */
+  /** searches and waits the watchdog already tried to stop */
   searchStops?: Set<string>;
+  waitStops?: Set<string>;
 }
 
 
@@ -779,6 +780,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     }
     // the command the restart cut off (not a time limit: commands have none unless given one)
     const cut = fresh.shells.filter((s) => !s.endedAt && !s.background).pop()?.command.replace(/\s+/g, " ").slice(0, 160);
+    const bg = backgroundShells(fresh.shells);
     if (resume) updateTask(id, (x) => closeOpen(x));
     // answers it already acted on before the restart aren't news
     const handled = new Set(fresh.entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text));
@@ -786,7 +788,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     for (const m of fresh2) handled.delete(m);
     const message = resume
       ? [
-          `(Ondra가 다시 시작됐어요. ${cut ? `그때 돌던 명령 \`${cut}\`은 재시작 때문에 끊겼어요. 시간 제한 때문이 아니니 제한이 있다고 여기지 말고, 필요하면 그 로그부터 보고 다시 돌리세요.` : "돌던 명령이 끊겼으면 그 로그부터 확인하세요."} 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 마세요.)`,
+          `(Ondra가 다시 시작됐어요. ${cut ? `그때 돌던 명령 \`${cut}\`은 재시작 때문에 끊겼어요. 시간 제한 때문이 아니니 제한이 있다고 여기지 말고, 필요하면 그 로그부터 보고 다시 돌리세요.` : "돌던 명령이 끊겼으면 그 로그부터 확인하세요."}${bg.length ? ` 백그라운드로 띄운 ${bg.map((c) => `\`${c}\``).join(", ")}는 아직 돌 수도, 꺼졌을 수도 있어요. 기다리기 전에 한 번만 확인하고(URL에 curl -m 5, 저장한 pid에 kill -0) 꺼졌으면 다시 띄우세요.` : ""} 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 마세요.)`,
           ...[...fresh2, ...fresh.inbox.filter((m) => !handled.has(m))].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`),
         ].join("\n")
       : fresh.legs.length > 1
@@ -799,6 +801,22 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   } catch (e) {
     fail(id, e instanceof Error ? e.message : String(e));
   }
+}
+
+/**
+ * What the job started in the background (a dev server, a watcher), newest
+ * first: after a restart it may still run or be gone, and the job checks once
+ * instead of waiting on its log.
+ */
+export function backgroundShells(shells: Shell[], max = 3): string[] {
+  const out: string[] = [];
+  for (const s of [...shells].reverse()) {
+    if (!s.background) continue;
+    const c = s.command.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (c && !out.includes(c)) out.push(c);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 /**
@@ -1757,20 +1775,45 @@ export function createAnswer(f: { space: Task["space"]; question: string; text: 
  * go in at once.
  */
 /**
- * The search watchdog: a find/rg/du … that has printed nothing new for
- * SEARCH_STALL_MS is walking a folder far too big (all of ~, Library). Only that
- * command is stopped, never the job, a build or a background command, and the
- * agent is told why so it searches somewhere narrower.
+ * The command watchdog. A find/rg/du … that has printed nothing new for
+ * SEARCH_STALL_MS is walking a folder far too big (all of ~, Library). A wait on
+ * a local server or its log that has shown nothing new for WAIT_STALL_MS waits
+ * for something that isn't coming (the server crashed, its port was taken, a
+ * restart took it down). Only that command is stopped, never the job, a build
+ * or the server it waits for, and the agent is told why.
  */
-function stopStalledSearches() {
+function stopStalledCommands() {
   const now = Date.now();
   for (const [id, run] of runs) {
     if (!run.streaming) continue;
     for (const s of taskById(id)?.shells ?? []) {
-      if (!run.tools.has(s.id) || run.searchStops?.has(s.id)) continue;
-      if (searchStalled({ ...s, changedAt: run.changed?.get(s.id) }, now)) void stopSearch(id, run, s);
+      if (!run.tools.has(s.id)) continue;
+      // one command can be both (wait for the server, then find the pages): each is tried once
+      const seen = { ...s, changedAt: run.changed?.get(s.id) };
+      if (!run.searchStops?.has(s.id) && searchStalled(seen, now)) void stopSearch(id, run, s);
+      if (!run.waitStops?.has(s.id) && waitStalled(seen, now)) void stopWait(id, run, s);
     }
   }
+}
+
+const shortCmd = (cmd: string) => {
+  const c = cmd.replace(/\s+/g, " ").trim();
+  return c.length > 120 ? `${c.slice(0, 120)}…` : c;
+};
+
+const waitStoppedSteer = (cmd: string) =>
+  `(Ondra) Stopped \`${shortCmd(cmd)}\` after ${WAIT_STALL_MS / 1000}s with nothing new: the local server or log line it waited for isn't coming. Read the log tail and check the process is alive (\`kill -0 <pid>\`) before waiting again; if it exited, fix why and start it again.`;
+
+async function stopWait(id: string, run: Run, s: Shell) {
+  (run.waitStops ??= new Set()).add(s.id);
+  const beside = (taskById(id)?.shells ?? []).filter((x) => x.id !== s.id && run.tools.has(x.id)).map((x) => x.command);
+  const arg = shellArg(s.command, beside);
+  if (!arg) return;
+  // the shell running the wait (`/bin/bash -c <command>`), not the server it waits for
+  const stopped = await agentStopCommand(agentOf(id), "bash", arg).catch(() => 0);
+  if (!stopped || runs.get(id) !== run) return;
+  updateTask(id, (t) => push(t, { kind: "note", text: "기다림 멈춤 · 2분 넘게 변화 없음" }));
+  if (run.streaming) void request(agentOf(id), { type: "steer", message: waitStoppedSteer(s.command) }).catch(() => {});
 }
 
 async function stopSearch(id: string, run: Run, s: Shell) {
@@ -1779,12 +1822,11 @@ async function stopSearch(id: string, run: Run, s: Shell) {
   if (!call) return;
   const stopped = await agentStopCommand(agentOf(id), call.program, call.arg).catch(() => 0);
   if (!stopped || runs.get(id) !== run) return;
-  const cmd = s.command.replace(/\s+/g, " ").trim();
   updateTask(id, (t) => push(t, { kind: "note", text: "검색 멈춤 · 1분 넘게 결과 없음" }));
   if (run.streaming)
     void request(agentOf(id), {
       type: "steer",
-      message: `(Ondra) Stopped \`${cmd.length > 120 ? `${cmd.slice(0, 120)}…` : cmd}\` after ${SEARCH_STALL_MS / 1000}s with no output: it was walking too big a folder. Search a named project folder with rg --files / rg, skip node_modules/.git/Library.`,
+      message: `(Ondra) Stopped \`${shortCmd(s.command)}\` after ${SEARCH_STALL_MS / 1000}s with no output: it was walking too big a folder. Search a named project folder with rg --files / rg, skip node_modules/.git/Library.`,
     }).catch(() => {});
 }
 
@@ -1815,7 +1857,7 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
         void request(agentOf(id), {
           type: "steer",
           message:
-            "(Ondra) You are checking on the same thing turn after turn. Wait for it in one bash call instead: `for i in $(seq 1 60); do <is it done?> && break; sleep 10; done; <show the result>` (up to 10 minutes per call). Don't stop or restart what is running.",
+            "(Ondra) You are checking on the same thing turn after turn. Wait for it in one bash call instead: `for i in $(seq 1 60); do <is it done?> && break; <is it still running?> || break; sleep 10; done; <show the result>`. Give it a deadline that fits: 90s for a local server, 10 minutes for a build or test run, longer only for CI or a store review. Don't stop or restart what is running.",
         }).catch(() => {});
     }
     return;
@@ -2151,7 +2193,7 @@ export function startScheduler() {
   // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
   setTimeout(() => void watchPrs(), 40_000);
   setInterval(() => void watchPrs(), 3 * 60_000);
-  setInterval(stopStalledSearches, 10_000);
+  setInterval(stopStalledCommands, 10_000);
   createRoot(() => {
     createEffect(
       on(
