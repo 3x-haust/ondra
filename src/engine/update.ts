@@ -125,7 +125,10 @@ export async function installNow() {
   } catch (e) {
     setStatus("idle");
     setProgress(null);
-    toast(t("업데이트하지 못했어요 · {why}", { why: e instanceof Error ? e.message : String(e) }), "bad");
+    const why = e instanceof Error ? e.message : String(e);
+    // the update server not answering is not the user's to read in English: say it plainly
+    const offline = /fetch|network|timed? ?out|connect|dns|release json|status code|50\d/i.test(why);
+    toast(offline ? t("업데이트 서버가 잠시 응답하지 않아요. 조금 뒤 다시 눌러 주세요") : t("업데이트하지 못했어요 · {why}", { why }), "bad");
   }
 }
 
