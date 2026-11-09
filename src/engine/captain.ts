@@ -11,16 +11,16 @@ import { prepareQuery } from "./vectors";
 import { addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
-import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, prOf, rawStats, stopTask, tell, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
-import { workedIn } from "./workedIn";
+import { lastSaid, placeOf, relay, userParked } from "./jobs";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
 export const chatKey = (space: SpaceId, project?: string) => (project ? `${space}~${project}` : space);
@@ -117,21 +117,7 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
   return reply.id;
 }
 
-/**
- * The user ended or stopped this work themselves, or the automatic follow-ups it
- * came from: main reports it and starts nothing to carry it on until the user asks.
- * A job the user asked for again starts clean; only main's own follow-ups inherit it.
- */
-export function userParked(t: Task | undefined): boolean {
-  for (let i = 0; t && i < 12; i++) {
-    if (t.endedBy === "user" || t.parkedAt) return true;
-    const id = t.id;
-    const made = state.captain.find((m) => (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === id));
-    if (!made?.after || !t.follows) return false;
-    t = taskById(t.follows);
-  }
-  return false;
-}
+export { userParked } from "./jobs";
 
 /**
  * Main is the orchestrator: when a job it started ends, the result comes back to
@@ -443,11 +429,11 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** Main searches skills directly; read / bash / web_fetch load through tool_search. */
+/** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts")).flatMap((e) => ["--extension", e]);
+  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
@@ -493,6 +479,40 @@ async function restartStale(space: string, skills: string): Promise<boolean> {
   return true;
 }
 
+/** main looking jobs up: the step shows on its pending reply, then stays above the reply */
+const stepsOf = new Map<string, string>();
+function noteStep(space: string, ev: any) {
+  const id = `${space}:${ev.toolCallId ?? ""}`;
+  // the end event carries no arguments: the finished line is worked out at the start
+  if (ev.type === "tool_execution_start") {
+    const done = mainStep(String(ev.toolName ?? ""), ev.args ?? {}, true);
+    if (done) stepsOf.set(id, done);
+  }
+  const step = ev.type === "tool_execution_start" ? mainStep(String(ev.toolName ?? ""), ev.args ?? {}, false) : stepsOf.get(id);
+  if (ev.type === "tool_execution_end") stepsOf.delete(id);
+  if (!step) return;
+  const m = [...state.captain].reverse().find((x) => inChat(x, space) && x.pending);
+  if (!m) return;
+  if (ev.type === "tool_execution_start") setState("captain", (x) => x.id === m.id, "step", step);
+  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-4) }));
+}
+const stepName = (s: unknown, n = 24) => {
+  const x = String(s ?? "").replace(/\s+/g, " ").trim();
+  return x.length > n ? `${x.slice(0, n - 1)}…` : x;
+};
+/** "작업 찾는 중 · 리디자인" / "작업 찾음 · 리디자인", "작업 살펴봄 · 비로그인 먼저 쓰기" (noteText lines) */
+export function mainStep(tool: string, args: any, done: boolean): string | undefined {
+  if (tool === "jobs_search") {
+    const q = stepName(args?.query);
+    return q ? (done ? `작업 찾음 · ${q}` : `작업 찾는 중 · ${q}`) : done ? "작업 목록 봄" : "작업 목록 보는 중";
+  }
+  if (tool === "job_read") {
+    const name = stepName(taskById(String(args?.id ?? ""))?.title ?? args?.id, 30);
+    return done ? `작업 살펴봄 · ${name}` : `작업 살펴보는 중 · ${name}`;
+  }
+  return undefined;
+}
+
 async function ensureCaptain(space: string) {
   const agent = agentOf(space);
   const skills = await skillScope(sp(space));
@@ -529,6 +549,7 @@ async function ensureCaptain(space: string) {
       }
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
+      if (ev.type === "tool_execution_start" || ev.type === "tool_execution_end") noteStep(space, ev);
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
     exit() {
@@ -569,7 +590,9 @@ async function ensureCaptain(space: string) {
   // a simulated project's folder is made up: main runs in the space's folder then
   const cwd = expand((isSim(space) ? "" : proj?.folder) || space0.folder || "~");
   const signature = await startSig(cwd, skills.signature);
-  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)]]);
+  // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
+  const door = isSim(space) ? [] : [...(await bridgeEnv()), ["APP_WORKER_ID", agent] as [string, string]];
+  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)], ...door]);
   sigOf.set(space, signature);
   markAlive(agent);
   attached.add(space);
@@ -667,15 +690,6 @@ function forksBlock(now: string, before?: string): string {
   ].join("\n");
 }
 
-/** Where a job works: the repo and branch it really committed or pushed in, its PR. */
-function placeOf(t: Task): string {
-  const w = workedIn(t);
-  const own = t.worktree?.state === "open" ? t.worktree : undefined;
-  const inOwn = !!own && (!w.repo || expand(w.repo).startsWith(own.path));
-  const where = inOwn ? `branch ${w.branch ?? own!.branch}` : w.repo ? `worked in ${w.repo}${w.branch ? ` on ${w.branch}` : ""}` : w.branch ? `${t.cwd} on ${w.branch}` : t.cwd;
-  const pr = prOf(t);
-  return pr ? `${where} · PR ${pr.url}` : where;
-}
 
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
@@ -688,8 +702,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       ? tasks
           .map((t) => {
             // what it is on (running), what it asks (waiting), what it did (done), why it stopped (failed)
-            const q = (w?.decisions ?? state.decisions).find((d) => d.taskId === t.id)?.question;
-            const said = t.status === "waiting" && q ? `asks: ${q}` : t.status === "done" && t.summary ? `did: ${t.summary}` : t.status === "failed" && t.error ? `failed: ${t.error}` : t.now;
+            const l = lastSaid(t, w?.decisions ?? state.decisions);
+            const said = l.tag === "now" ? l.text : `${l.tag}: ${l.text}`;
             return `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${placeOf(t)} | ${String(said ?? "").replace(/\s+/g, " ").slice(0, 200)}`;
           })
           .join("\n")
@@ -894,29 +908,23 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
       stopTask(r.taskId);
       out.push({ kind: "stop", taskId: r.taskId });
-    } else if (r?.kind === "append" && finished(job(r.taskId ?? r.workerId)) && String(r.message ?? "").trim()) {
-      // a finished job is closed: more on it is a new job with a fresh context, on its branch
-      const prev = job(r.taskId ?? r.workerId)!;
-      const id = createTask({
-        space: prev.space,
-        title: prev.title,
-        topic: prev.topic,
-        ask: String(r.message).trim(),
-        project: prev.project,
-        priority: prev.priority,
-        weight: prev.weight,
+    } else if (r?.kind === "append" && job(r.taskId ?? r.workerId)) {
+      // any job of this space, listed or found with jobs_search (a subagent, an older one, another project's)
+      const target = job(r.taskId ?? r.workerId)!;
+      const message = String(r.message ?? "").trim();
+      if (!message) {
+        out.push({ kind: "append", taskId: target.id, message });
+        continue;
+      }
+      // main's word is for now, not for after the fork's current turn; a finished job is
+      // closed: more on it is a new job with a fresh context, on its branch (jobs.ts relay)
+      const sent = relay(target, message, {
+        by: "main",
+        now: true,
         display: raw.filter((x) => x?.kind !== "remember").length === 1 && fromUser ? original : undefined,
         isolate: isolateOf.get(space),
-        reach: prev.reach,
-        follows: prev.id,
       });
-      out.push({ kind: "new", taskId: id });
-    } else if (r?.kind === "append" && job(r.taskId ?? r.workerId)) {
-      const id = job(r.taskId ?? r.workerId)!.id;
-      const message = String(r.message ?? "").trim();
-      // main's word is for now, not for after the fork's current turn
-      if (message) void tell(id, message, { now: true });
-      out.push({ kind: "append", taskId: id, message });
+      out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
     } else if (r?.kind === "new" && (r.task || r.title)) {
       // carrying on a job keeps its project; main naming a folder makes or finds that one, never a guess
       const before = job(r.from)?.project ? projectById(job(r.from)!.project!, sp(space)) : undefined;

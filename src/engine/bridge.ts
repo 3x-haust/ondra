@@ -5,8 +5,12 @@
 //                    key → updated, one-off details → refused)
 //   memory_forget  → retire a piece that turned out wrong (never the user's own)
 //   memory_paths   → path rules for a file a job just touched (once per job)
+//   jobs_search    → jobs of the caller's space, running or past (extensions/jobs.ts)
+//   job_read       → one of them in depth
+//   job_tell       → a message to one of them (queued, delivered, answered, resumed, carried on)
 // Calls arrive as `bridge:call` {id, call:{op, worker, args}} and are answered
 // with bridge_reply. The worker id is the job's id: a job only sees its own memory.
+// Main (`captain:<space>[~<project>]`) may use the job ops for its chat's space; memory stays a job's.
 import { bridgeReply, onEvent, pathsExist } from "../lib/native";
 import { homeDir, state, taskById } from "../state/store";
 import type { Memory, MemoryKind, Task } from "../state/types";
@@ -16,6 +20,8 @@ import { memoriesFor } from "./prompts";
 import { expand } from "./rpc";
 import { prepareQuery } from "./vectors";
 import { pushNote } from "./tasks";
+import { callerOf, jobLine, meaningText, readJob, sameSpace, searchJobs, tellJob, visibleJobs } from "./jobs";
+import { textSimilarity } from "./vectors";
 
 type Call = { op?: string; worker?: string; args?: Record<string, unknown> };
 const KIND_IDS = new Set<string>(KINDS.map((k) => k.id));
@@ -57,9 +63,10 @@ const keyOf = (v: unknown) => (typeof v === "string" ? v.trim().toLowerCase().re
 /** path rules already shown to each job (once per job) */
 const shown = new Map<string, Set<string>>();
 
-async function handle(c: Call): Promise<unknown> {
+export async function handle(c: Call): Promise<unknown> {
   const t = c.worker ? taskById(c.worker) : undefined;
   const a = c.args ?? {};
+  if (c.op?.startsWith("job")) return jobOp(c.op, c.worker, a);
   // memory belongs to a space: only a job (whose space is known) reads or writes it
   if (!t && c.op?.startsWith("memory_")) return c.op === "memory_search" ? { results: [], total: 0 } : c.op === "memory_paths" ? { rules: [] } : { error: "only a job can change memory" };
   switch (c.op) {
@@ -134,6 +141,36 @@ async function handle(c: Call): Promise<unknown> {
     }
   }
   return { error: `unknown op ${c.op}` };
+}
+
+/** the job ops: a job or main, each in its own space */
+async function jobOp(op: string, worker: string | undefined, a: Record<string, unknown>): Promise<unknown> {
+  const who = callerOf(worker);
+  if (!who) return { error: "only a job or main can look up jobs" };
+  switch (op) {
+    case "jobs_search": {
+      const query = String(a.query ?? "").trim().slice(0, 300);
+      // by meaning too, over the latest few hundred (the model embeds each job once)
+      const pool = query ? visibleJobs(who).sort((x, y) => (y.finishedAt ?? y.createdAt) - (x.finishedAt ?? x.createdAt)).slice(0, 300) : [];
+      const sims = pool.length ? await textSimilarity(query, pool.map((j) => ({ id: `job:${j.id}`, text: meaningText(j) }))) : new Map<string, number>();
+      const byJob = new Map([...sims].map(([k, v]) => [k.slice(4), v]));
+      const r = searchJobs(who, query, { status: typeof a.status === "string" ? a.status : undefined, project: typeof a.project === "string" ? a.project : undefined, limit: Number(a.limit) || undefined, sims: byJob });
+      if (r.error) return { error: r.error };
+      return { lines: r.hits.map((j) => jobLine(j)), total: r.total };
+    }
+    case "job_read": {
+      const j = taskById(String(a.id ?? ""));
+      if (!j || !visibleJobs(who).includes(j)) return { error: `no job ${String(a.id ?? "")} in this space (find it with jobs_search)` };
+      return { text: readJob(who, j, { messages: Number(a.messages) || undefined }) };
+    }
+    case "job_tell": {
+      const j = taskById(String(a.id ?? ""));
+      if (j && !sameSpace(who, j)) return { error: "that job is in another space; it can't be messaged from here" };
+      const r = tellJob(who, String(a.id ?? ""), String(a.message ?? ""), { now: a.now === true });
+      return r.ok ? { result: r.line, id: r.taskId } : { error: r.line };
+    }
+  }
+  return { error: `unknown op ${op}` };
 }
 
 let started = false;

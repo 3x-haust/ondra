@@ -203,6 +203,16 @@ export default {
   "같은 실패 반복": "Same failure again",
   "검색 멈춤 · 1분 넘게 결과 없음": "Stopped searching · no output for over a minute",
   "기다림 멈춤 · 2분 넘게 변화 없음": "Stopped waiting · nothing changed for over 2 minutes",
+  // main and jobs looking up other jobs (jobs_search, job_read, job_tell)
+  "작업 찾음 · {q}": "Found jobs · {q}",
+  "작업 찾는 중 · {q}": "Finding jobs · {q}",
+  "작업 살펴봄 · {name}": "Read job · {name}",
+  "작업 살펴보는 중 · {name}": "Reading job · {name}",
+  "작업 목록 봄": "Listed jobs",
+  "작업 목록 보는 중": "Listing jobs",
+  "작업 찾는 중": "Finding jobs",
+  "작업 살펴보는 중": "Reading a job",
+  "다른 작업에 전달하는 중": "Messaging another job",
 
   // tasks.ts
   "이 워크스페이스에 계정이 없어요": "No account in this workspace",

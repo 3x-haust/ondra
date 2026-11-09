@@ -121,6 +121,8 @@ export default {
   "테스트 돌림": "Ran tests",
   "도구 쓰는 중": "Using tool",
   "도구 씀": "Used tool",
+  "전달하는 중": "Sending to",
+  "전달함": "Sent to",
   "{names} 외 {n}개": "{names} and {n} more",
   "살펴봄": "Explored",
   "파일 {n}개 수정함": "Edited {n} file|Edited {n} files",

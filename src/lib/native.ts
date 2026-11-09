@@ -559,6 +559,8 @@ export const pathsExist = (paths: string[]) => call<boolean[]>("paths_exist", { 
 export const embedTexts = (texts: string[], query = false) => call<number[][]>("embed_texts", { texts, query }, []);
 /** Answer a `bridge:call` from an engine tool. */
 export const bridgeReply = (id: number, value: string) => call<void>("bridge_reply", { id, value });
+/** ONDRA_BRIDGE + its token, for main's engine (workers get them in workerEnv) */
+export const bridgeEnv = () => call<Env>("bridge_env", undefined, []);
 
 /** A newer release on GitHub, or null (always null in development builds). */
 export const checkForUpdate = () => call<{ version: string; notes?: string } | null>("update_check", {}, null);

@@ -78,6 +78,11 @@ const NOTE_FORMS: { key: string; was?: string[] }[] = [
   { key: '"{title}" 작업으로 넘어가요', was: ['"{title}" 일로 넘어가요'] },
   { key: "검색 멈춤 · 1분 넘게 결과 없음" },
   { key: "기다림 멈춤 · 2분 넘게 변화 없음" },
+  // main looking jobs up (its reply's steps)
+  { key: "작업 찾음 · {q}" },
+  { key: "작업 찾는 중 · {q}" },
+  { key: "작업 살펴봄 · {name}" },
+  { key: "작업 살펴보는 중 · {name}" },
 ];
 /** what "확인 필요 · …" lists (stored Korean → its key) */
 const PROOF_PARTS: Record<string, string> = {

@@ -415,6 +415,7 @@ pub fn run() {
             #[cfg(debug_assertions)]
             devbridge::dev_report,
             bridge::bridge_reply,
+            bridge::bridge_env,
             embed::embed_texts,
             import::scan_agents,
             import::read_transcript,
