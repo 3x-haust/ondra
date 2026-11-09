@@ -1,9 +1,10 @@
 // `?` shows every shortcut, built from the same table the keys run on (after gitsu),
-// so it can't go out of date. The names are the ones Settings › 단축키 shows.
+// so it can't go out of date, and shows the user's bindings. The names are the ones Settings › 단축키 shows.
 import { createMemo, createSignal, For, onCleanup } from "solid-js";
 import { appCommands } from "../state/commands";
 import { shortcutLabel, type ShortcutCommand } from "../lib/shortcuts";
 import { Icon } from "../ui/Icon";
+import { setView } from "../state/ui";
 import { t } from "../i18n";
 
 const [open, setOpen] = createSignal(false);
@@ -41,6 +42,7 @@ export function ShortcutSheet() {
       <div class="keysheet" role="dialog" aria-modal="true" aria-label={t("단축키")} onClick={(e) => e.stopPropagation()}>
         <div class="keysheet-head">
           <h3>{t("단축키")}</h3>
+          <button class="btn sm ghost" onClick={() => (close(), setView({ name: "settings", tab: "shortcuts" }))}>{t("단축키 설정")}</button>
           <button class="icon-btn" title={`${t("닫기")} (esc)`} aria-label={t("닫기")} onClick={close}>
             <Icon name="x" size={16} />
           </button>

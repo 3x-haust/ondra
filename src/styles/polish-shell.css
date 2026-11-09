@@ -1621,3 +1621,10 @@
 }
 /* folded sidebar: it sits before the show-sidebar button in the header */
 .head .update-btn { margin: 0 var(--s-4) 0 0; }
+.keysheet-head .btn.sm {
+  margin-right: var(--s-4);
+  color: var(--ink-3);
+}
+.keysheet-head .btn.sm:hover {
+  color: var(--ink);
+}

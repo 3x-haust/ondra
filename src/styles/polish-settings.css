@@ -786,3 +786,64 @@
 .settings-inner .acc-usage .acc-stat {
   gap: 0;
 }
+
+/* ───────── shortcuts: a key chip per command; click it and press the new keys */
+.settings-inner .kb-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  height: 26px;
+  padding: 0 var(--s-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast);
+}
+.settings-inner .kb-chip:hover {
+  border-color: var(--input);
+  background: var(--hover);
+}
+.settings-inner .kb-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.settings-inner .kb-chip.none {
+  font-weight: var(--fw-regular);
+  color: var(--ink-4);
+}
+.settings-inner .kb-chip.rec {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.settings-inner .kb-reset {
+  color: var(--ink-3);
+}
+.settings-inner .kb-reset:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.settings-inner .kb-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-height: 44px;
+  padding: var(--s-6) var(--s-14);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--muted);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.settings-inner .kb-note > span {
+  flex: 1;
+  min-width: 0;
+}
+.settings-inner .kb-note.refused {
+  background: var(--bad-soft);
+  color: var(--bad-ink);
+}

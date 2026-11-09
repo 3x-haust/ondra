@@ -1,4 +1,4 @@
-import { shortcuts, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts";
+import { binding, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts";
 import { nextWaiting, stepFork } from "../views/Sidebar";
 import { state, taskById } from "./store";
 import { switchSpace } from "./workspace";
@@ -37,9 +37,9 @@ export function showCommands() {
   setPaletteMode("commands");
   setPaletteOpen(true);
 }
-/** label and section are Korean keys, shown in the current language */
+/** label and section are Korean keys, shown in the current language; the key is the user's binding for the id */
 const command = (id: ShortcutId, label: string, section: string, icon: string, run: () => void, enabled?: () => boolean, inInput = false): ShortcutCommand =>
-  ({ id, label: t(label), section: t(section), icon, shortcut: shortcuts[id], run, enabled, inInput });
+  ({ id, label: t(label), section: t(section), icon, shortcut: binding(id), run, enabled, inInput });
 
 /** The palette and keyboard execute the same commands and availability checks. */
 export function appCommands(): ShortcutCommand[] {
@@ -47,6 +47,7 @@ export function appCommands(): ShortcutCommand[] {
     command("search", "검색", "일반", "search", () => { setPaletteMode("all"); setPaletteOpen(true); }, undefined, true),
     command("commands", "명령 보기", "일반", "list", showCommands, undefined, true),
     { id: "keys", label: t("단축키 목록"), section: t("일반"), icon: "keyboard", keys: "?", run: () => void import("../views/ShortcutSheet").then((m) => m.setSheetOpen(true)) },
+    { id: "keybindings", label: t("단축키 설정"), section: t("일반"), icon: "keyboard", run: () => setView({ name: "settings", tab: "shortcuts" }) },
     command("sidebar", "사이드바 열기·닫기", "일반", "panelLeft", toggleSidebar),
     command("zoomIn", "화면 크게", "일반", "plus", () => stepZoom(1), undefined, true),
     command("zoomOut", "화면 작게", "일반", "minus", () => stepZoom(-1), undefined, true),

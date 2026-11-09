@@ -46,16 +46,88 @@ export const shortcuts = {
 } satisfies Record<string, Shortcut>;
 export type ShortcutId = keyof typeof shortcuts;
 
-export function shortcutLabel(s: Shortcut): string {
-  const key = ({ Comma: ",", Period: ".", Backslash: "\\", Backquote: "`", BracketLeft: "[", BracketRight: "]", Equal: "=", Minus: "−", Tab: "⇥", Enter: "↵" } as Record<string, string>)[s.code] ?? s.code.replace(/^(Key|Digit)/, "");
-  return `${s.ctrl ? "⌃" : ""}${s.alt ? "⌥" : ""}${s.meta ? "⌘" : ""}${s.shift ? "⇧" : ""}${key}`;
+// ───────────── the user's bindings over the table
+// Settings › 단축키 keeps overrides by id in state.settings.keybindings: a chord as
+// text ("cmd+shift+KeyD", see chordText) or "none" for unbound. Every id in the
+// table can be rebound; an id missing from the overrides keeps its default.
+export const UNBOUND = "none";
+export type Overrides = Readonly<Record<string, string | undefined>>;
+
+const MODS = [["ctrl", "ctrl"], ["alt", "alt"], ["shift", "shift"], ["cmd", "meta"]] as const;
+/** a chord as stored: modifiers in macOS order, then the physical key (e.code) */
+export function chordText(s: Shortcut): string {
+  return [...MODS.filter(([, k]) => s[k]).map(([name]) => name), s.code].join("+");
 }
-export const shortcutHint = (id: ShortcutId) => shortcutLabel(shortcuts[id]);
+/** the stored text back to a chord; undefined if it isn't one */
+export function parseChord(text: string): Shortcut | undefined {
+  const parts = text.split("+");
+  const code = parts.pop();
+  if (!code || !/^[A-Z][A-Za-z0-9]*$/.test(code)) return undefined;
+  const s: Shortcut = { code };
+  for (const p of parts) {
+    const mod = MODS.find(([name]) => name === p);
+    if (!mod || s[mod[1]]) return undefined;
+    s[mod[1]] = true;
+  }
+  return s;
+}
+export const sameChord = (a: Shortcut, b: Shortcut) =>
+  a.code === b.code && !!a.meta === !!b.meta && !!a.ctrl === !!b.ctrl && !!a.alt === !!b.alt && !!a.shift === !!b.shift;
+
+let source: () => Overrides | undefined = () => undefined;
+/** where the overrides live (the store sets this; reading it inside JSX keeps hints live) */
+export function bindingSource(get: () => Overrides | undefined) {
+  source = get;
+}
+export const overrides = (): Overrides => source() ?? {};
+const table = shortcuts as Record<string, Shortcut>;
+export const isShortcutId = (id: string): id is ShortcutId => Object.prototype.hasOwnProperty.call(shortcuts, id);
+/** the key an id answers to now; undefined when the user unbound it */
+export function binding(id: string, o: Overrides = overrides()): Shortcut | undefined {
+  if (!isShortcutId(id)) return undefined;
+  const text = o[id];
+  if (text === UNBOUND) return undefined;
+  return (text !== undefined && parseChord(text)) || table[id];
+}
+// A chord taken straight from the table (`shortcuts.search`) stands for its id, so
+// code that matches or shows `shortcuts.x` follows the user's binding too.
+const tableId = new Map<Shortcut, string>(Object.entries(table).map(([id, s]) => [s, id]));
+const effective = (s: Shortcut | ShortcutId): Shortcut | undefined =>
+  typeof s === "string" ? binding(s) : tableId.has(s) ? binding(tableId.get(s)!) : s;
+
+const KEY_GLYPHS: Record<string, string> = {
+  Comma: ",", Period: ".", Slash: "/", Backslash: "\\", Backquote: "`", BracketLeft: "[", BracketRight: "]",
+  Semicolon: ";", Quote: "'", Equal: "=", Minus: "−", Tab: "⇥", Enter: "↵", NumpadEnter: "↵", Space: "Space",
+  Backspace: "⌫", Delete: "⌦", Escape: "⎋", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
+  PageUp: "⇞", PageDown: "⇟", Home: "↖", End: "↘", IntlBackslash: "§", IntlYen: "¥", IntlRo: "\\",
+  NumpadAdd: "+", NumpadSubtract: "−", NumpadMultiply: "×", NumpadDivide: "÷", NumpadDecimal: ".", NumpadEqual: "=",
+};
+/** one key as shown: ⌘ ⌥ ⌃ ⇧ glyphs, arrows, ↵ ⇥ and the key's own character */
+export function keyGlyph(code: string): string {
+  return KEY_GLYPHS[code] ?? code.replace(/^(Key|Digit|Numpad)/, "");
+}
+/** a chord as written, modifiers in the macOS order ⌃⌥⇧⌘ */
+export function chordLabel(s: Shortcut): string {
+  return `${s.ctrl ? "⌃" : ""}${s.alt ? "⌥" : ""}${s.shift ? "⇧" : ""}${s.meta ? "⌘" : ""}${keyGlyph(s.code)}`;
+}
+/** what a chord shows now: a table chord shows the user's binding ("" when unbound) */
+export function shortcutLabel(s: Shortcut | ShortcutId): string {
+  const e = effective(s);
+  return e ? chordLabel(e) : "";
+}
+export const shortcutHint = (id: ShortcutId) => shortcutLabel(id);
+/** "새 탭 (⌘T)", or just the label while the command has no key */
+export const withHint = (label: string, id: ShortcutId) => {
+  const keys = shortcutHint(id);
+  return keys ? `${label} (${keys})` : label;
+};
 
 export const ignoredKey = (e: KeyboardEvent) => e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.repeat;
 export const noModifiers = (e: KeyboardEvent) => !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
-export function matchesShortcut(e: KeyboardEvent, s: Shortcut): boolean {
-  return !ignoredKey(e) && e.code === s.code && e.metaKey === !!s.meta && e.ctrlKey === !!s.ctrl && e.shiftKey === !!s.shift && e.altKey === !!s.alt;
+/** a table chord or id matches the user's binding for it */
+export function matchesShortcut(e: KeyboardEvent, chord: Shortcut | ShortcutId): boolean {
+  const s = effective(chord);
+  return !!s && !ignoredKey(e) && e.code === s.code && e.metaKey === !!s.meta && e.ctrlKey === !!s.ctrl && e.shiftKey === !!s.shift && e.altKey === !!s.alt;
 }
 
 const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]';
