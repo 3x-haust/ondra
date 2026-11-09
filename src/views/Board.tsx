@@ -7,7 +7,7 @@ import { decisionFor, projectsIn, kidsOf, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
-import { ago, compact, IssueTag, now } from "../ui/bits";
+import { ago, compact, IssueTag, now, soon } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
@@ -272,7 +272,8 @@ function Card(props: { t: Task; byProject: boolean }) {
     return body.trim() === t(word()) ? "" : body;
   };
   const when = () => {
-    if (st() === "running" && job().startedAt) return compact(now() - job().startedAt!);
+    // the sidebar's clock, so the two never say different minutes
+    if (st() === "running" && job().startedAt) return compact(soon() - job().startedAt!);
     if (st() === "queued") return ago(job().createdAt);
     // paused: the task's own header says since when; a bare time here would read as something else
     if (st() === "paused") return "";
@@ -326,9 +327,18 @@ function Card(props: { t: Task; byProject: boolean }) {
       <Show when={line()}><p class="bc-line">{line()}</p></Show>
       <Show when={foot()}>
         <div class="bc-meta">
-          {/* what it couldn't check, first in the line under the title (the top row has no room) */}
+          {/* what it couldn't check, first in the line under the title (the top row has no room): a mark and
+              its count, so a narrow column never cuts it; the words and the list are in its tooltip */}
           <Show when={unchecked()}>
-            <span class="unverified-badge" title={job().unverified!.join("\n")}>{t("{n}개 확인 안 됨", { n: job().unverified!.length })}</span>
+            <span
+              class="unverified-badge bc-unchecked"
+              role="img"
+              aria-label={t("확인 안 됨 {n}", { n: job().unverified!.length })}
+              title={`${t("확인 안 됨 {n}", { n: job().unverified!.length })}\n${job().unverified!.join("\n")}`}
+            >
+              <Icon name="alert" size={12} />
+              {job().unverified!.length}
+            </span>
           </Show>
           <Kids t={job()} class="bc-kids" />
           <Show when={diff().add || diff().del}>
