@@ -2,7 +2,8 @@
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { refreshModels } from "../engine/modelList";
-import { ignoredKey, noModifiers, shortcutLabel, viewKey, type ShortcutCommand } from "../lib/shortcuts";
+import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, noModifiers, overrides, sameChord, shortcutLabel, shortcuts, viewKey, type Shortcut, type ShortcutId } from "../lib/shortcuts";
+import { assign, changed, chordOf, conflictOf, importGhostty, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
@@ -11,10 +12,11 @@ import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../st
 import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
-import { engine, tilde } from "../engine/rpc";
+import { engine, expand, tilde } from "../engine/rpc";
 import {
   accountProviders,
   accountRemove,
+  fsRead,
   inTauri,
   openPrivacySettings,
   pickFolder,
@@ -109,7 +111,7 @@ function General() {
             </For>
           </div>
         </Row>
-        <Row title={t("화면 크기")} desc={t("⌘= 크게 · ⌘− 작게")}>
+        <Row title={t("화면 크기")} desc={t("{a} 크게 · {b} 작게", { a: shortcutHint("zoomIn"), b: shortcutHint("zoomOut") })}>
           <div class="seg">
             <For each={ZOOMS}>
               {(z) => <button classList={{ on: Math.abs(zoom() - z) < 0.001 }} onClick={() => setZoom(z)}>{`${Math.round(z * 100)}%`}</button>}
@@ -772,35 +774,171 @@ function Permissions() {
 }
 
 // ───────────────── shortcuts
+interface KeyRow { id: string; label: string; section: string; keys?: string }
+
 /**
- * The `?` sheet's groups, in its order: 일반 first with the keys that aren't commands
- * (SHORTCUT_EXTRAS), then each command section, 설정 last.
- * TODO(merge): the same grouping lives inside ShortcutSheet(); once the shell group exports it, use that.
+ * Every command in the `?` sheet's groups, in the palette's section order. A row with an id
+ * from the table can be rebound; the rest (keys that aren't commands, ⌘1–9) only show.
  */
-function shortcutGroups(): { title: string; rows: { label: string; keys: string }[] }[] {
-  const out = new Map<string, ShortcutCommand[]>();
-  for (const c of appCommands()) if (c.shortcut) out.set(c.section, [...(out.get(c.section) ?? []), c]);
-  const last = (s: string) => Number(s === t("설정"));
-  const sections = [...out].sort((a, b) => last(a[0]) - last(b[0]));
+function keyRows(): KeyRow[] {
   const general = t("일반");
-  const row = (c: ShortcutCommand) => ({ label: c.label, keys: shortcutLabel(c.shortcut!) });
-  return [
-    { title: general, rows: [...SHORTCUT_EXTRAS.map(([label, keys]) => ({ label: t(label), keys: t(keys) })), ...(out.get(general) ?? []).map(row)] },
-    ...sections.filter(([sec]) => sec !== general).map(([title, list]) => ({ title, rows: list.map(row) })),
-  ];
+  const commands = appCommands();
+  const rows: KeyRow[] = SHORTCUT_EXTRAS.map(([label, keys]) => ({ id: "", label: t(label), section: general, keys: t(keys) }));
+  for (const c of commands) {
+    if (isShortcutId(c.id)) rows.push({ id: c.id, label: c.label, section: c.section });
+    else if (c.shortcut) rows.push({ id: "", label: c.label, section: c.section, keys: shortcutLabel(c.shortcut) });
+  }
+  // an id the table has but no command lists yet still gets a row
+  for (const id of Object.keys(shortcuts)) if (!commands.some((c) => c.id === id)) rows.push({ id, label: id, section: t("기타") });
+  return rows;
 }
 
+const writeBindings = (next: Record<string, string>) => setState("settings", { keybindings: next });
+
+const GHOSTTY_CONFIGS = [
+  "~/.config/ghostty/config",
+  "~/.config/ghostty/config.ghostty",
+  "~/Library/Application Support/com.mitchellh.ghostty/config",
+  "~/Library/Application Support/com.mitchellh.ghostty/config.ghostty",
+];
+async function importFromGhostty() {
+  // Ghostty reads these in order; a later line wins, as it does here
+  const texts: string[] = [];
+  for (const p of GHOSTTY_CONFIGS) {
+    const f = await fsRead(expand(p)).catch(() => undefined);
+    if (f?.text != null) texts.push(f.text);
+  }
+  if (!texts.length) return toast(t("Ghostty 설정 파일이 없어요"));
+  const { next, count } = importGhostty(overrides(), texts.join("\n"));
+  if (!count) return toast(t("가져올 단축키가 없어요"));
+  writeBindings(next);
+  toast(t("단축키 {n}개를 가져왔어요", { n: count }));
+}
+
+type KeyNote = { id: string; text: string; chord?: Shortcut; other?: ShortcutId };
+
 function Shortcuts() {
-  const groups = createMemo(shortcutGroups);
+  const [q, setQ] = createSignal("");
+  const [rec, setRec] = createSignal<string | null>(null);
+  const [held, setHeld] = createSignal("");
+  const [note, setNote] = createSignal<KeyNote | null>(null);
+  const rows = createMemo(keyRows);
+  const shown = createMemo(() => {
+    const query = q().trim().toLowerCase();
+    const keysOf = (r: KeyRow) => r.keys ?? shortcutLabel(r.id as ShortcutId);
+    const out = new Map<string, KeyRow[]>();
+    for (const r of rows()) {
+      if (query && !r.label.toLowerCase().includes(query) && !keysOf(r).toLowerCase().includes(query)) continue;
+      out.set(r.section, [...(out.get(r.section) ?? []), r]);
+    }
+    return [...out];
+  });
+  const anyChanged = () => Object.keys(overrides()).some((id) => changed(overrides(), id));
+  const chip = (id: string) => document.getElementById(`kb-${id}`);
+  const stop = () => {
+    setRec(null);
+    setHeld("");
+  };
+  const start = (id: string) => {
+    setNote(null);
+    setHeld("");
+    setRec(id);
+  };
+  const done = (id: string, next: Record<string, string>) => {
+    writeBindings(next);
+    stop();
+    setNote(null);
+    queueMicrotask(() => chip(id)?.focus());
+  };
+  const mods = (e: KeyboardEvent) => `${e.ctrlKey ? "⌃" : ""}${e.altKey ? "⌥" : ""}${e.shiftKey ? "⇧" : ""}${e.metaKey ? "⌘" : ""}`;
+  // keys owned elsewhere that can't be moved: ⌘1–9 switch workspaces
+  const fixedOwner = (s: Shortcut) => appCommands().find((c) => !isShortcutId(c.id) && c.shortcut && sameChord(c.shortcut, s));
+  const onKey = (e: KeyboardEvent, id: string) => {
+    if (rec() !== id) return;
+    // bare Tab leaves the row as it would anywhere
+    if (e.code === "Tab" && noModifiers(e)) return stop();
+    e.preventDefault();
+    e.stopPropagation();
+    if (modifierOnly(e.code)) return void setHeld(mods(e));
+    if (noModifiers(e) && e.code === "Escape") return (stop(), setNote(null));
+    if (noModifiers(e) && (e.code === "Backspace" || e.code === "Delete")) return done(id, assign(overrides(), id, null));
+    const chord = chordOf(e);
+    const why = refusal(chord, id);
+    if (why) return void setNote({ id, text: `${chordLabel(chord)} · ${t(why)}` });
+    const fixed = fixedOwner(chord);
+    if (fixed) return void setNote({ id, text: `${chordLabel(chord)} · ${t("{name}에 쓰고 있어요", { name: fixed.label })}` });
+    const other = conflictOf(chord, id, overrides());
+    if (!other) return done(id, assign(overrides(), id, chord));
+    const label = rows().find((r) => r.id === other)?.label ?? other;
+    stop();
+    setNote({ id, chord, other, text: `${chordLabel(chord)} · ${t("{name}에 쓰고 있어요", { name: label })}` });
+    queueMicrotask(() => document.querySelector<HTMLElement>(".kb-note .btn")?.focus());
+  };
+  const onKeyUp = (e: KeyboardEvent, id: string) => rec() === id && modifierOnly(e.code) && setHeld(mods(e));
+  const cancelNote = (id: string) => {
+    setNote(null);
+    queueMicrotask(() => chip(id)?.focus());
+  };
   return (
     <>
-      <h2>{t("단축키")}</h2>
-      <For each={groups()}>
-        {(g) => (
+      <div class="set-head">
+        <h2>{t("단축키")}</h2>
+        <button class="btn sm" onClick={() => void importFromGhostty()}>{t("Ghostty 설정에서 가져오기")}</button>
+        <button class="btn sm" disabled={!anyChanged()} onClick={() => (stop(), setNote(null), writeBindings({}), toast(t("기본값으로 되돌렸어요")))}>{t("모두 기본값으로")}</button>
+      </div>
+      <label class="tl-search">
+        <Icon name="search" size={14} />
+        <input placeholder={t("검색")} aria-label={t("단축키 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+      </label>
+      <For each={shown()} fallback={<div class="set-group"><div class="empty-line">{t("결과 없음")}</div></div>}>
+        {([section, list]) => (
           <>
-            <GroupTitle title={g.title} />
+            <GroupTitle title={section} />
             <div class="set-group">
-              <For each={g.rows}>{(r) => <Row title={r.label}><kbd>{r.keys}</kbd></Row>}</For>
+              <For each={list}>
+                {(r) => (
+                  <>
+                    <div class="set-row kb-row">
+                      <div class="set-label"><b>{r.label}</b></div>
+                      <div class="set-value">
+                        <Show when={r.id} fallback={<kbd>{r.keys}</kbd>}>
+                          <Show when={changed(overrides(), r.id)}>
+                            <button class="icon-btn sm kb-reset" title={`${t("기본값으로")} (${chordLabel(shortcuts[r.id as ShortcutId])})`} aria-label={t("{name} 기본값으로", { name: r.label })} onClick={() => done(r.id, reset(overrides(), r.id))}>
+                              <Icon name="undo" size={14} />
+                            </button>
+                          </Show>
+                          <button
+                            id={`kb-${r.id}`}
+                            class="kb-chip"
+                            classList={{ rec: rec() === r.id, none: !binding(r.id), changed: changed(overrides(), r.id) }}
+                            data-shortcuts={rec() === r.id ? "local" : undefined}
+                            aria-label={`${r.label} ${shortcutLabel(r.id as ShortcutId) || t("없음")}`}
+                            aria-pressed={rec() === r.id}
+                            aria-describedby={note()?.id === r.id ? "kb-note" : undefined}
+                            onClick={() => (rec() === r.id ? stop() : start(r.id))}
+                            onKeyDown={(e) => onKey(e, r.id)}
+                            onKeyUp={(e) => onKeyUp(e, r.id)}
+                            onBlur={() => rec() === r.id && (stop(), note()?.chord || setNote(null))}
+                          >
+                            {rec() === r.id ? held() || t("키를 누르세요") : shortcutLabel(r.id as ShortcutId) || t("없음")}
+                          </button>
+                        </Show>
+                      </div>
+                    </div>
+                    <Show when={note()?.id === r.id && note()}>
+                      {(n) => (
+                        <div id="kb-note" class="kb-note" classList={{ refused: !n().chord }} role="alert" data-shortcuts="local" onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), e.stopPropagation(), cancelNote(r.id))}>
+                          <span>{n().text}</span>
+                          <Show when={n().chord}>
+                            <button class="btn sm" onClick={() => done(r.id, moveTo(overrides(), r.id, n().chord!))}>{t("바꾸기")}</button>
+                            <button class="btn sm ghost" onClick={() => cancelNote(r.id)}>{t("취소")}</button>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
+                  </>
+                )}
+              </For>
             </div>
           </>
         )}

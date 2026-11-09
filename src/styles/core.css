@@ -1875,6 +1875,10 @@ kbd {
   font-size: var(--fs-2xs);
   color: var(--ink-3);
 }
+/* a command the user left without a key */
+kbd:empty {
+  display: none;
+}
 
 /* ───────────── visuals: timeline, relay, more-text ───────────── */
 .vz-tl {

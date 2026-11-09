@@ -30,7 +30,7 @@ import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { matchesShortcut, noModifiers, shortcutHint, shortcuts } from "../lib/shortcuts";
+import { matchesShortcut, noModifiers, shortcutHint, shortcuts, withHint } from "../lib/shortcuts";
 import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
@@ -612,7 +612,7 @@ export function MainView() {
           </span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={t("패널 (⌘\\)")} onClick={togglePanel}>
+        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} onClick={togglePanel}>
           <Icon name="panel" size={16} />
         </button>
       </header>

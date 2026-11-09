@@ -2,6 +2,7 @@
 // text, which panel is open) lives in `ui.ts`, not here.
 import { createEffect, createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "solid-js/store";
+import { bindingSource } from "../lib/shortcuts";
 import { inTauri, onEvent, stateFlushed, stateLoad, stateSaveParts } from "../lib/native";
 import { fixture } from "./fixture";
 import { debounce, Saver, unpackTask } from "./persist";
@@ -77,6 +78,7 @@ const setState = ((...args: unknown[]) => {
   return (writeState as (...a: unknown[]) => void)(...args);
 }) as SetStoreFunction<AppState>;
 export { state, setState };
+bindingSource(() => state.settings.keybindings);
 
 export const [loaded, setLoaded] = createSignal(false);
 

@@ -93,8 +93,8 @@ describe("app keyboard shortcuts", () => {
 
   it("shows the same chord that opens each tool", () => {
     expect(shortcutHint("sidebar")).toBe("⌘B");
-    expect(shortcutHint("flow")).toBe("⌘⇧F");
-    expect(shortcutHint("commands")).toBe("⌘⇧P");
+    expect(shortcutHint("flow")).toBe("⇧⌘F");
+    expect(shortcutHint("commands")).toBe("⇧⌘P");
     expect(shortcutHint("previousTab")).toBe("⌃⇧⇥");
   });
 });

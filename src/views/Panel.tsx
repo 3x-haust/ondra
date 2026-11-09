@@ -25,7 +25,7 @@ import { usesReverse } from "../engine/reverse";
 import { askDiscard, ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
-import { ignoredKey, noModifiers, shortcutHint, viewKey } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, shortcutHint, viewKey, withHint, type ShortcutId } from "../lib/shortcuts";
 import { lang, t as tr } from "../i18n";
 import { accountName } from "../ui/AccountPicker";
 
@@ -555,17 +555,17 @@ function ArtifactsPane(props: { t: Task }) {
   );
 }
 
-const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: string; job?: boolean }[] = [
-  { kind: "flow", label: "작업 흐름", icon: "branch", keys: shortcutHint("flow") },
-  { kind: "side", label: "옆 대화", icon: "message", keys: shortcutHint("side") },
-  { kind: "artifacts", label: "결과물", icon: "inbox", keys: shortcutHint("artifacts"), job: true },
-  { kind: "changes", label: "변경 사항", icon: "diff", keys: shortcutHint("changes"), job: true },
-  { kind: "pr", label: "PR", icon: "pr", keys: shortcutHint("pr"), job: true },
+const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: ShortcutId; job?: boolean }[] = [
+  { kind: "flow", label: "작업 흐름", icon: "branch", keys: "flow" },
+  { kind: "side", label: "옆 대화", icon: "message", keys: "side" },
+  { kind: "artifacts", label: "결과물", icon: "inbox", keys: "artifacts", job: true },
+  { kind: "changes", label: "변경 사항", icon: "diff", keys: "changes", job: true },
+  { kind: "pr", label: "PR", icon: "pr", keys: "pr", job: true },
   { kind: "issues", label: "이슈", icon: "issue" },
-  { kind: "terminal", label: "터미널", icon: "shell", keys: shortcutHint("terminal"), job: true },
-  { kind: "files", label: "파일", icon: "file", keys: shortcutHint("files"), job: true },
-  { kind: "browser", label: "브라우저", icon: "globe", keys: shortcutHint("browser") },
-  { kind: "overview", label: "작업 정보", icon: "list", keys: shortcutHint("overview"), job: true },
+  { kind: "terminal", label: "터미널", icon: "shell", keys: "terminal", job: true },
+  { kind: "files", label: "파일", icon: "file", keys: "files", job: true },
+  { kind: "browser", label: "브라우저", icon: "globe", keys: "browser" },
+  { kind: "overview", label: "작업 정보", icon: "list", keys: "overview", job: true },
   { kind: "reverse", label: "바이너리 분석", icon: "binary", job: true },
   { kind: "preview", label: "미리보기", icon: "monitor" },
 ];
@@ -583,7 +583,7 @@ function NewTab(props: { t?: Task }) {
             <Icon name={x.icon} size={16} />
             <span class="nt-label">{tr(x.label)}</span>
             <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">{tr("열림")}</span></Show>
-            <Show when={x.job && !props.t} fallback={<Show when={x.keys}><kbd class="nt-keys">{x.keys}</kbd></Show>}>
+            <Show when={x.job && !props.t} fallback={<Show when={x.keys && shortcutHint(x.keys)}>{(k) => <kbd class="nt-keys">{k()}</kbd>}</Show>}>
               <span class="nt-hint">{tr("작업에서만")}</span>
             </Show>
           </button>
@@ -758,7 +758,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   aria-label={tr(tool().label)}
                   aria-selected={activeTab() === x.id}
                   data-shortcut={x.kind}
-                  title={`${tr(tool().label)}${tool().keys ? ` (${tool().keys})` : ""}`}
+                  title={tool().keys ? withHint(tr(tool().label), tool().keys!) : tr(tool().label)}
                   onKeyDown={(e) => {
                     if (e.target !== e.currentTarget || ignoredKey(e) || !noModifiers(e) || (e.key !== "Enter" && e.key !== " ")) return;
                     e.preventDefault();
@@ -774,7 +774,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
                   <button
                     class="ptab-x"
                     data-shortcut={activeTab() === x.id ? "closeTab" : undefined}
-                    title={`${tr("탭 닫기")}${activeTab() === x.id ? ` (${shortcutHint("closeTab")})` : ""}`}
+                    title={activeTab() === x.id ? withHint(tr("탭 닫기"), "closeTab") : tr("탭 닫기")}
                     aria-label={tr("{name} 닫기", { name: tr(tool().label) })}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -828,7 +828,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
         </Show>
         {/* an empty tab is already open: + would only go back to it */}
         <Show when={!ptabs().some((x) => x.kind === "new")}>
-          <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={`${tr("새 탭")} (${shortcutHint("newTab")})`} aria-label={tr("새 탭")} onClick={newPanelTab}>
+          <button class="icon-btn sm ptab-add" data-shortcut="newTab" title={withHint(tr("새 탭"), "newTab")} aria-label={tr("새 탭")} onClick={newPanelTab}>
             <Icon name="plus" size={14} />
           </button>
         </Show>

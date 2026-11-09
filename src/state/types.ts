@@ -549,6 +549,8 @@ export interface Settings {
   githubWrite?: boolean;
   /** tools a job gets on top of the default ones (Settings › 도구), by name; empty = the defaults only */
   extraTools?: string[];
+  /** Settings › 단축키: shortcut id → "cmd+shift+KeyD" or "none" (unbound); a missing id keeps its default */
+  keybindings?: Record<string, string>;
 }
 
 export interface AppState {

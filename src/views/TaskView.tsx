@@ -9,7 +9,7 @@ import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
 import { goMain, hadTab, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
-import { shortcutHint } from "../lib/shortcuts";
+import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
@@ -451,7 +451,7 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <MoreMenu id={task().id} />
-              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={`${tr("패널")} (⌘\\)`} onClick={togglePanel}>
+              <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={withHint(tr("패널"), "panel")} onClick={togglePanel}>
                 <Icon name="panel" size={16} />
               </button>
             </div>

@@ -135,6 +135,7 @@ export default {
   "⌘ 길게": "Hold ⌘",
   "어디서든 요청": "Request from anywhere",
   "단축키 목록": "Shortcut list",
+  "단축키 설정": "Customize shortcuts",
   "종료": "Quit",
   "⌘Q 길게": "Hold ⌘Q",
 

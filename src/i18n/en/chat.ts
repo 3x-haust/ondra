@@ -38,7 +38,6 @@ export default {
 
   // main chat
   "메인": "Main",
-  "패널 (⌘\\)": "Panel (⌘\\)",
   "메인에서": "From Main",
   "메시지 보내기|input": "Message",
   "{name}에서": "From {name}",
