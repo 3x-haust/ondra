@@ -1,7 +1,7 @@
 // Main: the conversation with the one who splits your requests into jobs.
 import { noteText, nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
-import { holdScroll, keepBottom } from "../ui/stick";
+import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
@@ -622,6 +622,9 @@ export function MainView() {
   };
   const toBottom = () => queueMicrotask(() => box && (box.scrollTop = box.scrollHeight));
   createEffect(on(() => [state.space, msgs().length, msgs()[msgs().length - 1]?.pending, asks().length], toBottom));
+  // what the user sends always shows: it takes the chat to the bottom and holds it there a moment
+  const sent = () => msgs().filter((m) => m.from === "me").length;
+  createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(box))));
   // warm the cache as soon as a chat is open, so even the first message is cached
   createEffect(on(key, () => void warmMain(state.space, project()?.id)));
 
@@ -752,7 +755,7 @@ export function MainView() {
             <RequestBoard
               msgs={msgs()}
               started={started}
-              onJump={(id) => box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              onJump={(id) => (holdScroll(900, box), box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }))}
             />
           }
         >

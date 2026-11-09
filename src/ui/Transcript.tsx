@@ -767,7 +767,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
       const at = scroller?.querySelector<HTMLElement>(".answer-at");
       if (!at) return;
       const top = at.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16;
-      if (scroller.scrollHeight - top > scroller.clientHeight + 4) scroller.scrollTo({ top });
+      if (scroller.scrollHeight - top > scroller.clientHeight + 4) (holdScroll(400, scroller), scroller.scrollTo({ top }));
     }, wait);
   onMount(() => settled() && toAnswer(80));
   // what the user sends always shows: a new message (or one queued for the next turn) takes the chat to the bottom
