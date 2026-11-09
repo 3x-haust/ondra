@@ -376,12 +376,9 @@ export function TaskView(props: { id: string }) {
               </Show>
               <IssueTag t={task()} />
             </nav>
-            {/* the state first, then what's left to check */}
+            {/* the state first */}
             <Show when={task().status === "done" && task().worktree?.state === "open"}>
               <span class="status-chip unmerged"><Glyph t={task()} />{tr("검토")}</span>
-            </Show>
-            <Show when={task().status === "done" && !discarded(task()) && task().unverified?.length}>
-              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             {/* its changes were thrown away: the muted trash, 버림 · when it ended */}
             <Show when={discarded(task())}>
@@ -421,6 +418,10 @@ export function TaskView(props: { id: string }) {
                   )}
                 </Show>
               </span>
+            </Show>
+            {/* what's left to check comes after the state; a merged task has nothing left to check */}
+            <Show when={task().status === "done" && !discarded(task()) && task().worktree?.state !== "merged" && task().unverified?.length}>
+              <span class="status-chip unverified" title={task().unverified!.join("\n")}>{tr("{n}개 확인 안 됨", { n: task().unverified!.length })}</span>
             </Show>
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">

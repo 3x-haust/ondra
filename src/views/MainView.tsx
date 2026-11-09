@@ -769,7 +769,13 @@ function AnsweredLine(props: { a: Answered }) {
   );
 }
 
-type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "done"; at: number };
+type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "review" | "done"; at: number };
+
+/** A task line's state word: its status, or 검토 (finished, its worktree waiting to be merged), 병합됨, 버림. */
+type ReqState = Status | "inreview" | "merged" | "discarded";
+const REQ_WORD: Record<ReqState, string> = { ...statusLabel, inreview: "검토", merged: "병합됨", discarded: "버림" };
+const reqState = (t: Task): ReqState =>
+  discarded(t) ? "discarded" : t.status === "done" ? (t.worktree?.state === "open" ? "inreview" : t.worktree?.state === "merged" ? "merged" : "done") : t.status;
 
 /**
  * What the requests in this chat are doing, one line each, above the chat: the
@@ -841,11 +847,14 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       // a finished job is finished, and so is a discarded one (even paused or failed): subagents it
       // left stopped don't keep the request open
       const all = r.tasks.filter((t) => !discarded(t)).flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
+      // finished with its worktree still open, it waits on a merge: listed as 검토 until merged or discarded
       r.state = all.some((t) => t.status === "waiting" || t.status === "failed")
         ? "ask"
         : all.some((t) => t.status === "running" || t.status === "queued" || t.status === "paused")
           ? "live"
-          : "done";
+          : all.some((t) => reqState(t) === "inreview")
+            ? "review"
+            : "done";
       // when it ended: merged, when it was merged; discarded, when it was discarded
       r.at = Math.max(...r.tasks.map((t) => endedAt(t) ?? t.startedAt ?? t.createdAt));
     }
@@ -854,30 +863,34 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   });
   /** every task the list shows, once */
   const listed = () => [...new Set(reqs().flatMap((r) => r.tasks))];
-  // the head counts the tasks below it, by the words the sidebar uses
-  const ORDER: Status[] = ["waiting", "failed", "running", "queued", "paused", "done"];
-  // a discarded task is counted as 버림, never as 완료
-  const counts = () =>
-    [
-      ...ORDER.map((st) => [st, listed().filter((t) => t.status === st && !discarded(t)).length, tr(statusLabel[st])] as const),
-      ["discarded", listed().filter(discarded).length, tr("버림")] as const,
-    ].filter(([, n]) => n);
+  // the head counts the tasks below it, by the words the sidebar uses, most pressing first
+  // (검토 is its own word, and a discarded task is counted as 버림, never as 완료)
+  const ORDER: ReqState[] = ["waiting", "failed", "running", "inreview", "queued", "paused", "done", "merged", "discarded"];
+  const counts = () => ORDER.map((st) => [st, listed().filter((t) => reqState(t) === st).length, tr(REQ_WORD[st])] as const).filter(([, n]) => n);
   // what the job says it is doing now (its status line), not its title again
   // never the state word again (the row ends with it): "실패" beside 실패, "응답 필요" beside 응답 필요
   // ("대기 중" / "일시정지됨" are the state word too)
-  const sameAsState = (s: string, st: Status) => {
+  const sameAsState = (s: string, st: ReqState) => {
     const x = s.trim();
-    return x.toLowerCase() === tr(statusLabel[st]).toLowerCase() || x.replace(/\s*(중|됨)$/, "") === statusLabel[st] || (st === "waiting" && x === "응답 대기 중");
+    return x.toLowerCase() === tr(REQ_WORD[st]).toLowerCase() || x.replace(/\s*(중|됨)$/, "") === REQ_WORD[st] || (st === "waiting" && x === "응답 대기 중");
   };
   const doing = (t: Task) => {
     const s = (t.status === "waiting" ? nowText(t.now) : t.intent || nowText(t.now)).trim();
     return s && s !== t.title && !sameAsState(s, t.status) ? s : "";
   };
   const working = () => listed().filter((t) => t.status === "running");
-  /** a request's word: what its most pressing task is */
-  const stateOf = (r: Req): Status => (r.state === "done" ? "done" : (ORDER.find((st) => r.tasks.some((t) => t.status === st && !discarded(t))) ?? "running"));
-  /** what the row says: every task of it discarded reads 버림 (the muted trash), never 완료 */
-  const rowState = (r: Req): Status | "discarded" => (r.state === "done" && r.tasks.every(discarded) ? "discarded" : stateOf(r));
+  /** what the row says: its most pressing task's word. Finished: every task of it discarded reads 버림 (the
+   *  muted trash), every one kept merged reads 병합됨, never 완료 */
+  const rowState = (r: Req): ReqState => {
+    if (r.state === "done") {
+      const kept = r.tasks.filter((t) => !discarded(t));
+      return !kept.length ? "discarded" : kept.every((t) => reqState(t) === "merged") ? "merged" : "done";
+    }
+    const live = ORDER.filter((st) => st !== "done" && st !== "merged" && st !== "discarded");
+    return live.find((st) => r.tasks.some((t) => reqState(t) === st)) ?? (r.state === "review" ? "inreview" : "running");
+  };
+  /** still under way or waiting on you: the row shows the step it is on */
+  const going = (r: Req) => r.state === "ask" || r.state === "live";
   /** main's last report on one of the request's jobs */
   const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
   /** a one-task request: its to-do list (skipped steps left out) */
@@ -890,7 +903,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const t = focus(r);
     if (!t) return "";
     const s = ((t.status === "waiting" ? nowText(t.now) : t.plan.find((p) => p.state === "now")?.text ?? doing(t)) ?? "").trim();
-    return sameAsState(s, stateOf(r)) || sameAsState(s, t.status) ? "" : s;
+    return sameAsState(s, rowState(r)) || sameAsState(s, t.status) ? "" : s;
   };
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
@@ -900,11 +913,12 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       pick((t) => t.status === "waiting" || t.status === "failed") ??
       pick((t) => t.status === "running") ??
       pick((t) => t.status === "queued" || t.status === "paused") ??
+      pick((t) => reqState(t) === "inreview") ??
       r.tasks[r.tasks.length - 1]
     );
   };
   /** a task line's right side: how long it has run, or its state */
-  const when = (t: Task) => (discarded(t) ? tr("버림") : t.status === "running" && t.startedAt ? compact(now() - t.startedAt) : tr(statusLabel[t.status]));
+  const when = (t: Task) => (t.status === "running" && t.startedAt ? compact(now() - t.startedAt) : tr(REQ_WORD[reqState(t)]));
   return (
     <Show when={reqs().length}>
       <div class="req-board" ref={board} classList={{ open: open() }}>
@@ -923,17 +937,19 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
               {(r) => (
                 <li>
                   <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
-                    <Show when={rowState(r) === "discarded"} fallback={<i class={`req-dot ${stateOf(r)}`} />}>
-                      <GlyphMark g="discarded" class="req-glyph" />
-                    </Show>
+                    {/* 버림 and 검토 read by shape too: the shared muted trash, the review ring */}
+                    <Switch fallback={<i class={`req-dot ${rowState(r) === "merged" ? "done" : rowState(r)}`} />}>
+                      <Match when={rowState(r) === "discarded"}><GlyphMark g="discarded" class="req-glyph" /></Match>
+                      <Match when={rowState(r) === "inreview"}><GlyphMark g="inreview" class="req-glyph" /></Match>
+                    </Switch>
                     <span class="req-text">{r.text}</span>
                     {/* one task: the step it is on and its to-do list; several: how many of the tasks listed below are done */}
                     <Show
                       when={r.tasks.length > 1}
                       fallback={
                         <>
-                          <Show when={r.state !== "done" && stepNow(r)}>{(n) => <span class="req-step-now">{n()}</span>}</Show>
-                          <Show when={r.state !== "done" && steps(r)}>
+                          <Show when={going(r) && stepNow(r)}>{(n) => <span class="req-step-now">{n()}</span>}</Show>
+                          <Show when={going(r) && steps(r)}>
                             {(st) => (
                               <span class="req-steps" title={t("할 일 {done}/{n} 완료", { done: st().done, n: st().all })}>
                                 <i class="req-bar"><b style={{ width: `${(st().done / st().all) * 100}%` }} /></i>
@@ -948,7 +964,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                         {r.tasks.filter((x) => x.status === "done").length}/{r.tasks.length}
                       </span>
                     </Show>
-                    <span class={`req-state ${rowState(r)}`}>{((st) => (st === "discarded" ? tr("버림") : tr(statusLabel[st])))(rowState(r))}</span>
+                    <span class={`req-state ${rowState(r)}`}>{tr(REQ_WORD[rowState(r)])}</span>
                   </button>
                   {/* several tasks: one line each, all of them, so the count above adds up */}
                   <Show when={r.tasks.length > 1}>
@@ -957,7 +973,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                         <button class="req-job" onClick={() => openTask(x.id)} title={x.title}>
                           <span class="req-job-title">{x.title}</span>
                           <Show when={x.status !== "done" && doing(x)}><span class="req-job-now">{doing(x)}</span></Show>
-                          <span class={`req-job-time ${x.status}`}>{when(x)}</span>
+                          <span class={`req-job-time ${reqState(x)}`}>{when(x)}</span>
                         </button>
                       )}
                     </For>
