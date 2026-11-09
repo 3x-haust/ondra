@@ -1,0 +1,8 @@
+{ "note": "A job that failed: its row shows the error, main adds one short line on what the user can do, and starts nothing it can't finish", "space": "work",
+  "tasks": [{ "id": "t-deploy", "title": "배포 스크립트 점검", "topic": "acme", "status": "failed", "error": "스테이징 배포 키(DEPLOY_KEY)가 없어서 배포 단계에서 멈췄어요" }],
+  "chat": [
+    { "from": "me", "text": "acme 스테이징 배포 스크립트 끝까지 도는지 봐 줘" },
+    { "from": "captain", "text": "확인할게요 [fork t-deploy]" }
+  ],
+  "messages": [{ "event": "fork", "text": "Fork t-deploy \"배포 스크립트 점검\" failed.\nError: 스테이징 배포 키(DEPLOY_KEY)가 없어서 배포 단계에서 멈췄어요\nWhat it reported:\n빌드와 테스트는 통과했지만 배포 단계에서 DEPLOY_KEY가 없어 멈췄어요." }],
+  "expect": [{ "new": 0, "maxAnswer": 200 }] }

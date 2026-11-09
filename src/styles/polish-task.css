@@ -1245,59 +1245,55 @@
   pointer-events: none;
 }
 
-/* the job chip under a main reply: the sidebar's glyphs (§8) */
-.br-chip .sb-glyph {
+/* a job's row in a main reply: the sidebar's glyphs (§8) */
+.job-row .sb-glyph {
   width: 14px;
   height: 14px;
 }
-.br-chip .sb-glyph i {
+.job-row .sb-glyph i {
   width: 6px;
   height: 6px;
 }
-.br-chip .sb-glyph.paused i {
+.job-row .sb-glyph.paused i {
   width: 4px;
   height: 4px;
 }
-.br-chip .sb-glyph.queued {
+.job-row .sb-glyph.queued {
   box-shadow: none;
   border: 1.5px dashed var(--ink-4);
 }
-.br-chip .sb-glyph.waiting,
-.br-chip .sb-glyph.failed,
-.br-chip .sb-glyph.inreview {
+.job-row .sb-glyph.waiting,
+.job-row .sb-glyph.failed,
+.job-row .sb-glyph.inreview {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px currentColor;
 }
-.br-chip .sb-glyph.waiting {
+.job-row .sb-glyph.waiting {
   color: var(--warn);
 }
-.br-chip .sb-glyph.failed {
+.job-row .sb-glyph.failed {
   color: var(--bad);
 }
-.br-chip .sb-glyph.inreview {
+.job-row .sb-glyph.inreview {
   color: var(--accent-text);
 }
-.br-chip .sb-glyph.waiting i,
-.br-chip .sb-glyph.failed i,
-.br-chip .sb-glyph.inreview i {
+.job-row .sb-glyph.waiting i,
+.job-row .sb-glyph.failed i,
+.job-row .sb-glyph.inreview i {
   background: currentColor;
 }
-.br-chip .sb-glyph.done {
+.job-row .sb-glyph.done {
   background: var(--accent-soft);
   box-shadow: none;
   color: var(--accent-text);
 }
-.br-chip .sb-glyph.running {
+.job-row .sb-glyph.running {
   box-shadow: none;
 }
-.br-chip .sb-glyph .spin {
+.job-row .sb-glyph .spin {
   width: 14px;
   height: 14px;
   padding: 2px;
-}
-.br-chip.m-review .br-chip-meta {
-  color: var(--accent-text);
-  font-weight: var(--fw-medium);
 }
 /* a branch in review: the accent, like its glyph (never green) */
 .graph .g-lines path.ready {

@@ -458,7 +458,7 @@ export interface MemoryCheck {
 /** 일 기록: what one finished job did, kept as written (searched, never sent whole). */
 /** What main reported when a job finished, kept apart from the chat so it can be found again later. */
 export interface ResultEntry {
-  /** the main message it came from */
+  /** older entries: the main message it came from; newer ones: res-<task>-<finishedAt> */
   id: string;
   taskId: string;
   space: SpaceId;
@@ -467,6 +467,8 @@ export interface ResultEntry {
   reply?: string;
   answers: { text: string; blocks: Block[] }[];
   at: number;
+  /** the chat message where main said something about it (a newer entry; else the job's row shows it) */
+  msg?: string;
   /** kept on top of the list */
   pinned?: boolean;
 }
@@ -601,7 +603,7 @@ export interface AppState {
   side?: SideMessage[];
   /** pull requests jobs opened, watched for reviews, failed checks and conflicts (by PR url) */
   prWatch?: Record<string, PrWatch>;
-  /** finished jobs' results as main reported them, newest last (capped) */
+  /** finished jobs' results (as the jobs reported them; older ones as main did), newest last (capped) */
   results?: ResultEntry[];
 }
 

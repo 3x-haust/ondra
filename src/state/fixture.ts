@@ -179,6 +179,26 @@ export function fixture(base: AppState): AppState {
         worktree: { repo: "/Users/me/ondra", path: "/Users/me/ondra-wt/t7", branch: "task/t7", base: "abc", sub: "", state: "open" },
       },
       {
+        id: "t8", space: "work", topic: "ondra", title: "대시보드 문구 다듬기", ask: "대시보드 인사말이랑 카드 이름 좀 짧게", cwd: "~/01_Project/01_Projects/ondra", status: "done", priority: 2, weight: "light", accountId: "default",
+        createdAt: m(60), startedAt: m(60), finishedAt: m(48), now: "", summary: "인사말과 카드 이름을 짧게 바꿨어요", plan: [], legs: [{ startedAt: m(60), endedAt: m(48) }], shells: [], inbox: [],
+        entries: [
+          { id: "d1", at: m(60), kind: "user", text: "대시보드 인사말이랑 카드 이름 좀 짧게" },
+          { id: "d2", at: m(55), kind: "tool", tool: { name: "edit", kind: "edit", target: "Dashboard.tsx", detail: "/x/src/Dashboard.tsx", add: 6, del: 6, ok: true, endedAt: m(54.9) } },
+          { id: "d3", at: m(49), kind: "text", text: "인사말을 한 줄로 줄이고 카드 이름을 두 글자씩 맞췄어요. 개발 서버에서 대시보드를 열어 확인했어요." },
+          { id: "d4", at: m(48), kind: "block", block: { type: "shot", path: LOGIN, caption: "바뀐 대시보드" } },
+        ],
+        worktree: { repo: "/Users/me/ondra", path: "/x/worktrees/ondra-t8", branch: "fix/dashboard-copy", base: "abc", sub: "", state: "merged" }, mergedAt: m(47),
+      },
+      {
+        id: "t9", space: "work", topic: "acme", title: "배포 스크립트 점검", ask: "acme 스테이징 배포 스크립트 끝까지 도는지 봐 줘", cwd: "~/acme", status: "failed", priority: 2, weight: "light", accountId: "default",
+        createdAt: m(60), startedAt: m(60), finishedAt: m(44), now: "", error: "스테이징 배포 키(DEPLOY_KEY)가 없어서 배포 단계에서 멈췄어요", plan: [], legs: [{ startedAt: m(60), endedAt: m(44) }], shells: [], inbox: [],
+        entries: [
+          { id: "x1", at: m(60), kind: "user", text: "acme 스테이징 배포 스크립트 끝까지 도는지 봐 줘" },
+          { id: "x2", at: m(50), kind: "tool", tool: { name: "bash", kind: "bash", target: "./scripts/deploy.sh staging", detail: "./scripts/deploy.sh staging", ok: false, endedAt: m(49) } },
+          { id: "x3", at: m(44), kind: "text", text: "빌드와 테스트는 통과했지만 배포 단계에서 DEPLOY_KEY가 없어 멈췄어요." },
+        ],
+      },
+      {
         id: "t4", space: "work", topic: "앱", title: "iOS 시뮬레이터 스크린샷", ask: "iOS 시뮬레이터에서 앱 화면 스크린샷을 새로 찍어 줘", cwd: "~", status: "queued", priority: 0, weight: "heavy", accountId: "default",
         createdAt: m(2), now: "대기 중", plan: [], legs: [], entries: [], shells: [], inbox: [],
       },
@@ -194,6 +214,11 @@ export function fixture(base: AppState): AppState {
     captain: [
       { id: "cr", at: m(201), space: "work", from: "me", text: "README 좀 정리해 줘. 오래된 내용 빼고" },
       { id: "crr", at: m(201), space: "work", from: "captain", reply: "바로 정리할게요.", routes: [{ kind: "new", taskId: "t3" }] },
+      { id: "c8", at: m(61), space: "work", from: "me", text: "대시보드 문구 좀 짧게 다듬고, acme 스테이징 배포 스크립트도 끝까지 도는지 봐 줘" },
+      { id: "c8r", at: m(61), space: "work", from: "captain", reply: "두 가지로 나눠서 바로 시작할게요.", routes: [{ kind: "new", taskId: "t8" }, { kind: "new", taskId: "t9" }] },
+      // a job that finished as asked: main adds nothing, its row says it
+      { id: "c8a", at: m(48), space: "work", from: "captain", after: "t8", reply: "", routes: [] },
+      { id: "c8b", at: m(44), space: "work", from: "captain", after: "t9", reply: "", routes: [{ kind: "answer", text: "DEPLOY_KEY를 넣어 주시면 이어서 돌릴게요.", blocks: [] }] },
       { id: "c0", at: m(16), space: "work", from: "me", text: "하이" },
       { id: "c0r", at: m(16), space: "work", from: "captain", reply: "안녕하세요! 오늘은 뭘 같이 해 볼까요?", routes: [] },
       { id: "c1", at: m(15), space: "work", from: "me", text: "로그인 튕기는 거 고쳐 줘. 그리고 4월 회고 초안도. 아 블로그는 항상 반말로 써" },
@@ -208,6 +233,7 @@ export function fixture(base: AppState): AppState {
       { id: "c4", at: m(1), space: "work", from: "captain", reply: "", routes: [{ kind: "answer", text: "다음 주는 **화요일 오전**에 스테이징, **목요일 오후**에 운영 배포예요. 로그인 수정이 합쳐져야 목요일에 같이 나가요.", blocks: [] }] },
     ],
     results: [
+      { id: "res-t8", taskId: "t8", space: "work", project: "ondra", title: "대시보드 문구 다듬기", reply: "인사말과 카드 이름을 짧게 바꿨어요", answers: [{ text: "인사말을 한 줄로 줄이고 카드 이름을 두 글자씩 맞췄어요. 개발 서버에서 대시보드를 열어 확인했어요.", blocks: [{ type: "shot", path: LOGIN, caption: "바뀐 대시보드" }] }], at: m(48) },
       { id: "r_logo", taskId: "t6", space: "work", project: "ondra", title: "로고 색 바꾸기", reply: "로고를 파란색으로 바꿨어요.", answers: [{ text: "앱 아이콘과 메뉴 막대 아이콘 둘 다 **#2F6BFF**로 맞췄어요. 어두운 화면에서도 대비가 4.8:1이라 잘 보여요.", blocks: [] }], at: m(300) },
       { id: "r_readme", taskId: "t3", space: "work", project: "ondra", title: "README 정리", reply: "README에서 오래된 설치 안내를 빼고 지금 쓰는 방법만 남겼어요.", answers: [{ text: "- 설치: DMG 하나로 끝나요\n- 빠진 것: 예전 CLI 설치, 베타 신청 링크\n- 새로 쓴 것: 업데이트 방법", blocks: [{ type: "files", files: [{ path: "README.md", add: 12, del: 10 }] }] }], at: m(190) },
       { id: "r_re", taskId: "t_re", space: "work", project: "ondra", title: "보안 입력 판별 분석", reply: "", answers: [{ text: "ondra-cuhost는 접근성 요소의 **role**과 **subrole**을 문자열로 비교해서 비밀번호 칸을 알아봐요. `AXSecureTextField`면 입력을 막아요.", blocks: [{ type: "metric", label: "읽은 함수", value: "549" }] }], at: m(34) },

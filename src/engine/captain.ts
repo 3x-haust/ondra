@@ -4,7 +4,7 @@
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
 import { isNetError, waitOnline } from "./net";
-import { keepResult } from "./results";
+import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
@@ -121,7 +121,8 @@ export { userParked } from "./jobs";
 
 /**
  * Main is the orchestrator: when a job it started ends, the result comes back to
- * main, which tells the user what came out and carries on (next job, or a question).
+ * main, which carries on (next job, or a question). The chat's row for the job
+ * already shows what came out, so main adds only what needs the user.
  */
 export function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
@@ -129,19 +130,21 @@ export function jobEnded(t: Task) {
   const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
   const from = owners.find((m) => m.project) ?? owners[0];
   if (!from) return;
+  // its own result, kept now: the chat's row for it opens this
+  keepJobResult(t);
   const space = chatKey(t.space, from.project);
   const handed = from.project ? requestsOf(space).find((q) => q.jobs.has(t.id))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
   if (n > 6) return; // six automatic steps in a row: wait for the user
   followUps.set(space, n);
   const { said, blocks } = reportOf(t);
-  const evidence = t.entries.slice(sinceAsked(t)).flatMap((e) => (e.kind === "block" && e.block.type === "evidence" ? e.block.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
+  const evidence = jobReport(t).blocks.flatMap((b) => (b.type === "evidence" ? b.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
   const asked = userFollowUps(t.space, [t.id]);
   // main already sent this fork back since the user last spoke: once is enough
   const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
   const text = [
-    handed?.via === "main" ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, your answer goes back to main.` : "",
+    handed?.via === "main" ? `Main handed this project the user's request: "${handed.text}". Finish it here; when nothing is left, the jobs' results go back to main on their own.` : "",
     `Fork ${t.id} "${t.title}" ${t.status === "done" ? "finished" : "failed"}.`,
     t.status === "done" ? `Summary: ${t.summary ?? ""}` : `Error: ${t.error ?? ""}`,
     t.unverified?.length ? `Not verified: ${t.unverified.join("; ")}` : "",
@@ -149,8 +152,8 @@ export function jobEnded(t: Task) {
     said ? `What it reported:\n${said.slice(-3500)}` : "",
     blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
     asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
-    sentBack ? "You already sent this fork back once since the user last spoke. Report what came out and stop: no append to it until the user asks." : "",
-    userParked(t) ? "The user ended or stopped this work themselves. Report what came out and what is left in a few lines, then stop: no new fork to carry it on and no append to it until the user asks." : "",
+    sentBack ? "You already sent this fork back once since the user last spoke. Stop here: no append to it until the user asks; say in one line what is still open, if anything." : "",
+    userParked(t) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
@@ -162,23 +165,10 @@ export function jobEnded(t: Task) {
   void pump(space);
 }
 
-/** Where a job's latest report starts: after the last thing it was given (a card it asked and got answered is part of that work). */
-function sinceAsked(t: Task): number {
-  const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
-  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) return i + 1;
-  return 0;
-}
-
 /** What a job reported since it was last given work: its words and its result blocks in lines. */
 function reportOf(t: Task): { said: string; blocks: string[] } {
-  const since = t.entries.slice(sinceAsked(t));
-  const said = since
-    .filter((e) => e.kind === "text")
-    .map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim())
-    .filter(Boolean)
-    .join("\n\n");
-  const blocks = since.flatMap((e) => (e.kind === "block" ? [blockLine(e.block)] : [])).filter(Boolean).slice(-10);
-  return { said, blocks };
+  const { said, blocks } = jobReport(t);
+  return { said, blocks: blocks.map(blockLine).filter(Boolean).slice(-10) };
 }
 
 /**
@@ -288,6 +278,9 @@ function handDown(spaceId: SpaceId, projectId: string, request: string, taskIds:
   setState("captain", (list) => [...list.slice(-300), ask, reply]);
 }
 
+/** this chat message started the job or relayed to it (the chat shows it as the job's row) */
+const handsTo = (m: CaptainMessage, id: string) => (m.routes ?? []).some((r) => (r.kind === "new" || r.kind === "append") && r.taskId === id);
+
 export function reportUp(space: string) {
   const projectId = pj(space);
   if (!projectId) return;
@@ -315,9 +308,11 @@ export function reportUp(space: string) {
       .join("\n\n");
     const asked = userFollowUps(sp(space), jobs.map((t) => t.id));
     const proj = projectById(projectId);
+    // a job the project started on its own (a next step) has no row in main's chat
+    const rowInMain = (id: string) => state.captain.some((m) => m.space === sp(space) && !m.project && handsTo(m, id));
     const text = [
       `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
-      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}`).join(" | ")}` : "",
+      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}${rowInMain(t.id) ? "" : " (no row in your chat)"}`).join(" | ")}` : "",
       answers ? `What the project reported:\n${answers}` : "",
       reported ? `What the jobs reported:\n${reported}` : "",
       asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((x) => `- ${x}`).join("\n")}` : "",
@@ -691,6 +686,30 @@ function forksBlock(now: string, before?: string): string {
 }
 
 
+/**
+ * What main does when a fork it started ends. The chat shows each job main started or
+ * relayed to as one row that updates by itself (title, the job's own one-line summary,
+ * its screenshot; a click opens the full result), so main doesn't retell it.
+ */
+export const FORK_ENDED = [
+  "The chat already shows this fork as one row that updates by itself: its title, its own one-line summary and its screenshot, and a click opens its full result. Don't retell it: no report of what came out, what changed or how it was checked, no screenshots or blocks.",
+  'When it finished as asked and nothing needs the user, add nothing: {"reply":"","routes":[]}.',
+  "Otherwise add only what needs them: one short line as an \"answer\" (no blocks; a 왜 answer may take two sentences), or a route:",
+  "- it failed, or stopped short of what the user asked: its row already shows the error, so say plainly what is left or what the user can do about it. Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\").",
+  "- the user's follow-ups ask something its summary doesn't answer: answer every such question, the 왜 first.",
+  "- what the user asked for still isn't done and the next step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. Its row shows it, so \"reply\" stays empty or one short line.",
+  "- a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one \"ask\", your recommendation first.",
+  "\"Not verified\" items stay in its result, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Don't redo finished work.",
+].join("\n");
+
+/** What main does when a project it handed work to has finished: its jobs show as rows here too. */
+export const PROJECT_ENDED = [
+  "The chat already shows each of these jobs as one row that updates by itself (title, the job's own one-line summary, its screenshot; a click opens the full result), here and in the project's chat. Don't retell what came out and never point the user to the project's chat. A job marked \"no row in your chat\" (a next step the project started) is the exception: give its result in one line.",
+  'When the request is done as asked and nothing needs the user, add nothing: {"reply":"","routes":[]}.',
+  "Otherwise add only what needs them, in one short line (no blocks): a failure or what is still open (keep the jobs' own words on what isn't done or wasn't checked: \"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"), an answer to every question in the user's follow-ups the summaries don't answer (the 왜 first), or a choice only the user can make (one \"ask\", your recommendation first).",
+  "Don't redo it. Route a next step only if what the user asked still needs one.",
+].join("\n");
+
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
@@ -748,26 +767,13 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     const recent = (w ? w.chat : state.captain)
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : ""))].filter(Boolean).join(" ")}`));
+      // a job's end main added nothing to still shows: its row said it
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
-  if (event === "project")
-    out.push(
-      "",
-      "# A project you handed work to has finished (not a user message)",
-      text,
-      "",
-      "Tell the user here what came out, with the details they need from it: the result first (for something built: does it work, seen running, in one plain line, \"돼요\" / \"아직 돌려 보진 못했어요\" / \"안 돼요\"; then the screenshots or files the jobs made, so they can see it), then what fits the work (the cause, what changed, how it was checked; what went out and its status; links, PR numbers, what is still open), short and visual (blocks are fine), as an \"answer\". Never point them to the project's chat for details: this answer is where they read it. Keep the jobs' own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first. Don't redo it. Route a next step only if what the user asked still needs one.",
-    );
-  else if (event)
-    out.push(
-      "",
-      "# A fork you started has ended (not a user message)",
-      text,
-      "",
-      "Tell the user what came out, short and visual (blocks), as an \"answer\": the result first (for something built: does it work, seen running, in one plain line, \"돼요\" / \"아직 돌려 보진 못했어요\" / \"안 돼요\"; then the screenshots or files the fork made, so they can see it), then what fits the work (the cause, what changed, how it was checked; what went out and its status; links). Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first. Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
-    );
+  if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", FORK_ENDED);
   else out.push("", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, recap: false });
   keepSent(space, sentOf.get(space));
@@ -811,6 +817,8 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     const p = prose(raw) || loose;
     if (p) return { reply, routes: [{ kind: "answer", text: p, blocks: [] }] };
     if (reply) return { reply, routes: [] };
+    // a job's end that needs nothing from the user: its row in the chat already says it
+    if (event) return { reply: "", routes: [] };
     throw new Error("응답이 비어 있어요");
   }
   return { reply, routes };

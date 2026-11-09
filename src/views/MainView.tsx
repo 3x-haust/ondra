@@ -1,20 +1,21 @@
 // Main: the conversation with the one who splits your requests into jobs.
 import { noteText, nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
-import { keepBottom } from "../ui/stick";
+import { holdScroll, keepBottom } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
-// Every reply carries chips for the jobs it started; the jobs themselves live
-// in the sidebar, grouped by what they need from you.
+// Every reply carries one row for each job it started or relayed to, kept up to
+// date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
-import { fsFiles, pickFolder } from "../lib/native";
+import { fileSrc, fsFiles, pickFolder } from "../lib/native";
+import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
-import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, toast, togglePanel, view, type Draft } from "../state/ui";
+import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -32,7 +33,6 @@ import { effortFor } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
-import { BranchChip } from "./Branch";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
 import { openAddAccount } from "./Settings";
@@ -65,11 +65,96 @@ function fill(text: string) {
 
 // ───────────── pieces
 
-function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; active?: string }) {
+/** A reply main wrote on its own (a job ended, a project reported back), not to something the user said. */
+const onItsOwn = (m: CaptainMessage) => !!(m.after || m.up);
+/** the jobs a reply handed work to (started or relayed to), once each, in order */
+function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
+  const out: { taskId: string; relayed: boolean }[] = [];
+  for (const r of m.routes ?? []) {
+    if ((r.kind !== "new" && r.kind !== "append") || out.some((x) => x.taskId === r.taskId)) continue;
+    out.push({ taskId: r.taskId, relayed: r.kind === "append" });
+  }
+  return out;
+}
+/** something of this reply shows in the chat (main reacting to a job's end may add nothing: the job's row says it) */
+const shows = (m: CaptainMessage) =>
+  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
+
+/** What a job is on while it runs: what it last said it is doing, else its to-do step, else its status line. */
+function doingNow(x: Task): string {
+  const s = (x.intent || x.plan.find((p) => p.state === "now")?.text || nowText(x.now) || "").trim();
+  return s && s !== x.title ? s : "";
+}
+const oneLine = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
+
+/**
+ * One job main handed work to, as one quiet line that keeps up with it: its step while it runs,
+ * its own one-line result (and the screenshot it left) once done, or what it needs. A click opens
+ * its result, or the job while there is none; with ⌥/⌘ beside this pane. `live`: the last row
+ * for this job in the chat (an earlier one only names it).
+ */
+function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active?: boolean }) {
+  const task = () => taskById(props.taskId);
+  return (
+    <Show when={task()}>
+      {(x) => {
+        const meta = () => stateMeta(x());
+        const over = () => x().status === "done" && !discarded(x());
+        const result = () => (over() ? resultOfTask(x().id) : undefined);
+        const shot = () => (props.live && over() ? jobShot(x()) : undefined);
+        /** the word on the right: only when it needs you, or isn't moving */
+        const word = () => (meta().tone === "bad" || meta().tone === "ask" || meta().tone === "review" || meta().tone === "idle" ? meta().text : "");
+        const detail = () => {
+          if (!props.live) return "";
+          const t = x();
+          if (t.status === "failed") return oneLine(t.error).slice(0, 200);
+          if (t.status === "waiting") return oneLine(state.decisions.find((d) => d.taskId === t.id)?.question ?? nowText(t.now));
+          if (t.status === "done") return discarded(t) ? "" : oneLine(t.summary);
+          if (t.status === "running") return oneLine(doingNow(t));
+          return "";
+        };
+        /** relayed to while it works: said before its step ("전달함 · 버튼 확인"); once it is over, its result alone */
+        const line = () => {
+          const sent = props.relayed && (!props.live || meta().tone === "live" || x().status === "queued");
+          return [sent ? t("전달함|row") : "", detail()].filter(Boolean).join(" · ");
+        };
+        const open = (e: MouseEvent) => {
+          const r = result();
+          const v: View = r ? { name: "results", id: r.id } : { name: "task", id: x().id };
+          if (e.altKey || e.metaKey) splitPane("right", { view: v });
+          else setView(v);
+        };
+        return (
+          <button
+            class={`job-row tone-${meta().tone}`}
+            classList={{ active: props.active, past: !props.live }}
+            onClick={open}
+            onMouseEnter={() => setHoverTask(x().id)}
+            onMouseLeave={() => setHoverTask(null)}
+            title={props.relayed ? `${t("{task}에 전달했어요", { task: x().title })}` : x().title}
+          >
+            <Glyph t={x()} />
+            <span class="job-title">{x().title}</span>
+            <Show when={line()}>
+              <span class="job-detail">{line()}</span>
+            </Show>
+            <Show when={props.live && word()}>
+              <span class="job-word">{word()}</span>
+            </Show>
+            <Show when={shot()}>{(p) => <img class="job-shot" src={fileSrc(p())} alt="" loading="lazy" />}</Show>
+          </button>
+        );
+      }}
+    </Show>
+  );
+}
+
+function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined }) {
   const routes = () => props.m.routes ?? [];
+  const rows = () => handed(props.m);
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
   return (
-    <div class="reply" data-mid={props.m.id} classList={{ linked: !!props.chips?.some((t) => t.id === hoverTask() || t.id === props.active) }}>
+    <div class="reply" data-mid={props.m.id} classList={{ linked: rows().some((r) => r.taskId === hoverTask() || r.taskId === props.active) }}>
       <Show when={props.m.up ? projectById(props.m.up) : undefined}>
         {(p) => (
           <button class="reply-from" onClick={() => setView({ name: "main", project: p().id })}>
@@ -99,15 +184,17 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
             )}
           </Match>
           <Match when={true}>
-            {/* the jobs main looked up for this reply (jobs_search, job_read) */}
-            <For each={props.m.steps}>
-              {(s) => (
-                <div class="reply-note">
-                  <Icon name="search" size={14} />
-                  <span>{noteText(s)}</span>
-                </div>
-              )}
-            </For>
+            {/* the jobs main looked up for this reply (jobs_search, job_read); a job it then handed work to is its row instead */}
+            <Show when={!rows().length}>
+              <For each={props.m.steps}>
+                {(s) => (
+                  <div class="reply-note">
+                    <Icon name="search" size={14} />
+                    <span>{noteText(s)}</span>
+                  </div>
+                )}
+              </For>
+            </Show>
             <Show when={props.m.reply}><p class="reply-line">{props.m.reply}</p></Show>
             <Show when={!props.m.reply && !routes().length}>
               <div class="reply-error">
@@ -125,14 +212,6 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                         <Show when={a().text}><Markdown class="msg-text" text={a().text} /></Show>
                         <Show when={a().blocks.length}><div class="blocks"><For each={a().blocks}>{(b) => <BlockView block={b} />}</For></div></Show>
                       </>
-                    )}
-                  </Match>
-                  <Match when={r.kind === "append" && r}>
-                    {(a) => (
-                      <button class="reply-note" onClick={() => openTask(a().taskId)}>
-                        <Icon name="handoff" size={14} />
-                        <span>{withName("{task}에 전달했어요", taskById(a().taskId)?.title ?? t("작업"))}</span>
-                      </button>
                     )}
                   </Match>
                   <Match when={r.kind === "stop" && r}>
@@ -154,19 +233,14 @@ function Reply(props: { m: CaptainMessage; retry: () => void; chips?: Task[]; ac
                 </Switch>
               )}
             </For>
+            {/* the jobs it started or relayed to: one row each, kept up to date */}
+            <Show when={rows().length}>
+              <div class="job-rows">
+                <For each={rows()}>{(r) => <JobRow taskId={r.taskId} relayed={r.relayed} live={props.lastRow(r.taskId) === props.m.id} active={props.active === r.taskId} />}</For>
+              </div>
+            </Show>
           </Match>
         </Switch>
-        <Show when={props.chips?.length}>
-          <div class="br-chips">
-            <For each={props.chips}>
-              {(t) => (
-                <span onMouseEnter={() => setHoverTask(t.id)} onMouseLeave={() => setHoverTask(null)}>
-                  <BranchChip t={t} active={props.active === t.id} />
-                </span>
-              )}
-            </For>
-          </div>
-        </Show>
         <Show when={!props.m.pending && !props.m.error && (copyText() || props.m.usage)}>
           <div class="reply-foot">
             <Show when={copyText()}><MsgActions text={copyText()} onRetry={props.retry} /></Show>
@@ -448,7 +522,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
 }
 
 // ───────────── main
-/** Main's conversation: every message, with the jobs each reply started as chips. */
+/** Main's conversation: every message, with the jobs each reply handed work to as rows. */
 export function MainView() {
   let box!: HTMLDivElement;
   const pane = usePane();
@@ -476,6 +550,8 @@ export function MainView() {
       requestAnimationFrame(() => {
         const el = box?.querySelector(`[data-mid="${id}"]`);
         if (!el) return;
+        // the chat would follow its bottom again while pictures load: it stays on the message
+        holdScroll(1000, el);
         el.scrollIntoView({ block: "start" });
         setJumpMsg(undefined);
       }),
@@ -488,6 +564,12 @@ export function MainView() {
   const started = (m: CaptainMessage) =>
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   const sendMain = (text: string) => throwThought(text, state.space, { project: project()?.id });
+  /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
+  const lastRow = createMemo(() => {
+    const at = new Map<string, string>();
+    for (const m of msgs()) for (const r of handed(m)) at.set(r.taskId, m.id);
+    return at;
+  });
   /** ask the message before this reply again: main goes back to that point */
   const retry = (m: CaptainMessage) => {
     const list = msgs();
@@ -682,7 +764,15 @@ export function MainView() {
               {(m) => (
                 <Show when={!("taskId" in m) && m} fallback={<AnsweredLine a={m as Answered} />}>
                   {(c) => (
-                    <Show when={c().from === "me"} fallback={<Reply m={c()} retry={() => retry(c())} chips={started(c())} active={openRoot()} />}>
+                    <Show
+                      when={c().from === "me"}
+                      fallback={
+                        // main reacting to a job's end on its own shows only what it added (nothing while it reads it)
+                        <Show when={!onItsOwn(c()) || (!c().pending && shows(c()))}>
+                          <Reply m={c()} retry={() => retry(c())} active={openRoot()} lastRow={(id) => lastRow().get(id)} />
+                        </Show>
+                      }
+                    >
                       {/* main's own question answered: the same compact card a task's thread keeps */}
                       <Show when={answerOf(c().text ?? "")} fallback={<UserMsg id={c().id} text={c().text ?? ""} at={c().at} from={c().via === "main" ? t("메인에서") : undefined} onEdit={c().via === "main" ? undefined : (t) => void editMain(c().id, t)} />}>
                         {(a) => <AnsweredCard q={a().q} a={a().a} />}
@@ -924,7 +1014,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   /** still under way or waiting on you: the row shows the step it is on */
   const going = (r: Req) => r.state === "ask" || r.state === "live";
   /** main's last report on one of the request's jobs */
-  const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && r.tasks.some((t) => t.id === m.after))?.id;
+  const resultOf = (r: Req) => [...props.msgs].reverse().find((m) => m.after && shows(m) && r.tasks.some((t) => t.id === m.after))?.id;
   /** a one-task request: its to-do list (skipped steps left out) */
   const steps = (r: Req) => {
     const ps = r.tasks[0].plan.filter((p) => p.state !== "skip");
