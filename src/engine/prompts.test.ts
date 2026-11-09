@@ -80,6 +80,25 @@ describe("coding defaults", () => {
     expect(prompt).toContain("A build or test run gets up to 10 minutes per call");
   });
 
+  it("checks a rule over many pages by the rule, not by crawling a dev server", () => {
+    const prompt = TASK_SYSTEM.replace(/\s+/g, " ");
+    for (const rule of [
+      "test the rule itself (a unit test over the route list, e.g. the middleware's matcher)",
+      "open only a few representative pages",
+      "build once and serve the production build (`next build && next start`)",
+      "a few at a time (`xargs -P 4`), one output line per page",
+      "never one by one on a dev server",
+    ]) expect(prompt).toContain(rule);
+  });
+
+  it.each([
+    ["task", TASK_SYSTEM],
+    ["subagent", SUB_SYSTEM],
+  ])("keeps the %s role's lines between tool calls in Korean words", (_role, prompt) => {
+    const p = prompt.replace(/\s+/g, " ");
+    for (const rule of ["Korean sentences", "타입 검사, 미들웨어", "개발 서버", "in backticks", "capitalised English word"]) expect(p).toContain(rule);
+  });
+
   it("keeps role boundaries and the routing format", () => {
     expect(SUB_SYSTEM).toContain("Don't start subagents.");
     expect(TASK_SYSTEM).toContain("at most 4 at a time");

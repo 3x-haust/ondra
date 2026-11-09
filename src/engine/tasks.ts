@@ -17,7 +17,7 @@ import { allowedDevices, refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
-import { commandKind, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
+import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange } from "./proof";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -302,9 +302,10 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     }
     case "bash": {
       const cmd: string = args?.command ?? "";
-      if (/\bagent-browser\b/.test(cmd)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: describeBrowser(cmd).nowKo };
-      if (/\bagent-desktop\b/.test(cmd)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
-      if (/\b(test|vitest|jest|pytest|cargo test|xcodebuild test|go test)\b/.test(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
+      // what the command runs, not what it reads: `sed -n 1,18p a.test.tsx` is no test run
+      if (runsProgram(cmd, /\bagent-browser\b/)) return { name, kind: "browser", target: cmd.replace(/^.*?agent-browser\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: describeBrowser(cmd).nowKo };
+      if (runsProgram(cmd, /\bagent-desktop\b/)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
+      if (isTestRun(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
       return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).nowKo };
     }
     default:
@@ -425,7 +426,11 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           const message = going
             ? `(Ondra) A review is already running ("${had.title}"). Its findings come to you by themselves when it ends. Don't start another one and never ask the user for them: go on with what doesn't depend on it, or end your turn and wait.`
             : `(Ondra) This job was already reviewed once ("${had.title}"). Don't start another review. What it found:\n\n${had.result ?? had.summary ?? "(nothing written)"}\n\nFix P1·P2 only, re-run the tests that cover them, and finish.`;
-          if (!going) run.refused = message;
+          if (!going) {
+            run.refused = message;
+            // it carries the findings: kept until taken, like the result itself
+            t.pending = [...(t.pending ?? []), { text: message, from: had.id }];
+          }
           queueMicrotask(() => void request(agentOf(jobId), { type: "steer", message }).catch(() => {}));
           break;
         }
@@ -482,18 +487,130 @@ function spawnChild(parent: Task, title: string, ask: string, review = false): T
 export const childrenOf = (id: string) => [...kidsOf(id)];
 const activeKids = (id: string) => childrenOf(id).filter((t) => t.status === "queued" || t.status === "running" || t.status === "waiting");
 
+/** how a subagent's result to its fork begins (the same in every message carrying it) */
+const resultHead = (child: Task) =>
+  child.status === "done" ? (child.review ? `리뷰 결과가 왔어요 ("${child.title}")` : `서브에이전트 "${child.title}" 완료`) : `서브에이전트 "${child.title}" 실패`;
+
+/** A subagent's result as its fork reads it. */
+function resultMessage(child: Task, left: number) {
+  const body =
+    child.status === "done"
+      ? child.review
+        ? `${resultHead(child)}:\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
+        : `${resultHead(child)}: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
+      : `${resultHead(child)}: ${child.error ?? "알 수 없는 오류"}`;
+  return `${body}\n\n(남은 서브에이전트: ${left}개)`;
+}
+
+/** Sent to the running engine for the model: kept on the job until the model takes it. */
+function hold(id: string, text: string, extra: { from?: string; shown?: string } = {}) {
+  updateTask(id, (x) => (x.pending = [...(x.pending ?? []), { text, ...extra }]));
+}
+/** It never went out (the send failed): nothing to keep. */
+function unhold(id: string, text: string) {
+  updateTask(id, (x) => {
+    const i = (x.pending ?? []).findIndex((p) => p.text === text);
+    if (i >= 0) x.pending!.splice(i, 1);
+    if (!x.pending?.length) x.pending = undefined;
+  });
+}
+const markTaken = (kids: string[]) => {
+  const at = Date.now();
+  for (const k of new Set(kids)) updateTask(k, (c) => (c.taken = at));
+};
+/** The model took these: a subagent whose result it was is marked as heard. */
+function heard(id: string, gone: { text: string; from?: string }[]) {
+  if (!gone.length) return;
+  updateTask(id, (x) => {
+    for (const g of gone) {
+      const i = (x.pending ?? []).findIndex((p) => p.text === g.text);
+      if (i >= 0) x.pending!.splice(i, 1);
+    }
+    if (!x.pending?.length) x.pending = undefined;
+  });
+  markTaken(gone.flatMap((g) => (g.from ? [g.from] : [])));
+}
+
+/** A user message started in the engine: a queued one (steer, follow-up) the model now takes. */
+function tookMessage(id: string, text: string) {
+  const p = (taskById(id)?.pending ?? []).find((x) => text === x.text || text.startsWith(x.text));
+  if (p) heard(id, [{ ...p }]);
+}
+
+const userText = (m: any): string =>
+  typeof m?.content === "string" ? m.content : Array.isArray(m?.content) ? m.content.filter((c: any) => c?.type === "text").map((c: any) => String(c.text ?? "")).join("") : "";
+
+/**
+ * A finished review whose result the job never took: not waiting on the job, and no
+ * turn of the job ended after it finished (a queued result is taken before a turn ends).
+ * A restart that killed the engine with the result still queued leaves this.
+ */
+function missedReviews(t: Task): Task[] {
+  return childrenOf(t.id).filter(
+    (k) =>
+      k.review &&
+      k.status === "done" &&
+      !k.taken &&
+      !(t.pending ?? []).some((p) => p.from === k.id) &&
+      !t.inbox.some((m) => m.startsWith(resultHead(k))) &&
+      !t.entries.some((e) => e.kind === "turn" && e.at > (k.finishedAt ?? 0)),
+  );
+}
+
+/**
+ * What a new start of the job is owed besides its inbox: what its last engine was
+ * sent and never took, and (resumed) a review result it never got. `kids`: the
+ * subagents whose results go in with it.
+ */
+function owedAtStart(t: Task, resume: boolean): { texts: string[]; kids: string[] } {
+  const held = t.pending ?? [];
+  const missed = resume ? missedReviews(t) : [];
+  const inInbox = childrenOf(t.id).filter((k) => (k.status === "done" || k.status === "failed") && t.inbox.some((m) => m.startsWith(resultHead(k))));
+  return {
+    texts: [...held.map((p) => p.text), ...missed.map((k) => resultMessage(k, activeKids(t.id).length))],
+    kids: [...held.flatMap((p) => (p.from ? [p.from] : [])), ...missed.map((k) => k.id), ...inInbox.map((k) => k.id)],
+  };
+}
+
+/**
+ * The turn ended with messages it was sent still kept: the engine's own queue says
+ * which it never took (sent just as the turn ended); the rest it did. True when they
+ * went in now as a prompt.
+ */
+async function untaken(id: string, run: Run, agent: string): Promise<boolean> {
+  const held = (taskById(id)?.pending ?? []).map((p) => ({ ...p }));
+  if (!held.length) return false;
+  const q = await request(agent, { type: "clear_queue" }).catch(() => null);
+  const queued: string[] = [...(q?.steering ?? []), ...(q?.followUp ?? [])];
+  const left = held.filter((p) => queued.some((m) => m === p.text || m.startsWith(p.text)));
+  heard(id, held.filter((p) => !left.some((l) => l.text === p.text)));
+  if (!left.length || runs.get(id) !== run) return false;
+  // handing off: they go to the next session with the card
+  if (run.handoff) {
+    updateTask(id, (x) => {
+      x.pending = undefined;
+      x.inbox.push(...left.map((p) => p.text));
+    });
+    return false;
+  }
+  // a refused review's findings among them: this is that wake-up, not one more after it
+  if (left.some((p) => p.text === run.refused)) run.refused = undefined;
+  try {
+    run.turnStart = Date.now();
+    // one by one, so each is taken (and stops being kept) on its own
+    for (const p of left) await request(agent, { type: "prompt", message: p.text });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A subagent ended: hand its result to the fork (now, after its turn, or on its next start). */
 async function deliver(child: Task) {
   const parent = child.parentId ? taskById(child.parentId) : undefined;
   if (!parent) return;
-  const body =
-    child.status === "done"
-      ? child.review
-        ? `리뷰 결과가 왔어요 ("${child.title}"):\n\n${child.result ?? child.summary ?? ""}\n\nP1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.`
-        : `서브에이전트 "${child.title}" 완료: ${child.summary ?? ""}${child.result ? `\n\n${child.result}` : ""}`
-      : `서브에이전트 "${child.title}" 실패: ${child.error ?? "알 수 없는 오류"}`;
   const left = activeKids(parent.id).length;
-  const message = `${body}\n\n(남은 서브에이전트: ${left}개)`;
+  const message = resultMessage(child, left);
   const run = runs.get(parent.id);
   const agent = agentOf(parent.id);
   if (!run || !isAlive(agent) || parent.status === "paused" || parent.status === "done" || parent.status === "failed") {
@@ -510,6 +627,8 @@ async function deliver(child: Task) {
     }
     return;
   }
+  // a queued result dies with the engine (a restart before the turn ends): kept until taken
+  hold(parent.id, message, { from: child.id });
   try {
     if (run.streaming) await request(agent, { type: "follow_up", message });
     else {
@@ -521,6 +640,7 @@ async function deliver(child: Task) {
       await request(agent, { type: "prompt", message });
     }
   } catch {
+    unhold(parent.id, message);
     updateTask(parent.id, (x) => x.inbox.push(message));
   }
 }
@@ -706,7 +826,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   if (!resume && carries && !taskById(id)?.worktree && finished(taskById(carries))) takeBranch(id, carries);
   // it had already said done when Ondra went down: it is over, don't prompt it again
   const said = taskById(id);
-  if (resume && said?.saidDone && !unread(said).length) {
+  if (resume && said?.saidDone && !unread(said).length && !said.pending?.length) {
     finish(id, said.saidDone);
     return;
   }
@@ -772,7 +892,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     if (resume) run.stats = await rawStats(agent);
     else void rawStats(agent);
     if (rewind) {
-      updateTask(id, (x) => (x.inbox = []));
+      updateTask(id, (x) => ((x.inbox = []), (x.pending = undefined)));
       await forkAt(agent, rewind.from);
       run.stats = await rawStats(agent);
       await request(agent, { type: "prompt", message: rewind.message });
@@ -784,19 +904,24 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     if (resume) updateTask(id, (x) => closeOpen(x));
     // answers it already acted on before the restart aren't news
     const handled = new Set(fresh.entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text));
-    const fresh2 = unread(fresh);
+    // what the last engine was sent and never took (a restart killed it with them queued)
+    const owed = owedAtStart(fresh, resume);
+    const fresh2 = unread(fresh).filter((m) => !(fresh.pending ?? []).some((p) => (p.shown ?? p.text) === m));
     for (const m of fresh2) handled.delete(m);
+    const given = { ...fresh, inbox: [...fresh.inbox, ...owed.texts.filter((m) => !fresh.inbox.includes(m))] };
     const message = resume
       ? [
           `(Ondra가 다시 시작됐어요. ${cut ? `그때 돌던 명령 \`${cut}\`은 재시작 때문에 끊겼어요. 시간 제한 때문이 아니니 제한이 있다고 여기지 말고, 필요하면 그 로그부터 보고 다시 돌리세요.` : "돌던 명령이 끊겼으면 그 로그부터 확인하세요."}${bg.length ? ` 백그라운드로 띄운 ${bg.map((c) => `\`${c}\``).join(", ")}는 아직 돌 수도, 꺼졌을 수도 있어요. 기다리기 전에 한 번만 확인하고(URL에 curl -m 5, 저장한 pid에 kill -0) 꺼졌으면 다시 띄우세요.` : ""} 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 마세요.)`,
-          ...[...fresh2, ...fresh.inbox.filter((m) => !handled.has(m))].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`),
+          ...[...fresh2, ...owed.texts, ...fresh.inbox.filter((m) => !handled.has(m))].filter((m, i, all) => all.indexOf(m) === i).map((m) => `- ${m}`),
         ].join("\n")
       : fresh.legs.length > 1
-        ? handoffPrompt(fresh)
-        : taskPrompt(fresh);
+        ? handoffPrompt(given)
+        : taskPrompt(given);
     updateTask(id, (x) => {
       x.inbox = [];
+      x.pending = undefined;
     });
+    markTaken(owed.kids);
     await request(agent, { type: "prompt", message });
   } catch (e) {
     fail(id, e instanceof Error ? e.message : String(e));
@@ -880,6 +1005,8 @@ function handlers(id: string, run: Run) {
           run.turnStart ||= Date.now();
           break;
         case "message_start":
+          // a message it was sent goes into the conversation: the model has it now
+          if (ev.message?.role === "user") tookMessage(id, userText(ev.message));
           if (ev.message?.role === "assistant") {
             run.text = "";
             run.cursor = 0;
@@ -1176,6 +1303,8 @@ async function settle(id: string, run: Run) {
   }
   run.error = undefined;
   run.netTries = 0;
+  // sent while it worked and not taken by the turn's end: they go in now
+  if (await untaken(id, run, agent)) return;
 
   if (run.asked) {
     run.asked = false;
@@ -1316,10 +1445,14 @@ async function newSession(id: string, run: Run, card: Handoff) {
   try {
     run.turnStart = Date.now();
     await request(agent, { type: "new_session" });
-    await request(agent, { type: "prompt", message: handoffPrompt(taskById(id)!) });
+    const t = taskById(id)!;
+    const owed = owedAtStart(t, false);
+    await request(agent, { type: "prompt", message: handoffPrompt({ ...t, inbox: [...t.inbox, ...owed.texts.filter((m) => !t.inbox.includes(m))] }) });
     updateTask(id, (x) => {
       x.inbox = [];
+      x.pending = undefined;
     });
+    markTaken(owed.kids);
   } catch (e) {
     fail(id, e instanceof Error ? e.message : String(e));
   }
@@ -1900,9 +2033,12 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     });
     // the user's words may change the plan: the model is asked to update it (the user sees only their words)
     const sent = t.plan.some((s) => s.state !== "done") ? `${message}\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step.` : message;
+    // steered words wait for the current tool calls: kept until taken, as a restart loses them
+    hold(id, sent, { shown: opts.shown ?? message });
     try {
       await request(agent, run?.streaming ? { type: "steer", message: sent } : { type: "prompt", message: sent });
     } catch (e) {
+      unhold(id, sent);
       toast(e instanceof Error ? e.message : String(e), "bad");
     }
     return;
@@ -2178,6 +2314,7 @@ const waitsOnKids = (t: Task) =>
   t.legs.length > 0 &&
   !t.legs[t.legs.length - 1].endedAt &&
   !t.inbox.length &&
+  !t.pending?.length &&
   childrenOf(t.id).some((k) => k.status === "running" || k.status === "waiting" || (k.status === "queued" && k.legs.length > 0));
 
 export function startScheduler() {

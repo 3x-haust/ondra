@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
-import { commandKind, isLocalWait, isSearch, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
+import { commandKind, isLocalWait, isTestRun, runsProgram, isSearch, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound, riskyChange } from "./proof";
 import { backgroundShells, closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
 
@@ -23,9 +23,59 @@ describe("commandKind", () => {
     for (const c of ["pnpm -s typecheck", "pnpm test", "bun test ./tool/", "cargo test -q", "npx tsc --noEmit", "pnpm build", "pnpm run check:appshot"])
       expect(commandKind(c), c).toBe("check");
   });
+  it("reading or listing a file is never a check, whatever its path", () => {
+    for (const c of [
+      "sed -n 1,18p 'src/app/(app)/home/__tests__/quest-list.test.tsx'",
+      "ls build",
+      "cat src/build/index.ts | grep tsc",
+      "test -f dist/index.js && echo ok",
+      "rg -n \"pnpm test\" package.json",
+    ])
+      expect(commandKind(c), c).not.toBe("check");
+  });
   it("changing things is neither", () => {
     for (const c of ["git push origin main", "gh api repos/a/b/issues -f title=x", "curl -X POST https://x/y", "git checkout -b x", "gh pr merge 3 --merge"])
       expect(commandKind(c), c).toBe("other");
+  });
+});
+
+describe("isTestRun", () => {
+  it("runs of a test runner or a test script are test runs", () => {
+    for (const c of [
+      "pnpm -s test",
+      "npm run test:unit 2>&1 | tail -20",
+      "cd /repo && bunx vitest run 'src/app/(app)/home/__tests__/quest-list.test.tsx'",
+      "for i in 1 2; do bunx vitest run src/a.test.ts; done",
+      "cargo test -q",
+      "go test ./...",
+      "./gradlew test",
+      "xcodebuild -scheme App test",
+      "python3 -m pytest tests/",
+      "bash scripts/test.sh",
+      "out=$(npx jest src 2>&1); echo \"$out\" | tail -5",
+    ])
+      expect(isTestRun(c), c).toBe(true);
+  });
+  it("reading, printing or searching a test file is not", () => {
+    for (const c of [
+      "sed -n 1,18p 'src/app/(app)/home/__tests__/quest-list.test.tsx'",
+      "cd /repo && cat src/lib/__tests__/api-client.test.ts | head -40",
+      "head -60 src/a.test.ts; tail -5 /tmp/guest-test.log",
+      "rg -n \"describe\\(\" src/__tests__ | wc -l",
+      "grep -c PASS /tmp/test.log",
+      "ls src/__tests__",
+      "sed -n 1,80p /Applications/Ondra.app/Contents/Resources/app-skills/test-ci/SKILL.md",
+      "test -d tests && echo yes",
+      "python3 - <<'EOF'\np='src/__tests__/a.test.ts'\ns=open(p).read().replace('test(', 'it(')\nEOF",
+      "git log --oneline -- src/__tests__",
+    ])
+      expect(isTestRun(c), c).toBe(false);
+  });
+  it("a program named in what is read or searched is not run", () => {
+    expect(runsProgram("open http://localhost:3217/ >/dev/null 2>&1; agent-browser eval \"document.cookie\"", /\bagent-browser\b/)).toBe(true);
+    expect(runsProgram("echo \"== $p $(agent-browser get url)\"", /\bagent-browser\b/)).toBe(true);
+    expect(runsProgram("rg -n agent-browser skills/ | head", /\bagent-browser\b/)).toBe(false);
+    expect(runsProgram("sed -n 1,80p skills/agent-browser/SKILL.md", /\bagent-browser\b/)).toBe(false);
   });
 });
 

@@ -1,4 +1,5 @@
 import { lang, t } from "../i18n";
+import { runsProgram } from "./commandKind";
 
 /**
  * A shell command in plain words, for the canvas and the "now" line: what it does
@@ -214,7 +215,7 @@ export function describeCommand(cmd: string): Said {
     return h ? S("Aside로 {h} 봄", "Aside로 {h} 보는 중", h, { h }) : S("Aside 브라우저 씀", "Aside 브라우저 쓰는 중");
   }
   if (/\bpr-media\.sh\b/.test(c)) return S("PR에 사진 넣음", "PR에 사진 넣는 중");
-  if (/\bgh\b/.test(c)) {
+  if (runsProgram(c, /\bgh\b/)) {
     if (/\bactions\b|\bgh\s+run\b/.test(c)) return waits ? S("GitHub 빌드 기다림", "GitHub 빌드 기다리는 중") : S("GitHub 빌드 확인함", "GitHub 빌드 확인 중");
     if (/\bgh\s+pr\s+create\b/.test(c)) return S("PR 올림", "PR 올리는 중");
     if (/\bgh\s+pr\s+merge\b/.test(c)) return S("PR 병합함", "PR 병합 중");
@@ -254,6 +255,11 @@ export function describeCommand(cmd: string): Said {
     const [l, n] = G[git] ?? ["git 실행함", "git 실행 중"];
     return S(l, n);
   }
+  // reading, printing and searching are that, whatever they read or look for:
+  // `rg "next build"` is no build, `cat package.json | grep tsc` no check
+  if (/^(find|fd|locate|mdfind)\b/.test(k)) return S("파일 찾음", "파일 찾는 중");
+  if (/^(grep|egrep|rg|ag|ack|git\s+grep)\b/.test(k)) return S("검색함", "검색 중", file(k));
+  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴봄", "살펴보는 중", file(k));
   if (/\b(pnpm|npm|yarn|bun)\s+(run\s+)?(build|bundle)\b|\bcargo\s+build\b|\bxcodebuild\b|\bgradlew\b|\b(vite|next|tauri)\s+build\b|\bexpo\s+(export|prebuild)\b|\beas\s+build\b/.test(k))
     return S("빌드함", "빌드 중");
   if (/\b(pnpm|npm|yarn|bun)\s+(install|i|add|ci)\b|\bpip3?\s+install\b|\bbrew\s+install\b|\bcargo\s+add\b|\bpod\s+install\b/.test(k)) return S("설치함", "설치하는 중");
@@ -274,9 +280,6 @@ export function describeCommand(cmd: string): Said {
   if (/^docker\b/.test(k)) return S("도커 씀", "도커 쓰는 중");
   if (/^(xcrun|simctl|adb|emulator)\b/.test(k)) return S("기기 다룸", "기기 다루는 중");
   if (/^(cp|mv|rm|ln|rsync|tar|zip|unzip|ditto)\b/.test(k)) return S("파일 정리함", "파일 정리 중", file(k));
-  if (/^(find|fd|locate|mdfind)\b/.test(k)) return S("파일 찾음", "파일 찾는 중");
-  if (/^(grep|egrep|rg|ag|ack|git\s+grep)\b/.test(k)) return S("검색함", "검색 중", file(k));
-  if (/^(cat|sed|head|tail|less|wc|nl|awk|jq|ls|tree|stat|file|du|diff)\b/.test(k)) return S("살펴봄", "살펴보는 중", file(k));
   if (/^open\b/.test(k)) return S("열었음", "여는 중", host(k) ?? file(k));
   if (/^(sleep|wait)\b/.test(k)) return S("기다림", "기다리는 중");
   // a program's name, never shell syntax ("list=$(find")

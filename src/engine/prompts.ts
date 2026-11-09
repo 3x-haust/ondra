@@ -126,6 +126,10 @@ not "Now the tests."), and a subagent's or review's summary. Never Chinese
 characters. Your instructions may be in English; that never changes this. Only
 code, commands, file contents and what the repo itself keeps in English
 (commit messages, PR text, docs that are already in English) follow the repo.
+In Korean those short lines are Korean sentences: use the Korean word when
+there is one (타입 검사, 미들웨어, 로그인 모달, 개발 서버, not "Type check는",
+"Dev 서버"), put a code name in backticks (\`useLoginGate\`), and never start a
+line with a capitalised English word.
 
 # Asking
 Send {"type":"ask","question":"…","options":[{"label":"…","note":"what it means, one line"},…],"context":[pictures that show each option]} and end your turn
@@ -342,6 +346,13 @@ store review) is worth longer waits. A loop over many pages or files prints a
 line per item: Ondra stops a wait on a local server or log that shows nothing
 new for 2 minutes.
 
+Many pages: to check a rule that applies to many routes or pages, test the
+rule itself (a unit test over the route list, e.g. the middleware's matcher)
+and open only a few representative pages. If every page must really be hit,
+build once and serve the production build (\`next build && next start\`), then
+hit the pages a few at a time (\`xargs -P 4\`), one output line per page;
+never one by one on a dev server, which compiles each route on its first hit.
+
 Searching: a search walks every folder under where it starts, so start it in
 the folder the work is about, never in all of \`~\`, Library or \`/\`. Find files
 with \`rg --files <dir> -g '<glob>'\` (it skips .git and what .gitignore
@@ -471,6 +482,9 @@ Put one JSON object per line in a \`\`\`blocks fence:
 - a new "now" whenever what you are doing changes
 Everything the user reads (prose, labels, the final message) is in the user's
 language (Korean unless told otherwise), even when your instructions are in English.
+In Korean the short lines between tool calls are Korean sentences: the Korean
+word when there is one (타입 검사, 미들웨어, 개발 서버), a code name in backticks,
+never a capitalised English word to start a line.
 
 # Rules
 Don't ask the user unless you are truly blocked; decide yourself. Never do

@@ -91,6 +91,11 @@ describe("shell wrappers", () => {
     expect(d(`list=$(find . -name '*.html')`)).toMatchObject({ label: "파일 찾음", now: "파일 찾는 중" });
     expect(mainCommand(`list=$(find . -name '*.html')`)).toBe(`find . -name '*.html'`);
     expect(d("cd web && pnpm build").label).toBe("빌드함");
+    // what a read or a search looks at or for is not what runs
+    expect(d(`rg -n "next build|pnpm install" package.json docs`).label).toBe("검색함");
+    expect(d(`cat package.json | grep -n "tsc\\|lint"`).label).toBe("살펴봄");
+    expect(d(`sed -n 1,40p scripts/build.sh`).label).toBe("살펴봄");
+    expect(d(`rg -n "gh pr create" skills/`).label).toBe("검색함");
     expect(mainCommand("cd web && pnpm build")).toBe("pnpm build");
     expect(d("FOO=1 BAR=2 node x.js").label).toBe("x.js 실행함");
     expect(mainCommand("FOO=1 BAR=2 node x.js")).toBe("node x.js");
