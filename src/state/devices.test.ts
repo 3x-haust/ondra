@@ -62,6 +62,17 @@ describe("devices per space", () => {
     expect(usedBy(list[2])).toBeUndefined();
   });
 
+  it("finds a job that mentions a device only later, and one whose lines were trimmed", () => {
+    setState("space", "home");
+    setState("tasks", (ts) => [...ts, job("thome00000009", "home", { entries: [{ id: "a", at: 1, kind: "tool", tool: { kind: "bash", detail: "ls" } } as never] })]);
+    expect(usedBy(list[4])).toBeUndefined();
+    setState("tasks", (t) => t.id === "thome00000009", "entries", (es) => [...es, { id: "b", at: 2, kind: "tool", tool: { kind: "bash", detail: "xcrun simctl boot IPHONE-UDID" } } as never]);
+    expect(usedBy(list[4])?.id).toBe("thome00000009");
+    // the line that named it is dropped from the front: no longer its user
+    setState("tasks", (t) => t.id === "thome00000009", "entries", (es) => es.slice(1).map((e) => ({ ...e, tool: { kind: "bash", detail: "ls" } }) as never));
+    expect(usedBy(list[4])).toBeUndefined();
+  });
+
   it("puts a device in the space whose job used it", async () => {
     setState("tasks", (ts) => [...ts, job("thome00000009", "home", { entries: [{ id: "e", at: 1, kind: "tool", tool: { kind: "bash", detail: "xcrun simctl boot IPHONE-UDID" } } as never] })]);
     await refreshDevices();

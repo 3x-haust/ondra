@@ -2,7 +2,7 @@
 // progress, its subagents. Used in the main conversation and inside forks.
 import { nowText } from "../engine/describe";
 import { For, Show } from "solid-js";
-import { state, taskById } from "../state/store";
+import { kidsOf, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { ago, compact, endedAt, now, short, statusLabel } from "./bits";
@@ -54,7 +54,7 @@ export function line(t: Task): string {
 
 export function ForkCard(props: { id: string; compact?: boolean }) {
   const t = () => taskById(props.id);
-  const kids = () => state.tasks.filter((k) => k.parentId === props.id);
+  const kids = () => kidsOf(props.id);
   const live = () => kids().filter((k) => k.status === "running").length;
   const planDone = () => t()!.plan.filter((p) => p.state === "done").length;
   /** how long it took and what it used, for the hover on a finished one */

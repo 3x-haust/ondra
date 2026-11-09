@@ -4,10 +4,10 @@ import { keepBottom } from "./stick";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
-import { createEffect, onCleanup, createMemo, createSignal, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, onCleanup, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
-import { state, taskById } from "../state/store";
+import { kidsOf, state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
 import { describeBrowser, describeCommand, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
@@ -42,6 +42,20 @@ function group(entries: Entry[]): Item[] {
     } else out.push({ kind: "entry", id: e.id, entry: e });
   }
   return out;
+}
+
+const sameList = <T,>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+const sameItem = (a: Item, b: Item) =>
+  a.kind === b.kind && a.id === b.id && (a.kind === "tools" ? sameList(a.tools, (b as typeof a).tools) : a.kind === "blocks" ? sameList(a.blocks, (b as typeof a).blocks) : a.entry === (b as typeof a).entry);
+const sameTurn = (a: Turn, b: Turn) => a.id === b.id && a.user === b.user && a.ms === b.ms && a.usage === b.usage && sameList(a.body, b.body);
+/**
+ * The new list, but with the previous object wherever nothing in it changed: a streamed
+ * line then redraws only the row it lands in, not the whole thread (and an opened row stays open).
+ */
+function keep<T>(prev: T[] | undefined, next: T[], same: (a: T, b: T) => boolean): T[] {
+  if (!prev?.length) return next;
+  const out = next.map((x, i) => (prev[i] !== undefined && same(prev[i], x) ? prev[i] : x));
+  return out.length === prev.length && out.every((x, i) => x === prev[i]) ? prev : out;
 }
 
 /** One request and everything the agent did for it (across session hand-offs). */
@@ -89,24 +103,25 @@ function rowCount(entries: Entry[]): number {
 }
 
 function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?: boolean }) {
-  const items = createMemo(() => group(props.entries));
+  // by position: the thread grows at its end, so a row keeps its place (and its open fold) while lines stream in
+  const items = createMemo<Item[]>((prev) => keep(prev, group(props.entries), sameItem));
   const stopped = () => halted(props.task);
   return (
-    <For each={items()}>
-      {(it) => (
+    <Index each={items()}>
+      {(item) => (
         <Switch>
-          <Match when={it.kind === "tools" && it}>
+          <Match when={item().kind === "tools" && (item() as Item & { kind: "tools" })}>
             {(g) => (
-              <For each={runs(g().tools)}>
+              <Index each={runs(g().tools)}>
                 {(r) => (
-                  <Show when={r.length > 1} fallback={<ToolLine e={r[0]} shells={props.task.shells} stopped={stopped()} />}>
-                    <ToolGroup tools={r} shells={props.task.shells} stopped={stopped()} />
+                  <Show when={r().length > 1} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} />}>
+                    <ToolGroup tools={r()} shells={props.task.shells} stopped={stopped()} />
                   </Show>
                 )}
-              </For>
+              </Index>
             )}
           </Match>
-          <Match when={it.kind === "blocks" && it}>
+          <Match when={item().kind === "blocks" && (item() as Item & { kind: "blocks" })}>
             {(g) => (
               <div class="blocks">
                 <For each={chunkLinks(g().blocks)}>
@@ -115,10 +130,10 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
               </div>
             )}
           </Match>
-          <Match when={it.kind === "entry" && it}>{(x) => <EntryView e={x().entry} task={props.task} />}</Match>
+          <Match when={item().kind === "entry" && (item() as Item & { kind: "entry" })}>{(x) => <EntryView e={x().entry} task={props.task} />}</Match>
         </Switch>
       )}
-    </For>
+    </Index>
   );
 }
 
@@ -480,12 +495,13 @@ function noteIcon(text: string): string {
 const PAUSED = { id: "", status: "paused" } as Task;
 
 function EntryView(props: { e: Entry; task: Task }) {
-  const e = props.e;
+  // read through props: a row kept in place can be handed another line
+  const as = <K extends Entry["kind"]>(k: K) => (props.e.kind === k ? (props.e as Extract<Entry, { kind: K }>) : undefined);
   return (
     <Switch>
-      <Match when={e.kind === "user" && e}>{(x) => <UserMsg text={x().text} at={x().at} from={assigner(props.task)} />}</Match>
-      <Match when={e.kind === "text" && e}>{(x) => <Markdown class="msg-text" text={x().text} />}</Match>
-      <Match when={e.kind === "turn" && e}>
+      <Match when={as("user")}>{(x) => <UserMsg text={x().text} at={x().at} from={assigner(props.task)} />}</Match>
+      <Match when={as("text")}>{(x) => <Markdown class="msg-text" text={x().text} />}</Match>
+      <Match when={as("turn")}>
         {(x) => (
           <Show when={x().usage} fallback={<div class="turn-sep">{tr("{d} 동안 작업", { d: long(x().ms) })}</div>}>
             {(u) => <UsageLine u={u()} lead={x().ms ? tr("{d} 동안 작업", { d: long(x().ms) }) : undefined} />}
@@ -493,7 +509,7 @@ function EntryView(props: { e: Entry; task: Task }) {
         )}
       </Match>
       {/* a pause it has come back from: history, with how long it stayed paused */}
-      <Match when={e.kind === "note" && isPause(e) && e}>
+      <Match when={isPause(props.e) && as("note")}>
         {(x) => {
           const span = () => pauseSpan(props.task, x().id);
           return (
@@ -510,7 +526,7 @@ function EntryView(props: { e: Entry; task: Task }) {
           );
         }}
       </Match>
-      <Match when={e.kind === "note" && e}>
+      <Match when={as("note")}>
         {(x) => (
           <div class="note">
             <Icon name={noteIcon(x().text)} size={14} />
@@ -518,7 +534,7 @@ function EntryView(props: { e: Entry; task: Task }) {
           </div>
         )}
       </Match>
-      <Match when={e.kind === "error" && e}>
+      <Match when={as("error")}>
         {(x) => (
           <Show
             when={props.task.status === "failed" && props.task.entries[lastAt(props.task.entries, (y) => y.kind === "error")]?.id === x().id}
@@ -537,9 +553,9 @@ function EntryView(props: { e: Entry; task: Task }) {
           </Show>
         )}
       </Match>
-      <Match when={e.kind === "spawn" && e}>
+      <Match when={as("spawn")}>
         {(x) => {
-          const kids = () => x().childIds.map((id) => state.tasks.find((t) => t.id === id)).filter(Boolean);
+          const kids = () => x().childIds.map((id) => taskById(id)).filter(Boolean);
           // how they stand, counted by state: "1개 일시정지 · 1개 완료" (a discarded one is 버림, never 완료)
           const tally = () =>
             [
@@ -561,7 +577,7 @@ function EntryView(props: { e: Entry; task: Task }) {
           );
         }}
       </Match>
-      <Match when={e.kind === "handoff" && e}>
+      <Match when={as("handoff")}>
         {(x) => (
           <div class="handoff">
             <div class="handoff-head"><Icon name="handoff" size={14} />{tr("세션 {n}에서 계속", { n: x().leg })}</div>
@@ -605,7 +621,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
     const e = es[at];
     return e?.kind === "error" && e.text === props.task.error ? [...es.slice(0, at), ...es.slice(at + 1)] : es;
   });
-  const list = createMemo(() => turns(shownEntries()));
+  const list = createMemo<Turn[]>((prev) => keep(prev, turns(shownEntries()), sameTurn));
   /** nothing was recorded but its summary: that is the answer the thread ends on */
   const summaryOnly = () => !props.task.entries.some((e) => e.kind !== "user") && props.task.status === "done" && !!props.task.summary;
   const liveText = () => live[props.agentId] ?? "";
@@ -635,17 +651,17 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         <Show when={!props.task.entries.some((e) => e.kind === "user")}>
           <UserMsg text={props.task.ask} at={props.task.createdAt} from={assigner(props.task)} />
         </Show>
-        <For each={list()}>
+        <Index each={list()}>
           {(t, i) => (
             <TurnView
-              turn={t}
+              turn={t()}
               task={props.task}
               open={!settled()}
-              last={i() === list().length - 1}
-              end={i() === list().length - 1 && !summaryOnly() && hasEnd(props.task)}
+              last={i === list().length - 1}
+              end={i === list().length - 1 && !summaryOnly() && hasEnd(props.task)}
             />
           )}
-        </For>
+        </Index>
         <Show when={summaryOnly()}>
           <Markdown class="msg-text" text={props.task.summary!} />
           <Show when={hasEnd(props.task)}>
@@ -664,7 +680,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
           </div>
         </Show>
         {/* waiting on its subagents: their card above already shows that */}
-        <Show when={working() && !liveText() && !toolRunning() && !state.tasks.some((k) => k.parentId === props.task.id && (k.status === "running" || k.status === "queued"))}>
+        <Show when={working() && !liveText() && !toolRunning() && !kidsOf(props.task.id).some((k) => k.status === "running" || k.status === "queued")}>
           <div class="live-line">
             <span class="spin" />
             <span class="shimmer">{props.task.now ? nowText(props.task.now) : tr("작업 중")}</span>

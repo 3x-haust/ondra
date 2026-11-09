@@ -1,5 +1,5 @@
 // What a finished job took: its working time and the tokens it (and its sub-jobs) used.
-import { state } from "../state/store";
+import { kidsOf } from "../state/store";
 import type { Task } from "../state/types";
 import { long, tokens } from "./bits";
 import { t } from "../i18n";
@@ -28,7 +28,7 @@ export function jobCost(t: Task): JobCost {
       c.cacheRead += e.usage.cacheRead;
       c.cacheWrite += e.usage.cacheWrite;
     }
-    for (const k of state.tasks.filter((k) => k.parentId === x.id)) {
+    for (const k of kidsOf(x.id)) {
       c.kids++;
       add(k, false);
     }

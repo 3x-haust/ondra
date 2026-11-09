@@ -7,7 +7,7 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
@@ -846,7 +846,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     for (const r of out) {
       // a finished job is finished, and so is a discarded one (even paused or failed): subagents it
       // left stopped don't keep the request open
-      const all = r.tasks.filter((t) => !discarded(t)).flatMap((t) => [t, ...(t.status === "done" ? [] : state.tasks.filter((k) => k.parentId === t.id))]);
+      const all = r.tasks.filter((t) => !discarded(t)).flatMap((t) => [t, ...(t.status === "done" ? [] : kidsOf(t.id))]);
       // finished with its worktree still open, it waits on a merge: listed as 검토 until merged or discarded
       r.state = all.some((t) => t.status === "waiting" || t.status === "failed")
         ? "ask"
@@ -907,7 +907,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
   };
   /** a request's job to look at: the one that needs you, else the one working, else the last one */
   const focus = (r: Req) => {
-    const all = r.tasks.flatMap((t) => [t, ...state.tasks.filter((k) => k.parentId === t.id)]);
+    const all = r.tasks.flatMap((t) => [t, ...kidsOf(t.id)]);
     const pick = (ok: (t: Task) => boolean) => all.find(ok);
     return (
       pick((t) => t.status === "waiting" || t.status === "failed") ??

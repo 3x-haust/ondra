@@ -3,7 +3,7 @@
 // change to a task without opening it, so several can be steered one after another.
 import { nowText } from "../engine/describe";
 import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
-import { decisionFor, projectsIn, state } from "../state/store";
+import { decisionFor, projectsIn, kidsOf, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
@@ -48,7 +48,7 @@ const DAY = 86_400_000;
 function stateOf(task: Task): string {
   if (discarded(task)) return "done";
   if (task.status === "failed") return "failed";
-  const kids = state.tasks.filter((k) => k.parentId === task.id);
+  const kids = kidsOf(task.id);
   if (task.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   if (task.status === "running") return "running";
   if (task.status === "paused") return "paused";
@@ -95,7 +95,7 @@ export function StateGlyph(props: { g: ReturnType<typeof glyphOf> | "discarded" 
 /** Subagents of a task, one format on the board and the canvas: ⑂ 1/2 while some run, ⑂ 2 when none do
  *  (or `short`, where room is tight: the count alone, the fraction in the tooltip). */
 export function Kids(props: { t: Task; class?: string; short?: boolean }) {
-  const kids = () => state.tasks.filter((k) => k.parentId === props.t.id);
+  const kids = () => kidsOf(props.t.id);
   const live = () => kids().filter((k) => k.status === "running").length;
   return (
     <Show when={kids().length}>
@@ -252,7 +252,7 @@ function Card(props: { t: Task; byProject: boolean }) {
   const word = () => (gone() ? "버림" : merged() ? "병합됨" : STATE_WORD[st()]);
   /** finished with checks it couldn't do: the canvas card's badge */
   const unchecked = () => job().status === "done" && !gone() && !merged() && !!job().unverified?.length;
-  const kids = () => state.tasks.filter((k) => k.parentId === job().id);
+  const kids = () => kidsOf(job().id);
   /** thrown away or merged: nothing of it is left to count */
   const diff = () => (gone() || merged() ? { add: 0, del: 0 } : changes(job()));
   const [talk, setTalk] = createSignal(false);

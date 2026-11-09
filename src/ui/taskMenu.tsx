@@ -3,7 +3,7 @@
 // items in the same order, with the same words and icons. Delete asks first (§9.9).
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
-import { state, taskById } from "../state/store";
+import { kidsOf, taskById } from "../state/store";
 import { goMain, openPanel, openTask, toast, view } from "../state/ui";
 import { archiveTask, discardTask, duplicateTask, finishTask, mergeTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 import { expand } from "../engine/rpc";
@@ -263,7 +263,7 @@ export function confirmDiscard(id: string) {
 export function confirmDeleteTask(id: string) {
   const x = taskById(id);
   if (!x) return;
-  const kids = state.tasks.filter((k) => k.parentId === id).length;
+  const kids = kidsOf(id).length;
   confirmAsk({
     title: t("이 작업을 삭제할까요?"),
     body: [x.title, kids ? t("서브에이전트 {n}개 포함", { n: kids }) : "", x.worktree?.state === "open" ? t("브랜치는 남아요") : ""].filter(Boolean).join(" · "),

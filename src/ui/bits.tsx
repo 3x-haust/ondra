@@ -58,9 +58,19 @@ export function endedAt(x: Task): number | undefined {
 }
 
 const [tick, setTick] = createSignal(Date.now());
-setInterval(() => setTick(Date.now()), 1000);
+const [slowTick, setSlowTick] = createSignal(Date.now());
+setInterval(() => {
+  const t = Date.now();
+  setTick(t);
+  if (t - slowTick() >= 15_000) setSlowTick(t);
+}, 1000);
 /** Current time, updated every second. */
 export const now = tick;
+/**
+ * Current time for labels that only change by the minute (3분 전, 2시간째), updated every
+ * 15 seconds: a list of hundreds of jobs doesn't redo every row each second.
+ */
+export const soon = slowTick;
 
 const locale = () => (lang() === "en" ? "en-US" : "ko-KR");
 
@@ -85,7 +95,7 @@ export function long(ms: number) {
 /** 방금, 3분 전, 2시간 전, 어제, 4일 전, then the date */
 export function ago(at?: number) {
   if (!at) return "";
-  const m = Math.max(0, Math.round((now() - at) / 60_000));
+  const m = Math.max(0, Math.round((soon() - at) / 60_000));
   if (m < 1) return t("방금");
   if (m < 60) return t("{n}분 전", { n: m });
   const h = Math.floor(m / 60);

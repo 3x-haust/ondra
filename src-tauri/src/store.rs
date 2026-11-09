@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 fn state_file(app: &AppHandle) -> PathBuf {
     data_dir(app).join("state.json")
@@ -283,11 +283,102 @@ pub fn state_load(app: AppHandle) -> Option<String> {
 }
 
 /// Written via a temp file so a crash mid-write never leaves half a state file.
-#[tauri::command]
-pub fn state_save(app: AppHandle, json: String) -> Result<(), String> {
-    let path = state_file(&app);
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| e.to_string())
+}
+
+/// Each task's JSON as last sent by the app (see src/state/persist.ts): a save sends only
+/// the tasks that changed, and the file is put together here.
+static TASK_PARTS: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
+
+#[tauri::command(async)]
+pub fn state_save(app: AppHandle, json: String) -> Result<(), String> {
+    let mut parts = TASK_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+    // a whole file replaces what was held: the next partial save sends every task again
+    *parts = None;
+    write_atomic(&state_file(&app), json.as_bytes())
+}
+
+/// The whole state file from the state without its tasks (`head`, a JSON object), the tasks'
+/// order (`order`, their slots) and their JSON. Returns the slots it doesn't hold (then it
+/// writes nothing and the app sends those).
+pub fn join_parts(held: &std::collections::HashMap<String, String>, head: &str, order: &[String]) -> Result<Vec<u8>, Vec<String>> {
+    let missing: Vec<String> = order.iter().filter(|k| !held.contains_key(*k)).cloned().collect();
+    if !missing.is_empty() {
+        return Err(missing);
+    }
+    let head = head.trim();
+    let size = head.len() + order.iter().map(|k| held[k].len() + 1).sum::<usize>() + 16;
+    let mut out = Vec::with_capacity(size);
+    out.extend_from_slice(b"{\"tasks\":[");
+    for (i, k) in order.iter().enumerate() {
+        if i > 0 {
+            out.push(b',');
+        }
+        out.extend_from_slice(held[k].as_bytes());
+    }
+    out.push(b']');
+    let rest = head.strip_prefix('{').map(str::trim_start).unwrap_or("}");
+    if !rest.starts_with('}') {
+        out.push(b',');
+    }
+    out.extend_from_slice(rest.as_bytes());
+    Ok(out)
+}
+
+#[tauri::command(async)]
+pub fn state_save_parts(app: AppHandle, head: String, order: Vec<String>, tasks: std::collections::HashMap<String, String>) -> Result<Vec<String>, String> {
+    if !head.trim_start().starts_with('{') {
+        return Err("state head is not an object".into());
+    }
+    let mut guard = TASK_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+    let held = guard.get_or_insert_with(Default::default);
+    held.extend(tasks);
+    let bytes = match join_parts(held, &head, &order) {
+        Ok(b) => b,
+        Err(missing) => return Ok(missing),
+    };
+    let keep: std::collections::HashSet<&String> = order.iter().collect();
+    held.retain(|k, _| keep.contains(k));
+    write_atomic(&state_file(&app), &bytes)?;
+    Ok(vec![])
+}
+
+static QUIT_SAVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static QUIT_WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The app is about to quit: ask the page for its last save first (it saves a moment after
+/// a change, so the newest one may not be on disk yet), then quit once it says it's written,
+/// or after a second and a half at most. True: the quit is held until then.
+pub fn hold_quit_for_save(app: &AppHandle, code: i32) -> bool {
+    use std::sync::atomic::Ordering;
+    if QUIT_SAVED.load(Ordering::SeqCst) {
+        return false;
+    }
+    if QUIT_WAITING.swap(true, Ordering::SeqCst) {
+        return true;
+    }
+    let Some(page) = app.get_webview("main") else { return false };
+    if page.emit("state:flush", ()).is_err() {
+        return false;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let start = std::time::Instant::now();
+        while !QUIT_SAVED.load(Ordering::SeqCst) && start.elapsed() < std::time::Duration::from_millis(1500) {
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        QUIT_SAVED.store(true, Ordering::SeqCst);
+        app.exit(code);
+    });
+    true
+}
+
+/// The page's last save before quitting is written.
+#[tauri::command]
+pub fn state_flushed() {
+    QUIT_SAVED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -760,7 +851,20 @@ fn read_lines_from(path: &std::path::Path, from: u64) -> TraceChunk {
 
 #[cfg(test)]
 mod trace_tests {
-    use super::read_lines_from;
+    use super::{join_parts, read_lines_from};
+
+    #[test]
+    fn state_file_is_put_together_from_its_parts() {
+        let held: std::collections::HashMap<String, String> =
+            [("a".to_string(), r#"{"id":"a"}"#.to_string()), ("b".to_string(), r#"{"id":"b"}"#.to_string())].into_iter().collect();
+        let order = vec!["b".to_string(), "a".to_string()];
+        let out = String::from_utf8(join_parts(&held, r#"{"version":3,"space":"home"}"#, &order).unwrap()).unwrap();
+        assert_eq!(out, r#"{"tasks":[{"id":"b"},{"id":"a"}],"version":3,"space":"home"}"#);
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["tasks"][1]["id"], "a");
+        assert_eq!(String::from_utf8(join_parts(&held, "{}", &[]).unwrap()).unwrap(), r#"{"tasks":[]}"#);
+        assert_eq!(join_parts(&held, "{}", &["c".to_string()]).unwrap_err(), vec!["c".to_string()]);
+    }
 
     #[test]
     fn reads_whole_new_lines_only() {

@@ -7,7 +7,7 @@ import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
-import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, state, taskById, uid, updateAccount, updateTask } from "../state/store";
+import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
@@ -479,7 +479,7 @@ function spawnChild(parent: Task, title: string, ask: string, review = false): T
   return child;
 }
 
-export const childrenOf = (id: string) => state.tasks.filter((t) => t.parentId === id);
+export const childrenOf = (id: string) => [...kidsOf(id)];
 const activeKids = (id: string) => childrenOf(id).filter((t) => t.status === "queued" || t.status === "running" || t.status === "waiting");
 
 /** A subagent ended: hand its result to the fork (now, after its turn, or on its next start). */
