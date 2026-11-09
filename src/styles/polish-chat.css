@@ -18,14 +18,14 @@
   font-size: var(--fs-lg);
   line-height: var(--lh-lg);
 }
-.composer-wrap .composer textarea {
+.composer-wrap:not(.slim) .composer textarea {
   min-height: 42px;
   padding: var(--s-12) var(--s-16) var(--s-4);
 }
-.composer-wrap .composer.big textarea {
+.composer-wrap:not(.slim) .composer.big textarea {
   min-height: 68px;
 }
-.composer-wrap .composer-bar {
+.composer-wrap:not(.slim) .composer-bar {
   min-height: 40px;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-8) var(--s-8);
@@ -1672,4 +1672,19 @@
 /* the list's own line: its answer button sits at the row's end */
 .decision .decision-own .decision-go {
   margin-left: auto;
+}
+
+/* thin until used (one row: +, model and send), open while you use it */
+.composer-wrap.slim .composer-right {
+  margin-right: var(--s-4);
+}
+.composer-wrap.slim .composer {
+  padding: 0 var(--s-8);
+  gap: var(--s-4);
+}
+.composer-wrap.slim .composer textarea {
+  padding: 8px var(--s-4) 10px;
+}
+.composer-wrap.slim .send {
+  margin-left: 0;
 }
