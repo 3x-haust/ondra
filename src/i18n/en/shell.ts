@@ -98,6 +98,9 @@ export default {
   // commands
   "명령 보기": "Show commands",
   "사이드바 열기·닫기": "Toggle sidebar",
+  "화면 크게": "Zoom in",
+  "화면 작게": "Zoom out",
+  "화면 크기 {p}%": "Zoom {p}%",
   "패널 열기·닫기": "Toggle panel",
   "보드": "Board",
   "언어 전환": "Switch language",

@@ -523,6 +523,8 @@ export interface Settings {
   /** "provider/id" for the captain; empty = the account's model */
   captainModel: string;
   theme: "system" | "dark" | "light";
+  /** how big the app is drawn (1 = 100%) */
+  zoom?: number;
   /** UI language; "system" follows the Mac */
   language?: "system" | "ko" | "en";
   /** Instructions imported from other tools (CLAUDE.md, AGENTS.md …) + the user's own. */

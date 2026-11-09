@@ -6,6 +6,7 @@ import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, paletteOpen, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { appCommands } from "./state/commands";
+import { applyZoom, zoom } from "./state/zoom";
 import { ShortcutSheet, sheetOpen, setSheetOpen } from "./views/ShortcutSheet";
 import { dispatchShortcut, noModifiers, shortcutContext, shortcutOverlay, viewKey } from "./lib/shortcuts";
 import { anyPop } from "./ui/ModelPicker";
@@ -63,6 +64,7 @@ export default function App() {
   keepSpaces();
   // settings fill the window; "back" returns to wherever you were
   let lastView: View = { name: "main" };
+  createEffect(() => applyZoom(zoom()));
   createEffect(() => {
     const v = view();
     if (v.name !== "settings") lastView = v;

@@ -1,6 +1,8 @@
 export default {
   // general
   "테마": "Theme",
+  "화면 크기": "Zoom",
+  "⌘= 크게 · ⌘− 작게": "⌘= bigger · ⌘− smaller",
   "시스템": "System",
   "라이트": "Light",
   "다크": "Dark",
