@@ -74,7 +74,7 @@ export default {
   "메모리 검색": "Memory search",
   "서브에이전트 실행": "Run subagent",
   "브라우저 여는 중": "Opening browser",
-  "{n}개 확인 안 됨": "{n} unverified",
+  "확인 안 됨 {n}": "Unverified {n}",
   "여는 중": "Opening",
   "열었음": "Opened",
   "클릭 중": "Clicking",
@@ -132,6 +132,7 @@ export default {
   "확대 (+)": "Zoom in (+)",
   "확대": "Zoom in",
   "전체 보기 (⇧1) · 100% (⇧0)": "Fit all (⇧1) · 100% (⇧0)",
+  "전체 보기": "Fit all",
   "완료된 작업 모두 접기": "Collapse done tasks",
   "완료된 작업 모두 펼치기": "Expand done tasks",
 

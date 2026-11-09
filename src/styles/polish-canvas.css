@@ -1945,21 +1945,49 @@
   line-height: 18px;
 }
 
-/* ── canvas: the cards fade out along the view's bottom and right edges and along the sheet's left edge
-   (Canvas.tsx FADE), so a card running off reads as "more there"; nothing shows in the sheet's inset */
+/* ── canvas: where a card runs off the view (left, right or the sheet's left edge, bottom), the cards fade
+   out along that edge (Canvas.tsx `fades`: --cv-fl/-fr/-fb are 0 where nothing runs off), so it reads as
+   "more there". The fade drops off steeply, so what is left of a word at the edge can't be read; nothing
+   shows in the sheet's inset. */
+@property --cv-fl {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --cv-fr {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --cv-fb {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 .cv-layer {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  --cv-fade: 20px;
+  --cv-end: calc(100% - var(--cv-sheet, 0px));
   -webkit-mask-image:
-    linear-gradient(to bottom, #000 calc(100% - var(--cv-fade)), transparent),
-    linear-gradient(to right, #000 calc(100% - var(--cv-sheet, 0px) - var(--cv-fade)), transparent calc(100% - var(--cv-sheet, 0px)));
+    linear-gradient(to bottom, #000 calc(100% - var(--cv-fb)), rgb(0 0 0 / 0.3) calc(100% - var(--cv-fb) * 0.45), transparent calc(100% - var(--cv-fb) * 0.15)),
+    linear-gradient(to right, transparent calc(var(--cv-fl) * 0.15), rgb(0 0 0 / 0.3) calc(var(--cv-fl) * 0.55), #000 var(--cv-fl)),
+    linear-gradient(to right, #000 calc(var(--cv-end) - var(--cv-fr)), rgb(0 0 0 / 0.3) calc(var(--cv-end) - var(--cv-fr) * 0.45), transparent calc(var(--cv-end) - var(--cv-fr) * 0.15), transparent);
   mask-image:
-    linear-gradient(to bottom, #000 calc(100% - var(--cv-fade)), transparent),
-    linear-gradient(to right, #000 calc(100% - var(--cv-sheet, 0px) - var(--cv-fade)), transparent calc(100% - var(--cv-sheet, 0px)));
+    linear-gradient(to bottom, #000 calc(100% - var(--cv-fb)), rgb(0 0 0 / 0.3) calc(100% - var(--cv-fb) * 0.45), transparent calc(100% - var(--cv-fb) * 0.15)),
+    linear-gradient(to right, transparent calc(var(--cv-fl) * 0.15), rgb(0 0 0 / 0.3) calc(var(--cv-fl) * 0.55), #000 var(--cv-fl)),
+    linear-gradient(to right, #000 calc(var(--cv-end) - var(--cv-fr)), rgb(0 0 0 / 0.3) calc(var(--cv-end) - var(--cv-fr) * 0.45), transparent calc(var(--cv-end) - var(--cv-fr) * 0.15), transparent);
   -webkit-mask-composite: source-in;
   mask-composite: intersect;
+  transition:
+    --cv-fl var(--dur) var(--ease),
+    --cv-fr var(--dur) var(--ease),
+    --cv-fb var(--dur) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cv-layer {
+    transition: none;
+  }
 }
 /* a narrow view gives the sheet less width (Canvas.tsx sheetW), so a card still fits whole beside it */
 .cv-drawer {
@@ -1984,4 +2012,33 @@
 }
 .bc-diff {
   white-space: nowrap;
+}
+
+/* ── canvas: a card past the view's left edge, or mostly past its right one or the sheet's: its words go, so no fragment of them
+   is left to read; the card and its line stay (Canvas.tsx `fades`) */
+.cv-node > * {
+  transition: opacity var(--dur) var(--ease);
+}
+.cv-node.off > * {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cv-node > * {
+    transition: none;
+  }
+}
+
+/* ── board: what a finished card couldn't check, as a mark and its count (never cut in a narrow column) */
+.bc-meta .unverified-badge.bc-unchecked {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  overflow: visible;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── canvas: a command on a card reads as code at the card's own size (≥ 11px on screen at 75%) */
+.cv-world .cv-node .cv-act-row .tg.cmd {
+  font-size: var(--cv-body);
 }
