@@ -82,10 +82,6 @@ When agent-browser answers "Resource temporarily unavailable" (os error 35),
 another job is using the browser this moment: wait a few seconds and retry
 once, then switch to Aside rather than retrying in a loop.
 
-Searching: when web_search says the engine is busy, search through Aside
-(`aside skills show google-search`, then `googleSearch.search(q, { limit: 8 })`
-in `aside repl`).
-
 ## Fast loop: fewer turns, smaller pages
 
 What makes a browser agent slow is the number of turns, not the commands

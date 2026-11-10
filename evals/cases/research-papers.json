@@ -1,0 +1,7 @@
+{
+  "ask": "MoE 언어모델에서 전문가 라우팅 방식이 어떻게 다른지 논문 기준으로 정리해줘. Switch Transformer, Mixtral, DeepSeekMoE 비교해서",
+  "kind": "other",
+  "answer": "first",
+  "note": "Primary sources are the papers themselves (arXiv abs/html, not blog summaries), with their submission dates; numbers (expert counts, top-k) need verbatim quotes from the papers.",
+  "expect": { "maxSecs": 1800, "research": {} }
+}
