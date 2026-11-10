@@ -259,6 +259,7 @@ fn claude_session(path: &Path) -> ImportSession {
     let (mut cwd, mut first_user) = (String::new(), String::new());
     let (mut custom, mut ai) = (String::new(), String::new());
     let mut count = 0;
+    let mut headless = false;
     let mut scan_title = |v: &Value| match v.get("type").and_then(Value::as_str) {
         Some("custom-title") => {
             if let Some(t) = v.get("customTitle").and_then(Value::as_str) {
@@ -278,6 +279,9 @@ fn claude_session(path: &Path) -> ImportSession {
             if let Some(c) = v.get("cwd").and_then(Value::as_str) {
                 cwd = c.to_string();
             }
+        }
+        if v.get("entrypoint").and_then(Value::as_str).is_some_and(|e| e.starts_with("sdk")) {
+            headless = true;
         }
         scan_title(&v);
         match v.get("type").and_then(Value::as_str) {
@@ -302,6 +306,8 @@ fn claude_session(path: &Path) -> ImportSession {
         }
     }
     let title = [custom, ai, first_user].into_iter().find(|t| !t.trim().is_empty()).unwrap_or_default();
+    // a run a program started (claude -p, the SDK) is not a conversation to pick up: no title, so it's not listed
+    let title = if headless { String::new() } else { title };
     ImportSession {
         source: "claude",
         path: path.display().to_string(),
@@ -384,6 +390,10 @@ fn is_temp(cwd: &str) -> bool {
     ["/var/folders/", "/private/var/folders/", "/tmp/", "/private/tmp/"].iter().any(|p| cwd.starts_with(p))
 }
 
+fn is_codex_exec(meta: &Value) -> bool {
+    meta.get("source").and_then(Value::as_str) == Some("exec") || meta.get("originator").and_then(Value::as_str) == Some("codex_exec")
+}
+
 fn keep_session(s: &ImportSession) -> bool {
     !s.title.is_empty() && !is_temp(&s.cwd)
 }
@@ -407,6 +417,7 @@ fn codex_session(path: &Path, titles: &HashMap<String, String>) -> ImportSession
     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     let (mut cwd, mut first_user) = (String::new(), String::new());
     let (mut count, mut read) = (0u64, 0u64);
+    let mut headless = false;
     if let Ok(f) = File::open(path) {
         let mut r = BufReader::new(f);
         let mut buf = Vec::new();
@@ -431,6 +442,8 @@ fn codex_session(path: &Path, titles: &HashMap<String, String>) -> ImportSession
             match (v.get("type").and_then(Value::as_str), p.get("type").and_then(Value::as_str)) {
                 (Some("session_meta"), _) if cwd.is_empty() => {
                     cwd = p.get("cwd").and_then(Value::as_str).unwrap_or_default().to_string();
+                    // `codex exec`: a run a script or another agent started, not the user's conversation
+                    headless = is_codex_exec(&p);
                 }
                 (Some("event_msg"), Some("user_message")) if first_user.is_empty() => {
                     let text = p.get("message").and_then(Value::as_str).unwrap_or_default();
@@ -469,6 +482,7 @@ fn codex_session(path: &Path, titles: &HashMap<String, String>) -> ImportSession
         .find(|(id, _)| name.contains(id.as_str()))
         .map(|(_, t)| t.clone())
         .unwrap_or(first_user);
+    let title = if headless { String::new() } else { title };
     let messages = if read > 0 && read < size { count * size / read } else { count };
     ImportSession {
         source: "codex",
@@ -964,6 +978,32 @@ pub async fn read_transcript(source: String, path: String) -> Transcript {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tmp_jsonl(name: &str, lines: &[&str]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ondra-import-{}-{}", name, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join(format!("{name}.jsonl"));
+        std::fs::write(&p, lines.join("\n") + "\n").unwrap();
+        p
+    }
+
+    #[test]
+    fn codex_exec_runs_are_not_listed() {
+        let user = r#"{"type":"event_msg","payload":{"type":"user_message","message":"Read brief.md fully and report"}}"#;
+        let exec = tmp_jsonl("exec", &[r#"{"type":"session_meta","payload":{"cwd":"/x","originator":"codex_exec","source":"exec"}}"#, user]);
+        let chat = tmp_jsonl("chat", &[r#"{"type":"session_meta","payload":{"cwd":"/x","originator":"codex_cli_rs","source":"cli"}}"#, user]);
+        assert!(!keep_session(&codex_session(&exec, &HashMap::new())));
+        assert!(keep_session(&codex_session(&chat, &HashMap::new())));
+    }
+
+    #[test]
+    fn claude_sdk_runs_are_not_listed() {
+        let line = |entry: &str| format!(r#"{{"type":"user","cwd":"/x","entrypoint":"{entry}","message":{{"role":"user","content":"fix the login page"}}}}"#);
+        let sdk = tmp_jsonl("sdk", &[&line("sdk-cli")]);
+        let cli = tmp_jsonl("cli", &[&line("cli")]);
+        assert!(!keep_session(&claude_session(&sdk)));
+        assert!(keep_session(&claude_session(&cli)));
+    }
 
     /// Runs against this machine's real tool folders: `cargo test -- --ignored --nocapture`.
     #[test]
