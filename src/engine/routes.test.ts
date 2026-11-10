@@ -140,3 +140,20 @@ describe("a reply said twice", () => {
     expect(sameSaid("확인해 봤어요", "로그인 후 대시보드로 가지 않는 건 라우터 가드가 세션 복원을 기다리지 않아서예요.")).toBe(false);
   });
 });
+
+describe("which project new work joins", () => {
+  beforeEach(() => setState("projects", [{ id: "p-orbit", space: "home", name: "Orbit", folder: "/Users/me/projects/orbit", createdAt: 1 } as never]));
+  const shot = "리서치 해줘\n\n첨부한 파일:\n- /Users/me/Library/Application Support/Orbit/Captures/Orbit 2026-11-10.png";
+
+  it("a project's name only in an attached file's path doesn't put the work there", async () => {
+    for (const r of [{ kind: "new", title: "멱등함수 리서치", task: "research" }, { kind: "new", title: "멱등함수 리서치", task: "research", project: "Orbit" }]) {
+      const out = await applyRoutes("home", [r], shot);
+      expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBeUndefined();
+    }
+  });
+
+  it("the user naming it still does", async () => {
+    const out = await applyRoutes("home", [{ kind: "new", title: "버그", task: "fix it" }], "orbit 캡처 버그 고쳐줘\n\n첨부한 파일:\n- /tmp/x.png");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("p-orbit");
+  });
+});
