@@ -73,6 +73,9 @@ export default {
   "새 탭": "New tab",
   "열림": "Open",
   "탭 닫기": "Close tab",
+  "넓게 보기": "Expand",
+  "끌어서 폭 바꾸기 · 두 번 눌러 넓게 보기": "Drag to resize · double-click to expand",
+  "대화 옆에 두기": "Show beside the chat",
   "작업 화면": "Task screen",
   "PR 없음": "No pull request",
 
