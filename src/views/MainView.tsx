@@ -403,13 +403,14 @@ function Picks(props: { project?: string; wait?: boolean }) {
 }
 
 /** The model chip for the account a chat runs on: company and personal keep their own model. */
-function AccountModel(props: { accountId: string; up?: boolean }) {
+/** `rest`: the level shown when none was picked (main itself runs at 낮음; new work at 높음) */
+function AccountModel(props: { accountId: string; up?: boolean; rest?: string }) {
   return (
     <ModelPicker
       up={props.up}
       accountId={props.accountId}
       model={accountById(props.accountId)?.model ?? ""}
-      thinking={effortFor(props.accountId) || ""}
+      thinking={effortFor(props.accountId) || props.rest || ""}
       onChange={(m, t) =>
         updateAccount(props.accountId, (x) => {
           if (m) x.model = m;
@@ -691,7 +692,7 @@ export function MainView() {
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<AccountModel accountId={account()} up={!big} />}
+      right={<AccountModel accountId={account()} up={!big} rest="low" />}
     />
   );
 

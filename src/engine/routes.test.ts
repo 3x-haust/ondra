@@ -114,3 +114,17 @@ describe("a new job lands in the right project", () => {
     expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("ondra");
   });
 });
+
+describe("a reply's text outside its route", () => {
+  it("drops the route written out again after the fence", async () => {
+    const { strayProse } = await import("./captain");
+    expect(strayProse('parameter\n- kind: answer\n- text: "하이! 무엇을 도와드릴까요?"', "하이! 무엇을 도와드릴까요?")).toBe("");
+    expect(strayProse("하이! 무엇을 도와드릴까요?", "하이! 무엇을 도와드릴까요?")).toBe("");
+    expect(strayProse("- kind: answer\n- text: 됐어요", "")).toBe("");
+  });
+  it("keeps a real answer written as prose", async () => {
+    const { strayProse } = await import("./captain");
+    expect(strayProse("설정 › 계정에서 바꿀 수 있어요.", "")).toBe("설정 › 계정에서 바꿀 수 있어요.");
+    expect(strayProse("이유는 캐시 때문이에요. 자세히 보면…", "확인했어요")).toBe("이유는 캐시 때문이에요. 자세히 보면…");
+  });
+});
