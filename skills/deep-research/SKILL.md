@@ -39,6 +39,8 @@ research, Claude Research, Tongyi DeepResearch) and what the papers found:
 | `<보고서 이름>.pdf` | printed with `pdf.sh` in this skill's folder, named for what it is about (e.g. `CUA와 agent-desktop 비교.pdf`), never `report.pdf` |
 | `summary.html` | the chat card: a one-screen summary of the PDF, from `summary.html` in this skill's folder |
 
+Anything else (a script that checks an example or a calculation, scratch files) goes in `$APP_SCRATCH_DIR`, never the working folder: research changes nothing in the user's repo.
+
 ## 1. Scope and plan
 
 1. Write the user's question verbatim at the top of `plan.md`.
