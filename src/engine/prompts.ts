@@ -2,7 +2,8 @@
 // session on an account shares one cached prefix:
 //   role + report format → user instructions → space rules → memory → task.
 import { projectNow } from "./journal";
-import { homeDir, spaceById, state } from "../state/store";
+import { homeDir, projectById, spaceById, state } from "../state/store";
+import { notesPrompt } from "./notes";
 import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { crosscheckLine } from "./crosscheck";
@@ -893,7 +894,8 @@ export function handoffPrompt(t: Task): string {
 }
 
 /** Everything appended to the engine's system prompt for a task, stable parts first. */
-export function taskSystem(t: Task): string[] {
+export function taskSystem(t: Task, notes?: string): string[] {
   const space = spaceById(t.space);
-  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach))].filter(Boolean);
+  const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
+  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
 }
