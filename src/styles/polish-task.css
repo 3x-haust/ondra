@@ -1840,3 +1840,47 @@ button.pf-ref:hover {
   flex: 0 1 auto;
   min-width: 2ch;
 }
+
+/* queued messages: the arrow becomes a grip on hover when there is a line to reorder */
+.queued-grip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.queued-grip > * {
+  grid-area: 1 / 1;
+  transition: opacity 0.12s var(--ease);
+}
+.queued-grip > :last-child {
+  opacity: 0;
+}
+.queued-grip.on {
+  cursor: grab;
+  touch-action: none;
+}
+.queued-row:hover .queued-grip.on > :first-child,
+.queued-row.lifted .queued-grip.on > :first-child {
+  opacity: 0;
+}
+.queued-row:hover .queued-grip.on > :last-child,
+.queued-row.lifted .queued-grip.on > :last-child {
+  opacity: 1;
+}
+.queued.sorting,
+.queued.sorting .queued-grip.on {
+  cursor: grabbing;
+  user-select: none;
+}
+.queued.sorting .queued-row:not(.lifted) {
+  background: transparent;
+}
+.queued.sorting .queued-row:not(.lifted) .queued-acts {
+  opacity: 0;
+}
+.queued-row.lifted {
+  background: var(--hover);
+  color: var(--ink-2);
+}

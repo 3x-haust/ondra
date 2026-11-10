@@ -2268,6 +2268,17 @@ export function editQueued(id: string, qid: string, text: string) {
   if (!t) return dropQueued(id, qid);
   updateTask(id, (x) => (x.queue = (x.queue ?? []).map((y) => (y.id === qid ? { id: y.id, at: y.at, text: t } : y))));
 }
+/** Move a queued message to another place in line (`to` is its new index). */
+export function moveQueued(id: string, qid: string, to: number) {
+  updateTask(id, (x) => {
+    const q = [...(x.queue ?? [])];
+    const from = q.findIndex((y) => y.id === qid);
+    if (from < 0) return;
+    const [it] = q.splice(from, 1);
+    q.splice(Math.max(0, Math.min(to, q.length)), 0, it!);
+    x.queue = q;
+  });
+}
 export function dropQueued(id: string, qid: string) {
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
 }

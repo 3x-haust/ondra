@@ -16,7 +16,7 @@ import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { askDiscard } from "../ui/Review";
-import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, tell } from "../engine/tasks";
+import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -150,15 +150,48 @@ function Queued(props: { t: Task }) {
     const e = untrack(editing);
     if (e && !props.t.queue?.some((q) => q.id === e.id)) (setEditing(null), setDraft(e.text));
   });
+  // dragged by its handle, a message changes its place in line (like Codex); the order is the one they go in
+  const [dragging, setDragging] = createSignal<string | null>(null);
+  let list!: HTMLDivElement;
+  const drag = (e: PointerEvent, qid: string) => {
+    if (e.button !== 0 || (props.t.queue?.length ?? 0) < 2) return;
+    e.preventDefault();
+    // the window listens: the row is moved in the page as it goes, which would drop a capture on it
+    setDragging(qid);
+    const move = (ev: PointerEvent) => {
+      const rows = [...list.querySelectorAll<HTMLElement>(":scope > .queued-row")];
+      const at = rows.findIndex((r) => ev.clientY < r.getBoundingClientRect().top + r.offsetHeight / 2);
+      const to = at < 0 ? rows.length - 1 : at;
+      const from = props.t.queue?.findIndex((q) => q.id === qid) ?? -1;
+      if (from >= 0 && to !== from) moveQueued(props.t.id, qid, to > from ? to - 1 + (at < 0 ? 1 : 0) : to);
+    };
+    const end = () => {
+      setDragging(null);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
   return (
-    <div class="queued">
+    <div class="queued" ref={list} classList={{ sorting: !!dragging() }}>
       <For each={props.t.queue}>
         {(q) => (
           <Show
             when={editing()?.id === q.id}
             fallback={
-              <div class="queued-row">
-                <Icon name="handoff" size={13} />
+              <div class="queued-row" classList={{ lifted: dragging() === q.id }}>
+                <span
+                  class="queued-grip"
+                  classList={{ on: (props.t.queue?.length ?? 0) > 1 }}
+                  title={(props.t.queue?.length ?? 0) > 1 ? tr("끌어서 순서 바꾸기") : undefined}
+                  onPointerDown={(e) => drag(e, q.id)}
+                >
+                  <Icon name="handoff" size={13} />
+                  <Icon name="dots" size={13} />
+                </span>
                 <span class="queued-text" title={q.text} onDblClick={() => setEditing({ id: q.id, text: q.text })}>{q.text}</span>
                 <div class="queued-acts">
                   <button class="queued-steer" onClick={() => steerQueued(props.t.id, q.id)}>
