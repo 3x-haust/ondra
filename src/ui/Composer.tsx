@@ -9,7 +9,7 @@ import { setState, state } from "../state/store";
 import { focusId } from "../state/ui";
 import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
-import { asQuote } from "./quote";
+import { withQuotes } from "./quote";
 import { openImage } from "./Lightbox";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
@@ -277,15 +277,15 @@ export function Composer(props: {
     setPick(null);
     grow();
   };
-  /** put a quote at the end of what is typed, on its own lines, the cursor after it */
+  /** quoted from a reply: a quiet line above what is typed (sent first, as a Markdown quote), the cursor stays in the text */
+  const [quotes, setQuotes] = createSignal<string[]>([]);
   const quote = (t: string) => {
-    const v = el.value.replace(/\s+$/, "");
-    const next = `${v ? `${v}\n\n` : ""}${asQuote(t)}\n\n`;
-    setText(next);
-    el.value = next;
+    const q = t.trim();
+    if (!q) return;
+    setQuotes((l) => (l.includes(q) ? l : [...l, q]));
+    setEngaged(true);
     el.focus();
-    el.setSelectionRange(next.length, next.length);
-    grow();
+    el.setSelectionRange(el.value.length, el.value.length);
   };
   // every menu that opens from this input (+, project, permission, model, account) goes where
   // there is room for it, never over the control that opened it
@@ -336,7 +336,7 @@ export function Composer(props: {
   };
 
   // a picture or file alone is enough to send
-  const ready = () => (!!text().trim() || files().length > 0) && !props.disabled;
+  const ready = () => (!!text().trim() || files().length > 0 || quotes().length > 0) && !props.disabled;
   const send = () => {
     if (!ready()) return;
     // skills named anywhere ("이거 /skill:deep-research 로 조사해줘"): the first runs, with the rest of the text
@@ -365,8 +365,9 @@ export function Composer(props: {
       return;
     }
     const f = files();
-    const v = text();
-    keep(v);
+    const v = withQuotes(quotes(), text());
+    keep(text());
+    setQuotes([]);
     setEngaged(false);
     // emptied before it is handed on: sending can close this input (a new task opens the task),
     // and a draft saved after that would come back the next time
@@ -522,6 +523,20 @@ export function Composer(props: {
               </For>
             </div>
           )}
+        </Show>
+        <Show when={quotes().length}>
+          <div class="quote-row">
+            <For each={quotes()}>
+              {(q) => (
+                <div class="cquote" title={q}>
+                  <span class="cquote-text">{q}</span>
+                  <button type="button" class="cquote-x" aria-label={t("인용 빼기")} title={t("인용 빼기")} onClick={() => setQuotes((l) => l.filter((x) => x !== q))}>
+                    <Icon name="x" size={12} />
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
         </Show>
         <Show when={files().length}>
           <div class="attach-row">
