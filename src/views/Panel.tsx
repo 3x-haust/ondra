@@ -9,7 +9,7 @@ import { accountById, homeDir, projectById, projectsIn, state, updateTask } from
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { openLink } from "../ui/links";
-import { toast, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
+import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
@@ -604,7 +604,7 @@ const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.
 // which tabs go with you to another place (see enterPlace in state/ui)
 setTabFits((place, kind) => {
   if (kind === "preview") return previewPlace() === place ? "use" : "drop";
-  if (place === "main" || place === "results") return jobOnly(kind) ? "keep" : "use";
+  if (isMainPlace(place) || place === "results") return jobOnly(kind) ? "keep" : "use";
   const t = state.tasks.find((x) => x.id === place);
   if (!t) return "use";
   // the shared browser you opened yourself goes along; a task's own page doesn't
