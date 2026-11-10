@@ -79,6 +79,8 @@ interface Run {
   pendingHandoff?: Handoff;
   /** a review it asked for was refused (one per job): said again as a prompt if the turn ended waiting for it */
   refused?: string;
+  /** asked once, after a turn ended with no done block, whether it is finished */
+  askedDone?: boolean;
   /** toolCallId → when that shell's output last changed (the search and wait watchdog) */
   changed?: Map<string, number>;
   /** searches and waits the watchdog already tried to stop */
@@ -1480,6 +1482,22 @@ async function settle(id: string, run: Run) {
       x.now = lastReport(x) ?? "답을 기다리는 중";
     });
     return;
+  }
+  // asked once whether it is finished before the user is
+  // (a finished job often just forgets the done block)
+  if (drainQueue(id)) return;
+  if (!run.askedDone) {
+    run.askedDone = true;
+    try {
+      run.turnStart = Date.now();
+      await request(agent, {
+        type: "prompt",
+        message: "(Ondra) Your turn ended without a done block. If the work is finished, send the done block now with the final answer (don't repeat the work). If it isn't, carry on with the next step; if you need the user, send an ask block.",
+      });
+      return;
+    } catch {
+      // fall through
+    }
   }
   const d: Decision = {
     id: uid("d"),

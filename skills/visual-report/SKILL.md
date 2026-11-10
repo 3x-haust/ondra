@@ -59,6 +59,7 @@ on a subagent or the user is no handoff: just end the turn.
 | what's in / out of this work | `scope` | `label?`, `in: {label, note?}[]`, `out: {label, note?}[]` |
 | how much, which is biggest | `bars` | `label?`, `unit?`, `items: {label, value, note?, highlight?}[]` |
 | where things are | `tree` | `label?`, `unit?`, `items: {path, note?, value?, state?}[]` |
+| a stack, layer on layer (스택, 기술 스택, "구성 시각화") | `stack` | `items: {label, parts: string[], note?, em?}[]` top first, `side?: {label}[]` for what runs through every layer (모니터링, 인증) |
 | what it's made of | `groups` | `label?`, `groups: {label, note?, items: {label, note?, state?, ref?}[]}[]`, `links?: {from, to, label?}[]` |
 | who talks to whom | `sequence` | `label?`, `actors: string[]`, `steps: {from, to, label, note?}[]` |
 | straight order | `steps` | `label?`, `items: {label, note?, state?}[]` |
@@ -82,6 +83,8 @@ or cause (Tversky); long LLM answers are easier to grasp as diagrams
 - Box labels are short nouns/verbs; notes ≤ ~6 words.
 - Before/after: two pictures with the same boxes in the same order.
 - A straight chain of boxes is `steps`, not `diagram`.
+- A stack ("스택 시각화", "기술 스택") is `stack`: layers from the screen down to the machines, each with
+  what it runs on. Who calls whom is a second picture (`arch`), only when asked.
 
 ## Pictures of code and systems
 
