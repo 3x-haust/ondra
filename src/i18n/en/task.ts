@@ -41,6 +41,7 @@ export default {
   // above the composer
   "할 일": "To-dos",
   "지금 보내기": "Send now",
+  "끌어서 순서 바꾸기": "Drag to reorder",
   "수정": "Edit",
   "저장": "Save",
   "취소": "Cancel",
