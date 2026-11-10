@@ -632,9 +632,11 @@ export function MainView() {
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
     });
-  /** questions of this chat's tasks already answered: one quiet line each where the card was */
+  /** questions of this chat's tasks already answered: one quiet line each where the card was.
+   *  Not in a project's chat: each job's own result shows there under its row, and the answers are in it. */
   const answered = createMemo(() => {
     const out: Answered[] = [];
+    if (project()) return out;
     for (const t of state.tasks) {
       if (t.space !== state.space || (project() && t.project !== project()!.id)) continue;
       for (const e of t.entries) {
