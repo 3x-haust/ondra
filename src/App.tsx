@@ -4,7 +4,7 @@ import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { closePanel, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { keepPanes } from "./state/panes";
 import { Panes } from "./views/Panes";
 import { menuClose } from "./views/PaneControls";
@@ -179,13 +179,16 @@ export default function App() {
     else document.documentElement.dataset.theme = t;
   });
 
+  // another place picked: the chat comes back beside the panel
+  createEffect(on(view, () => setPanelWide(false), { defer: true }));
+
   return (
     <Show when={loaded()}>
-      <div class="app" classList={{ "sb-hidden": sidebarAway() }}>
+      <div class="app" classList={{ "sb-hidden": sidebarAway(), "panel-wide": panelWide() && panelShown() }}>
         <div class="sb-wrap" inert={sidebarAway() || undefined}>
           <Show when={view().name === "settings"} fallback={<Sidebar />}><SettingsNav onBack={back} /></Show>
         </div>
-        <main class="main" classList={{ split: paneCount() > 1 && view().name !== "settings" }}>
+        <main class="main" classList={{ split: paneCount() > 1 && view().name !== "settings" }} inert={(panelWide() && panelShown()) || undefined}>
           <Show when={view().name === "settings"}><SettingsPage onBack={back} /></Show>
           {/* the center: split panes, each with its own view (one fills it when alone) */}
           <Show when={view().name !== "settings"}><Panes /></Show>

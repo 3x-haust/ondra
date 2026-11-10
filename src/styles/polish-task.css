@@ -1785,14 +1785,34 @@ button.pf-ref:hover {
   }
 }
 
-/* the panel gives way before the conversation does: the chat keeps 520px, the panel takes the rest
+/* the panel gives way before the conversation does: the chat keeps 360px, the panel takes the rest
    (down to 320px) */
 .app .panel {
   min-width: 0;
-  max-width: max(320px, calc(100vw - var(--sidebar-w) - 520px - 2 * var(--gut)));
+  max-width: max(320px, calc(100vw - var(--sidebar-w) - 360px - 2 * var(--gut)));
 }
 .app.sb-hidden .panel {
-  max-width: max(320px, calc(100vw - 520px - 3 * var(--gut)));
+  max-width: max(320px, calc(100vw - 360px - 3 * var(--gut)));
+}
+/* 넓게 보기: the panel takes the center, the chat steps aside until it's put back */
+.app > .panel {
+  grid-row: 1;
+  grid-column: 3;
+}
+.app.panel-wide > .main {
+  display: none;
+}
+.app.panel-wide > .panel,
+.app.panel-wide > .panel-resize {
+  grid-column: 2 / 4;
+}
+.app.panel-wide > .panel {
+  width: auto;
+  max-width: none;
+}
+.panel-wide-btn {
+  flex: none;
+  margin-right: var(--s-4);
 }
 
 /* diffs: a wrapped line continues under its own code, a step in, never at the left edge */

@@ -1239,16 +1239,28 @@ html.capture-window body {
   position: relative;
 }
 .panel-resize {
-  position: absolute;
-  left: -3px;
-  top: 0;
-  bottom: 0;
-  width: 6px;
+  /* the panel's own cell, over the gutter at its left */
+  grid-row: 1;
+  grid-column: 3;
+  justify-self: start;
+  align-self: stretch;
+  position: relative;
+  width: 8px;
   cursor: col-resize;
   z-index: var(--z-pop);
 }
-.panel-resize:hover,
-body.resizing .panel-resize {
+.panel-resize::after {
+  content: "";
+  position: absolute;
+  top: var(--gut);
+  bottom: var(--gut);
+  left: calc(50% - 1px);
+  width: 2px;
+  border-radius: 1px;
+  transition: background-color var(--dur-fast) ease;
+}
+.panel-resize:hover::after,
+body.resizing .panel-resize::after {
   background: var(--accent-line);
 }
 body.resizing {

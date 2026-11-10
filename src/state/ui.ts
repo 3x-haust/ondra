@@ -406,7 +406,10 @@ export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast
 let leave: (() => Promise<unknown>) | null = null;
 export const setPanelLeave = (f: (() => Promise<unknown>) | null) => (leave = f);
 /** Close the right panel (the center stays as it is). */
+/** The panel takes the whole center (the chat steps aside) until it's put back, closed, or another view is picked. */
+export const [panelWide, setPanelWide] = createSignal(false);
 export async function closePanel() {
+  setPanelWide(false);
   if (!panelOpen()) return;
   const f = leave;
   leave = null;

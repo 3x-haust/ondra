@@ -9,7 +9,7 @@ import { accountById, homeDir, projectById, projectsIn, state, updateTask } from
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { openLink } from "../ui/links";
-import { toast, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
+import { toast, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
@@ -712,18 +712,25 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
   const KEY = "ondra.jobW";
   try {
     const w = Number(localStorage.getItem(KEY));
-    if (w >= 380 && w <= 980) document.documentElement.style.setProperty("--job-w", `${w}px`);
+    if (w >= 320 && w <= 4000) document.documentElement.style.setProperty("--job-w", `${w}px`);
   } catch {
     /* storage can be blocked */
   }
+  /** the narrowest the chat gets beside the panel */
+  const CHAT_MIN = 360;
   const drag = (e: PointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect().width;
-    const max = Math.min(980, window.innerWidth - 600);
-    let w = startW;
+    const startW = el.getBoundingClientRect().width;
+    // the room the chat and the panel share: the chat keeps CHAT_MIN beside it, or steps aside altogether
+    const room = startW + (panelWide() ? 0 : (document.querySelector(".app > .main")?.getBoundingClientRect().width ?? 0));
+    let w = Number(getComputedStyle(document.documentElement).getPropertyValue("--job-w").replace("px", "")) || 560;
     const move = (ev: PointerEvent) => {
-      w = Math.max(380, Math.min(max, startW + startX - ev.clientX));
+      const want = startW + startX - ev.clientX;
+      const wide = room - want < CHAT_MIN / 2;
+      if (wide !== panelWide()) setPanelWide(wide);
+      if (wide) return;
+      w = Math.max(320, Math.min(room - CHAT_MIN, want));
       document.documentElement.style.setProperty("--job-w", `${w}px`);
     };
     const up = () => {
@@ -744,8 +751,10 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
   /** the browser tab shows the job's own tab while it browses, else the shared browser */
   const shared = () => tab() === "browser" && (!props.t?.browser || panelShared());
   return (
+    <>
+    {/* in the gutter beside the card, which clips what pokes out of it */}
+    <div class="panel-resize" title={tr("끌어서 폭 바꾸기 · 두 번 눌러 넓게 보기")} onPointerDown={drag} onDblClick={() => setPanelWide(!panelWide())} />
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
-      <div class="panel-resize" onPointerDown={drag} />
       <div class="panel-bar" data-tauri-drag-region>
         <div class="ptabs" ref={bar} role="tablist" data-tauri-drag-region>
           <span class="tab-ind" classList={{ on: ind().on }} style={{ transform: `translateX(${ind().x}px)`, width: `${ind().w}px` }} />
@@ -837,6 +846,15 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
           </button>
         </Show>
         <span class="spacer" data-tauri-drag-region />
+        <button
+          class="icon-btn sm panel-wide-btn"
+          title={panelWide() ? tr("대화 옆에 두기") : tr("넓게 보기")}
+          aria-label={panelWide() ? tr("대화 옆에 두기") : tr("넓게 보기")}
+          aria-pressed={panelWide()}
+          onClick={() => setPanelWide(!panelWide())}
+        >
+          <Icon name={panelWide() ? "compact" : "zoom"} size={14} />
+        </button>
       </div>
       <div class="panel-body">
         <Switch>
@@ -877,5 +895,6 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
         </Switch>
       </div>
     </aside>
+    </>
   );
 }
