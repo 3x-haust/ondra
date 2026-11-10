@@ -212,7 +212,8 @@ pub async fn tool_status(app: AppHandle) -> ToolStatus {
 
 /// Environment every worker gets so the tools "just work" inside its session:
 /// the bundled binaries on PATH, the shared browser (its own tab in it, see
-/// `browser.rs`), keychain sign-in, and its own folder for screenshots and recordings.
+/// `browser.rs`), keychain sign-in, its own folder for screenshots and recordings,
+/// and one for builds and scratch work.
 /// Async: the first job may have to start the shared browser.
 #[tauri::command]
 pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>) -> Vec<(String, String)> {
@@ -267,6 +268,7 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     env.push(("APP_WORKER_ID".into(), worker_id.clone()));
     env.extend(crate::bridge::env());
     env.push(("ONDRA_HOOKS_FILE".into(), hooks_file(&app).display().to_string()));
+    env.push(("APP_SCRATCH_DIR".into(), crate::store::scratch_dir(&worker_id).display().to_string()));
     env.push(("APP_ARTIFACTS_DIR".into(), crate::store::artifacts_dir(app, worker_id)));
     env
 }

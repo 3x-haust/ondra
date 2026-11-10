@@ -381,12 +381,23 @@ pub fn state_flushed() {
     QUIT_SAVED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
+fn safe_id(worker_id: &str) -> String {
+    worker_id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect()
+}
+
 #[tauri::command]
 pub fn artifacts_dir(app: AppHandle, worker_id: String) -> String {
-    let safe: String = worker_id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
-    let dir = data_dir(&app).join("artifacts").join(safe);
+    let dir = data_dir(&app).join("artifacts").join(safe_id(&worker_id));
     let _ = std::fs::create_dir_all(&dir);
     dir.display().to_string()
+}
+
+/// A job's folder for builds, caches and scratch work, kept out of its artifacts folder.
+/// It is in the system temp folder, which macOS clears on its own; Ondra never deletes it.
+pub fn scratch_dir(worker_id: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join("ondra-scratch").join(safe_id(worker_id));
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 // ───────────── accounts ─────────────
@@ -849,6 +860,22 @@ fn read_lines_from(path: &std::path::Path, from: u64) -> TraceChunk {
     let whole = buf.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
     buf.truncate(whole);
     TraceChunk { text: String::from_utf8_lossy(&buf).into_owned(), end: from + whole as u64 }
+}
+
+#[cfg(test)]
+mod scratch_tests {
+    use super::scratch_dir;
+
+    #[test]
+    fn scratch_is_a_per_job_folder_in_the_system_temp_folder() {
+        let id = format!("job-{}", std::process::id());
+        let dir = scratch_dir(&id);
+        assert!(dir.is_dir());
+        assert_eq!(dir, std::env::temp_dir().join("ondra-scratch").join(&id));
+        // the id never reaches outside the scratch folder
+        assert_eq!(scratch_dir("../../x").file_name().unwrap(), "x");
+        let _ = std::fs::remove_dir(&dir);
+    }
 }
 
 #[cfg(test)]

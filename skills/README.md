@@ -72,3 +72,4 @@ Set by the app when it starts a worker (`worker_env` in `src-tauri/src/tools.rs`
 | `AGENT_DESKTOP_MACOS_HELPER_PATH` | bundled macOS helper |
 | `APP_WORKER_ID` | the worker's id |
 | `APP_ARTIFACTS_DIR` | where screenshots and recordings go (one folder per worker) |
+| `APP_SCRATCH_DIR` | builds, caches and scratch work (one folder per worker, in the system temp folder) |

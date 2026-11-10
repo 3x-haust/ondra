@@ -55,6 +55,12 @@ describe("coding defaults", () => {
     ]) expect(prompt.replace(/\s+/g, " ")).toContain(rule);
   });
 
+  it.each([TASK_SYSTEM, SUB_SYSTEM])("keeps builds and scratch work out of the artifacts folder", (prompt) => {
+    const p = flat(prompt);
+    expect(p).toContain("$APP_ARTIFACTS_DIR holds only what the user will look at.");
+    expect(p).toMatch(/Builds, caches \(CARGO_TARGET_DIR[^)]*\), unpacked copies and scratch work go in \$APP_SCRATCH_DIR\./);
+  });
+
   it("keeps searches out of ~ and short, without cutting builds short", () => {
     const p = flat(TASK_SYSTEM);
     for (const rule of ["rg --files <dir> -g '<glob>'", "not `find .`", "-maxdepth", "-not -path '*/node_modules/*' -not -path '*/.git/*'", '"timeout" (60)', "90s"])
