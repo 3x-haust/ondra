@@ -845,6 +845,9 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   // a simulation only shows what main decided; nothing is started
   if (isSim(space)) return { reply, routes: parsed as Route[] };
   const routes = await applyRoutes(space, parsed, text, cwd, !event);
+  // the reply said again as the answer ("안녕하세요, 뭐 도와드릴까요?" and "안녕하세요! 무엇을 도와드릴까요?"): said once
+  const said = parsed.filter((r: any) => r?.kind === "answer" && typeof r.text === "string").map((r: any) => r.text as string);
+  if (reply && said.some((a: string) => sameSaid(reply, a))) return { reply: "", routes };
   if (!routes.length) {
     // nothing usable came back: whatever it said is the answer
     const loose = parsed.map((r: any) => (typeof r?.text === "string" ? r.text : "")).filter(Boolean).join("\n\n");
@@ -856,6 +859,25 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     throw new Error("응답이 비어 있어요");
   }
   return { reply, routes };
+}
+
+/** Two lines that say the same thing (a greeting or a short answer worded a little differently). */
+export function sameSaid(a: string, b: string): boolean {
+  const flat = (s: string) => s.replace(/[\s.,!?~"'`*_:;·…()\-]/g, "").toLowerCase();
+  const x = flat(a);
+  const y = flat(b);
+  if (!x || !y) return false;
+  if (x.includes(y) || y.includes(x)) return true;
+  const grams = (s: string) => {
+    const g = new Map<string, number>();
+    for (let i = 0; i < s.length - 1; i++) g.set(s.slice(i, i + 2), (g.get(s.slice(i, i + 2)) ?? 0) + 1);
+    return g;
+  };
+  const gx = grams(x);
+  const gy = grams(y);
+  let both = 0;
+  for (const [k, n] of gx) both += Math.min(n, gy.get(k) ?? 0);
+  return (2 * both) / (x.length - 1 + (y.length - 1)) >= 0.6;
 }
 
 /**
