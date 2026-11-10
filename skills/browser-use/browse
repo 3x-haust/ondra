@@ -1,0 +1,655 @@
+#!/usr/bin/env python3
+"""browse: drive this job's browser tab in few, small, fast steps (agent-browser underneath).
+
+  browse open <url>              load light, wait for it to settle, then `look`        (one call)
+  browse look [-s css] [--all] [--urls]
+                                 the page's controls, lean: refs, roles, names, values;
+                                 header/nav/footer link lists folded
+  browse read [<url>] [css] [--section <heading>] [--outline] [--links] [--max <chars>]
+                                 the main content as markdown (no menus, ads, footers);
+                                 with a url, opens it first (light), all in one call
+  browse do "<cmd>" ["<cmd>" ...] [--read [read options]]
+                                 agent-browser commands in one batch (stops at the first
+                                 failure), wait for the page to settle, then `look` (on the
+                                 same page only what changed), or `read` with --read
+  browse visuals on|off          on: images, fonts, media, ads and animations come back
+                                 (reloads the page); off: blocked again from the next page
+  browse shot <file.png> [--full]
+                                 a screenshot with visuals on (turns them on first)
+
+Light is the default: images, media, fonts and ad/tracker requests are blocked and
+motion is reduced in this tab only (other jobs and the app's browser panel are not
+touched). Uses AGENT_BROWSER_* from the environment, like plain agent-browser.
+"""
+
+import difflib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+AB = os.environ.get("BROWSE_AGENT_BROWSER", "agent-browser")
+SESSION = os.environ.get("AGENT_BROWSER_SESSION", "default")
+STATE_DIR = os.path.join(os.environ.get("APP_SCRATCH_DIR") or os.environ.get("TMPDIR") or "/tmp", ".browse")
+STATE = os.path.join(STATE_DIR, re.sub(r"[^\w.-]", "_", SESSION) + ".json")
+
+# Blocked in light mode. Ads and trackers only: nothing a page needs to work
+# (no A/B tools, whose anti-flicker snippets would hide the page while waiting).
+TRACKERS = [
+    "doubleclick.net", "googlesyndication.com", "googleadservices.com", "google-analytics.com",
+    "googletagmanager.com", "amazon-adsystem.com", "adnxs.com", "criteo.com", "criteo.net",
+    "taboola.com", "outbrain.com", "scorecardresearch.com", "chartbeat.com", "hotjar.com",
+    "clarity.ms", "quantserve.com", "moatads.com", "adsrvr.org", "rubiconproject.com",
+    "pubmatic.com", "permutive.app", "segment.io",
+]
+ROUTES = [["network", "route", "*", "--abort", "--resource-type", "image,media,font"]] + [
+    ["network", "route", f"*://*{d}/*", "--abort"] for d in TRACKERS
+]
+
+# Waits until the page stops changing: no DOM change for 300 ms, no fetch/XHR still
+# open (net.js counts them), at most 4 s. In light mode also makes CSS motion instant.
+SETTLE = r"""(async (light) => {
+  const t0 = performance.now(); let last = t0;
+  const mo = new MutationObserver(() => { last = performance.now(); });
+  mo.observe(document.documentElement || document, { subtree: true, childList: true, characterData: true });
+  const open = () => (window.__browseNet ? window.__browseNet.open : 0);
+  while (performance.now() - t0 < 4000) {
+    await new Promise((r) => setTimeout(r, 50));
+    if (document.readyState !== "loading" && open() === 0 && performance.now() - last >= 300) break;
+  }
+  mo.disconnect();
+  if (light && document.head && !document.getElementById("__browse_light")) {
+    const s = document.createElement("style"); s.id = "__browse_light";
+    s.textContent = "*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}";
+    document.head.appendChild(s);
+  }
+  return location.href;
+})(%s)"""
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+READ_JS = os.path.join(HERE, "read.js")
+NET_JS = os.path.join(HERE, "net.js")
+
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_state(st):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(STATE, "w") as f:
+            json.dump(st, f)
+    except OSError:
+        pass
+
+
+def batch(cmds, bail=True):
+    """Run commands in one agent-browser call: [(command, ok, result | error)]."""
+    args = [AB, "batch", "--json"] + (["--bail"] if bail else [])
+    t = time.time()
+    p = subprocess.run(args, input=json.dumps(cmds), capture_output=True, text=True)
+    if os.environ.get("BROWSE_DEBUG"):
+        sys.stderr.write(f"[{time.time() - t:.2f}s] {' | '.join(' '.join(c)[:40] for c in cmds)[:300]}\n")
+    try:
+        rows = json.loads(p.stdout)
+    except ValueError:
+        sys.stderr.write((p.stderr or p.stdout or "agent-browser gave no answer").strip() + "\n")
+        sys.exit(p.returncode or 1)
+    return [(r.get("command") or [], bool(r.get("success", r.get("error") is None)), r.get("result") if r.get("error") is None else r.get("error")) for r in rows]
+
+
+def settle_cmd(st):
+    return ["eval", SETTLE % ("true" if not st.get("visual") else "false")]
+
+
+def daemon_pid():
+    p = subprocess.run([AB, "session", "info", "--json"], capture_output=True, text=True)
+    try:
+        return json.loads(p.stdout)["data"].get("pid")
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def setup(st, url=None):
+    """What this tab's session needs once per session daemon (it goes away with the
+    daemon): light mode's routes and reduced motion. Returns (commands to run first,
+    the open command for `url`)."""
+    pid = daemon_pid()
+    if not pid and "AGENT_BROWSER_INIT_SCRIPTS" not in os.environ:
+        # the app sets this for every job; without it, a daemon this call starts gets net.js
+        # (only one starting now: given to a running daemon, it would drop that tab's routes)
+        os.environ["AGENT_BROWSER_INIT_SCRIPTS"] = NET_JS
+    cmds = []
+    if not st.get("visual") and not (pid and st.get("light_pid") == pid):
+        st["pending"] = True
+        cmds = [["network", "unroute"], ["set", "media", "reduced-motion"]] + ROUTES
+    return cmds, (["open", url, "--wait-until", "domcontentloaded"] if url else None)
+
+
+def setup_done(st):
+    if st.pop("pending", False) and not st.get("visual"):
+        st["light_pid"] = daemon_pid()
+
+
+# ───────────── look: the snapshot without the decoration ─────────────
+
+LINE = re.compile(r'^(\s*)- ([\w-]+)(?: "((?:[^"\\]|\\.)*)")?(?: \[([^\]]*)\])?(.*)$')
+INTERACTIVE = {
+    "link", "button", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "slider",
+    "spinbutton", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "treeitem",
+    "DisclosureTriangle",
+}
+PROSE = {"paragraph", "cell", "definition", "term", "blockquote", "emphasis", "strong", "code", "Abbr",
+         "superscript", "subscript", "mark", "time", "LabelText", "caption", "Figcaption"}
+LANDMARKS = {"banner": "header", "navigation": "nav", "contentinfo": "footer", "complementary": "aside",
+             "main": "main", "search": "search", "dialog": "dialog", "alertdialog": "dialog"}
+CHROME = {"header", "nav", "footer", "aside"}
+FLAGS = ("checked", "selected", "expanded", "pressed", "disabled", "required", "invalid", "readonly")
+
+
+class Node:
+    __slots__ = ("role", "name", "attrs", "rest", "kids", "parent")
+
+    def __init__(self, role, name, attrs, rest, parent):
+        self.role, self.name, self.attrs, self.rest, self.kids, self.parent = role, name, attrs, rest, [], parent
+
+
+def parse(text):
+    root = Node("root", "", {}, "", None)
+    stack = [(-1, root)]
+    for raw in text.splitlines():
+        m = LINE.match(raw)
+        if not m:
+            continue
+        ind, role, name, attrs, rest = len(m.group(1)), m.group(2), m.group(3) or "", m.group(4) or "", m.group(5) or ""
+        a = {}
+        for part in attrs.split(", ") if attrs else []:
+            k, _, v = part.partition("=")
+            a[k.strip()] = v if _ else True
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        parent = stack[-1][1]
+        n = Node(role, name.replace('\\"', '"'), a, rest, parent)
+        parent.kids.append(n)
+        stack.append((ind, n))
+    return root
+
+
+def text_of(n, limit=80):
+    out = []
+
+    def walk(x):
+        if sum(len(s) for s in out) > limit:
+            return
+        if x.role == "StaticText" and x.name:
+            out.append(x.name)
+        for k in x.kids:
+            walk(k)
+
+    walk(n)
+    return re.sub(r"\s+", " ", " ".join(out)).strip()
+
+
+def clip(s, n=90):
+    s = re.sub(r"\s+", " ", s).strip()
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def interactive(n):
+    if n.role in INTERACTIVE and "ref" in n.attrs:
+        return True
+    return n.role == "generic" and "ref" in n.attrs and ("clickable" in n.rest)
+
+
+def descendants(n, role):
+    for k in n.kids:
+        if k.role == role:
+            yield k
+        else:
+            yield from descendants(k, role)
+
+
+def lean(text, all_=False, urls=False):
+    """Fold the snapshot into the lines a model needs to act on the page."""
+    items = []  # (region, kind, payload, ref, extra, prose)
+
+    def walk(n, region, inter_names):
+        role = n.role
+        reg = LANDMARKS.get(role, region)
+        if role in ("image", "img", "ListMarker", "StaticText", "LineBreak") and not interactive(n):
+            if role == "StaticText" and region == "dialog" and n.name.strip():
+                items.append((reg, "text", clip(n.name, 160), None, "", False))
+            return
+        if role in ("alert", "status") and text_of(n):
+            items.append((reg, "alert", clip(text_of(n, 200), 200), None, "", False))
+        if role == "heading" and reg not in CHROME:
+            name = n.name or text_of(n)
+            kid = next((k for k in n.kids if k.role == "link" and "ref" in k.attrs), None)
+            if name:
+                items.append((reg, "heading", clip(name, 120), kid.attrs.get("ref") if kid else None, "#" * int(n.attrs.get("level", 2) or 2), False))
+            for k in n.kids:
+                if k is not kid:
+                    walk(k, reg, inter_names | {name})
+            return
+        if interactive(n):
+            name = n.name or text_of(n, 60) or next((k.name for k in n.kids if k.role in ("image", "img") and k.name), "")
+            if role == "generic":
+                if not name:
+                    return
+                role = "clickable"
+            hk = next((k for k in n.kids if k.role == "heading"), None) if role == "link" else None
+            if hk is not None and reg not in CHROME and clip(hk.name or text_of(hk), 120) == clip(name, 120):
+                # a link around a heading (a result's title): the heading, with the link's ref
+                items.append((reg, "heading", clip(name, 120), n.attrs["ref"], "#" * int(hk.attrs.get("level", 2) or 2), False))
+                for k in n.kids:
+                    if k is not hk:
+                        walk(k, reg, inter_names | {name})
+                return
+            if name in inter_names and role in ("button", "link", "clickable", "DisclosureTriangle"):
+                # a button inside a link of the same name: one control
+                for k in n.kids:
+                    walk(k, reg, inter_names)
+                return
+            flags = [f if n.attrs.get(f) in (True, "true") else f"{f}=false" for f in FLAGS if f in n.attrs]
+            flags = [f for f in flags if not f.endswith("=false") or (f.startswith(("checked", "pressed")) or (f.startswith("expanded") and role != "combobox"))]
+            value = n.rest.strip()
+            value = value[1:].strip() if value.startswith(":") else ""
+            extra, skip_kids = "", False
+            opts = list(descendants(n, "option")) if role == "combobox" else []
+            if role == "combobox" and opts:
+                names = [clip(k.name, 40) + ("*" if "selected" in k.attrs else "") for k in opts]
+                extra = " options: " + ", ".join(names[:30]) + (f" +{len(names) - 30}" if len(names) > 30 else "")
+                skip_kids = True
+            if flags:
+                extra = f" [{', '.join(flags)}]" + extra
+            if value and value != name:
+                extra += f" = {clip(value, 80)}"
+            if urls and role == "link" and n.attrs.get("url"):
+                extra += f" -> {n.attrs['url']}"
+            # a link in running text (a paragraph, a table cell) rather than a menu or a list of links
+            p = n.parent
+            prose = role == "link" and p is not None and (p.role in PROSE or (p.role == "listitem" and any(k.role == "StaticText" and k.name.strip() for k in p.kids)))
+            items.append((reg, "control", (role, clip(name, 90)), n.attrs["ref"], extra, prose))
+            if not skip_kids:
+                for k in n.kids:
+                    walk(k, reg, inter_names | {name})
+            return
+        for k in n.kids:
+            walk(k, reg, inter_names)
+
+    walk(parse(text), "", frozenset())
+    if not all_:
+        # the same control again and again (a "Copy" button per code block): the first two, then a count
+        seen, kept = {}, []
+        for it in items:
+            if it[1] == "control" and not it[5]:
+                key = (it[0], it[2])
+                seen[key] = seen.get(key, 0) + 1
+                if seen[key] > 2:
+                    continue
+            kept.append(it)
+        items = [it if not (it[1] == "control" and seen.get((it[0], it[2]), 0) > 2 and it[4] == "") else (*it[:4], f" (+{seen[(it[0], it[2])] - 1} alike)", it[5]) for it in kept]
+        items = dedupe_alike(items)
+
+    out, last_reg, i = [], None, 0
+    prose_run = []
+
+    def flush_prose():
+        if prose_run:
+            cap = len(prose_run) if all_ else 6
+            more = f" | +{len(prose_run) - cap} (look --all)" if len(prose_run) > cap else ""
+            out.append("in text: " + " | ".join(prose_run[:cap]) + more)
+            prose_run.clear()
+
+    while i < len(items):
+        reg, kind, payload, ref, extra, prose = items[i]
+        if reg != last_reg:
+            flush_prose()
+            out.append(f"[{reg or 'page'}]")
+            last_reg = reg
+        if kind == "heading":
+            if len(extra) > 3 and not all_:
+                i += 1
+                continue
+            flush_prose()
+            out.append(f"{extra} {payload}" + (f" @{ref}" if ref else ""))
+            i += 1
+            continue
+        if kind in ("text", "alert"):
+            out.append(("! " if kind == "alert" else "") + payload)
+            i += 1
+            continue
+        role, name = payload
+        if prose and not extra:
+            if not any(x.startswith(name + " @") for x in prose_run):
+                prose_run.append(f"{name} @{ref}")
+            i += 1
+            continue
+        j = i
+        # a run of links/buttons with the same state on one line
+        if role in ("link", "button", "tab", "menuitem", "option", "clickable", "DisclosureTriangle") and (not extra or extra.startswith(" [")) and "=" not in extra.replace("=false", ""):
+            while j + 1 < len(items) and items[j + 1][0] == reg and items[j + 1][1] == "control" and items[j + 1][2][0] == role and items[j + 1][4] == extra and not items[j + 1][5]:
+                j += 1
+        if j - i >= 2:
+            run = [f"{items[k][2][1]} @{items[k][3]}" for k in range(i, j + 1)]
+            cap = len(run) if all_ else (8 if reg in CHROME else 15)
+            more = f" | +{len(run) - cap} more (look --all)" if len(run) > cap else ""
+            out.append(f"{role}s{extra}: " + " | ".join(run[:cap]) + more)
+            i = j + 1
+            continue
+        out.append(f'{role} "{name}" @{ref}{extra}' if name else f"{role} @{ref}{extra}")
+        i += 1
+    flush_prose()
+    return out
+
+
+def dedupe_alike(items):
+    """Keep the "(+N alike)" note on the first of the repeated controls only."""
+    out, noted = [], set()
+    for it in items:
+        if it[1] == "control" and it[4].startswith(" (+") and it[4].endswith(" alike)"):
+            key = (it[0], it[2])
+            if key in noted:
+                it = (*it[:4], "", it[5])
+            noted.add(key)
+        out.append(it)
+    return out
+
+
+def snap_lines(result, all_=False, urls=False):
+    if not isinstance(result, dict):
+        return [str(result)]
+    return lean(result.get("snapshot") or "", all_=all_, urls=urls)
+
+
+def blocks(lines):
+    """[(region marker, [lines])] in order."""
+    out = []
+    for line in lines:
+        if line.startswith("[") and line.endswith("]") and " " not in line:
+            out.append((line, []))
+        elif out:
+            out[-1][1].append(line)
+        else:
+            out.append(("[page]", [line]))
+    return out
+
+
+def no_refs(lines):
+    return [re.sub(r" @e\d+", "", x) for x in lines]
+
+
+def host(url):
+    m = re.match(r"^\w+://([^/]+)", url or "")
+    return m.group(1) if m else ""
+
+
+def show_look(st, url, title, lines, full=False, fold=True):
+    """Print the look. On the page the last look was on: only what changed. On another
+    page of the same site: header/nav/footer blocks that didn't change are one line."""
+    prev = st.get("last") or {}
+    old = prev.get("lines") or []
+    head = f"{title} — {url}" if title else url
+    if not full and prev.get("url") == url and old:
+        if old == lines:
+            print(f"{head}\n(no change on the page)")
+        else:
+            sm = difflib.SequenceMatcher(a=old, b=lines, autojunk=False)
+            changed, gone = set(), 0
+            for op, a1, a2, b1, b2 in sm.get_opcodes():
+                if op in ("replace", "insert"):
+                    changed.update(range(b1, b2))
+                if op in ("replace", "delete"):
+                    gone += a2 - a1
+            if len(changed) > len(lines) * 0.6:
+                print(head + "\n" + "\n".join(lines))
+            else:
+                print(f"{head}\n(same page; {len(changed)} new/changed line(s), {gone} gone; `browse look` for all)")
+                region, shown = "[page]", None
+                for i, line in enumerate(lines):
+                    if line.startswith("[") and line.endswith("]") and " " not in line:
+                        region = line
+                    elif i in changed:
+                        if shown != region:
+                            print(region)
+                            shown = region
+                        print(line)
+    else:
+        out = [head]
+        seen = [no_refs(b) for r, b in blocks(old) if r.strip("[]") in CHROME] if fold and host(prev.get("url")) == host(url) else []
+        for region, body in blocks(lines):
+            if region.strip("[]") in CHROME and len("".join(body)) > 60 and no_refs(body) in seen:
+                out.append(f"{region} (as on the last page)")
+            else:
+                out += [region] + body
+        print("\n".join(out))
+    st["last"] = {"url": url, "lines": lines}
+
+
+def fail(rows, quiet_ok=True):
+    """Print failures (and the output of commands that print something); True if one failed."""
+    bad = False
+    for cmd, ok, res in rows:
+        if not ok:
+            bad = True
+            print(f"✗ {' '.join(cmd)[:120]}: {res}")
+        elif not quiet_ok and isinstance(res, dict):
+            r = {k: v for k, v in res.items() if k not in ("lifecycle", "origin", "targetId")}
+            if cmd and cmd[0] == "eval":
+                print(json.dumps(r.get("result"), ensure_ascii=False)[:4000])
+            elif cmd and cmd[0] == "get":
+                print(" ".join(str(v) for v in r.values())[:4000])
+    return bad
+
+
+# ───────────── commands ─────────────
+
+
+def cmd_open(argv):
+    if not argv:
+        sys.exit("usage: browse open <url>")
+    st = load_state()
+    cmds, open_ = setup(st, argv[0])
+    pre = cmds + [open_]
+    rows, shown = settled_look(st, pre, bail=False, full=True)
+    setup_done(st)
+    save_state(st)
+    if fail([r for r in rows if r[0][:1] == ["open"]]) or not shown:
+        sys.exit(1)
+
+
+def ok(row):
+    return row[1] and isinstance(row[2], dict)
+
+
+def settled_look(st, pre, bail, full=False, read=None):
+    """Run `pre`, let the page settle, then look (or read, with `read` options), all in one
+    batch; again if the page moved on meanwhile (a redirect, a click that navigates).
+    Returns (rows of pre, whether something was shown)."""
+    show = ["eval", read_js(read)] if read else ["snapshot", "-c"]
+    tail = [settle_cmd(st), show, ["get", "title"], ["get", "url"]]
+    rows = batch(pre + tail, bail=bail)
+    done, last = rows[: len(pre)], rows[len(pre):]
+    for _ in range(3):
+        if len(last) == 4 and all(ok(r) for r in last) and last[0][2].get("result") == last[3][2].get("url"):
+            break
+        last = batch([["wait", "--load", "domcontentloaded"]] + tail, bail=False)[1:]
+    if len(last) < 4 or not ok(last[1]):
+        print(f"✗ {'read' if read else 'look'}: {last[1][2] if len(last) > 1 else 'no answer'}")
+        return done, False
+    if read:
+        print(last[1][2].get("result") or "(no readable text)")
+        st.pop("last", None)
+        return done, True
+    url = last[3][2].get("url", "") if ok(last[3]) else ""
+    title = last[2][2].get("title", "") if ok(last[2]) else ""
+    show_look(st, url, title, snap_lines(last[1][2]), full=full)
+    return done, True
+
+
+def look_args(argv):
+    sel, all_, urls = None, False, False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-s", "--selector") and i + 1 < len(argv):
+            sel = argv[i + 1]
+            i += 1
+        elif a == "--all":
+            all_ = True
+        elif a in ("--urls", "-u"):
+            urls = True
+        i += 1
+    return sel, all_, urls
+
+
+def cmd_look(argv):
+    st = load_state()
+    sel, all_, urls = look_args(argv)
+    snap = ["snapshot", "-c"] + (["-s", sel] if sel else []) + (["-u"] if urls else [])
+    rows = batch([["get", "title"], ["get", "url"], snap])
+    if fail(rows):
+        sys.exit(1)
+    url, title = rows[1][2].get("url", ""), rows[0][2].get("title", "")
+    lines = snap_lines(rows[2][2], all_=all_ or bool(sel), urls=urls)
+    if sel:
+        print(f"{title} — {url} (inside {sel})\n" + "\n".join(lines))
+    else:
+        show_look(st, url, title, lines, full=True, fold=False)
+        save_state(st)
+
+
+def cmd_do(argv):
+    if not argv:
+        sys.exit('usage: browse do "<agent-browser command>" ...')
+    st = load_state()
+    cmds, read = [], None
+    if "--read" in argv:
+        i = argv.index("--read")
+        read, argv = read_opts(argv[i + 1:]), argv[:i]
+    for a in argv:
+        a = a.strip()
+        if a.startswith("["):
+            cmds.append(json.loads(a))
+        else:
+            cmds.append(shlex_split(a))
+    # a page change (open/navigate) inside the batch keeps light mode
+    nav = next((i for i, c in enumerate(cmds) if c[:1] in (["open"], ["navigate"], ["goto"]) and len(c) > 1), None)
+    pre = cmds
+    if nav is not None:
+        first, open_ = setup(st, cmds[nav][1])
+        pre = first + cmds[:nav] + [cmds[nav][:2] + ["--wait-until", "domcontentloaded"] + cmds[nav][2:]] + cmds[nav + 1:]
+    rows, _ = settled_look(st, pre, bail=True, read=read)
+    acted = [r for r in rows if r[0][:2] not in (["network", "route"], ["network", "unroute"]) and r[0][:1] != ["set"]]
+    setup_done(st)
+    save_state(st)
+    if fail(acted, quiet_ok=False):
+        sys.exit(1)
+
+
+def shlex_split(s):
+    import shlex
+
+    return shlex.split(s)
+
+
+def read_opts(argv):
+    opts = {"sel": None, "section": None, "outline": False, "links": False, "max": 12000, "url": None}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--section" and i + 1 < len(argv):
+            opts["section"] = argv[i + 1]
+            i += 1
+        elif a == "--max" and i + 1 < len(argv):
+            opts["max"] = int(argv[i + 1])
+            i += 1
+        elif a == "--outline":
+            opts["outline"] = True
+        elif a == "--links":
+            opts["links"] = True
+        elif re.match(r"^(https?://|about:|file:)", a):
+            opts["url"] = a
+        elif not a.startswith("-"):
+            opts["sel"] = a
+        i += 1
+    return opts
+
+
+def read_js(opts):
+    with open(READ_JS) as f:
+        return f.read().replace("__OPTS__", json.dumps({k: v for k, v in opts.items() if k != "url"}))
+
+
+def cmd_read(argv):
+    st = load_state()
+    opts = read_opts(argv)
+    if opts["url"]:
+        cmds, open_ = setup(st, opts["url"])
+        pre = cmds + [open_]
+        rows, shown = settled_look(st, pre, bail=False, read=opts)
+        setup_done(st)
+        save_state(st)
+        if fail([r for r in rows if r[0][:1] == ["open"]]) or not shown:
+            sys.exit(1)
+        return
+    rows = batch([["eval", read_js(opts)]])
+    if fail(rows):
+        sys.exit(1)
+    print(rows[0][2].get("result") or "(no readable text)")
+
+
+def cmd_visuals(argv):
+    st = load_state()
+    on = (argv[:1] or ["on"])[0] != "off"
+    st["visual"] = on
+    if on:
+        st.pop("light_pid", None)
+        rows = batch([["network", "unroute"], ["set", "media", "no-preference"], ["get", "url"]], bail=False)
+        url = rows[-1][2].get("url", "") if ok(rows[-1]) else ""
+        if url.startswith(("http:", "https:", "file:")):
+            # load the page again with everything (a reload loses what was typed into it)
+            fail(batch([["open", url, "--wait-until", "domcontentloaded"], settle_cmd(st)], bail=False)[:1])
+        print("visuals on: images, fonts, media, ads and animations load in this tab (page loaded again)")
+    else:
+        print("visuals off: blocked again from the next `browse open`")
+    st.pop("last", None)
+    save_state(st)
+
+
+def cmd_shot(argv):
+    if not argv:
+        sys.exit("usage: browse shot <file.png> [--full]")
+    st = load_state()
+    if not st.get("visual"):
+        cmd_visuals(["on"])
+        st = load_state()
+    wait_imgs = "(async()=>{const t=Date.now();while(Date.now()-t<5000&&[...document.images].some(i=>i.loading!=='lazy'&&!i.complete))await new Promise(r=>setTimeout(r,100));await document.fonts.ready;return true})()"
+    rows = batch([["eval", wait_imgs], ["screenshot"] + (["--full"] if "--full" in argv else []) + [argv[0]]], bail=False)
+    if fail(rows[1:]):
+        sys.exit(1)
+    print(f"saved {argv[0]}")
+
+
+def main():
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+    cmd, rest = argv[0], argv[1:]
+    fn = {"open": cmd_open, "goto": cmd_open, "look": cmd_look, "snapshot": cmd_look, "do": cmd_do, "read": cmd_read,
+          "visuals": cmd_visuals, "shot": cmd_shot, "screenshot": cmd_shot}.get(cmd)
+    if not fn:
+        sys.exit(f"browse: unknown command {cmd!r} (open, look, read, do, visuals, shot); anything else: agent-browser {cmd} ...")
+    fn(rest)
+
+
+if __name__ == "__main__":
+    main()

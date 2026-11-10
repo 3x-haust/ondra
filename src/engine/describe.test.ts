@@ -75,6 +75,13 @@ describe("describeBrowser", () => {
     // a chain: the step that does something, not the look around it
     expect(b("open https://acme.dev && agent-browser --session s wait 1000 && agent-browser snapshot -i")).toMatchObject({ label: "열었음", target: "acme.dev" });
     expect(b("cookies clear")).toMatchObject({ label: "브라우저 씀", action: "other" });
+    // browse, the skill's lean loop: its own verbs, and the step inside a `do` batch
+    expect(b("browse open https://acme.dev/pricing")).toMatchObject({ label: "열었음", target: "acme.dev/pricing" });
+    expect(b("/x/browser-use/browse read https://acme.dev/docs --section Auth")).toMatchObject({ label: "페이지 읽음", target: "acme.dev/docs" });
+    expect(b(`browse do "fill @e3 kim" "click @e5" --read`)).toMatchObject({ label: "입력함", target: "‘kim’" });
+    expect(b(`browse do "wait --text Saved" "click @e5"`)).toMatchObject({ label: "클릭함" });
+    expect(b("browse look -s main").label).toBe("페이지 읽음");
+    expect(b("browse shot /tmp/a.png").label).toBe("화면 캡처함");
     setState("settings", "language", "en");
     expect(b("open https://acme.dev/pricing")).toMatchObject({ label: "Opened", now: "Opening", nowKo: "여는 중 acme.dev/pricing" });
     expect(b("‘프로 시작하기’ 클릭").now).toBe("Clicking");

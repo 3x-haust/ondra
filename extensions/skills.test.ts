@@ -124,6 +124,8 @@ describe("skill router", () => {
     expect(r.forTool("write", { path: ".github/workflows/ci.yml" })?.skill.name).toBe("test-ci");
     expect(r.forTool("computer", {})?.skill.name).toBe("computer-use");
     expect(r.forTool("device", {})?.skill.name).toBe("device-use");
+    // the skill's own `browse` steps into it too
+    expect(router().forTool("bash", { command: "browse open https://example.com" })?.skill.name).toBe("browser-use");
   });
 
   it("leaves ordinary work alone", () => {

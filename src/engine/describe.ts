@@ -338,6 +338,8 @@ const BROWSER_ALIAS: Record<string, BrowserAction> = {
   scrollintoview: "scroll", screenshot: "screenshot", pdf: "pdf", eval: "eval", wait: "wait", is: "verify",
   back: "back", forward: "forward", reload: "reload", tab: "tab", close: "close", set: "set",
   connect: "connect", mouse: "mouse",
+  // browse (the browser-use skill's lean loop over agent-browser)
+  look: "read", shot: "screenshot", visuals: "set",
 };
 const alias = (w: string): BrowserAction | undefined => (Object.prototype.hasOwnProperty.call(BROWSER_ALIAS, w.toLowerCase()) ? BROWSER_ALIAS[w.toLowerCase()] : undefined);
 /** stored descriptions ("acme.dev/pricing 열기", "‘프로 시작하기’ 클릭"): the verb comes last */
@@ -362,11 +364,21 @@ function element(sel: string | undefined): string | undefined {
 /** flags that take the next word as their value */
 const FLAG_VALUE = /^--(session|profile|timeout|port|cdp|headers|executable-path|proxy|user-agent|state|name|account|load|url|text|fn)$/;
 
+/** what only looks or waits, next to the step that does something */
+const PASSIVE: BrowserAction[] = ["read", "screenshot", "wait", "load", "verify", "other"];
+/** the program in front of a browser command: agent-browser, or the skill's `browse` */
+const BROWSER_PROGRAM = /^.*?(?:\bagent-browser|(?:^|\/)browse)\s+/;
+
 /** one agent-browser command (its words after `agent-browser` and its --flags) */
 function browserStep(w: string[]): { action: BrowserAction; target?: string } {
   const args = w.filter((x, i) => !x.startsWith("--") && !FLAG_VALUE.test(w[i - 1] ?? ""));
   const [cmd = "", ...rest] = args;
   const name = w.find((_, i) => w[i - 1] === "--name");
+  // browse do "fill @e3 x" "click @e5": the step among its commands that does something
+  if (cmd === "do") {
+    const steps = rest.map((x) => browserStep(words(x)));
+    return steps.find((s) => !PASSIVE.includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? { action: "other" };
+  }
   let action: BrowserAction = alias(cmd) ?? "other";
   switch (action) {
     case "open":
@@ -444,10 +456,10 @@ export function describeBrowser(cmd: string): Said & { action: BrowserAction } {
     // a chain: the step that does something (open a page, click) over the looking around it
     const steps = c
       .split(/\s*(?:&&|\|\||;|\n|\|)\s*/)
-      .map((p) => p.replace(/^.*?\bagent-browser\s+/, ""))
+      .map((p) => p.replace(BROWSER_PROGRAM, ""))
       .filter((p) => p && !/^(sleep|echo|cd|timeout|true)\b/.test(p))
       .map((p) => browserStep(words(p)));
-    step = steps.find((s) => !["read", "screenshot", "wait", "load", "verify", "other"].includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? steps[0] ?? { action: "other" };
+    step = steps.find((s) => !PASSIVE.includes(s.action)) ?? steps.find((s) => s.action !== "other") ?? steps[0] ?? { action: "other" };
   }
   const [label, now] = BROWSER_VERBS[step.action];
   return { label: t(label), now: t(now), nowKo: step.target ? `${now} ${step.target}` : now, target: step.target, action: step.action };
