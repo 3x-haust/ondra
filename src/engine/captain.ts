@@ -11,7 +11,7 @@ import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
-import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
+import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
@@ -1018,6 +1018,12 @@ async function tidy(space: string, ms?: number) {
 
 const clampPriority = (p: unknown): Priority => (p === 0 || p === 1 || p === 2 || p === 3 ? p : 2);
 
+/** A message without its attached files' list and without any file path in it. */
+export function spokenPart(text: string): string {
+  const i = text.startsWith("첨부한 파일:\n") ? 0 : text.indexOf("\n\n첨부한 파일:\n");
+  return (i >= 0 ? text.slice(0, i) : text).replace(/(?:~|\/)[^\s"'`]*\/[^\s"'`]*/g, " ");
+}
+
 /**
  * The project a new fork from the space chat belongs to: the one main named,
  * the one its folder is in, or the one the user's message or the task names
@@ -1029,9 +1035,14 @@ function existingProject(space: SpaceId, r: any, original: string) {
   if (!list.length) return undefined;
   const named = typeof r.project === "string" ? r.project : typeof r.project?.name === "string" && !r.project.folder ? r.project.name : "";
   const low = (x: string) => x.toLowerCase().replace(/\s+/g, "");
+  // the user's words, without the files they attached: a screenshot saved by an app
+  // ("…/Orbit/Captures/x.png") says where the file lives, not what the work is about
+  const words = low(spokenPart(original));
+  const onlyInPaths = (p: Project) => !words.includes(low(p.name)) && low(original).includes(low(p.name));
   if (named) {
     const hit = list.find((p) => low(p.name) === low(named) || p.id === named || low(p.folder.split("/").pop() ?? "") === low(named));
-    if (hit) return hit;
+    if (hit && !onlyInPaths(hit)) return hit;
+    if (hit) return undefined;
   }
   if (typeof r.cwd === "string" && r.cwd) {
     const id = projectFor(space, r.cwd);
@@ -1039,7 +1050,7 @@ function existingProject(space: SpaceId, r: any, original: string) {
     return id ? list.find((p) => p.id === id) : undefined;
   }
   // only what the user said and main's title: a brief names other things ("not an Ondra change")
-  const said = low(`${original} ${r.title ?? ""}`);
+  const said = low(`${spokenPart(original)} ${r.title ?? ""}`);
   const hits = list.filter((p) => {
     const base = (p.folder.split("/").pop() ?? "").toLowerCase();
     return said.includes(low(p.name)) || (base.length > 3 && said.includes(base));

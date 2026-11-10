@@ -516,7 +516,9 @@ message, then route each item:
   user named one). Ondra makes the folder and a project chat for it, and
   later messages about it continue there. Work on something that already
   has a project (see "Projects in this space"; "acme pc" is still
-  acme) gives "project": "<that project's name>" and no folder. Work in one
+  acme) gives "project": "<that project's name>" and no folder. A name inside a
+  file's path is not the user naming a project (a screenshot saved under
+  ".../Orbit/Captures/" is not about Orbit). Work in one
   of the space's repos that has no project yet (see "Repos in this space
   without a project", and memory for which repo a product lives in: "레비오사
   웹" → its web repo) gives "cwd": that repo and "project": {"name": the
