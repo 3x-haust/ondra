@@ -15,8 +15,9 @@ export function windowFor(model?: string): number {
   return KNOWN.find(([re]) => re.test(model ?? ""))?.[1] ?? DEFAULT_WINDOW;
 }
 
-/** The first point (~65%) asks for a handoff at the next clean stop; the second (~80%) asks for it now. */
-export const HANDOFF_SHARE = [0.65, 0.8] as const;
+/** The first point (~50%) asks for a handoff at the next clean stop; the second (~65%) asks for it now.
+ *  Past the middle of the window every call costs the most and the model loses track of the start. */
+export const HANDOFF_SHARE = [0.5, 0.65] as const;
 // a small window still gets room to work before the first nudge
 const FLOOR = 100_000;
 

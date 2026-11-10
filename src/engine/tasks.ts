@@ -10,7 +10,7 @@ import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
-import { ctx, noteCall, noteCtx } from "../state/ctx";
+import { ctx, noteCall, noteCtx, setCtx, setReuse } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
@@ -1133,6 +1133,8 @@ function handlers(id: string, run: Run) {
           const level = run.longNudges ?? 0;
           const job = taskById(id);
           const win = ctx[agentOf(id)]?.window || windowFor(job?.model || (job ? modelFor(job.accountId) : undefined));
+          // the gauge follows every call (the engine's own count only comes when the turn ends)
+          if (prompt && win) setCtx(agentOf(id), { tokens: prompt, window: win, percent: (prompt / win) * 100 });
           const at = handoffAt(win);
           if (run.streaming && level < at.length && prompt > at[level] && !run.done && !run.handoff) {
             run.longNudges = level + 1;
@@ -1571,6 +1573,9 @@ async function newSession(id: string, run: Run, card: Handoff) {
   try {
     run.turnStart = Date.now();
     await request(agent, { type: "new_session" });
+    // the old session's size is gone with it: the gauge starts from empty, not from the last call
+    if (ctx[agent]) setCtx(agent, { tokens: 0, window: ctx[agent]!.window, percent: 0 });
+    setReuse(agent, "last", 0);
     const t = taskById(id)!;
     const owed = owedAtStart(t, false);
     await request(agent, { type: "prompt", message: handoffPrompt({ ...t, inbox: [...t.inbox, ...owed.texts.filter((m) => !t.inbox.includes(m))] }) });

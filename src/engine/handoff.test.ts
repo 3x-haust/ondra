@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
 
 describe("handoffAt", () => {
-  it("hands off near two thirds of the reported window", () => {
-    expect(handoffAt(200_000)).toEqual([130_000, 160_000]);
-    expect(handoffAt(272_000)).toEqual([176_800, 217_600]);
-    expect(handoffAt(1_000_000)).toEqual([650_000, 800_000]);
+  it("asks at half the reported window and insists at about two thirds", () => {
+    expect(handoffAt(200_000)).toEqual([100_000, 130_000]);
+    expect(handoffAt(272_000)).toEqual([136_000, 176_800]);
+    expect(handoffAt(1_000_000)).toEqual([500_000, 650_000]);
   });
 
   it("keeps a floor for small windows and stays below the window", () => {
     const [first, second] = handoffAt(128_000);
-    expect(first).toBe(100_000);
+    expect(first).toBe(83_200);
     expect(second).toBeGreaterThan(first);
     expect(second).toBeLessThan(128_000);
   });
