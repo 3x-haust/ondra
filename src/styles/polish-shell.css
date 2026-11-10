@@ -1585,8 +1585,14 @@
   stroke-linecap: round;
   transition: stroke-dashoffset var(--dur-slow, 240ms) var(--ease, ease-out);
 }
+.update-wrap {
+  gap: var(--s-6);
+}
+.update-wrap .update-btn {
+  margin: 0;
+}
 .update-pct {
-  margin: 0 var(--s-4) 0 calc(-1 * var(--s-2));
+  margin: 0 var(--s-4) 0 0;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
@@ -1606,3 +1612,6 @@
 .app .sidebar .sb-foot .update-wrap,
 .app .sidebar .sb-foot > .update-btn { margin: 0 var(--s-6) 0 0; }
 .app .sidebar .sb-foot .update-btn { margin: 0; }
+/* at the row's end the ring keeps the edge and its percent reads before it */
+.app .sidebar .sb-foot .update-wrap { flex-direction: row-reverse; }
+.app .sidebar .sb-foot .update-pct { margin: 0; }
