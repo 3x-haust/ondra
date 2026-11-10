@@ -179,13 +179,13 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
     return (
       <Show when={c()}>
         {(s) => (
-          <Show when={s() !== "busy"} fallback={<span class="cx-st"><span class="spin sm" /></span>}>
+          <Show when={s() !== "busy"} fallback={<span class="cn-st"><span class="spin sm" /></span>}>
             {(() => {
               const v = s() as Exclude<Checked, "busy">;
               return v.ok ? (
-                <span class="cx-st ok">{[t("응답함"), `${(v.ms / 1000).toFixed(1)}s`, v.tools === false ? t("도구 없음") : v.tools ? t("도구 확인됨") : ""].filter(Boolean).join(" · ")}</span>
+                <span class="cn-st ok">{[t("응답함"), `${(v.ms / 1000).toFixed(1)}s`, v.tools === false ? t("도구 없음") : v.tools ? t("도구 확인됨") : ""].filter(Boolean).join(" · ")}</span>
               ) : (
-                <span class="cx-st bad" title={v.detail}>{v.text}</span>
+                <span class="cn-st bad" title={v.detail}>{v.text}</span>
               );
             })()}
           </Show>
@@ -197,11 +197,11 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
   return (
     <Sheet
       title={editing ? editing.label : t("직접 연결|provider")}
-      class="sp-sheet cx-sheet"
+      class="sp-sheet cn-sheet"
       onClose={props.onClose}
       foot={
         <>
-          <Show when={saveErr()}><span class="cx-err">{saveErr()}</span></Show>
+          <Show when={saveErr()}><span class="cn-err">{saveErr()}</span></Show>
           <span class="spacer" />
           <button class="btn sm" disabled={!chosen().length || checking()} onClick={() => void check()}>{checking() ? t("확인 중") : t("연결 확인")}</button>
           <button class="btn sm" onClick={props.onClose}>{t("취소")}</button>
@@ -213,7 +213,7 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
         <Show when={!editing}>
           <div class="sp-field">
             <span>{t("종류")}</span>
-            <div class="seg cx-presets" role="radiogroup" aria-label={t("종류")}>
+            <div class="seg cn-presets" role="radiogroup" aria-label={t("종류")}>
               <For each={PRESETS}>
                 {(p) => (
                   <button type="button" role="radio" aria-checked={preset() === p.id} classList={{ on: preset() === p.id }} onClick={() => pick(p.id)}>
@@ -240,7 +240,7 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
         </label>
         <div class="sp-field">
           <span>{t("API 키")}</span>
-          <div class="cx-key">
+          <div class="cn-key">
             <input
               class="input"
               type="password"
@@ -258,23 +258,23 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
         </div>
         <div class="sp-field sp-top">
           <span>{t("추가 헤더")}</span>
-          <div class="cx-headers">
+          <div class="cn-headers">
             <For each={headers()}>
               {(h, i) => (
-                <div class="cx-header">
+                <div class="cn-header">
                   <input class="input" placeholder={t("이름")} aria-label={t("헤더 이름")} value={h.name} spellcheck={false} onInput={(e) => setHeaders((l) => l.map((x, j) => (j === i() ? { ...x, name: e.currentTarget.value } : x)))} />
                   <input class="input" type="password" autocomplete="off" placeholder={h.value === null ? t("저장된 값 유지") : t("값")} aria-label={t("헤더 값")} value={h.value ?? ""} onInput={(e) => setHeaders((l) => l.map((x, j) => (j === i() ? { ...x, value: e.currentTarget.value } : x)))} />
                   <button class="icon-btn sm" title={t("삭제")} aria-label={t("삭제")} onClick={() => setHeaders((l) => l.filter((_, j) => j !== i()))}><Icon name="x" size={14} /></button>
                 </div>
               )}
             </For>
-            <button class="btn ghost sm cx-add" onClick={() => setHeaders((l) => [...l, { name: "", value: "" }])}><Icon name="plus" size={14} />{t("헤더 추가")}</button>
+            <button class="btn ghost sm cn-add" onClick={() => setHeaders((l) => [...l, { name: "", value: "" }])}><Icon name="plus" size={14} />{t("헤더 추가")}</button>
           </div>
         </div>
         <div class="sp-field sp-top">
           <span>{t("모델|list")}</span>
-          <div class="cx-models">
-            <div class="cx-model-bar">
+          <div class="cn-models">
+            <div class="cn-model-bar">
               <button class="btn sm" disabled={listing() || !baseUrl().trim()} onClick={() => void list()}>
                 <Show when={listing()} fallback={<Icon name="download" size={14} />}><span class="spin sm" /></Show>
                 {t("모델 불러오기")}
@@ -282,33 +282,33 @@ export function ConnectionSheet(props: { space: SpaceId; accountId?: string; onC
               <input class="input" placeholder={t("모델 ID 직접 입력")} aria-label={t("모델 ID 직접 입력")} value={typed()} spellcheck={false} onInput={(e) => setTyped(e.currentTarget.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTyped())} />
               <button class="btn ghost sm" disabled={!typed().trim()} onClick={addTyped}>{t("추가")}</button>
             </div>
-            <Show when={listErr()}>{(e) => <div class="cx-st bad" title={e().detail}>{e().text}<Show when={e().detail}><span class="cx-detail">{e().detail}</span></Show></div>}</Show>
+            <Show when={listErr()}>{(e) => <div class="cn-st bad" title={e().detail}>{e().text}<Show when={e().detail}><span class="cn-detail">{e().detail}</span></Show></div>}</Show>
             <Show when={rows().length}>
-              <div class="cx-list">
+              <div class="cn-list">
                 <For each={rows()}>
                   {(r) => (
-                    <div class="cx-model" classList={{ on: r.on }}>
-                      <div class="cx-model-line">
-                        <label class="check cx-model-id" title={r.name ?? r.id}>
+                    <div class="cn-model" classList={{ on: r.on }}>
+                      <div class="cn-model-line">
+                        <label class="check cn-model-id" title={r.name ?? r.id}>
                           <input type="checkbox" checked={r.on} onChange={(e) => edit(r.id, (x) => ({ ...x, on: e.currentTarget.checked }))} />
                           <code>{r.id}</code>
                         </label>
                         <Status id={r.id} />
                       </div>
                       <Show when={r.on}>
-                        <div class="cx-model-opts">
+                        <div class="cn-model-opts">
                           <label class="check"><input type="checkbox" checked={r.tools} onChange={(e) => edit(r.id, (x) => ({ ...x, tools: e.currentTarget.checked }))} />{t("도구 사용 가능")}</label>
                           <label class="check"><input type="checkbox" checked={r.reasoning} onChange={(e) => edit(r.id, (x) => ({ ...x, reasoning: e.currentTarget.checked }))} />{t("추론")}</label>
-                          <label class="cx-num">
+                          <label class="cn-num">
                             <span>{t("컨텍스트")}</span>
                             <input class="input" type="number" min="1024" step="1024" value={r.contextWindow} onChange={(e) => edit(r.id, (x) => ({ ...x, contextWindow: Math.max(1024, Number(e.currentTarget.value) || x.contextWindow) }))} />
                           </label>
-                          <label class="cx-num">
+                          <label class="cn-num">
                             <span>{t("최대 출력")}</span>
                             <input class="input" type="number" min="256" step="256" value={r.maxTokens} onChange={(e) => edit(r.id, (x) => ({ ...x, maxTokens: Math.max(256, Number(e.currentTarget.value) || x.maxTokens) }))} />
                           </label>
                           <Show when={r.reasoning}>
-                            <label class="cx-num cx-efforts" title={t("서버가 받는 reasoning_effort 값")}>
+                            <label class="cn-num cn-efforts" title={t("서버가 받는 reasoning_effort 값")}>
                               <span>{t("추론 강도 값")}</span>
                               <input class="input" placeholder="low, medium, high" value={(r.efforts ?? []).join(", ")} spellcheck={false} onChange={(e) => edit(r.id, (x) => ({ ...x, efforts: e.currentTarget.value.split(/[\s,]+/).filter(Boolean) }))} />
                             </label>
