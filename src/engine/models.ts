@@ -16,8 +16,18 @@ const idOf = (m: string) => m.split("/").pop() ?? m;
 
 /** The model to pass with --model, or undefined for the engine default. */
 /** the account's default 생각 깊이 */
-export function effortFor(accountId: string): string | undefined {
-  return accountById(accountId)?.effort || undefined;
+/** The level picked for a model on this account (each model keeps its own); `model` defaults to the account's. */
+export function effortFor(accountId: string, model?: string): string | undefined {
+  const a = accountById(accountId);
+  if (!a) return undefined;
+  const m = model || a.model;
+  return (m && a.efforts?.[m]) || a.effort || undefined;
+}
+/** Remember a level for one model of an account (and make that model the account's when given). */
+export function setModelEffort(x: { model: string; effort?: string; efforts?: Record<string, string> }, model: string, effort: string) {
+  if (model) x.model = model;
+  const m = model || x.model;
+  if (m && effort) x.efforts = { ...(x.efforts ?? {}), [m]: effort };
 }
 
 export function modelFor(accountId: string): string | undefined {

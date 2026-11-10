@@ -96,6 +96,8 @@ export function ModelPicker(props: {
   model: string;
   thinking: string;
   onChange: (model: string, thinking: string) => void;
+  /** the level a model keeps of its own: picking it brings that back instead of carrying this one over */
+  effortOf?: (model: string) => string;
   /** open upward (inside a composer at the bottom) */
   up?: boolean;
 }) {
@@ -134,7 +136,7 @@ export function ModelPicker(props: {
   // the models of one account: it is named the way the usage chip names it; several providers keep theirs
   const heading = (id: string) => (groups().length <= 1 && accountName(props.accountId)) || provider(id);
   const Item = (p: { m: string }) => (
-    <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
+    <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, props.effortOf ? props.effortOf(p.m) : effort()), setOpen(false))}>
       <span class="pop-item-main">{nameOf(p.m)}</span>
       <Show when={noTools(p.m)}><span class="model-tag" title={t("도구 없이 대화만 해요")}>{t("도구 없음")}</span></Show>
       <Show when={current() === p.m}><Icon name="check" size={14} /></Show>
@@ -164,7 +166,7 @@ export function ModelPicker(props: {
                 onInput={(e) => setQ(e.currentTarget.value)}
                 onKeyDown={(e) => {
                   const f = found();
-                  if (e.key === "Enter" && f?.length) (props.onChange(f[0], effort()), setOpen(false));
+                  if (e.key === "Enter" && f?.length) (props.onChange(f[0], props.effortOf ? props.effortOf(f[0]) : effort()), setOpen(false));
                 }}
                 ref={(el) => setTimeout(() => el.focus(), 0)}
               />

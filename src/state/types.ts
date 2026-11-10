@@ -49,8 +49,10 @@ export interface Account {
   providers: string[];
   /** "provider/id"; empty = pick automatically */
   model: string;
-  /** default 생각 깊이 for work on this account; empty = high */
+  /** default 생각 깊이 for work on this account; empty = high (kept for models picked before efforts per model) */
   effort?: string;
+  /** 생각 깊이 per model ("provider/id" → level): each model keeps its own */
+  efforts?: Record<string, string>;
   /** Models that failed for this account (unsupported, no access). */
   badModels: string[];
   stats: TokenStats;

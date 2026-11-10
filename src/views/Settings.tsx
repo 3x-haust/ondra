@@ -1,4 +1,5 @@
 // Settings: general, accounts, import from other tools, skills, tools.
+import { effortFor, setModelEffort } from "../engine/models";
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { refreshModels } from "../engine/modelList";
@@ -144,13 +145,9 @@ function General() {
               <ModelPicker
                 accountId={a.id}
                 model={a.model ?? ""}
-                thinking={a.effort || ""}
-                onChange={(m, e) =>
-                  updateAccount(a.id, (x) => {
-                    if (m) x.model = m;
-                    x.effort = e;
-                  })
-                }
+                thinking={effortFor(a.id) || ""}
+                effortOf={(m) => effortFor(a.id, m) || ""}
+                onChange={(m, e) => updateAccount(a.id, (x) => setModelEffort(x, m, e))}
               />
             </Row>
           )}

@@ -934,7 +934,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--no-skills",
       ...(model ? ["--model", model] : []),
       "--thinking",
-      t.thinking || effortFor(account.id) || "high",
+      t.thinking || effortFor(account.id, model) || "high",
       ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
       ...(talkOnly ? ["--no-tools"] : [...workerTools(), ...offTools()]),
       ...(resume ? ["--continue"] : []),
