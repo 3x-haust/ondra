@@ -10,7 +10,7 @@
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
-import { flushState, state } from "../state/store";
+import { flushState, state, setQuitting } from "../state/store";
 import { t } from "../i18n";
 
 const FIRST = 5_000;
@@ -125,8 +125,10 @@ export async function installNow() {
     }
     // the restart doesn't wait for a save still to come
     await flushState().catch(() => {});
+    setQuitting(true);
     await installUpdate();
   } catch (e) {
+    setQuitting(false);
     setStatus("idle");
     setProgress(null);
     const why = e instanceof Error ? e.message : String(e);
