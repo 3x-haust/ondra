@@ -15,7 +15,7 @@ import { agentKill, agentSpawn, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsP
 import { prose, readFences } from "./fences";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
-import { failedModelIn, modelFor, nextModel } from "./models";
+import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
@@ -453,6 +453,8 @@ const promptSig = () => {
   for (let i = 0; i < CAPTAIN_SYSTEM.length; i++) h = (h * 31 + CAPTAIN_SYSTEM.charCodeAt(i)) | 0;
   return h.toString(36);
 };
+/** How hard main thinks: the level picked under its chat, else 낮음 (it answers and hands work on, fast). */
+export const mainEffort = (accountId: string | undefined) => (accountId && effortFor(accountId)) || "low";
 /** The model main runs on: the account's, or the one set for main (not on a direct connection, whose models are its own). */
 export function mainModel(accountId: string | undefined): string | undefined {
   const acc = state.accounts.find((a) => a.id === accountId);
@@ -471,7 +473,7 @@ const wantedAccount = (space: string): string | undefined => {
 // picking another account or model under the chat restarts main on it (auto routing alone doesn't: a warm cache stays)
 const startSig = async (dir: string, skills: string, space: string) => {
   const id = wantedAccount(space);
-  return `${id}\n${mainModel(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}`;
+  return `${id}\n${mainModel(id)}\n${mainEffort(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}`;
 };
 export async function restartIfStale(space: string): Promise<boolean> {
   if (busy.has(space)) return false;
@@ -594,8 +596,9 @@ async function ensureCaptain(space: string) {
     "--shared-prompt-cache",
     // The search extension owns discovery, not Pi's prompt catalog.
     "--no-skills",
+    // the level its chip under the chat shows (낮음 unless one was picked)
     "--thinking",
-    "low",
+    mainEffort(acc.id),
     // the same system prompt in every main chat (any space, any project): one
     // shared cached prefix per account. What differs per chat (space and project
     // rules) goes into the first message instead.
@@ -845,7 +848,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   if (!routes.length) {
     // nothing usable came back: whatever it said is the answer
     const loose = parsed.map((r: any) => (typeof r?.text === "string" ? r.text : "")).filter(Boolean).join("\n\n");
-    const p = prose(raw) || loose;
+    const p = strayProse(prose(raw), reply) || loose;
     if (p) return { reply, routes: [{ kind: "answer", text: p, blocks: [] }] };
     if (reply) return { reply, routes: [] };
     // a job's end that needs nothing from the user: its row in the chat already says it
@@ -853,6 +856,20 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     throw new Error("응답이 비어 있어요");
   }
   return { reply, routes };
+}
+
+/**
+ * What a reply said outside its route, kept as its answer unless it is the route again: the reply
+ * restated ("하이!" after {"reply":"하이!"}) or the route written out as fields ("kind: answer", "text: …"),
+ * as some models do after the fence.
+ */
+export function strayProse(text: string, reply: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  const flat = (s: string) => s.replace(/[\s"'`*_\-:>]/g, "");
+  if (reply && flat(t).includes(flat(reply))) return "";
+  if (/^\s*[-*]?\s*(kind|text|reply|routes)\s*:/im.test(t) && /^\s*[-*]?\s*kind\s*:/im.test(t)) return "";
+  return t;
 }
 
 /** Record what the reply used; clear the session in the background when it got long, else when it goes quiet. */
