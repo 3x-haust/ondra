@@ -1,6 +1,7 @@
 // Agent prose as markdown. Raw HTML is dropped and links only open http(s)
 // URLs or reveal local paths, so nothing an agent writes can run in the app.
 import { Marked, type Tokens } from "marked";
+import { rangeTilde } from "./markdownTilde";
 import { createEffect } from "solid-js";
 import { fileSrc } from "../lib/native";
 import { linkTip } from "../lib/links";
@@ -16,6 +17,7 @@ const GITHUB_IMG = /^https:\/\/(github\.com\/user-attachments\/|user-images\.git
 const make = (github: boolean) => new Marked({
   gfm: true,
   breaks: true,
+  tokenizer: { del: rangeTilde },
   renderer: {
     html() {
       return "";
