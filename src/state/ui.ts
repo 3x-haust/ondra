@@ -255,9 +255,14 @@ export function closePanelTab(id: number) {
 // keeps the tab you were on if it applies there, else Flow.
 type Place = string;
 /** where the panel belongs: Main, each task, and the results page (what it opens shows beside it) */
-const placeOf = (v: View): Place | null => (v.name === "task" ? v.id : v.name === "main" ? "main" : v.name === "results" ? "results" : null);
+const placeOf = (v: View): Place | null =>
+  v.name === "task" ? v.id : v.name === "main" ? (v.project ? `main~${v.project}` : "main") : v.name === "results" ? "results" : null;
+/** Main or a project's chat (their panels show the same kinds of tabs) */
+export const isMainPlace = (p: Place) => p === "main" || p.startsWith("main~");
 let place: Place | null = "main";
 const lastTab = new Map<Place, PanelTab>();
+/** each chat keeps its own panel: open or closed as it was left; a chat seen for the first time starts closed */
+const openAt = new Map<Place, boolean>();
 /** What a tab is to a place: shown, kept out of sight for later (a task's tab on Main), or dropped.
  *  The panel fills this in (it knows the tasks). */
 export type TabFit = "use" | "keep" | "drop";
@@ -272,7 +277,9 @@ function enterPlace(v: View) {
   const to = placeOf(v);
   if (!to || to === place) return;
   if (place) lastTab.set(place, panelTab());
+  if (place) openAt.set(place, panelOpen());
   place = to;
+  setPanelOpen(openAt.get(to) ?? false);
   const cur = ptabs().find((t) => t.id === activeTab());
   const keep = ptabs().filter((t) => t.kind === "new" || tabFits(to, t.kind) !== "drop");
   if (keep.length !== ptabs().length) setPtabs(keep.length ? keep : [{ id: ++tabSeq, kind: "flow" }]);
