@@ -246,17 +246,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
             )}
           </Match>
           <Match when={true}>
-            {/* the jobs main looked up for this reply (jobs_search, job_read); a job it then handed work to is its row instead */}
-            <Show when={!rows().length}>
-              <For each={props.m.steps}>
-                {(s) => (
-                  <div class="reply-note">
-                    <Icon name="search" size={14} />
-                    <span>{noteText(s)}</span>
-                  </div>
-                )}
-              </For>
-            </Show>
+            {/* the jobs main looked up show on the thinking line while it answers ("작업 살펴보는 중 · …"); the answer stands alone */}
             <Show when={props.m.reply}><p class="reply-line">{props.m.reply}</p></Show>
             <Show when={!props.m.reply && !routes().length}>
               <div class="reply-error">
