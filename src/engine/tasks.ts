@@ -7,7 +7,7 @@ import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
-import { accountById, accountsIn, homeDir, loaded, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
+import { accountById, accountsIn, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
@@ -17,6 +17,7 @@ import { allowedDevices, refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
+import { notesMarkdown, readNotes, writeNotes } from "./notes";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange, unbackedClaim } from "./proof";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
@@ -397,6 +398,14 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           quiet: true,
         });
         if (id) push(t, { kind: "note", text: `메모리에 저장 · ${String(b.text).slice(0, 120)}` });
+        break;
+      }
+      case "notes": {
+        // a job of a project leaves where it stands for the next one (not a subagent: its parent does)
+        const p = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
+        const md = p ? notesMarkdown(p.name, t.title, b) : undefined;
+        if (!p || !md) break;
+        void writeNotes(p.id, md).then((ok) => ok && updateTask(t.id, (x) => void push(x, { kind: "note", text: "프로젝트 노트 갱신" })));
         break;
       }
       case "handoff":
@@ -929,7 +938,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const args = [
       "--session-dir",
       `${engine.info.dataDir}/sessions/${id}`,
-      ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
+      ...taskSystem(t, t.project && !t.parentId ? await readNotes(t.project) : undefined).flatMap((p) => ["--append-system-prompt", p]),
       // The search extension owns discovery; Pi must not advertise a catalog.
       "--no-skills",
       ...(model ? ["--model", model] : []),

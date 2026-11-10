@@ -14,6 +14,7 @@ import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
+import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -50,7 +51,9 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; model?: string; recap: boolean };
+type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; model?: string; notes?: string; recap: boolean };
+/** a project chat's notes, read before each message */
+const notesOf = new Map<string, string>();
 const sentOf = new Map<string, SentHeader>();
 /** the git repos in each space's folder, looked up again after a few minutes */
 const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
@@ -877,11 +880,14 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.`
     : "";
   if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
+  // a project chat: where the project stands, as its jobs left it
+  const notes = pj(space) ? (notesOf.get(space) ?? "") : "";
+  if (notes && notes !== sent.notes) out.push("", `# Project notes${sent.notes ? " (updated)" : ""} (left by this project's jobs: where it stands, what is left)`, notes.slice(0, 8000));
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, recap: false });
+  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
 }
@@ -897,7 +903,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const t0 = Date.now();
   let watch: ReturnType<typeof setInterval> | undefined;
   try {
-    await Promise.all([prepareQuery(text), refreshRepos(sp(space))]);
+    await Promise.all([prepareQuery(text), refreshRepos(sp(space)), pj(space) ? readNotes(pj(space)!).then((n) => void notesOf.set(space, n)) : undefined]);
     turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
     heardAt.set(space, Date.now());
     watch = setInterval(() => watchCommands(space), 5_000);

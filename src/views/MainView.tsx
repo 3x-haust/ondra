@@ -6,7 +6,7 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
-import { createEffect, createMemo, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
@@ -15,7 +15,7 @@ import { fileSrc, fsFiles, pickFolder } from "../lib/native";
 import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
-import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View } from "../state/ui";
+import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -30,6 +30,7 @@ import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
 import { effortFor, setModelEffort } from "../engine/models";
+import { notesPath, notesVersion, readNotes } from "../engine/notes";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
@@ -638,6 +639,11 @@ export function MainView() {
     return list;
   });
   /** a project's own chat: how its tasks stand, in the head */
+  /** the project's notes, once a job has left them (read again when a job rewrites them) */
+  const [hasNotes] = createResource(
+    () => (project() ? [project()!.id, notesVersion()] as const : undefined),
+    async ([id]) => !!(await readNotes(id)),
+  );
   const projCounts = () => {
     const p = project();
     if (!p) return [];
@@ -755,6 +761,11 @@ export function MainView() {
           </span>
         </Show>
         <span class="spacer" data-tauri-drag-region />
+        <Show when={project() && hasNotes()}>
+          <button class="icon-btn" title={t("프로젝트 노트 · 작업이 남긴 진행 상황")} onClick={() => previewFile(notesPath(project()!.id))}>
+            <Icon name="file" size={16} />
+          </button>
+        </Show>
         <button class="icon-btn" classList={{ on: panelOpen() && focused() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} onClick={togglePanel}>
           <Icon name="panel" size={16} />
         </button>

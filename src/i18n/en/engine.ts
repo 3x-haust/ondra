@@ -203,6 +203,7 @@ export default {
   "같은 실패 반복": "Same failure again",
   "검색 멈춤 · 1분 넘게 결과 없음": "Stopped searching · no output for over a minute",
   "기다림 멈춤 · 2분 넘게 변화 없음": "Stopped waiting · nothing changed for over 2 minutes",
+  "프로젝트 노트 갱신": "Project notes updated",
   // main and jobs looking up other jobs (jobs_search, job_read, job_tell)
   "작업 찾음 · {q}": "Found jobs · {q}",
   "작업 찾는 중 · {q}": "Finding jobs · {q}",

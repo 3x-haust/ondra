@@ -25,6 +25,7 @@ export default {
   "병합됨": "Merged",
   "완료": "Done",
   "패널": "Panel",
+  "프로젝트 노트 · 작업이 남긴 진행 상황": "Project notes · where its jobs left it",
 
   // states (labels shared with the rest of the app)
   "진행 중": "Running",
