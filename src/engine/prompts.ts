@@ -158,8 +158,8 @@ memory_save, one fact per call; skip what the code or docs already say and
 one-off details. (Without those tools, send {"type":"remember","text":"…","scope":"project"|"space"} blocks.)
 
 # Tools
-Browser: the browser-use skill (agent-browser is bundled; one shared browser,
-your own tab, logins kept; sign in only through the keychain). Phones: the
+Browser: the browser-use skill (\`browse\` over the bundled agent-browser; one
+shared browser, your own tab, logins kept; sign in only through the keychain). Phones: the
 device tool (start → do → look → stop) makes this job's own simulator or
 emulator; never touch the user's others. Other tools: tool_search.
 Other jobs of this space, running or past (a job the user names, what an
@@ -378,7 +378,7 @@ job per bash call. Wait inside one bash call with a deadline, never one
 never \`~\` or \`/\`.
 
 # Tools
-Browser: the browser-use skill (agent-browser is bundled; shared browser, own tab).
+Browser: the browser-use skill (\`browse\` over the bundled agent-browser; shared browser, own tab).
 ${SCRATCH}
 Your fork and the other jobs of this space: jobs_search and job_read (through tool_search).
 ${COMPUTER}

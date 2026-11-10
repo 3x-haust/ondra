@@ -390,7 +390,7 @@ BROWSER_READ = r"""(() => {
   return JSON.stringify({ title: document.title, url: location.href, published: pub, text, html: document.documentElement.outerHTML.slice(0, 300000) });
 })()"""
 SETTLED = ("(() => { const t = (document.title + ' ' + (document.body ? document.body.innerText.slice(0, 600) : '')).toLowerCase();"
-           " return document.readyState === 'complete' && !/just a moment|attention required|verifying|checking your browser|verification successful/.test(t)"
+           " return document.readyState !== 'loading' && !/just a moment|attention required|verifying|checking your browser|verification successful/.test(t)"
            " && document.body && document.body.innerText.length > 400; })()")
 
 
@@ -415,7 +415,8 @@ def unjson(out):
 def via_browser(url):
     if not shutil.which("agent-browser"):
         return {"verdict": "blocked", "status": 0, "text": "", "meta": {}, "note": "agent-browser not on PATH"}
-    code, out, err = ab("open", url, timeout=90)
+    # not the load event: ad-heavy pages never fire it (agent-browser then times out at 25 s)
+    code, out, err = ab("open", url, "--wait-until", "domcontentloaded", timeout=90)
     if code:
         return {"verdict": "blocked", "status": 0, "text": "", "meta": {}, "note": (err or out).strip()[-300:]}
     ab("wait", "--fn", SETTLED, timeout=40)  # JS challenges usually clear in a few seconds
@@ -622,11 +623,11 @@ def search(q, engines, n):
         order = [e for e in order if benched.get(e, 0) < time.time()] or order
     for e in order:
         url = ENGINES[e].format(q=quote_plus(q), hl="ko" if hangul else "en")
-        code, out, err = ab("open", url, timeout=60)
+        code, out, err = ab("open", url, "--wait-until", "domcontentloaded", timeout=60)
         if code:
             tried.append(f"{e}: {(err or out).strip()[-120:]}")
             continue
-        ab("wait", "--fn", "document.readyState === 'complete' && document.querySelectorAll('a[href]').length > 20", timeout=30)
+        ab("wait", "--fn", "document.readyState !== 'loading' && document.querySelectorAll('a[href]').length > 20", timeout=30)
         code, out, err = ab("eval", "--stdin", stdin=SERP, timeout=40)
         try:
             d = unjson(out)

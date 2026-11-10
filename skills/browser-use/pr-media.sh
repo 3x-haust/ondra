@@ -3,8 +3,8 @@
 # The files go up through the PR page's comment box in a browser signed in to
 # GitHub; the comment is never sent. GitHub hands back user-attachments links,
 # and gh writes them into the description. No AI in between.
-# The browser: Aside (aside repl, no AI) when it is installed and signed in,
-# otherwise Ondra's shared browser (your own tab). Aside failing falls back too.
+# The browser: Ondra's shared browser (your own tab); when GitHub isn't signed in
+# there, Aside (aside repl, no AI) with this space's account, if it is signed in.
 #
 #   pr-media.sh <PR number|URL> file...       # inside the repo folder a number is enough
 #   pr-media.sh <PR> --dir <folder>           # every png/jpg/gif/webp/mp4/mov in the folder
@@ -125,8 +125,9 @@ print(v if isinstance(v, str) else json.dumps(v))'; }
 via_browser() {
 
   # your tab may be gone (closed, or the browser restarted): then a new one
-  ab open "$URL" >/dev/null 2>&1 || ab tab new "$URL" >/dev/null
-  ab wait --load networkidle >/dev/null 2>&1 || true
+  ab open "$URL" --wait-until domcontentloaded >/dev/null 2>&1 || ab tab new "$URL" >/dev/null
+  # GitHub never goes network-idle: wait for the comment box (or the sign-in link) instead
+  ab wait --fn "!!(document.querySelector('textarea') || document.querySelector('a[href*=\"/login\"]'))" >/dev/null 2>&1 || true
 
   # Find the comment box and its file input, whatever GitHub calls them today, and mark them.
   FOUND=$(js "(() => {
@@ -143,8 +144,8 @@ via_browser() {
   })()")
   case $FOUND in
     ok) ;;
-    signed-out) echo "GitHub is not signed in in Ondra's browser. Ask the user to sign in to GitHub (the account that opens PRs) in the browser panel, then run this again." >&2; exit 3 ;;
-    *) echo "Couldn't find the comment box on $URL ($FOUND)." >&2; exit 1 ;;
+    signed-out) return 3 ;;
+    *) echo "Couldn't find the comment box on $URL ($FOUND)." >&2; return 1 ;;
   esac
 
   ab upload '[data-ondra-upload]' "${ABS[@]}" >/dev/null
@@ -169,16 +170,22 @@ aside_ready() {
   printf '%s\n' "$rows" | grep -E "^[* ] *$ACCOUNT[[:space:]]" | grep -v "signed out" | grep -q "signed in"
 }
 LINKS=""
-if [[ $VIA == aside ]] || { [[ -z $VIA ]] && aside_ready; }; then
+if [[ $VIA == aside ]]; then
   echo "via Aside${ACCOUNT:+ ($ACCOUNT)}"
-  if ! via_aside; then
-    [[ $VIA == aside ]] && { echo "Aside upload failed." >&2; exit 1; }
-    echo "Aside upload failed; using Ondra's browser." >&2
-    via_browser
-  fi
+  via_aside || { echo "Aside upload failed." >&2; exit 1; }
 else
   echo "via Ondra's browser"
-  via_browser
+  rc=0; via_browser || rc=$?
+  if ((rc)); then
+    if [[ -z $VIA ]] && aside_ready; then
+      echo "Ondra's browser couldn't; via Aside${ACCOUNT:+ ($ACCOUNT)}" >&2
+      via_aside || { echo "Aside upload failed." >&2; exit 1; }
+    elif ((rc == 3)); then
+      echo "GitHub is not signed in in Ondra's browser. Ask the user to sign in to GitHub (the account that opens PRs) in the browser panel, then run this again." >&2; exit 3
+    else
+      exit 1
+    fi
+  fi
 fi
 
 BLOCK=$(LINKS="$LINKS" python3 - "${ABS[@]}" <<'EOF'

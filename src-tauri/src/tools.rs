@@ -231,6 +231,13 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));
     }
+    // `browse`, the browser-use skill's lean loop over agent-browser
+    // and its net.js on every page of the job's tab, so `browse` can tell when a page is done
+    // loading data (it must be there when the session's daemon starts)
+    if let Some(dir) = bundled_skills_root(&app).map(|r| r.join("browser-use")).filter(|d| d.join("browse").is_file()) {
+        env.push(("AGENT_BROWSER_INIT_SCRIPTS".into(), dir.join("net.js").display().to_string()));
+        env.push(("PATH".into(), dir.display().to_string()));
+    }
     if let Some(dir) = resource(&app, "agent-browser-skills") {
         env.push(("AGENT_BROWSER_SKILLS_DIR".into(), dir.display().to_string()));
     }

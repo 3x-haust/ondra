@@ -127,8 +127,8 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
 - **Screenshots only when something is wrong**, or as before/after proof.
   Read structure (`snapshot -i --delta`, `eval`) to check; look at pixels
   for layout, overflow and theme.
-- **Surfaces**: web through `browser-use` (agent-browser, or Aside when this
-  space has it); iOS/Android through `device-use` (your own device, `stop` it
+- **Surfaces**: web through `browser-use` (the built-in browser; Aside only
+  when the user asks); iOS/Android through `device-use` (your own device, `stop` it
   at the end); a Mac app through `computer-use` (one app, one worker at a time).
 - **In parallel, by area**: more than ~15 screens or several platforms → up to
   4 subagents, one area each (e.g. 가입·로그인 / 목록·검색 / 결제 / 설정), each
