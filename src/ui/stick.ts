@@ -40,7 +40,10 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
    *  put back where it was. */
   let intentUntil = 0;
   let dragging = false;
-  const meant = () => dragging || Date.now() < intentUntil || (holding && (!holdAt || el.contains(holdAt)));
+  /** the pointer rests on a page shown inside the chat (a report, a summary): its wheel never reaches us,
+   *  but the chat it scrolls past the page's end is the user's doing */
+  let overFrame = false;
+  const meant = () => overFrame || dragging || Date.now() < intentUntil || (holding && (!holdAt || el.contains(holdAt)));
   const intent = (ms: number) => (intentUntil = Math.max(intentUntil, Date.now() + ms));
   /** where the user left it */
   let lastTop = el.scrollTop;
@@ -114,6 +117,8 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   // while the pointer is down in the chat (the scrollbar, selecting text past the top) it moves as the user drags;
   // a plain click grants nothing: a choice clicked in the thread must not let the reply carry it up
   let bar = false;
+  const onOver = (e: PointerEvent) => (overFrame = (e.target as Element)?.tagName === "IFRAME");
+  const onLeave = () => (overFrame = false);
   const onDown = (e: PointerEvent) => {
     dragging = true;
     bar = e.target === el;
@@ -133,6 +138,8 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
   };
   el.addEventListener("sent", onSent);
   el.addEventListener("pointerdown", onDown, { passive: true });
+  el.addEventListener("pointerover", onOver, { passive: true });
+  el.addEventListener("pointerleave", onLeave, { passive: true });
   window.addEventListener("pointerup", onUp, { passive: true });
   // find in page (⌘F) moves the chat to what it found: keys anywhere count
   window.addEventListener("keydown", onWinKey, { capture: true, passive: true } as AddEventListenerOptions);
@@ -161,6 +168,8 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     el.removeEventListener("keydown", onKey);
     el.removeEventListener("sent", onSent);
     el.removeEventListener("pointerdown", onDown);
+    el.removeEventListener("pointerover", onOver);
+    el.removeEventListener("pointerleave", onLeave);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("keydown", onWinKey, { capture: true } as EventListenerOptions);
     cancelAnimationFrame(mend);
