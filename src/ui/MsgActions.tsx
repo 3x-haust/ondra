@@ -1,6 +1,7 @@
 // The quiet row under a message (shown on hover): time, copy, edit, retry.
 // A user message can be edited in place: the conversation goes back to that
 // point and continues from the new text.
+import { splitQuotes } from "./quote";
 import { skillAsk } from "./Aside";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { fileSrc } from "../lib/native";
@@ -75,8 +76,9 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
             <Show when={split().body}>
               {/* a /skill: request shows the skill as a chip, not the line that tells main to use it */}
               <div class="msg-user">
-                <For each={skillAsk(split().body).skills}>{(n) => <span class="msg-skill"><Icon name="skill" size={12} />{n}</span>}</For>
-                {skillAsk(split().body).rest}
+                <For each={splitQuotes(split().body).quotes}>{(q) => <div class="msg-quote">{q}</div>}</For>
+                <For each={skillAsk(splitQuotes(split().body).rest).skills}>{(n) => <span class="msg-skill"><Icon name="skill" size={12} />{n}</span>}</For>
+                {skillAsk(splitQuotes(split().body).rest).rest}
               </div>
             </Show>
             <Show when={split().files.length}>

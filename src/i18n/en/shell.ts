@@ -69,6 +69,7 @@ export default {
   "폴더와 작업 {n}개는 그대로 남아요": "The folder and its task stay|The folder and its {n} tasks stay",
   "폴더는 그대로 남아요": "The folder stays",
   "제거": "Remove",
+  "인용 빼기": "Remove quote",
 
   // the one task menu (sidebar, header ⋯, board and canvas cards)
   "일시정지|action": "Pause",
