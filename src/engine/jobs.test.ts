@@ -7,7 +7,7 @@ import { handle } from "./bridge";
 import { applyRoutes, mainStep } from "./captain";
 import { CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM } from "./prompts";
 import { callerOf, jobLine, PAIR_PER_WINDOW, readJob, resetSends, scrub, searchJobs, TELL_PER_MIN, tellJob } from "./jobs";
-import { agentOf, steerQueued } from "./tasks";
+import { agentOf } from "./tasks";
 import { markAlive, markDead } from "./rpc";
 
 const NOW = Date.UTC(2026, 10, 9, 12);
@@ -137,15 +137,12 @@ describe("job_read", () => {
 });
 
 describe("job_tell", () => {
-  it("queues for a running job's next turn, or delivers now", () => {
+  it("goes straight into a running job (another job's words never wait in the user's line)", () => {
     markAlive(agentOf("t-guest"));
     const r = tellJob(callerOf("t-wait")!, "t-guest", "배너는 내가 맡을게요");
-    expect(r).toMatchObject({ ok: true, line: "queued for its next turn" });
-    const q = taskById("t-guest")!.queue![0];
-    expect(q).toMatchObject({ text: "배너는 내가 맡을게요", by: "t-wait" });
-    expect(q.sent).toContain('another job in this space, "배너 문구" (t-wait)');
-    // when it goes in, the thread shows the words and who sent them; the model gets who it is from
-    steerQueued("t-guest", q.id);
+    expect(r).toMatchObject({ ok: true, line: "delivered" });
+    expect(taskById("t-guest")!.queue ?? []).toHaveLength(0);
+    // the thread shows the words and who sent them
     const e = taskById("t-guest")!.entries.slice(-1)[0]!;
     expect(e).toMatchObject({ kind: "user", text: "배너는 내가 맡을게요", by: "t-wait" });
     expect(tellJob(callerOf("t-wait")!, "t-guest", "지금 봐줘", { now: true }).line).toBe("delivered");
