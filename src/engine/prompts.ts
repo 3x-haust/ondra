@@ -765,7 +765,7 @@ function gitNote(t: Task): string[] {
   const w = t.worktree;
   if (!w || w.state !== "open") return [];
   return [
-    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done; the user merges it from Ondra.`,
+    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done; the user merges it from Ondra. Only what is meant to be merged goes in this folder: scripts you run to check something, notes and downloads for a question or research go in $APP_SCRATCH_DIR, reports in $APP_ARTIFACTS_DIR. A job that leaves the repo unchanged ends without a merge.`,
   ];
 }
 
