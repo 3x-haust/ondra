@@ -7,6 +7,10 @@ import { t } from "../i18n";
 
 const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(null);
 
+// a drawn picture (cleaned SVG markup from an answer), shown big on its own
+const [drawn, setDrawn] = createSignal<string | null>(null);
+export const openDrawing = (markup: string) => setDrawn(markup);
+
 export function openImage(path: string, list: string[] = [path]) {
   const l = list.includes(path) ? list : [path, ...list];
   setShown({ list: l, i: l.indexOf(path) });
@@ -15,6 +19,7 @@ export function openImage(path: string, list: string[] = [path]) {
 export function Lightbox() {
   const step = (d: number) => setShown((s) => s && { ...s, i: (s.i + d + s.list.length) % s.list.length });
   const onKey = (e: KeyboardEvent) => {
+    if (drawn() && e.key === "Escape" && !ignoredKey(e)) return void (e.preventDefault(), e.stopPropagation(), setDrawn(null));
     if (!shown() || ignoredKey(e) || !noModifiers(e)) return;
     if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setShown(null));
     else if (e.key === "ArrowRight") (e.preventDefault(), e.stopPropagation(), step(1));
@@ -23,6 +28,17 @@ export function Lightbox() {
   onMount(() => window.addEventListener("keydown", onKey, true));
   onCleanup(() => window.removeEventListener("keydown", onKey, true));
   return (
+    <>
+    <Show when={drawn()}>
+      {(m) => (
+        <div class="lightbox" onClick={() => setDrawn(null)}>
+          <div class="lb-drawing" innerHTML={m()} onClick={(e) => e.stopPropagation()} />
+          <div class="lb-bar" onClick={(e) => e.stopPropagation()}>
+            <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setDrawn(null)}><Icon name="x" size={14} /></button>
+          </div>
+        </div>
+      )}
+    </Show>
     <Show when={shown()}>
       {(s) => {
         const path = () => s().list[s().i];
@@ -43,5 +59,6 @@ export function Lightbox() {
         );
       }}
     </Show>
+    </>
   );
 }

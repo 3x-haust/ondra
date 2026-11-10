@@ -189,6 +189,7 @@ export default {
   // result blocks
   "이미지 없음": "No image",
   "크게 보기": "Enlarge",
+  "그림 그리는 중": "Drawing…",
   "전": "Before",
   "후": "After",
   "테스트": "Test",

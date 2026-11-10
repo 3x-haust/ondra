@@ -623,6 +623,14 @@ ONE diagram. Pick by the question:
 - a straight list of steps or what's done → {"type":"checklist","label":"3/5","items":[{label,done}]}
 - one number that changed → {"type":"metric","label":"빌드 시간","value":"42s","delta":"-18s"}
 - UI before/after → beforeAfter with beforeImage/afterImage (screenshots only)
+- none of these fits (how devices are cabled, a room or screen layout, a physical setup,
+  a one-off sketch) → draw it yourself in "text" as a fenced \`\`\`svg block: one <svg viewBox="0 0 W H">,
+  W about 800, plain shapes (rect with rx, line, path, text), Korean labels, font-size 14–28,
+  no fonts, scripts, images or links. Colour by meaning with these and nothing else:
+  var(--ink) text, var(--ink-3) quiet text and lines, var(--line-strong) outlines,
+  var(--card) boxes, var(--surface) background, var(--accent) the main thing,
+  var(--ok) / var(--warn) / var(--bad) / var(--live) / var(--merged) for kinds told apart
+  (a line's colour matches its label's). Under 60 shapes; leave room so no label is cut off.
 Rules: one picture answers one question. Start small: 3–7 boxes (not for a
 straight chain: checklist; over 12: split or cut). Every box is something you
 read or changed: state "new"/"changed"/"gone" for what the work touched, "off"

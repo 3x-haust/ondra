@@ -1972,3 +1972,36 @@
   flex: 0 1 auto;
   min-width: 0;
 }
+
+/* a picture an answer drew (```svg): the column's width at most, in the app's font */
+.md .md-svg {
+  margin: var(--s-12) 0;
+  padding: var(--s-16);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  cursor: zoom-in;
+}
+.md .md-svg > svg,
+.lightbox .lb-drawing > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 520px;
+  font-family: var(--font);
+}
+.lightbox .lb-drawing {
+  width: min(1100px, 90vw);
+  padding: var(--s-24);
+  border-radius: var(--r-xl);
+  /* the same ground the picture had in the chat (surface over the page), opaque here */
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg);
+  cursor: default;
+}
+.lightbox .lb-drawing > svg {
+  max-height: 80vh;
+}
+.md .md-svg-wait {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
