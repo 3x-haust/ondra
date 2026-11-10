@@ -7,7 +7,7 @@ import type { Permission } from "../state/types";
 import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
 import { accountName } from "./AccountPicker";
-import { canUseTools, connectionOf, connModelLabel } from "../engine/connections";
+import { canUseTools, connectionOf, connModelLabel, effortLevels, effortShown } from "../engine/connections";
 import { t } from "../i18n";
 
 /** `name` is the Korean key: show it with t(name) (낮음 · 보통 · 높음 · 매우 높음 · 최대). */
@@ -112,8 +112,10 @@ export function ModelPicker(props: {
   const nameOf = (m: string) => connModelLabel(props.accountId, m) ?? prettyModel(m);
   const label = () => (props.model ? nameOf(props.model) : auto() ? nameOf(auto()!) : t("모델 선택"));
   const noTools = (m: string) => !canUseTools(props.accountId, m);
-  const effort = () => effortOf(props.thinking);
   const current = () => props.model || auto() || "";
+  // a connection's model offers the levels its server takes (none when it doesn't reason)
+  const levels = () => effortLevels(props.accountId, current());
+  const effort = () => effortShown(props.accountId, current(), effortOf(props.thinking));
   const all = () => models() ?? [];
   const ranked = () => rankModels(all());
   // a short list is shown whole; "자주 씀" only earns its place in front of a long one
@@ -140,16 +142,18 @@ export function ModelPicker(props: {
   );
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => (setQ(""), setOpen(!open()))} title={current() ? [label(), effortLabel(effort()), noTools(current()) ? t("도구 없이 대화만 해요") : ""].filter(Boolean).join(" · ") : t("모델 · 추론 강도")}>
+      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => (setQ(""), setOpen(!open()))} title={current() ? [label(), effort() ? effortLabel(effort()) : "", noTools(current()) ? t("도구 없이 대화만 해요") : ""].filter(Boolean).join(" · ") : t("모델 · 추론 강도")}>
         <span class="model-name">{label()}</span>
         <Show when={current() && noTools(current())}><span class="model-effort">{t("도구 없음")}</span></Show>
-        <Show when={current()}><span class="model-effort">{effortLabel(effort())}</span></Show>
+        <Show when={current() && effort()}><span class="model-effort">{effortLabel(effort())}</span></Show>
         <Icon name="down" size={12} class="muted" />
       </button>
       <Show when={open()}>
         <div class="pop model-pop" classList={{ up: props.up }} role="dialog" aria-label={[t("모델 · 추론 강도"), accountName(props.accountId)].filter(Boolean).join(" · ")}>
-          <EffortSlider value={effort()} onChange={(id) => props.onChange(props.model, id)} />
-          <div class="pop-sep" />
+          <Show when={levels()?.length !== 0}>
+            <EffortSlider value={effort()} levels={levels()} onChange={(id) => props.onChange(props.model, id)} />
+            <div class="pop-sep" />
+          </Show>
           <Show when={all().length > 8}>
             <div class="model-find">
               <Icon name="search" size={14} />
@@ -246,18 +250,19 @@ export function PermissionPicker(props: { value: Permission; onChange: (p: Permi
 }
 
 /** 추론 강도 as a segmented control, a cell per level: click one, or the arrow keys. */
-function EffortSlider(props: { value: string; onChange: (id: string) => void }) {
-  const n = EFFORTS.length;
-  const at = () => Math.max(0, EFFORTS.findIndex((e) => e.id === props.value));
+function EffortSlider(props: { value: string; levels?: string[]; onChange: (id: string) => void }) {
+  const list = () => (props.levels ? EFFORTS.filter((e) => props.levels!.includes(e.id)) : EFFORTS);
+  const n = () => list().length;
+  const at = () => Math.max(0, list().findIndex((e) => e.id === props.value));
   const set = (i: number) => {
-    const id = EFFORTS[Math.min(n - 1, Math.max(0, i))].id;
+    const id = list()[Math.min(n() - 1, Math.max(0, i))].id;
     if (id !== props.value) props.onChange(id);
   };
   const key = (e: KeyboardEvent) => {
     if (ignoredKey(e) || !noModifiers(e)) return;
     const d = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
     if (e.key === "Home") return e.preventDefault(), set(0);
-    if (e.key === "End") return e.preventDefault(), set(n - 1);
+    if (e.key === "End") return e.preventDefault(), set(n() - 1);
     if (d) e.preventDefault(), set(at() + d);
   };
   return (
@@ -266,7 +271,7 @@ function EffortSlider(props: { value: string; onChange: (id: string) => void }) 
         <span>{t("추론 강도")}</span>
       </div>
       <div class="eff-seg" role="radiogroup" tabindex="0" aria-label={t("추론 강도")} onKeyDown={key}>
-        <For each={EFFORTS}>
+        <For each={list()}>
           {(x, i) => (
             <button type="button" role="radio" tabindex="-1" aria-checked={i() === at()} classList={{ on: i() === at() }} onClick={() => set(i())}>
               {t(x.name)}

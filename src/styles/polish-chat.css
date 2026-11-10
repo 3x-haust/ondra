@@ -246,8 +246,9 @@
 }
 
 /* effort: a segmented control with a cell per level */
+/* the same inset at the top as the list's last row leaves at the bottom, and the same either side of the line */
 .model-pop .eff {
-  padding: var(--s-4) var(--s-4) var(--s-6);
+  padding: 0 var(--s-4);
 }
 .model-pop .eff-head {
   display: flex;

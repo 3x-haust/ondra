@@ -8,7 +8,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
+import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -462,7 +462,17 @@ export function mainModel(accountId: string | undefined): string | undefined {
 export async function mainToolArgs(accountId: string | undefined): Promise<string[]> {
   return canUseTools(accountId, mainModel(accountId)) ? mainTools() : ["--no-tools"];
 }
-const startSig = async (dir: string, skills: string, space: string) => `${await instructionSig(dir)}\n${(await mainToolArgs(accountOf.get(space))).join(" ")}\n${promptSig()}\n${skills}`;
+/** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
+const wantedAccount = (space: string): string | undefined => {
+  const pick = state.accountPick?.[sp(space)];
+  if (pick && pick !== "auto" && accountById(pick)?.space === sp(space)) return pick;
+  return accountOf.get(space);
+};
+// picking another account or model under the chat restarts main on it (auto routing alone doesn't: a warm cache stays)
+const startSig = async (dir: string, skills: string, space: string) => {
+  const id = wantedAccount(space);
+  return `${id}\n${mainModel(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}`;
+};
 export async function restartIfStale(space: string): Promise<boolean> {
   if (busy.has(space)) return false;
   return restartStale(space, (await skillScope(sp(space))).signature);
