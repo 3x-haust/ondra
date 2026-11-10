@@ -69,6 +69,14 @@ export default {
   "폴더와 작업 {n}개는 그대로 남아요": "The folder and its task stay|The folder and its {n} tasks stay",
   "폴더는 그대로 남아요": "The folder stays",
   "제거": "Remove",
+  "피드백 보내기 · GitHub 이슈": "Send feedback · GitHub issue",
+  "이슈를 올렸어요": "Issue filed",
+  "GitHub에서 이어서 올려 주세요": "Finish filing it on GitHub",
+  "피드백 보내기": "Send feedback",
+  "GitHub 공개 이슈로 올라가요. 로그의 키·토큰·이메일은 가려져요.": "Filed as a public GitHub issue. Keys, tokens and emails in the log are hidden.",
+  "무슨 일이 있었나요? 어떻게 하다가 그랬는지도 적어 주세요.": "What happened? Say what you were doing when it did.",
+  "최근 로그 붙이기": "Attach the recent log",
+  "보낼 내용 보기": "See what is sent",
   "인용 빼기": "Remove quote",
 
   // the one task menu (sidebar, header ⋯, board and canvas cards)

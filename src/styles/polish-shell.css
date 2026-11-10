@@ -1615,3 +1615,64 @@
 /* at the row's end the ring keeps the edge and its percent reads before it */
 .app .sidebar .sb-foot .update-wrap { flex-direction: row-reverse; }
 .app .sidebar .sb-foot .update-pct { margin: 0; }
+
+/* /feedback: the words, whether the log goes along, and exactly what is sent */
+.fb-sheet {
+  width: min(560px, calc(100vw - 32px));
+}
+.fb-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--s-10) var(--s-12);
+  border: 1px solid var(--input);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  min-height: 132px;
+  resize: vertical;
+}
+.fb-text:focus {
+  outline: none;
+  border-color: var(--accent-line, var(--line));
+}
+.fb-log {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  margin-top: var(--s-12);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.fb-count {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.fb-preview {
+  margin-top: var(--s-8);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.fb-preview > summary {
+  cursor: pointer;
+}
+.fb-preview > pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: var(--s-6) 0 0;
+  padding: var(--s-8) var(--s-10);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fb-note {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}

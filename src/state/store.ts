@@ -1,5 +1,6 @@
 // The one app store, saved to disk (debounced). Live-only data (streaming
 // text, which panel is open) lives in `ui.ts`, not here.
+import { flushLog } from "../lib/log";
 import { createEffect, createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "solid-js/store";
 import { bindingSource } from "../lib/shortcuts";
@@ -121,7 +122,7 @@ export async function flushState() {
 
 export async function loadState() {
   // quitting: the app waits (a moment at most) for the last save
-  void onEvent("state:flush", () => ((quitting = true), void flushState().finally(() => void stateFlushed())));
+  void onEvent("state:flush", () => ((quitting = true), flushLog(), void flushState().finally(() => void stateFlushed())));
   if (!inTauri && location.search.includes("fixture")) {
     setState(reconcile(fixture(freshState())));
     const { setCtx } = await import("./ctx");

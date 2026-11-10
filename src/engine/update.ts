@@ -7,6 +7,7 @@
 // A restart would cut the jobs at work (their commands, servers, checks): while one runs, the
 // notice restarts once none does instead. Settings shows the same, with how far the download
 // is, and still restarts at once when asked.
+import { flushLog, logError, logInfo } from "../lib/log";
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
@@ -126,9 +127,12 @@ export async function installNow() {
     // the restart doesn't wait for a save still to come
     await flushState().catch(() => {});
     setQuitting(true);
+    logInfo("update", `installing ${available() ?? "update"}`);
+    flushLog();
     await installUpdate();
   } catch (e) {
     setQuitting(false);
+    logError("update", `install failed: ${e instanceof Error ? e.message : String(e)}`);
     setStatus("idle");
     setProgress(null);
     const why = e instanceof Error ? e.message : String(e);

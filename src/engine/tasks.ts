@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { logError, logWarn } from "../lib/log";
 import { isNetError, waitOnline } from "./net";
 import { cutTitle, describeBrowser, describeCommand } from "./describe";
 import { t as tr } from "../i18n";
@@ -1046,6 +1047,7 @@ export function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
 }
 
 function fail(id: string, message: string) {
+  logError("task", `${id} failed: ${message}`);
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
@@ -1230,6 +1232,7 @@ function handlers(id: string, run: Run) {
     exit(code: number | null) {
       markDead(agent);
       const t = taskById(id);
+      logWarn("engine", `${id} engine exited (${code ?? "signal"})${appQuitting() ? " while quitting" : ""}: ${stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ")}`);
       // the app quitting took it down: it stays running and picks up again when the app opens
       if (appQuitting()) return;
       if (t && runs.get(id) === run && (t.status === "running" || t.status === "waiting")) {
