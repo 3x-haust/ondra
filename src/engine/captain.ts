@@ -11,8 +11,9 @@ import { prepareQuery } from "./vectors";
 import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { prose, readFences } from "./fences";
+import { shellArg } from "./commandKind";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
@@ -426,10 +427,13 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  */
 const sigOf = new Map<string, string>();
 /** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. */
-export async function mainTools(): Promise<string[]> {
+export async function mainTools(lean = false): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
   const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts")).flatMap((e) => ["--extension", e]);
+  // a model on a direct connection routes only: given read and bash it starts doing the work itself
+  // (and loses the request on the way), so anything that needs files or a shell is a fork
+  if (lean) return ["--no-builtin-tools", ...direct];
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
@@ -462,7 +466,7 @@ export function mainModel(accountId: string | undefined): string | undefined {
 }
 /** main's tool flags; a model without tool calling runs talk-only */
 export async function mainToolArgs(accountId: string | undefined): Promise<string[]> {
-  return canUseTools(accountId, mainModel(accountId)) ? mainTools() : ["--no-tools"];
+  return canUseTools(accountId, mainModel(accountId)) ? mainTools(isDirect(accountById(accountId ?? ""))) : ["--no-tools"];
 }
 /** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
 const wantedAccount = (space: string): string | undefined => {
@@ -494,6 +498,56 @@ async function restartStale(space: string, skills: string): Promise<boolean> {
   errors.delete(space);
   sigOf.delete(space);
   return true;
+}
+
+/**
+ * Main answers and hands work on, on any model. A command of its own that runs past MAIN_CMD_MS is
+ * stopped, and a turn that keeps calling tools (or keeps finding none) is brought back to the message:
+ * a model can lose the request on the way (asked for a game, it grepped ~/.config for eleven minutes).
+ */
+const MAIN_CMD_MS = 30_000;
+const MAIN_CALLS = 10;
+type Turn = { text: string; calls: number; misses: number; nudged: boolean; cmds: Map<string, { command: string; at: number; stopped?: boolean }> };
+const turnOf = new Map<string, Turn>();
+const steerMain = (space: string, message: string) => void request(agentOf(space), { type: "steer", message }).catch(() => {});
+function guardTurn(space: string, ev: any) {
+  const t = turnOf.get(space);
+  if (!t) return;
+  const id = String(ev.toolCallId ?? "");
+  const tool = String(ev.toolName ?? "");
+  if (ev.type === "tool_execution_start") {
+    t.calls++;
+    if (tool === "bash" && typeof ev.args?.command === "string") t.cmds.set(id, { command: ev.args.command, at: Date.now() });
+  } else {
+    t.cmds.delete(id);
+    const out = ev.result?.content?.find?.((c: any) => c?.type === "text")?.text;
+    if (tool === "tool_search" && (ev.isError || /No matching tools|Repeated call/i.test(String(out ?? "")))) t.misses++;
+  }
+  if (t.nudged || (t.calls < MAIN_CALLS && t.misses < 2)) return;
+  t.nudged = true;
+  steerMain(
+    space,
+    `(Ondra) ${t.calls} tool calls on this message so far. The message you are answering: «${t.text.slice(0, 300)}». Send your route block now: answer what you know, and hand anything that needs more work to a fork (kind "new").`,
+  );
+}
+function watchCommands(space: string) {
+  const t = turnOf.get(space);
+  if (!t) return;
+  const now = Date.now();
+  for (const [id, c] of t.cmds) {
+    if (c.stopped || now - c.at < MAIN_CMD_MS) continue;
+    c.stopped = true;
+    const others = [...t.cmds].filter(([k]) => k !== id).map(([, x]) => x.command);
+    const arg = shellArg(c.command, others);
+    if (!arg) continue;
+    void agentStopCommand(agentOf(space), "bash", arg)
+      .catch(() => 0)
+      .then((n) => {
+        if (!n || turnOf.get(space) !== t) return;
+        const cmd = c.command.replace(/\s+/g, " ").trim();
+        steerMain(space, `(Ondra) Stopped \`${cmd.length > 120 ? `${cmd.slice(0, 120)}…` : cmd}\` after ${MAIN_CMD_MS / 1000}s. You answer and hand work on: anything that runs long is a fork (kind "new"). The message: «${t.text.slice(0, 300)}».`);
+      });
+  }
 }
 
 /** main looking jobs up: the step shows on its pending reply, then stays above the reply */
@@ -566,7 +620,7 @@ async function ensureCaptain(space: string) {
       }
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
-      if (ev.type === "tool_execution_start" || ev.type === "tool_execution_end") noteStep(space, ev);
+      if (ev.type === "tool_execution_start" || ev.type === "tool_execution_end") (noteStep(space, ev), guardTurn(space, ev));
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
     exit() {
@@ -809,7 +863,9 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const accId = accountOf.get(space);
   const runOn = mainModel(accId);
   const acct = accId ? accountById(accId) : undefined;
-  const model = runOn ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.` : "";
+  const model = runOn
+    ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.${isDirect(acct) ? " You have no file or shell tools here: anything that needs files, code or a shell is a fork (kind \"new\"); build requests go straight to one." : ""}`
+    : "";
   if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
@@ -829,11 +885,16 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const done = new Promise<void>((resolve) => settled.set(space, resolve));
   genOf.set(space, { ms: 0 });
   const t0 = Date.now();
+  let watch: ReturnType<typeof setInterval> | undefined;
   try {
     await Promise.all([prepareQuery(text), refreshRepos(sp(space))]);
+    turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
+    watch = setInterval(() => watchCommands(space), 5_000);
     await request(agent, { type: "prompt", message: context(space, text, cwd, event) });
     await done;
   } finally {
+    clearInterval(watch);
+    turnOf.delete(space);
     setLive(agent, "");
   }
   const raw = texts.get(space) ?? "";
