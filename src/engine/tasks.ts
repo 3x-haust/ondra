@@ -23,6 +23,7 @@ import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVI
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
+import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
 import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
 import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 
@@ -113,9 +114,13 @@ export function chooseAccount(space: Task["space"], topic: string): string {
   const pick = state.accountPick?.[space];
   if (pick && pick !== "auto" && pool.some((a) => a.id === pick)) return pick;
   if (pool.length === 1) return pool[0].id;
+  // a direct connection (a local model, a gateway) runs work only when picked, unless it is all there is
+  const routed = pool.filter((a) => !isDirect(a));
+  const auto = routed.length ? routed : pool;
+  if (auto.length === 1) return auto[0].id;
   const load = (id: string) => Math.max(0, ...usageOf(id).map((l) => l.used));
-  const roomy = pool.filter((a) => load(a.id) < 85);
-  const use = roomy.length ? roomy : pool;
+  const roomy = auto.filter((a) => load(a.id) < 85);
+  const use = roomy.length ? roomy : auto;
   const HOUR = 60 * 60_000;
   const same = state.tasks
     .filter((t) => t.space === space && t.topic === topic && use.some((a) => a.id === t.accountId))
@@ -910,6 +915,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ["ONDRA_SPACE", t0.space] as [string, string], ["ONDRA_GITHUB_WRITE", state.settings.githubWrite === false ? "0" : "1"] as [string, string], ["ONDRA_DEVICES_ALLOWED", allowedDevices(t0.space, id).join(",")] as [string, string], ...dataEnv(t0), ...(spaceById(t0.space).aside?.trim() ? [["ONDRA_ASIDE_ACCOUNT", spaceById(t0.space).aside!.trim()] as [string, string]] : [])];
     env.push(["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t0.space))]);
     const model = t.model || modelFor(account.id);
+    // a model without tool calling (marked on its connection) runs talk-only instead of failing on its first request
+    const talkOnly = !canUseTools(account.id, model);
+    if (talkOnly && !resume) updateTask(id, (x) => void push(x, { kind: "note", text: "이 모델은 도구를 못 써서 대화만 해요" }));
     await prepareQuery(relatedQuery(t));
     // the memory given at the first start is kept for every later session (Hermes / Letta:
     // a stable prompt); later saves reach the next job
@@ -928,8 +936,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       "--thinking",
       t.thinking || effortFor(account.id) || "high",
       ...(await workerExtensions()).flatMap((e) => ["--extension", e]),
-      ...workerTools(),
-      ...offTools(),
+      ...(talkOnly ? ["--no-tools"] : [...workerTools(), ...offTools()]),
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);
@@ -1323,6 +1330,25 @@ async function settle(id: string, run: Run) {
       else push(x, { kind: "turn", ms: 0, usage: used });
     });
 
+  // A connection's model turned out to have no tool calling: mark it so and start over talk-only.
+  const tm = t.model || modelFor(t.accountId);
+  const row = connModel(t.accountId, tm);
+  if (run.error && row?.tools && toolsRefused(run.error) && run.modelTries < 4) {
+    run.modelTries++;
+    updateAccount(t.accountId, (a) => {
+      const m = a.connection?.models.find((x) => x.id === row.id);
+      if (m) m.tools = false;
+    });
+    updateTask(id, (x) => {
+      x.entries = x.entries.filter((e) => e.kind !== "turn");
+      push(x, { kind: "note", text: "이 모델은 도구를 못 써요 · 대화만 하도록 다시 시작해요" });
+      x.legs = x.legs.slice(0, -1);
+    });
+    agentKill(agent);
+    markDead(agent);
+    void startTask(id, false);
+    return;
+  }
   // The provider rejected the model: switch and start over (nothing ran yet).
   if (run.error && isModelError(run.error) && run.modelTries < 4) {
     run.modelTries++;
@@ -2131,6 +2157,10 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     updateTask(id, (x) => (x.queue = [...(x.queue ?? []), q]));
     return;
   }
+  if (restartBeforeNext.delete(id) && isAlive(agent)) {
+    agentKill(agent);
+    markDead(agent);
+  }
   updateTask(id, (x) => {
     x.saidDone = undefined;
     // what the user sees in the bubble (a button's label), when the message is meant for the model;
@@ -2350,8 +2380,13 @@ export async function setTaskPermission(id: string, p: Permission) {
   }
 }
 
+/** jobs whose engine must start again (with the new model's tools on or off) before the next message */
+const restartBeforeNext = new Set<string>();
+
 /** Model / effort for one task; applied to its live session right away. */
 export async function setTaskModel(id: string, model: string, thinking: string) {
+  const before = taskById(id);
+  const was = before ? before.model || modelFor(before.accountId) : undefined;
   updateTask(id, (t) => {
     t.model = model || undefined;
     t.thinking = thinking || undefined;
@@ -2361,6 +2396,16 @@ export async function setTaskModel(id: string, model: string, thinking: string) 
   try {
     const t = taskById(id)!;
     const m = model || modelFor(t.accountId);
+    // tools on or off is fixed when the engine starts: a switch across that line takes a new start
+    if (canUseTools(t.accountId, was) !== canUseTools(t.accountId, m)) {
+      if (t.status === "running") {
+        restartBeforeNext.add(id);
+        return void updateTask(id, (x) => void push(x, { kind: "note", text: "도구 사용 여부가 달라서 다음 메시지부터 이 모델로 바꿔요" }));
+      }
+      agentKill(agent);
+      markDead(agent);
+      return void updateTask(id, (x) => void push(x, { kind: "note", text: `모델 → ${(m ?? "").split("/").pop()}` }));
+    }
     if (m) {
       const i = m.indexOf("/");
       await request(agent, { type: "set_model", provider: m.slice(0, i), modelId: m.slice(i + 1) });

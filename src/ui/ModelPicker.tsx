@@ -7,6 +7,7 @@ import type { Permission } from "../state/types";
 import { modelsNow, rankModels, refreshModels } from "../engine/modelList";
 import { Icon } from "./Icon";
 import { accountName } from "./AccountPicker";
+import { canUseTools, connectionOf, connModelLabel } from "../engine/connections";
 import { t } from "../i18n";
 
 /** `name` is the Korean key: show it with t(name) (낮음 · 보통 · 높음 · 매우 높음 · 최대). */
@@ -106,20 +107,25 @@ export function ModelPicker(props: {
   const [showOld, setShowOld] = createSignal(false);
   const [q, setQ] = createSignal("");
   const auto = () => accountById(props.accountId)?.model;
-  const label = () => (props.model ? prettyModel(props.model) : auto() ? prettyModel(auto()!) : t("모델 선택"));
+  // a direct connection's models go by their own names ("llama3.1:8b"), as one list under the connection
+  const direct = () => !!connectionOf(props.accountId);
+  const nameOf = (m: string) => connModelLabel(props.accountId, m) ?? prettyModel(m);
+  const label = () => (props.model ? nameOf(props.model) : auto() ? nameOf(auto()!) : t("모델 선택"));
+  const noTools = (m: string) => !canUseTools(props.accountId, m);
   const effort = () => effortOf(props.thinking);
   const current = () => props.model || auto() || "";
   const all = () => models() ?? [];
   const ranked = () => rankModels(all());
   // a short list is shown whole; "자주 씀" only earns its place in front of a long one
-  const often = () => (all().length > 6 ? ranked().often : []);
+  const long = () => all().length > 6 && !direct();
+  const often = () => (long() ? ranked().often : []);
   const groups = (): [string, string[]][] =>
-    all().length > 6 ? ranked().latest : [...new Set(all().map((m) => m.split("/")[0]))].map((pv) => [pv, all().filter((m) => m.split("/")[0] === pv)]);
-  const older = () => (all().length > 6 ? ranked().older : []);
+    long() ? ranked().latest : [...new Set(all().map((m) => m.split("/")[0]))].map((pv) => [pv, all().filter((m) => m.split("/")[0] === pv)]);
+  const older = () => (long() ? ranked().older : []);
   // typing finds any model, the folded older ones too
   const found = () => {
     const k = q().trim().toLowerCase();
-    return k ? all().filter((m) => m.toLowerCase().includes(k) || prettyModel(m).toLowerCase().includes(k)) : null;
+    return k ? all().filter((m) => m.toLowerCase().includes(k) || nameOf(m).toLowerCase().includes(k)) : null;
   };
   const PROVIDER: Record<string, string> = { "openai-codex": "OpenAI · ChatGPT 계정", openai: "OpenAI", anthropic: "Anthropic · Claude 계정", google: "Google" };
   const provider = (id: string) => (PROVIDER[id] ? t(PROVIDER[id]) : id);
@@ -127,14 +133,16 @@ export function ModelPicker(props: {
   const heading = (id: string) => (groups().length <= 1 && accountName(props.accountId)) || provider(id);
   const Item = (p: { m: string }) => (
     <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, effort()), setOpen(false))}>
-      <span class="pop-item-main">{prettyModel(p.m)}</span>
+      <span class="pop-item-main">{nameOf(p.m)}</span>
+      <Show when={noTools(p.m)}><span class="model-tag" title={t("도구 없이 대화만 해요")}>{t("도구 없음")}</span></Show>
       <Show when={current() === p.m}><Icon name="check" size={14} /></Show>
     </button>
   );
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
-      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => (setQ(""), setOpen(!open()))} title={current() ? `${label()} · ${effortLabel(effort())}` : t("모델 · 추론 강도")}>
+      <button type="button" class="chip model-chip" classList={{ on: open() }} onClick={() => (setQ(""), setOpen(!open()))} title={current() ? [label(), effortLabel(effort()), noTools(current()) ? t("도구 없이 대화만 해요") : ""].filter(Boolean).join(" · ") : t("모델 · 추론 강도")}>
         <span class="model-name">{label()}</span>
+        <Show when={current() && noTools(current())}><span class="model-effort">{t("도구 없음")}</span></Show>
         <Show when={current()}><span class="model-effort">{effortLabel(effort())}</span></Show>
         <Icon name="down" size={12} class="muted" />
       </button>

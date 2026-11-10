@@ -912,3 +912,134 @@
   margin-left: var(--s-8);
   color: var(--ink-3);
 }
+
+/* 직접 연결 sheet: the workspace sheet's rows, wider for the model list */
+.sheet.sp-sheet.cx-sheet {
+  width: 680px;
+  max-width: calc(100vw - 32px);
+}
+.cx-sheet .sheet-body {
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+}
+.cx-sheet .seg.cx-presets {
+  flex-wrap: wrap;
+  height: auto;
+  justify-self: start;
+}
+.cx-sheet .select {
+  height: 32px;
+}
+.cx-sheet .cx-key,
+.cx-sheet .cx-headers,
+.cx-sheet .cx-models {
+  width: 100%;
+}
+.cx-sheet .cx-key,
+.cx-sheet .cx-header,
+.cx-sheet .cx-model-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+}
+.cx-sheet .cx-key .input,
+.cx-sheet .cx-header .input,
+.cx-sheet .cx-model-bar .input {
+  flex: 1;
+  min-width: 0;
+}
+.cx-sheet .cx-headers,
+.cx-sheet .cx-models {
+  display: grid;
+  gap: var(--s-6);
+  min-width: 0;
+}
+.cx-sheet .cx-add {
+  justify-self: start;
+}
+.cx-sheet .cx-list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.cx-sheet .cx-model {
+  display: grid;
+  gap: var(--s-6);
+  padding: var(--s-6) var(--s-10);
+  border-bottom: 1px solid var(--line-soft);
+}
+.cx-sheet .cx-model:last-child {
+  border-bottom: 0;
+}
+.cx-sheet .cx-model-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+}
+.cx-sheet .cx-model-id {
+  flex: 1;
+  min-width: 0;
+}
+.cx-sheet .cx-model-id code {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--fs-code);
+}
+.cx-sheet .cx-model-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-6) var(--s-14);
+  padding-left: 24px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.cx-sheet .cx-num {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  color: var(--ink-3);
+}
+.cx-sheet .cx-num .input {
+  width: 96px;
+  height: 28px;
+  font-size: var(--fs-sm);
+}
+.cx-sheet .cx-efforts .input {
+  width: 150px;
+}
+.cx-sheet .cx-st {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.cx-sheet .cx-st.ok {
+  color: var(--ok-ink);
+}
+.cx-sheet .cx-st.bad {
+  color: var(--bad-ink);
+  flex-wrap: wrap;
+}
+.cx-sheet .cx-detail {
+  flex-basis: 100%;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.cx-sheet .cx-err {
+  font-size: var(--fs-sm);
+  color: var(--bad-ink);
+}
+.settings-inner .acc-conn {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

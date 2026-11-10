@@ -3,6 +3,7 @@
 // rejects it, remember that and move to the next candidate.
 import { accountById, updateAccount } from "../state/store";
 import { modelsOf } from "./modelList";
+import { canUseTools } from "./connections";
 
 const RANK = [/opus/i, /sonnet/i, /gpt-6/i, /gpt-5\.6/i, /gpt-5/i, /gemini.*pro/i, /claude/i, /gpt/i];
 const WEAK = /mini|nano|haiku|flash|lite/i;
@@ -39,7 +40,8 @@ export async function nextModel(accountId: string, failed: string | undefined): 
   const pool = all
     .filter((m) => !bad.has(idOf(m)))
     .filter((m) => !logged.length || logged.some((p) => m.startsWith(`${p}/`)))
-    .sort((x, y) => score(x) - score(y));
+    // a connection's model that can use tools before one that can't
+    .sort((x, y) => Number(!canUseTools(accountId, x)) - Number(!canUseTools(accountId, y)) || score(x) - score(y));
   const pick = pool[0] ?? null;
   updateAccount(accountId, (x) => {
     x.badModels = [...bad];

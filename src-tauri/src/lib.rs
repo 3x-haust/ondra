@@ -6,6 +6,7 @@
 //!   components — the engine, Chrome and the analyzer, kept outside the app (fetched once per version)
 //!   browser — the one shared browser every job uses (own tab, shared logins)
 //!   keychain — sign-in from the macOS keychain without the agent seeing it
+//!   providers — direct connections (any OpenAI-, Anthropic- or Google-compatible address) in models.json
 //!   store   — state file, accounts, opening files, inbox folder
 //!   git     — what a task changed
 //!   import  — rules, skills, memory and sessions from other agent tools
@@ -22,6 +23,7 @@ mod computer;
 mod computer_setup;
 pub mod focus;
 mod keychain;
+mod providers;
 mod git;
 mod import;
 mod pty;
@@ -409,6 +411,10 @@ pub fn run() {
             store::account_dir_path,
             store::account_providers,
             store::account_remove,
+            providers::provider_save,
+            providers::provider_remove,
+            providers::provider_models,
+            providers::provider_check,
             store::memory_git_commit,
             store::memory_git_log,
             store::memory_git_show,

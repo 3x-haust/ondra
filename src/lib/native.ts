@@ -239,6 +239,33 @@ export const accountDirPath = (accountId: string) => call<string | null>("accoun
 /** Providers with saved credentials in the account (keys of auth.json). */
 export const accountProviders = (accountId: string) => call<string[]>("account_providers", { accountId }, []);
 export const accountRemove = (accountId: string) => call<void>("account_remove", { accountId });
+
+// ───────────────────────── direct connections ─────────────────────────
+/** Where to ask. A null key or header value means the one stored in the keychain for `stored`. */
+export type ProviderTarget = {
+  baseUrl: string;
+  api: string;
+  key: string | null;
+  headers: { name: string; value: string | null }[];
+  stored: { accountId: string; provider: string } | null;
+};
+export type FoundModel = { id: string; name?: string; contextWindow?: number; maxTokens?: number; tools?: boolean; reasoning?: boolean; image?: boolean };
+/** why a request didn't go through (see providers.rs) */
+export type ProviderFail = { kind: string; status?: number | null; detail: string };
+/** outside the app there is no server to ask: a short sample list, so the form can be looked at */
+const SAMPLE: FoundModel[] = [
+  { id: "qwen3-coder:30b", contextWindow: 262144, tools: true },
+  { id: "llama3.1:8b", tools: true },
+  { id: "gemma3:4b", tools: false, image: true },
+];
+export const providerModels = (target: ProviderTarget) => call<FoundModel[]>("provider_models", { target }, SAMPLE);
+export const providerCheck = (target: ProviderTarget, model: string, reasoning: boolean) =>
+  call<{ tools: boolean | null; ms: number }>("provider_check", { target, model, reasoning }, { tools: !model.includes("gemma"), ms: 420 });
+/** Writes the connection into the account's models.json; the key and header values go to the keychain.
+ *  key: "" removes it, null keeps the stored one. */
+export const providerSave = (accountId: string, provider: string, entry: object, key: string | null, headers: { name: string; value: string | null }[]) =>
+  call<void>("provider_save", { accountId, provider, entry, key, headers });
+export const providerRemove = (accountId: string, provider: string) => call<void>("provider_remove", { accountId, provider });
 /** delete a session folder's old conversation files, keeping the newest one */
 export const sessionsPrune = (dir: string) => call<void>("sessions_prune", { dir }, undefined);
 

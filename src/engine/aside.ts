@@ -14,9 +14,13 @@ import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
 import { agentKill, agentSpawn, spaceLogs } from "../lib/native";
 import { prose } from "./fences";
 import { modelFor } from "./models";
+import { canUseTools } from "./connections";
 import { engine, expand, explain, isAlive, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { accountEnv, NO_ACCOUNT, spaceAccount } from "./tasks";
 import { t as tr } from "../i18n";
+
+/** read-only tools, or none for a connection's model without tool calling */
+const readTools = (accountId: string, model: string | undefined) => (canUseTools(accountId, model) ? ["--tools", "read,grep,find,ls"] : ["--no-tools"]);
 
 // ───────────── btw
 
@@ -227,7 +231,7 @@ export async function askBtw(scope: string, question: string, files: string[] = 
     await agentSpawn(
       agent,
       logs || expand(spaceById(space).folder || "~"),
-      ["--no-session", "--tools", "read,grep,find,ls", "--no-skills", "--thinking", "low", ...(model ? ["--model", model] : [])],
+      ["--no-session", ...readTools(acc.id, model), "--no-skills", "--thinking", "low", ...(model ? ["--model", model] : [])],
       await accountEnv(acc.id),
     );
     markAlive(agent);
@@ -304,8 +308,7 @@ async function ensureSide(space: SpaceId) {
     expand(spaceById(space).folder || "~"),
     [
       "--no-session",
-      "--tools",
-      "read,grep,find,ls",
+      ...readTools(acc.id, model),
       "--thinking",
       "low",
       "--append-system-prompt",
