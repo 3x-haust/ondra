@@ -2207,7 +2207,9 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
   if (!t) return;
   const wasPaused = t.status === "paused";
   const agent = agentOf(id);
-  if (!opts.now && t.status === "running" && isAlive(agent)) {
+  // the user's words wait in line while it works; another agent's (a subagent reporting, its parent
+  // answering) go in right away, after its current tool calls: they are part of the work, not the user's turn
+  if (!opts.now && !(opts.by && opts.by !== "main") && t.status === "running" && isAlive(agent)) {
     const q = { id: uid("q"), text: opts.shown ?? message, at: Date.now(), ...(opts.by ? { by: opts.by } : {}), ...(opts.shown && opts.shown !== message ? { sent: message } : {}) };
     updateTask(id, (x) => (x.queue = [...(x.queue ?? []), q]));
     return;
@@ -2268,6 +2270,13 @@ export function dropQueued(id: string, qid: string) {
 function drainQueue(id: string): boolean {
   const q = taskById(id)?.queue?.[0];
   if (!q) return false;
+  // what other agents left in line (from before they went straight in) goes in as one message
+  if (q.by) {
+    const theirs = (taskById(id)?.queue ?? []).filter((x) => x.by);
+    updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => !y.by)));
+    void tell(id, theirs.map((x) => x.sent ?? x.text).join("\n\n"), { now: true, shown: theirs.map((x) => x.text).join("\n\n"), by: q.by });
+    return true;
+  }
   updateTask(id, (x) => (x.queue = (x.queue ?? []).slice(1)));
   void tell(id, q.sent ?? q.text, queuedOpts(q));
   return true;

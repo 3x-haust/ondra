@@ -89,8 +89,8 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
     void refreshLimits(props.accountId);
     void loadEmail(props.accountId);
   });
-  // a plan window says something only near its cap: then it shows, in the warning colour, in words
-  const list = () => limitsShown(props.accountId).filter((l) => l.used >= NEAR);
+  // every plan window shows how much of it is used; near its cap it turns the warning colour
+  const list = () => limitsShown(props.accountId);
   // credits matter once a window is used up (they're what the work runs on then), or when there is no window
   const showCredits = () => !!creditsOf(props.accountId) && (!limitsShown(props.accountId).length || list().some((l) => l.used >= 100));
   // the one source for how full the context is: the strip, its tooltip and the sheet all read it
@@ -146,7 +146,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim hot" data-used={l.used} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
+          <span class="st-lim" classList={{ hot: l.used >= NEAR }} data-used={l.used} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
             {l.used >= 100 ? t("{w} 한도 다 씀", { w: windowLabel(l.window) }) : t("{w} 한도 {n}%", { w: windowLabel(l.window), n: Math.round(l.used) })}
           </span>
         )}

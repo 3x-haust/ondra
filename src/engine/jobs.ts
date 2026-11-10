@@ -358,7 +358,7 @@ export function relay(target: Task, message: string, o: { by: string; now?: bool
   }
   const alive = isAlive(agentOf(target.id));
   const outcome: Outcome =
-    target.status === "running" && alive ? (o.now ? "delivered" : "queued") : target.status === "waiting" && alive ? "answered" : target.status === "queued" ? "waits" : "resumed";
+    target.status === "running" && alive ? (o.now || o.by !== "main" ? "delivered" : "queued") : target.status === "waiting" && alive ? "answered" : target.status === "queued" ? "waits" : "resumed";
   void tell(target.id, o.sent ?? message, { now: o.now, ...(o.sent ? { shown: message } : {}), by: o.by });
   return { outcome, taskId: target.id };
 }
