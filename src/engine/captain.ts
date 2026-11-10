@@ -427,13 +427,10 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  */
 const sigOf = new Map<string, string>();
 /** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. */
-export async function mainTools(lean = false): Promise<string[]> {
+export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
   const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts")).flatMap((e) => ["--extension", e]);
-  // a model on a direct connection routes only: given read and bash it starts doing the work itself
-  // (and loses the request on the way), so anything that needs files or a shell is a fork
-  if (lean) return ["--no-builtin-tools", ...direct];
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
@@ -466,7 +463,7 @@ export function mainModel(accountId: string | undefined): string | undefined {
 }
 /** main's tool flags; a model without tool calling runs talk-only */
 export async function mainToolArgs(accountId: string | undefined): Promise<string[]> {
-  return canUseTools(accountId, mainModel(accountId)) ? mainTools(isDirect(accountById(accountId ?? ""))) : ["--no-tools"];
+  return canUseTools(accountId, mainModel(accountId)) ? mainTools() : ["--no-tools"];
 }
 /** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
 const wantedAccount = (space: string): string | undefined => {
@@ -530,10 +527,22 @@ function guardTurn(space: string, ev: any) {
     `(Ondra) ${t.calls} tool calls on this message so far. The message you are answering: «${t.text.slice(0, 300)}». Send your route block now: answer what you know, and hand anything that needs more work to a fork (kind "new").`,
   );
 }
+/** an engine that has sent nothing for this long, with no command of its own running, is stuck: it is restarted */
+const MAIN_SILENT_MS = 4 * 60_000;
+const heardAt = new Map<string, number>();
 function watchCommands(space: string) {
   const t = turnOf.get(space);
   if (!t) return;
   const now = Date.now();
+  if (!t.cmds.size && now - (heardAt.get(space) ?? now) > MAIN_SILENT_MS) {
+    turnOf.delete(space);
+    const agent = agentOf(space);
+    agentKill(agent);
+    markDead(agent);
+    errors.set(space, "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.");
+    settled.get(space)?.();
+    return;
+  }
   for (const [id, c] of t.cmds) {
     if (c.stopped || now - c.at < MAIN_CMD_MS) continue;
     c.stopped = true;
@@ -620,6 +629,7 @@ async function ensureCaptain(space: string) {
       }
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
+      heardAt.set(space, Date.now());
       if (ev.type === "tool_execution_start" || ev.type === "tool_execution_end") (noteStep(space, ev), guardTurn(space, ev));
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
@@ -864,7 +874,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const runOn = mainModel(accId);
   const acct = accId ? accountById(accId) : undefined;
   const model = runOn
-    ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.${isDirect(acct) ? " You have no file or shell tools here: anything that needs files, code or a shell is a fork (kind \"new\"); build requests go straight to one." : ""}`
+    ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.`
     : "";
   if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
@@ -889,6 +899,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   try {
     await Promise.all([prepareQuery(text), refreshRepos(sp(space))]);
     turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
+    heardAt.set(space, Date.now());
     watch = setInterval(() => watchCommands(space), 5_000);
     await request(agent, { type: "prompt", message: context(space, text, cwd, event) });
     await done;
