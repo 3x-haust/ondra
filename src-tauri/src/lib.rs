@@ -12,6 +12,7 @@
 //!   import  — rules, skills, memory and sessions from other agent tools
 
 mod update;
+mod applog;
 mod components;
 mod browser;
 mod inbrowser;
@@ -359,6 +360,10 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            applog::log_append,
+            applog::logs_recent,
+            applog::feedback_issue,
+            applog::os_version,
             update::update_check,
             update::update_install,
             update::update_prepare,

@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { logError, logWarn } from "../lib/log";
 import { isNetError, waitOnline } from "./net";
 import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
@@ -369,6 +370,7 @@ async function pump(space: string) {
         keepResult(next.replyId);
         if (pj(space)) reportUp(space);
       } catch (e) {
+        logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
         // the project couldn't answer: main still gets what the jobs reported
         if (pj(space)) reportUp(space);
@@ -552,6 +554,7 @@ function watchCommands(space: string) {
     agentKill(agent);
     markDead(agent);
     errors.set(space, "메인이 4분 넘게 아무 응답이 없어서 멈췄어요. 다시 보내 주세요.");
+    logWarn("main", `${space} engine silent for 4 minutes: restarted`);
     settled.get(space)?.();
     return;
   }

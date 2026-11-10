@@ -1,5 +1,6 @@
 // One job: title and state, the transcript, whatever waits on you docked
 // above its own input, and the side panel (changes / files / terminal / web).
+import { feedbackCommand } from "../ui/Feedback";
 import { Fold } from "../ui/Fold";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { decisionFor, homeDir, projectById, taskById, updateTask } from "../state/store";
@@ -501,6 +502,7 @@ export function TaskView(props: { id: string }) {
                   commands={[
                     // the same names as Main's list: verbs for what opens, then this task's own actions
                     btwCommand(() => `task:${task().id}`),
+                    feedbackCommand(),
                     { name: "side", desc: tr("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (showTool("side"), a.trim() && void sendSide(task().space, a)) },
                     { name: "flow", desc: tr("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => showTool("flow") },
                     { name: "changes", desc: tr("변경 사항 열기"), keys: shortcutHint("changes"), icon: "diff", run: () => showTool("changes") },

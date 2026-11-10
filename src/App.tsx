@@ -37,6 +37,8 @@ import { afterLaunch, notesFor } from "./engine/releaseNotes";
 import { ReleaseNotes } from "./ui/ReleaseNotes";
 import { ConfirmHost, ContextMenuHost } from "./ui/taskMenu";
 import { getVersion } from "@tauri-apps/api/app";
+import { installLog } from "./lib/log";
+import { FeedbackHost, setFeedbackVersion } from "./ui/Feedback";
 import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
@@ -101,7 +103,7 @@ export default function App() {
     if (!location.search.includes("fixture")) startTidy();
     if (!location.search.includes("fixture")) {
       startUpdates();
-      void getVersion().then((v) => { setAppVersion(v); void afterLaunch(v); }).catch(() => {});
+      void getVersion().then((v) => { setAppVersion(v); installLog(v); setFeedbackVersion(v); void afterLaunch(v); }).catch(() => {});
     }
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
@@ -202,6 +204,7 @@ export default function App() {
       <Show when={sheetOpen()}><ShortcutSheet /></Show>
       <QuoteBar />
       <Show when={notesFor() !== null}><ReleaseNotes current={appVersion()} /></Show>
+      <FeedbackHost />
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
       <VisualViewer />

@@ -105,6 +105,13 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 /** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
 export const openExternal = (url: string) => call<void>("open_url", { url });
+/** The app's log: append lines to a day's file (files before `keepFrom` are removed). */
+export const logAppend = (day: string, lines: string[], keepFrom?: string) => call<void>("log_append", { day, lines, keepFrom: keepFrom ?? null });
+/** The newest part of the app's log, up to `maxBytes`. */
+export const logsRecent = (maxBytes: number) => call<string>("logs_recent", { maxBytes }, "2026-11-10 17:20:01 INFO  [app] start 0.38.5 · Mac OS X 15.1\n2026-11-10 17:21:44 ERROR [task] t1 failed: 엔진 종료 (코드 1)\n");
+export const osVersion = () => call<string>("os_version", undefined, "macOS");
+/** File an issue on Ondra's repository with the user's GitHub CLI; rejects with "NO_GH" when it can't. */
+export const feedbackIssue = (title: string, body: string) => call<string>("feedback_issue", { title, body });
 export const openInEditor = (path: string) => call<void>("open_in_editor", { path });
 /** `env`: the space's spaceEnv, so the shell runs as that space. */
 export const openInTerminal = (path: string, env: Env = []) => call<void>("open_in_terminal", { path, env });
