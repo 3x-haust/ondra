@@ -171,10 +171,24 @@ export function Composer(props: {
     void listenDrops();
   });
 
+  // empty, it keeps its resting size: measured while the box was narrow (a pane opening, the
+  // hero laying out), the placeholder wrapped letter by letter and the box stayed that tall
   const grow = () => {
+    if (!el) return;
+    if (!el.value) return void (el.style.height = "");
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
   };
+  // and when its width changes, its text re-wraps: measure again
+  onMount(() => {
+    let w = 0;
+    const ro = new ResizeObserver(([e]) => {
+      const now = Math.round(e.contentRect.width);
+      if (now !== w) (w = now), grow();
+    });
+    queueMicrotask(() => el && ro.observe(el));
+    onCleanup(() => ro.disconnect());
+  });
   // ── "/" commands and "@" files
   const [pick, setPick] = createSignal<Pick | null>(null);
   const [sel, setSel] = createSignal(0);
