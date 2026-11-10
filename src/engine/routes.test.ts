@@ -128,3 +128,15 @@ describe("a reply's text outside its route", () => {
     expect(strayProse("이유는 캐시 때문이에요. 자세히 보면…", "확인했어요")).toBe("이유는 캐시 때문이에요. 자세히 보면…");
   });
 });
+
+describe("a reply said twice", () => {
+  it("knows the same line worded a little differently", async () => {
+    const { sameSaid } = await import("./captain");
+    expect(sameSaid("안녕하세요, 뭐 도와드릴까요?", "안녕하세요! 무엇을 도와드릴까요?")).toBe(true);
+    expect(sameSaid("확인했어요.", "확인했어요")).toBe(true);
+  });
+  it("keeps a short reply beside a real answer", async () => {
+    const { sameSaid } = await import("./captain");
+    expect(sameSaid("확인해 봤어요", "로그인 후 대시보드로 가지 않는 건 라우터 가드가 세션 복원을 기다리지 않아서예요.")).toBe(false);
+  });
+});
