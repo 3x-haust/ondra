@@ -103,7 +103,8 @@ describe("a subagent's result reaches its job", () => {
     queued = [];
     emit({ type: "agent_settled" });
     await vi.waitFor(() => expect(task("job").pending).toBeUndefined());
-    expect(sent("prompt")).toHaveLength(1);
+    // the review is not sent again; the only other prompt is Ondra asking once whether the job is finished
+    expect(sent("prompt").filter((m) => !m.includes("without a done block"))).toHaveLength(1);
     expect(task("review").taken).toBeTypeOf("number");
   });
 
