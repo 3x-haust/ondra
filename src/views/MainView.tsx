@@ -17,7 +17,7 @@ import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
-import { chatKey, editMain, inChat, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
+import { chatKey, editMain, inChat, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -182,6 +182,35 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
   );
 }
 
+/** "생각하는 중 · 12초": opened, what the model reasons streams under it as it comes */
+function Thinking(props: { m: CaptainMessage; label: string }) {
+  const thought = () => mainThought(chatKey(props.m.space, props.m.project)).trim();
+  const [open, setOpen] = createSignal(false);
+  let box: HTMLDivElement | undefined;
+  // it follows the newest line while the reader is at the end of it
+  let atEnd = true;
+  createEffect(on(thought, () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
+  return (
+    <div class="reply-think" classList={{ open: open() && !!thought() }}>
+      <button type="button" class="reply-thinking shimmer" disabled={!thought()} aria-expanded={open()} onClick={() => setOpen(!open())}>
+        {props.label}
+        <Show when={thought()}>
+          <Icon name="chevron" size={12} class="reply-think-chev" />
+        </Show>
+      </button>
+      <Show when={open() && thought()}>
+        <div
+          class="reply-thought"
+          ref={(el) => ((box = el), queueMicrotask(() => (el.scrollTop = el.scrollHeight)))}
+          onScroll={(e) => (atEnd = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 24)}
+        >
+          {thought()}
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined; full?: boolean }) {
   const routes = () => props.m.routes ?? [];
   const rows = () => handed(props.m);
@@ -199,7 +228,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
-            <span class="shimmer reply-thinking">{props.m.step ? noteText(props.m.step) : t("생각하는 중")} · {short(soon() - props.m.at)}</span>
+            <Thinking m={props.m} label={`${props.m.step ? noteText(props.m.step) : t("생각하는 중")} · ${short(soon() - props.m.at)}`} />
           </Match>
           <Match when={props.m.error}>
             {(err) => (

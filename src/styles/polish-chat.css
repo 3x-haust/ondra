@@ -1853,3 +1853,47 @@
     transform: translateY(-4px);
   }
 }
+
+/* "생각하는 중": a quiet button once there is reasoning to show; opened, it streams under the line */
+.reply-think > .reply-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-lg);
+  line-height: 24px;
+  color: inherit;
+  cursor: pointer;
+}
+.reply-think > .reply-thinking:disabled {
+  cursor: default;
+}
+.reply-think-chev {
+  color: var(--ink-3);
+  transition: transform var(--dur-fast) ease;
+}
+.reply-think.open .reply-think-chev {
+  transform: rotate(90deg);
+}
+.reply-thought {
+  margin: var(--s-6) 0 0;
+  padding: 0 0 0 var(--s-12);
+  max-height: 260px;
+  overflow-y: auto;
+  border-left: 2px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  animation: think-open var(--dur-fast) ease-out;
+}
+@keyframes think-open {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
