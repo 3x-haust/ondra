@@ -1786,3 +1786,17 @@
     transition: none;
   }
 }
+
+/* a project's chat: under a finished job's row, its own closing answer, as it said it */
+.job-result {
+  justify-self: stretch;
+  display: grid;
+  gap: var(--s-12);
+  margin: var(--s-4) 0 var(--s-12) var(--s-8);
+  min-width: 0;
+}
+.job-result .blocks {
+  display: grid;
+  gap: var(--s-12);
+  min-width: 0;
+}

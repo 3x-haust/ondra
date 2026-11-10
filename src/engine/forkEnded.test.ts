@@ -43,10 +43,10 @@ describe("main when a job ends", () => {
 });
 
 describe("a project's own chat", () => {
-  it("still reports what a fork came back with, under its row", () => {
-    expect(FORK_REPORT).toContain("Tell the user what came out");
-    expect(FORK_REPORT).toContain("your report goes under it");
+  it("shows the fork's own answer under its row, so main doesn't retell it", () => {
+    expect(FORK_REPORT).toContain("the fork's own closing answer as it wrote it");
+    expect(FORK_REPORT).toContain("Don't retell or summarise it");
     expect(FORK_REPORT).toContain('"CI 결과는 기다리지 않았어요" stays that');
-    expect(FORK_REPORT).not.toContain('{"reply":"","routes":[]}');
+    expect(FORK_REPORT).toContain('{"reply":"","routes":[]}');
   });
 });

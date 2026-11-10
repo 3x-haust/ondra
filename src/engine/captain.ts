@@ -713,13 +713,14 @@ export const FORK_ENDED = [
 ].join("\n");
 
 /**
- * A project's own chat is about that project's work alone, so there main still reports what a
- * fork came back with, under the fork's row (Main, across projects, keeps to the row).
+ * A project's own chat is about that project's work alone: under the fork's row it shows the fork's own
+ * closing answer as the fork wrote it (words, blocks, screenshots), so it's there even if main never gets
+ * to speak; main adds only what that answer doesn't say.
  */
 export const FORK_REPORT = [
-  "The chat shows this fork as a row (a click opens its full result); your report goes under it.",
-  "Tell the user what came out, short and visual (blocks), as an \"answer\": the result first (for something built: does it work, seen running, in one plain line, \"돼요\" / \"아직 돌려 보진 못했어요\" / \"안 돼요\"; then the screenshots or files the fork made, so they can see it), then what fits the work (the cause, what changed, how it was checked; what went out and its status; links). Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"). Answer every question in the user's follow-ups, the 왜 first.",
-  "Then route a next step only when what the user asked for still isn't done and the step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. \"Not verified\" items are reported, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Ask only a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one question, your recommendation first. Don't redo finished work.",
+  "The chat shows this fork as a row and, right under it, the fork's own closing answer as it wrote it (its words, blocks and screenshots). Don't retell or summarise it: no second report of what came out, what changed or how it was checked.",
+  'When it finished as asked and nothing needs the user, add nothing: {"reply":"","routes":[]}.',
+  FORK_ENDED.split("\n").slice(2).join("\n"),
 ].join("\n");
 
 /** What main does when a project it handed work to has finished: its jobs show as rows here too. */
