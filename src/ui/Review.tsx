@@ -10,6 +10,7 @@ import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
 import { fileSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, openInEditor, pageSrc, pdfSrc, revealPath, type GitChanges } from "../lib/native";
 import { Fold } from "./Fold";
+import { openImage } from "./Lightbox";
 import { Icon } from "./Icon";
 import { GlyphMark } from "../views/Sidebar";
 import { langOf, tokenize, type Tok } from "./highlight";
@@ -361,6 +362,9 @@ export function PreviewPane() {
           <div class="fv-head">
             <span class="dv-path" title={full()}><span class="dv-dir">{dir().replace(/^\/Users\/[^/]+/, "~")}/</span><span class="dv-name">{name()}</span></span>
             <span class="spacer" />
+            <Show when={kind() === "image"}>
+              <button class="icon-btn sm" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(full())}><Icon name="zoom" size={14} /></button>
+            </Show>
             <button class="btn sm ghost" title={tr("편집기에서 열기")} onClick={() => openInEditor(full())}><Icon name="external" size={14} />{tr("편집기")}</button>
             <button class="btn sm ghost" title={tr("Finder에서 보기")} onClick={() => revealPath(full())}><Icon name="folder" size={14} />Finder</button>
           </div>
@@ -372,7 +376,7 @@ export function PreviewPane() {
                 <iframe class="aframe" src={pdfSrc(full())} title={name()} />
               </Show>
             </Match>
-            <Match when={kind() === "image"}><div class="fv-img"><img src={fileSrc(full())} alt={name()} /></div></Match>
+            <Match when={kind() === "image"}><div class="fv-img"><img src={fileSrc(full())} alt={name()} title={tr("크게 보기")} onClick={() => openImage(full())} /></div></Match>
             <Match when={kind() === "video"}><video class="pv-video" src={fileSrc(full())} controls /></Match>
             <Match when={kind() === "md"}><div class="pv-md"><Markdown text={md() ?? ""} /></div></Match>
             <Match when={kind() === "code"}><Viewer root={dir()} path={name()} startDiff={false} back={() => setPreviewPath(null)} /></Match>
@@ -498,7 +502,7 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
           when={mode() === "file"}
           fallback={<DiffCard f={props.changed!} root={props.root} open toggle={() => setMode("file")} />}
         >
-          <Show when={!IMG.test(props.path)} fallback={<div class="fv-img"><img src={fileSrc(full())} alt={name} /></div>}>
+          <Show when={!IMG.test(props.path)} fallback={<div class="fv-img"><img src={fileSrc(full())} alt={name} title={tr("크게 보기")} onClick={() => openImage(full())} /></div>}>
             <Show when={text()} fallback={<div class="pane-empty" />}>
               {(t) => (
                 <Show
