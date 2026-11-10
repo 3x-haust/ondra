@@ -109,6 +109,10 @@ function save(): Promise<void> {
   });
   return saving;
 }
+/** The app is quitting (or restarting into an update): engines that end now were stopped by that, not failed. */
+let quitting = false;
+export const appQuitting = () => quitting;
+export const setQuitting = (on: boolean) => void (quitting = on);
 /** Save now whatever waits (before quitting or restarting into an update). */
 export async function flushState() {
   saveSoon.flush();
@@ -117,7 +121,7 @@ export async function flushState() {
 
 export async function loadState() {
   // quitting: the app waits (a moment at most) for the last save
-  void onEvent("state:flush", () => void flushState().finally(() => void stateFlushed()));
+  void onEvent("state:flush", () => ((quitting = true), void flushState().finally(() => void stateFlushed())));
   if (!inTauri && location.search.includes("fixture")) {
     setState(reconcile(fixture(freshState())));
     const { setCtx } = await import("./ctx");

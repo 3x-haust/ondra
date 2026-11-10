@@ -7,7 +7,7 @@ import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
-import { accountById, accountsIn, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
+import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
@@ -1230,6 +1230,8 @@ function handlers(id: string, run: Run) {
     exit(code: number | null) {
       markDead(agent);
       const t = taskById(id);
+      // the app quitting took it down: it stays running and picks up again when the app opens
+      if (appQuitting()) return;
       if (t && runs.get(id) === run && (t.status === "running" || t.status === "waiting")) {
         const tail = stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ");
         fail(id, tail || `엔진 종료 (코드 ${code ?? "?"})`);
