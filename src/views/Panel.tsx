@@ -604,7 +604,7 @@ const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.
 // which tabs go with you to another place (see enterPlace in state/ui)
 setTabFits((place, kind) => {
   if (kind === "preview") return previewPlace() === place ? "use" : "drop";
-  if (place === "main") return jobOnly(kind) ? "keep" : "use";
+  if (place === "main" || place === "results") return jobOnly(kind) ? "keep" : "use";
   const t = state.tasks.find((x) => x.id === place);
   if (!t) return "use";
   // the shared browser you opened yourself goes along; a task's own page doesn't

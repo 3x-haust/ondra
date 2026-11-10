@@ -1140,7 +1140,23 @@
     flex-basis: 100%;
   }
 }
-@container (max-width: 560px) {
+/* beside the panel: the list stays (it's how you move between results), the project filter steps out */
+@container (max-width: 640px) {
+  .res-seg {
+    display: none;
+  }
+  .res-list {
+    width: 184px;
+  }
+  .res-doc {
+    padding-inline: var(--s-16);
+  }
+  .res-top {
+    margin-inline: calc(var(--s-16) * -1);
+    padding-inline: var(--s-16);
+  }
+}
+@container (max-width: 420px) {
   .res-list {
     display: none;
   }
