@@ -1962,3 +1962,13 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* the login button keeps its words on one line; the address beside it is what gives way */
+.decision-login > span:not(.muted) {
+  flex: none;
+  white-space: nowrap;
+}
+.decision-login > .muted {
+  flex: 0 1 auto;
+  min-width: 0;
+}
