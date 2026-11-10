@@ -161,6 +161,32 @@ export function connModel(accountId: string | undefined, model: string | undefin
   return id === undefined ? undefined : c.models.find((m) => m.id === id);
 }
 
+const PICKABLE = ["low", "medium", "high", "xhigh", "max"];
+/**
+ * The 추론 강도 levels a connection's model offers: none when it doesn't reason, the ones its server
+ * takes when it lists them ("low, high, max" → 낮음 · 높음 · 최대); undefined: every level (not a
+ * connection's model, or a server that takes the usual ones).
+ */
+export function effortLevels(accountId: string | undefined, model: string | undefined): string[] | undefined {
+  const m = connModel(accountId, model);
+  if (!m) return undefined;
+  if (!m.reasoning) return [];
+  const map = levelMap(m.efforts);
+  if (!map) return undefined;
+  const takes = new Set(Object.values(map));
+  const levels = PICKABLE.filter((l) => takes.has(l));
+  return levels.length ? levels : undefined;
+}
+/** The level a picked effort really runs at on a connection's model: what the server is sent ("보통" on "low, high, max" runs as 높음). */
+export function effortShown(accountId: string | undefined, model: string | undefined, effort: string): string {
+  const levels = effortLevels(accountId, model);
+  if (!levels) return effort;
+  if (!levels.length) return "";
+  if (levels.includes(effort)) return effort;
+  const to = levelMap(connModel(accountId, model)?.efforts)?.[effort];
+  return to && levels.includes(to) ? to : levels[levels.length - 1];
+}
+
 /** False only for a connection's model marked as having no tools: work on it runs talk-only. */
 export function canUseTools(accountId: string | undefined, model: string | undefined): boolean {
   return connModel(accountId, model)?.tools !== false;
