@@ -13,14 +13,15 @@
 .composer-wrap .composer.drop {
   border-color: var(--accent);
 }
-/* reading size, the same as the messages it sends */
+/* reading size, the same as the messages it sends. The line is kept close to the glyphs: macOS draws the caret
+   the full line tall, so a roomy line leaves it towering over the text; the padding gives the room back */
 .composer-wrap .composer textarea {
   font-size: var(--fs-lg);
-  line-height: var(--lh-lg);
+  line-height: var(--lh-md);
 }
 .composer-wrap:not(.slim) .composer textarea {
   min-height: 42px;
-  padding: var(--s-12) var(--s-16) var(--s-4);
+  padding: 14px var(--s-16) 6px;
 }
 .composer-wrap:not(.slim) .composer.big textarea {
   min-height: 68px;
@@ -1767,7 +1768,7 @@
   gap: var(--s-4);
 }
 .composer-wrap.slim .composer textarea {
-  padding: 8px var(--s-4) 10px;
+  padding: 10px var(--s-4) 12px;
 }
 .composer-wrap.slim .send {
   margin-left: 0;
