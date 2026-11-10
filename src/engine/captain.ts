@@ -18,6 +18,7 @@ import { skillScope } from "./skillPick";
 import { failedModelIn, modelFor, nextModel } from "./models";
 import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
+import { canUseTools, isDirect } from "./connections";
 import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
@@ -377,7 +378,7 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
         await waitOnline(attempt + 1);
         continue;
       }
-      if (attempt < 3 && isModelError(msg) && !state.settings.captainModel) {
+      if (attempt < 3 && isModelError(msg) && mainModel(accountOf.get(space)) === modelFor(accountOf.get(space) ?? "")) {
         const acc = accountOf.get(space)!;
         const next = await nextModel(acc, failedModelIn(msg) ?? modelFor(acc));
         if (next) {
@@ -452,7 +453,16 @@ const promptSig = () => {
   for (let i = 0; i < CAPTAIN_SYSTEM.length; i++) h = (h * 31 + CAPTAIN_SYSTEM.charCodeAt(i)) | 0;
   return h.toString(36);
 };
-const startSig = async (dir: string, skills: string) => `${await instructionSig(dir)}\n${(await mainTools()).join(" ")}\n${promptSig()}\n${skills}`;
+/** The model main runs on: the account's, or the one set for main (not on a direct connection, whose models are its own). */
+export function mainModel(accountId: string | undefined): string | undefined {
+  const acc = state.accounts.find((a) => a.id === accountId);
+  return (!isDirect(acc) && state.settings.captainModel) || (accountId ? modelFor(accountId) : undefined);
+}
+/** main's tool flags; a model without tool calling runs talk-only */
+export async function mainToolArgs(accountId: string | undefined): Promise<string[]> {
+  return canUseTools(accountId, mainModel(accountId)) ? mainTools() : ["--no-tools"];
+}
+const startSig = async (dir: string, skills: string, space: string) => `${await instructionSig(dir)}\n${(await mainToolArgs(accountOf.get(space))).join(" ")}\n${promptSig()}\n${skills}`;
 export async function restartIfStale(space: string): Promise<boolean> {
   if (busy.has(space)) return false;
   return restartStale(space, (await skillScope(sp(space))).signature);
@@ -460,7 +470,7 @@ export async function restartIfStale(space: string): Promise<boolean> {
 async function restartStale(space: string, skills: string): Promise<boolean> {
   const agent = agentOf(space);
   if (!isAlive(agent) || !attached.has(space) || !sigOf.has(space)) return false;
-  if ((await startSig(folderOf(space), skills)) === sigOf.get(space)) return false;
+  if ((await startSig(folderOf(space), skills, space)) === sigOf.get(space)) return false;
   const gone = new Promise<void>((done) => {
     listen(agent, { event() {}, exit: () => done() });
     setTimeout(done, 3000);
@@ -557,7 +567,7 @@ async function ensureCaptain(space: string) {
   });
   const space0 = spaceById(sp(space));
   const proj = projectOf(space);
-  const model = state.settings.captainModel || modelFor(acc.id);
+  const model = mainModel(acc.id);
   // A reload or restart soon after the last reply keeps the session: its prefix
   // is still in the provider cache. After a quiet spell it would be cold anyway,
   // so a fresh session with a text recap is cheaper.
@@ -568,7 +578,7 @@ async function ensureCaptain(space: string) {
     sessionDir(space),
     ...(resume ? ["--continue"] : []),
     // Search tools are declared; read and bash load when needed.
-    ...(await mainTools()),
+    ...(await mainToolArgs(acc.id)),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote
     "--shared-prompt-cache",
@@ -584,7 +594,7 @@ async function ensureCaptain(space: string) {
   ];
   // a simulated project's folder is made up: main runs in the space's folder then
   const cwd = expand((isSim(space) ? "" : proj?.folder) || space0.folder || "~");
-  const signature = await startSig(cwd, skills.signature);
+  const signature = await startSig(cwd, skills.signature, space);
   // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
   const door = isSim(space) ? [] : [...(await bridgeEnv()), ["APP_WORKER_ID", agent] as [string, string]];
   await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)], ...door]);

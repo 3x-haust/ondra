@@ -397,4 +397,7 @@ export default {
   "변경 {i}/{n}": "Change {i} of {n}",
   "줄 {line}, 열 {col}": "Ln {line}, Col {col}",
   "일반 텍스트": "Plain Text",
+  "이 모델은 도구를 못 써서 대화만 해요": "This model can't use tools, so it only chats",
+  "이 모델은 도구를 못 써요 · 대화만 하도록 다시 시작해요": "This model can't use tools · starting again in chat-only mode",
+  "도구 사용 여부가 달라서 다음 메시지부터 이 모델로 바꿔요": "This model differs in tool use, so it takes over from the next message",
 } satisfies Record<string, string>;

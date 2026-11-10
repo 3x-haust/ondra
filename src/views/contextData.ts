@@ -2,7 +2,7 @@
 // A live agent answers itself; a stopped job or chat is rebuilt in a short-lived
 // engine started with the same arguments (no session, so no conversation).
 import { skillPaths } from "../engine/skillPick";
-import { mainTools, restartIfStale } from "../engine/captain";
+import { mainModel, mainToolArgs, restartIfStale } from "../engine/captain";
 import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
 import { accountEnv, offTools, workerTools } from "../engine/tasks";
@@ -187,9 +187,9 @@ export async function loadChat(key: string, accountId: string): Promise<Loaded> 
   // (next message would anyway), so what's shown is what the model gets
   await restartIfStale(key).catch(() => false);
   const { ctx, live } = await liveOr(`captain:${key}`, async () => {
-    const model = state.settings.captainModel || modelFor(accountId);
+    const model = mainModel(accountId);
     const args = [
-      ...(await mainTools()),
+      ...(await mainToolArgs(accountId)),
       "--no-skills",
       "--thinking",
       "low",

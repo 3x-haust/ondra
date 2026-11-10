@@ -426,11 +426,23 @@ pub fn account_dir_path(app: AppHandle, account_id: String) -> Option<String> {
 /// Which providers this account is logged into (names only; secrets stay in the file).
 #[tauri::command]
 pub fn account_providers(app: AppHandle, account_id: String) -> Vec<String> {
-    let dir = account_dir(&app, &account_id).unwrap_or_else(default_agent_dir);
-    let Ok(text) = std::fs::read_to_string(dir.join("auth.json")) else { return vec![] };
-    let Ok(serde_json::Value::Object(map)) = serde_json::from_str(&text) else { return vec![] };
-    let mut keys: Vec<String> = map.keys().cloned().collect();
+    let own = account_dir(&app, &account_id);
+    let dir = own.clone().unwrap_or_else(default_agent_dir);
+    let mut keys: Vec<String> = std::fs::read_to_string(dir.join("auth.json"))
+        .ok()
+        .and_then(|text| match serde_json::from_str(&text) {
+            Ok(serde_json::Value::Object(map)) => Some(map.keys().cloned().collect()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    // an Ondra-made account also counts the direct connections in its models.json (names only)
+    if own.is_some() {
+        if let Ok(text) = std::fs::read_to_string(dir.join("models.json")) {
+            keys.extend(crate::providers::provider_ids(&text));
+        }
+    }
     keys.sort();
+    keys.dedup();
     keys
 }
 
@@ -439,6 +451,8 @@ pub fn account_providers(app: AppHandle, account_id: String) -> Vec<String> {
 pub fn account_remove(app: AppHandle, account_id: String) {
     if let Some(dir) = account_dir(&app, &account_id) {
         if dir.starts_with(data_dir(&app)) {
+            // its direct connections' keys go with it
+            crate::providers::forget_secrets(&dir);
             let _ = std::fs::remove_dir_all(dir);
         }
     }

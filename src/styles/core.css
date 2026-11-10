@@ -2619,3 +2619,10 @@ body {
   flex: 1;
   min-width: 0;
 }
+/* a model that can't call tools: said where it is picked */
+.model-tag {
+  flex-shrink: 0;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}

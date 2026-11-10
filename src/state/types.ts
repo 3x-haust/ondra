@@ -55,6 +55,37 @@ export interface Account {
   badModels: string[];
   stats: TokenStats;
   lastUsedAt?: number;
+  /** a direct connection (any compatible address and key) instead of a login */
+  connection?: Connection;
+}
+
+/** API kinds the engine can talk to a custom provider with */
+export type ConnectionApi = "openai-completions" | "openai-responses" | "anthropic-messages" | "google-generative-ai";
+
+export interface Connection {
+  /** the provider id in the account's models.json ("direct-ollama"); models are "<provider>/<id>" */
+  provider: string;
+  preset: string;
+  baseUrl: string;
+  api: ConnectionApi;
+  /** names of extra headers; their values (and the key) live in the keychain */
+  headers: string[];
+  hasKey: boolean;
+  models: ConnectionModel[];
+}
+
+export interface ConnectionModel {
+  id: string;
+  name?: string;
+  contextWindow: number;
+  maxTokens: number;
+  /** 도구 사용 가능: off runs it with no tools (talk only) */
+  tools: boolean;
+  /** 추론 */
+  reasoning: boolean;
+  image: boolean;
+  /** reasoning_effort values the server takes ("low, high, max"); empty = the usual ones */
+  efforts?: string[];
 }
 
 /** One relay leg = one fresh engine session. */

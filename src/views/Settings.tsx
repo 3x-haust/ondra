@@ -30,11 +30,12 @@ import { ago, agoIn, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { LoginSheet } from "./Login";
+import { ConnectionSheet } from "./Connection";
 import { keyText, SHORTCUT_EXTRAS } from "./ShortcutSheet";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
 import { HooksTab } from "./Hooks";
-import { Logo } from "../ui/Logos";
+import { Logo, logoFor } from "../ui/Logos";
 import { appName } from "../lib/brand";
 import { Sheet } from "../ui/Sheet";
 import { getVersion } from "@tauri-apps/api/app";
@@ -451,14 +452,14 @@ function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
 // ───────────────── accounts
 const providerName = (p: string) =>
   /anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p;
-const servicesOf = (a: Account) => [...new Set(a.providers.map(providerName))];
+const servicesOf = (a: Account) => (a.connection ? [] : [...new Set(a.providers.map(providerName))]);
 /** the name the person gave an account; "" when it still has a made-up one ("기본", "회사", "회사 2") */
 const ownLabel = (a: Account) => {
   const made = ["기본", "계정", ...state.spaces.map((s) => s.label)].flatMap((l) => [l, t(l)]);
   return a.label && !made.some((l) => a.label === l || a.label.startsWith(`${l} `)) ? a.label : "";
 };
 /** signed in = the account has a provider login (the same test the account chip uses) */
-const signedIn = (a: Account) => a.providers.length > 0;
+const signedIn = (a: Account) => a.providers.length > 0 || !!a.connection;
 
 /** "2시간" / "3일": how long until a plan window starts over */
 const resetIn = (ms: number) => {
@@ -472,16 +473,17 @@ const resetIn = (ms: number) => {
  *  its sheet carries the same title */
 const loginWord = (a: Account) => (signedIn(a) ? "서비스 추가" : "로그인");
 
-function AccountRow(props: { id: string; onLogin: () => void }) {
+function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
   const [confirm, setConfirm] = createSignal(false);
   const [typed, setTyped] = createSignal<string>();
   const used = () => a().stats.input + a().stats.cacheRead + a().stats.cacheWrite + a().stats.output;
   const cache = () => Math.round((cacheShare(a()) ?? 0) * 100);
   // the plan windows the composer shows (5시간 / 주간), only while signed in
-  onMount(() => signedIn(a()) && void refreshLimits(props.id));
-  const windows = () => (signedIn(a()) ? usageOf(props.id, now()) : []);
-  const credits = () => (signedIn(a()) ? creditsOf(props.id) : undefined);
+  // a direct connection has no plan windows
+  onMount(() => signedIn(a()) && !a().connection && void refreshLimits(props.id));
+  const windows = () => (signedIn(a()) && !a().connection ? usageOf(props.id, now()) : []);
+  const credits = () => (signedIn(a()) && !a().connection ? creditsOf(props.id) : undefined);
   // provider + email until the person names it; clearing the name goes back to that
   const made = () => state.spaces.find((s) => s.id === a().space)?.label ?? "계정";
   const auto = () => accountName({ ...a(), label: made() });
@@ -493,6 +495,9 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         <For each={servicesOf(a())}>
           {(p) => <span class="acc-logo" title={props.id === "default" ? t("{p} · 이 Mac의 기본 로그인", { p }) : p}><Logo name={p === "Claude" ? "claude" : p} size={14} /></span>}
         </For>
+        <Show when={a().connection}>
+          {(c) => <span class="acc-logo" title={`${t("직접 연결|provider")} · ${c().baseUrl}`}><Show when={logoFor(c().preset)} fallback={<Icon name="link" size={14} />}><Logo name={c().preset} size={14} /></Show></span>}
+        </Show>
         <span class="acc-name-wrap" data-v={typed() ?? (ownLabel(a()) || auto())}>
           <input
             class="acc-name"
@@ -533,7 +538,14 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
         <Show when={used()}>
           <span class="acc-stat acc-cache" title={t("{k} 토큰", { n: used(), k: tokens(used()) })}>{t("캐시 적중 {p}%", { p: cache() })}</span>
         </Show>
-        <button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{t(loginWord(a()))}</button>
+        <Show when={a().connection} fallback={<button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{t(loginWord(a()))}</button>}>
+          {(c) => (
+            <>
+              <span class="acc-stat acc-conn" title={c().baseUrl}>{t("모델 {n}개", { n: c().models.length })}</span>
+              <button class="btn sm" onClick={props.onEdit}>{t("편집")}</button>
+            </>
+          )}
+        </Show>
         <Show when={props.id !== "default"}>
           <Show
             when={confirm()}
@@ -548,7 +560,7 @@ function AccountRow(props: { id: string; onLogin: () => void }) {
                 setState("accounts", (l) => l.filter((x) => x.id !== props.id));
               }}
             >
-              {t("계정 삭제")}
+              {a().connection ? t("연결 삭제") : t("계정 삭제")}
             </button>
           </Show>
         </Show>
@@ -615,6 +627,8 @@ function Accounts() {
   };
   // each workspace with its own accounts: its name, folder and instructions are set here too
   const [editing, setEditing] = createSignal<SpaceId | "new" | null>(null);
+  /** 직접 연결: a new one in a workspace, or an existing one to edit */
+  const [conn, setConn] = createSignal<{ space: SpaceId; accountId?: string } | null>(null);
   return (
     <>
       <div class="set-h2-row">
@@ -627,6 +641,7 @@ function Accounts() {
           <>
             <GroupTitle title={t(s.label)}>
               <Show when={state.space === s.id}><span class="sp-now">{t("현재")}</span></Show>
+              <button class="btn ghost sm" onClick={() => setConn({ space: s.id })}><Icon name="link" size={14} />{t("직접 연결|provider")}</button>
               <button class="btn ghost sm" disabled={!!pending()} onClick={() => add(s.id)}><Icon name="plus" size={14} />{t("계정 추가")}</button>
             </GroupTitle>
             <div class="set-group">
@@ -638,7 +653,7 @@ function Accounts() {
                 <Icon name="chevron" size={14} class="sp-go" />
               </button>
               <For each={state.accounts.filter((a) => a.space === s.id)} fallback={<Show when={pending()?.space !== s.id}><div class="empty-line">{t("계정 없음")}</div></Show>}>
-                {(a) => <AccountRow id={a.id} onLogin={() => setLogin({ id: a.id, title: loginWord(a) })} />}
+                {(a) => <AccountRow id={a.id} onLogin={() => setLogin({ id: a.id, title: loginWord(a) })} onEdit={() => setConn({ space: a.space, accountId: a.id })} />}
               </For>
               <Show when={pending()?.space === s.id}>
                 <div class="acc-row acc-pending">
@@ -655,6 +670,7 @@ function Accounts() {
       </For>
       <Show when={login()}>{(l) => <LoginSheet accountId={l().id} title={t(l().title)} onClose={() => void closed()} />}</Show>
       <Show when={editing()}>{(id) => <SpaceSheet id={id()} onClose={() => setEditing(null)} />}</Show>
+      <Show when={conn()}>{(c) => <ConnectionSheet space={c().space} accountId={c().accountId} onClose={() => setConn(null)} />}</Show>
     </>
   );
 }

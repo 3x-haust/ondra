@@ -20,6 +20,13 @@ const fresh = new Set<string>();
 
 /** Ask the engine again (once per app run unless forced, e.g. after a login). */
 export function refreshModels(accountId: string, force = false): Promise<string[]> {
+  // a direct connection's models are the ones written for it: no engine to ask
+  const conn = state.accounts.find((a) => a.id === accountId)?.connection;
+  if (conn) {
+    const l = conn.models.map((m) => `${conn.provider}/${m.id}`);
+    setLists(accountId, l);
+    return Promise.resolve(l);
+  }
   if (!force && fresh.has(accountId)) return Promise.resolve(lists[accountId] ?? []);
   const going = inflight.get(accountId);
   if (going && !force) return going;
