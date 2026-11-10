@@ -143,3 +143,13 @@ describe("a resumed job with a finished review it never got", () => {
     expect(last(sent("prompt"))).not.toContain(FINDING);
   });
 });
+
+describe("a refused request", () => {
+  it("is told apart from limits and outages", async () => {
+    const { isRefusedRequest } = await import("./tasks");
+    expect(isRefusedRequest('{"detail":"Bad Request"}')).toBe(true);
+    expect(isRefusedRequest('400 {"error":{"type":"invalid_request_error","message":"bad image"}}')).toBe(true);
+    expect(isRefusedRequest("400 context_length_exceeded: maximum context length")).toBe(false);
+    expect(isRefusedRequest("429 rate limit")).toBe(false);
+  });
+});

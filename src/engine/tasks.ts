@@ -86,6 +86,8 @@ interface Run {
   msgActed?: boolean;
   /** a message that only reasoned past THINK_MAX_MS was cut: the turn's end sends it on to its next step */
   thinkCut?: boolean;
+  /** the provider refused the session itself (400): it went on once in a fresh session */
+  freshAfterRefusal?: boolean;
   /** toolCallId → when that shell's output last changed (the search and wait watchdog) */
   changed?: Map<string, number>;
   /** searches and waits the watchdog already tried to stop */
@@ -1398,6 +1400,17 @@ async function settle(id: string, run: Run) {
     void carryOnWhenOnline(id, run, agent, err);
     return;
   }
+  // the provider refuses the whole request (400 Bad Request): something in the session's history
+  // can't be sent again, so retrying the same session fails every time. It goes on once in a fresh
+  // session from what the thread shows; a second refusal there is a real failure.
+  if (run.error && isRefusedRequest(run.error) && !run.freshAfterRefusal && !run.done && !run.handoff && !run.asked) {
+    run.freshAfterRefusal = true;
+    logWarn("task", `${id} request refused (${run.error.slice(0, 120)}): going on in a fresh session`);
+    run.error = undefined;
+    updateTask(id, (x) => push(x, { kind: "note", text: "요청이 거부돼서 새 세션으로 이어가요" }));
+    void newSession(id, run, cardFromThread(taskById(id)!));
+    return;
+  }
   if (run.error && !run.done && !run.handoff && !run.asked) {
     fail(id, run.error);
     return;
@@ -1553,6 +1566,21 @@ export function onlyWaits(card: Handoff): boolean {
     /(wait|기다|(답|응답|결과|리뷰)[이가을를]? (오면|받으면))/i.test(next) &&
     !/(고치|고쳐|만들|돌리|돌려|올리|올려|배포|수정|추가|작성|머지|푸시|\b(fix|build|run|push|deploy|write|implement|merge)\b)/i.test(next)
   );
+}
+
+/** A 400 for the request as a whole, not a limit or an outage. */
+export const isRefusedRequest = (e: string) => /\bBad Request\b|"status":\s*400\b|\b400\b.*invalid_request|invalid_request_error/i.test(e) && !/context|too long|maximum|rate|quota|limit/i.test(e);
+
+/** A handoff card made from the thread, for a session that couldn't write its own. */
+export function cardFromThread(t: Task): Handoff {
+  const said = t.entries.flatMap((e) => (e.kind === "text" && e.text.trim() ? [e.text.trim().replace(/```blocks[\s\S]*?```/g, "").trim().slice(0, 600)] : [])).filter(Boolean).slice(-4);
+  const done = t.plan.filter((p) => p.state === "done").map((p) => p.text);
+  const open = t.plan.find((p) => p.state === "now" || p.state === "todo")?.text;
+  return {
+    did: [...done.map((d) => `(plan) ${d}`), ...said],
+    next: open ? `${open} (the last session was cut off by a provider error: check where it stood first)` : "Pick up where the last session stopped (it was cut off by a provider error): check the state first.",
+    evidence: [],
+  };
 }
 
 /** Start a fresh session on the handoff card (and the results that came in meanwhile). */
@@ -2427,6 +2455,18 @@ export function stopTask(id: string) {
 }
 
 export function resumeTask(id: string) {
+  // a session the provider refused fails the same way on every retry: the retry starts a fresh one
+  // from what the thread shows (the scheduler continues only a session whose leg is still open)
+  const t = taskById(id);
+  if (t?.status === "failed" && t.error && isRefusedRequest(t.error)) {
+    const card = cardFromThread(t);
+    updateTask(id, (x) => {
+      const leg = x.legs[x.legs.length - 1];
+      // the next start opens a new leg and gives it this card (a still-open leg would be continued)
+      if (leg && !leg.endedAt) (leg.endedAt = Date.now()), (leg.handoff = card);
+      push(x, { kind: "note", text: "요청이 거부돼서 새 세션으로 이어가요" });
+    });
+  }
   // resumed on its own: it no longer waits for the fork that paused it
   updateTask(id, (t) => (requeue(t), (t.pausedBy = undefined), (t.resumedAt = Date.now())));
   resumeKids(id);
