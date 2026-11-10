@@ -741,6 +741,14 @@ export function MainView() {
             )}
           </Show>
         </h1>
+        {/* Main: what its requests are doing, beside the title; opened, the list hangs from the header */}
+        <Show when={!project() && msgs().length}>
+          <RequestBoard
+            msgs={msgs()}
+            started={started}
+            onJump={(id) => (holdScroll(900, box), box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }))}
+          />
+        </Show>
         <Show when={projCounts().length}>
           <span class="head-counts">
             <For each={projCounts()}>{([st, n, word]) => <span class={`req-tag ${st}`}>{word} {n}</span>}</For>
@@ -780,18 +788,7 @@ export function MainView() {
         }
       >
         {/* a project's chat: all its tasks stay above the conversation (they include what it started) */}
-        <Show
-          when={project()}
-          fallback={
-            <RequestBoard
-              msgs={msgs()}
-              started={started}
-              onJump={(id) => (holdScroll(900, box), box?.querySelector(`[data-mid="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }))}
-            />
-          }
-        >
-          {(p) => <ProjectStrip project={p().id} />}
-        </Show>
+        <Show when={project()}>{(p) => <ProjectStrip project={p().id} />}</Show>
         <div class="thread" ref={(el) => { box = el; onCleanup(keepBottom(el)); }}>
           <div class="thread-inner convo">
             <For each={timeline()}>

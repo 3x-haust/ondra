@@ -1802,3 +1802,54 @@
   gap: var(--s-12);
   min-width: 0;
 }
+
+/* Main: the requests line sits in the header beside the title, a quiet button; opened, its list hangs from
+   the header in the view's own colour, no frame, the thread's column inside, a soft shadow below */
+.main-view > .head {
+  position: relative;
+  z-index: 4;
+}
+.main-view .head .req-board {
+  position: static;
+  z-index: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  margin: 0 0 0 var(--s-4);
+  padding: 0;
+  background: none;
+}
+.main-view .head .req-board::after {
+  display: none;
+}
+.main-view .head .req-board .req-head {
+  height: var(--h-sm);
+  padding: 0 var(--s-8);
+  gap: var(--s-6);
+  border-radius: var(--r-md);
+}
+.main-view .head .req-board.open .req-head.req-head {
+  background: var(--hover);
+}
+.main-view .head .req-board .req-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: var(--s-4) max(var(--s-16), calc((100% - var(--chat-w)) / 2)) var(--s-12);
+  border: 0;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: var(--bg);
+  box-shadow: 0 18px 24px -18px rgb(0 0 0 / 0.5);
+  animation: req-hang var(--dur-fast) ease-out;
+}
+@keyframes req-hang {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
