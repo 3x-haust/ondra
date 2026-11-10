@@ -129,10 +129,22 @@ async function runCase(c) {
   });
   const e = c.expect ?? {};
   const checks = {};
+  let research;
   if (e.asks) checks.asked = asked > 0;
   else checks.done = detail.length > 0 && detail.every((d) => d.status === "done");
   if (e.textAny) checks.text = e.textAny.some((s) => text.includes(s));
   if (e.artifacts) checks.artifacts = e.artifacts.every((ext) => artifacts.some((a) => a.toLowerCase().endsWith(`.${ext}`)));
+  if (e.research) {
+    // deep-research: score the newest research folder with the skill's own checker (writes eval.json)
+    const dirs = ids.flatMap((id) => {
+      const dir = join(DATA, "artifacts", id);
+      return existsSync(dir) ? readdirSync(dir).filter((f) => f.startsWith("research-")).map((f) => join(dir, f)) : [];
+    }).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    research = dirs.length ? scoreResearch(dirs[0]) : { pass: false, failed: ["no research folder"] };
+    checks.research = !!research.pass;
+    if (e.research.blocked) checks.blockedRead = (research.rescued_reads ?? 0) > 0;
+    checks.pdf = !!dirs[0] && readdirSync(dirs[0]).some((f) => f.endsWith(".pdf"));
+  }
   if (e.maxSecs) checks.fast = secs <= e.maxSecs;
   if (e.maxTools) checks.fewTools = tools.length <= e.maxTools;
   checks.noFailedTools = tools.every((t) => t.ok);
@@ -148,11 +160,24 @@ async function runCase(c) {
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k);
   return {
     name: c.name, ask: c.ask, pass: !failedChecks.length, failedChecks, checks,
-    secs, routedSecs, tools: tools.length, failedTools: tools.filter((t) => !t.ok).length, asked,
+    secs, routedSecs, tools: tools.length, failedTools: tools.filter((t) => !t.ok).length, asked, research,
     slowest: [...tools].sort((a, b) => (b.secs ?? 0) - (a.secs ?? 0)).slice(0, 3),
     reply: reply?.text, routes: ids, jobs: detail,
     failures: ids.flatMap(failedOutputs),
   };
+}
+
+/** The deep-research checker's scorecard for one research folder ($R/eval.json). */
+function scoreResearch(dir) {
+  const checker = join(HERE, "..", "skills", "deep-research", "check-research.py");
+  try {
+    execFileSync("python3", [checker, dir, "--score"], { encoding: "utf8", timeout: 600_000 });
+  } catch {} // exit 1 = [must] hits left; the scorecard is still written
+  try {
+    return JSON.parse(readFileSync(join(dir, "eval.json"), "utf8"));
+  } catch (err) {
+    return { pass: false, failed: [`checker: ${String(err).slice(0, 200)}`] };
+  }
 }
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -188,6 +213,7 @@ const md = [
     "",
     r.error ? `runner error: ${r.error}` : "",
     `slowest: ${(r.slowest ?? []).map((t) => `${t.secs}s ${t.cmd.slice(0, 80)}`).join(" · ")}`,
+    r.research ? `research: ${JSON.stringify(r.research)}` : "",
     "",
     ...(r.failures ?? []).slice(0, 5).flatMap((f) => ["```", f.call, f.output.slice(-600), "```"]),
     "",

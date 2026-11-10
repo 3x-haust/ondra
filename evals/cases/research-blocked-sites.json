@@ -1,0 +1,7 @@
+{
+  "ask": "Playwright와 Puppeteer를 비교 리서치해줘. npm 주간 다운로드, Stack Overflow 질문 수와 대표 답변, Medium 같은 개발 블로그의 의견까지 출처 달아서",
+  "kind": "other",
+  "answer": "first",
+  "note": "Blocked-site retrieval: npmjs.com, stackoverflow.com and medium.com answer plain fetches with a Cloudflare challenge (403). The job must read them through web.py fetch (route, reader or browser), not drop them: blockedRead needs ≥ 1 rescued read in sources/index.jsonl.",
+  "expect": { "maxSecs": 1800, "research": { "blocked": true } }
+}

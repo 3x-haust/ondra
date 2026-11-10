@@ -232,8 +232,8 @@ export default function (pi: any) {
         if (!hits.length)
           return text(
             r.status === 429 || r.status === 202 || r.busyUntil
-              ? "The search engine is refusing searches for now (every job shares it). Don't retry in a loop: search through Aside instead (`aside skills show google-search`, then `aside repl` with googleSearch.search), or work on with what you have and search later."
-              : `No results (HTTP ${r.status}). Try other words, or search through Aside.`,
+              ? "The search engine is refusing searches for now (every job shares it). Don't retry in a loop: search in your own agent-browser tab instead (deep-research's `web.py search \"<query>\"` does it; otherwise `agent-browser open \"https://search.naver.com/search.naver?where=web&query=<words>\"`, then `agent-browser snapshot -i --urls -s '#main_pack'`), or work on with what you have and search later."
+              : `No results (HTTP ${r.status}). Try other words, or search in your agent-browser tab.`,
             { query: p.query, hits: [] },
           );
         return text(hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"), { query: p.query, hits, cached: !!r.cached });
