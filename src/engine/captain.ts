@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 // The dispatcher (internally "captain"). Every request goes here first and
 // comes back as routes: answer now, add to a running task, start new tasks, or
 // remember. The chat is kept as text in the app; the engine session under it is
@@ -106,6 +107,14 @@ function keptSent(space: string): SentHeader | undefined {
 }
 
 export const captainAgent = agentOf;
+
+/** what main reasons while it answers, per chat; cleared when the next answer starts */
+const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
+export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
+export function addThought(key: string, delta: string) {
+  if (!delta) return;
+  setThoughtsAll((all) => ({ ...all, [key]: ((all[key] ?? "") + delta).slice(-40_000) }));
+}
 
 /** Send a request. Returns the id of the reply message to watch (empty if nothing was sent). */
 export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string } = {}): string {
@@ -625,6 +634,9 @@ async function ensureCaptain(space: string) {
           g.at = undefined;
         }
       }
+      // what it reasons, as it comes: shown under "생각하는 중" when opened
+      if (ev.type === "message_update" && ev.assistantMessageEvent?.type === "thinking_delta") addThought(space, String(ev.assistantMessageEvent.delta ?? ""));
+      if (ev.type === "message_start" && ev.message?.role === "assistant" && (thoughtsAll()[space] ?? "").trim()) addThought(space, "\n\n");
       if (ev.type === "message_update" && ev.assistantMessageEvent?.type === "text_delta") {
         const t = (texts.get(space) ?? "") + ev.assistantMessageEvent.delta;
         texts.set(space, t);
@@ -897,6 +909,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   await ensureCaptain(space);
   const agent = agentOf(space);
   texts.set(space, "");
+  setThoughtsAll((all) => ({ ...all, [space]: "" }));
   errors.delete(space);
   const done = new Promise<void>((resolve) => settled.set(space, resolve));
   genOf.set(space, { ms: 0 });
