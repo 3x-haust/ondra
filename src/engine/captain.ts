@@ -426,10 +426,13 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  */
 const sigOf = new Map<string, string>();
 /** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. */
-export async function mainTools(): Promise<string[]> {
+export async function mainTools(lean = false): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
   const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts")).flatMap((e) => ["--extension", e]);
+  // a model on a direct connection routes only: given read and bash it starts doing the work itself
+  // (and loses the request on the way), so anything that needs files or a shell is a fork
+  if (lean) return ["--no-builtin-tools", ...direct];
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
@@ -462,7 +465,7 @@ export function mainModel(accountId: string | undefined): string | undefined {
 }
 /** main's tool flags; a model without tool calling runs talk-only */
 export async function mainToolArgs(accountId: string | undefined): Promise<string[]> {
-  return canUseTools(accountId, mainModel(accountId)) ? mainTools() : ["--no-tools"];
+  return canUseTools(accountId, mainModel(accountId)) ? mainTools(isDirect(accountById(accountId ?? ""))) : ["--no-tools"];
 }
 /** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
 const wantedAccount = (space: string): string | undefined => {
@@ -809,7 +812,9 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const accId = accountOf.get(space);
   const runOn = mainModel(accId);
   const acct = accId ? accountById(accId) : undefined;
-  const model = runOn ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.` : "";
+  const model = runOn
+    ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.${isDirect(acct) ? " You have no file or shell tools here: anything that needs files, code or a shell is a fork (kind \"new\"); build requests go straight to one." : ""}`
+    : "";
   if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
