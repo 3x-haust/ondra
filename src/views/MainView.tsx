@@ -93,7 +93,23 @@ const oneLine = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
  * its result, or the job while there is none; with ⌥/⌘ beside this pane. `live`: the last row
  * for this job in the chat (an earlier one only names it).
  */
-function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active?: boolean }) {
+/**
+ * What a finished job ended on, as it said it: the words and result blocks its last turn closed with
+ * (after its steps), else its result line. A project's chat shows it under the job's row, as is.
+ */
+export function closingOf(t: Task): { text: string; blocks: Extract<Task["entries"][number], { kind: "block" }>["block"][] } {
+  const e = t.entries;
+  let end = e.length;
+  while (end > 0 && (e[end - 1].kind === "note" || e[end - 1].kind === "turn")) end--;
+  let i = end;
+  while (i > 0 && (e[i - 1].kind === "text" || e[i - 1].kind === "block")) i--;
+  const tail = e.slice(i, end);
+  const text = tail.flatMap((x) => (x.kind === "text" && x.text.trim() ? [x.text.trim()] : [])).join("\n\n");
+  const blocks = tail.flatMap((x) => (x.kind === "block" ? [x.block] : []));
+  return { text: text || (blocks.length ? "" : (t.result ?? "").trim()), blocks };
+}
+
+function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active?: boolean; full?: boolean }) {
   const task = () => taskById(props.taskId);
   return (
     <Show when={task()}>
@@ -101,7 +117,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
         const meta = () => stateMeta(x());
         const over = () => x().status === "done" && !discarded(x());
         const result = () => (over() ? resultOfTask(x().id) : undefined);
-        const shot = () => (props.live && over() ? jobShot(x()) : undefined);
+        const shot = () => (props.live && over() && !props.full ? jobShot(x()) : undefined);
         /** the word on the right: only when it needs you, or isn't moving */
         const word = () => (meta().tone === "bad" || meta().tone === "ask" || meta().tone === "review" || meta().tone === "idle" ? meta().text : "");
         const detail = () => {
@@ -124,7 +140,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
           if (e.altKey || e.metaKey) splitPane("right", { view: v });
           else setView(v);
         };
-        return (
+        const row = (
           <button
             class={`job-row tone-${meta().tone}`}
             classList={{ active: props.active, past: !props.live }}
@@ -144,12 +160,28 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
             <Show when={shot()}>{(p) => <img class="job-shot" src={fileSrc(p())} alt="" loading="lazy" />}</Show>
           </button>
         );
+        const closing = createMemo(() => (props.full && props.live && over() ? closingOf(x()) : undefined));
+        return (
+          <>
+            {row}
+            <Show when={closing()?.text || closing()?.blocks.length ? closing() : undefined}>
+              {(c) => (
+                <div class="job-result">
+                  <Show when={c().text}><Markdown class="msg-text" text={c().text} /></Show>
+                  <Show when={c().blocks.length}>
+                    <div class="blocks"><For each={c().blocks}>{(b) => <BlockView block={b} task={x()} />}</For></div>
+                  </Show>
+                </div>
+              )}
+            </Show>
+          </>
+        );
       }}
     </Show>
   );
 }
 
-function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined }) {
+function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined; full?: boolean }) {
   const routes = () => props.m.routes ?? [];
   const rows = () => handed(props.m);
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
@@ -236,7 +268,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
             {/* the jobs it started or relayed to: one row each, kept up to date */}
             <Show when={rows().length}>
               <div class="job-rows">
-                <For each={rows()}>{(r) => <JobRow taskId={r.taskId} relayed={r.relayed} live={props.lastRow(r.taskId) === props.m.id} active={props.active === r.taskId} />}</For>
+                <For each={rows()}>{(r) => <JobRow taskId={r.taskId} relayed={r.relayed} live={props.lastRow(r.taskId) === props.m.id} active={props.active === r.taskId} full={props.full} />}</For>
               </div>
             </Show>
           </Match>
@@ -774,7 +806,7 @@ export function MainView() {
                       fallback={
                         // main reacting to a job's end on its own shows only what it added (nothing while it reads it)
                         <Show when={!onItsOwn(c()) || (!c().pending && shows(c()))}>
-                          <Reply m={c()} retry={() => retry(c())} active={openRoot()} lastRow={(id) => lastRow().get(id)} />
+                          <Reply m={c()} retry={() => retry(c())} active={openRoot()} lastRow={(id) => lastRow().get(id)} full={!!project()} />
                         </Show>
                       }
                     >
