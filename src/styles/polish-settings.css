@@ -914,83 +914,83 @@
 }
 
 /* 직접 연결 sheet: the workspace sheet's rows, wider for the model list */
-.sheet.sp-sheet.cx-sheet {
+.sheet.sp-sheet.cn-sheet {
   width: 680px;
   max-width: calc(100vw - 32px);
 }
-.cx-sheet .sheet-body {
+.cn-sheet .sheet-body {
   max-height: min(70vh, 720px);
   overflow-y: auto;
 }
-.cx-sheet .seg.cx-presets {
+.cn-sheet .seg.cn-presets {
   flex-wrap: wrap;
   height: auto;
   justify-self: start;
 }
-.cx-sheet .select {
+.cn-sheet .select {
   height: 32px;
 }
-.cx-sheet .cx-key,
-.cx-sheet .cx-headers,
-.cx-sheet .cx-models {
+.cn-sheet .cn-key,
+.cn-sheet .cn-headers,
+.cn-sheet .cn-models {
   width: 100%;
 }
-.cx-sheet .cx-key,
-.cx-sheet .cx-header,
-.cx-sheet .cx-model-bar {
+.cn-sheet .cn-key,
+.cn-sheet .cn-header,
+.cn-sheet .cn-model-bar {
   display: flex;
   align-items: center;
   gap: var(--s-6);
   min-width: 0;
 }
-.cx-sheet .cx-key .input,
-.cx-sheet .cx-header .input,
-.cx-sheet .cx-model-bar .input {
+.cn-sheet .cn-key .input,
+.cn-sheet .cn-header .input,
+.cn-sheet .cn-model-bar .input {
   flex: 1;
   min-width: 0;
 }
-.cx-sheet .cx-headers,
-.cx-sheet .cx-models {
+.cn-sheet .cn-headers,
+.cn-sheet .cn-models {
   display: grid;
   gap: var(--s-6);
   min-width: 0;
 }
-.cx-sheet .cx-add {
+.cn-sheet .cn-add {
   justify-self: start;
 }
-.cx-sheet .cx-list {
+.cn-sheet .cn-list {
   display: grid;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   max-height: 320px;
   overflow-y: auto;
 }
-.cx-sheet .cx-model {
+.cn-sheet .cn-model {
   display: grid;
   gap: var(--s-6);
   padding: var(--s-6) var(--s-10);
   border-bottom: 1px solid var(--line-soft);
 }
-.cx-sheet .cx-model:last-child {
+.cn-sheet .cn-model:last-child {
   border-bottom: 0;
 }
-.cx-sheet .cx-model-line {
+.cn-sheet .cn-model-line {
   display: flex;
   align-items: center;
   gap: var(--s-8);
   min-width: 0;
 }
-.cx-sheet .cx-model-id {
+.cn-sheet .cn-model-id {
   flex: 1;
   min-width: 0;
 }
-.cx-sheet .cx-model-id code {
+.cn-sheet .cn-model-id code {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--fs-code);
 }
-.cx-sheet .cx-model-opts {
+.cn-sheet .cn-model-opts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -999,21 +999,21 @@
   font-size: var(--fs-sm);
   color: var(--ink-2);
 }
-.cx-sheet .cx-num {
+.cn-sheet .cn-num {
   display: flex;
   align-items: center;
   gap: var(--s-6);
   color: var(--ink-3);
 }
-.cx-sheet .cx-num .input {
+.cn-sheet .cn-num .input {
   width: 96px;
   height: 28px;
   font-size: var(--fs-sm);
 }
-.cx-sheet .cx-efforts .input {
+.cn-sheet .cn-efforts .input {
   width: 150px;
 }
-.cx-sheet .cx-st {
+.cn-sheet .cn-st {
   display: inline-flex;
   align-items: center;
   gap: var(--s-6);
@@ -1021,19 +1021,19 @@
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
-.cx-sheet .cx-st.ok {
+.cn-sheet .cn-st.ok {
   color: var(--ok-ink);
 }
-.cx-sheet .cx-st.bad {
+.cn-sheet .cn-st.bad {
   color: var(--bad-ink);
   flex-wrap: wrap;
 }
-.cx-sheet .cx-detail {
+.cn-sheet .cn-detail {
   flex-basis: 100%;
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
-.cx-sheet .cx-err {
+.cn-sheet .cn-err {
   font-size: var(--fs-sm);
   color: var(--bad-ink);
 }
