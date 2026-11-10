@@ -81,6 +81,10 @@ interface Run {
   refused?: string;
   /** asked once, after a turn ended with no done block, whether it is finished */
   askedDone?: boolean;
+  /** the message being written has said or called something (not only reasoned) */
+  msgActed?: boolean;
+  /** a message that only reasoned past THINK_MAX_MS was cut: the turn's end sends it on to its next step */
+  thinkCut?: boolean;
   /** toolCallId → when that shell's output last changed (the search and wait watchdog) */
   changed?: Map<string, number>;
   /** searches and waits the watchdog already tried to stop */
@@ -1077,12 +1081,14 @@ function handlers(id: string, run: Run) {
             run.text = "";
             run.cursor = 0;
             run.msgAt = Date.now();
+            run.msgActed = false;
             const es = taskById(id)?.entries;
             run.msgAfter = es?.[es.length - 1]?.id;
           }
           break;
         case "message_update": {
           const d = ev.assistantMessageEvent;
+          if (d?.type && !String(d.type).startsWith("thinking")) run.msgActed = true;
           if (d?.type !== "text_delta" || !d.delta) break;
           run.text += d.delta;
           setLive(id, prose(run.text));
@@ -1458,6 +1464,17 @@ async function settle(id: string, run: Run) {
       x.now = `서브에이전트 ${activeKids(id).length}개 기다리는 중`;
     });
     return;
+  }
+  // its reasoning ran on and was cut: it goes on to the next step, briefly
+  if (run.thinkCut) {
+    run.thinkCut = false;
+    try {
+      run.turnStart = Date.now();
+      await request(agent, { type: "prompt", message: THINK_CUT });
+      return;
+    } catch {
+      // fall through to the stalled card
+    }
   }
   // It ended its turn waiting for a review that was refused: no result will wake it, so say why now
   if (run.refused) {
@@ -2078,10 +2095,21 @@ export function createAnswer(f: { space: Task["space"]; question: string; text: 
  * restart took it down). Only that command is stopped, never the job, a build
  * or the server it waits for, and the agent is told why.
  */
+/** One message that only reasons this long (no words, no tool call) is going in circles: it is cut. */
+const THINK_MAX_MS = 10 * 60_000;
+const THINK_CUT =
+  "(Ondra) You reasoned for over 10 minutes without writing anything or calling a tool, so that message was cut. Don't plan everything again: take the next step now with a tool call, and keep the reasoning before each step short.";
+async function cutThinking(id: string, run: Run) {
+  run.thinkCut = true;
+  updateTask(id, (t) => void push(t, { kind: "note", text: "생각이 10분 넘게 이어져서 끊고 다음 단계로 넘겼어요" }));
+  await request(agentOf(id), { type: "abort" }, 8000).catch(() => {});
+}
+
 function stopStalledCommands() {
   const now = Date.now();
   for (const [id, run] of runs) {
     if (!run.streaming) continue;
+    if (!run.thinkCut && !run.msgActed && run.msgAt && now - run.msgAt > THINK_MAX_MS) void cutThinking(id, run);
     for (const s of taskById(id)?.shells ?? []) {
       if (!run.tools.has(s.id)) continue;
       // one command can be both (wait for the server, then find the pages): each is tried once
