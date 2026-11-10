@@ -1884,3 +1884,8 @@ button.pf-ref:hover {
   background: var(--hover);
   color: var(--ink-2);
 }
+
+/* a picture in the preview opens big on click */
+.fv-img img {
+  cursor: zoom-in;
+}
