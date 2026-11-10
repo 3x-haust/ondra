@@ -985,6 +985,52 @@ func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, Str
     }
 }
 
+/// The frontmost app's focused window and where it is.
+struct HeldFrame { let window: AXUIElement; let origin: CGPoint; let size: CGSize }
+
+func axPoint(_ el: AXUIElement, _ attr: String) -> CGPoint? {
+    var v: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(el, attr as CFString, &v) == .success, let val = v, CFGetTypeID(val) == AXValueGetTypeID() else { return nil }
+    var p = CGPoint.zero
+    return AXValueGetValue(val as! AXValue, .cgPoint, &p) ? p : nil
+}
+func axSize(_ el: AXUIElement) -> CGSize? {
+    var v: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &v) == .success, let val = v, CFGetTypeID(val) == AXValueGetTypeID() else { return nil }
+    var s = CGSize.zero
+    return AXValueGetValue(val as! AXValue, .cgSize, &s) ? s : nil
+}
+
+func frontWindowFrame() -> HeldFrame? {
+    guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
+    let app = AXUIElementCreateApplication(front.processIdentifier)
+    var w: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &w) == .success, let win = w, CFGetTypeID(win) == AXUIElementGetTypeID() else { return nil }
+    let el = win as! AXUIElement
+    guard let o = axPoint(el, kAXPositionAttribute), let s = axSize(el) else { return nil }
+    return HeldFrame(window: el, origin: o, size: s)
+}
+
+/// Watch the held window for a moment after a launch; if it was moved or resized, put it back.
+func keepFrame(_ h: HeldFrame) {
+    let moved = { () -> Bool in
+        guard let o = axPoint(h.window, kAXPositionAttribute), let s = axSize(h.window) else { return false }
+        return abs(o.x - h.origin.x) > 1 || abs(o.y - h.origin.y) > 1 || abs(s.width - h.size.width) > 1 || abs(s.height - h.size.height) > 1
+    }
+    for _ in 0..<15 {
+        usleep(100_000)
+        if moved() {
+            // let the arrangement finish, then restore size first (a smaller window can always move)
+            usleep(250_000)
+            var size = h.size, origin = h.origin
+            if let sv = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(h.window, kAXSizeAttribute as CFString, sv) }
+            if let pv = AXValueCreate(.cgPoint, &origin) { AXUIElementSetAttributeValue(h.window, kAXPositionAttribute as CFString, pv) }
+            if let sv = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(h.window, kAXSizeAttribute as CFString, sv) }
+            return
+        }
+    }
+}
+
 func findAppByName(_ name: String) -> URL? {
     for dir in ["/System/Applications", "/Applications", "/System/Applications/Utilities"] {
         let candidate = URL(fileURLWithPath: dir).appendingPathComponent("\(name).app")
@@ -1013,10 +1059,14 @@ func handle(_ req: [String: Any]) -> [String: Any] {
     case "launch":
         guard let name = req["app"] as? String else { return fail(id, "BAD_REQUEST", "missing app") }
         let hide = (req["hide"] as? Bool) ?? false
+        // Stage Manager makes room for a window that opens behind: the user's own front window
+        // is pushed aside and shrunk. Its frame is noted now and put back once the launch settles.
+        let held = frontWindowFrame()
         let sem = DispatchSemaphore(value: 0)
         var out: (pid_t?, String?) = (nil, nil)
         launchHidden(name, hide: hide) { pid, err in out = (pid, err); sem.signal() }
         sem.wait()
+        if let held = held { keepFrame(held) }
         let after = environment()
         if let pid = out.0 {
             return ok(id, ["pid": Int(pid), "env": after, "envBefore": before,
