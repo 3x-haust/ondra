@@ -29,7 +29,7 @@ import { Composer, hasDraft } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ModelPicker, PermissionPicker, usePop } from "../ui/ModelPicker";
-import { effortFor } from "../engine/models";
+import { effortFor, setModelEffort } from "../engine/models";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
@@ -411,12 +411,8 @@ function AccountModel(props: { accountId: string; up?: boolean; rest?: string })
       accountId={props.accountId}
       model={accountById(props.accountId)?.model ?? ""}
       thinking={effortFor(props.accountId) || props.rest || ""}
-      onChange={(m, t) =>
-        updateAccount(props.accountId, (x) => {
-          if (m) x.model = m;
-          x.effort = t;
-        })
-      }
+      effortOf={(m) => effortFor(props.accountId, m) || props.rest || ""}
+      onChange={(m, t) => updateAccount(props.accountId, (x) => setModelEffort(x, m, t))}
     />
   );
 }

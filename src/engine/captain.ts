@@ -454,7 +454,7 @@ const promptSig = () => {
   return h.toString(36);
 };
 /** How hard main thinks: the level picked under its chat, else 낮음 (it answers and hands work on, fast). */
-export const mainEffort = (accountId: string | undefined) => (accountId && effortFor(accountId)) || "low";
+export const mainEffort = (accountId: string | undefined) => (accountId && effortFor(accountId, mainModel(accountId))) || "low";
 /** The model main runs on: the account's, or the one set for main (not on a direct connection, whose models are its own). */
 export function mainModel(accountId: string | undefined): string | undefined {
   const acc = state.accounts.find((a) => a.id === accountId);

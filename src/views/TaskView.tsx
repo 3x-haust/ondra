@@ -536,7 +536,7 @@ export function TaskView(props: { id: string }) {
                       up
                       accountId={task().accountId}
                       model={task().model ?? ""}
-                      thinking={task().thinking || effortFor(task().accountId) || ""}
+                      thinking={task().thinking || effortFor(task().accountId, task().model) || ""}
                       onChange={(m, th) => void setTaskModel(task().id, m, th)}
                     />
                     </>
