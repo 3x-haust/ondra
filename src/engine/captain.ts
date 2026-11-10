@@ -49,7 +49,7 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; recap: boolean };
+type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; model?: string; recap: boolean };
 const sentOf = new Map<string, SentHeader>();
 /** the git repos in each space's folder, looked up again after a few minutes */
 const reposOf = new Map<SpaceId, { at: number; list: string[] }>();
@@ -805,11 +805,17 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
+  // which model this is, said when it changes: asked "너 무슨 모델이야?", main answers from this, not a guess
+  const accId = accountOf.get(space);
+  const runOn = mainModel(accId);
+  const acct = accId ? accountById(accId) : undefined;
+  const model = runOn ? `You run on the model ${runOn.split("/").slice(1).join("/") || runOn} (${runOn}), through ${acct?.label || "this account"}. Asked which model you are, say this.` : "";
+  if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
   else out.push("", "# Message", text);
-  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, recap: false });
+  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
 }
