@@ -203,6 +203,7 @@ export default {
   "같은 실패 반복": "Same failure again",
   "검색 멈춤 · 1분 넘게 결과 없음": "Stopped searching · no output for over a minute",
   "기다림 멈춤 · 2분 넘게 변화 없음": "Stopped waiting · nothing changed for over 2 minutes",
+  "요청이 거부돼서 새 세션으로 이어가요": "The request was refused, so it goes on in a new session",
   "프로젝트 노트 갱신": "Project notes updated",
   "생각이 10분 넘게 이어져서 끊고 다음 단계로 넘겼어요": "Reasoned for over 10 minutes; cut it and moved on to the next step",
   // main and jobs looking up other jobs (jobs_search, job_read, job_tell)
