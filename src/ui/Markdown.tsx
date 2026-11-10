@@ -7,7 +7,8 @@ import { fileSrc } from "../lib/native";
 import { linkTip } from "../lib/links";
 import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
-import { openImage } from "./Lightbox";
+import { openDrawing, openImage } from "./Lightbox";
+import { safeSvg } from "./svgSafe";
 import { langOf, tokenize, toHtml } from "./highlight";
 import { t } from "../i18n";
 
@@ -21,6 +22,14 @@ const make = (github: boolean) => new Marked({
   renderer: {
     html() {
       return "";
+    },
+    // a picture the agent drew: shown when it is a clean drawing, else the code as it was
+    code({ text, lang }: Tokens.Code) {
+      if ((lang ?? "").trim().toLowerCase() !== "svg") return false;
+      const svg = safeSvg(text);
+      if (svg) return `<figure class="md-svg" title="${t("크게 보기")}">${svg}</figure>`;
+      // still being written (the answer streams in): a quiet line, not the code scrolling past
+      return /<\/svg>/i.test(text) ? false : `<p class="md-svg-wait">${t("그림 그리는 중")}</p>`;
     },
     link({ href, text }: Tokens.Link) {
       const safe = /^https?:\/\//.test(href) || href.startsWith("/") ? href : "";
@@ -49,6 +58,8 @@ const plain = (href: string) => { try { return decodeURI(href); } catch { return
 /** `github`: the text comes from GitHub (a PR's comments), so pictures it hosts show inline */
 export function Markdown(props: { text: string; class?: string; github?: boolean }) {
   const onClick = (e: MouseEvent) => {
+    const drawing = (e.target as HTMLElement).closest("figure.md-svg");
+    if (drawing) return openDrawing(drawing.innerHTML);
     const remote = (e.target as HTMLElement).closest("img.md-remote") as HTMLImageElement | null;
     if (remote) return void openLink(decodeURI(remote.dataset.href ?? ""), { event: e });
     const img = (e.target as HTMLElement).closest("img[data-path]") as HTMLImageElement | null;
