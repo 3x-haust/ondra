@@ -8312,6 +8312,7 @@ textarea { resize: none !important; field-sizing: content; }
   background: var(--hover);
 }
 .res-seg button {
+  white-space: nowrap;
   height: 22px;
   padding: 0 var(--s-10);
   border-radius: var(--r-sm);

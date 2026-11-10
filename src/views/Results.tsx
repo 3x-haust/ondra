@@ -6,7 +6,8 @@ import { pinResult, removeResults, restoreResults, resultCopy, resultPreview, re
 import { ignoredKey } from "../lib/shortcuts";
 import { projectById, state, taskById } from "../state/store";
 import type { ResultEntry } from "../state/types";
-import { openTask, setJumpMsg, setView, toast } from "../state/ui";
+import { openTask, panelOpen, setJumpMsg, setView, toast, togglePanel } from "../state/ui";
+import { withHint } from "../lib/shortcuts";
 import { BlockView } from "../ui/Blocks";
 import { discarded, withDiff } from "../state/progress";
 import { Icon } from "../ui/Icon";
@@ -207,6 +208,9 @@ export function ResultsView() {
             <input ref={searchEl} placeholder={t("검색")} aria-label={t("검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.key === "Escape" && (setQ(""), listEl?.focus())} />
           </div>
         </Show>
+        <button class="icon-btn" classList={{ on: panelOpen() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} aria-label={t("패널")} onClick={togglePanel}>
+          <Icon name="panel" size={16} />
+        </button>
         <PaneControls />
       </header>
       <Show when={all().length} fallback={<div class="pane-empty res-none"><Icon name="inbox" size={20} /><span>{t("결과물 없음")}</span></div>}>

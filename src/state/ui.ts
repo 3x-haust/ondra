@@ -254,7 +254,8 @@ export function closePanelTab(id: number) {
 // a file it opened) doesn't carry to the next one, and a place seen for the first time
 // keeps the tab you were on if it applies there, else Flow.
 type Place = string;
-const placeOf = (v: View): Place | null => (v.name === "task" ? v.id : v.name === "main" ? "main" : null);
+/** where the panel belongs: Main, each task, and the results page (what it opens shows beside it) */
+const placeOf = (v: View): Place | null => (v.name === "task" ? v.id : v.name === "main" ? "main" : v.name === "results" ? "results" : null);
 let place: Place | null = "main";
 const lastTab = new Map<Place, PanelTab>();
 /** What a tab is to a place: shown, kept out of sight for later (a task's tab on Main), or dropped.
@@ -325,7 +326,7 @@ export const [sidebarHidden, setSidebarHidden] = createSignal(false);
 export const [roomy, setRoomy] = createSignal(typeof window === "undefined" || window.innerWidth >= 1200);
 if (typeof window !== "undefined") window.addEventListener("resize", () => setRoomy(window.innerWidth >= 1200));
 /** The panel belongs to a task (and Main): elsewhere it stays hidden, its tabs kept for later. */
-export const panelShown = () => panelOpen() && (view().name === "task" || view().name === "main");
+export const panelShown = () => panelOpen() && placeOf(view()) !== null;
 /** The list is out of the way: folded by you, or making room for a panel in a narrow window. */
 export const sidebarAway = () => sidebarHidden() || (crowded() && panelShown());
 /** The narrowest the split panes can be side by side (set by the pane host; 0 for one pane). */

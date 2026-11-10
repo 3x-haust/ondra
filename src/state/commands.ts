@@ -23,7 +23,7 @@ function toggleChanges() {
 const inChanges = () => view().name === "changes";
 const changesKey = (id: string) => () => inPane(".cg-view")?.dispatchEvent(new CustomEvent("cg-command", { detail: id }));
 /** the panel shows beside Main and a task only (canvas, memory, results, devices and settings have none) */
-const panelAvailable = () => view().name === "main" || view().name === "task";
+const panelAvailable = () => view().name === "main" || view().name === "task" || view().name === "results";
 const visiblePanel = () => panelAvailable() && panelOpen();
 const many = () => paneCount() > 1 && view().name !== "settings";
 const notSettings = () => view().name !== "settings";
