@@ -165,8 +165,8 @@ describe("background host computer-use instructions", () => {
     // never teaches the raw host-GUI escape hatches as a fallback
     expect(prompt).toContain("blocked");
     expect(prompt).toMatch(/AppleScript\/System Events|agent-desktop/);
-    // the guest VM survives only as an optional separate mode, no longer required
-    expect(prompt).toContain("optional separate mode");
+    // there is no VM mode to fall back to
+    expect(prompt).not.toMatch(/guest|isolated/i);
     expect(prompt).not.toContain("No host fallback");
   });
 
@@ -174,8 +174,7 @@ describe("background host computer-use instructions", () => {
     const skill = bundledSkills["../../skills/computer-use/SKILL.md"];
     expect(skill).toContain("background");
     expect(skill).toContain("never take the user's focus");
-    // the optional isolated guest is still documented, just not the default
-    expect(skill).toContain("isolated macOS");
+    expect(skill).not.toMatch(/guest|isolated/i);
     // and raw host GUI automation is still refused, not demonstrated
     expect(skill).not.toMatch(/agent-desktop (launch|press|click|batch)|open -g -a/);
     expect(skill).toMatch(/cliclick|AppleScript or System Events/);

@@ -51,9 +51,7 @@ describe("computer tool — host background mode", () => {
     vi.stubEnv("ONDRA_COMPUTER_HOST_BIN", fakeHelperBin());
     vi.stubEnv("APP_WORKER_ID", "job");
     vi.stubEnv("APP_ARTIFACTS_DIR", realpathSync(mkdtempSync(join(tmpdir(), "cu-art-"))));
-    vi.stubEnv("ONDRA_COMPUTER_SOCKET", undefined);
     vi.stubEnv("ONDRA_COMPUTER_EVALUATION_MODE", undefined);
-    vi.stubEnv("ONDRA_COMPUTER_CAPTURE_DIR", undefined);
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -74,11 +72,82 @@ describe("computer tool — host background mode", () => {
     expect(stopped.stopped).toBe(true);
   });
 
-  it("does not use the guest native path in host mode (no socket required)", async () => {
+  it("registers a deferred sequential tool without spawning the helper", () => {
+    const { tool } = load();
+    expect(tool).toMatchObject({ name: "computer", exposure: "deferred", executionMode: "sequential" });
+    expect(tool.parameters.properties.action.enum).toEqual(["start", "observe", "look", "act", "stop"]);
+    expect(tool.description).not.toMatch(/guest|isolated/i);
+  });
+
+  it("refuses to start when the helper is not bundled", async () => {
+    vi.stubEnv("ONDRA_COMPUTER_HOST", undefined);
     const { call } = load();
-    // No ONDRA_COMPUTER_SOCKET set, yet start works purely via the host helper.
-    const start = data(await call({ action: "start", app: "TextEdit" }));
-    expect(start.pid).toBe(4242);
+    await expect(call({ action: "start", app: "TextEdit" })).rejects.toThrow("not bundled");
+  });
+
+  it("rejects fields that do not belong to the action", async () => {
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    await expect(call({ action: "look", screen: true })).rejects.toThrow("Invalid computer action fields");
+    await expect(call({ action: "observe", app: "x" })).rejects.toThrow("Invalid computer action fields");
     await call({ action: "stop" });
+  });
+
+  it("omits an unchanged image, and resends it after the context resets", async () => {
+    const { call, hooks } = load();
+    await call({ action: "start", app: "TextEdit" });
+    expect((await call({ action: "look" })).content).toHaveLength(2);
+    const again = await call({ action: "look" });
+    expect(again.content).toHaveLength(1);
+    expect(data(again)).toMatchObject({ kind: "unchanged", imageIncluded: false });
+    hooks.get("session_compact")!();
+    expect((await call({ action: "look" })).content).toHaveLength(2);
+    await call({ action: "stop" });
+  });
+
+  it.each([{ model: { input: ["text"] } }, {}])("does not send image data to a text-only or unknown model", async ctx => {
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    const look = await call({ action: "look" }, undefined, ctx);
+    expect(look.isError).toBe(true);
+    expect(look.content).toHaveLength(1);
+    expect(data(look)).toMatchObject({ error: "MODEL_IMAGE_UNSUPPORTED", imageIncluded: false });
+    await call({ action: "stop" });
+  });
+
+  it("forces full observations in forced-full evaluation mode", async () => {
+    vi.stubEnv("ONDRA_COMPUTER_EVALUATION_MODE", "forced-full");
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    expect(data(await call({ action: "observe" })).kind).toBe("full");
+    await call({ action: "stop" });
+  });
+
+  it("observes compactly by default", async () => {
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    expect(data(await call({ action: "observe" })).kind).toBe("unchanged");
+    await call({ action: "stop" });
+  });
+
+  it("fails closed on an invalid evaluation mode", async () => {
+    vi.stubEnv("ONDRA_COMPUTER_EVALUATION_MODE", "secret-invalid-mode");
+    const { call } = load();
+    await expect(call({ action: "start", app: "TextEdit" })).rejects.toThrow("Invalid computer evaluation configuration");
+  });
+
+  it("serializes overlapping calls", async () => {
+    const { call } = load();
+    const starting = call({ action: "start", app: "TextEdit" });
+    await expect(call({ action: "observe" })).rejects.toThrow("in progress");
+    await starting;
+    await call({ action: "stop" });
+  });
+
+  it("stops the helper on session shutdown", async () => {
+    const { call, hooks } = load();
+    await call({ action: "start", app: "TextEdit" });
+    await hooks.get("session_shutdown")!();
+    await expect(call({ action: "observe" })).rejects.toThrow("in progress");
   });
 });

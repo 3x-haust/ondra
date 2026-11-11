@@ -18,10 +18,6 @@ mod browser;
 mod inbrowser;
 mod devices;
 mod engine;
-#[cfg(target_os = "macos")]
-mod computer;
-#[cfg(target_os = "macos")]
-mod computer_setup;
 pub mod focus;
 mod keychain;
 mod providers;
@@ -162,11 +158,6 @@ fn set_tray_count(app: AppHandle, running: u32, waiting: u32) {
 }
 
 fn kill_children(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    if let Err(code) = app.state::<computer_setup::ComputerState>().shutdown(|| app.state::<engine::Engine>().kill_all()) {
-        eprintln!("computer shutdown: {code}");
-    }
-    #[cfg(not(target_os = "macos"))]
     app.state::<engine::Engine>().kill_all();
     app.state::<pty::Ptys>().kill_all();
     browser::stop(app);
@@ -246,11 +237,6 @@ pub fn run() {
             applog::install_panic_hook(app.handle());
             // the keys Settings › 단축키 set, before the page loads (keys.rs)
             let bound = keys::load(app.handle());
-            #[cfg(target_os = "macos")]
-            {
-                app.manage(computer_setup::ComputerState::default());
-                computer_setup::resume_existing(app.handle());
-            }
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
@@ -383,16 +369,6 @@ pub fn run() {
             engine::agent_stop_command,
             engine::agent_alive,
             engine::engine_models,
-            #[cfg(target_os = "macos")]
-            computer_setup::computer_prepare,
-            #[cfg(target_os = "macos")]
-            computer_setup::computer_open_setup_viewer,
-            #[cfg(target_os = "macos")]
-            computer_setup::computer_start,
-            #[cfg(target_os = "macos")]
-            computer_setup::computer_recover,
-            #[cfg(target_os = "macos")]
-            computer_setup::computer_status,
             pty::pty_open,
             pty::pty_open_login,
             pty::pty_write,

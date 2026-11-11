@@ -212,8 +212,8 @@ notification-based settling instead of fixed sleeps, batched AX reads.
 
 ## 3. What we do
 
-Decision (from the user): background on their own Mac is the default; the VM guest
-becomes an optional isolated mode. We reverse-engineered Codex to learn the
+Decision (from the user): computer use runs in the background on their own Mac;
+the earlier VM guest mode is gone. We reverse-engineered Codex to learn the
 technique and then did it better — using only **public** APIs.
 
 - **Genuinely background, not masked.** We never activate, never send synthetic
@@ -302,7 +302,7 @@ Rejected:
   dictionary key.
 
 ## 6. Measured numbers
-See `docs/computer-use.md` ("Host background mode — measured") for the numbers
+See `docs/computer-use.md` ("Measured") for the numbers
 captured on the user's Mac (ms/action, bytes-and-tokens/observation, and the
 frontmost/key-window/cursor invariants before vs after each action), with Codex
 compared where its own metric names make it measurable.

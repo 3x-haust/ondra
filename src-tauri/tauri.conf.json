@@ -76,7 +76,6 @@
       "dmg/background.tiff": "dmg-background.tiff",
       "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/components.json": "components.json",
-      "resources/computer/": "computer/",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"
     }
