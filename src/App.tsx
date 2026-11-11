@@ -74,9 +74,10 @@ export default function App() {
     }).then((u) => (unq = u));
     onCleanup(() => (un?.(), unq?.()));
   });
-  if (import.meta.env.DEV)
-    void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy")]).then(
-      ([store, tasks, captain, ui, native, memory, absorb, tidy]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy }),
+  // test builds (VITE_TEST_HOOKS=1) too: two copies of the app driven side by side
+  if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOKS === "1")
+    void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy"), import("./engine/remote"), import("./engine/hosts"), import("./state/mirror")]).then(
+      ([store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror }),
     );
   let unCapture: (() => void) | undefined;
   onCleanup(() => unCapture?.());
