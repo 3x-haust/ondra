@@ -806,13 +806,13 @@ export async function mergeTask(id: string): Promise<boolean> {
   try {
     const env = await gitEnv(t);
     const into = await worktreeMerge(w.repo, w.path, w.branch, t.title, env);
-    await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
+    const left = await dropWorktree(t, false, env);
     updateTask(id, (x) => {
       const now = Date.now();
-      x.worktree = { ...w, state: "merged", into };
+      x.worktree = { ...w, state: "merged", into, ...(left ? { left } : {}) };
       x.cwd = homeDir(x);
       x.mergedAt = now;
-      push(x, { kind: "note", text: `${into}에 병합 · 워크트리 정리` });
+      push(x, { kind: "note", text: left ? `${into}에 병합` : `${into}에 병합 · 워크트리 정리` });
       if (x.status !== "done") {
         x.status = "done";
         x.plan = closePlan(x.plan);
@@ -851,9 +851,9 @@ export async function closeWorktree(id: string) {
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
-  await worktreeRemove(w.repo, w.path, w.branch, true, await gitEnv(t)).catch((e) => toast(String(e), "bad"));
+  const left = await dropWorktree(t, true, await gitEnv(t), true);
   updateTask(id, (x) => {
-    x.worktree = { ...w, state: "discarded" };
+    x.worktree = { ...w, state: "discarded", ...(left ? { left } : {}) };
     x.cwd = homeDir(x);
     push(x, { kind: "note", text: "워크트리 정리 · 변경은 PR에 있어요" });
   });
@@ -864,9 +864,9 @@ export async function discardTask(id: string) {
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
-  await worktreeRemove(w.repo, w.path, w.branch, false, await gitEnv(t)).catch((e) => toast(String(e), "bad"));
+  const left = await dropWorktree(t, false, await gitEnv(t), true);
   updateTask(id, (x) => {
-    x.worktree = { ...w, state: "discarded" };
+    x.worktree = { ...w, state: "discarded", ...(left ? { left } : {}) };
     x.cwd = homeDir(x);
     x.discardedAt = Date.now();
     push(x, { kind: "note", text: "변경을 버렸어요" });
@@ -1052,6 +1052,8 @@ export function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
 
 function fail(id: string, message: string) {
   logError("task", `${id} failed: ${message}`);
+  // a folder left for it (it ran in a branch it had handed on) can go now
+  setTimeout(() => void sweepWorktrees(), 0);
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
@@ -1743,6 +1745,8 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
 function finish(id: string, summary: string, run?: Run) {
   // it worked in a finished job's branch folder: the branch (and its merge) ends up here
   claimBranch(id);
+  // a folder left for it (it ran in a branch it had handed on) can go now
+  setTimeout(() => void sweepWorktrees(), 0);
   // its subagents are for it: once it is done, ones that never started go away
   // and running ones stop (a review that runs after its job ended is wasted)
   for (const k of activeKids(id)) {
@@ -1803,16 +1807,17 @@ async function dropEmptyBranch(id: string) {
     if (pr && prMerged(await ghPrState(pr.url, env).catch(() => ""))) into = `PR #${pr.n}`;
     if (!into) return;
     // through a PR the branch stays, and anything left in the folder is saved on it
-    await worktreeRemove(w.repo, w.path, w.branch, !!pr, env).catch(() => {});
+    const left = await dropWorktree(t, !!pr, env);
     updateTask(id, (x) => {
       x.cwd = homeDir(x);
-      x.worktree = { ...w, state: "merged", into };
+      x.worktree = { ...w, state: "merged", into, ...(left ? { left } : {}) };
       x.mergedAt = Date.now();
-      push(x, { kind: "note", text: pr ? `${into} 병합됨 · 워크트리 정리` : `${into}에 이미 반영됨 · 워크트리 정리` });
+      push(x, { kind: "note", text: pr ? `${into} 병합됨${left ? "" : " · 워크트리 정리"}` : `${into}에 이미 반영됨${left ? "" : " · 워크트리 정리"}` });
     });
     return;
   }
-  await worktreeRemove(w.repo, w.path, w.branch, false, env).catch(() => {});
+  // another job still in the folder: it stays (merged in effect: nothing was left on it) until that one is done
+  if (await dropWorktree(t, false, env)) return updateTask(id, (x) => ((x.cwd = homeDir(x)), (x.worktree = { ...w, state: "merged", into: w.into ?? "", left: true })));
   updateTask(id, (x) => {
     x.cwd = homeDir(x);
     x.worktree = undefined;
@@ -1998,6 +2003,36 @@ export function createTask(f: {
 
 /** The job it carries on gives it its branch and worktree. */
 const inside = (dir: string, root: string) => !!root && (dir === root || dir.startsWith(`${root.replace(/\/+$/, "")}/`));
+
+/** a job not done yet that works in this folder, other than its owner: one that handed its branch on
+ *  and was picked up again keeps the folder it ran in */
+const usedBy = (path: string, owner: string) =>
+  state.tasks.find((x) => x.id !== owner && !x.parentId && !x.answer && x.status !== "done" && x.status !== "failed" && inside(x.cwd, path));
+
+/** Remove a job's worktree. While another job still works in that folder it stays (true), so that
+ *  job doesn't find its folder gone and make it again; sweepWorktrees removes it once that job is done. */
+async function dropWorktree(t: Task, keepBranch: boolean, env: Env, loud = false): Promise<boolean> {
+  const w = t.worktree!;
+  if (usedBy(w.path, t.id)) return true;
+  await worktreeRemove(w.repo, w.path, w.branch, keepBranch, env).catch((e) => (loud ? toast(String(e), "bad") : undefined));
+  return false;
+}
+
+/** Remove the worktree folders jobs are done with: those left for a job that was still in them, and
+ *  (at start) any a job's record says are merged or discarded but are still on disk. The branch stays. */
+export async function sweepWorktrees(all = false) {
+  for (const t of [...state.tasks]) {
+    const w = t.worktree;
+    if (!w || w.state === "open" || !(all || w.left)) continue;
+    if (usedBy(w.path, t.id) || state.tasks.some((x) => x.worktree?.state === "open" && x.worktree.path === w.path)) continue;
+    const there = await fsRead(w.path).then(
+      () => true,
+      (e) => !/파일이 없어요/.test(String(e)),
+    );
+    if (there) await worktreeRemove(w.repo, w.path, w.branch, true, await gitEnv(t)).catch(() => {});
+    if (w.left) updateTask(t.id, (x) => void (x.worktree && (x.worktree = { ...x.worktree, left: undefined })));
+  }
+}
 
 /**
  * A job working in another job's open worktree takes its branch once that job is
