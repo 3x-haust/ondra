@@ -62,9 +62,18 @@ function keep<T>(prev: T[] | undefined, next: T[], same: (a: T, b: T) => boolean
 /** One request and everything the agent did for it (across session hand-offs). */
 type Turn = { id: string; user?: Entry & { kind: "user" }; body: Entry[]; ms?: number; usage?: Usage };
 
+/**
+ * Notes the user has no use for in the thread: memory filling in on its own (the memory page shows it)
+ * and the checks Ondra runs on the agent (a repeated check, a step to verify before finishing, a review
+ * that still holds). They stay in the job's record; only the thread leaves them out.
+ */
+const QUIET_NOTE = /^(메모리에? 저장 · |기억함 · |메모리 \d+개 저장|프로젝트 노트 갱신|같은 (검사|실패) 반복|확인 필요 · |끝내기 전에 확인 · |이전 작업의 리뷰가 그대로 유효해요|앞의 일에서 받은 리뷰가 그대로 유효해요|리뷰는 이미 한 번 받았어요)/;
+const quiet = (e: Entry) => e.kind === "note" && QUIET_NOTE.test(e.text);
+
 function turns(entries: Entry[]): Turn[] {
   const out: Turn[] = [];
   for (const e of entries) {
+    if (quiet(e)) continue;
     if (e.kind === "user" || !out.length) out.push({ id: e.id, body: [], ...(e.kind === "user" ? { user: e } : {}) });
     const t = out[out.length - 1];
     if (e.kind === "user") continue;
@@ -395,7 +404,6 @@ export function liveVerb(t: Task): string | undefined {
     if (e.kind === "user") return undefined;
     if (e.kind !== "tool" || e.tool.endedAt || e.tool.stopped) continue;
     const x = e.tool;
-    if (x.note) return tr("메모리에 쓰는 중");
     if (x.kind === "bash" || x.kind === "browser") return (x.kind === "browser" ? describeBrowser(x.target ?? "") : describeCommand(x.target ?? "")).now;
     if (x.name === "job_tell") return tr(TELL[0]);
     return tr(VERB[x.kind][0]);
@@ -406,11 +414,11 @@ export function liveVerb(t: Task): string | undefined {
 /**
  * Which calls belong on one line: reads/searches ("살펴봄", Codex's Explored),
  * file edits ("파일 수정함"), commands ("명령 5개 실행함", Claude Code's "Ran 5
- * shell commands") and browser steps. Memory notes and other tools stay single.
+ * shell commands") and browser steps. Other tools stay single.
  */
 type Family = "explore" | "edit" | "browser" | "run";
 const familyOf = (e: ToolEntry): Family | undefined =>
-  e.tool.note ? undefined : e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
+  e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
 function runs(tools: ToolEntry[]): ToolEntry[][] {
   const out: ToolEntry[][] = [];
   for (const t of tools) {
@@ -510,7 +518,6 @@ function doneLabel(run: ToolEntry[]): string {
     if (f === "run") return tr("명령 {n}개 실행함", { n: run.length });
     return tr("브라우저 {n}번 씀", { n: run.length });
   }
-  if (t.note) return tr("메모리에 저장함");
   if (t.kind === "bash") return describeCommand(t.target ?? "").label;
   if (t.kind === "browser") return describeBrowser(t.target ?? "").label;
   return tr((t.name === "job_tell" ? TELL : VERB[t.kind])[1]);
@@ -599,13 +606,11 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   return (
     <div class="tool" classList={{ bad: t().ok === false && !props.halt, halted: !!props.halt }}>
       <button class="tool-row click" onClick={click} title={t().detail}>
-        <Show when={running()} fallback={<Icon name={t().note ? "memory" : ICON[t().kind]} size={14} />}>
+        <Show when={running()} fallback={<Icon name={ICON[t().kind]} size={14} />}>
           <span class="spin" />
         </Show>
         <span class="tool-verb" classList={{ shimmer: running() }}>
-          {t().note
-            ? running() ? tr("메모리에 쓰는 중") : cut() ? tr("메모리") : tr("메모리에 저장함")
-            : props.halt === "search"
+          {props.halt === "search"
               ? tr("검색함") // stopped with nothing found: it searched, it didn't find
               : t().kind === "bash" || t().kind === "browser"
               ? ((d) => (running() ? d.now : d.label))(browser() ?? describeCommand(t().target ?? ""))
