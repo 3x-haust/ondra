@@ -112,11 +112,30 @@ export function request(agentId: string, command: Record<string, unknown>, timeo
   });
 }
 
+/** What a provider said, without the status code and JSON around it:
+ *  `429 {"type":"error","error":{"message":"This request would exceed …"}}` → "This request would exceed …". */
+export function providerSays(message: string): string {
+  const at = message.indexOf("{");
+  if (at >= 0) {
+    try {
+      const j = JSON.parse(message.slice(at));
+      const said = j?.error?.message ?? j?.message ?? (typeof j?.error === "string" ? j.error : undefined);
+      if (typeof said === "string" && said.trim()) return said.replace(/\s+/g, " ").trim();
+    } catch {
+      // not JSON after all: the text as it is
+    }
+  }
+  return message.replace(/^\s*\d{3}\b[:\s]*/, "").replace(/\s+/g, " ").trim();
+}
+
+/** cut at a word, with an ellipsis */
+const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, "")}…`);
+
 /** Provider errors → a sentence the user can act on. */
 export function explain(message: string): string {
   const m = message.match(/'([^']+)' model is not supported/i);
   if (m) return t("이 계정에서 쓸 수 없는 모델 · {m}", { m: m[1] });
-  if (/rate limit|usage limit|429|quota/i.test(message)) return t("사용 한도 도달 · {msg}", { msg: message.slice(0, 90) });
+  if (/rate limit|usage limit|429|quota/i.test(message)) return t("사용 한도 도달 · {msg}", { msg: clip(providerSays(message), 140) });
   if (/unauthori[sz]ed|invalid.*token|401|403|log ?in/i.test(message)) return t("로그인이 필요해요 · 설정 › 계정");
   if (/no (api key|credentials)|not configured/i.test(message)) return t("연결된 계정이 없어요 · 설정 › 계정");
   return message.replace(/\s+/g, " ").slice(0, 220);

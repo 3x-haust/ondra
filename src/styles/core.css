@@ -1277,7 +1277,14 @@ button.strip:hover {
   font-size: var(--fs-lg);
 }
 .reply-error > .icon {
+  flex-shrink: 0;
   color: var(--ink-3);
+}
+/* a long message wraps in its own column; the button keeps its one line */
+.reply-error > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .retry {
   display: inline-flex;
@@ -1290,6 +1297,8 @@ button.strip:hover {
   border: 1px solid var(--line);
   font-size: var(--fs-sm);
   color: var(--ink-2);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .retry:hover {
   color: var(--ink);
