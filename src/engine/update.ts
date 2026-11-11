@@ -8,6 +8,7 @@
 // notice restarts once none does instead. Settings shows the same, with how far the download
 // is, and still restarts at once when asked.
 import { flushLog, logError, logInfo } from "../lib/log";
+import { flushTelemetry, track } from "../lib/telemetry";
 import { createSignal } from "solid-js";
 import { checkForUpdate, installUpdate, onUpdateProgress, prepareUpdate } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
@@ -128,11 +129,14 @@ export async function installNow() {
     await flushState().catch(() => {});
     setQuitting(true);
     logInfo("update", `installing ${available() ?? "update"}`);
+    track("update_installed", { ok: true });
     flushLog();
+    await flushTelemetry();
     await installUpdate();
   } catch (e) {
     setQuitting(false);
     logError("update", `install failed: ${e instanceof Error ? e.message : String(e)}`);
+    track("update_installed", { ok: false });
     setStatus("idle");
     setProgress(null);
     const why = e instanceof Error ? e.message : String(e);

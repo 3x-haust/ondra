@@ -2,6 +2,7 @@
 import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import * as L from "./layout";
+import { logWarn } from "../lib/log";
 
 export type View =
   /** the main conversation of the current space */
@@ -401,6 +402,8 @@ export function releaseToast(id: number) {
 /** One toast at a time (DESIGN.md §9.10): a new one replaces the passing one; kept ones wait under it. 3s, 6s with an action or an error. */
 export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"], opts: { stay?: boolean; ms?: number } = {}) {
   const id = ++seq;
+  // an error the user was shown: in the log for a feedback report
+  if (tone === "bad") logWarn("toast", text);
   for (const x of toasts()) if (!x.stay) (clearTimeout(timers.get(x.id)?.timer), timers.delete(x.id));
   setToasts((t) => [...t.filter((x) => x.stay), { id, text, tone, action, stay: opts.stay }]);
   if (!opts.stay) {
