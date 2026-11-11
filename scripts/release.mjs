@@ -54,6 +54,10 @@ const onPath = (bin) => {
 
 if (notes && !existsSync(notes)) die(`no notes file ${notes}`);
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY) die("TAURI_SIGNING_PRIVATE_KEY is not set: the updater checks the package with it");
+// a release without the key would send no usage numbers or feedback, and nothing would say so
+const dotenv = existsSync(join(root, ".env")) ? readFileSync(join(root, ".env"), "utf8") : "";
+for (const name of ["VITE_POSTHOG_KEY", "VITE_POSTHOG_SURVEY"])
+  if (!process.env[name] && !new RegExp(`^${name}=\\S+`, "m").test(dotenv)) die(`${name} is not set (.env): see docs/TELEMETRY.md`);
 const identity = process.env.APPLE_SIGNING_IDENTITY ?? "";
 if (!identity && publish) die("APPLE_SIGNING_IDENTITY is not set");
 if (!identity) say("APPLE_SIGNING_IDENTITY is not set: signing ad hoc (not for publishing)");

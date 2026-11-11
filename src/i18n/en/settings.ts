@@ -11,6 +11,8 @@ export default {
   "⌘ 클릭하면 기본 브라우저에서 열려요": "⌘-click opens a link in your default browser",
   "{name} 안에서": "In {name}",
   "기본 브라우저": "Default browser",
+  "익명 사용 통계 보내기": "Send anonymous usage statistics",
+  "무엇을 시켰는지, 파일, 계정은 보내지 않아요": "Never what you asked, your files or your accounts",
   "동시 작업 수": "Concurrent tasks",
   "빌드·시뮬레이터 작업 동시 수": "Concurrent build and simulator tasks",
   "빌드, 시뮬레이터, 앱 조작": "Builds, simulators, app control",

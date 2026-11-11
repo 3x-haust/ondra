@@ -30,6 +30,7 @@ import {
 import { ago, agoIn, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
+import { canTrack, track } from "../lib/telemetry";
 import { LoginSheet } from "./Login";
 import { ConnectionSheet } from "./Connection";
 import { keyText, SHORTCUT_EXTRAS } from "./ShortcutSheet";
@@ -134,6 +135,12 @@ function General() {
             <button classList={{ on: state.settings.links === "outside" }} onClick={() => setState("settings", "links", "outside")}>{t("기본 브라우저")}</button>
           </div>
         </Row>
+        {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
+        <Show when={canTrack}>
+          <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>
+            <Switch_ label={t("익명 사용 통계 보내기")} on={state.settings.telemetry !== false} set={(v) => (v || track("telemetry_off", {}), setState("settings", "telemetry", v))} />
+          </Row>
+        </Show>
       </div>
 
       {/* what every new task starts with: the same model and permission the composer shows (one store) */}
