@@ -323,6 +323,7 @@ export const toolStatus = () =>
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
+export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });
 /** Env every worker gets: bundled tools on PATH, its tab in the shared browser, keychain sign-in, artifacts dir. */
 export const workerEnv = async (workerId: string, space?: string) => {
   // every job gets the shared browser: one whose browser is still coming in waits for it

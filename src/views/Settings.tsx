@@ -19,14 +19,13 @@ import {
   accountProviders,
   accountRemove,
   inTauri,
-  openPrivacySettings,
   pickFolder,
-  requestAccessibility,
   toolStatus,
   spaceGhLogin,
   spaceGitIdentity,
   spaceTools,
 } from "../lib/native";
+import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
@@ -799,10 +798,10 @@ function Permissions() {
       <h2>{t("macOS 권한")}</h2>
       <div class="set-group">
         <Row title={t("손쉬운 사용")} desc={t("다른 앱 조작에 필요")}>
-          {perm(status()?.accessibility, async () => { await requestAccessibility(); openPrivacySettings("accessibility"); })}
+          {perm(status()?.accessibility, () => void askPermission("accessibility"))}
         </Row>
         <Row title={t("화면 기록")} desc={t("앱 화면 캡처에 필요")}>
-          {perm(status()?.screenRecording, () => openPrivacySettings("screen"))}
+          {perm(status()?.screenRecording, () => void askPermission("screen"))}
         </Row>
       </div>
     </>

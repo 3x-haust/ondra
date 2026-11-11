@@ -429,6 +429,7 @@ pub fn run() {
             tools::tool_status,
             tools::request_accessibility,
             tools::open_privacy_settings,
+            tools::permission_guide,
             tools::worker_env,
             tools::worker_skills,
             tools::global_skills,

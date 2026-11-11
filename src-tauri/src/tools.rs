@@ -106,6 +106,36 @@ pub fn open_privacy_settings(pane: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The guide laid over System Settings' privacy list (one at a time).
+static GUIDE: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+/// Show a small panel over System Settings with Ondra's tile to drag into the privacy list
+/// ("Ondra를 손쉬운 사용 목록에 끌어다 놓으세요"); it goes away once the permission is on.
+#[tauri::command]
+pub fn permission_guide(pane: String, title: String, sub: String) -> Result<(), String> {
+    let mut guide = GUIDE.lock().map_err(|e| e.to_string())?;
+    if let Some(mut old) = guide.take() {
+        let _ = old.kill();
+        let _ = old.wait();
+    }
+    // the app the user drags in: the bundle this runs from (none when run from a dev build)
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let Some(app) = exe.ancestors().find(|p| p.extension().is_some_and(|x| x == "app")) else { return Ok(()) };
+    let Some(host) = sidecar("ondra-cuhost") else { return Ok(()) };
+    let pane = if pane == "screen" { "screen" } else { "accessibility" };
+    let child = Command::new(host)
+        .args(["--guide", pane, "--app"])
+        .arg(app)
+        .args(["--title", &title, "--sub", &sub])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    *guide = Some(child);
+    Ok(())
+}
+
 // ───────────── locating bundled files ─────────────
 
 /// Sidecars sit beside the running executable, both in `tauri dev` and in the bundle.
