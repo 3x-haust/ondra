@@ -45,6 +45,11 @@ screen) over checks of its internals:
 | nothing leaked | a search of what the reader sees (copy, titles, alt text, comments) for phrases from the task, the spec and the rules: none may appear |
 | taste | a rubric written from the user's words, scored against shots of the result, one line of evidence per point |
 
+- At least one check judges the result from outside your own work: the real
+  app, page or command driven the way the user will, real data, or the
+  user's own words held against what shows. A check that only agrees with
+  you proves nothing: an expected value worked out from the code you wrote,
+  a mock of the very thing under test, a score you gave yourself.
 - Run them once before changing anything. A check that already passes for a
   requirement that isn't met yet is a wrong check: fix it.
 - Never loosen, skip or delete a check to get it to pass. If a check is
@@ -65,7 +70,10 @@ Each round:
 6. Add one line to `.ondra/goal/log.md`: round · check · cause · fix · before → after.
 
 Same check failing three rounds in a row: stop and rethink (re-read the spec,
-doubt the assumption, look one layer deeper) before the next try. Truly
+doubt the assumption, look one layer deeper) before the next try. Still
+failing after that: the approach is wrong, not the details. Undo your
+changes for that part, keep the spec, the checks and the log, and build it
+again another way; don't keep patching on top of what failed. Truly
 blocked (needs the user's login, a decision, a device you may not touch):
 `ask` with what you tried, and end the turn.
 
@@ -73,9 +81,18 @@ blocked (needs the user's login, a decision, a device you may not touch):
 
 - Run every check once more; all pass. A check that passed stays passed
   until a change touches what it covers: don't run it again for its own sake.
-- Then review it the way the user would: go through **Asked for** line by
-  line against the evidence (shots, outputs), not against what you remember
-  doing. Anything that goes against their words is a failing check: back to 3.
+- Look for success that isn't real on the path the checks went through: a
+  stub or hard-coded result, a caught error that ends as "ok", a fallback the
+  user can't tell from the real thing, a placeholder left in. Each is a
+  failing check: back to 3. A degraded state the user can see is fine.
+- Then have it tried by someone who didn't build it: start
+  {"type":"subagent","title":"결과 확인","task":"…"} with only the **Asked for**
+  lines in the user's words and how to reach the result (the URL, the
+  command, the files, the screens to open). No plan, no log, no verdict of
+  yours. It uses the result the way the user would and reports, per line,
+  what matches and what doesn't, with evidence. It is not a code review; it
+  doesn't read your code. End your turn and wait for it. Every mismatch is a
+  failing check: back to 3.
 - End with `done`: the checks as evidence (`kind: "test"`, `ok: true`), a
   `compare` of passing checks before → after, shots of what the user will
   look at, and anything left as an assumption in `unverified`.
