@@ -206,3 +206,18 @@ process.stdin.on("data", c => {
     await session.stop();
   });
 });
+
+describe("HostObservation.label", () => {
+  it("names an element by its own title or description, else the first text inside it", () => {
+    const obs = new HostObservation();
+    obs.accept({ id: "w", role: "AXWindow", children: [
+      { id: "b1", role: "AXButton", desc: "보내기" },
+      { id: "b2", role: "AXButton", children: [{ id: "g", role: "AXGroup", children: [{ id: "t", role: "AXStaticText", value: "  지수민\n님 " }] }] },
+      { id: "b3", role: "AXButton" },
+    ] }, true);
+    expect(obs.label("b1")).toBe("보내기");
+    expect(obs.label("b2")).toBe("지수민 님");
+    expect(obs.label("b3")).toBeUndefined();
+    expect(obs.label("nope")).toBeUndefined();
+  });
+});

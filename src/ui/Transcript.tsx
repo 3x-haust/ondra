@@ -9,7 +9,7 @@ import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types"
 import { live, previewFile } from "../state/ui";
 import { kidsOf, state, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
-import { describeBrowser, describeCommand, mainCommand } from "../engine/describe";
+import { describeBrowser, describeCommand, describeComputer, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
 import { BlockView, type ProofBlock } from "./Blocks";
 import { vizOf } from "./viz";
@@ -396,6 +396,10 @@ const TELL: [string, string] = ["전달하는 중", "전달함"];
 
 type ToolEntry = Entry & { kind: "tool" };
 
+/** a computer step in words: "클릭함 ‘보내기’", "화면 봄" */
+const isComputer = (x: ToolCall) => x.name === "computer";
+const computerSaid = (x: ToolCall) => describeComputer(x.act, x.target || undefined);
+
 /** What a working task is doing this moment, as its running call's row says it ("테스트 중"), if one runs. */
 export function liveVerb(t: Task): string | undefined {
   if (t.status !== "running") return undefined;
@@ -406,6 +410,7 @@ export function liveVerb(t: Task): string | undefined {
     const x = e.tool;
     if (x.kind === "bash" || x.kind === "browser") return (x.kind === "browser" ? describeBrowser(x.target ?? "") : describeCommand(x.target ?? "")).now;
     if (x.name === "job_tell") return tr(TELL[0]);
+    if (isComputer(x)) return computerSaid(x).now;
     return tr(VERB[x.kind][0]);
   }
   return undefined;
@@ -416,9 +421,9 @@ export function liveVerb(t: Task): string | undefined {
  * file edits ("파일 수정함"), commands ("명령 5개 실행함", Claude Code's "Ran 5
  * shell commands") and browser steps. Other tools stay single.
  */
-type Family = "explore" | "edit" | "browser" | "run";
+type Family = "explore" | "edit" | "browser" | "run" | "computer";
 const familyOf = (e: ToolEntry): Family | undefined =>
-  e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
+  isComputer(e.tool) ? "computer" : e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
 function runs(tools: ToolEntry[]): ToolEntry[][] {
   const out: ToolEntry[][] = [];
   for (const t of tools) {
@@ -460,8 +465,11 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
     return d ? { verb: d.label, target: d.target! } : undefined;
   };
   const sites = () => names(steps().map((d) => (d.action === "open" ? d.target?.split("/")[0] : undefined)));
+  // computer steps: the one going on ("클릭 중 ‘보내기’"), else the app(s) they worked in ("앱 조작함 Instagram")
+  const apps = () => names(props.tools.map((t) => t.tool.app));
   // "살펴봄 a.ts, b.ts", "파일 3개 수정함", "브라우저 5번 씀"
   const summary = () => {
+    if (fam() === "computer") return ((l) => (l ? computerSaid(l.tool).now : tr("앱 조작함")))(live());
     const s = step();
     if (s) return s.verb;
     const done = !live();
@@ -477,8 +485,8 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
   };
   // what it touched; for commands the one running now (or the last), for the browser the step's target or the sites
   const detail = () =>
-    fam() === "explore" || fam() === "edit" ? names(props.tools.map((t) => shortName(t.tool))) : fam() === "browser" ? (step()?.target ?? sites()) : shortName((open_() ?? props.tools[props.tools.length - 1]).tool);
-  const lead = () => (fam() === "explore" ? "read" : fam() === "edit" ? "edit" : fam() === "run" ? "bash" : "browser") as ToolCall["kind"];
+    fam() === "computer" ? ((l) => (l ? (computerSaid(l.tool).target ?? l.tool.app ?? "") : apps()))(live()) : fam() === "explore" || fam() === "edit" ? names(props.tools.map((t) => shortName(t.tool))) : fam() === "browser" ? (step()?.target ?? sites()) : shortName((open_() ?? props.tools[props.tools.length - 1]).tool);
+  const lead = () => (fam() === "explore" ? "read" : fam() === "edit" ? "edit" : fam() === "run" ? "bash" : fam() === "computer" ? "desktop" : "browser") as ToolCall["kind"];
   return (
     <div class="tool group" classList={{ open: open() }}>
       <button class="tool-row click" onClick={() => setOpen(!open())} aria-expanded={open()}>
@@ -489,7 +497,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
         <span class="tool-target" classList={{ cmd: fam() === "run" }}>{detail()}</span>
         <span class="tool-end">
           {/* a browser step named by its verb ("클릭 중 ‘프로 시작하기’") says how many steps the row holds */}
-          <Show when={step()}><span class="tool-count">{tr("{n}단계|count", { n: props.tools.length })}</span></Show>
+          <Show when={step() || fam() === "computer"}><span class="tool-count">{tr("{n}단계|count", { n: props.tools.length })}</span></Show>
           <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
           <Show when={halts() && !failed()}><span class="tool-stopped">{tr("멈춤|tool")}</span></Show>
           <Show when={(props.stopped && open_()) || props.tools.some((e) => e.tool.stopped && !halt(e))}><span class="tool-stopped">{tr("중단됨")}</span></Show>
@@ -516,8 +524,10 @@ function doneLabel(run: ToolEntry[]): string {
     if (f === "explore") return tr("살펴봄");
     if (f === "edit") return tr("파일 {n}개 수정함", { n: new Set(run.map((e) => e.tool.target ?? e.id)).size });
     if (f === "run") return tr("명령 {n}개 실행함", { n: run.length });
+    if (f === "computer") return tr("앱 조작함");
     return tr("브라우저 {n}번 씀", { n: run.length });
   }
+  if (isComputer(t)) return computerSaid(t).label;
   if (t.kind === "bash") return describeCommand(t.target ?? "").label;
   if (t.kind === "browser") return describeBrowser(t.target ?? "").label;
   return tr((t.name === "job_tell" ? TELL : VERB[t.kind])[1]);
@@ -542,7 +552,7 @@ function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolea
   const failed = () => props.tools.filter((t) => t.tool.ok === false && !props.halts?.get(t.id)).length;
   const kind = (): ToolCall["kind"] => {
     const f = familyOf(props.tools[0]);
-    return f === "explore" ? "read" : f === "edit" ? "edit" : f === "run" ? "bash" : f === "browser" ? "browser" : props.tools[0].tool.kind;
+    return f === "explore" ? "read" : f === "edit" ? "edit" : f === "run" ? "bash" : f === "browser" ? "browser" : f === "computer" ? "desktop" : props.tools[0].tool.kind;
   };
   return (
     <div class="tool group work-line" classList={{ open: open() }}>
@@ -594,7 +604,8 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   /** how long it took or has run: nothing under a second ("0초째" says nothing) */
   const took = () => (t().endedAt ?? now()) - props.e.at;
   const browser = () => (t().kind === "browser" ? describeBrowser(t().target ?? "") : undefined);
-  const what = () => ((b) => (b && b.action !== "other" ? (b.target ?? "") : shortName(t())))(browser());
+  const what = () =>
+    isComputer(t()) ? (computerSaid(t()).target ?? t().app ?? "") : ((b) => (b && b.action !== "other" ? (b.target ?? "") : shortName(t())))(browser());
   const [open, setOpen] = createSignal(false);
   const canOpen = () => !!shell() || t().kind === "other" || t().kind === "search" || !!t().note;
   const click = () => {
@@ -612,6 +623,8 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
         <span class="tool-verb" classList={{ shimmer: running() }}>
           {props.halt === "search"
               ? tr("검색함") // stopped with nothing found: it searched, it didn't find
+              : isComputer(t())
+              ? ((d) => (running() ? d.now : d.label))(computerSaid(t()))
               : t().kind === "bash" || t().kind === "browser"
               ? ((d) => (running() ? d.now : d.label))(browser() ?? describeCommand(t().target ?? ""))
               : tr((t().name === "job_tell" ? TELL : VERB[t().kind])[running() ? 0 : 1])}

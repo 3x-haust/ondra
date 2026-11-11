@@ -184,6 +184,12 @@ export function fixture(base: AppState): AppState {
         entries: [
           { id: "d1", at: m(60), kind: "user", text: "대시보드 인사말이랑 카드 이름 좀 짧게" },
           { id: "d2", at: m(55), kind: "tool", tool: { name: "edit", kind: "edit", target: "Dashboard.tsx", detail: "/x/src/Dashboard.tsx", add: 6, del: 6, ok: true, endedAt: m(54.9) } },
+          // computer use: each step in words, one row per app session
+          { id: "dc1", at: m(53), kind: "tool", tool: { name: "computer", kind: "desktop", act: "open", target: "Safari", app: "Safari", ok: true, endedAt: m(52.9) } },
+          { id: "dc2", at: m(52.9), kind: "tool", tool: { name: "computer", kind: "desktop", act: "look", target: "", app: "Safari", ok: true, endedAt: m(52.8) } },
+          { id: "dc3", at: m(52.8), kind: "tool", tool: { name: "computer", kind: "desktop", act: "click", target: "‘대시보드’", app: "Safari", ok: true, endedAt: m(52.7) } },
+          { id: "dc4", at: m(52.7), kind: "tool", tool: { name: "computer", kind: "desktop", act: "scroll", target: "down", app: "Safari", ok: true, endedAt: m(52.6) } },
+          { id: "dc5", at: m(52.6), kind: "tool", tool: { name: "computer", kind: "desktop", act: "stop", target: "", app: "Safari", ok: true, endedAt: m(52.5) } },
           { id: "d3", at: m(49), kind: "text", text: "인사말을 한 줄로 줄이고 카드 이름을 두 글자씩 맞췄어요. 개발 서버에서 대시보드를 열어 확인했어요." },
           { id: "d4", at: m(48), kind: "block", block: { type: "shot", path: LOGIN, caption: "바뀐 대시보드" } },
         ],

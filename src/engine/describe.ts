@@ -42,7 +42,7 @@ export function nowText(now: string | undefined): string {
   const plain = now.includes("|") ? now : t(now);
   if (plain !== now) return plain;
   // a browser step as describeBrowser() stores it: "클릭 중 ‘프로 시작하기’"
-  for (const [, ing] of Object.values(BROWSER_VERBS)) if (now.startsWith(`${ing} `)) return `${t(ing)} ${now.slice(ing.length + 1)}`;
+  for (const [, ing] of [...Object.values(BROWSER_VERBS), ...Object.values(COMPUTER_VERBS)]) if (now.startsWith(`${ing} `)) return `${t(ing)} ${now.slice(ing.length + 1)}`;
   for (const { f, keys, re } of FORM_RES) {
     const m = now.match(re);
     if (!m) continue;
@@ -464,3 +464,68 @@ export function describeBrowser(cmd: string): Said & { action: BrowserAction } {
   const [label, now] = BROWSER_VERBS[step.action];
   return { label: t(label), now: t(now), nowKo: step.target ? `${now} ${step.target}` : now, target: step.target, action: step.action };
 }
+
+/** A computer-use step (extensions/computer.ts), done / going on, the verb before the target. */
+export type ComputerAction = "open" | "look" | "read" | "click" | "dblclick" | "menu" | "type" | "press" | "scroll" | "drag" | "stop" | "other";
+const COMPUTER_VERBS: Record<ComputerAction, [string, string]> = {
+  open: ["열었음", "여는 중"],
+  look: ["화면 봄", "화면 보는 중"],
+  read: ["화면 읽음", "화면 읽는 중"],
+  click: ["클릭함", "클릭 중"],
+  dblclick: ["더블클릭함", "더블클릭 중"],
+  menu: ["메뉴 엶", "메뉴 여는 중"],
+  type: ["입력함", "입력 중"],
+  press: ["키 누름", "키 누르는 중"],
+  scroll: ["스크롤함", "스크롤 중"],
+  drag: ["끌어다 놓음", "끌어다 놓는 중"],
+  stop: ["앱 사용 마침", "앱 사용 마치는 중"],
+  other: ["앱 조작함", "앱 조작 중"],
+};
+const SCROLL_WAY: Record<string, string> = { up: "위로", down: "아래로", left: "왼쪽으로", right: "오른쪽으로" };
+
+/**
+ * What a computer call does, from its arguments: the step and what it worked on (the app
+ * opened, the text typed, the key, the scroll direction). A click's element is named once
+ * the call returns (its label, see tasks.ts).
+ */
+export function computerStep(args: any): { action: ComputerAction; target?: string } {
+  const input = args?.input ?? {};
+  switch (args?.action) {
+    case "start":
+      return { action: "open", target: typeof args.app === "string" ? args.app : undefined };
+    case "look":
+      return { action: "look" };
+    case "observe":
+      return { action: "read" };
+    case "stop":
+      return { action: "stop" };
+    case "act":
+      switch (input.kind) {
+        case "click":
+        case "click-at":
+          return { action: input.button === "right" ? "menu" : input.count === 2 ? "dblclick" : "click" };
+        case "type":
+        case "set-value":
+          return { action: "type", target: quoted(String(input.text ?? input.value ?? "")) };
+        case "press": {
+          const mods = Array.isArray(input.modifiers) ? input.modifiers.filter((m: unknown) => typeof m === "string") : [];
+          return { action: "press", target: typeof input.key === "string" ? [...mods, input.key].join("+") : undefined };
+        }
+        case "scroll":
+          return { action: "scroll", target: typeof input.direction === "string" ? input.direction : undefined };
+        case "drag":
+          return { action: "drag" };
+      }
+  }
+  return { action: "other" };
+}
+
+/** A computer step in plain words: "클릭함 ‘보내기’", "스크롤 중 아래로", "열었음 Instagram". */
+export function describeComputer(action: string | undefined, target?: string): Said {
+  const [label, now] = COMPUTER_VERBS[(action as ComputerAction) in COMPUTER_VERBS ? (action as ComputerAction) : "other"];
+  const said = action === "scroll" && target && SCROLL_WAY[target] ? SCROLL_WAY[target] : target;
+  return { label: t(label), now: t(now), nowKo: said ? `${now} ${said}` : now, target: said ? (action === "scroll" ? t(said) : said) : undefined };
+}
+
+/** An element's label as a click target: ‘보내기’. */
+export const computerLabel = (label: string) => quoted(label);

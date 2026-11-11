@@ -147,6 +147,20 @@ export default {
   "브라우저 연결 중": "Connecting browser",
   "마우스 조작함": "Moved mouse",
   "마우스 조작 중": "Moving mouse",
+
+  // describe.ts: computer-use steps (done / going on)
+  "화면 봄": "Looked at the screen",
+  "화면 보는 중": "Looking at the screen",
+  "화면 읽음": "Read the screen",
+  "화면 읽는 중": "Reading the screen",
+  "메뉴 엶": "Opened menu",
+  "메뉴 여는 중": "Opening menu",
+  "앱 사용 마침": "Done with the app",
+  "앱 사용 마치는 중": "Finishing with the app",
+  "위로": "up",
+  "아래로": "down",
+  "왼쪽으로": "left",
+  "오른쪽으로": "right",
   // a task's "now" line (stored in Korean, shown through nowText() / t())
   "이어서 작업 중": "Resuming",
   "시작 중": "Starting",

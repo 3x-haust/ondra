@@ -129,6 +129,9 @@ export interface ToolCall {
   note?: boolean;
   /** For notes: what was written (capped). */
   text?: string;
+  /** For computer: the step (computerStep()) and the app the session works in. */
+  act?: string;
+  app?: string;
 }
 
 /** One line of a task's transcript. */

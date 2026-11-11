@@ -163,6 +163,24 @@ export class HostObservation {
 
   currentEpoch(): string { return this.epoch; }
 
+  /** What an element is called, for showing the step to the user: its own title or
+   *  description, else the first text inside it ("보내기"). */
+  label(ref: string): string | undefined {
+    const text = (n: HostNode) => [n.title, n.desc, n.placeholder].find((v): v is string => typeof v === "string" && !!v.trim());
+    const find = (n: HostNode): HostNode | undefined => n.id === ref ? n : (n.children ?? []).reduce<HostNode | undefined>((hit, c) => hit ?? find(c), undefined);
+    const inner = (n: HostNode, depth: number): string | undefined => {
+      if (depth > 3) return undefined;
+      for (const c of n.children ?? []) {
+        const v = text(c) ?? (c.role === "AXStaticText" && typeof c.value === "string" && c.value.trim() ? c.value : undefined) ?? inner(c, depth + 1);
+        if (v) return v;
+      }
+      return undefined;
+    };
+    const node = this.tree && find(this.tree);
+    const name = node && (text(node) ?? inner(node, 0));
+    return name ? name.replace(/\s+/g, " ").trim().slice(0, 80) : undefined;
+  }
+
   invalidate(): void { this.epoch = ""; }
   reset(): void { this.epoch = ""; this.baseEpoch = ""; this.tree = undefined; this.ids = new Set(); }
 }
@@ -275,6 +293,8 @@ export class ComputerHostSession {
     return this.guard(async () => {
       // Refs are checked against the epoch the caller observed, not the latest one.
       const translated = this.translate(action, String(action.epoch));
+      const ref = action.ref ?? (isRecord(action.from) ? action.from.ref : undefined);
+      const label = typeof ref === "string" ? this.obs.label(ref) : undefined;
       const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
       // the user's own mouse or keys moved things: theirs, not the action's
       if (r.backgroundPreserved === false && r.userInput !== true) {
@@ -288,7 +308,7 @@ export class ComputerHostSession {
       const effect = snapshot ? (snapshot.kind === "unchanged" ? "no_change" : "changed") : "unknown";
       return { action: { ok: true, outcome: "verified", effect, ...(typeof r.via === "string" ? { via: r.via } : {}),
           ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}) }, actionMs: r.actionMs, env: r.env,
-        ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}),
+        ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}), ...(label ? { label } : {}),
         ...(snapshot ? { observation: snapshot } : { observationError: "NO_WINDOW" }) };
     });
   }
