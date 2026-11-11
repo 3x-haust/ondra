@@ -196,7 +196,10 @@ export default function (pi: any) {
       const helper = new ComputerHostHelper(hostBin);
       helper.start();
       hostSession = new ComputerHostSession(helper);
-      return result(await hostSession.start(input.app!, signal));
+      // a start that failed (app not found, launch refused) leaves no session behind: the next
+      // start, with another name for the app, begins clean
+      try { return result(await hostSession.start(input.app!, signal)); }
+      catch (error) { try { await stopHost(); } catch { /* already gone */ } throw error; }
     }
     if (!hostSession) throw new Error("No computer session; call start first");
     if (input.action === "look") {
