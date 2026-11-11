@@ -24,6 +24,12 @@ using only **public** APIs:
   screen.
 - **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
   so the user's frontmost app stays in front.
+- **Park** the windows of an app the launch opened in a screen corner, one point
+  left on screen (a window wholly off every screen may be moved back or stop being
+  drawn). They are still drawn, so the tree, events and captures work; windows the
+  app opens later are parked after each action. They go back where they were on
+  `release` (the tool's `stop`), when the helper ends, or when the user brings the
+  app forward. An app that was already running is not parked.
 
 The background contract is **verified, not masked**: the helper records the
 frontmost app, key window and mouse position before and after every action and
