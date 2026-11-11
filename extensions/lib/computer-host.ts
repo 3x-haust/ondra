@@ -242,7 +242,8 @@ export class ComputerHostSession {
     if (this.started) throw new Error("Host session already started; use another session for another app");
     this.started = true;
     const launched = await this.helper.request("launch", { app }, signal);
-    if (launched.backgroundPreserved === false) throw new Error("Launch changed the foreground; refusing to continue in background");
+    // the user moving the mouse or typing while it started is theirs, not the launch's
+    if (launched.backgroundPreserved === false && launched.userInput !== true) throw new Error("Launch changed the foreground; refusing to continue in background");
     const pid = launched.pid;
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
     this.pid = pid;
