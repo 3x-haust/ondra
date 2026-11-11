@@ -59,8 +59,34 @@ const openId = () => {
 const openRoot = () => {
   let t = openId() ? taskById(openId()!) : undefined;
   while (t?.parentId) t = taskById(t.parentId);
+  // a follow-up shows under the job it carries on
+  for (let i = 0; t && carriedOn(t) && i < 50; i++) t = carriedOn(t);
   return t?.id;
 };
+
+/** a job of the list: not a subagent, a quick answer or archived */
+const listed = (t: Task) => !t.parentId && !t.answer && !t.archived;
+/** the job a follow-up carries on (one you started by answering it, say "merge it"), when that one
+ *  is in the same list: the follow-up then sits under it, like a file under its folder */
+function carriedOn(t: Task): Task | undefined {
+  const p = t.follows ? taskById(t.follows) : undefined;
+  return p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project ? p : undefined;
+}
+/** every job down a job's line of follow-ups, oldest first */
+function followUps(t: Task): Task[] {
+  const out: Task[] = [];
+  const seen = new Set([t.id]);
+  let ring = new Set([t.id]);
+  while (ring.size) {
+    const next = state.tasks.filter((x) => !seen.has(x.id) && listed(x) && ring.has(x.follows ?? "") && carriedOn(x));
+    for (const x of next) seen.add(x.id);
+    out.push(...next);
+    ring = new Set(next.map((x) => x.id));
+  }
+  return out.sort((a, b) => a.createdAt - b.createdAt);
+}
+/** a job and its follow-ups: the line sorts, folds away and counts as one */
+const lineOf = (t: Task) => [t, ...followUps(t)];
 
 /** A job's line ends when it was merged, thrown away, or had nothing to merge. */
 /** how long a finished job stays in the list */
@@ -114,9 +140,10 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
 }
 
 // ───────────── one row per job (T3-style thread list)
-function Row(props: { t: Task; kid?: boolean; index: number }) {
+function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number }) {
   const t = () => props.t;
   const kids = () => [...kidsOf(t().id)].sort((a, b) => a.createdAt - b.createdAt);
+  const ups = () => (props.kid || props.follow ? [] : followUps(t()));
   const [open, setOpen] = createSignal<boolean | undefined>(undefined);
   const showKids = () => open() ?? (openRoot() === t().id || kids().some((k) => k.status === "waiting" || k.status === "failed"));
   const b = () => bucket(t());
@@ -131,7 +158,7 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
     <>
       <button
         class="sb-row"
-        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, hot: hoverTask() === t().id, past: ended(t()) }}
+        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, follow: props.follow, hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
         // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
@@ -183,6 +210,11 @@ function Row(props: { t: Task; kid?: boolean; index: number }) {
       <Show when={!props.kid && showKids() && kids().length}>
         <div class="sb-kid-list">
           <For each={kids()}>{(k, i) => <Row t={k} kid index={i()} />}</For>
+        </div>
+      </Show>
+      <Show when={ups().length}>
+        <div class="sb-follow-list">
+          <For each={ups()}>{(f, i) => <Row t={f} follow index={i()} />}</For>
         </div>
       </Show>
     </>
@@ -386,25 +418,30 @@ function DoneFold(props: { id: string; tasks: Task[] }) {
 
 export function Sidebar() {
   const [showArchived, setShowArchived] = createSignal(false);
+  // every job in the list, follow-ups too (counts go by these)
+  const every = createMemo(() => tasksIn(state.space).filter(listed));
+  // the rows: a job with its follow-ups under it, placed by the newest of its line
+  const latest = (t: Task) => Math.max(...lineOf(t).map((x) => x.startedAt ?? x.createdAt));
+  const pinned = (t: Task) => lineOf(t).some((x) => x.pinned);
   const roots = createMemo(() =>
-    tasksIn(state.space)
-      .filter((t) => !t.parentId && !t.answer && !t.archived)
-      .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
+    every()
+      .filter((t) => !carriedOn(t))
+      .sort((a, b) => Number(pinned(b)) - Number(pinned(a)) || latest(b) - latest(a)),
   );
   const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs fold away under their group after a few minutes; opening one
   // doesn't move it back up: it shows where it is, in its group's done fold
-  const old = (t: Task) => !t.pinned && ended(t) && (t.finishedAt ?? t.createdAt) < soon() - DONE_FOR;
+  const old = (t: Task) => lineOf(t).every((x) => !x.pinned && ended(x) && (x.finishedAt ?? x.createdAt) < soon() - DONE_FOR);
   const shown = createMemo(() => roots().filter((t) => !old(t)));
   const filed = (t: Task) => !!t.project && projectsIn(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
   const looseDone = createMemo(() => roots().filter((t) => old(t) && !filed(t)));
-  const needs = createMemo(() => roots().filter(needsYou).length);
+  const needs = createMemo(() => every().filter(needsYou).length);
   // 내 차례 counts memory conflicts too; the popover has a row per task and one 메모리 확인 row
   const turn = () => needs() + memAsks();
   const turnRows = () => needs() + (memAsks() ? 1 : 0);
-  const boardLive = () => roots().filter((t) => t.status === "running").length;
+  const boardLive = () => every().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
   const addFolder = async () => {
