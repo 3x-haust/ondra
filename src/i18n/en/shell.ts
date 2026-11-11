@@ -50,7 +50,7 @@ export default {
   "완료 {n}개 · 버림 {m}개": "{n} done · {m} discarded",
   "보관함 {n}개": "{n} archived",
   "설정": "Settings",
-  "서브에이전트 접기": "Hide subagents",
+  "이어진 작업 {n}개": "{n} follow-up|{n} follow-ups",
   "서브에이전트 {n}개": "{n} subagent|{n} subagents",
   "개인": "Personal",
   "회사": "Work",
