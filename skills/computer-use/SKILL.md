@@ -34,7 +34,8 @@ and their front app stay as they are.
   on the off-screen display as it starts (`mode: offscreen`): still never on the
   user's screen, full-size looks, but its Dock tile shows it running. If that
   doesn't take, it stays hidden (`mode: hidden`). On `stop` a background copy is
-  quit and cleaned up; a real app is hidden again. An app the user already had open is used as-is, never copied.
+  quit and cleaned up, and a real app the session opened is quit (its Dock dot goes
+  away); one the user brought to the front meanwhile is left alone. An app the user already had open is used as-is, never copied.
 - Some apps try to make themselves a Dock app and come to the front. The injected
   guard holds most of them back; one it can't (a hardened app without the dyld
   exception) is handed the front straight back, reported as `selfActivated` /

@@ -1380,6 +1380,7 @@ final class BgApp {
 
 var bgApps: [pid_t: BgApp] = [:]
 let bgLock = NSLock()
+func isLaunchedReal(_ pid: pid_t) -> Bool { bgLock.lock(); defer { bgLock.unlock() }; return launchedApps.contains(pid) || offscreenApps.contains(pid) }
 func isOffscreenApp(_ pid: pid_t) -> Bool { bgLock.lock(); defer { bgLock.unlock() }; return offscreenApps.contains(pid) }
 func bgApp(_ pid: pid_t) -> BgApp? { bgLock.lock(); defer { bgLock.unlock() }; return bgApps[pid] }
 
@@ -1560,10 +1561,26 @@ func releaseBackground(_ pid: pid_t) {
 }
 
 func releaseAllBackground() {
-    bgLock.lock(); let pids = Array(bgApps.keys); let shown = Array(offscreenApps); offscreenApps.removeAll(); bgLock.unlock()
+    bgLock.lock(); let pids = Array(bgApps.keys); let real = Array(launchedApps.union(offscreenApps)); bgLock.unlock()
     for pid in pids { releaseBackground(pid) }
-    // a real app shown on the off-screen display goes back to hidden before the display goes away
-    for pid in shown { NSRunningApplication(processIdentifier: pid)?.hide() }
+    // a real app the job opened is quit before the display goes away
+    for pid in real { releaseReal(pid) }
+}
+
+/// A real app the job opened: quit it, so its Dock tile stops showing it running. If the user
+/// has since brought it to the front it is theirs and stays; if it doesn't quit (a question
+/// about unsaved work), it is hidden instead.
+func releaseReal(_ pid: pid_t) {
+    bgLock.lock(); let launched = launchedApps.remove(pid) != nil; offscreenApps.remove(pid); bgLock.unlock()
+    guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return }
+    if app.isActive { return }
+    if launched {
+        app.terminate()
+        let t0 = nowMs()
+        while !app.isTerminated, nowMs() - t0 < 3000 { usleep(50_000) }
+        if app.isTerminated { return }
+    }
+    app.hide()
 }
 
 // ───────────────────────── real app, off-screen ─────────────────────────
@@ -1573,8 +1590,10 @@ func releaseAllBackground() {
 // off-screen desktop before its first window, then shown there, so its windows are drawn at
 // full size (not a Stage Manager thumbnail) and pointer and key events reach them.
 
-/// real apps the job showed on the off-screen display (hidden again on release)
+/// real apps the job showed on the off-screen display
 var offscreenApps: Set<pid_t> = []
+/// real apps the job opened (not ones the user already had open): quit on release
+var launchedApps: Set<pid_t> = []
 
 func allPids() -> [pid_t] {
     let n = proc_listallpids(nil, 0)
@@ -1815,6 +1834,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
                 // its windows opened off-screen: show them there (full size, never on the user's screen)
                 if let p = pid, c.caught == p, showOffscreen(p) { mode = "offscreen" }
             }
+            if !alreadyOpen, let p = pid { bgLock.lock(); launchedApps.insert(p); bgLock.unlock() }
         }
         if let held = held { keepFrame(held) }
         // an app the user opened themselves may have come up off-screen (apps remember their
@@ -1893,12 +1913,11 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, result)
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
-        // a background copy the job opened is terminated and cleaned up; a hidden fallback is hidden again
+        // a background copy the job opened is terminated and cleaned up; a real app it opened is
+        // quit; the user's own app is hidden again if it was shown
         if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) }
-        else if isOffscreenApp(pid_t(pidN)) {
-            bgLock.lock(); offscreenApps.remove(pid_t(pidN)); bgLock.unlock()
-            NSRunningApplication(processIdentifier: pid_t(pidN))?.hide()
-        } else { hideAgain(pid_t(pidN)) }
+        else if isLaunchedReal(pid_t(pidN)) { releaseReal(pid_t(pidN)) }
+        else { hideAgain(pid_t(pidN)) }
         rescueStrayWindows()
         return ok(id, ["released": true, "env": environment()])
     case "selfcheck":
@@ -1944,7 +1963,7 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.1")
+    print("ondra-cuhost 0.4.2")
     exit(0)
 }
 
