@@ -37,7 +37,8 @@ function group(entries: Entry[]): Item[] {
   for (const e of entries) {
     const last = out[out.length - 1];
     if (e.kind === "tool") {
-      if (last?.kind === "tools") last.tools.push(e);
+      // pictures the agent looked at stay their own row, open (Codex shows them, never folded into a work line)
+      if (last?.kind === "tools" && !last.tools[last.tools.length - 1].tool.image === !e.tool.image) last.tools.push(e);
       else out.push({ kind: "tools", id: e.id, tools: [e] });
     } else if (e.kind === "block") {
       if (last?.kind === "blocks") last.blocks.push(e.block);
@@ -451,11 +452,11 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
 }
 
 /**
- * Pictures the agent looked at, as Codex shows them: "이미지 2개 확인함" over the pictures
- * themselves (open one to see it big); the chevron folds them away.
+ * Pictures the agent looked at, as Codex shows them: "이미지 2개 확인함", folded; open it for
+ * the pictures themselves (click one to see it big).
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
-  const [open, setOpen] = createSignal(true);
+  const [open, setOpen] = createSignal(false);
   const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
   const shown = () => props.tools.filter((t) => t.tool.ok !== false && t.tool.image);
   const n = () => props.tools.length;
