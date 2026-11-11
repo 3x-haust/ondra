@@ -186,11 +186,21 @@ pub async fn worktree_landed(path: String, env: Option<Vec<(String, String)>>) -
 }
 
 fn remove(repo: &str, path: &str, branch: &str, keep_branch: bool) -> Result<(), String> {
-    if keep_branch && Path::new(path).is_dir() {
+    // a checkout of its own (.git in it), not a folder git would read as part of one further up
+    let checkout = Path::new(path).join(".git").exists();
+    if keep_branch && checkout {
         let _ = commit_all(path, "작업 중 저장");
     }
     if Path::new(path).exists() {
-        run(repo, &["worktree", "remove", "--force", path])?;
+        if let Err(e) = run(repo, &["worktree", "remove", "--force", path]) {
+            // no longer a worktree, only what was written there after it went (a dev server's
+            // cache, an empty folder): delete the folder itself
+            if checkout {
+                return Err(e);
+            }
+            std::fs::remove_dir_all(path).map_err(|x| x.to_string())?;
+            let _ = run(repo, &["worktree", "prune"]);
+        }
     } else {
         let _ = run(repo, &["worktree", "prune"]);
     }
@@ -271,6 +281,10 @@ mod tests {
 
         remove(&wa.repo, &a, "task/a", false).unwrap();
         remove(&wb.repo, &b, "task/b", true).unwrap();
+        assert!(!Path::new(&a).exists());
+        // written there after it went (a dev server's cache): removing again deletes the folder
+        std::fs::create_dir_all(Path::new(&a).join(".vite")).unwrap();
+        remove(&wa.repo, &a, "task/a", true).unwrap();
         assert!(!Path::new(&a).exists());
         assert!(run(&r, &["rev-parse", "--verify", "task/b"]).is_ok());
         assert!(run(&r, &["rev-parse", "--verify", "task/a"]).is_err());

@@ -89,7 +89,7 @@ export default function App() {
     // the engine, the browser and the analyzer, as each comes in (the engine's version shows once it's here)
     void startComponents((name) => name === "engine" && void refreshEngine());
     // jobs still running in the engine from before a reload: hear them again
-    if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs()).catch(() => {});
+    if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs().then(() => m.sweepWorktrees(true))).catch(() => {});
     startScheduler();
     void import("./state/limits").then((m) => m.watchLimits(() => state.accounts.map((a) => a.id)));
     if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());

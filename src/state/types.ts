@@ -283,6 +283,9 @@ export interface Worktree {
   state: "open" | "merged" | "discarded";
   /** Branch it was merged into. */
   into?: string;
+  /** the folder stayed: another job was still working in it (one that had handed this branch on and
+   *  was picked up again); it goes once that job is done */
+  left?: boolean;
 }
 
 /** Visual answer blocks the agents send instead of paragraphs. */
