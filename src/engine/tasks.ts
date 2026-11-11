@@ -1168,6 +1168,11 @@ function handlers(id: string, run: Run) {
           const tool = describeTool(ev.toolName, ev.args);
           updateTask(id, (t) => {
             const { now, ...call } = tool;
+            // reading a picture is looking at it: the row shows it ("이미지 1개 확인함")
+            if (call.kind === "read" && call.detail && /\.(png|jpe?g|gif|webp|heic|bmp|tiff?)$/i.test(call.detail)) {
+              const p = expand(call.detail);
+              call.image = p.startsWith("/") ? p : `${expand(t.cwd).replace(/\/+$/, "")}/${p.replace(/^\.\//, "")}`;
+            }
             if (ev.toolName === "bash") {
               call.shellId = ev.toolCallId;
               t.shells.push({ id: ev.toolCallId, command: call.detail ?? call.target, startedAt: Date.now(), tail: "", background: keepsRunning(call.detail ?? "") });

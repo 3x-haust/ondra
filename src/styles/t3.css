@@ -7741,6 +7741,30 @@ textarea { resize: none !important; field-sizing: content; }
   border-left: 1px solid var(--line);
 }
 
+/* pictures the agent looked at ("이미지 2개 확인함"): the pictures under the row, small, open big on click */
+.pic-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-8);
+  padding: var(--s-4) 0 var(--s-8) var(--s-20);
+}
+.pic-thumb {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  cursor: zoom-in;
+}
+.pic-thumb img {
+  display: block;
+  width: auto;
+  max-width: 220px;
+  height: 140px;
+  object-fit: cover;
+}
+
 /* ───────── shared browser view (views/Browser.tsx) ───────── */
 .browser-view {
   display: flex;
