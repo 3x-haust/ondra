@@ -613,7 +613,12 @@ export function MainView() {
   const account = () => chooseAccount(state.space, project()?.name ?? "");
   const started = (m: CaptainMessage) =>
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
-  const sendMain = (text: string) => throwThought(text, state.space, { project: project()?.id });
+  const sendMain = (text: string) => {
+    const p = project();
+    // another Mac's project: what's typed is a job there (its own Ondra does the routing)
+    if (p?.host) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p.name, ask: text, cwd: p.folder, project: p.id, accountId: account() }));
+    return throwThought(text, state.space, { project: p?.id });
+  };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
   const lastRow = createMemo(() => {
     const at = new Map<string, string>();

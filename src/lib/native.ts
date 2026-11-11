@@ -325,7 +325,6 @@ export const remoteStart = () => call<void>("remote_start");
 export const remoteStop = () => call<void>("remote_stop");
 export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
 export const remoteHostName = () => call<string>("remote_host_name", undefined, "Mac");
-export const remoteLanIp = () => call<string | null>("remote_lan_ip", undefined, null);
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });

@@ -1,0 +1,47 @@
+// Other Macs' work, as this app shows it: the projects the user added from another Mac
+// (Settings › 연결) and their jobs, kept up to date over Ondra's own network (engine/hosts.ts).
+// Held in memory only: it is the other Mac's, never written to this Mac's state.json.
+import { createStore } from "solid-js/store";
+import type { Project, SpaceId, Task } from "./types";
+
+export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
+
+export interface HostMirror {
+  status: HostStatus;
+  /** why it isn't connected, when it says */
+  reason?: string;
+  /** every project on that Mac (to pick from) */
+  projects: { id: string; name: string; folder: string }[];
+  /** the jobs of the projects added here, as that Mac has them (ids as there) */
+  tasks: Task[];
+}
+
+export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirror> }>({ hosts: {} });
+
+/** a project of another Mac, as this app names it: r:<host>:<its id> */
+export const remoteProjectId = (host: string, id: string) => `r:${host}:${id}`;
+export function splitProjectId(id?: string): { host: string; id: string } | undefined {
+  const m = id?.match(/^r:([0-9a-f]{64}):(.+)$/);
+  return m ? { host: m[1], id: m[2] } : undefined;
+}
+
+/** every mirrored job (subagents included) */
+export function mirroredTasks(): Task[] {
+  const out: Task[] = [];
+  for (const h of Object.values(mirror.hosts)) out.push(...h.tasks);
+  return out;
+}
+
+/** the Mac a job runs on, when it is another Mac's */
+export function hostOfTask(id: string): string | undefined {
+  for (const [host, h] of Object.entries(mirror.hosts)) if (h.tasks.some((t) => t.id === id)) return host;
+  return undefined;
+}
+
+/** projects added from other Macs, as projects of this app's space */
+export function linkedProjects(links: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[] | undefined, hostName: (h: string) => string): Project[] {
+  return (links ?? []).map((l) => {
+    const p = mirror.hosts[l.host]?.projects.find((x) => x.id === l.id);
+    return { id: remoteProjectId(l.host, l.id), space: l.space, name: p?.name ?? l.name ?? "", folder: p?.folder ?? l.folder ?? "", host: l.host, hostName: hostName(l.host) };
+  });
+}

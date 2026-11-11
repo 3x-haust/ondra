@@ -1,29 +1,28 @@
-# Remote control
+# Connections: working on another Mac
 
-Phones see and steer jobs over Ondra's own private network. Nothing goes through a server that can read it.
+This works like Codex's remote connections. You add another Mac's project to this app's sidebar. Jobs in that project run on that Mac, with its files, tools and accounts. They show up here like any other job.
+
+## Setting it up
+
+1. On the Mac that does the work, open Settings › 연결 and turn on **다른 Mac에서 이 Mac 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
+2. On the other Mac, open Settings › 연결, press **Mac 추가** and paste the link. The first Mac then asks **허용 / 거절**.
+3. Once it's allowed, press **프로젝트 추가**. Pick one of that Mac's projects, or type a folder path there. The project shows in the sidebar with the Mac's name beside it.
+
+After that the Macs find each other again on their own, with no new link needed. Either side can remove the other: **빼기** on one side, **연결 끊기** on the other.
 
 ## How it fits together
 
-- **`remote/host`** is the `ondra-remote` helper, written in Rust on iroh.
-  - The Mac's key lives in `<data dir>/remote/key` (0600). Its public half is the Mac's address.
-  - Phones dial that address over QUIC: hole-punched UDP when possible, otherwise through a relay. Either way the connection is end-to-end encrypted.
-  - Only devices listed in `remote/devices.json` get in.
-  - The app drives the helper over stdin/stdout (JSON lines; see the top of `main.rs`).
-- **`remote/client`** is the phone's side of the connection, compiled to WebAssembly. The phone's key stays in its browser.
-- **`remote/web`** is the phone page, a small Solid app built from the same `tokens.css`.
-- **`src-tauri/src/remote.rs`** starts and stops the helper. `src/engine/remote.ts` answers phones from the app's state.
-- **Settings › 원격 제어** turns it on, shows the pairing QR, and lists devices.
+- **The network.** `remote/host` is the `ondra-remote` helper, written in Rust on iroh. Each Mac keeps a key in `<data dir>/remote/key` (0600); the public half is its address. Macs reach each other over QUIC. That is hole-punched UDP when possible, or a relay when not. Either way the traffic is end-to-end encrypted. Only Macs listed in `remote/devices.json` get in, and only while 다른 Mac에서 이 Mac 쓰기 is on. One helper process plays both sides: it accepts other Macs and dials out to them. The app drives it over stdin/stdout (see the top of `main.rs`).
+- **The side doing the work** is `src/engine/remote.ts`. It sends the jobs of the projects the other Mac added: first each whole job, then only what changed (a job's fields, and its entries from the first one that differs). It does what the other Mac asks with the same functions the window uses: create, tell, stop, merge, queue edits and so on.
+- **The side looking on** is `src/engine/hosts.ts` and `src/state/mirror.ts`. Those jobs are held in memory and never written to this Mac's state.json. `taskById`, `projectById`, `projectsShown` and `tasksShown` include them, so the sidebar and the job view work unchanged. The engine's own loops (scheduler, PR watching and so on) read `state.tasks`, which doesn't include them. An action on another Mac's job is sent there; see `far()` at the top of each action in `tasks.ts`.
 
-## Adding a phone
+## Not there yet
 
-1. The QR holds the page URL with the Mac's id and a one-time code (`#m=…&p=…`). The code is good for 10 minutes, for one device.
-2. The phone connects with that code. The Mac asks "허용 / 거절".
-3. Once allowed, the phone's key is remembered and it comes back on its own. 연결 끊기 removes it and closes its connection.
+- Panels that read files (changes, files, pictures) still read this Mac's disk.
+- The model picker lists this Mac's models.
 
 ## Building
 
-The helper and the browser module need Rust 1.91 (iroh). The app itself stays on its own toolchain.
+The helper needs Rust 1.91 (iroh). The app keeps its own toolchain. `src-tauri/helpers/build.sh` builds `ondra-remote` into `src-tauri/binaries`.
 
-- `src-tauri/helpers/build.sh` builds `ondra-remote` into `src-tauri/binaries`.
-- `pnpm remote:build` builds the browser module and the page into `dist-remote/`. It needs the `wasm32-unknown-unknown` target, `llvm-tools`, and `wasm-bindgen-cli` 0.2.130.
-- `pnpm remote:dev` serves the page on this Wi-Fi, port 4740. A dev build's QR points there.
+For a test with two copies of the app on one Mac, use debug builds. Set `ONDRA_DATA_DIR` and `ONDRA_DEVBRIDGE_PORT` per copy, and build with `VITE_TEST_HOOKS=1` for `window.__ui`.

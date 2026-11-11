@@ -1003,7 +1003,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] =
   { id: "general", label: "일반", icon: "gear" },
   { id: "accounts", label: "계정과 워크스페이스", icon: "key" },
   { id: "tools", label: "macOS 권한", icon: "shield" },
-  { id: "remote", label: "원격 제어", icon: "phone" },
+  { id: "remote", label: "연결", icon: "monitor" },
   { id: "agent-tools", label: "도구", icon: "tools" },
   { id: "skills", label: "스킬", icon: "skill" },
   { id: "hooks", label: "훅", icon: "bolt" },

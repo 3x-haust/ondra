@@ -24,7 +24,7 @@ import { Icon } from "../ui/Icon";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
-import { StatusLine } from "../ui/Usage";
+import { HostLine, StatusLine } from "../ui/Usage";
 import { liveVerb, Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
@@ -522,7 +522,7 @@ export function TaskView(props: { id: string }) {
                   draftKey={`task:${task().id}`}
                   top={<><BtwCard scope={`task:${task().id}`} />{strips()}</>}
                   plus={plusFor({})}
-                  status={<StatusLine
+                  status={task().host ? <HostLine host={task().host!} running={task().status === "running"} /> : <StatusLine
                   accountId={task().accountId}
                   space={task().space}
                   running={task().status === "running"}

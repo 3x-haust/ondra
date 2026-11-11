@@ -1709,3 +1709,24 @@
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }
+
+/* a project of another Mac (Settings › 연결): the Mac's name after its own, quieter */
+.sb-host {
+  margin-left: var(--s-6);
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+.sb-proj.away .sb-title {
+  color: var(--ink-3);
+}
+.status-line .st-host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 28px;
+  padding: 0 var(--s-8);
+  color: var(--ink-3);
+}
+.status-line .st-host.away {
+  color: var(--warn);
+}

@@ -1,206 +1,195 @@
-// Remote control: phones the user approved see the jobs and steer them, over Ondra's own
-// private network (remote/host: end-to-end encrypted, devices known by their keys).
+// Letting other Macs work on this one (Settings › 연결 › 이 Mac): a Mac the user allowed
+// adds this Mac's projects to its sidebar and runs jobs in them here. Its Ondra keeps a
+// live copy of those jobs (engine/hosts.ts); this side sends what changed and does what it
+// asks, as if the user had done it here.
 //
-// The helper does the network and who may come in; this side speaks for the app:
-//   phone → Mac  {t:"tasks"} {t:"open",id} {t:"close"} {t:"tell",id,text,queue?}
-//                {t:"new",text,project?} {t:"stop",id}
-//   Mac → phone  {t:"hello",mac,projects} {t:"tasks",tasks} {t:"task",task} {t:"created",id}
-//                {t:"error",message}
-// What a phone gets is the same as the window shows, in short: titles, states, the words,
-// each step as one line.
-import { createEffect, createRoot, createSignal, on } from "solid-js";
-import { inTauri, onRemote, remoteCmd, remoteHostName, remoteStart, remoteStop } from "../lib/native";
-import { projectById, setState, state } from "../state/store";
-import type { Entry, Task } from "../state/types";
-import { describeBrowser, describeCommand, describeComputer, nowText } from "./describe";
-import { chooseAccount, createTask, stopTask, tell } from "./tasks";
-import { t } from "../i18n";
+//   them → here  {t:"projects"} {t:"watch",projects} {t:"call",seq,fn,args}
+//   here → them  {t:"projects",list} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
+//
+// A job goes as its fields and its entries; after the first time only what changed: the
+// fields when they did, and the entries from the first one that differs.
+import { createSignal } from "solid-js";
+import { unwrap } from "solid-js/store";
+import { inTauri, onRemote, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
+import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
+import type { Task } from "../state/types";
+import * as jobs from "./tasks";
+import { connectHosts, helperGone, onPeer, startHosts } from "./hosts";
 
 export interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 export interface PairAsk { conn: number; device: { id: string; name: string } }
 
-/** what the window shows about remote control */
+/** what the window shows about this Mac's side */
 export const [remote, setRemote] = createSignal<{
-  on: boolean;
-  /** the Mac's id on the network, once it is reachable */
+  /** this Mac's id on the network, once it is reachable */
   id?: string;
   devices: RemoteDevice[];
-  /** phones connected now (by connection) */
+  /** Macs connected now (by connection) */
   live: Record<number, { id: string; name: string }>;
-  /** a phone asking to be let in */
+  /** a Mac asking to be let in */
   asks: PairAsk[];
-  /** the code in the QR shown now, and when it stops working */
+  /** the code in the link copied last, and when it stops working */
   pair?: { code: string; until: number };
-}>({ on: false, devices: [], live: {}, asks: [] });
+}>({ devices: [], live: {}, asks: [] });
 
-const watching = new Map<number, string | undefined>();
-const sentList = new Map<number, string>();
-const sentTask = new Map<number, string>();
-
-const send = (conn: number, data: Record<string, unknown>) => void remoteCmd({ cmd: "send", conn, data }).catch(() => {});
-
-const VERB: Record<string, string> = {
-  read: "읽음", search: "찾음", edit: "수정함", write: "작성함", bash: "실행함", test: "테스트함",
-  web: "웹 검색함", browser: "브라우저 씀", desktop: "앱 조작함", agent: "에이전트 씀", other: "도구 씀",
-};
-
-/** one step as the window's line says it ("실행함 npm test", "클릭함 ‘보내기’") */
-function stepLine(x: Extract<Entry, { kind: "tool" }>["tool"]): { verb: string; target: string } {
-  if (x.name === "computer") {
-    const d = describeComputer(x.act, x.target || undefined);
-    return { verb: x.endedAt ? d.label : d.now, target: d.target ?? x.app ?? "" };
-  }
-  if (x.kind === "bash" || x.kind === "test") {
-    const d = describeCommand(x.target ?? "");
-    return { verb: x.endedAt ? d.label : d.now, target: d.target ?? (x.target ?? "").slice(0, 120) };
-  }
-  if (x.kind === "browser") {
-    const d = describeBrowser(x.target ?? "");
-    return { verb: x.endedAt ? d.label : d.now, target: d.target ?? "" };
-  }
-  if (x.image) return { verb: t("이미지 {n}개 확인함", { n: 1 }), target: "" };
-  const name = (x.target ?? "").split("/").pop() ?? "";
-  return { verb: t(VERB[x.kind] ?? VERB.other), target: name };
+interface Conn {
+  /** the projects (ids here) whose jobs it keeps */
+  watch: Set<string>;
+  /** each job as last sent: its fields' JSON and each entry's */
+  sent: Map<string, { head: string; ents: string[] }>;
+  /** send everything again (just asked) */
+  all: boolean;
 }
+const conns = new Map<number, Conn>();
+const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
 
-const projectName = (task: Task) => projectById(task.project)?.name ?? task.topic ?? "";
+// ───────── what changed
 
-function summary(task: Task) {
-  const last = task.entries[task.entries.length - 1];
-  return {
-    id: task.id,
-    title: task.title,
-    status: task.status,
-    now: task.status === "running" ? nowText(task.now) : "",
-    project: projectName(task),
-    at: last?.at ?? task.startedAt ?? task.createdAt ?? 0,
-    parent: task.parentId ?? null,
-  };
-}
+const dirty = new Set<string>();
+let dirtyAll = false;
+let projectsDirty = false;
+onWrite((args) => {
+  if (!conns.size) return;
+  if (args[0] === "projects") projectsDirty = true;
+  if (args[0] !== "tasks") return soon();
+  const sel = args[1];
+  if (args.length < 3) dirtyAll = true;
+  else if (typeof sel === "function") state.tasks.forEach((x, i) => (sel as (t: Task, i: number) => boolean)(x, i) && dirty.add(x.id));
+  else if (typeof sel === "number") state.tasks[sel] && dirty.add(state.tasks[sel].id);
+  else if (Array.isArray(sel)) for (const i of sel) state.tasks[i] && dirty.add(state.tasks[i].id);
+  else dirtyAll = true;
+  soon();
+});
 
-function list() {
-  return state.tasks
-    .filter((x) => !x.parentId && !x.archived)
-    .map(summary)
-    .sort((a, b) => b.at - a.at)
-    .slice(0, 80);
-}
-
-/** a job for the phone: its words and each step as a line (the newest 160) */
-function detail(task: Task) {
-  const items: Record<string, unknown>[] = [];
-  for (const e of task.entries.slice(-160)) {
-    if (e.kind === "user") items.push({ k: "user", id: e.id, text: e.text, by: e.by ?? null });
-    else if (e.kind === "text") items.push({ k: "text", id: e.id, text: e.text });
-    else if (e.kind === "error") items.push({ k: "error", id: e.id, text: e.text });
-    else if (e.kind === "tool") {
-      const s = stepLine(e.tool);
-      items.push({ k: "step", id: e.id, verb: s.verb, target: s.target, ok: e.tool.ok !== false, running: !e.tool.endedAt && !e.tool.stopped });
-    } else if (e.kind === "block") {
-      const b = e.block;
-      if (b.type === "link") items.push({ k: "link", id: e.id, title: b.title, ref: b.ref, kind: b.kind });
-      else if (b.type === "checklist") items.push({ k: "checks", id: e.id, label: b.label ?? "", items: b.items });
-      else if (b.type === "text") items.push({ k: "text", id: e.id, text: b.text });
-      else if (b.type === "evidence") items.push({ k: "checks", id: e.id, label: t("확인"), items: b.items.map((i) => ({ label: i.note || i.ref, done: i.ok !== false && ["ran", "exists", "read"].includes(i.check ?? "") })) });
-    } else if (e.kind === "turn") items.push({ k: "turn", id: e.id, ms: e.ms });
-  }
-  return {
-    ...summary(task),
-    plan: task.plan,
-    queue: (task.queue ?? []).map((q) => q.text),
-    items,
-  };
-}
-
-/** what changed goes to each phone (lists and the job it has open), a moment after it changes */
 let timer: ReturnType<typeof setTimeout> | undefined;
+const soon = () => (timer ??= setTimeout(flush, 300));
+
+/** the project a job belongs to (a subagent: its top job's) */
+function rootProject(t: Task): string | undefined {
+  let x: Task | undefined = t;
+  for (let i = 0; x?.parentId && i < 20; i++) x = taskById(x.parentId);
+  return x?.project;
+}
+
 function flush() {
   timer = undefined;
-  const conns = Object.keys(remote().live).map(Number);
-  if (!conns.length) return;
-  const tasks = list();
-  const listJson = JSON.stringify(tasks);
-  for (const c of conns) {
-    if (sentList.get(c) !== listJson) {
-      sentList.set(c, listJson);
-      send(c, { t: "tasks", tasks });
+  const live = state.tasks.filter((x) => x.status === "running" || x.status === "waiting");
+  for (const [conn, c] of conns) {
+    if (projectsDirty) void sendProjects(conn);
+    if (!c.watch.size && !c.sent.size) continue;
+    const pick = c.all || dirtyAll ? state.tasks : [...new Set([...[...dirty].map((id) => taskById(id)).filter((x): x is Task => !!x && !x.host), ...live])];
+    const out: Record<string, unknown>[] = [];
+    let size = 0;
+    const seen = new Set<string>();
+    const ship = (last = false) => {
+      if (!out.length && !last) return;
+      const gone = last && (c.all || dirtyAll) ? [...c.sent.keys()].filter((id) => !seen.has(id)) : last ? [...c.sent.keys()].filter((id) => !taskById(id) || !c.watch.has(rootProject(taskById(id)!) ?? "")) : [];
+      for (const id of gone) c.sent.delete(id);
+      if (out.length || gone.length) void send(conn, { t: "patch", tasks: out.splice(0), ...(gone.length ? { gone } : {}) });
+      size = 0;
+    };
+    for (const t of pick) {
+      if (!c.watch.has(rootProject(t) ?? "")) continue;
+      seen.add(t.id);
+      const raw = unwrap(t);
+      const { entries, ...rest } = raw;
+      const head = JSON.stringify(rest);
+      const ents = entries.map((e) => JSON.stringify(e));
+      const before = c.sent.get(t.id);
+      let from = 0;
+      if (before) while (from < ents.length && from < before.ents.length && ents[from] === before.ents[from]) from++;
+      const sameHead = before?.head === head;
+      if (before && sameHead && from === ents.length && before.ents.length === ents.length) continue;
+      c.sent.set(t.id, { head, ents });
+      out.push({ id: t.id, ...(sameHead ? {} : { head: rest }), from, entries: entries.slice(from), n: ents.length });
+      size += head.length + ents.slice(from).reduce((n, s) => n + s.length, 0);
+      if (size > 4 << 20) ship();
     }
-    const id = watching.get(c);
-    const task = id ? state.tasks.find((x) => x.id === id) : undefined;
-    if (task) {
-      const d = detail(task);
-      const j = JSON.stringify(d);
-      if (sentTask.get(c) !== j) {
-        sentTask.set(c, j);
-        send(c, { t: "task", task: d });
-      }
-    }
+    ship(true);
+    c.all = false;
   }
+  dirty.clear();
+  dirtyAll = false;
+  projectsDirty = false;
 }
-const soon = () => (timer ??= setTimeout(flush, 250));
 
-function handle(conn: number, msg: Record<string, unknown>) {
-  const id = typeof msg.id === "string" ? msg.id : undefined;
-  const text = typeof msg.text === "string" ? msg.text.trim() : "";
+async function sendProjects(conn: number) {
+  const list = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, folder: p.folder }));
+  await send(conn, { t: "projects", list });
+}
+
+// ───────── what it asks
+
+/** a new job in one of this Mac's projects, from another Mac (it chose the id) */
+function create(f: { id: string; title: string; ask: string; project: string; display?: string }) {
+  const p = projectById(f.project);
+  if (!p) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  return jobs.createTask({ id: f.id, space: p.space, title: f.title, topic: p.name, ask: f.ask, display: f.display, cwd: p.folder, project: p.id, isolate: state.settings.isolate, accountId: jobs.chooseAccount(p.space, p.name) });
+}
+
+/** what another Mac may do here: the same the user does with a job, and add a project */
+const CALLS: Record<string, (...a: never[]) => unknown> = {
+  create,
+  addProject: (folder: string) => addProject(state.space, folder),
+  tell: jobs.tell,
+  stopTask: jobs.stopTask,
+  resumeTask: jobs.resumeTask,
+  startTask: jobs.startTask,
+  mergeTask: jobs.mergeTask,
+  discardTask: jobs.discardTask,
+  closeWorktree: jobs.closeWorktree,
+  archiveTask: jobs.archiveTask,
+  removeTask: jobs.removeTask,
+  renameTask: jobs.renameTask,
+  duplicateTask: jobs.duplicateTask,
+  editTurn: jobs.editTurn,
+  steerQueued: jobs.steerQueued,
+  dropQueued: jobs.dropQueued,
+  editQueued: jobs.editQueued,
+  moveQueued: jobs.moveQueued,
+  setTaskModel: jobs.setTaskModel,
+  setTaskPermission: jobs.setTaskPermission,
+};
+
+async function handle(conn: number, msg: Record<string, unknown>) {
+  const c = conns.get(conn);
+  if (!c) return;
   switch (msg.t) {
-    case "tasks":
-      sentList.delete(conn);
+    case "projects":
+      await sendProjects(conn);
       break;
-    case "open":
-      watching.set(conn, id);
-      sentTask.delete(conn);
+    case "watch":
+      c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);
+      c.all = true;
+      soon();
       break;
-    case "close":
-      watching.set(conn, undefined);
-      break;
-    case "tell":
-      if (id && text && state.tasks.some((x) => x.id === id)) void tell(id, text, msg.queue ? {} : { now: true });
-      break;
-    case "new": {
-      if (!text) break;
-      const p = typeof msg.project === "string" ? projectById(msg.project) : undefined;
-      const space = p?.space ?? state.space;
-      const made = createTask({
-        space,
-        title: text.split("\n")[0].slice(0, 60),
-        topic: p?.name ?? "",
-        ask: text,
-        cwd: p?.folder,
-        project: p?.id,
-        isolate: state.settings.isolate,
-        accountId: chooseAccount(space, p?.name ?? ""),
-      });
-      send(conn, { t: "created", id: made });
-      watching.set(conn, made);
-      sentTask.delete(conn);
+    case "call": {
+      const fn = CALLS[String(msg.fn)];
+      const seq = msg.seq;
+      try {
+        if (!fn) throw new Error(`unknown: ${String(msg.fn)}`);
+        const value = await (fn as (...a: unknown[]) => unknown)(...(Array.isArray(msg.args) ? msg.args : []));
+        await send(conn, { t: "ret", seq, value: value ?? null });
+      } catch (e) {
+        await send(conn, { t: "ret", seq, error: e instanceof Error ? e.message : String(e) });
+      }
+      soon();
       break;
     }
-    case "stop":
-      if (id) stopTask(id);
-      break;
   }
-  soon();
 }
 
-async function hello(conn: number) {
-  const projects = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, space: p.space }));
-  send(conn, { t: "hello", mac: { name: await remoteHostName() }, projects });
-  sentList.delete(conn);
-  soon();
-}
+// ───────── letting Macs in
 
-/** a fresh QR code, good for ten minutes */
-export function newPairing() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const code = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  const until = Date.now() + 10 * 60_000;
-  void remoteCmd({ cmd: "pair", code, ttl: 600 }).catch(() => {});
-  setRemote((r) => ({ ...r, pair: { code, until } }));
-}
-
-export function stopPairing() {
-  void remoteCmd({ cmd: "unpair" }).catch(() => {});
-  setRemote((r) => ({ ...r, pair: undefined }));
+/** a link another Mac can add this one with, good for ten minutes and one Mac */
+export async function connectLink(): Promise<string | undefined> {
+  const id = remote().id;
+  if (!id) return undefined;
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  await remoteCmd({ cmd: "pair", code, ttl: 600 });
+  setRemote((r) => ({ ...r, pair: { code, until: Date.now() + 10 * 60_000 } }));
+  const name = await remoteHostName();
+  return `ondra://connect/${id}?code=${code}&name=${encodeURIComponent(name)}`;
 }
 
 export function answerPair(conn: number, ok: boolean) {
@@ -212,40 +201,42 @@ export const revokeDevice = (id: string) => void remoteCmd({ cmd: "revoke", id }
 
 export async function setRemoteOn(on: boolean) {
   setState("settings", "remote", on);
-  if (on) await remoteStart();
+  if (on) await startHosts();
   else {
-    await remoteStop();
-    setRemote({ on: false, devices: remote().devices, live: {}, asks: [] });
+    await remoteCmd({ cmd: "host", on: false }).catch(() => {});
+    setRemote((r) => ({ ...r, live: {}, asks: [], pair: undefined }));
+    if (!state.settings.hosts?.length) {
+      await remoteStop();
+      helperGone();
+    }
   }
 }
 
 let started = false;
-/** Listen for the helper and keep phones up to date; turns it on if the user left it on. */
+/** Hear the helper (both sides), and connect to the Macs added before. */
 export function initRemote() {
   if (!inTauri || started) return;
   started = true;
   void onRemote((ev) => {
     switch (ev.ev) {
       case "ready":
-        setRemote((r) => ({ ...r, on: true, id: String(ev.id) }));
+        setRemote((r) => ({ ...r, id: String(ev.id) }));
         break;
       case "devices":
-        setRemote((r) => ({ ...r, on: true, devices: (ev.list as RemoteDevice[]) ?? [] }));
+        setRemote((r) => ({ ...r, devices: (ev.list as RemoteDevice[]) ?? [] }));
         break;
       case "pair":
         setRemote((r) => ({ ...r, asks: [...r.asks, { conn: Number(ev.conn), device: ev.device as PairAsk["device"] }] }));
         break;
       case "open": {
         const conn = Number(ev.conn);
+        conns.set(conn, { watch: new Set(), sent: new Map(), all: true });
         setRemote((r) => ({ ...r, live: { ...r.live, [conn]: ev.device as { id: string; name: string } } }));
-        void hello(conn);
         break;
       }
       case "close": {
         const conn = Number(ev.conn);
-        watching.delete(conn);
-        sentList.delete(conn);
-        sentTask.delete(conn);
+        conns.delete(conn);
         setRemote((r) => {
           const live = { ...r.live };
           delete live[conn];
@@ -254,16 +245,23 @@ export function initRemote() {
         break;
       }
       case "msg":
-        if (ev.data && typeof ev.data === "object") handle(Number(ev.conn), ev.data as Record<string, unknown>);
+        if (ev.data && typeof ev.data === "object") void handle(Number(ev.conn), ev.data as Record<string, unknown>);
+        break;
+      case "peer":
+      case "peer-msg":
+        onPeer(ev);
         break;
       case "stopped":
-        setRemote((r) => ({ ...r, on: false, id: undefined, live: {}, asks: [] }));
+        helperGone();
+        conns.clear();
+        setRemote((r) => ({ ...r, id: undefined, live: {}, asks: [] }));
+        // it went away on its own while still wanted: bring it back
+        if (state.settings.remote || state.settings.hosts?.length) setTimeout(() => void startHosts().then(connectHosts), 2000);
         break;
     }
   });
-  createRoot(() => {
-    // anything about the jobs changed: phones hear it (batched)
-    createEffect(on(() => JSON.stringify(state.tasks.map((x) => [x.id, x.status, x.now, x.title, x.entries.length, x.entries[x.entries.length - 1]?.id, (x.entries[x.entries.length - 1] as { tool?: { endedAt?: number } })?.tool?.endedAt, x.queue?.length])), soon));
-  });
-  if (state.settings.remote) void remoteStart().catch(() => {});
+  // running jobs change without a store write now and then (a streamed line): look again each second
+  setInterval(() => conns.size && soon(), 1000);
+  if (state.settings.remote) void startHosts();
+  void connectHosts();
 }

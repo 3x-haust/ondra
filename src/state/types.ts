@@ -221,6 +221,8 @@ export interface Task {
   issue?: { n: number; url: string; title: string };
   /** Answered on the spot by the router; no agent ran yet. */
   answer?: boolean;
+  /** runs on another Mac (Settings › 연결): that Mac's id. Shown here, worked there. */
+  host?: string;
   /** Work in its own git worktree (undefined = the app setting). */
   isolate?: boolean;
   /** The task's own worktree, when its folder is a git repo. */
@@ -594,8 +596,11 @@ export interface Settings {
   permission: Permission;
   /** where links open: the app's own browser (missing = inside) or the system's default one */
   links?: "inside" | "outside";
-  /** remote control: phones the user approved can see and steer jobs (Ondra's own private network) */
+  /** other Macs may use this one (Settings › 연결): the ones the user allowed get in */
   remote?: boolean;
+  /** other Macs this one works on, and the projects of theirs added here */
+  hosts?: { id: string; name: string; pair?: string }[];
+  hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */
@@ -688,6 +693,9 @@ export interface Project {
   space: SpaceId;
   name: string;
   folder: string;
+  /** on another Mac (Settings › 연결): its id there and the name it goes by */
+  host?: string;
+  hostName?: string;
 }
 
 export interface SideMessage {

@@ -1,6 +1,8 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { far, startFar } from "./hosts";
+import { splitProjectId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
@@ -813,6 +815,7 @@ async function isolate(id: string): Promise<boolean> {
 
 /** Merge the task's branch into the repo's current branch, then remove the worktree. */
 export async function mergeTask(id: string): Promise<boolean> {
+  { const r = far(id, "mergeTask", [id]); if (r) return r as never; }
   const t = taskById(id);
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return false;
@@ -861,6 +864,7 @@ export function prOf(t: Task): { url: string; n: string } | undefined {
 
 /** A job whose work went into a pull request: remove its worktree, keep the branch (the PR needs it). */
 export async function closeWorktree(id: string) {
+  { const r = far(id, "closeWorktree", [id]); if (r) return r as never; }
   const t = taskById(id);
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
@@ -874,6 +878,7 @@ export async function closeWorktree(id: string) {
 }
 
 export async function discardTask(id: string) {
+  { const r = far(id, "discardTask", [id]); if (r) return r as never; }
   const t = taskById(id);
   const w = t?.worktree;
   if (!t || !w || w.state !== "open") return;
@@ -888,6 +893,7 @@ export async function discardTask(id: string) {
 }
 
 export async function startTask(id: string, resume = false, rewind?: { from: string; message: string }) {
+  { const r = far(id, "startTask", [id, resume, rewind]); if (r) return r as never; }
   if (!taskById(id)) return;
   // claim the slot right away; making the worktree takes a moment and the scheduler may run again
   updateTask(id, (t) => {
@@ -1982,8 +1988,10 @@ export function createTask(f: {
   issue?: Task["issue"];
   /** another agent asked for it (see Entry's `by`) */
   by?: string;
+  /** its id, when another Mac chose it (a job started from there) */
+  id?: string;
 }): string {
-  const id = uid("t");
+  const id = f.id && !taskById(f.id) ? f.id : uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
   // its branch moves over now when it has finished; a job still wrapping up hands it over when this one starts
   const takes = !!prev && finished(prev) && prev.worktree?.state === "open";
@@ -2024,6 +2032,12 @@ export function createTask(f: {
     thinking: undefined,
     permission: state.settings.permission ?? "edits",
   };
+  // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
+  const far_ = splitProjectId(f.project);
+  if (far_) {
+    startFar(far_.host, { ...task, host: far_.host }, { id, title: task.title, ask: f.ask, project: far_.id, display: f.display });
+    return id;
+  }
   setState("tasks", (list) => [...list, task]);
   if (takes) takeBranch(id, prev!.id);
   return id;
@@ -2307,6 +2321,7 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
 }
 
 export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string; by?: string } = {}) {
+  { const r = far(id, "tell", [id, message, opts]); if (r) return r as never; }
   const t = taskById(id);
   if (!t) return;
   const wasPaused = t.status === "paused";
@@ -2361,6 +2376,7 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
 
 /** Steer a queued message in now. */
 export function steerQueued(id: string, qid: string) {
+  { const r = far(id, "steerQueued", [id, qid]); if (r) return r as never; }
   const q = taskById(id)?.queue?.find((x) => x.id === qid);
   if (!q) return;
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
@@ -2369,12 +2385,14 @@ export function steerQueued(id: string, qid: string) {
 const queuedOpts = (q: NonNullable<Task["queue"]>[number]) => ({ now: true, ...(q.sent ? { shown: q.text } : {}), ...(q.by ? { by: q.by } : {}) });
 /** Change a queued message where it is; an emptied one is taken out. Edited, it is the user's own words. */
 export function editQueued(id: string, qid: string, text: string) {
+  { const r = far(id, "editQueued", [id, qid, text]); if (r) return r as never; }
   const t = text.trim();
   if (!t) return dropQueued(id, qid);
   updateTask(id, (x) => (x.queue = (x.queue ?? []).map((y) => (y.id === qid ? { id: y.id, at: y.at, text: t } : y))));
 }
 /** Move a queued message to another place in line (`to` is its new index). */
 export function moveQueued(id: string, qid: string, to: number) {
+  { const r = far(id, "moveQueued", [id, qid, to]); if (r) return r as never; }
   updateTask(id, (x) => {
     const q = [...(x.queue ?? [])];
     const from = q.findIndex((y) => y.id === qid);
@@ -2385,6 +2403,7 @@ export function moveQueued(id: string, qid: string, to: number) {
   });
 }
 export function dropQueued(id: string, qid: string) {
+  { const r = far(id, "dropQueued", [id, qid]); if (r) return r as never; }
   updateTask(id, (x) => (x.queue = (x.queue ?? []).filter((y) => y.id !== qid)));
 }
 /** The work is done: the next queued message goes in. True if one did. */
@@ -2523,11 +2542,13 @@ function resumeKids(id: string) {
 
 /** The user stopped it: paused, and main doesn't carry it on by itself. */
 export function stopTask(id: string) {
+  { const r = far(id, "stopTask", [id]); if (r) return r as never; }
   pauseTask(id);
   updateTask(id, (t) => (t.parkedAt = Date.now()));
 }
 
 export function resumeTask(id: string) {
+  { const r = far(id, "resumeTask", [id]); if (r) return r as never; }
   // a session the provider refused fails the same way on every retry: the retry starts a fresh one
   // from what the thread shows (the scheduler continues only a session whose leg is still open)
   const t = taskById(id);
@@ -2550,6 +2571,7 @@ export const finishTask = (id: string) => {
 };
 
 export function removeTask(id: string) {
+  { const r = far(id, "removeTask", [id]); if (r) return r as never; }
   for (const k of childrenOf(id)) removeTask(k.id);
   releaseBrowser(id);
   const gone = taskById(id);
@@ -2566,6 +2588,7 @@ export function removeTask(id: string) {
 
 /** What a job may do without asking; a live session switches right away. */
 export async function setTaskPermission(id: string, p: Permission) {
+  { const r = far(id, "setTaskPermission", [id, p]); if (r) return r as never; }
   updateTask(id, (t) => {
     t.permission = p;
   });
@@ -2583,6 +2606,7 @@ const restartBeforeNext = new Set<string>();
 
 /** Model / effort for one task; applied to its live session right away. */
 export async function setTaskModel(id: string, model: string, thinking: string) {
+  { const r = far(id, "setTaskModel", [id, model, thinking]); if (r) return r as never; }
   const before = taskById(id);
   const was = before ? before.model || modelFor(before.accountId) : undefined;
   updateTask(id, (t) => {
@@ -2756,6 +2780,7 @@ export async function forkAt(agent: string, text: string): Promise<boolean> {
  * away, the session goes back to just before it, and the job runs from there.
  */
 export async function editTurn(id: string, entryId: string, text: string) {
+  { const r = far(id, "editTurn", [id, entryId, text]); if (r) return r as never; }
   const t = taskById(id);
   if (!t) return;
   const at = t.entries.findIndex((e) => e.id === entryId);
@@ -2807,6 +2832,7 @@ export async function editTurn(id: string, entryId: string, text: string) {
 
 export const togglePin = (id: string) => updateTask(id, (t) => (t.pinned = !t.pinned));
 export function archiveTask(id: string, on = true) {
+  { const r = far(id, "archiveTask", [id, on]); if (r) return r as never; }
   updateTask(id, (t) => {
     t.archived = on;
     if (on) t.pinned = false;
@@ -2814,11 +2840,13 @@ export function archiveTask(id: string, on = true) {
   if (on) toast(tr("보관했어요"), "info", { label: tr("되돌리기"), run: () => archiveTask(id, false) });
 }
 export function renameTask(id: string, title: string) {
+  { const r = far(id, "renameTask", [id, title]); if (r) return r as never; }
   const v = title.trim().slice(0, 80);
   if (v) updateTask(id, (t) => (t.title = v));
 }
 /** Same request again as a new job (same folder, model and permission). */
 export function duplicateTask(id: string): string | undefined {
+  { const r = far(id, "duplicateTask", [id]); if (r) return undefined; }
   const t = taskById(id);
   if (!t) return;
   const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId });

@@ -1,4 +1,5 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
+import { mirror } from "../state/mirror";
 import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
@@ -193,3 +194,17 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
  * the task view's call still compiles; drop it there and this can go.
  */
 
+
+/** a job of another Mac (Settings › 연결): where it runs, in place of this Mac's account and limits */
+export function HostLine(props: { host: string; running?: boolean }) {
+  const name = () => state.settings.hosts?.find((h) => h.id === props.host)?.name ?? "Mac";
+  const st = () => mirror.hosts[props.host]?.status;
+  return (
+    <div class="status-line">
+      <span class="st-host" classList={{ away: st() !== "ok" }} title={st() === "ok" ? undefined : t("연결 안 됨")}>
+        <Icon name="monitor" size={14} />
+        {st() === "ok" ? t("{name}에서 실행", { name: name() }) : t("{name} 연결 안 됨", { name: name() })}
+      </span>
+    </div>
+  );
+}
