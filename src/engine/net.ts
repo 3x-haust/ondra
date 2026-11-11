@@ -3,7 +3,7 @@
 
 /** Errors that mean the request never got through or was cut, not that the model or the request was wrong. */
 const NET =
-  /fetch failed|network ?error|networkerror|load failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up|other side closed|premature close|connection (error|reset|closed|lost|refused)|terminated|timed out|request timeout|\b(502|503|504)\b|bad gateway|service unavailable|gateway time-?out|overloaded/i;
+  /fetch failed|network ?error|networkerror|load failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up|other side closed|premature close|connection (error|reset|closed|lost|refused)|terminated|timed out|request timeout|\b(502|503|504)\b|bad gateway|service unavailable|gateway time-?out|overloaded|unable to connect|able to access the url|ConnectionRefused|ConnectionClosed/i;
 
 export const isNetError = (message: string) => NET.test(message);
 
