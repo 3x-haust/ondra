@@ -273,6 +273,21 @@ export function removeProject(id: string) {
 export const taskById = (id: string) => index().byId.get(id);
 /** a task's subagents, in the order they were made (the tasks list's order) */
 export const kidsOf = (id: string): Task[] => index().kids.get(id) ?? none;
+
+/** a job of the list: not a subagent, a quick answer or archived */
+export const listed = (t: Task) => !t.parentId && !t.answer && !t.archived;
+/** the job a follow-up carries on (one started by answering it, say "merge it"), when that one is in
+ *  the same list: the follow-up is part of its line, shown under it and named by it */
+export function carriedOn(t: Task): Task | undefined {
+  const p = t.follows ? taskById(t.follows) : undefined;
+  return p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project ? p : undefined;
+}
+/** the first job of a follow-up's line (the job itself when it follows none) */
+export function lineHead(t: Task): Task {
+  let x = t;
+  for (let i = 0; carriedOn(x) && i < 50; i++) x = carriedOn(x)!;
+  return x;
+}
 export const accountById = (id: string) => state.accounts.find((a) => a.id === id);
 export const accountsIn = (space: SpaceId) => state.accounts.filter((a) => a.space === space);
 export const decisionsIn = (space: SpaceId) => state.decisions.filter((d) => taskById(d.taskId)?.space === space);
