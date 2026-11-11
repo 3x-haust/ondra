@@ -24,12 +24,13 @@ using only **public** APIs:
   screen.
 - **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
   so the user's frontmost app stays in front.
-- **Park** the windows of an app the launch opened in a screen corner, one point
-  left on screen (a window wholly off every screen may be moved back or stop being
-  drawn). They are still drawn, so the tree, events and captures work; windows the
-  app opens later are parked after each action. They go back where they were on
-  `release` (the tool's `stop`), when the helper ends, or when the user brings the
-  app forward. An app that was already running is not parked.
+- **Hidden**: an app the launch opens starts hidden (`OpenConfiguration.hides`),
+  so nothing shows on the user's screen and Stage Manager doesn't switch. AX reads
+  and actions work on a hidden app. A capture or pointer/key events unhide it
+  without activation (behind the user's windows) for the moment they need, then
+  hide it again. Parking windows off-screen instead doesn't work: a visible window
+  is kept on the stage (Stage Manager) and a parked window can't be captured. An app
+  that was already running is not hidden.
 
 The background contract is **verified, not masked**: the helper records the
 frontmost app, key window and mouse position before and after every action and
@@ -85,9 +86,9 @@ helper on the same apps.
   selected a word. Prefer `set-value` or keys there.
 - Scroll wheel events are not used (a background app drops them); scroll areas
   without a settable scroll bar or page action report `SCROLL_UNAVAILABLE`.
-- **App-level hidden windows**: a fully hidden app exposes no Accessibility tree,
-  so host mode launches without activation (window behind the user's front app)
-  rather than hidden.
+- **Apps that need their window drawn**: a hidden app is shown for a moment for each
+  capture and each pointer or key event. An app whose AX tree empties while hidden
+  can only be driven with those (each shows it briefly).
 - Fully offscreen/minimized windows and multi-window targeting are minimal (the AX
   key window).
 

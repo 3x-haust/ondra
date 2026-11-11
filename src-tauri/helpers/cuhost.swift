@@ -14,8 +14,9 @@
 //   - never warps the real cursor, never posts to the global session (events go
 //     to the target pid only); where it points is shown with its own small pointer
 //     drawn just above the target window;
-//   - launches apps without activation and parks their windows in a screen corner, out of the
-//     user's sight (still drawn, so the tree, events and captures work); they go back on release;
+//   - launches apps hidden and without activation (not one the user already has open); the
+//     tree and actions work on a hidden app, captures and events show it behind the user's
+//     windows for a moment and hide it again;
 //   - records the frontmost app, its front window id and mouse position BEFORE and
 //     AFTER every action and reports them, so the caller can verify nothing moved;
 //   - refuses event input while the user is working in the target app, and never
@@ -39,7 +40,7 @@
 //   {"op":"look","pid":123}                 → window-only PNG (base64) of the key window,
 //                                             plus its frame; coordinates are image pixels
 //   {"op":"act","pid":123,"action":{…}}     → one action, settle, then re-observe
-//   {"op":"release","pid":123}              → put the app's parked windows back where they were
+//   {"op":"release","pid":123}              → hide again anything shown for a capture or events
 //   {"op":"selfcheck","pid":123}            → invariants + a no-op timing probe
 // Every response carries "env" (frontmost/key window/mouse) so callers can assert
 // the background invariant themselves.
@@ -409,6 +410,7 @@ let keyCodes: [String: CGKeyCode] = [
 ]
 
 func postKey(pid: pid_t, keyCode: CGKeyCode, flags: CGEventFlags) {
+    ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     let down = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true)
     down?.flags = flags
@@ -419,6 +421,7 @@ func postKey(pid: pid_t, keyCode: CGKeyCode, flags: CGEventFlags) {
 }
 
 func typeText(pid: pid_t, text: String) {
+    ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     // Unit = one event carrying the UTF-16 for a chunk; keep chunks small.
     for scalarChunk in text.unicodeScalars.chunked(into: 20) {
@@ -468,6 +471,7 @@ func mouseEvent(_ src: CGEventSource?, _ type: CGEventType, _ at: CGPoint, _ but
 }
 
 func postClick(pid: pid_t, at: CGPoint, button: CGMouseButton, count: Int, window: EventWindow?) {
+    ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     let downType: CGEventType = button == .right ? .rightMouseDown : .leftMouseDown
     let upType: CGEventType = button == .right ? .rightMouseUp : .leftMouseUp
@@ -484,6 +488,7 @@ func minJerk(_ t: Double) -> Double { t * t * t * (10 - 15 * t + 6 * t * t) }
 /// Press at `from`, move through eased intermediate points, release at `to` — all
 /// posted to the target pid; the real cursor never moves. Returns the step count.
 func postDrag(pid: pid_t, from: CGPoint, to: CGPoint, window: EventWindow?) -> Int {
+    ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     let distance = hypot(to.x - from.x, to.y - from.y)
     let steps = max(4, min(12, Int(distance / 24)))
@@ -960,26 +965,22 @@ func settle(pid: pid_t) -> Double {
 
 // ───────────────────────── launch (hidden, no activation) ─────────────────────────
 
+func appURL(_ name: String) -> URL? {
+    let ws = NSWorkspace.shared
+    if name.contains("/") || name.hasSuffix(".app") { return URL(fileURLWithPath: name) }
+    if let u = ws.urlForApplication(withBundleIdentifier: name) { return u }
+    // locate by display name
+    return findAppByName(name) ?? ws.urlForApplication(toOpen: URL(fileURLWithPath: "/dev/null"))
+}
+
 func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, String?) -> Void) {
     let ws = NSWorkspace.shared
-    var url: URL?
-    if name.contains("/") || name.hasSuffix(".app") {
-        url = URL(fileURLWithPath: name)
-    } else if let u = ws.urlForApplication(withBundleIdentifier: name) {
-        url = u
-    } else {
-        // locate by display name
-        url = ws.urlForApplication(toOpen: URL(fileURLWithPath: "/dev/null"))
-        if let full = findAppByName(name) { url = full }
-    }
-    guard let appURL = url else { completion(nil, "app not found"); return }
+    guard let appURL = appURL(name) else { completion(nil, "app not found"); return }
     let cfg = NSWorkspace.OpenConfiguration()
     cfg.activates = false          // never bring it to the front (keeps the user's focus)
     cfg.addsToRecentItems = false
-    // App-level hide removes the window from the AX tree, so we only hide when the
-    // caller asks and accepts AX-blind operation. Default: visible-but-not-activated,
-    // i.e. the window opens behind the user's frontmost app. ScreenCaptureKit can
-    // still capture it when it is occluded by other windows.
+    // Hidden: nothing on the user's screen. The AX tree and actions work on a hidden app;
+    // captures and events show it for a moment (ensureDrawn), behind the user's windows.
     cfg.hides = hide
     ws.openApplication(at: appURL, configuration: cfg) { app, err in
         if let app = app { completion(app.processIdentifier, nil) }
@@ -1041,82 +1042,41 @@ func findAppByName(_ name: String) -> URL? {
     return nil
 }
 
-// ───────────────────────── parking ─────────────────────────
-// The job's app never shows over the user's work: once its windows open they are moved to a
-// screen corner with a single point left on screen (the way tiling window managers keep other
-// workspaces' windows: a window wholly off every screen may be moved back or stop being drawn).
-// They are still drawn, so accessibility, pid-addressed events and window capture work as
-// before. Where each window was is kept: they go back when the job is done with the app (release,
-// the helper ending) or when the user brings the app forward themselves.
+// ───────────────────────── out of sight ─────────────────────────
+// An app the job opens is launched hidden: no window on the user's screen, no Stage Manager
+// switch, nothing in its strip. Accessibility reads and acts on a hidden app all the same. Only
+// what needs the window drawn shows it, without activating it: a capture (`look`) and pointer or
+// key events. It is hidden again right after, and stays hidden when the job is done; the user
+// brings it up from the Dock or ⌘Tab, which shows it as usual.
 
-struct Parked { let window: AXUIElement; let origin: CGPoint }
-var parked: [pid_t: [Parked]] = [:]
-let parkLock = NSLock()
-/// set while an action runs: the app coming forward then is the action's doing, not the user's
-var acting = false
+/// apps shown for a capture or events, to hide again after
+var shownFor: Set<pid_t> = []
+let shownLock = NSLock()
 
-func axWindows(_ pid: pid_t) -> [AXUIElement] {
-    var v: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &v) == .success,
-          let list = v as? [AXUIElement] else { return [] }
-    return list
+func onScreenWindows(_ pid: pid_t) -> Int {
+    ((CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? [])
+        .filter { ($0[kCGWindowOwnerPID as String] as? Int32) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 }.count
 }
 
-/// Screens in accessibility coordinates (top-left origin, y down).
-func axScreens() -> [CGRect] {
-    let top = NSScreen.screens.first?.frame.maxY ?? 0
-    return NSScreen.screens.map { CGRect(x: $0.frame.minX, y: top - $0.frame.maxY, width: $0.frame.width, height: $0.frame.height) }
+/// Draw a hidden app's windows (behind the user's, never activated) for what needs them drawn.
+func ensureDrawn(_ pid: pid_t) {
+    guard let app = NSRunningApplication(processIdentifier: pid), app.isHidden else { return }
+    shownLock.lock(); shownFor.insert(pid); shownLock.unlock()
+    app.unhide()
+    for _ in 0..<40 where onScreenWindows(pid) == 0 { usleep(25_000) }
+    usleep(120_000) // its first frame
 }
 
-/// Where a window of this size goes: a screen's bottom-right (else bottom-left) corner with one
-/// point on that screen, and none of it on another screen.
-func parkSpot(_ size: CGSize, screens: [CGRect] = axScreens()) -> CGPoint? {
-    for s in screens {
-        for o in [CGPoint(x: s.maxX - 1, y: s.maxY - 1), CGPoint(x: s.minX - size.width + 1, y: s.maxY - 1)] {
-            let r = CGRect(origin: o, size: size)
-            if !screens.contains(where: { $0 != s && $0.intersects(r) }) { return o }
-        }
-    }
-    return nil
+/// Hide again what ensureDrawn showed (not an app the user brought up meanwhile: that one is theirs).
+func hideAgain(_ pid: pid_t) {
+    shownLock.lock(); let was = shownFor.remove(pid) != nil; shownLock.unlock()
+    guard was, let app = NSRunningApplication(processIdentifier: pid), !app.isActive else { return }
+    app.hide()
 }
 
-/// Move the app's windows out of sight. Already parked ones that came back are moved again.
-func park(_ pid: pid_t) {
-    parkLock.lock(); defer { parkLock.unlock() }
-    var list = parked[pid] ?? []
-    for w in axWindows(pid) {
-        let role = axString(w, kAXRoleAttribute), sub = axString(w, kAXSubroleAttribute)
-        guard role == (kAXWindowRole as String), sub == nil || sub == (kAXStandardWindowSubrole as String) || sub == (kAXDialogSubrole as String) else { continue }
-        guard let at = axPoint(w, kAXPositionAttribute), let size = axSize(w), var spot = parkSpot(size) else { continue }
-        if abs(at.x - spot.x) < 1, abs(at.y - spot.y) < 1 { continue }
-        if !list.contains(where: { CFEqual($0.window, w) }) { list.append(Parked(window: w, origin: at)) }
-        if let v = AXValueCreate(.cgPoint, &spot) { AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, v) }
-    }
-    parked[pid] = list
-}
-
-/// Put the app's windows back where they were.
-func unpark(_ pid: pid_t) {
-    parkLock.lock(); defer { parkLock.unlock() }
-    for p in parked[pid] ?? [] {
-        var o = p.origin
-        if let v = AXValueCreate(.cgPoint, &o) { AXUIElementSetAttributeValue(p.window, kAXPositionAttribute as CFString, v) }
-    }
-    parked[pid] = nil
-}
-
-func unparkAll() {
-    parkLock.lock(); let pids = Array(parked.keys); parkLock.unlock()
-    for pid in pids { unpark(pid) }
-}
-
-/// Park the app as soon as its first window is there (a launch shows it a moment later).
-func parkWhenShown(_ pid: pid_t) {
-    for _ in 0..<40 {
-        if !axWindows(pid).isEmpty { break }
-        usleep(75_000)
-    }
-    park(pid)
+func hideAllAgain() {
+    shownLock.lock(); let pids = shownFor; shownLock.unlock()
+    for pid in pids { hideAgain(pid) }
 }
 
 // ───────────────────────── request handling ─────────────────────────
@@ -1138,21 +1098,21 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, ["apps": apps, "env": before])
     case "launch":
         guard let name = req["app"] as? String else { return fail(id, "BAD_REQUEST", "missing app") }
-        let hide = (req["hide"] as? Bool) ?? false
+        // an app the user already has open is theirs to look at: never hidden; any other launches hidden
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.standardizedFileURL })
+        let target = appURL(name)
+        let hide = target.map { !running.contains($0.standardizedFileURL) && ((req["hide"] as? Bool) ?? true) } ?? false
         // Stage Manager makes room for a window that opens behind: the user's own front window
         // is pushed aside and shrunk. Its frame is noted now and put back once the launch settles.
         let held = frontWindowFrame()
-        // an app the user already has open is theirs to look at: only one this launch opens is parked
-        let running = Set(NSWorkspace.shared.runningApplications.map { $0.processIdentifier })
         let sem = DispatchSemaphore(value: 0)
         var out: (pid_t?, String?) = (nil, nil)
         launchHidden(name, hide: hide) { pid, err in out = (pid, err); sem.signal() }
         sem.wait()
-        if let pid = out.0, !running.contains(pid), (req["park"] as? Bool) ?? true { parkWhenShown(pid) }
         if let held = held { keepFrame(held) }
         let after = environment()
         if let pid = out.0 {
-            return ok(id, ["pid": Int(pid), "env": after, "envBefore": before,
+            return ok(id, ["pid": Int(pid), "hidden": hide, "env": after, "envBefore": before,
                            "backgroundPreserved": backgroundPreserved(before, after)])
         }
         return fail(id, "LAUNCH_FAILED", out.1 ?? "launch failed")
@@ -1167,8 +1127,10 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         guard #available(macOS 14.0, *) else { return fail(id, "UNSUPPORTED_OS", "window capture needs macOS 14+") }
         let sem = DispatchSemaphore(value: 0)
         var png: Data?; var meta: [String: Any]?
+        ensureDrawn(pid_t(pidN))
         captureKeyWindowPNG(pid: pid_t(pidN)) { p, m in png = p; meta = m; sem.signal() }
         sem.wait()
+        hideAgain(pid_t(pidN))
         guard let data = png, let m = meta else { return fail(id, "CAPTURE_FAILED", "window capture failed (Screen Recording permission?)") }
         if let f = m["frame"] as? [String: Double], let wid = m["windowID"] as? Int, let w = m["width"] as? Int, let h = m["height"] as? Int {
             lastLook[pid_t(pidN)] = LookFrame(frame: CGRect(x: f["x"]!, y: f["y"]!, width: f["width"]!, height: f["height"]!),
@@ -1188,18 +1150,15 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         CFRunLoopRunInMode(.defaultMode, 0, true)
         axNotifications = 0
         var info: [String: Any] = [:]
-        acting = true
-        defer { acting = false }
         do { info = try performAction(pid: pid_t(pidN), action: action, map: map) }
         catch ActError.message(let code, let msg) { return fail(id, code, msg) }
         catch { return fail(id, "ACT_FAILED", "\(error)") }
         // settle on the app's own notifications, then re-observe in the same round trip
         let settleMs = settle(pid: pid_t(pidN))
-        // a window the action opened (a dialog, a second window) goes out of sight too
-        let wasParked: Bool = { parkLock.lock(); defer { parkLock.unlock() }; return parked[pid_t(pidN)] != nil }()
-        if wasParked { park(pid_t(pidN)) }
+
         let actMs = nowMs() - t0
         let tree = observeTree(pid: pid_t(pidN), map: map)
+        hideAgain(pid_t(pidN))
         var after = environment()
         var extra: [String: Any] = [:]
         // Some apps bring themselves forward when clicked. Hand the front back to what
@@ -1220,7 +1179,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, result)
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
-        unpark(pid_t(pidN))
+        hideAgain(pid_t(pidN))
         return ok(id, ["released": true, "env": environment()])
     case "selfcheck":
         let pidN = req["pid"] as? Int
@@ -1283,23 +1242,16 @@ let worker = Thread {
         }
         emit(handle(obj))
     }
-    unparkAll()
+    hideAllAgain()
     exit(0)
 }
 worker.stackSize = 8 << 20
 worker.start()
-// Stopped (the job is done with the app): its windows go back where they were first.
+// Stopped: an app shown for a capture or events goes back out of sight first.
 signal(SIGTERM, SIG_IGN)
 let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-onTerm.setEventHandler { unparkAll(); exit(0) }
+onTerm.setEventHandler { hideAllAgain(); exit(0) }
 onTerm.resume()
-// The user bringing a parked app forward (its Dock icon, ⌘Tab) wants to see it: it comes back.
-NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: nil) { note in
-    guard !acting, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-    let pid = app.processIdentifier
-    let isParked: Bool = { parkLock.lock(); defer { parkLock.unlock() }; return parked[pid] != nil }()
-    if isParked, userInputSince(seconds: 2) { DispatchQueue.global().async { unpark(pid) } }
-}
 // No Dock icon, no menu bar, never activated: windows only for the pointer overlay.
 NSApplication.shared.setActivationPolicy(.accessory)
 NSApplication.shared.run()
