@@ -1696,6 +1696,9 @@ button.reply-note:hover {
   height: var(--h-md);
   font-size: var(--fs-md);
 }
+.live-line.thinking-line {
+  color: var(--ink-3);
+}
 .live-line.muted .icon {
   color: var(--ink-4);
 }

@@ -132,6 +132,8 @@ export interface ToolCall {
   /** For computer: the step (computerStep()) and the app the session works in. */
   act?: string;
   app?: string;
+  /** a picture the agent looked at (reading an image file), its full path: shown as a thumbnail */
+  image?: string;
 }
 
 /** One line of a task's transcript. */

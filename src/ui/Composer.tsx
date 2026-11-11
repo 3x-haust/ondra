@@ -2,7 +2,8 @@
 // Card with the text area; a bar below it: [+] and left chips, right chips,
 // send ↔ stop. Strips (paused, plan, background…) dock on top, an optional
 // row sits under the card. Files can be attached with + or dropped on the window.
-// Enter sends (never mid-IME), Shift+Enter is a new line.
+// Enter sends (never mid-IME), Shift+Enter is a new line; while a task works, Enter puts the
+// words in now and Cmd+Enter queues them for after (as Codex does).
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
@@ -95,6 +96,8 @@ export const hasDraft = (key: string) => drafts.has(key);
 export function Composer(props: {
   placeholder: string;
   onSend: (text: string) => void;
+  /** Cmd+Enter: hold the words until the work in progress is done, instead of now */
+  onQueue?: (text: string) => void;
   id?: string;
   /** chips after the + button */
   left?: JSX.Element;
@@ -347,7 +350,7 @@ export function Composer(props: {
 
   // a picture or file alone is enough to send
   const ready = () => (!!text().trim() || files().length > 0 || quotes().length > 0) && !props.disabled;
-  const send = () => {
+  const send = (queue = false) => {
     if (!ready()) return;
     // skills named anywhere ("이거 /skill:deep-research 로 조사해줘"): the first runs, with the rest of the text
     const skills = props.commands?.filter((c) => c.skill) ?? [];
@@ -388,7 +391,7 @@ export function Composer(props: {
     el.value = "";
     const key = props.draftKey;
     if (key !== undefined) drafts.delete(key);
-    props.onSend(withFiles(v, f));
+    (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, f));
     queueMicrotask(grow);
   };
 
@@ -631,6 +634,11 @@ export function Composer(props: {
             }
           }}
           onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !e.isComposing && props.onQueue && !pick()) {
+              e.preventDefault();
+              send(true);
+              return;
+            }
             if (ignoredKey(e) || e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.key === "Escape" && !pick() && noModifiers(e)) {
               e.preventDefault();

@@ -1,6 +1,8 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
-import { noteText, nowText } from "../engine/describe";
+import { noteText } from "../engine/describe";
 import { holdScroll, keepBottom, toBottomSent } from "./stick";
+import { openImage } from "./Lightbox";
+import { fileSrc } from "../lib/native";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
@@ -155,7 +157,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
                 fallback={
               <Index each={runs(g().tools)}>
                 {(r) => (
-                  <Show when={r().length > 1} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} halt={halts().get(r()[0].id)} />}>
+                  <Show when={r().length > 1 || !!r()[0].tool.image} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} halt={halts().get(r()[0].id)} />}>
                     <ToolGroup tools={r()} shells={props.task.shells} stopped={stopped()} halts={halts()} />
                   </Show>
                 )}
@@ -421,9 +423,9 @@ export function liveVerb(t: Task): string | undefined {
  * file edits ("파일 수정함"), commands ("명령 5개 실행함", Claude Code's "Ran 5
  * shell commands") and browser steps. Other tools stay single.
  */
-type Family = "explore" | "edit" | "browser" | "run" | "computer";
+type Family = "explore" | "edit" | "browser" | "run" | "computer" | "image";
 const familyOf = (e: ToolEntry): Family | undefined =>
-  isComputer(e.tool) ? "computer" : e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
+  isComputer(e.tool) ? "computer" : e.tool.image ? "image" : e.tool.kind === "read" || e.tool.kind === "search" ? "explore" : e.tool.kind === "edit" || e.tool.kind === "write" ? "edit" : e.tool.kind === "browser" ? "browser" : e.tool.kind === "bash" || e.tool.kind === "test" ? "run" : undefined;
 function runs(tools: ToolEntry[]): ToolEntry[][] {
   const out: ToolEntry[][] = [];
   for (const t of tools) {
@@ -441,6 +443,48 @@ function runs(tools: ToolEntry[]): ToolEntry[][] {
  * for each call. While one runs, the line says which.
  */
 function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
+  return (
+    <Show when={familyOf(props.tools[0]) === "image"} fallback={<CallGroup {...props} />}>
+      <PictureGroup tools={props.tools} stopped={props.stopped} />
+    </Show>
+  );
+}
+
+/**
+ * Pictures the agent looked at, as Codex shows them: "이미지 2개 확인함" over the pictures
+ * themselves (open one to see it big); the chevron folds them away.
+ */
+function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
+  const [open, setOpen] = createSignal(true);
+  const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
+  const shown = () => props.tools.filter((t) => t.tool.ok !== false && t.tool.image);
+  const n = () => props.tools.length;
+  return (
+    <div class="tool group pic-group" classList={{ open: open() }}>
+      <button class="tool-row click" onClick={(e) => (holdScroll(800, e.currentTarget), setOpen(!open()))} aria-expanded={open()}>
+        <Icon name="image" size={14} />
+        <span class="tool-verb" classList={{ shimmer: live() }}>{live() ? tr("이미지 보는 중") : tr("이미지 {n}개 확인함", { n: n() })}</span>
+        <span class="tool-end">
+          <Show when={n() - shown().length}><span class="tool-fail">{tr("실패 {n}", { n: n() - shown().length })}</span></Show>
+        </span>
+        <Icon name="chevron" size={12} class="tool-chev" />
+      </button>
+      <Fold open={open() && shown().length > 0}>
+        <div class="pic-thumbs">
+          <For each={shown()}>
+            {(e) => (
+              <button class="pic-thumb" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(e.tool.image!)}>
+                <img src={fileSrc(e.tool.image!)} alt="" loading="lazy" />
+              </button>
+            )}
+          </For>
+        </div>
+      </Fold>
+    </div>
+  );
+}
+
+function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
   const [open, setOpen] = createSignal(false);
   /** Ondra stopped it: neither running nor failed */
   const halt = (t: ToolEntry) => props.halts?.get(t.id);
@@ -525,8 +569,10 @@ function doneLabel(run: ToolEntry[]): string {
     if (f === "edit") return tr("파일 {n}개 수정함", { n: new Set(run.map((e) => e.tool.target ?? e.id)).size });
     if (f === "run") return tr("명령 {n}개 실행함", { n: run.length });
     if (f === "computer") return tr("앱 조작함");
+    if (f === "image") return tr("이미지 {n}개 확인함", { n: run.length });
     return tr("브라우저 {n}번 씀", { n: run.length });
   }
+  if (t.image) return tr("이미지 {n}개 확인함", { n: 1 });
   if (isComputer(t)) return computerSaid(t).label;
   if (t.kind === "bash") return describeCommand(t.target ?? "").label;
   if (t.kind === "browser") return describeBrowser(t.target ?? "").label;
@@ -557,7 +603,7 @@ function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolea
   return (
     <div class="tool group work-line" classList={{ open: open() }}>
       <button class="tool-row click" onClick={() => setOpen(!open())} aria-expanded={open()}>
-        <Icon name={ICON[kind()]} size={14} />
+        <Icon name={familyOf(props.tools[0]) === "image" ? "image" : ICON[kind()]} size={14} />
         <span class="tool-verb">{label()}</span>
         <span class="tool-end">
           <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
@@ -568,7 +614,7 @@ function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolea
         <div class="explore-body">
           <For each={parts()}>
             {(r) => (
-              <Show when={r.length > 1} fallback={<ToolLine e={r[0]} shells={props.shells} stopped={props.stopped} halt={props.halts?.get(r[0].id)} />}>
+              <Show when={r.length > 1 || !!r[0].tool.image} fallback={<ToolLine e={r[0]} shells={props.shells} stopped={props.stopped} halt={props.halts?.get(r[0].id)} />}>
                 <ToolGroup tools={r} shells={props.shells} stopped={props.stopped} halts={props.halts} />
               </Show>
             )}
@@ -912,9 +958,10 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         </Show>
         {/* waiting on its subagents: their card above already shows that */}
         <Show when={working() && !liveText() && !toolRunning() && !kidsOf(props.task.id).some((k) => k.status === "running" || k.status === "queued")}>
-          <div class="live-line">
-            <span class="spin" />
-            <span class="shimmer">{props.task.now ? nowText(props.task.now) : tr("작업 중")}</span>
+          {/* between steps the model is thinking: one quiet line, like Codex's "생각 중". What it did
+              is on the step rows above; a finished step isn't said again as if still going on. */}
+          <div class="live-line thinking-line">
+            <span class="shimmer">{tr("생각 중")}</span>
           </div>
         </Show>
         {/* a question waiting on the user: last in the conversation, so it scrolls with it */}

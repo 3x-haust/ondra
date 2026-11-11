@@ -132,6 +132,8 @@ export default {
   "파일 {n}개 수정함": "Edited {n} file|Edited {n} files",
   "파일 {n}개 수정 중": "Editing {n} file|Editing {n} files",
   "명령 {n}개 실행함": "Ran {n} command|Ran {n} commands",
+  "이미지 {n}개 확인함": "Viewed {n} image|Viewed {n} images",
+  "이미지 보는 중": "Viewing image",
   "명령 {n}개 실행 중": "Running {n} command|Running {n} commands",
   "브라우저 {n}번 씀": "Used the browser once|Used the browser {n} times",
   "실패 {n}": "{n} failed",

@@ -69,7 +69,13 @@ export function fixture(base: AppState): AppState {
         entries: [
           { id: "p1", at: m(6), kind: "user", text: "acme.dev 요금제 페이지 결제 버튼 동작 확인" },
           { id: "p2", at: m(5), kind: "tool", tool: { name: "browser", kind: "browser", target: "acme.dev/pricing 열기", ok: true, endedAt: m(4.9) } },
-          { id: "p3", at: m(3), kind: "tool", tool: { name: "browser", kind: "browser", target: "‘프로 시작하기’ 클릭" } },
+          { id: "p3", at: m(3), kind: "tool", tool: { name: "browser", kind: "browser", target: "‘프로 시작하기’ 클릭", ok: true, endedAt: m(2.9) } },
+          { id: "p3b", at: m(2.8), kind: "tool", tool: { name: "read", kind: "read", target: "pricing.png", detail: "pricing.png", image: PRICING, ok: true, endedAt: m(2.7) } },
+          // a computer session going on: its steps share one row, the running one named
+          { id: "p4", at: m(2.5), kind: "tool", tool: { name: "computer", kind: "desktop", act: "open", target: "Stripe", app: "Stripe", ok: true, endedAt: m(2.4) } },
+          { id: "p5", at: m(2.4), kind: "tool", tool: { name: "computer", kind: "desktop", act: "look", target: "", app: "Stripe", ok: true, endedAt: m(2.3) } },
+          { id: "p6", at: m(2.3), kind: "tool", tool: { name: "computer", kind: "desktop", act: "type", target: "‘pro’", app: "Stripe", ok: true, endedAt: m(2.2) } },
+          { id: "p7", at: m(0.1), kind: "tool", tool: { name: "computer", kind: "desktop", act: "press", target: "return", app: "Stripe" } },
         ],
         shells: [], inbox: [],
       },

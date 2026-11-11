@@ -1193,6 +1193,8 @@ func onlineDisplays() -> [CGDirectDisplayID] {
 /// The off-screen display, made once and held for the helper's life.
 final class Backdrop {
     static let shared = Backdrop()
+    static let queue = DispatchQueue(label: "ondra.backdrop")
+    static let serialBase: UInt32 = 0x4f440000
     private var display: CGVirtualDisplay?
     private(set) var displayID: CGDirectDisplayID = 0
     private let conn: Int32
@@ -1209,29 +1211,42 @@ final class Backdrop {
     /// Make the display if it isn't up yet. Returns false if it could not be created.
     @discardableResult func ensure() -> Bool {
         if display != nil { return true }
-        let d = CGVirtualDisplayDescriptor()
-        d.queue = .main; d.name = "Ondra"
-        d.maxPixelsWide = 1920; d.maxPixelsHigh = 1200
-        d.sizeInMillimeters = CGSize(width: 480, height: 300)
-        // Each helper (one per job using the computer) holds its own display: a unique serial,
-        // so a second job running at the same time doesn't fail to make one.
-        d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = UInt32(truncatingIfNeeded: getpid())
-        guard let v = CGVirtualDisplay(descriptor: d) else { dbgLog("display: create failed"); return false }
-        let st = CGVirtualDisplaySettings(); st.hiDPI = 0
-        st.modes = [CGVirtualDisplayMode(width: 1920, height: 1200, refreshRate: 30)]
-        guard v.apply(st) else { dbgLog("display: apply failed"); return false }
-        // Place it off the bottom-right corner of the real displays, touching them only at a
-        // corner, so the pointer can never wander onto it. Another job's display is already
-        // there: go corner-to-corner past the last one.
+        // Each helper (one per job using the computer) holds its own display, in a numbered slot
+        // with a fixed serial. The system remembers where a display it has seen goes, so from the
+        // second time on a slot comes up straight in its corner. A display it hasn't seen lands
+        // beside the main one first, and a Dock on that side jumps onto it for a moment (the
+        // Dock flicker users saw when every helper made a new one).
+        let taken = Set(onlineDisplays().filter { CGDisplayVendorNumber($0) == 0x1234 && CGDisplayModelNumber($0) == 0x4f44 }.map { CGDisplaySerialNumber($0) })
+        var made: CGVirtualDisplay?
+        for slot in UInt32(0)..<8 where !taken.contains(Backdrop.serialBase + slot) {
+            let d = CGVirtualDisplayDescriptor()
+            // its own queue: the main thread is often busy with a request
+            d.queue = Backdrop.queue; d.name = "Ondra"
+            d.maxPixelsWide = 1920; d.maxPixelsHigh = 1200
+            d.sizeInMillimeters = CGSize(width: 480, height: 300)
+            d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = Backdrop.serialBase + slot
+            guard let v = CGVirtualDisplay(descriptor: d) else { continue } // another helper took it just now
+            let st = CGVirtualDisplaySettings(); st.hiDPI = 0
+            st.modes = [CGVirtualDisplayMode(width: 1920, height: 1200, refreshRate: 30)]
+            if v.apply(st) { made = v; break }
+        }
+        guard let v = made else { dbgLog("display: create failed"); return false }
+        let t1 = nowMs()
+        while !onlineDisplays().contains(v.displayID), nowMs() - t1 < 2000 { usleep(10_000) }
+        // Its place: off the bottom-right corner of the real displays, touching them only at a
+        // corner, so the pointer can never wander onto it; past another job's display if one is
+        // there. Saved for this set of displays, so it's already there next time.
         var corner = CGPoint(x: CGDisplayBounds(CGMainDisplayID()).maxX, y: CGDisplayBounds(CGMainDisplayID()).maxY)
         for other in onlineDisplays() where other != v.displayID && CGDisplayVendorNumber(other) == 0x1234 && CGDisplayModelNumber(other) == 0x4f44 {
             let b = CGDisplayBounds(other)
             if b.maxX > corner.x { corner = CGPoint(x: b.maxX, y: b.maxY) }
         }
-        var cfg: CGDisplayConfigRef?
-        CGBeginDisplayConfiguration(&cfg)
-        CGConfigureDisplayOrigin(cfg, v.displayID, Int32(corner.x), Int32(corner.y))
-        CGCompleteDisplayConfiguration(cfg, .forSession)
+        if CGDisplayBounds(v.displayID).origin != corner {
+            var cfg: CGDisplayConfigRef?
+            CGBeginDisplayConfiguration(&cfg)
+            CGConfigureDisplayOrigin(cfg, v.displayID, Int32(corner.x), Int32(corner.y))
+            CGCompleteDisplayConfiguration(cfg, .permanently)
+        }
         display = v; displayID = v.displayID
         // its desktop (space) comes up a moment after the display; nothing can be put on it before
         let t0 = nowMs()
@@ -2016,7 +2031,7 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.3")
+    print("ondra-cuhost 0.4.4")
     exit(0)
 }
 
