@@ -46,7 +46,10 @@ using only **public** APIs:
   window has moved over (`mode: offscreen`). Its Dock tile shows it running; nothing
   else does. If it can't be placed, it stays hidden (`mode: hidden`) and a capture or
   events unhide it behind the user's windows for the moment they need. Each helper
-  holds its own display (serial = its pid), so jobs running at once don't collide. An app the user already had open is used as-is, never
+  holds its own display (serial = its pid), so jobs running at once don't collide.
+  On release (or when the helper exits) a real app the job opened is quit, so its Dock
+  tile stops showing it running; one the user has brought to the front is left alone,
+  and one that won't quit (a question about unsaved work) is hidden. An app the user already had open is used as-is, never
   copied. A window the user's own app left on the off-screen display is moved back.
 
 The background contract is **verified, not masked**: the helper records the
