@@ -63,32 +63,6 @@ export const agentAlive = () => call<string[]>("agent_alive", undefined, []);
 /** "provider/model" ids this account can use. */
 export const engineModels = (accountId: string) => call<string[]>("engine_models", { accountId }, ["openai-codex/gpt-5.6-terra"]);
 
-// ───────────────────────── isolated computer preparation ─────────────────────────
-export interface ComputerStatus {
-  phase: "idle" | "preparing" | "setup" | "stopped" | "starting" | "ready" | "recovering" | "error" | "closed";
-  busy: boolean;
-  prepared: boolean;
-  taskId: string | null;
-  error: string | null;
-}
-export interface ComputerPrepareRequest {
-  restoreImage: string;
-  cpuCount?: number;
-  memoryBytes?: number;
-  diskBytes?: number;
-  width?: number;
-  height?: number;
-}
-const unavailableComputer: ComputerStatus = { phase: "idle", busy: false, prepared: false, taskId: null, error: "COMPUTER_UNSUPPORTED" };
-export const computerStatus = () => call<ComputerStatus>("computer_status", undefined, unavailableComputer);
-const computerCommand = (command: string, args?: Record<string, unknown>): Promise<ComputerStatus> =>
-  inTauri ? invoke<ComputerStatus>(command, args) : Promise.reject(new Error("COMPUTER_UNSUPPORTED"));
-export const computerPrepare = (request: ComputerPrepareRequest) => computerCommand("computer_prepare", { request });
-export const computerOpenSetupViewer = () => computerCommand("computer_open_setup_viewer");
-/** Call only from an explicit user action; taskId is the complete t:<id> engine id. */
-export const computerStart = (taskId: string) => computerCommand("computer_start", { taskId });
-export const computerRecover = (taskId: string) => computerCommand("computer_recover", { taskId });
-
 // ───────────────────────── terminal (PTY) ─────────────────────────
 /**
  * Open a PTY. `command` null = the user's login shell. Output arrives as

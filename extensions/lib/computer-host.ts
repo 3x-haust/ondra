@@ -223,7 +223,7 @@ export class ComputerHostHelper {
   stop(): void { this.closed = true; try { this.child?.stdin.end(); } catch { /* closing */ } this.child?.kill(); this.child = undefined; }
 }
 
-/** One app in one background host session, mirroring the guest session's surface. */
+/** One app in one background host session. */
 export class ComputerHostSession {
   private pid?: number;
   private readonly obs = new HostObservation();

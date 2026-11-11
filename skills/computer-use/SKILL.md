@@ -5,8 +5,7 @@ description: >
   Read before operating Mac apps, clicking buttons, typing into fields or
   capturing native app windows (컴퓨터유즈, Mac 앱 조작, 앱 클릭·입력, 메신저 앱).
   Covers how it stays in the background, observation, and what to try when an
-  app ignores an action. An isolated
-  macOS guest is an optional separate mode.
+  app ignores an action.
 metadata:
   ondra-tools: 'computer'
   ondra-commands: '\bagent-desktop\b'
@@ -120,13 +119,6 @@ The host app that runs the helper needs **Accessibility** (to read the tree and
 act) and, for `look`, **Screen Recording** (to capture a window). If an action
 reports that a permission is missing, tell the user the exact step and continue
 with what you can verify. Do not click permission dialogs yourself.
-
-## Optional isolated guest
-
-A separate, isolated macOS **guest** VM remains available as an opt-in mode for
-work that must not touch the user's own session at all. It is not the default and
-requires its own setup; see `docs/computer-use.md`. Everything above is about the
-default background host mode.
 
 ## Other surfaces
 

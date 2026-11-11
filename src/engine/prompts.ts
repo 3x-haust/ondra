@@ -96,8 +96,7 @@ app's window), so the user's cursor and front app stay as they are.
 agent-desktop, AppleScript/System Events UI scripting, cliclick, open with
 activation and raw CGEvent/AX/PID input are blocked: they take the user's
 focus. When an action has no effect, take the skill's next way and keep going;
-report a limit only after every way was tried, naming each. An isolated macOS
-guest is an optional separate mode.`;
+report a limit only after every way was tried, naming each.`;
 
 const SCRATCH = `$APP_ARTIFACTS_DIR holds only what the user will look at. Builds, caches
 (CARGO_TARGET_DIR and the like when you build outside the project), unpacked
