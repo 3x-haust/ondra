@@ -621,15 +621,34 @@ func scrollAX(_ area: AXUIElement, direction: String, lines: Int) throws -> [Str
             let range = max(1, content - (vertical ? view.height : view.width))
             let delta = Double(lines) * 24 / Double(range)
             let next = min(1, max(0, current + (forward ? delta : -delta)))
-            if AXUIElementSetAttributeValue(bar, kAXValueAttribute as CFString, NSNumber(value: next)) == .success {
-                return ["scrolledTo": next]
+            // a web page's own bar can be set and still move nothing (the page doesn't scroll; the
+            // list inside it does, like a chat thread): only a bar that moved counts
+            if abs(next - current) > 1e-6, AXUIElementSetAttributeValue(bar, kAXValueAttribute as CFString, NSNumber(value: next)) == .success {
+                usleep(30_000)
+                var after: CFTypeRef?
+                if AXUIElementCopyAttributeValue(bar, kAXValueAttribute as CFString, &after) == .success,
+                   let moved = (after as? NSNumber)?.doubleValue, abs(moved - current) > 1e-6 {
+                    return ["scrolledTo": moved]
+                }
             }
         }
     }
     let page = vertical ? (forward ? "AXScrollDownByPage" : "AXScrollUpByPage") : (forward ? "AXScrollRightByPage" : "AXScrollLeftByPage")
-    if axActions(area).contains(page), AXUIElementPerformAction(area, page as CFString) == .success { return ["scrolledBy": "page"] }
+    if axActions(area).contains(page) {
+        let before = contentOrigin(area)
+        if AXUIElementPerformAction(area, page as CFString) == .success {
+            usleep(30_000)
+            if before == nil || contentOrigin(area) != before { return ["scrolledBy": "page"] }
+        }
+    }
     if let moved = scrollByReveal(area, direction: direction, lines: lines) { return moved }
     throw ActError.message("SCROLL_UNAVAILABLE", "this scroll area exposes no settable scroll bar or page action")
+}
+
+/// Where the area's content sits now (its first child's origin), to tell whether a page action moved it.
+func contentOrigin(_ area: AXUIElement) -> CGPoint? {
+    guard let first = axChildren(area).first, let f = axFrame(first) else { return nil }
+    return f.origin
 }
 
 /// Web views (Safari web apps, WebKit chats) often expose no scroll bar. Bring the element just
@@ -1028,8 +1047,8 @@ func appURL(_ name: String) -> URL? {
     let ws = NSWorkspace.shared
     if name.contains("/") || name.hasSuffix(".app") { return URL(fileURLWithPath: name) }
     if let u = ws.urlForApplication(withBundleIdentifier: name) { return u }
-    // locate by display name
-    return findAppByName(name) ?? ws.urlForApplication(toOpen: URL(fileURLWithPath: "/dev/null"))
+    // locate by name (never some other app: a name that matches nothing is "not found")
+    return findAppByName(name)
 }
 
 func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, String?) -> Void) {
@@ -1093,12 +1112,46 @@ func keepFrame(_ h: HeldFrame) {
     }
 }
 
+/// An app by the name the user knows it by: its file name, bundle name or display name, in
+/// the user's languages too ("카카오톡" as well as "KakaoTalk"), any case, in the usual app
+/// folders and the user's own (where Safari and Chrome put web apps the user made).
 func findAppByName(_ name: String) -> URL? {
-    for dir in ["/System/Applications", "/Applications", "/System/Applications/Utilities"] {
-        let candidate = URL(fileURLWithPath: dir).appendingPathComponent("\(name).app")
-        if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+    let fm = FileManager.default
+    let want = name.lowercased().replacingOccurrences(of: ".app", with: "")
+    let home = fm.homeDirectoryForCurrentUser.path
+    var dirs = ["/System/Applications", "/Applications", "/System/Applications/Utilities", "/Applications/Utilities",
+                "\(home)/Applications"]
+    // one level of folders inside the user's app folders ("Chrome Apps.localized", a vendor folder)
+    for base in ["/Applications", "\(home)/Applications"] {
+        for sub in (try? fm.contentsOfDirectory(atPath: base)) ?? [] where !sub.hasSuffix(".app") && !sub.hasPrefix(".") {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: "\(base)/\(sub)", isDirectory: &isDir), isDir.boolValue { dirs.append("\(base)/\(sub)") }
+        }
     }
-    return nil
+    let apps = dirs.flatMap { dir in ((try? fm.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".app") }
+        .map { URL(fileURLWithPath: dir).appendingPathComponent($0) } }
+    // the file name first (as it is spelled on disk), then any name the app goes by
+    if let hit = apps.first(where: { $0.deletingPathExtension().lastPathComponent.lowercased() == want }) { return hit }
+    return apps.first { url in
+        let info = infoPlist(url)
+        return ([info["CFBundleName"] as? String, info["CFBundleDisplayName"] as? String] + localizedAppNames(url))
+            .contains { $0?.lowercased() == want }
+    }
+}
+
+/// The app's names in the user's languages, from its InfoPlist.strings or InfoPlist.loctable.
+func localizedAppNames(_ app: URL) -> [String?] {
+    let res = app.appendingPathComponent("Contents/Resources")
+    var langs: [String] = []
+    for l in Locale.preferredLanguages {
+        langs.append(l); langs.append(l.replacingOccurrences(of: "-", with: "_"))
+        if let short = l.split(separator: "-").first { langs.append(String(short)) }
+    }
+    var tables: [[String: Any]] = langs.compactMap { NSDictionary(contentsOf: res.appendingPathComponent("\($0).lproj/InfoPlist.strings")) as? [String: Any] }
+    if let loc = NSDictionary(contentsOf: res.appendingPathComponent("InfoPlist.loctable")) as? [String: Any] {
+        tables += langs.compactMap { loc[$0] as? [String: Any] }
+    }
+    return tables.flatMap { [$0["CFBundleDisplayName"] as? String, $0["CFBundleName"] as? String] }
 }
 
 // ───────────────────────── background launch (off-screen display) ─────────────────────────
@@ -1963,7 +2016,7 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.2")
+    print("ondra-cuhost 0.4.3")
     exit(0)
 }
 

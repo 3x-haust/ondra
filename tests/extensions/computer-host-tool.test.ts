@@ -24,6 +24,7 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", c => { buf += c; let nl;
   while ((nl = buf.indexOf("\\n")) >= 0) { const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
     const r = JSON.parse(line); let res;
+    if (r.op === "launch" && r.app === "Nope") { process.stdout.write(JSON.stringify({ version: 1, id: r.id, ok: false, error: { code: "LAUNCH_FAILED", message: "app not found" } }) + "\\n"); continue; }
     if (r.op === "launch") res = { pid: 4242, env: ENV, backgroundPreserved: true };
     else if (r.op === "observe") res = { tree: tree("a"), env: ENV };
     else if (r.op === "act") res = { actionMs: 5, env: ENV, backgroundPreserved: true, tree: tree(r.action.kind === "set-value" ? r.action.value : "a") };
@@ -70,6 +71,23 @@ describe("computer tool — host background mode", () => {
     expect(look.content[1].type).toBe("image");
     const stopped = data(await call({ action: "stop" }));
     expect(stopped.stopped).toBe(true);
+  });
+
+  it("leaves no session behind after a start that failed, so another name can be tried", async () => {
+    const { call } = load();
+    await expect(call({ action: "start", app: "Nope" })).rejects.toThrow(/app not found/);
+    const start = data(await call({ action: "start", app: "TextEdit" }));
+    expect(start.pid).toBe(4242);
+    await call({ action: "stop" });
+  });
+
+  it("names the clicked element for the step line, outside what the model reads", async () => {
+    const { call } = load();
+    const epoch = data(await call({ action: "start", app: "TextEdit" })).observation.epoch;
+    const r = await call({ action: "act", input: { kind: "click", epoch, ref: "w/AXButton#go" } });
+    expect(r.details).toEqual({ label: "Go" });
+    expect(r.content[0].text).not.toContain("label");
+    await call({ action: "stop" });
   });
 
   it("registers a deferred sequential tool without spawning the helper", () => {

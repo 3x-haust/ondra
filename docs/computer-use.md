@@ -105,10 +105,14 @@ helper on the same apps.
 - **Views that poll the real mouse button** ignore background drags: TextEdit's
   text selection did not change (`effect: no_change`), while a double-click still
   selected a word. Prefer `set-value` or keys there.
-- Scroll wheel events are not used (a background app drops them). A scroll area
-  without a settable scroll bar or page action is scrolled by revealing the nearest
-  element past its visible edge (`AXScrollToVisible`, `scrolledBy: reveal`); only
-  when nothing moves does it report `SCROLL_UNAVAILABLE`.
+- Scroll wheel events are not used (a background app drops them, even addressed to
+  its window). A scroll bar or page action counts only if it moved something: a web
+  page's own bar can be set while the list inside it (a chat thread) stays put. Then,
+  or with no bar at all, the area is scrolled by revealing the nearest element past
+  its visible edge (`AXScrollToVisible`, `scrolledBy: reveal`); only when nothing
+  moves does it report `SCROLL_UNAVAILABLE`.
+- Apps are found by file, bundle or display name, in the user's languages too
+  ("카카오톡"), including `~/Applications` (where Safari and Chrome put web apps).
 - **Apps that need their window drawn**: a hidden app is shown for a moment for each
   capture and each pointer or key event. An app whose AX tree empties while hidden
   can only be driven with those (each shows it briefly).
