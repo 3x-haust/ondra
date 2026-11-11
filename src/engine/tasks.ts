@@ -2336,7 +2336,12 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
       x.status = "running";
     });
     // the user's words may change the plan: the model is asked to update it (the user sees only their words)
-    const sent = t.plan.some((s) => s.state !== "done") ? `${message}\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step.` : message;
+    const planNote = t.plan.some((s) => s.state !== "done") ? "\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step." : "";
+    // said in the middle of the work: a question gets its answer first, not after the work it interrupted
+    const midNote = run?.streaming
+      ? "\n\n(Ondra) The user said this while you were working. If it's a question, answer it now in a sentence or two, before any more tool calls, and don't change files for it; then go on with the work unless they asked you to stop or change course."
+      : "";
+    const sent = `${message}${midNote}${planNote}`;
     // steered words wait for the current tool calls: kept until taken, as a restart loses them
     hold(id, sent, { shown: opts.shown ?? message });
     try {
