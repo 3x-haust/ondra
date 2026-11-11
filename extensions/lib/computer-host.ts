@@ -181,6 +181,23 @@ export class HostObservation {
     return name ? name.replace(/\s+/g, " ").trim().slice(0, 80) : undefined;
   }
 
+  /** Which screen this is, for the user's step line: the window's title, with the page's first
+   *  heading when it adds something ("Instagram · 받은 메시지함"). */
+  screen(): string | undefined {
+    const say = (v: unknown) => typeof v === "string" && v.trim() ? v.replace(/\s+/g, " ").trim() : undefined;
+    const first = (n: HostNode, role: string): HostNode | undefined =>
+      n.role === role ? n : (n.children ?? []).reduce<HostNode | undefined>((hit, c) => hit ?? first(c, role), undefined);
+    const textIn = (n: HostNode, depth = 0): string | undefined =>
+      say(n.title) ?? say(n.desc) ?? say(n.value) ?? (depth < 3 ? (n.children ?? []).reduce<string | undefined>((hit, c) => hit ?? textIn(c, depth + 1), undefined) : undefined);
+    if (!this.tree) return undefined;
+    const win = first(this.tree, "AXWindow");
+    const title = win && say(win.title);
+    const head = first(win ?? this.tree, "AXHeading");
+    const heading = head && textIn(head);
+    const parts = [title, heading && !title?.includes(heading) ? heading : undefined].filter((v): v is string => !!v);
+    return parts.length ? parts.join(" · ").slice(0, 80) : undefined;
+  }
+
   invalidate(): void { this.epoch = ""; }
   reset(): void { this.epoch = ""; this.baseEpoch = ""; this.tree = undefined; this.ids = new Set(); }
 }
@@ -268,6 +285,9 @@ export class ComputerHostSession {
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
     return { pid, env: launched.env, ...("kind" in (observed as object) ? { observation: observed } : observed) };
   }
+
+  /** Which screen the app is on, from the last observation (for the user's step line). */
+  screen(): string | undefined { return this.obs.screen(); }
 
   async observe(full: boolean, signal?: AbortSignal): Promise<HostSnapshot> {
     return this.guard(async () => {

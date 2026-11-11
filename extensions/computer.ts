@@ -207,10 +207,17 @@ export default function (pi: any) {
       try {
         const image = await hostSession.look(signal);
         if (signal?.aborted || generation !== imageGeneration) throw new Error("Observations reset during capture; look again");
-        return renderImage(image, forceFull || (input.full ?? false), ctx);
+        const out = await renderImage(image, forceFull || (input.full ?? false), ctx);
+        const screen = hostSession.screen();
+        return screen && !out.isError ? { ...out, details: { ...(out.details ?? {}), screen } } : out;
       } catch (error) { reset(); throw error; }
     }
-    if (input.action === "observe") return result(await hostSession.observe(forceFull || (input.full ?? false), signal));
+    if (input.action === "observe") {
+      // which screen it read is for the user's step line ("화면 읽음 · Instagram · 받은 메시지함")
+      const out = result(await hostSession.observe(forceFull || (input.full ?? false), signal));
+      const screen = hostSession.screen();
+      return screen && !out.isError ? { ...out, details: { ...(out.details ?? {}), screen } } : out;
+    }
     // the element's name is for the user's step line, not the model
     const { label, ...acted } = await hostSession.act({ ...input.input! }, signal);
     const out = result(acted);

@@ -1221,6 +1221,9 @@ function handlers(id: string, run: Run) {
               // a click names its element once the call returns ("클릭함 ‘보내기’")
               const label = ev.result?.details?.label;
               if (e.tool.name === "computer" && !e.tool.target && typeof label === "string" && label.trim()) e.tool.target = computerLabel(label) ?? "";
+              // a look or read names the screen it was on ("화면 읽음 · Instagram · 받은 메시지함")
+              const screen = ev.result?.details?.screen;
+              if (e.tool.name === "computer" && !e.tool.target && typeof screen === "string" && screen.trim()) e.tool.target = screen.trim();
               e.tool.endedAt = Date.now();
               const shot = e.tool.detail && !ev.isError ? screenshotIn(e.tool.detail) : undefined;
               if (shot) t.shot = shot;

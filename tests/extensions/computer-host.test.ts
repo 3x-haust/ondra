@@ -221,3 +221,17 @@ describe("HostObservation.label", () => {
     expect(obs.label("nope")).toBeUndefined();
   });
 });
+
+describe("HostObservation.screen", () => {
+  it("says which screen: the window title, with the first heading when it adds something", () => {
+    const obs = new HostObservation();
+    expect(obs.screen()).toBeUndefined();
+    obs.accept({ id: "a", role: "AXApplication", children: [{ id: "w", role: "AXWindow", title: "Instagram", children: [
+      { id: "h", role: "AXHeading", children: [{ id: "t", role: "AXStaticText", value: "받은  메시지함" }] },
+      { id: "h2", role: "AXHeading", title: "추천" },
+    ] }] }, true);
+    expect(obs.screen()).toBe("Instagram · 받은 메시지함");
+    obs.accept({ id: "w", role: "AXWindow", title: "메모 — 장보기", children: [{ id: "h", role: "AXHeading", title: "장보기" }] }, true);
+    expect(obs.screen()).toBe("메모 — 장보기");
+  });
+});
