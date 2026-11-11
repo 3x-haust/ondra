@@ -628,7 +628,44 @@ func scrollAX(_ area: AXUIElement, direction: String, lines: Int) throws -> [Str
     }
     let page = vertical ? (forward ? "AXScrollDownByPage" : "AXScrollUpByPage") : (forward ? "AXScrollRightByPage" : "AXScrollLeftByPage")
     if axActions(area).contains(page), AXUIElementPerformAction(area, page as CFString) == .success { return ["scrolledBy": "page"] }
+    if let moved = scrollByReveal(area, direction: direction, lines: lines) { return moved }
     throw ActError.message("SCROLL_UNAVAILABLE", "this scroll area exposes no settable scroll bar or page action")
+}
+
+/// Web views (Safari web apps, WebKit chats) often expose no scroll bar. Bring the element just
+/// past the visible edge into view instead (AXScrollToVisible): the area moves by about `lines`
+/// rows, and a chat that loads older messages when scrolled up loads them.
+func scrollByReveal(_ area: AXUIElement, direction: String, lines: Int) -> [String: Any]? {
+    guard let view = axFrame(area), view.width > 0, view.height > 0 else { return nil }
+    let step = CGFloat(max(1, lines)) * 24
+    // where the element should end up beyond the edge, and how far an element is from it
+    func distance(_ f: CGRect) -> CGFloat? {
+        switch direction {
+        case "down":  return f.maxY > view.maxY + 1 ? abs(f.maxY - (view.maxY + step)) : nil
+        case "up":    return f.minY < view.minY - 1 ? abs(f.minY - (view.minY - step)) : nil
+        case "right": return f.maxX > view.maxX + 1 ? abs(f.maxX - (view.maxX + step)) : nil
+        case "left":  return f.minX < view.minX - 1 ? abs(f.minX - (view.minX - step)) : nil
+        default: return nil
+        }
+    }
+    let vertical = direction == "up" || direction == "down"
+    var best: (AXUIElement, CGFloat)?
+    var stack = axChildren(area), visited = 0
+    while let el = stack.popLast(), visited < 4000 {
+        visited += 1
+        let kids = axChildren(el)
+        // small elements (a row, a message) give even steps; whole containers would jump
+        if let f = axFrame(el), f.width > 0, f.height > 0,
+           (vertical ? f.height : f.width) < (vertical ? view.height : view.width) * 0.6,
+           let d = distance(f), best == nil || d < best!.1 { best = (el, d) }
+        stack.append(contentsOf: kids)
+    }
+    guard let (el, _) = best, let before = axFrame(el) else { return nil }
+    guard AXUIElementPerformAction(el, "AXScrollToVisible" as CFString) == .success else { return nil }
+    usleep(60_000)
+    // it moved if the element's frame did (the page scrolled under it)
+    if let after = axFrame(el), abs(after.minY - before.minY) < 1, abs(after.minX - before.minX) < 1 { return nil }
+    return ["scrolledBy": "reveal"]
 }
 
 func elementIsSecure(_ el: AXUIElement) -> Bool {
@@ -1088,7 +1125,17 @@ func findAppByName(_ name: String) -> URL? {
 //   - An app that tries to make itself a Dock app and come forward (some Electron, tao)
 //     is held back by ondra-bgguard.dylib, injected when the app can't enforce it away.
 
+func dbgLog(_ m: String) {
+    if ProcessInfo.processInfo.environment["ONDRA_CU_DEBUG"] != nil { FileHandle.standardError.write("cu: \(m)\n".data(using: .utf8)!) }
+}
+
 enum AppKind: String { case native, chromium, sandboxed, fallback }
+
+func onlineDisplays() -> [CGDirectDisplayID] {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 32); var n: UInt32 = 0
+    CGGetOnlineDisplayList(32, &ids, &n)
+    return Array(ids.prefix(Int(n)))
+}
 
 /// The off-screen display, made once and held for the helper's life.
 final class Backdrop {
@@ -1113,18 +1160,30 @@ final class Backdrop {
         d.queue = .main; d.name = "Ondra"
         d.maxPixelsWide = 1920; d.maxPixelsHigh = 1200
         d.sizeInMillimeters = CGSize(width: 480, height: 300)
-        d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = 7
-        guard let v = CGVirtualDisplay(descriptor: d) else { return false }
+        // Each helper (one per job using the computer) holds its own display: a unique serial,
+        // so a second job running at the same time doesn't fail to make one.
+        d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = UInt32(truncatingIfNeeded: getpid())
+        guard let v = CGVirtualDisplay(descriptor: d) else { dbgLog("display: create failed"); return false }
         let st = CGVirtualDisplaySettings(); st.hiDPI = 0
         st.modes = [CGVirtualDisplayMode(width: 1920, height: 1200, refreshRate: 30)]
-        guard v.apply(st) else { return false }
-        // place it just off the bottom-right corner of the real displays
-        let main = CGDisplayBounds(CGMainDisplayID())
+        guard v.apply(st) else { dbgLog("display: apply failed"); return false }
+        // Place it off the bottom-right corner of the real displays, touching them only at a
+        // corner, so the pointer can never wander onto it. Another job's display is already
+        // there: go corner-to-corner past the last one.
+        var corner = CGPoint(x: CGDisplayBounds(CGMainDisplayID()).maxX, y: CGDisplayBounds(CGMainDisplayID()).maxY)
+        for other in onlineDisplays() where other != v.displayID && CGDisplayVendorNumber(other) == 0x1234 && CGDisplayModelNumber(other) == 0x4f44 {
+            let b = CGDisplayBounds(other)
+            if b.maxX > corner.x { corner = CGPoint(x: b.maxX, y: b.maxY) }
+        }
         var cfg: CGDisplayConfigRef?
         CGBeginDisplayConfiguration(&cfg)
-        CGConfigureDisplayOrigin(cfg, v.displayID, Int32(main.maxX), Int32(main.maxY))
+        CGConfigureDisplayOrigin(cfg, v.displayID, Int32(corner.x), Int32(corner.y))
         CGCompleteDisplayConfiguration(cfg, .forSession)
         display = v; displayID = v.displayID
+        // its desktop (space) comes up a moment after the display; nothing can be put on it before
+        let t0 = nowMs()
+        while spaceID == 0, nowMs() - t0 < 3000 { usleep(20_000) }
+        dbgLog("display \(displayID) up, space \(spaceID) after \(Int(nowMs() - t0))ms")
         return true
     }
 
@@ -1196,12 +1255,24 @@ func hasRendererHelper(_ app: URL) -> Bool {
     return false
 }
 
+/// The app a template bundle (a Safari web app) runs under: the system Web App.
+func templateApp(_ app: URL) -> URL? {
+    guard let params = infoPlist(app)["LSTemplateApplicationParameters"] as? [String: Any],
+          let bid = params["CFBundleIdentifier"] as? String,
+          let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid),
+          Bundle(url: url)?.executablePath != nil else { return nil }
+    return url
+}
+
 func detectKind(_ app: URL) -> AppKind {
     if app.path.hasPrefix("/System/") { return .fallback }
     let info = infoPlist(app)
     // Catalyst and iOS-on-Mac apps crash libsecinit on a swapped plist and take their type
     // from LaunchServices; they can't be background-copied.
     if info["UIDeviceFamily"] != nil || (info["LSRequiresIPhoneOS"] as? Bool) == true { return .fallback }
+    // A Safari web app has no program of its own: the system Web App runs it, as a regular app
+    // only (a changed copy of either bundle is refused as damaged, with an alert).
+    if (info["LSTemplateApplication"] as? Bool) == true { return .fallback }
     let s = signFacts(app)
     if s.sandbox { return .sandboxed }
     if hasRendererHelper(app) { return .chromium }
@@ -1245,8 +1316,9 @@ func buildCopy(_ app: URL, kind: AppKind) throws -> Copy {
     let fm = FileManager.default
     let copy = cacheAppsDir().appendingPathComponent(app.lastPathComponent)
     try? fm.removeItem(at: copy)
-    let exeName = (infoPlist(app)["CFBundleExecutable"] as? String) ?? app.deletingPathExtension().lastPathComponent
-    let contents = app.appendingPathComponent("Contents")
+    let source = app
+    let exeName = (infoPlist(source)["CFBundleExecutable"] as? String) ?? source.deletingPathExtension().lastPathComponent
+    let contents = source.appendingPathComponent("Contents")
     let copyContents = copy.appendingPathComponent("Contents")
     if kind == .native {
         try fm.createDirectory(at: copyContents, withIntermediateDirectories: true)
@@ -1269,7 +1341,7 @@ func buildCopy(_ app: URL, kind: AppKind) throws -> Copy {
     // native: the background plist stays (the real signature is validated via the symlink).
     // chromium: start background, swap the real one back at check-in.
     // sandboxed: start real, swap background in once sandboxed, real back at check-in.
-    if kind != .sandboxed { setBackgroundOnly(plist) }
+    if kind == .native || kind == .chromium { setBackgroundOnly(plist) }
     return Copy(url: copy, exe: copyContents.appendingPathComponent("MacOS/\(exeName)").path, plist: plist, origPlist: origPlist)
 }
 
@@ -1308,6 +1380,7 @@ final class BgApp {
 
 var bgApps: [pid_t: BgApp] = [:]
 let bgLock = NSLock()
+func isOffscreenApp(_ pid: pid_t) -> Bool { bgLock.lock(); defer { bgLock.unlock() }; return offscreenApps.contains(pid) }
 func bgApp(_ pid: pid_t) -> BgApp? { bgLock.lock(); defer { bgLock.unlock() }; return bgApps[pid] }
 
 /// Spawn the copy suspended, assign it to the off-screen desktop, resume it, and run the
@@ -1347,7 +1420,8 @@ func launchBackground(real: URL, copy: Copy, kind: AppKind, guardDylib: String?)
     // sandboxed: begin with the real plist; stage both the background plist and a fresh
     // copy of the real one to swap at the right moments.
     let bgStage = copy.plist + ".bg", origStage = copy.plist + ".orig"
-    if kind == .sandboxed {
+    let reverseSwap = kind == .sandboxed
+    if reverseSwap {
         unlink(bgStage); try? FileManager.default.copyItem(atPath: copy.plist, toPath: bgStage); setBackgroundOnly(bgStage)
     }
     if kind != .native {
@@ -1367,14 +1441,14 @@ func launchBackground(real: URL, copy: Copy, kind: AppKind, guardDylib: String?)
     bd.assign(pid, to: space)
     kill(pid, SIGCONT)
 
-    let t0 = nowMs(); var swappedIn = kind != .sandboxed; var restored = kind == .native
+    let t0 = nowMs(); var swappedIn = !reverseSwap; var restored = kind == .native
     var checkinMs = 0.0
     while nowMs() - t0 < 8000 {
         if !swappedIn, sbCheck(pid, nil, 0) != 0 {
-            kill(pid, SIGSTOP); _ = rename(bgStage, copy.plist); kill(pid, SIGCONT); swappedIn = true
+            kill(pid, SIGSTOP); _ = rename(bgStage, copy.plist); kill(pid, SIGCONT); swappedIn = true; dbgLog("swap: background plist in after \(Int(nowMs() - t0))ms")
         }
         if swappedIn, !restored, checkedInType(pid) != nil {
-            kill(pid, SIGSTOP); _ = rename(origStage, copy.plist); kill(pid, SIGCONT); restored = true; checkinMs = nowMs() - t0
+            kill(pid, SIGSTOP); _ = rename(origStage, copy.plist); kill(pid, SIGCONT); restored = true; checkinMs = nowMs() - t0; dbgLog("swap: checked in after \(Int(checkinMs))ms, real plist back")
         }
         var st: Int32 = 0
         if waitpid(pid, &st, WNOHANG) == pid {
@@ -1486,8 +1560,129 @@ func releaseBackground(_ pid: pid_t) {
 }
 
 func releaseAllBackground() {
-    bgLock.lock(); let pids = Array(bgApps.keys); bgLock.unlock()
+    bgLock.lock(); let pids = Array(bgApps.keys); let shown = Array(offscreenApps); offscreenApps.removeAll(); bgLock.unlock()
     for pid in pids { releaseBackground(pid) }
+    // a real app shown on the off-screen display goes back to hidden before the display goes away
+    for pid in shown { NSRunningApplication(processIdentifier: pid)?.hide() }
+}
+
+// ───────────────────────── real app, off-screen ─────────────────────────
+// Apps that can't run from a background copy (Safari web apps, Catalyst, App Store, system
+// apps) run as the real app: a regular app, so its Dock tile shows it running. It is still kept
+// off the user's screen: launched hidden, caught the moment its process exists and put on the
+// off-screen desktop before its first window, then shown there, so its windows are drawn at
+// full size (not a Stage Manager thumbnail) and pointer and key events reach them.
+
+/// real apps the job showed on the off-screen display (hidden again on release)
+var offscreenApps: Set<pid_t> = []
+
+func allPids() -> [pid_t] {
+    let n = proc_listallpids(nil, 0)
+    var buf = [pid_t](repeating: 0, count: Int(max(0, n)) + 128)
+    let got = proc_listallpids(&buf, Int32(buf.count * MemoryLayout<pid_t>.size))
+    return Array(buf.prefix(Int(max(0, got))))
+}
+
+func pidPath(_ pid: pid_t) -> String? {
+    var b = [CChar](repeating: 0, count: 4096)
+    return proc_pidpath(pid, &b, UInt32(b.count)) > 0 ? String(cString: b) : nil
+}
+
+/// The arguments a process was started with (KERN_PROCARGS2).
+func processArgs(_ pid: pid_t) -> [String] {
+    var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+    var size = 0
+    guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return [] }
+    var buf = [UInt8](repeating: 0, count: size)
+    guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return [] }
+    let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
+    var i = 4
+    while i < size, buf[i] != 0 { i += 1 }        // the executable path
+    while i < size, buf[i] == 0 { i += 1 }        // padding
+    var args: [String] = []
+    while args.count < argc, i < size {
+        let start = i
+        while i < size, buf[i] != 0 { i += 1 }
+        args.append(String(decoding: buf[start..<i], as: UTF8.self)); i += 1
+    }
+    return args
+}
+
+/// The program an app runs as: its own executable, or the system Web App for a Safari web app.
+func runningExecutable(_ app: URL) -> String? {
+    let exe = (infoPlist(app)["LSTemplateApplication"] as? Bool) == true
+        ? templateApp(app).flatMap { Bundle(url: $0)?.executablePath }
+        : Bundle(url: app)?.executablePath
+    return exe.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
+}
+
+/// Watches for the process LaunchServices starts for `exe` and, the moment it exists, stops it,
+/// assigns it to the off-screen desktop and lets it go on; keeps it there while it starts.
+final class LaunchCatcher {
+    private let lock = NSLock()
+    private var _caught: pid_t = 0
+    private var stopped = false
+    var caught: pid_t { lock.lock(); defer { lock.unlock() }; return _caught }
+
+    init(exe: String, mentioning: String?, space: UInt64) {
+        let known = Set(allPids())
+        Thread.detachNewThread { [self] in
+            var seen = known
+            let t0 = nowMs()
+            while nowMs() - t0 < 8000 {
+                lock.lock(); let stop = stopped; lock.unlock()
+                if stop { return }
+                for p in allPids() where !seen.contains(p) {
+                    // launchd forks, then xpcproxy, then the app's program replaces it (same pid):
+                    // keep looking at a pid until it is something else
+                    guard let path = pidPath(p) else { continue }
+                    if path == "/sbin/launchd" || path == "/usr/libexec/xpcproxy" { continue }
+                    seen.insert(p)
+                    guard URL(fileURLWithPath: path).resolvingSymlinksInPath().path == exe else { continue }
+                    if let m = mentioning, !processArgs(p).contains(m) { continue }
+                    kill(p, SIGSTOP); Backdrop.shared.assign(p, to: space); kill(p, SIGCONT)
+                    lock.lock(); _caught = p; lock.unlock()
+                    dbgLog("catcher: \(p) after \(Int(nowMs() - t0))ms, space \(space), windows \(layer0Windows(p).count)")
+                    // keep it there while it starts (its first windows)
+                    let c0 = nowMs()
+                    while nowMs() - c0 < 3000, kill(p, 0) == 0 {
+                        Backdrop.shared.assign(p, to: space)
+                        if nowMs() - c0 > 600, layer0Windows(p).count > 0 { break }
+                        usleep(20_000)
+                    }
+                    return
+                }
+                usleep(300)
+            }
+        }
+    }
+    func stop() { lock.lock(); stopped = true; lock.unlock() }
+}
+
+/// The app's normal windows (hidden ones too) and where they are.
+func layer0Windows(_ pid: pid_t) -> [CGRect] {
+    ((CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]]) ?? []).compactMap { w in
+        guard (w[kCGWindowOwnerPID as String] as? Int32) == pid, (w[kCGWindowLayer as String] as? Int) == 0,
+              let b = w[kCGWindowBounds as String] as? [String: CGFloat], let wd = b["Width"], let ht = b["Height"],
+              wd > 1, ht > 1 else { return nil }
+        return CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: wd, height: ht)
+    }
+}
+
+/// Show a hidden real app the catcher put off-screen, only once every window of it is there.
+func showOffscreen(_ pid: pid_t) -> Bool {
+    // its windows open where it last left them and move to the off-screen desktop a moment later
+    let t0 = nowMs()
+    var wins = layer0Windows(pid)
+    while wins.isEmpty || !wins.allSatisfy({ Backdrop.shared.contains($0) }), nowMs() - t0 < 3000 {
+        usleep(50_000); wins = layer0Windows(pid)
+    }
+    dbgLog("offscreen check \(pid) after \(Int(nowMs() - t0))ms: \(wins)")
+    guard !wins.isEmpty, wins.allSatisfy({ Backdrop.shared.contains($0) }),
+          let app = NSRunningApplication(processIdentifier: pid) else { return false }
+    app.unhide()
+    bgLock.lock(); offscreenApps.insert(pid); bgLock.unlock()
+    return true
 }
 
 /// A window the user's own app left on the off-screen display (apps remember their frame):
@@ -1500,7 +1695,7 @@ func rescueStrayWindows() {
     for w in infos {
         guard (w[kCGWindowLayer as String] as? Int) == 0,
               let owner = w[kCGWindowOwnerPID as String] as? pid_t, !seen.contains(owner),
-              bgApp(owner) == nil,
+              bgApp(owner) == nil, !isOffscreenApp(owner),
               let b = w[kCGWindowBounds as String] as? [String: CGFloat],
               let x = b["X"], let y = b["Y"], let wd = b["Width"], let ht = b["Height"] else { continue }
         let frame = CGRect(x: x, y: y, width: wd, height: ht)
@@ -1591,7 +1786,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if kind != .fallback {
             do {
                 let copy = try buildCopy(target, kind: kind)
-                let guardPath = (kind != .sandboxed && guardEligible(target)) ? guardDylibPath() : nil
+                let guardPath = kind != .sandboxed && guardEligible(target) ? guardDylibPath() : nil
                 if let app = launchBackground(real: target, copy: copy, kind: kind, guardDylib: guardPath) {
                     pid = app.pid; mode = "background:\(kind.rawValue)\(guardPath != nil ? "+guard" : "")"
                 } else {
@@ -1602,12 +1797,24 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if pid == nil {
             // the real app, hidden and never activated (its Dock tile may show)
             let hide = !alreadyOpen && ((req["hide"] as? Bool) ?? true)
+            // catch its process as it starts and put it on the off-screen desktop
+            var catcher: LaunchCatcher?
+            if hide, Backdrop.shared.ensure(), let exe = runningExecutable(target) {
+                let web = (infoPlist(target)["LSTemplateApplication"] as? Bool) == true
+                catcher = LaunchCatcher(exe: exe, mentioning: web ? target.path : nil, space: Backdrop.shared.spaceID)
+            }
             let sem = DispatchSemaphore(value: 0)
             var out: (pid_t?, String?) = (nil, nil)
             launchHidden(name, hide: hide) { p, e in out = (p, e); sem.signal() }
             sem.wait()
             pid = out.0; launchErr = out.1 ?? launchErr
             mode = alreadyOpen ? "attached" : "hidden"
+            if let c = catcher {
+                for _ in 0..<40 where c.caught == 0 { usleep(25_000) }
+                c.stop()
+                // its windows opened off-screen: show them there (full size, never on the user's screen)
+                if let p = pid, c.caught == p, showOffscreen(p) { mode = "offscreen" }
+            }
         }
         if let held = held { keepFrame(held) }
         // an app the user opened themselves may have come up off-screen (apps remember their
@@ -1617,7 +1824,8 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if let pid = pid {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
-            var result: [String: Any] = ["pid": Int(pid), "mode": mode, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            var result: [String: Any] = ["pid": Int(pid), "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            if mode == "hidden", let e = launchErr { result["backgroundError"] = e }
             if !preserved, userInputSince(seconds: (nowMs() - t0) / 1000) { result["userInput"] = true }
             return ok(id, result)
         }
@@ -1686,7 +1894,11 @@ func handle(_ req: [String: Any]) -> [String: Any] {
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
         // a background copy the job opened is terminated and cleaned up; a hidden fallback is hidden again
-        if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) } else { hideAgain(pid_t(pidN)) }
+        if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) }
+        else if isOffscreenApp(pid_t(pidN)) {
+            bgLock.lock(); offscreenApps.remove(pid_t(pidN)); bgLock.unlock()
+            NSRunningApplication(processIdentifier: pid_t(pidN))?.hide()
+        } else { hideAgain(pid_t(pidN)) }
         rescueStrayWindows()
         return ok(id, ["released": true, "env": environment()])
     case "selfcheck":
@@ -1732,7 +1944,7 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.0")
+    print("ondra-cuhost 0.4.1")
     exit(0)
 }
 

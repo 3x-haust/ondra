@@ -38,10 +38,15 @@ using only **public** APIs:
   plist until the sandbox is on (`sandbox_check`), then the background plist, then
   the real one back at check-in. The `start` result's `mode` reports which kind,
   `+guard` when `ondra-bgguard.dylib` is injected to keep a self-activating app
-  background. Catalyst, iOS-on-Mac, App Store and system apps can't be copied this
-  way and fall back to the real app launched hidden (`mode: hidden`), which AX reads
-  and acts on all the same; a capture or events unhide it behind the user's windows
-  for the moment they need. An app the user already had open is used as-is, never
+  background. Safari web apps, Catalyst, iOS-on-Mac, App Store and system apps can't
+  be copied this way (a changed web app or Web App bundle is refused as damaged) and
+  run as the real app: launched hidden, its process caught the moment it exists
+  (past launchd and xpcproxy; a web app by its `--bundlepath`) and assigned to the
+  off-screen display's space before its first window, then shown there once every
+  window has moved over (`mode: offscreen`). Its Dock tile shows it running; nothing
+  else does. If it can't be placed, it stays hidden (`mode: hidden`) and a capture or
+  events unhide it behind the user's windows for the moment they need. Each helper
+  holds its own display (serial = its pid), so jobs running at once don't collide. An app the user already had open is used as-is, never
   copied. A window the user's own app left on the off-screen display is moved back.
 
 The background contract is **verified, not masked**: the helper records the
@@ -97,8 +102,10 @@ helper on the same apps.
 - **Views that poll the real mouse button** ignore background drags: TextEdit's
   text selection did not change (`effect: no_change`), while a double-click still
   selected a word. Prefer `set-value` or keys there.
-- Scroll wheel events are not used (a background app drops them); scroll areas
-  without a settable scroll bar or page action report `SCROLL_UNAVAILABLE`.
+- Scroll wheel events are not used (a background app drops them). A scroll area
+  without a settable scroll bar or page action is scrolled by revealing the nearest
+  element past its visible edge (`AXScrollToVisible`, `scrolledBy: reveal`); only
+  when nothing moves does it report `SCROLL_UNAVAILABLE`.
 - **Apps that need their window drawn**: a hidden app is shown for a moment for each
   capture and each pointer or key event. An app whose AX tree empties while hidden
   can only be driven with those (each shows it briefly).
