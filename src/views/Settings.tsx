@@ -25,6 +25,7 @@ import {
   spaceGitIdentity,
   spaceTools,
 } from "../lib/native";
+import { RemoteSettings } from "./RemoteSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now, tokens } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -59,11 +60,11 @@ function Stepper(props: { value: number; min: number; max: number; onChange: (n:
   );
 }
 
-function Switch_(props: { on: boolean; set: (on: boolean) => void; label?: string }) {
+export function Switch_(props: { on: boolean; set: (on: boolean) => void; label?: string }) {
   return <button class="switch" classList={{ on: props.on }} role="switch" aria-checked={props.on} aria-label={props.label} onClick={() => props.set(!props.on)}><i /></button>;
 }
 
-function Row(props: { title: string; desc?: string; children?: any }) {
+export function Row(props: { title: string; desc?: string; children?: any }) {
   return (
     <div class="set-row" title={props.desc}>
       <div class="set-label">
@@ -1002,6 +1003,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] =
   { id: "general", label: "일반", icon: "gear" },
   { id: "accounts", label: "계정과 워크스페이스", icon: "key" },
   { id: "tools", label: "macOS 권한", icon: "shield" },
+  { id: "remote", label: "원격 제어", icon: "phone" },
   { id: "agent-tools", label: "도구", icon: "tools" },
   { id: "skills", label: "스킬", icon: "skill" },
   { id: "hooks", label: "훅", icon: "bolt" },
@@ -1058,6 +1060,7 @@ export function SettingsPage(props: { onBack: () => void }) {
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>
             <Match when={settingsTab() === "shortcuts"}><Shortcuts /></Match>
+            <Match when={settingsTab() === "remote"}><RemoteSettings /></Match>
             <Match when={settingsTab() === "accounts"}><Accounts /></Match>
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>

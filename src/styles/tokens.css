@@ -4,6 +4,10 @@
   color-scheme: light;
   --bg: #fcfcfc;
   --bubble: #f4f4f5;
+  /* a QR code reads only dark on light, in either theme */
+  --qr-bg: #ffffff;
+  --qr-ink: #111113;
+  --qr-muted: #6b6b73;
   --sidebar: #fafafa;
   --card: #ffffff;
   --muted: #fafafa;

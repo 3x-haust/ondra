@@ -1919,3 +1919,106 @@ button.st-sh:hover { text-decoration: underline; }
   grid-column: 1 / -1;
   margin: 0;
 }
+
+/* ───────── settings › 원격 제어 */
+.rc-pair {
+  display: flex;
+  gap: var(--s-24);
+  align-items: center;
+  padding: var(--s-20);
+}
+.rc-qr {
+  flex: none;
+  width: 184px;
+  height: 184px;
+  padding: var(--s-12);
+  border-radius: var(--r-xl);
+  background: var(--qr-bg);
+  color: var(--qr-ink);
+  display: grid;
+  place-items: center;
+}
+.rc-qr-code,
+.rc-qr-code svg {
+  width: 160px;
+  height: 160px;
+  display: block;
+}
+.rc-qr-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  color: var(--qr-muted);
+  font-size: var(--fs-sm);
+}
+.rc-steps {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-10);
+}
+.rc-steps b {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-strong);
+}
+.rc-steps ol {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  color: var(--ink-2);
+}
+.rc-pair-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-12);
+  margin-top: var(--s-4);
+  font-size: var(--fs-sm);
+}
+.rc-device .set-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+}
+.rc-device .set-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+}
+.rc-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.rc-ask {
+  position: fixed;
+  right: var(--s-20);
+  bottom: var(--s-20);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  max-width: 460px;
+  padding: var(--s-14) var(--s-16);
+  border-radius: var(--r-xl);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  animation: rc-in 0.22s var(--ease);
+}
+.rc-ask-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--fs-sm);
+}
+.rc-ask-main b {
+  font-size: var(--fs-md);
+}
+@keyframes rc-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
