@@ -11,7 +11,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, projectById, projectFor, projectsIn, repoHome, setState, spaceById, state, taskById, tasksIn, uid } from "../state/store";
+import { accountById, addProject, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -832,7 +832,7 @@ export const PROJECT_ENDED = [
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
-  const mine = (w ? w.tasks : tasksIn(sp(space))).filter((t) => !pj(space) || t.project === pj(space));
+  const mine = (w ? w.tasks : tasksShown(sp(space))).filter((t) => !pj(space) || t.project === pj(space));
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
@@ -851,8 +851,9 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   const space0 = spaceById(sp(space));
   const proj = projectOf(space);
   const rules = [spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).join("\n\n");
-  const projs = w ? w.projects : projectsIn(sp(space));
-  const projects = projs.map((p) => `- ${p.name}: ${p.folder}`).join("\n") || "(none)";
+  // projects added from other Macs (Settings › 연결) are listed too: a job there runs on that Mac
+  const projs = w ? w.projects : projectsShown(sp(space));
+  const projects = projs.map((p) => `- ${p.name}: ${p.folder}${"hostName" in p && p.hostName ? ` (on ${p.hostName}, another Mac: its jobs run there)` : ""}`).join("\n") || "(none)";
   const taken = new Set(projs.map((p) => expand(p.folder).replace(/\/+$/, "")));
   const repos = ((w?.repos ?? reposOf.get(sp(space))?.list) ?? []).filter((r) => !taken.has(r)).map((r) => `- ${r}`).join("\n");
   // no always-on memory: a few pieces recalled for this message alone
@@ -1034,7 +1035,7 @@ export function spokenPart(text: string): string {
  * main with a folder; this only finds ones that exist.
  */
 function existingProject(space: SpaceId, r: any, original: string) {
-  const list = projectsIn(space);
+  const list = projectsShown(space);
   if (!list.length) return undefined;
   const named = typeof r.project === "string" ? r.project : typeof r.project?.name === "string" && !r.project.folder ? r.project.name : "";
   const low = (x: string) => x.toLowerCase().replace(/\s+/g, "");
