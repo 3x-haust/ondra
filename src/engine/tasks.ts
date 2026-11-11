@@ -1990,6 +1990,10 @@ export function createTask(f: {
   by?: string;
   /** its id, when another Mac chose it (a job started from there) */
   id?: string;
+  /** run it on another Mac (Settings › 연결) */
+  host?: string;
+  /** another Mac asked for it */
+  from?: Task["from"];
 }): string {
   const id = f.id && !taskById(f.id) ? f.id : uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
@@ -2031,11 +2035,13 @@ export function createTask(f: {
     model: undefined,
     thinking: undefined,
     permission: state.settings.permission ?? "edits",
+    ...(f.from ? { from: f.from } : {}),
   };
   // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
   const far_ = splitProjectId(f.project);
-  if (far_) {
-    startFar(far_.host, { ...task, host: far_.host }, { id, title: task.title, ask: f.ask, project: far_.id, display: f.display });
+  const farHost = far_?.host ?? f.host;
+  if (farHost) {
+    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, display: f.display });
     return id;
   }
   setState("tasks", (list) => [...list, task]);

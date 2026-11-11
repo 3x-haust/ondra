@@ -33,6 +33,8 @@ export const [remote, setRemote] = createSignal<{
 }>({ devices: [], live: {}, asks: [] });
 
 interface Conn {
+  /** the Mac's id */
+  device: string;
   /** the projects (ids here) whose jobs it keeps */
   watch: Set<string>;
   /** each job as last sent: its fields' JSON and each entry's */
@@ -64,11 +66,16 @@ onWrite((args) => {
 let timer: ReturnType<typeof setTimeout> | undefined;
 const soon = () => (timer ??= setTimeout(flush, 300));
 
-/** the project a job belongs to (a subagent: its top job's) */
-function rootProject(t: Task): string | undefined {
-  let x: Task | undefined = t;
-  for (let i = 0; x?.parentId && i < 20; i++) x = taskById(x.parentId);
-  return x?.project;
+/** a job's top job (a subagent's parent, up the line) */
+function rootOf(t: Task): Task {
+  let x: Task = t;
+  for (let i = 0; x.parentId && i < 20; i++) x = taskById(x.parentId) ?? x;
+  return x;
+}
+/** what that Mac keeps: the jobs of the projects it added, and the jobs it asked for */
+function wanted(c: Conn, t: Task): boolean {
+  const r = rootOf(t);
+  return (!!r.project && c.watch.has(r.project)) || (!!c.device && r.from?.device === c.device);
 }
 
 function flush() {
@@ -76,20 +83,20 @@ function flush() {
   const live = state.tasks.filter((x) => x.status === "running" || x.status === "waiting");
   for (const [conn, c] of conns) {
     if (projectsDirty) void sendProjects(conn);
-    if (!c.watch.size && !c.sent.size) continue;
+    if (!c.watch.size && !c.sent.size && !c.all) continue;
     const pick = c.all || dirtyAll ? state.tasks : [...new Set([...[...dirty].map((id) => taskById(id)).filter((x): x is Task => !!x && !x.host), ...live])];
     const out: Record<string, unknown>[] = [];
     let size = 0;
     const seen = new Set<string>();
     const ship = (last = false) => {
       if (!out.length && !last) return;
-      const gone = last && (c.all || dirtyAll) ? [...c.sent.keys()].filter((id) => !seen.has(id)) : last ? [...c.sent.keys()].filter((id) => !taskById(id) || !c.watch.has(rootProject(taskById(id)!) ?? "")) : [];
+      const gone = last && (c.all || dirtyAll) ? [...c.sent.keys()].filter((id) => !seen.has(id)) : last ? [...c.sent.keys()].filter((id) => !taskById(id) || !wanted(c, taskById(id)!)) : [];
       for (const id of gone) c.sent.delete(id);
       if (out.length || gone.length) void send(conn, { t: "patch", tasks: out.splice(0), ...(gone.length ? { gone } : {}) });
       size = 0;
     };
     for (const t of pick) {
-      if (!c.watch.has(rootProject(t) ?? "")) continue;
+      if (!wanted(c, t)) continue;
       seen.add(t.id);
       const raw = unwrap(t);
       const { entries, ...rest } = raw;
@@ -120,16 +127,17 @@ async function sendProjects(conn: number) {
 
 // ───────── what it asks
 
-/** a new job in one of this Mac's projects, from another Mac (it chose the id) */
-function create(f: { id: string; title: string; ask: string; project: string; display?: string }) {
-  const p = projectById(f.project);
-  if (!p) throw new Error("그 프로젝트가 이 Mac에 없어요");
-  return jobs.createTask({ id: f.id, space: p.space, title: f.title, topic: p.name, ask: f.ask, display: f.display, cwd: p.folder, project: p.id, isolate: state.settings.isolate, accountId: jobs.chooseAccount(p.space, p.name) });
+/** a new job here, from another Mac (it chose the id): in one of this Mac's projects, or in no project */
+function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; display?: string }) {
+  const p = f.project ? projectById(f.project) : undefined;
+  if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  const space = p?.space ?? state.space;
+  const from = { device: c.device, space: f.space ?? "" };
+  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: jobs.chooseAccount(space, p?.name ?? ""), from });
 }
 
 /** what another Mac may do here: the same the user does with a job, and add a project */
 const CALLS: Record<string, (...a: never[]) => unknown> = {
-  create,
   addProject: (folder: string) => addProject(state.space, folder),
   tell: jobs.tell,
   stopTask: jobs.stopTask,
@@ -164,7 +172,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       soon();
       break;
     case "call": {
-      const fn = CALLS[String(msg.fn)];
+      const fn = msg.fn === "create" ? (f: Parameters<typeof create>[1]) => create(c, f) : CALLS[String(msg.fn)];
       const seq = msg.seq;
       try {
         if (!fn) throw new Error(`unknown: ${String(msg.fn)}`);
@@ -230,7 +238,7 @@ export function initRemote() {
         break;
       case "open": {
         const conn = Number(ev.conn);
-        conns.set(conn, { watch: new Set(), sent: new Map(), all: true });
+        conns.set(conn, { device: String((ev.device as { id?: string })?.id ?? ""), watch: new Set(), sent: new Map(), all: true });
         setRemote((r) => ({ ...r, live: { ...r.live, [conn]: ev.device as { id: string; name: string } } }));
         break;
       }

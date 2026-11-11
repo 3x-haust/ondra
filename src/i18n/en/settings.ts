@@ -367,6 +367,9 @@ export default {
   "모델 {n}개": "{n} model|{n} models",
   "연결 삭제": "Delete connection",
   // Settings › 연결
+  "연결 관리": "Manage connections",
+  "이 프로젝트는 {name}에 있어요": "This project is on {name}",
+  "어느 Mac에서 할지": "Which Mac it runs on",
   "{name}에서 실행": "Running on {name}",
   "{name} 연결 안 됨": "{name} not connected",
   "연결": "Connections",

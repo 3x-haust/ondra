@@ -47,7 +47,7 @@ export function far(id: string, fn: string, args: unknown[]): Promise<unknown> |
 }
 
 /** a new job in another Mac's project: shown here at once, made and run there */
-export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project: string; display?: string }) {
+export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; display?: string }) {
   if (!mirror.hosts[host]) status(host, "lost");
   setMirror("hosts", host, "tasks", (l) => [...l, task]);
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
@@ -61,7 +61,7 @@ function place(host: string, t: Task, list: Task[]) {
   for (let i = 0; root?.parentId && i < 20; i++) root = list.find((x) => x.id === root!.parentId) ?? root;
   const pid = (root?.project ?? t.project)?.split(":").pop();
   const link = state.settings.hostProjects?.find((l) => l.host === host && l.id === pid);
-  t.space = (link?.space ?? state.space) as SpaceId;
+  t.space = (link?.space ?? root?.from?.space ?? t.from?.space ?? state.space) as SpaceId;
 }
 
 interface Patch { id: string; head?: Omit<Task, "entries">; from?: number; entries?: Entry[]; n?: number }

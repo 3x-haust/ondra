@@ -223,6 +223,8 @@ export interface Task {
   answer?: boolean;
   /** runs on another Mac (Settings › 연결): that Mac's id. Shown here, worked there. */
   host?: string;
+  /** asked for by another Mac (Settings › 연결): which one, and the space it was asked from there */
+  from?: { device: string; space: string };
   /** Work in its own git worktree (undefined = the app setting). */
   isolate?: boolean;
   /** The task's own worktree, when its folder is a git repo. */
@@ -601,6 +603,8 @@ export interface Settings {
   /** other Macs this one works on, and the projects of theirs added here */
   hosts?: { id: string; name: string; pair?: string }[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
+  /** where new work goes from the main chat (Codex's run location): another Mac's id, or this Mac */
+  computer?: string;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */

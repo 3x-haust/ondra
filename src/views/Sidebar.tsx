@@ -622,7 +622,7 @@ export function Sidebar() {
                       <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
-                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}<Show when={p.hostName}><span class="sb-host">{p.hostName}</span></Show></span>}>
+                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}<Show when={p.hostName}><span class="sb-host"><i class={`cn-dot is-${mirror.hosts[p.host!]?.status ?? "connecting"}`} aria-hidden="true" />{p.hostName}</span></Show></span>}>
                       <input
                         class="sb-rename"
                         value={p.name}
