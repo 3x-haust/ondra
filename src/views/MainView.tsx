@@ -1,5 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
-import { feedbackCommand } from "../ui/Feedback";
+import { feedbackCommands } from "../ui/Feedback";
 import { noteText, nowText } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
@@ -694,7 +694,7 @@ export function MainView() {
       files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
       commands={[
         btwCommand(() => `main:${key()}`),
-        feedbackCommand(),
+        ...feedbackCommands(),
         { name: "side", desc: t("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
         { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
         { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },

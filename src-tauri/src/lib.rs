@@ -349,7 +349,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             applog::log_append,
             applog::logs_recent,
-            applog::feedback_issue,
             applog::os_version,
             update::update_check,
             update::update_install,

@@ -34,7 +34,6 @@ export const THEMES = ["system", "dark", "light"] as const;
 export const FAULTS = ["network", "auth", "usage_limit", "context_limit", "refused", "engine_exit", "timeout", "no_model", "unknown"] as const;
 export const COMMANDS = ["feedback", "btw", "side", "flow", "changes", "files", "terminal", "browser", "pause", "resume", "retry", "start", "done", "merge", "discard", "rename", "ask", "edits", "full", "remember", "memory", "settings", "clear", "compact", "stop", "task", "main", "skill", "other"] as const;
 export const WHERE = ["main", "task"] as const;
-export const FEEDBACK_TO = ["private", "github"] as const;
 
 type In<T extends readonly string[]> = T[number];
 /** What every job event says about the job. */
@@ -68,7 +67,7 @@ export interface Events {
   job_merged: { hours_open: number };
   job_discarded: { hours_open: number };
   update_installed: { ok: boolean };
-  feedback_sent: { to: In<typeof FEEDBACK_TO>; with_log: boolean };
+  feedback_sent: { with_log: boolean };
   telemetry_off: Record<string, never>;
 }
 export type EventName = keyof Events;
@@ -98,7 +97,7 @@ export const SHAPES: { [K in EventName]: Record<keyof Events[K], Kind> } = {
   job_merged: { hours_open: "number" },
   job_discarded: { hours_open: "number" },
   update_installed: { ok: "boolean" },
-  feedback_sent: { to: FEEDBACK_TO, with_log: "boolean" },
+  feedback_sent: { with_log: "boolean" },
   telemetry_off: {},
 };
 
