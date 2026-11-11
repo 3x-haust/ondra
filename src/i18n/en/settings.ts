@@ -140,6 +140,8 @@ export default {
   "받지 못했어요 · 잠시 뒤 다시 받아요": "Couldn't download · Trying again soon",
   "macOS 권한": "macOS permissions",
   "손쉬운 사용": "Accessibility",
+  "Ondra를 {list} 목록에 끌어다 놓으세요": "Drag Ondra into {list}",
+  "그다음 스위치를 켜세요": "Then turn it on.",
   "다른 앱 조작에 필요": "Needed to control other apps",
   "허용": "Allow",
   "허용됨": "Allowed",

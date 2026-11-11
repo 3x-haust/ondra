@@ -2028,10 +2028,149 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
     return frontSame && keySame && mouseSame
 }
 
+// ───────────────────────── permission guide ─────────────────────────
+// `--guide accessibility|screen --app <Ondra.app> --title <t> --sub <s>`: a small panel laid
+// over the bottom of System Settings while it shows the privacy list, holding Ondra's tile to
+// drag into the list ("Ondra를 손쉬운 사용 목록에 끌어다 놓으세요 · 그다음 켜세요"). It shows only while
+// System Settings is in front and quits once the permission is on (checked for the process that
+// launched it: Ondra), when System Settings goes away, or after ten minutes.
+
+/// The app's tile: drag it out and the list gets the app's file.
+final class DragTile: NSView, NSDraggingSource {
+    let url: URL
+    init(url: URL, name: String) {
+        self.url = url
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.09).cgColor
+        layer?.borderWidth = 1
+        let icon = NSImageView(image: NSWorkspace.shared.icon(forFile: url.path))
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        let label = NSTextField(labelWithString: name)
+        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        label.textColor = .labelColor
+        for v in [icon, label] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 28), icon.heightAnchor.constraint(equalToConstant: 28),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10), label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {
+        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+        let image = NSImage(size: bounds.size, flipped: false) { _ in
+            if let rep = self.bitmapImageRepForCachingDisplay(in: self.bounds) {
+                self.cacheDisplay(in: self.bounds, to: rep); rep.draw(in: self.bounds)
+            }
+            return true
+        }
+        item.setDraggingFrame(bounds, contents: image)
+        beginDraggingSession(with: [item], event: event, source: self)
+    }
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .copy }
+}
+
+final class GuidePanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+func runGuide(_ args: [String]) -> Never {
+    func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+    let pane = args.first(where: { $0 == "accessibility" || $0 == "screen" }) ?? "accessibility"
+    guard let appPath = arg("--app") else { exit(2) }
+    let url = URL(fileURLWithPath: appPath)
+    let name = (Bundle(url: url)?.infoDictionary?["CFBundleName"] as? String) ?? url.deletingPathExtension().lastPathComponent
+    let title = arg("--title") ?? "Drag \(name) into the list", sub = arg("--sub") ?? "Then turn it on."
+    let granted = { pane == "screen" ? CGPreflightScreenCaptureAccess() : AXIsProcessTrusted() }
+    // a frame to sit on instead of System Settings' window (tests)
+    let testFrame = ProcessInfo.processInfo.environment["ONDRA_GUIDE_FRAME"].map { s -> CGRect in
+        let n = s.split(separator: ",").compactMap { Double($0) }; return CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+    }
+
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let W: CGFloat = 420, H: CGFloat = 132
+    let panel = GuidePanel(contentRect: NSRect(x: 0, y: 0, width: W, height: H), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
+    panel.level = .floating; panel.hidesOnDeactivate = false
+    panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+    panel.appearance = NSAppearance(named: .darkAqua)
+    let bg = NSView(frame: NSRect(x: 0, y: 0, width: W, height: H))
+    bg.wantsLayer = true; bg.layer?.cornerRadius = 16; bg.layer?.masksToBounds = true
+    bg.layer?.backgroundColor = NSColor(white: 0.11, alpha: 0.98).cgColor
+    bg.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor; bg.layer?.borderWidth = 1
+    panel.contentView = bg
+
+    let badge = NSView(); badge.wantsLayer = true
+    badge.layer?.cornerRadius = 16; badge.layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.18).cgColor
+    let arrow = NSImageView(image: NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil) ?? NSImage())
+    arrow.symbolConfiguration = .init(pointSize: 14, weight: .semibold); arrow.contentTintColor = .systemBlue
+    let t1 = NSTextField(labelWithString: title); t1.font = .systemFont(ofSize: 14, weight: .semibold); t1.textColor = .labelColor
+    let t2 = NSTextField(labelWithString: sub); t2.font = .systemFont(ofSize: 12.5); t2.textColor = .secondaryLabelColor
+    for l in [t1, t2] { l.lineBreakMode = .byTruncatingTail; l.maximumNumberOfLines = 1 }
+    let tile = DragTile(url: url, name: name)
+    for v in [badge, arrow, t1, t2, tile] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; bg.addSubview(v) }
+    NSLayoutConstraint.activate([
+        badge.leadingAnchor.constraint(equalTo: bg.leadingAnchor, constant: 16), badge.topAnchor.constraint(equalTo: bg.topAnchor, constant: 16),
+        badge.widthAnchor.constraint(equalToConstant: 32), badge.heightAnchor.constraint(equalToConstant: 32),
+        arrow.centerXAnchor.constraint(equalTo: badge.centerXAnchor), arrow.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
+        t1.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 12), t1.trailingAnchor.constraint(lessThanOrEqualTo: bg.trailingAnchor, constant: -16),
+        t1.topAnchor.constraint(equalTo: bg.topAnchor, constant: 15),
+        t2.leadingAnchor.constraint(equalTo: t1.leadingAnchor), t2.trailingAnchor.constraint(lessThanOrEqualTo: bg.trailingAnchor, constant: -16),
+        t2.topAnchor.constraint(equalTo: t1.bottomAnchor, constant: 2),
+        tile.leadingAnchor.constraint(equalTo: bg.leadingAnchor, constant: 16), tile.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -16),
+        tile.bottomAnchor.constraint(equalTo: bg.bottomAnchor, constant: -16), tile.heightAnchor.constraint(equalToConstant: 48),
+    ])
+
+    let started = Date()
+    var settingsSeen = Date()
+    func settingsWindow() -> CGRect? {
+        if let f = testFrame { return f }
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first?.processIdentifier else { return nil }
+        let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+        return list.filter { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 }
+            .compactMap { w -> CGRect? in
+                guard let b = w[kCGWindowBounds as String] as? NSDictionary else { return nil }
+                return CGRect(dictionaryRepresentation: b)
+            }
+            .max { $0.width * $0.height < $1.width * $1.height }
+    }
+    let tick = Timer(timeInterval: 0.25, repeats: true) { _ in
+        if (testFrame == nil && granted()) || Date().timeIntervalSince(started) > 600 { exit(0) }
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard let win = settingsWindow() else {
+            panel.orderOut(nil)
+            // System Settings closed (a moment's grace while it opens)
+            if Date().timeIntervalSince(settingsSeen) > 4 { exit(0) }
+            return
+        }
+        settingsSeen = Date()
+        guard testFrame != nil || front == "com.apple.systempreferences" else { panel.orderOut(nil); return }
+        // over the bottom of the window, inside it, where the list's + and − sit
+        let w = min(W, win.width - 32)
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let frame = NSRect(x: win.midX - w / 2, y: top - (win.maxY - 14), width: w, height: H)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        if !panel.isVisible { panel.orderFrontRegardless() }
+    }
+    RunLoop.main.add(tick, forMode: .common)
+    tick.fire()
+    app.run()
+    exit(0)
+}
+
 // ───────────────────────── main loop ─────────────────────────
 
+if CommandLine.arguments.contains("--guide") { runGuide(CommandLine.arguments) }
+
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.4")
+    print("ondra-cuhost 0.4.5")
     exit(0)
 }
 

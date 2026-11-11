@@ -4,7 +4,8 @@ import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js
 import { setState, state, updateAccount } from "../state/store";
 import { importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine } from "../engine/rpc";
-import { accountProviders, openPrivacySettings, requestAccessibility, toolStatus } from "../lib/native";
+import { accountProviders, toolStatus } from "../lib/native";
+import { askPermission } from "../lib/permissions";
 import { appName } from "../lib/brand";
 import { Icon } from "../ui/Icon";
 import { LoginSheet } from "./Settings";
@@ -91,10 +92,10 @@ export function Onboarding() {
             </div>
             <div class="onb-acts">
               <Show when={!status()?.accessibility}>
-                <button class="btn sm" onClick={async () => { await requestAccessibility(); openPrivacySettings("accessibility"); }}>{t("손쉬운 사용")}</button>
+                <button class="btn sm" onClick={() => void askPermission("accessibility")}>{t("손쉬운 사용")}</button>
               </Show>
               <Show when={!status()?.screenRecording}>
-                <button class="btn sm" onClick={() => openPrivacySettings("screen")}>{t("화면 기록")}</button>
+                <button class="btn sm" onClick={() => void askPermission("screen")}>{t("화면 기록")}</button>
               </Show>
             </div>
           </div>
