@@ -25,11 +25,11 @@ and their front app stay as they are.
 - Actions go to the target app only: accessibility actions, or pointer and key
   events addressed to its window. The real cursor never moves; a small pointer
   of the helper's own shows where you act, just above the target window.
-- Apps launch without activation, so the user's front app stays in front, and the
-  windows of an app this launch opened are moved to a screen corner, out of the
-  user's sight. They are still drawn: the tree, actions and `look` work as usual.
-  They go back where they were at `stop`, or when the user brings the app forward.
-  An app the user already had open is left where it is.
+- An app this session opens launches hidden and without activation: nothing shows
+  on the user's screen. The accessibility tree and actions work on a hidden app.
+  `look` and pointer or key events show its window for a moment, behind the user's
+  windows and never in front, then hide it again. It stays hidden after `stop`; the
+  user brings it up from the Dock. An app the user already had open is not hidden.
 - Some apps bring themselves forward when clicked. The helper hands the front
   straight back to the user's app and reports `selfActivated` / `restored`.
 - The user's own mouse and keys during an action are theirs, not a failure.
@@ -111,9 +111,8 @@ decision or as evidence. Do not trade verification for fewer tokens.
 Keep window captures in `$APP_ARTIFACTS_DIR`. Inspect each image before citing
 it; a blank, stale or partial capture is not proof. Capture failures do not
 authorize bringing a window forward or changing Spaces, Stage Manager or display
-settings. If a window is fully hidden (app-level hide), the accessibility tree is
-unavailable; operate the app without hiding it (its windows stay in the corner, out of
-sight), or report the limitation. Don't move the app's windows yourself.
+settings. Don't hide, unhide, move or activate the app yourself: the tool shows it
+for a capture and hides it again.
 
 ## Permissions
 
