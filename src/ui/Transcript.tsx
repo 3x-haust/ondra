@@ -37,8 +37,7 @@ function group(entries: Entry[]): Item[] {
   for (const e of entries) {
     const last = out[out.length - 1];
     if (e.kind === "tool") {
-      // pictures the agent looked at stay their own row, open (Codex shows them, never folded into a work line)
-      if (last?.kind === "tools" && !last.tools[last.tools.length - 1].tool.image === !e.tool.image) last.tools.push(e);
+      if (last?.kind === "tools") last.tools.push(e);
       else out.push({ kind: "tools", id: e.id, tools: [e] });
     } else if (e.kind === "block") {
       if (last?.kind === "blocks") last.blocks.push(e.block);
