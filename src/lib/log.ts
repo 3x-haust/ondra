@@ -55,11 +55,19 @@ export const flushLog = flush;
 
 const text = (x: unknown) => (x instanceof Error ? `${x.name}: ${x.message}${x.stack ? ` ⏎ ${x.stack.split("\n").slice(1, 4).join(" ⏎ ")}` : ""}` : typeof x === "string" ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })());
 
+/** the screen in view and what has focus, for errors that carry no stack */
+const where = () => {
+  const view = [...(document.querySelector("main.main")?.children ?? [])].map((c) => c.className.split(" ")[0]).filter(Boolean).join("+") || "?";
+  const focus = document.activeElement?.className;
+  return `${view}${typeof focus === "string" && focus ? ` (focus .${focus.split(" ")[0]})` : ""}`;
+};
+
 /** Uncaught errors, rejected promises and console errors go to the log as well. */
 export function installLog(version: string) {
   logInfo("app", `start ${version}`);
   window.addEventListener("error", (e) => logError("ui", `${e.message} @ ${String(e.filename ?? "").split("/").pop()}:${e.lineno}`));
-  window.addEventListener("unhandledrejection", (e) => logError("ui", `unhandled: ${text(e.reason)}`));
+  // a thrown string has no stack: say which screen it came from (the address names the view)
+  window.addEventListener("unhandledrejection", (e) => logError("ui", `unhandled: ${text(e.reason)}${typeof e.reason === "string" ? ` · on ${where()}` : ""}`));
   const was = { error: console.error.bind(console), warn: console.warn.bind(console) };
   console.error = (...a: unknown[]) => (logError("console", a.map(text).join(" ")), was.error(...a));
   console.warn = (...a: unknown[]) => (logWarn("console", a.map(text).join(" ")), was.warn(...a));

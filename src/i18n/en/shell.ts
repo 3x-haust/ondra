@@ -69,7 +69,6 @@ export default {
   "폴더와 작업 {n}개는 그대로 남아요": "The folder and its task stay|The folder and its {n} tasks stay",
   "폴더는 그대로 남아요": "The folder stays",
   "제거": "Remove",
-  "피드백 보내기 · GitHub 이슈": "Send feedback · GitHub issue",
   "이슈를 올렸어요": "Issue filed",
   "GitHub에서 이어서 올려 주세요": "Finish filing it on GitHub",
   "피드백 보내기": "Send feedback",
