@@ -5,7 +5,7 @@ import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
-import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn } from "../state/store";
+import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn, listed, carriedOn, lineHead } from "../state/store";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
@@ -65,18 +65,9 @@ const openTop = () => {
 const openRoot = () => {
   let t = openTop() ? taskById(openTop()!) : undefined;
   // a follow-up shows under the job it carries on
-  for (let i = 0; t && carriedOn(t) && i < 50; i++) t = carriedOn(t);
-  return t?.id;
+  return t && lineHead(t).id;
 };
 
-/** a job of the list: not a subagent, a quick answer or archived */
-const listed = (t: Task) => !t.parentId && !t.answer && !t.archived;
-/** the job a follow-up carries on (one you started by answering it, say "merge it"), when that one
- *  is in the same list: the follow-up then sits under it, like a file under its folder */
-function carriedOn(t: Task): Task | undefined {
-  const p = t.follows ? taskById(t.follows) : undefined;
-  return p && p.id !== t.id && listed(p) && p.space === t.space && p.project === t.project ? p : undefined;
-}
 /** every job down a job's line of follow-ups, oldest first */
 function followUps(t: Task): Task[] {
   const out: Task[] = [];

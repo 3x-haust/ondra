@@ -1,6 +1,6 @@
 // A question a task is waiting on, with its answers as buttons.
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { projectById, state, taskById } from "../state/store";
+import { lineHead, projectById, state, taskById } from "../state/store";
 import type { Block, Decision, Task } from "../state/types";
 import { inBrowserShare } from "../lib/native";
 import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortcuts";
@@ -175,7 +175,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
   };
   const crumb = () => (props.showTask !== false && props.crumb !== false ? t() : undefined);
   const Crumb = (p: { x: Task }) => (
-    <button class="decision-src" onClick={() => openTask(p.x.id)} title={p.x.title}>
+    <button class="decision-src" onClick={() => openTask(p.x.id)} title={lineHead(p.x).title}>
       {/* where it runs: its project (badge and name), 기타 when it has none;
           in that project's own chat the header already says it, so only the task */}
       <Show when={!inOwnProject(p.x, here())}>
@@ -189,7 +189,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
         </Show>
         <span class="decision-src-sep">/</span>
       </Show>
-      <span class="decision-src-title">{p.x.title}</span>
+      <span class="decision-src-title">{lineHead(p.x).title}</span>
     </button>
   );
   const Login = () => (

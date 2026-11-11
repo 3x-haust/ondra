@@ -8,7 +8,7 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
@@ -938,9 +938,13 @@ function ProjectTasks(props: { list: Task[] }) {
 type Answered = { id: string; at: number; taskId: string; q: string; a: string };
 const answeredSeen = new Map<string, Answered>();
 
-/** "4월 회고 초안 · 초안으로 저장": the task (opens it) and what was answered; the question on hover */
+/** "4월 회고 초안 · 초안으로 저장": the task (opens it) and what was answered; the question on hover.
+ *  A follow-up goes by the job its line started from, as the sidebar files it */
 function AnsweredLine(props: { a: Answered }) {
-  const task = () => taskById(props.a.taskId);
+  const task = () => {
+    const x = taskById(props.a.taskId);
+    return x && lineHead(x);
+  };
   return (
     <button class="answered-line" onClick={() => openTask(props.a.taskId)} title={`${props.a.q} → ${props.a.a}`}>
       <Icon name="check" size={14} />
