@@ -1,79 +1,90 @@
-// Where work runs, like Codex's run location: this Mac or another one added in Settings › 연결,
-// in one of its workspaces, on one of that workspace's accounts. Under the composer once another
-// Mac is added, with that Mac's account and plan use the way this Mac's own show.
+// Where work runs, like Codex's run location: this Mac or another one added in Settings › 연결.
+// The workspace is the tab at the top (another Mac's workspace of the same name), so this picks
+// only the Mac; a tab only another Mac has offers only Macs. That Mac's account, plan use and
+// models show the way this Mac's own do.
 import { For, Show } from "solid-js";
 import { mirror, type HostInfo } from "../state/mirror";
-import { setState, state } from "../state/store";
+import { accountsIn, setState, state } from "../state/store";
 import { setView } from "../state/ui";
 import { windowLabel } from "../state/limits";
 import { Icon } from "./Icon";
 import { Logo } from "./Logos";
+import { ModelPicker, type RemoteModels } from "./ModelPicker";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 import { t } from "../i18n";
 
-export interface Place { host: string; space?: string; account?: string }
+export interface Place { host: string; space?: string; account?: string; model?: string; thinking?: string }
+type HostAccount = HostInfo["accounts"][number];
 
 const hostName = (id: string) => state.settings.hosts?.find((h) => h.id === id)?.name ?? "Mac";
 const infoOf = (host: string): HostInfo | undefined => mirror.hosts[host]?.info;
+const labelOf = (space: string) => state.spaces.find((s) => s.id === space)?.label;
 
-/** the workspace there that work from this workspace goes to: the one picked, the one of the same
- *  name, or its first */
-export function hostSpace(host: string, mine: string, picked?: string): string | undefined {
-  const spaces = infoOf(host)?.spaces ?? [];
-  if (picked && (!spaces.length || spaces.some((s) => s.id === picked))) return picked;
-  const label = state.spaces.find((s) => s.id === mine)?.label;
-  return (spaces.find((s) => s.id === mine) ?? spaces.find((s) => s.label === label) ?? spaces[0])?.id;
+/** that Mac's workspace for this one here: the one of the same name (unknown until it says) */
+export function hostSpace(host: string, mine: string): string | undefined {
+  return infoOf(host)?.spaces.find((s) => s.label === labelOf(mine))?.id;
+}
+/** a Mac that has this workspace (or hasn't said yet which it has) */
+const hasSpace = (host: string, mine: string) => {
+  const h = state.settings.hosts?.find((x) => x.id === host);
+  const labels = infoOf(host)?.spaces.map((s) => s.label) ?? h?.spaces;
+  return !labels || labels.includes(labelOf(mine) ?? "");
+};
+/** this Mac works here: a workspace of its own, or one it has since given an account */
+export const localHere = (mine: string) => !state.spaces.find((s) => s.id === mine)?.only || accountsIn(mine).length > 0;
+const macsHere = (mine: string) => (state.settings.hosts ?? []).filter((h) => hasSpace(h.id, mine));
+
+/** where new work from this workspace runs: another Mac, else this Mac (undefined) */
+export function chosenComputer(mine: string = state.space): Place | undefined {
+  const c = state.settings.computers?.[mine];
+  const host = c && macsHere(mine).some((h) => h.id === c.host) ? c.host : !localHere(mine) ? macsHere(mine)[0]?.id : undefined;
+  if (!host) return undefined;
+  const same = c?.host === host;
+  return { host, space: hostSpace(host, mine), account: same ? c.account : undefined, model: same ? c.model : undefined, thinking: same ? c.thinking : undefined };
 }
 
-/** where new work from this workspace runs: another Mac (still added), else this Mac (undefined) */
-export function chosenComputer(space: string = state.space): Place | undefined {
-  const c = state.settings.computers?.[space];
-  if (!c || !state.settings.hosts?.some((h) => h.id === c.host)) return undefined;
-  return { host: c.host, space: hostSpace(c.host, space, c.space), account: c.account };
-}
-
-export function setComputer(space: string, p: Place | undefined) {
+export function setComputer(mine: string, p: Omit<Place, "space"> | undefined) {
   setState("settings", "computers", (m) => {
     const next = { ...(m ?? {}) };
-    if (p) next[space] = p;
-    else delete next[space];
+    if (p) next[mine] = { host: p.host, account: p.account, model: p.model, thinking: p.thinking };
+    else delete next[mine];
     return next;
   });
 }
 
-const spaceLabel = (host: string, id?: string) => infoOf(host)?.spaces.find((s) => s.id === id)?.label;
+/** the account there new work runs on: the one picked, else what that workspace would pick */
+export function hostAccount(p: Place, mine: string, own?: string): HostAccount | undefined {
+  const info = infoOf(p.host);
+  if (!info) return undefined;
+  if (own) return info.accounts.find((a) => a.id === own);
+  const sp = p.space ?? hostSpace(p.host, mine);
+  const pool = info.accounts.filter((a) => !sp || a.space === sp);
+  return pool.find((a) => a.id === p.account) ?? pool.find((a) => a.id === (sp ? info.pick[sp] : undefined)) ?? pool[0];
+}
 
-/** the chip: which Mac (and workspace there); a menu to change it unless it's fixed (a project's own Mac) */
+/** that account's models, for the model picker */
+export const remoteModels = (a: HostAccount | undefined): RemoteModels | undefined =>
+  a ? { models: a.models ?? [], auto: a.model, name: a.name, levels: a.levels, names: a.names } : undefined;
+
+/** the chip: which Mac; a menu to change it unless it's fixed (a project's own Mac) */
 export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: string }) {
   const mine = () => props.space ?? state.space;
-  const hosts = () => state.settings.hosts ?? [];
   const status = () => (props.value ? (mirror.hosts[props.value.host]?.status ?? "connecting") : "ok");
-  const label = () => {
-    if (!props.value) return t("이 Mac");
-    const many = (infoOf(props.value.host)?.spaces.length ?? 0) > 1;
-    const sp = many ? spaceLabel(props.value.host, props.value.space) : undefined;
-    return sp ? `${hostName(props.value.host)} · ${sp}` : hostName(props.value.host);
-  };
+  const label = () => (props.value ? hostName(props.value.host) : t("이 Mac"));
   const items = (): MenuEntry[] => [
-    { id: "local", label: t("이 Mac"), icon: "monitor", checked: !props.value, run: () => setComputer(mine(), undefined) },
-    ...hosts().flatMap((h): MenuEntry[] => {
-      const off = mirror.hosts[h.id]?.status !== "ok";
-      const spaces = infoOf(h.id)?.spaces ?? [];
-      const name = (x: string) => (off ? `${x} · ${t("연결 안 됨")}` : x);
-      if (spaces.length <= 1) return [{ id: h.id, label: name(h.name), icon: "monitor", checked: props.value?.host === h.id, run: () => setComputer(mine(), { host: h.id }) }];
-      return spaces.map((s) => ({
-        id: `${h.id}:${s.id}`,
-        label: name(`${h.name} · ${s.label}`),
-        icon: "monitor",
-        checked: props.value?.host === h.id && props.value.space === s.id,
-        run: () => setComputer(mine(), { host: h.id, space: s.id }),
-      }));
-    }),
+    ...(localHere(mine()) ? [{ id: "local", label: t("이 Mac"), icon: "monitor", checked: !props.value, run: () => setComputer(mine(), undefined) }] : []),
+    ...macsHere(mine()).map((h) => ({
+      id: h.id,
+      label: mirror.hosts[h.id]?.status === "ok" ? h.name : `${h.name} · ${t("연결 안 됨")}`,
+      icon: "monitor",
+      checked: props.value?.host === h.id,
+      run: () => props.value?.host !== h.id && setComputer(mine(), { host: h.id }),
+    })),
     "sep",
     { id: "manage", label: t("연결 관리"), icon: "gear", run: () => setView({ name: "settings", tab: "remote" }) },
   ];
   return (
-    <Show when={hosts().length || props.value}>
+    <Show when={macsHere(mine()).length || props.value}>
       <button
         type="button"
         class="st-acc st-comp"
@@ -90,12 +101,32 @@ export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: 
   );
 }
 
+/** the model chip for new work on another Mac: that account's models there */
+export function HostModel(props: { place: Place; space?: string; up?: boolean; rest?: string }) {
+  const mine = () => props.space ?? state.space;
+  const acc = () => hostAccount(props.place, mine());
+  return (
+    <Show when={acc()}>
+      {(a) => (
+        <ModelPicker
+          up={props.up}
+          accountId={a().id}
+          remote={remoteModels(a())}
+          model={props.place.model ?? ""}
+          thinking={props.place.thinking || a().effort || props.rest || ""}
+          onChange={(m, th) => setComputer(mine(), { ...props.place, model: m, thinking: th })}
+        />
+      )}
+    </Show>
+  );
+}
+
 const NEAR = 80;
 
 /**
- * Under the composer when the work runs on another Mac: that Mac (and workspace), the account
- * there, and its plan use, read from that Mac. `account` set: a job's own account (not changed
- * here); unset: new work, its account picked from that workspace's.
+ * Under the composer when the work runs on another Mac: that Mac, the account there, and its plan
+ * use, read from that Mac. `account` set: a job's own account (not changed here); unset: new work,
+ * its account picked from that workspace's.
  */
 export function HostStatus(props: { place: Place; fixed?: boolean; account?: string; space?: string }) {
   const mine = () => props.space ?? state.space;
@@ -103,14 +134,14 @@ export function HostStatus(props: { place: Place; fixed?: boolean; account?: str
   const sp = () => props.place.space ?? hostSpace(props.place.host, mine());
   const pool = () => (info()?.accounts ?? []).filter((a) => !sp() || a.space === sp());
   const auto = () => !props.account && !props.place.account;
-  const accId = () => props.account ?? (props.place.account && pool().some((a) => a.id === props.place.account) ? props.place.account : sp() ? info()?.pick[sp()!] : undefined);
-  const acc = () => info()?.accounts.find((a) => a.id === accId());
+  const acc = () => hostAccount(props.place, mine(), props.account);
   const pickAccount = (e: MouseEvent) =>
     openMenuAt(
       "host-account",
       () => [
-        { id: "auto", label: t("자동"), icon: "spark", checked: auto(), run: () => setComputer(mine(), { ...props.place, account: undefined }) },
-        ...pool().map((a) => ({ id: a.id, label: a.name, icon: "key", checked: !auto() && a.id === accId(), run: () => setComputer(mine(), { ...props.place, account: a.id }) })),
+        { id: "auto", label: t("자동"), icon: "spark", checked: auto(), run: () => setComputer(mine(), { host: props.place.host }) },
+        // another account has its own models: the model picked goes back to that account's
+        ...pool().map((a) => ({ id: a.id, label: a.name, icon: "key", checked: !auto() && a.id === acc()?.id, run: () => setComputer(mine(), { host: props.place.host, account: a.id }) })),
       ],
       (e.currentTarget as HTMLElement).getBoundingClientRect(),
     );

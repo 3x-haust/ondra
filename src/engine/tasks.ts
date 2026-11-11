@@ -1994,6 +1994,9 @@ export function createTask(f: {
   host?: string;
   hostSpace?: string;
   hostAccount?: string;
+  /** its own model and level (else its account's) */
+  model?: string;
+  thinking?: string;
   /** another Mac asked for it */
   from?: Task["from"];
 }): string {
@@ -2033,9 +2036,9 @@ export function createTask(f: {
     origin: f.origin,
     ...(f.issue ? { issue: f.issue } : {}),
     isolate: f.isolate,
-    // no model of its own: it runs on its account's model (each account picks its own)
-    model: undefined,
-    thinking: undefined,
+    // no model of its own unless asked for one: it runs on its account's model (each account picks its own)
+    model: f.model || undefined,
+    thinking: f.thinking || undefined,
     permission: state.settings.permission ?? "edits",
     ...(f.from ? { from: f.from } : {}),
   };
@@ -2043,7 +2046,7 @@ export function createTask(f: {
   const far_ = splitProjectId(f.project);
   const farHost = far_?.host ?? f.host;
   if (farHost) {
-    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, account: f.hostAccount, display: f.display });
+    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, spaceLabel: state.spaces.find((x) => x.id === f.space)?.label, account: f.hostAccount, model: f.model, thinking: f.thinking, display: f.display });
     return id;
   }
   setState("tasks", (list) => [...list, task]);

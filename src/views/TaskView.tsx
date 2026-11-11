@@ -25,7 +25,7 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
-import { HostStatus } from "../ui/ComputerPicker";
+import { HostStatus, hostAccount, remoteModels } from "../ui/ComputerPicker";
 import { liveVerb, Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
@@ -571,6 +571,7 @@ export function TaskView(props: { id: string }) {
                     <>
                     <ModelPicker
                       up
+                      remote={task().host ? remoteModels(hostAccount({ host: task().host! }, task().space, task().accountId)) : undefined}
                       accountId={task().accountId}
                       model={task().model ?? ""}
                       thinking={task().thinking || effortFor(task().accountId, task().model) || ""}

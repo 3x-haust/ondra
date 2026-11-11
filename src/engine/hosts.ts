@@ -6,7 +6,8 @@
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
 import { mirror, remoteProjectId, setMirror, type HostInfo, type HostStatus } from "../state/mirror";
-import { setState, state } from "../state/store";
+import { accountsIn, projectsIn, setState, state, tasksIn, uid } from "../state/store";
+import { switchSpace } from "../state/workspace";
 import type { Entry, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
@@ -47,7 +48,7 @@ export function far(id: string, fn: string, args: unknown[]): Promise<unknown> |
 }
 
 /** a new job in another Mac's project: shown here at once, made and run there */
-export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; hostSpace?: string; account?: string; display?: string }) {
+export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; hostSpace?: string; spaceLabel?: string; account?: string; model?: string; thinking?: string; display?: string }) {
   if (!mirror.hosts[host]) status(host, "lost");
   setMirror("hosts", host, "tasks", (l) => [...l, task]);
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
@@ -158,9 +159,16 @@ export function onPeer(ev: Record<string, unknown>) {
     case "projects":
       setMirror("hosts", host, "projects", (d.list as { id: string; name: string; folder: string }[]) ?? []);
       break;
-    case "info":
-      setMirror("hosts", host, "info", d.info as HostInfo);
+    case "info": {
+      const info = d.info as HostInfo;
+      setMirror("hosts", host, "info", info);
+      const labels = info.spaces.map((s) => s.label);
+      if (JSON.stringify(state.settings.hosts?.find((x) => x.id === host)?.spaces) !== JSON.stringify(labels)) {
+        setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, spaces: labels } : x)));
+        syncSpaces();
+      }
       break;
+    }
     case "patch":
       apply(host, (d.tasks as Patch[]) ?? [], (d.gone as string[]) ?? [], !!d.all);
       break;
@@ -195,6 +203,23 @@ export async function addHost(text: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * The workspace tabs: this Mac's, and those of the Macs added here, matched by name. A workspace
+ * only another Mac has gets a tab of its own here (its work runs on that Mac); it goes when no
+ * added Mac has it anymore, unless something of this Mac's was put in it since.
+ */
+export function syncSpaces() {
+  const want = new Set((state.settings.hosts ?? []).flatMap((h) => h.spaces ?? []));
+  const add = [...want].filter((l) => !state.spaces.some((s) => s.label === l));
+  const drop = state.spaces.filter((s) => s.only && !want.has(s.label) && !accountsIn(s.id).length && !projectsIn(s.id).length && !tasksIn(s.id).length).map((s) => s.id);
+  if (!add.length && !drop.length) return;
+  if (drop.includes(state.space)) {
+    const to = state.spaces.find((s) => !drop.includes(s.id));
+    if (to) switchSpace(to.id, { name: "main" });
+  }
+  setState("spaces", (l) => [...l.filter((s) => !drop.includes(s.id)), ...add.map((label) => ({ id: uid("sp"), label, folder: "~", rules: "", only: true }))]);
+}
+
 export function removeHost(id: string) {
   clearTimeout(retry.get(id)?.timer);
   retry.delete(id);
@@ -202,6 +227,7 @@ export function removeHost(id: string) {
   setState("settings", "hostProjects", (l) => (l ?? []).filter((p) => p.host !== id));
   void remoteCmd({ cmd: "hangup", peer: id }).catch(() => {});
   setMirror("hosts", produce((h) => void delete h[id]));
+  syncSpaces();
 }
 
 /** add one of that Mac's projects to this space's sidebar */

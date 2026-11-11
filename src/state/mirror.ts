@@ -21,7 +21,20 @@ export interface HostMirror {
 
 export interface HostInfo {
   spaces: { id: string; label: string }[];
-  accounts: { id: string; space: string; name: string; services: string[]; limits: Limit[]; credits?: string }[];
+  accounts: {
+    id: string;
+    space: string;
+    name: string;
+    services: string[];
+    limits: Limit[];
+    credits?: string;
+    /** its models, its own model and level there; a direct connection's levels and names per model */
+    models: string[];
+    model?: string;
+    effort?: string;
+    levels?: Record<string, string[]>;
+    names?: Record<string, string>;
+  }[];
   /** per workspace there: the account new work would run on now */
   pick: Record<string, string>;
 }

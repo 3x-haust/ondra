@@ -1,5 +1,4 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
-import { mirror } from "../state/mirror";
 import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { AccountPicker } from "./AccountPicker";

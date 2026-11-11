@@ -91,6 +91,18 @@ export function placePop(el: HTMLElement) {
   }
 }
 
+/** another Mac's account, for picking a model there */
+export interface RemoteModels {
+  models: string[];
+  /** the account's own model there */
+  auto?: string;
+  name: string;
+  /** a direct connection's models: the levels each takes ([] = none) */
+  levels?: Record<string, string[]>;
+  /** a direct connection's models: their own names */
+  names?: Record<string, string>;
+}
+
 export function ModelPicker(props: {
   accountId: string;
   model: string;
@@ -100,24 +112,31 @@ export function ModelPicker(props: {
   effortOf?: (model: string) => string;
   /** open upward (inside a composer at the bottom) */
   up?: boolean;
+  /** an account of another Mac (Settings › 연결): its models and levels as that Mac sent them */
+  remote?: RemoteModels;
 }) {
   const [open, setOpen] = usePop();
   // the kept list shows at once; the engine is asked again behind it
-  const [asked] = createResource(() => (open() ? props.accountId : false), (id) => refreshModels(id as string));
-  const models = () => modelsNow(props.accountId) ?? asked();
+  const [asked] = createResource(() => (open() && !props.remote ? props.accountId : false), (id) => refreshModels(id as string));
+  const models = () => (props.remote ? props.remote.models : (modelsNow(props.accountId) ?? asked()));
   const loading = () => !models() && asked.loading;
   const [showOld, setShowOld] = createSignal(false);
   const [q, setQ] = createSignal("");
-  const auto = () => accountById(props.accountId)?.model;
+  const auto = () => (props.remote ? props.remote.auto : accountById(props.accountId)?.model);
   // a direct connection's models go by their own names ("llama3.1:8b"), as one list under the connection
-  const direct = () => !!connectionOf(props.accountId);
-  const nameOf = (m: string) => connModelLabel(props.accountId, m) ?? prettyModel(m);
+  const direct = () => (props.remote ? !!props.remote.names : !!connectionOf(props.accountId));
+  const nameOf = (m: string) => (props.remote ? props.remote.names?.[m] : connModelLabel(props.accountId, m)) ?? prettyModel(m);
   const label = () => (props.model ? nameOf(props.model) : auto() ? nameOf(auto()!) : t("모델 선택"));
-  const noTools = (m: string) => !canUseTools(props.accountId, m);
+  const noTools = (m: string) => (props.remote ? false : !canUseTools(props.accountId, m));
   const current = () => props.model || auto() || "";
   // a connection's model offers the levels its server takes (none when it doesn't reason)
-  const levels = () => effortLevels(props.accountId, current());
-  const effort = () => effortShown(props.accountId, current(), effortOf(props.thinking));
+  const levels = () => (props.remote ? props.remote.levels?.[current()] : effortLevels(props.accountId, current()));
+  const effort = () => {
+    if (!props.remote) return effortShown(props.accountId, current(), effortOf(props.thinking));
+    const l = levels();
+    const e = effortOf(props.thinking);
+    return !l ? e : !l.length ? "" : l.includes(e) ? e : l[l.length - 1];
+  };
   const all = () => models() ?? [];
   const ranked = () => rankModels(all());
   // a short list is shown whole; "자주 씀" only earns its place in front of a long one
@@ -134,7 +153,7 @@ export function ModelPicker(props: {
   const PROVIDER: Record<string, string> = { "openai-codex": "OpenAI · ChatGPT 계정", openai: "OpenAI", anthropic: "Anthropic · Claude 계정", google: "Google" };
   const provider = (id: string) => (PROVIDER[id] ? t(PROVIDER[id]) : id);
   // the models of one account: it is named the way the usage chip names it; several providers keep theirs
-  const heading = (id: string) => (groups().length <= 1 && accountName(props.accountId)) || provider(id);
+  const heading = (id: string) => (groups().length <= 1 && (props.remote ? props.remote.name : accountName(props.accountId))) || provider(id);
   const Item = (p: { m: string }) => (
     <button type="button" class="pop-item" classList={{ on: current() === p.m }} onClick={() => (props.onChange(p.m, props.effortOf ? props.effortOf(p.m) : effort()), setOpen(false))}>
       <span class="pop-item-main">{nameOf(p.m)}</span>
@@ -151,7 +170,7 @@ export function ModelPicker(props: {
         <Icon name="down" size={12} class="muted" />
       </button>
       <Show when={open()}>
-        <div class="pop model-pop" classList={{ up: props.up }} role="dialog" aria-label={[t("모델 · 추론 강도"), accountName(props.accountId)].filter(Boolean).join(" · ")}>
+        <div class="pop model-pop" classList={{ up: props.up }} role="dialog" aria-label={[t("모델 · 추론 강도"), props.remote ? props.remote.name : accountName(props.accountId)].filter(Boolean).join(" · ")}>
           <Show when={levels()?.length !== 0}>
             <EffortSlider value={effort()} levels={levels()} onChange={(id) => props.onChange(props.model, id)} />
             <div class="pop-sep" />

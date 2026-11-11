@@ -16,6 +16,9 @@ import type { Task } from "../state/types";
 import type { HostInfo } from "../state/mirror";
 import { creditsOf, usageOf } from "../state/limits";
 import { accountName, service } from "../ui/AccountPicker";
+import { modelsNow, refreshModels } from "./modelList";
+import { connectionOf, connModelLabel, effortLevels } from "./connections";
+import { effortFor } from "./models";
 import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts } from "./hosts";
 
@@ -131,7 +134,13 @@ function info(): HostInfo {
     spaces: state.spaces.map((s) => ({ id: s.id, label: s.label })),
     accounts: state.accounts
       .filter((a) => a.providers.length)
-      .map((a) => ({ id: a.id, space: a.space, name: accountName(a, true), services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id) })),
+      .map((a) => {
+        const models = modelsNow(a.id) ?? [];
+        const direct = !!connectionOf(a.id);
+        const levels = direct ? Object.fromEntries(models.flatMap((m) => { const l = effortLevels(a.id, m); return l ? [[m, l]] : []; })) : undefined;
+        const names = direct ? Object.fromEntries(models.flatMap((m) => { const n = connModelLabel(a.id, m); return n ? [[m, n]] : []; })) : undefined;
+        return { id: a.id, space: a.space, name: accountName(a, true), services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id), models, model: a.model || undefined, effort: effortFor(a.id), levels, names };
+      }),
     pick: Object.fromEntries(state.spaces.map((s) => [s.id, jobs.chooseAccount(s.id, "")])),
   };
 }
@@ -153,13 +162,13 @@ async function sendProjects(conn: number) {
 
 /** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
-function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; hostSpace?: string; account?: string; display?: string }) {
+function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; hostSpace?: string; spaceLabel?: string; account?: string; model?: string; thinking?: string; display?: string }) {
   const p = f.project ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
-  const space = p?.space ?? (state.spaces.some((s) => s.id === f.hostSpace) ? f.hostSpace! : state.space);
+  const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
   const from = { device: c.device, space: f.space ?? "" };
   const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
-  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: account, from });
+  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: account, from, model: f.model, thinking: f.thinking });
 }
 
 /** what another Mac may do here: the same the user does with a job, and add a project */
@@ -193,6 +202,8 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       await sendProjects(conn);
       c.info = undefined;
       sendInfo(conn, c);
+      // the model lists, asked once (they're kept): the next info carries them
+      void Promise.all(state.accounts.filter((a) => a.providers.length).map((a) => refreshModels(a.id).catch(() => {}))).then(() => sendInfo(conn, c));
       break;
     case "watch":
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);

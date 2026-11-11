@@ -34,7 +34,13 @@ import { effortFor, setModelEffort } from "../engine/models";
 import { notesPath, notesVersion, readNotes } from "../engine/notes";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { ComputerPicker, HostStatus, chosenComputer } from "../ui/ComputerPicker";
+import { ComputerPicker, HostModel, HostStatus, chosenComputer, hostAccount, type Place } from "../ui/ComputerPicker";
+
+/** the model picked for work on another Mac, when that account there has it */
+const hostPick = (p: Place) => {
+  const a = hostAccount(p, state.space);
+  return p.model && a?.models.includes(p.model) ? { model: p.model, thinking: p.thinking } : p.thinking ? { thinking: p.thinking } : {};
+};
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
@@ -544,7 +550,8 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
       accountId: account(),
       host: computer()?.host,
       hostSpace: computer()?.space,
-      hostAccount: computer()?.account,
+      hostAccount: computer() ? hostAccount(computer()!, state.space)?.id : undefined,
+      ...(computer() ? hostPick(computer()!) : {}),
     });
     setPaneDraft(props.pane, null);
     focusPane(props.pane);
@@ -576,7 +583,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
               <PermissionPicker value={state.settings.permission ?? "edits"} onChange={(x) => setState("settings", "permission", x)} />
             </>
           }
-          right={<AccountModel accountId={account()} />}
+          right={<Show when={computer()} fallback={<AccountModel accountId={account()} />}>{(c) => <HostModel place={c()} />}</Show>}
         />
       </div>
     </div>
@@ -631,7 +638,7 @@ export function MainView() {
     const p = project();
     const at = computer();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
-    if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: at.account }));
+    if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
     return throwThought(text, state.space, { project: p?.id });
   };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
@@ -744,7 +751,7 @@ export function MainView() {
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<AccountModel accountId={account()} up={!big} rest="low" />}
+      right={<Show when={computer()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
     />
   );
 

@@ -24,6 +24,8 @@ export interface Space {
   aside?: string;
   /** The user's own simulators, emulators and phones that belong to this space (device ids). */
   devices?: string[];
+  /** made for another Mac's workspace of this name (Settings › 연결): its work runs there, none here */
+  only?: boolean;
 }
 
 /** One turn's tokens plus the plan limits right after it. */
@@ -601,11 +603,11 @@ export interface Settings {
   /** other Macs may use this one (Settings › 연결): the ones the user allowed get in */
   remote?: boolean;
   /** other Macs this one works on, and the projects of theirs added here */
-  hosts?: { id: string; name: string; pair?: string }[];
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[] }[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** where new work goes from each workspace here (Codex's run location): another Mac, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */
-  computers?: Record<string, { host: string; space?: string; account?: string }>;
+  computers?: Record<string, { host: string; account?: string; model?: string; thinking?: string }>;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */
