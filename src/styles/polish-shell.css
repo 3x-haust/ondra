@@ -378,6 +378,37 @@
 .app .sidebar .sb-proj-jobs .sb-kid-list::before {
   left: 15px;
 }
+/* follow-ups (work started from a job, say by answering it): one step in under that job, on a
+   tree line like files under their folder; full rows, since each is a job of its own */
+.app .sidebar .sb-follow-list {
+  position: relative;
+}
+.app .sidebar .sb-follow-list::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 17px;
+  top: 0;
+  bottom: calc(var(--h-row) / 2);
+  width: 1px;
+  background: var(--line-soft);
+}
+.app .sidebar .sb-row.follow {
+  padding-left: 34px;
+}
+.app .sidebar .sb-proj-jobs .sb-row.follow {
+  padding-left: 32px;
+}
+.app .sidebar .sb-proj-jobs .sb-follow-list::before {
+  left: 15px;
+}
+/* a follow-up's subagents: one step further in */
+.app .sidebar .sb-follow-list .sb-row.kid {
+  padding-left: 56px;
+}
+.app .sidebar .sb-follow-list .sb-kid-list::before {
+  left: 39px;
+}
 .app .sidebar .sb-proj-jobs + .sb-row,
 .app .sidebar .sb-projects > div + .sb-row {
   margin-top: 0;
