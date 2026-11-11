@@ -562,7 +562,8 @@ export function TaskView(props: { id: string }) {
                   ]}
                   placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
-                  onSend={(m) => tell(task().id, m)}
+                  onSend={(m) => tell(task().id, m, { now: true })}
+                  onQueue={task().status === "running" ? (m) => tell(task().id, m) : undefined}
                   running={task().status === "running"}
                   onStop={() => stopTask(task().id)}
                   right={
