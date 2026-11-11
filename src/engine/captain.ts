@@ -4,7 +4,8 @@ import { createSignal } from "solid-js";
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
-import { logError, logWarn } from "../lib/log";
+import { logError, logInfo, logWarn } from "../lib/log";
+import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
 import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
@@ -121,6 +122,7 @@ export function addThought(key: string, delta: string) {
 export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string } = {}): string {
   const t = text.trim();
   if (!t) return "";
+  track("message_sent", { where: "main" });
   const project = opts.project || undefined;
   const space = chatKey(spaceId, project);
   const me: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t };
@@ -693,6 +695,7 @@ async function ensureCaptain(space: string) {
   // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
   const door = isSim(space) ? [] : [...(await bridgeEnv()), ["APP_WORKER_ID", agent] as [string, string]];
   await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)], ...door]);
+  logInfo("main", `${space} engine started (${model || "account model"})`);
   sigOf.set(space, signature);
   markAlive(agent);
   attached.add(space);

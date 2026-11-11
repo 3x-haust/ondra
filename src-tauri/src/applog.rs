@@ -117,3 +117,46 @@ pub async fn feedback_issue(title: String, body: String) -> Result<String, Strin
         Err(err.lines().filter(|l| !l.trim().is_empty()).last().unwrap_or("gh failed").to_string())
     }
 }
+
+/// "2026-11-11 10:20:01" and "2026-11-11" in local time, the way the app side writes them.
+fn now() -> (String, String) {
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    unsafe { libc::localtime_r(&t, &mut tm) };
+    let day = format!("{:04}-{:02}-{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+    (format!("{day} {:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec), day)
+}
+
+/// One line in the app's format; the home folder's name never reaches the file.
+fn line(at: &str, level: &str, src: &str, msg: &str, home: &str) -> String {
+    let msg = if home.len() > 1 { msg.replace(home, "~") } else { msg.to_string() };
+    let msg: String = msg.split('\n').map(str::trim).collect::<Vec<_>>().join(" ⏎ ").chars().take(2000).collect();
+    format!("{at} {level:<5} [{src}] {msg}\n")
+}
+
+/// A native panic goes to the log as well (where and what), for a feedback report.
+pub fn install_panic_hook(app: &AppHandle) {
+    let d = dir(app);
+    let home = std::env::var("HOME").unwrap_or_default();
+    let was = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let (at, day) = now();
+        let thread = std::thread::current().name().unwrap_or("?").to_string();
+        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(d.join(format!("ondra-{day}.log"))) {
+            let _ = f.write_all(line(&at, "ERROR", "native", &format!("panic in {thread}: {info}"), &home).as_bytes());
+        }
+        was(info);
+    }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_native_line_reads_like_the_apps_and_hides_the_home_folder() {
+        let l = line("2026-11-11 10:20:01", "ERROR", "native", "panic at /Users/me/x.rs:1\n  boom", "/Users/me");
+        assert_eq!(l, "2026-11-11 10:20:01 ERROR [native] panic at ~/x.rs:1 ⏎ boom\n");
+        assert!(day_ok(&now().1));
+    }
+}

@@ -2,9 +2,9 @@ import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup,
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
-import type { SpaceId } from "./state/types";
+import type { SpaceId, Task } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { closePanel, panelTab, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { keepPanes } from "./state/panes";
 import { Panes } from "./views/Panes";
 import { menuClose } from "./views/PaneControls";
@@ -16,10 +16,10 @@ import { anyPop } from "./ui/ModelPicker";
 import { spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
-import { refreshEngine, startRpc } from "./engine/rpc";
+import { engine, refreshEngine, startRpc } from "./engine/rpc";
 import { startComponents } from "./engine/components";
 import { startScheduler } from "./engine/tasks";
-import { applyKeys, notify, onEvent, setFocusGuard, setTrayCount } from "./lib/native";
+import { applyKeys, notify, onEvent, osVersion, setFocusGuard, setTrayCount } from "./lib/native";
 import { watchDevices } from "./state/devices";
 import { Onboarding } from "./views/Onboarding";
 import { Palette } from "./views/Palette";
@@ -37,7 +37,8 @@ import { afterLaunch, notesFor } from "./engine/releaseNotes";
 import { ReleaseNotes } from "./ui/ReleaseNotes";
 import { ConfirmHost, ContextMenuHost } from "./ui/taskMenu";
 import { getVersion } from "@tauri-apps/api/app";
-import { installLog } from "./lib/log";
+import { installLog, logInfo, logWarn } from "./lib/log";
+import { EFFORTS, faultOf, jobFailed, modelOf, PANEL_TABS, PERMISSIONS, pick, startTelemetry, THEMES, track, VIEWS, WEIGHTS } from "./lib/telemetry";
 import { FeedbackHost, setFeedbackVersion } from "./ui/Feedback";
 import { VisualViewer } from "./ui/exportVisual";
 import { warmModels } from "./engine/modelList";
@@ -103,7 +104,7 @@ export default function App() {
     if (!location.search.includes("fixture")) startTidy();
     if (!location.search.includes("fixture")) {
       startUpdates();
-      void getVersion().then((v) => { setAppVersion(v); installLog(v); setFeedbackVersion(v); void afterLaunch(v); }).catch(() => {});
+      void getVersion().then((v) => { setAppVersion(v); installLog(v); setFeedbackVersion(v); void afterLaunch(v); void countLaunch(v); }).catch(() => {});
     }
     void scan();
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
@@ -140,12 +141,60 @@ export default function App() {
   window.addEventListener("resize", placeToast);
   onCleanup(() => window.removeEventListener("resize", placeToast));
 
+  // anonymous usage numbers (lib/telemetry.ts): the launch and how the app is set up, then the places opened
+  const countLaunch = async (version: string) => {
+    const { first } = startTelemetry({ version, os: await osVersion().catch(() => "macOS"), lang: lang(), enabled: () => state.settings.telemetry !== false });
+    const providers = [...new Set(state.accounts.flatMap((a) => a.providers))].sort();
+    const has = (re: RegExp) => providers.some((p) => re.test(p));
+    logInfo("app", `${engine.info.engineVersion ? `engine ${engine.info.engineVersion}` : "engine missing"} · ${lang()} · ${state.settings.theme} · spaces ${state.spaces.length} · accounts ${state.accounts.length} (${providers.join(",") || "none"}) · tasks ${state.tasks.length} · memory ${state.memory.length} · permission ${state.settings.permission}`);
+    track("app_launched", { first_launch: first, onboarded: state.onboarded });
+    track("settings_snapshot", {
+      spaces_n: state.spaces.length, accounts_n: state.accounts.length, tasks_n: state.tasks.length, memories_n: state.memory.length, skills_n: state.skills.length,
+      anthropic_connected: has(/anthropic|claude/), openai_connected: has(/openai|codex/), google_connected: has(/google|gemini/), other_connected: providers.some((p) => !/anthropic|claude|openai|codex|google|gemini/.test(p)),
+      isolate_on: state.settings.isolate, learn_on: state.settings.learn, watch_prs_on: !!state.settings.watchPullRequests, github_write_on: state.settings.githubWrite !== false, focus_guard_on: state.settings.focusGuard, links_inside: state.settings.links !== "outside",
+      permission: pick(PERMISSIONS, state.settings.permission, "edits"), theme: pick(THEMES, state.settings.theme, "system"),
+    });
+  };
+  // a job as numbers: what kind, which model family, how long. Never its title, its ask or its folder.
+  const countJob = (t: Task, was: string | undefined) => {
+    const kind = t.answer ? "answer" : t.review ? "review" : t.parentId ? "subagent" : "job";
+    logInfo("task", `${t.id} ${was ? `${was} → ` : "new, "}${t.status} (${kind}${t.parentId ? ` of ${t.parentId}` : ""}, ${t.model || "account model"}${t.status === "done" && t.unverified?.length ? `, ${t.unverified.length} unverified` : ""})`);
+    const about = { kind, ...modelOf(t.model || state.accounts.find((a) => a.id === t.accountId)?.model), effort: pick(EFFORTS, t.thinking, "auto"), permission: pick(PERMISSIONS, t.permission ?? state.settings.permission, "edits"), weight: pick(WEIGHTS, t.weight, "light") } as const;
+    if (!was) return track("job_started", { ...about, isolated: !!t.worktree, from_issue: !!t.issue });
+    if (t.status !== "done" && t.status !== "failed") return;
+    const seconds = t.startedAt ? Math.max(0, Math.round(((t.finishedAt ?? Date.now()) - t.startedAt) / 1000)) : 0;
+    if (t.status === "failed") jobFailed({ ...about, reason: faultOf(t.error), seconds }, t.error);
+    const cost = jobCost(t);
+    track("job_finished", { ...about, ok: t.status === "done", seconds, tokens: cost.total, subagents_n: cost.kids, unverified_n: t.unverified?.length ?? 0, ended_by_user: t.endedBy === "user" });
+  };
+  // what became of a job's changes: merged or thrown away, and how long after it was made
+  const landed = new Map<string, string>();
+  const countLanded = (t: Task) => {
+    const now = t.worktree?.state ?? "";
+    const was = landed.get(t.id);
+    landed.set(t.id, now);
+    if (was === undefined || was === now || (now !== "merged" && now !== "discarded")) return;
+    track(now === "merged" ? "job_merged" : "job_discarded", { hours_open: Math.round((Date.now() - t.createdAt) / 360_000) / 10 });
+  };
+  createEffect(on(() => view().name, (name) => track("view_opened", { view: pick(VIEWS, name, "main") }), { defer: true }));
+  createEffect(on(() => panelShown() && panelTab(), (tab) => tab && track("panel_opened", { tab: pick(PANEL_TABS, tab, "new") }), { defer: true }));
+  // the trail a feedback report carries (lib/log.ts): where the user went and what each job did,
+  // by id and state. Never a title, an ask or a folder.
+  createEffect(on(view, (v) => logInfo("view", [v.name, "id" in v && v.id, "tab" in v && v.tab].filter(Boolean).join(" ")), { defer: true }));
+  const net = () => (navigator.onLine ? logInfo("net", "online") : logWarn("net", "offline"));
+  window.addEventListener("online", net);
+  window.addEventListener("offline", net);
+  onCleanup(() => (window.removeEventListener("online", net), window.removeEventListener("offline", net)));
+  createEffect(on(() => state.onboarded, (done, was) => was === false && done && track("onboarding_finished", { signed_in: state.accounts.some((a) => a.providers.length > 0) }), { defer: true }));
+
   // a job that finishes or needs you while Ondra is in the background: tell the system
   const seen = new Map<string, string>();
   createEffect(() => {
     for (const t of state.tasks) {
       const was = seen.get(t.id);
       seen.set(t.id, t.status);
+      if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
+      countLanded(t);
       if (!was || was === t.status || document.hasFocus()) continue;
       // which space it is in, so a company job never reads as a personal one
       const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;

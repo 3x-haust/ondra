@@ -5,11 +5,25 @@
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { t } from "../i18n";
+import { logWarn } from "./log";
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 const call = <T>(cmd: string, args?: Record<string, unknown>, fallback?: T): Promise<T> =>
-  inTauri ? invoke<T>(cmd, args) : Promise.resolve(fallback as T);
+  inTauri ? invoke<T>(cmd, args).catch((e) => (failed(cmd, e), Promise.reject(e))) : Promise.resolve(fallback as T);
+
+// A native command that failed goes to the app's log (lib/log.ts) for a feedback report: its name
+// and the error, never its arguments. The same failure again within a minute is not repeated.
+const failedAt = new Map<string, number>();
+function failed(cmd: string, e: unknown) {
+  if (cmd === "log_append") return;
+  const line = `${cmd}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300);
+  const now = Date.now();
+  if (now - (failedAt.get(line) ?? 0) < 60_000) return;
+  if (failedAt.size > 200) failedAt.clear();
+  failedAt.set(line, now);
+  logWarn("native", line);
+}
 
 export type Env = [string, string][];
 

@@ -3,6 +3,7 @@
 // update carries only the app. This follows how far each one is, for Settings, and makes a job
 // that has to wait for one say so.
 import { createSignal } from "solid-js";
+import { logError, logInfo } from "../lib/log";
 import { componentsStatus, componentsWait, onComponents, setComponentGate, type ComponentStatus } from "../lib/native";
 import { dropToast, toast } from "../state/ui";
 import { t } from "../i18n";
@@ -46,6 +47,9 @@ export async function startComponents(onReady: (name: string) => void) {
   const take = (next: ComponentStatus[]) => {
     for (const c of next) {
       if (c.state === "ready" && seen.get(c.name) !== "ready" && seen.has(c.name)) onReady(c.name);
+      // each part as it arrives or fails, for a feedback report
+      if (seen.get(c.name) !== c.state && (c.state === "ready" || c.state === "failed" || c.state === "downloading"))
+        (c.state === "failed" ? logError : logInfo)("component", `${c.name} ${c.version} ${c.state}${c.error ? `: ${c.error}` : ""}`);
       seen.set(c.name, c.state);
     }
     setList(next);
