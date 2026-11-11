@@ -1423,7 +1423,9 @@
   display: none;
 }
 .app .sidebar .sb-row:hover .sb-kids,
-.app .sidebar .sb-row:focus-within .sb-kids {
+.app .sidebar .sb-row:focus-within .sb-kids,
+/* folded follow-ups stay in sight: their count says there is more under the job */
+.app .sidebar .sb-row.shut .sb-kids {
   display: inline-flex;
 }
 

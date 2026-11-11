@@ -56,9 +56,14 @@ const openId = () => {
   const v = view();
   return v.name === "task" ? v.id : undefined;
 };
-const openRoot = () => {
+/** the open job's own top (a subagent's job) */
+const openTop = () => {
   let t = openId() ? taskById(openId()!) : undefined;
   while (t?.parentId) t = taskById(t.parentId);
+  return t?.id;
+};
+const openRoot = () => {
+  let t = openTop() ? taskById(openTop()!) : undefined;
   // a follow-up shows under the job it carries on
   for (let i = 0; t && carriedOn(t) && i < 50; i++) t = carriedOn(t);
   return t?.id;
@@ -144,8 +149,22 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
   const t = () => props.t;
   const kids = () => [...kidsOf(t().id)].sort((a, b) => a.createdAt - b.createdAt);
   const ups = () => (props.kid || props.follow ? [] : followUps(t()));
+  // what folds under the row: its follow-ups and its subagents, opened and closed together
+  const nested = () => kids().length + ups().length;
   const [open, setOpen] = createSignal<boolean | undefined>(undefined);
-  const showKids = () => open() ?? (openRoot() === t().id || kids().some((k) => k.status === "waiting" || k.status === "failed"));
+  // open by itself while something under it is going on, needs you, or is open
+  const showKids = () =>
+    open() ??
+    (openTop() === t().id ||
+      (ups().length > 0 && openRoot() === t().id) ||
+      kids().some((k) => k.status === "waiting" || k.status === "failed") ||
+      ups().some((f) => !ended(f) || needsYou(f)));
+  const foldTip = () => {
+    if (showKids()) return tr("접기");
+    if (!ups().length) return tr("서브에이전트 {n}개", { n: kids().length });
+    if (!kids().length) return tr("이어진 작업 {n}개", { n: ups().length });
+    return `${tr("이어진 작업 {n}개", { n: ups().length })} · ${tr("서브에이전트 {n}개", { n: kids().length })}`;
+  };
   const b = () => bucket(t());
   const tone = () => stateMeta(t(), props.kid).tone;
   const meta = () => stateMeta(t(), props.kid).text;
@@ -158,7 +177,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
     <>
       <button
         class="sb-row"
-        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, follow: props.follow, hot: hoverTask() === t().id, past: ended(t()) }}
+        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, follow: props.follow, shut: ups().length > 0 && !showKids(), hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
         // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
@@ -174,18 +193,19 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
       >
         <Glyph t={t()} />
         <span class="sb-title">{taskTitle(t())}</span>
-        <Show when={!props.kid && kids().length}>
+        <Show when={!props.kid && nested()}>
           <span
             class="sb-kids"
             classList={{ open: showKids() }}
             role="button"
-            title={showKids() ? tr("서브에이전트 접기") : tr("서브에이전트 {n}개", { n: kids().length })}
+            aria-expanded={showKids()}
+            title={foldTip()}
             onClick={(e) => {
               e.stopPropagation();
               setOpen(!showKids());
             }}
           >
-            {kids().length}
+            {nested()}
             <Icon name="chevron" size={12} class="sb-kids-chev" />
           </span>
         </Show>
@@ -212,7 +232,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
           <For each={kids()}>{(k, i) => <Row t={k} kid index={i()} />}</For>
         </div>
       </Show>
-      <Show when={ups().length}>
+      <Show when={showKids() && ups().length}>
         <div class="sb-follow-list">
           <For each={ups()}>{(f, i) => <Row t={f} follow index={i()} />}</For>
         </div>
