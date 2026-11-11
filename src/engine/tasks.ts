@@ -4,7 +4,7 @@
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
-import { cutTitle, describeBrowser, describeCommand } from "./describe";
+import { computerLabel, computerStep, cutTitle, describeBrowser, describeCommand, describeComputer } from "./describe";
 import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
@@ -297,6 +297,15 @@ const lines = (s: unknown) => (typeof s === "string" && s ? s.split("\n").length
 
 const jobName = (id: unknown) => (typeof id === "string" ? (taskById(id)?.title ?? id) : "");
 
+/** The app the task's latest computer session works in. */
+function sessionApp(t: Task): string | undefined {
+  for (let i = t.entries.length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "tool" && e.tool.name === "computer" && e.tool.app) return e.tool.app;
+  }
+  return undefined;
+}
+
 /** How a tool call shows up: kind, target, and a "now" line. */
 function describeTool(name: string, args: any): ToolCall & { now: string } {
   const path: string = args?.path ?? args?.file_path ?? args?.filePath ?? "";
@@ -338,6 +347,11 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
       return { name, kind: "read", target: jobName(args?.id), detail: JSON.stringify(args ?? {}), now: "작업 살펴보는 중" };
     case "job_tell":
       return { name, kind: "other", target: jobName(args?.id), detail: String(args?.message ?? ""), now: "다른 작업에 전달하는 중" };
+    // a Mac app driven in the background: the step and what it worked on ("클릭함 ‘보내기’")
+    case "computer": {
+      const s = computerStep(args);
+      return { name, kind: "desktop", act: s.action, target: s.target ?? "", detail: JSON.stringify(args ?? {}), now: describeComputer(s.action, s.target).nowKo };
+    }
     default:
       return { name, kind: "other", target: name, detail: JSON.stringify(args ?? {}), now: name };
   }
@@ -1160,6 +1174,9 @@ function handlers(id: string, run: Run) {
               if (t.shells.length > MAX_SHELLS) t.shells.splice(0, t.shells.length - MAX_SHELLS);
             }
             if (call.kind === "browser") t.browser = true;
+            // the app a computer step works in: the one its session opened
+            if (call.name === "computer")
+              call.app = call.act === "open" ? call.target : sessionApp(t);
             t.now = now;
             run.tools.set(ev.toolCallId, push(t, { kind: "tool", tool: call }));
           });
@@ -1201,6 +1218,9 @@ function handlers(id: string, run: Run) {
             const e = t.entries.find((x) => x.id === entryId);
             if (e?.kind === "tool") {
               e.tool.ok = !ev.isError;
+              // a click names its element once the call returns ("클릭함 ‘보내기’")
+              const label = ev.result?.details?.label;
+              if (e.tool.name === "computer" && !e.tool.target && typeof label === "string" && label.trim()) e.tool.target = computerLabel(label) ?? "";
               e.tool.endedAt = Date.now();
               const shot = e.tool.detail && !ev.isError ? screenshotIn(e.tool.detail) : undefined;
               if (shot) t.shot = shot;

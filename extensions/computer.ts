@@ -208,7 +208,10 @@ export default function (pi: any) {
       } catch (error) { reset(); throw error; }
     }
     if (input.action === "observe") return result(await hostSession.observe(forceFull || (input.full ?? false), signal));
-    return result(await hostSession.act({ ...input.input! }, signal));
+    // the element's name is for the user's step line, not the model
+    const { label, ...acted } = await hostSession.act({ ...input.input! }, signal);
+    const out = result(acted);
+    return typeof label === "string" && !out.isError ? { ...out, details: { label } } : out;
   }
 
   pi.registerTool({

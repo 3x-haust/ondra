@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { setState } from "../state/store";
-import { cutTitle, describeBrowser as b, mainCommand, noteText, nowText, unwrapCommand, describeCommand as d } from "./describe";
+import { computerStep, cutTitle, describeBrowser as b, describeComputer, mainCommand, noteText, nowText, unwrapCommand, describeCommand as d } from "./describe";
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
@@ -235,5 +235,28 @@ describe("cutTitle", () => {
   it("cuts one very long word where it must", () => {
     const c = cutTitle("a".repeat(120));
     expect(c).toBe(`${"a".repeat(79)}…`);
+  });
+});
+
+describe("computer steps", () => {
+  const said = (args: any, label?: string) => {
+    const s = computerStep(args);
+    const d = describeComputer(s.action, label ?? s.target);
+    return d.target ? `${d.label} ${d.target}` : d.label;
+  };
+  it("says what each call did, in words", () => {
+    expect(said({ action: "start", app: "Instagram" })).toBe("열었음 Instagram");
+    expect(said({ action: "look" })).toBe("화면 봄");
+    expect(said({ action: "observe", full: true })).toBe("화면 읽음");
+    expect(said({ action: "act", input: { kind: "click", epoch: "h1", ref: "e1" } }, "‘보내기’")).toBe("클릭함 ‘보내기’");
+    expect(said({ action: "act", input: { kind: "click", epoch: "h1", ref: "e1", count: 2 } })).toBe("더블클릭함");
+    expect(said({ action: "act", input: { kind: "type", epoch: "h1", text: "안녕" } })).toBe("입력함 ‘안녕’");
+    expect(said({ action: "act", input: { kind: "press", epoch: "h1", key: "f", modifiers: ["cmd"] } })).toBe("키 누름 cmd+f");
+    expect(said({ action: "act", input: { kind: "scroll", epoch: "h1", direction: "down" } })).toBe("스크롤함 아래로");
+    expect(said({ action: "stop" })).toBe("앱 사용 마침");
+  });
+  it("stores the step going on in Korean, as a task's now line", () => {
+    expect(describeComputer("scroll", "up").nowKo).toBe("스크롤 중 위로");
+    expect(describeComputer("look").nowKo).toBe("화면 보는 중");
   });
 });
