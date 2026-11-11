@@ -941,10 +941,6 @@
 .panel-body .nt-row .icon {
   color: var(--ink-3);
 }
-.panel-body .nt-row:disabled {
-  box-shadow: none;
-  color: var(--ink-4);
-}
 .panel-body .nt-open {
   font-size: var(--fs-xs);
   color: var(--ink-3);
@@ -961,10 +957,6 @@
   line-height: 18px;
   letter-spacing: 0;
   color: var(--ink-3);
-}
-.panel-body .nt-hint {
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
 }
 
 /* ───────────── overview ───────────── */
