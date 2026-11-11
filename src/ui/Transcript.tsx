@@ -125,7 +125,7 @@ function haltsOf(entries: Entry[]): Map<string, Halt> {
 /** How many rows a run of entries shows: tool runs fold into one line each, links into one list. */
 function rowCount(entries: Entry[]): number {
   let n = 0;
-  for (const it of group(entries)) n += it.kind === "tools" ? runs(it.tools).length : it.kind === "blocks" ? chunkLinks(it.blocks).length : 1;
+  for (const it of group(entries)) n += it.kind === "tools" ? (settled(it.tools) ? 1 : runs(it.tools).length) : it.kind === "blocks" ? chunkLinks(it.blocks).length : 1;
   return n;
 }
 
@@ -136,10 +136,14 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
   const halts = createMemo(() => haltsOf(props.task.entries));
   return (
     <Index each={items()}>
-      {(item) => (
+      {(item, i) => (
         <Switch>
           <Match when={item().kind === "tools" && (item() as Item & { kind: "tools" })}>
             {(g) => (
+              <Show
+                // while the job works, the run it's still in stays line by line (it doesn't fold and unfold under you)
+                when={(stopped() || settled(g().tools)) && runs(g().tools).length > 1 && (!props.live || stopped() || i < items().length - 1)}
+                fallback={
               <Index each={runs(g().tools)}>
                 {(r) => (
                   <Show when={r().length > 1} fallback={<ToolLine e={r()[0]} shells={props.task.shells} stopped={stopped()} halt={halts().get(r()[0].id)} />}>
@@ -147,6 +151,10 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
                   </Show>
                 )}
               </Index>
+                }
+              >
+                <WorkLine tools={g().tools} shells={props.task.shells} stopped={stopped()} halts={halts()} />
+              </Show>
             )}
           </Match>
           <Match when={item().kind === "blocks" && (item() as Item & { kind: "blocks" })}>
@@ -483,6 +491,71 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
       <Fold open={open()}>
         <div class="explore-body">
           <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} halt={halt(e)} />}</For>
+        </div>
+      </Fold>
+    </div>
+  );
+}
+
+/** every call in the run has ended: nothing in it is going on any more */
+const settled = (tools: ToolEntry[]) => tools.length > 0 && tools.every((t) => !!t.tool.endedAt || !!t.tool.stopped);
+
+/** what a finished run of calls did, said the way its own line says it ("명령 3개 실행함") */
+function doneLabel(run: ToolEntry[]): string {
+  const t = run[0].tool;
+  if (run.length > 1) {
+    const f = familyOf(run[0]);
+    if (f === "explore") return tr("살펴봄");
+    if (f === "edit") return tr("파일 {n}개 수정함", { n: new Set(run.map((e) => e.tool.target ?? e.id)).size });
+    if (f === "run") return tr("명령 {n}개 실행함", { n: run.length });
+    return tr("브라우저 {n}번 씀", { n: run.length });
+  }
+  if (t.note) return tr("메모리에 저장함");
+  if (t.kind === "bash") return describeCommand(t.target ?? "").label;
+  if (t.kind === "browser") return describeBrowser(t.target ?? "").label;
+  return tr((t.name === "job_tell" ? TELL : VERB[t.kind])[1]);
+}
+
+/**
+ * Finished calls of several kinds back to back read as one quiet line, as Codex does
+ * ("파일 수정함 · 명령 3개 실행함 · 웹 검색함"): only what was done, no names; open it for each line.
+ */
+function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
+  const [open, setOpen] = createSignal(false);
+  const parts = () => runs(props.tools);
+  // one phrase per kind, counted over the whole line, in the order they first came
+  const label = () => {
+    const kinds = new Map<string, ToolEntry[]>();
+    for (const t of props.tools) {
+      const k = familyOf(t) ?? doneLabel([t]);
+      kinds.set(k, [...(kinds.get(k) ?? []), t]);
+    }
+    return [...new Set([...kinds.values()].map((l) => doneLabel(l.length > 1 && !familyOf(l[0]) ? [l[0]] : l)))].join(" · ");
+  };
+  const failed = () => props.tools.filter((t) => t.tool.ok === false && !props.halts?.get(t.id)).length;
+  const kind = (): ToolCall["kind"] => {
+    const f = familyOf(props.tools[0]);
+    return f === "explore" ? "read" : f === "edit" ? "edit" : f === "run" ? "bash" : f === "browser" ? "browser" : props.tools[0].tool.kind;
+  };
+  return (
+    <div class="tool group work-line" classList={{ open: open() }}>
+      <button class="tool-row click" onClick={() => setOpen(!open())} aria-expanded={open()}>
+        <Icon name={ICON[kind()]} size={14} />
+        <span class="tool-verb">{label()}</span>
+        <span class="tool-end">
+          <Show when={failed()}><span class="tool-fail">{tr("실패 {n}", { n: failed() })}</span></Show>
+        </span>
+        <Icon name="chevron" size={12} class="tool-chev" />
+      </button>
+      <Fold open={open()}>
+        <div class="explore-body">
+          <For each={parts()}>
+            {(r) => (
+              <Show when={r.length > 1} fallback={<ToolLine e={r[0]} shells={props.shells} stopped={props.stopped} halt={props.halts?.get(r[0].id)} />}>
+                <ToolGroup tools={r} shells={props.shells} stopped={props.stopped} halts={props.halts} />
+              </Show>
+            )}
+          </For>
         </div>
       </Fold>
     </div>

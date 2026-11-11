@@ -1889,3 +1889,33 @@ button.pf-ref:hover {
 .fv-img img {
   cursor: zoom-in;
 }
+
+/* ───────── a finished turn's work, opened: three levels you can tell apart (Codex)
+   the fold's head is a quiet label, the words stay the words, the work lines sit
+   under them in grey; a line under the open fold ends it before the answer */
+.work-fold > .work-head {
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+}
+.work-fold > .work-head:hover {
+  color: var(--ink);
+}
+.work-fold.open:not(.pic-fold) > .work-clip > .work-body {
+  padding-bottom: var(--s-16);
+  border-bottom: 1px solid var(--line-soft);
+}
+.work-body .msg-text,
+.work-body .md {
+  color: var(--ink);
+}
+.work-body > .tool + .tool {
+  margin-top: calc(var(--s-16) * -1 + 2px);
+}
+.work-body > .md + .tool,
+.work-body > .tool + .md {
+  margin-top: calc(var(--s-16) * -1 + var(--s-8));
+}
+/* the answer's scroll mark takes no room: no second gap before the answer */
+.thread-inner > .answer-at {
+  margin-bottom: calc(var(--s-24) * -1);
+}
