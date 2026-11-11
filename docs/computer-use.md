@@ -46,7 +46,10 @@ using only **public** APIs:
   window has moved over (`mode: offscreen`). Its Dock tile shows it running; nothing
   else does. If it can't be placed, it stays hidden (`mode: hidden`) and a capture or
   events unhide it behind the user's windows for the moment they need. Each helper
-  holds its own display (serial = its pid), so jobs running at once don't collide.
+  holds its own display in a numbered slot with a fixed serial, so jobs running at once
+  don't collide, and macOS remembers where each slot goes: from the second time on it
+  comes up straight in its corner. A display macOS hasn't seen first lands beside the
+  main one, and a Dock on that side jumps onto it for a moment.
   On release (or when the helper exits) a real app the job opened is quit, so its Dock
   tile stops showing it running; one the user has brought to the front is left alone,
   and one that won't quit (a question about unsaved work) is hidden. An app the user already had open is used as-is, never
