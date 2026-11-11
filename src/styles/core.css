@@ -1873,6 +1873,8 @@ kbd {
   background: var(--active);
   font-family: var(--font);
   font-size: var(--fs-2xs);
+  /* the row's line height would push the keys to the chip's bottom edge */
+  line-height: 1;
   color: var(--ink-3);
 }
 /* a command the user left without a key */
