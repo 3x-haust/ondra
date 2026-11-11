@@ -6,8 +6,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "remote:dev": "vite --config remote/web/vite.config.ts",
-    "remote:build": "sh remote/client/build.sh && vite build --config remote/web/vite.config.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --environment node",

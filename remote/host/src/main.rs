@@ -1,23 +1,26 @@
-//! ondra-remote: Ondra's own private network for remote control.
+//! ondra-remote: Ondra's own private network, so one Mac's Ondra can work on another.
 //!
-//! The Mac holds a key (its address on the network); a phone holds one too, kept in its
-//! browser. They find each other by key through a relay and talk end-to-end encrypted
-//! (iroh: QUIC over hole-punched UDP, or relayed when that can't be done). Only devices the
-//! user approved on the Mac get in; one is approved by scanning the QR Ondra shows (a
-//! one-time pairing code) and pressing 허용 on the Mac.
+//! Each Mac holds a key: its address on the network. Macs find each other by key through
+//! a relay and talk end-to-end encrypted (iroh: QUIC over hole-punched UDP, or relayed when
+//! that can't be done). The same helper does both sides:
+//!   - host: other Macs connect in. Only Macs the user allowed get in; one is allowed with a
+//!     one-time code from the link Ondra copies, and 허용 pressed on this Mac.
+//!   - client: it dials a host ("dial") and carries the window's lines to it.
 //!
 //! The app drives it over stdin/stdout, one JSON object per line:
-//!   in:  {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
+//!   in:  {"cmd":"host","on"} {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
 //!        {"cmd":"send","conn","data"} {"cmd":"revoke","id"} {"cmd":"devices"}
+//!        {"cmd":"dial","peer","name","pair"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
 //!   out: {"ev":"ready","id"} {"ev":"devices","list"} {"ev":"pair","conn","device"}
 //!        {"ev":"open","conn","device"} {"ev":"msg","conn","data"} {"ev":"close","conn"}
-//!        {"ev":"error","message"}
+//!        {"ev":"peer","peer","state":"connecting|waiting|ok|denied|closed","reason"?}
+//!        {"ev":"peer-msg","peer","data"}
 //! It exits when stdin closes (the app quit).
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -37,8 +40,8 @@ use tokio::{
 };
 
 const ALPN: &[u8] = b"ondra/remote/1";
-/// one line from a phone, at most (a message with pictures fits; a flood doesn't)
-const MAX_LINE: usize = 8 << 20;
+/// one line, at most (a long job's record fits; a flood doesn't)
+const MAX_LINE: usize = 64 << 20;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Device {
@@ -57,7 +60,11 @@ struct Shared {
     approvals: Mutex<HashMap<u64, oneshot::Sender<bool>>>,
     conns: Mutex<HashMap<u64, (String, mpsc::UnboundedSender<String>, Connection)>>,
     next: AtomicU64,
+    /** other Macs may come in (the user turned it on) */
+    hosting: AtomicBool,
     out: mpsc::UnboundedSender<Value>,
+    /// hosts this Mac dialed: what to send them
+    peers: Mutex<HashMap<String, (mpsc::UnboundedSender<String>, Connection)>>,
 }
 
 fn now() -> u64 {
@@ -119,6 +126,12 @@ impl ProtocolHandler for Remote {
 async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
     let peer = conn.remote_id().to_string();
     let (mut send, recv) = conn.accept_bi().await?;
+    if !s.hosting.load(Ordering::Relaxed) {
+        send.write_all(b"{\"t\":\"denied\",\"reason\":\"off\"}\n").await?;
+        send.finish()?;
+        conn.closed().await;
+        return Ok(());
+    }
     let mut lines = BufReader::new(recv);
     let mut buf = Vec::new();
     // the first line says who it is: {"t":"hello","name":"iPhone","pair":"<code>"}
@@ -126,7 +139,7 @@ async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
         Some(v) => v,
         None => return Ok(()),
     };
-    let name = hello.get("name").and_then(Value::as_str).unwrap_or("기기").chars().take(60).collect::<String>();
+    let name = hello.get("name").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect::<String>();
     let id = s.next.fetch_add(1, Ordering::Relaxed);
     let known = s.devices.lock().await.iter().any(|d| d.id == peer);
     if !known {
@@ -191,6 +204,59 @@ async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
     Ok(())
 }
 
+/// Connect to a host Mac and carry lines both ways until either side ends.
+async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Result<()> {
+    let id: iroh::EndpointId = peer.parse().map_err(|e| anyhow!("{e}"))?;
+    if let Some((_, old)) = s.peers.lock().await.remove(&peer) {
+        old.close(0u32.into(), b"again");
+    }
+    s.emit(json!({ "ev": "peer", "peer": peer, "state": "connecting" }));
+    let conn = ep.connect(id, ALPN).await?;
+    let (mut send, recv) = conn.open_bi().await?;
+    send.write_all(format!("{hello}\n").as_bytes()).await?;
+    let mut lines = BufReader::new(recv);
+    let mut buf = Vec::new();
+    // the host says waiting (asking its user), ok, or denied
+    loop {
+        let Some(v) = read_line(&mut lines, &mut buf).await? else { return Err(anyhow!("closed")) };
+        match v.get("t").and_then(Value::as_str) {
+            Some("waiting") => s.emit(json!({ "ev": "peer", "peer": peer, "state": "waiting" })),
+            Some("ok") => break,
+            Some("denied") => {
+                s.emit(json!({ "ev": "peer", "peer": peer, "state": "denied", "reason": v.get("reason").cloned().unwrap_or(Value::Null) }));
+                conn.close(0u32.into(), b"denied");
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    s.peers.lock().await.insert(peer.clone(), (tx, conn.clone()));
+    s.emit(json!({ "ev": "peer", "peer": peer, "state": "ok" }));
+    let writer = tokio::spawn(async move {
+        while let Some(line) = rx.recv().await {
+            if send.write_all(line.as_bytes()).await.is_err() || send.write_all(b"\n").await.is_err() {
+                break;
+            }
+        }
+        let _ = send.finish();
+    });
+    let reason = loop {
+        match read_line(&mut lines, &mut buf).await {
+            Ok(Some(data)) => s.emit(json!({ "ev": "peer-msg", "peer": peer, "data": data })),
+            Ok(None) => break "closed".to_string(),
+            Err(e) => break format!("{e:#}"),
+        }
+    };
+    writer.abort();
+    let mine = s.peers.lock().await.get(&peer).map(|(_, c)| c.stable_id() == conn.stable_id()).unwrap_or(false);
+    if mine {
+        s.peers.lock().await.remove(&peer);
+        s.emit(json!({ "ev": "peer", "peer": peer, "state": "closed", "reason": reason }));
+    }
+    Ok(())
+}
+
 async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R, buf: &mut Vec<u8>) -> Result<Option<Value>> {
     buf.clear();
     let mut limited = r.take(MAX_LINE as u64);
@@ -230,7 +296,9 @@ async fn main() -> Result<()> {
         approvals: Mutex::new(HashMap::new()),
         conns: Mutex::new(HashMap::new()),
         next: AtomicU64::new(1),
+        hosting: AtomicBool::new(false),
         out,
+        peers: Mutex::new(HashMap::new()),
     });
 
     let key = load_key(&dir)?;
@@ -259,6 +327,16 @@ async fn main() -> Result<()> {
                 *s.pairing.lock().await = (!code.is_empty()).then(|| (code, Instant::now() + Duration::from_secs(ttl)));
             }
             "unpair" => *s.pairing.lock().await = None,
+            "host" => {
+                let on = cmd.get("on").and_then(Value::as_bool).unwrap_or(false);
+                s.hosting.store(on, Ordering::Relaxed);
+                if !on {
+                    *s.pairing.lock().await = None;
+                    for (_, (_, _, c)) in s.conns.lock().await.iter() {
+                        c.close(2u32.into(), b"off");
+                    }
+                }
+            }
             "approve" => {
                 if let Some(tx) = s.approvals.lock().await.remove(&conn_id) {
                     let _ = tx.send(cmd.get("ok").and_then(Value::as_bool).unwrap_or(false));
@@ -282,6 +360,28 @@ async fn main() -> Result<()> {
                 }
             }
             "devices" => s.emit(json!({ "ev": "devices", "list": s.devices.lock().await.clone() })),
+            "dial" => {
+                let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("").trim().to_string();
+                let hello = json!({ "t": "hello", "name": cmd.get("name").cloned().unwrap_or(json!("Mac")), "pair": cmd.get("pair").cloned().unwrap_or(Value::Null) });
+                let (s, ep) = (s.clone(), router.endpoint().clone());
+                tokio::spawn(async move {
+                    if let Err(e) = dial(s.clone(), ep, peer.clone(), hello).await {
+                        s.emit(json!({ "ev": "peer", "peer": peer, "state": "closed", "reason": format!("{e:#}") }));
+                    }
+                });
+            }
+            "peer-send" => {
+                let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("");
+                if let (Some(data), Some((tx, _))) = (cmd.get("data"), s.peers.lock().await.get(peer)) {
+                    let _ = tx.send(data.to_string());
+                }
+            }
+            "hangup" => {
+                let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("");
+                if let Some((_, c)) = s.peers.lock().await.remove(peer) {
+                    c.close(0u32.into(), b"bye");
+                }
+            }
             _ => {}
         }
     }

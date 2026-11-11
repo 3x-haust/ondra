@@ -14,5 +14,3 @@ docs/research/
 
 # remote control: build output
 remote/*/target/
-remote/web/pkg/
-dist-remote/

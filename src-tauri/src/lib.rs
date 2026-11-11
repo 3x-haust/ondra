@@ -434,8 +434,6 @@ pub fn run() {
             remote::remote_stop,
             remote::remote_cmd,
             remote::remote_host_name,
-            remote::remote_lan_ip,
-            remote::remote_qr,
             tools::worker_env,
             tools::worker_skills,
             tools::global_skills,

@@ -1,6 +1,6 @@
 //! Remote control: runs the `ondra-remote` helper (Ondra's own private network, see
-//! remote/host) while the user has it on, passes its events to the window as "remote"
-//! and the window's commands to it.
+//! remote/host) while this Mac works on others or lets them in, passes its events to the
+//! window as "remote" and the window's commands to it.
 use std::{
     io::{BufRead, BufReader, Write},
     process::{Child, ChildStdin, Command, Stdio},
@@ -79,20 +79,4 @@ pub fn remote_host_name() -> String {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "Mac".into())
-}
-
-/// Addresses on the local network (for opening the remote page from a phone on the same Wi-Fi).
-#[tauri::command]
-pub fn remote_lan_ip() -> Option<String> {
-    let out = Command::new("/usr/sbin/ipconfig").args(["getifaddr", "en0"]).output().ok()?;
-    let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!ip.is_empty()).then_some(ip)
-}
-
-/// A QR code for `text`, as SVG (dark modules on a transparent ground; the page sets the colors).
-#[tauri::command]
-pub fn remote_qr(text: String) -> Result<String, String> {
-    use qrcode::{render::svg, EcLevel, QrCode};
-    let code = QrCode::with_error_correction_level(text.as_bytes(), EcLevel::M).map_err(|e| e.to_string())?;
-    Ok(code.render::<svg::Color>().quiet_zone(false).min_dimensions(200, 200).dark_color(svg::Color("currentColor")).light_color(svg::Color("transparent")).build())
 }
