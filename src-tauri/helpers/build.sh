@@ -57,6 +57,20 @@ build_guard() {
   echo "ondra-bgguard: built $out"
 }
 
+# ondra-remote: remote control's private network (remote/host, Rust). Its own crate and a
+# newer Rust (iroh needs 1.91), so it builds apart from the app.
+build_remote() {
+  out="$here/../binaries/ondra-remote-$triple"
+  crate="$here/../../remote/host"
+  newest=$(find "$crate/src" "$crate/Cargo.toml" "$crate/Cargo.lock" -type f -newer "$out" 2>/dev/null | head -1)
+  if [ -f "$out" ] && [ -z "$newest" ]; then echo "ondra-remote: up to date"; return 0; fi
+  (cd "$crate" && RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN_REMOTE:-1.91.0}" cargo build -q --release --target "$triple")
+  cp "$crate/target/$triple/release/ondra-remote" "$out"
+  chmod 755 "$out"
+  echo "ondra-remote: built $out"
+}
+
 build ondra-simhelper simhelper.swift ""
 build ondra-cuhost cuhost.swift cuhost.entitlements
 build_guard
+build_remote
