@@ -29,10 +29,12 @@ and their front app stay as they are.
   background-only copy of the app, shaped per app kind so its login keychain keeps
   working; the `start` result's `mode` says which kind was used
   (`background:native` / `:chromium` / `:sandboxed`, `+guard` when the activation
-  guard is injected). A few apps can't be copied this way — Catalyst, iOS-on-Mac,
-  App Store and system apps — and fall back to the real app launched hidden
-  (`mode: hidden`); that one may show a Dock tile. On `stop` a background copy is
-  quit and cleaned up. An app the user already had open is used as-is, never copied.
+  guard is injected). A few apps can't be copied this way — Safari web apps,
+  Catalyst, iOS-on-Mac, App Store and system apps — and run as the real app, put
+  on the off-screen display as it starts (`mode: offscreen`): still never on the
+  user's screen, full-size looks, but its Dock tile shows it running. If that
+  doesn't take, it stays hidden (`mode: hidden`). On `stop` a background copy is
+  quit and cleaned up; a real app is hidden again. An app the user already had open is used as-is, never copied.
 - Some apps try to make themselves a Dock app and come to the front. The injected
   guard holds most of them back; one it can't (a hardened app without the dyld
   exception) is handed the front straight back, reported as `selfActivated` /
