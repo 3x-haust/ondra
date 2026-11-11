@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { usePop } from "./ModelPicker";
 import { t } from "../i18n";
 
-const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
+export const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
 const services = (a: Account) => [...new Set(a.providers.map(service))];
 const find = (a: Account | string | undefined) => (typeof a === "string" ? state.accounts.find((x) => x.id === a) : a);
 /** a label the person gave it (the default one is only the workspace's name, "회사 2", which says nothing) */

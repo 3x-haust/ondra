@@ -5,7 +5,7 @@
 // engine/remote.ts; the network is the ondra-remote helper.
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { mirror, remoteProjectId, setMirror, type HostStatus } from "../state/mirror";
+import { mirror, remoteProjectId, setMirror, type HostInfo, type HostStatus } from "../state/mirror";
 import { setState, state } from "../state/store";
 import type { Entry, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
@@ -47,7 +47,7 @@ export function far(id: string, fn: string, args: unknown[]): Promise<unknown> |
 }
 
 /** a new job in another Mac's project: shown here at once, made and run there */
-export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; display?: string }) {
+export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; hostSpace?: string; account?: string; display?: string }) {
   if (!mirror.hosts[host]) status(host, "lost");
   setMirror("hosts", host, "tasks", (l) => [...l, task]);
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
@@ -157,6 +157,9 @@ export function onPeer(ev: Record<string, unknown>) {
   switch (d.t) {
     case "projects":
       setMirror("hosts", host, "projects", (d.list as { id: string; name: string; folder: string }[]) ?? []);
+      break;
+    case "info":
+      setMirror("hosts", host, "info", d.info as HostInfo);
       break;
     case "patch":
       apply(host, (d.tasks as Patch[]) ?? [], (d.gone as string[]) ?? [], !!d.all);

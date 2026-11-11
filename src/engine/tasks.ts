@@ -1990,8 +1990,10 @@ export function createTask(f: {
   by?: string;
   /** its id, when another Mac chose it (a job started from there) */
   id?: string;
-  /** run it on another Mac (Settings › 연결) */
+  /** run it on another Mac (Settings › 연결), in this workspace and on this account there */
   host?: string;
+  hostSpace?: string;
+  hostAccount?: string;
   /** another Mac asked for it */
   from?: Task["from"];
 }): string {
@@ -2041,7 +2043,7 @@ export function createTask(f: {
   const far_ = splitProjectId(f.project);
   const farHost = far_?.host ?? f.host;
   if (farHost) {
-    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, display: f.display });
+    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, account: f.hostAccount, display: f.display });
     return id;
   }
   setState("tasks", (list) => [...list, task]);

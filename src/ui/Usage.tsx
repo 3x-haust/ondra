@@ -196,17 +196,3 @@ export function StatusLine(props: { lead?: JSX.Element; accountId: string; space
  */
 
 
-/** a job of another Mac (Settings › 연결): where it runs, in place of this Mac's account and limits */
-export function HostLine(props: { host: string; running?: boolean }) {
-  const name = () => state.settings.hosts?.find((h) => h.id === props.host)?.name ?? "Mac";
-  const st = () => mirror.hosts[props.host]?.status;
-  return (
-    <div class="status-line">
-      <span class="st-host" classList={{ away: st() !== "ok" }} title={st() === "ok" ? undefined : t("연결 안 됨")}>
-        <i class={`cn-dot is-${st() ?? "connecting"}`} aria-hidden="true" />
-        <Icon name="monitor" size={14} />
-        {st() === "ok" ? t("{name}에서 실행", { name: name() }) : t("{name} 연결 안 됨", { name: name() })}
-      </span>
-    </div>
-  );
-}

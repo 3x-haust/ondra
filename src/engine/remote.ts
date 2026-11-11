@@ -4,7 +4,7 @@
 // asks, as if the user had done it here.
 //
 //   them → here  {t:"projects"} {t:"watch",projects} {t:"call",seq,fn,args}
-//   here → them  {t:"projects",list} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
+//   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
 // fields when they did, and the entries from the first one that differs.
@@ -13,6 +13,9 @@ import { unwrap } from "solid-js/store";
 import { inTauri, onRemote, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
 import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
+import type { HostInfo } from "../state/mirror";
+import { creditsOf, usageOf } from "../state/limits";
+import { accountName, service } from "../ui/AccountPicker";
 import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts } from "./hosts";
 
@@ -41,6 +44,8 @@ interface Conn {
   sent: Map<string, { head: string; ents: string[] }>;
   /** send everything again (just asked) */
   all: boolean;
+  /** the workspaces and accounts as last sent */
+  info?: string;
 }
 const conns = new Map<number, Conn>();
 const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
@@ -120,6 +125,25 @@ function flush() {
   projectsDirty = false;
 }
 
+/** this Mac's workspaces, accounts and how much of each plan is used: what the other Mac shows */
+function info(): HostInfo {
+  return {
+    spaces: state.spaces.map((s) => ({ id: s.id, label: s.label })),
+    accounts: state.accounts
+      .filter((a) => a.providers.length)
+      .map((a) => ({ id: a.id, space: a.space, name: accountName(a, true), services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id) })),
+    pick: Object.fromEntries(state.spaces.map((s) => [s.id, jobs.chooseAccount(s.id, "")])),
+  };
+}
+
+function sendInfo(conn: number, c: Conn) {
+  const now = info();
+  const json = JSON.stringify(now);
+  if (json === c.info) return;
+  c.info = json;
+  void send(conn, { t: "info", info: now });
+}
+
 async function sendProjects(conn: number) {
   const list = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, folder: p.folder }));
   await send(conn, { t: "projects", list });
@@ -127,13 +151,15 @@ async function sendProjects(conn: number) {
 
 // ───────── what it asks
 
-/** a new job here, from another Mac (it chose the id): in one of this Mac's projects, or in no project */
-function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; display?: string }) {
+/** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
+ *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
+function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; hostSpace?: string; account?: string; display?: string }) {
   const p = f.project ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
-  const space = p?.space ?? state.space;
+  const space = p?.space ?? (state.spaces.some((s) => s.id === f.hostSpace) ? f.hostSpace! : state.space);
   const from = { device: c.device, space: f.space ?? "" };
-  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: jobs.chooseAccount(space, p?.name ?? ""), from });
+  const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
+  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: account, from });
 }
 
 /** what another Mac may do here: the same the user does with a job, and add a project */
@@ -165,6 +191,8 @@ async function handle(conn: number, msg: Record<string, unknown>) {
   switch (msg.t) {
     case "projects":
       await sendProjects(conn);
+      c.info = undefined;
+      sendInfo(conn, c);
       break;
     case "watch":
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);
@@ -270,6 +298,10 @@ export function initRemote() {
   });
   // running jobs change without a store write now and then (a streamed line): look again each second
   setInterval(() => conns.size && soon(), 1000);
+  // plan use moves on its own (refreshed every couple of minutes): the other Macs hear it when it does
+  setInterval(() => {
+    for (const [conn, c] of conns) sendInfo(conn, c);
+  }, 20_000);
   if (state.settings.remote) void startHosts();
   void connectHosts();
 }

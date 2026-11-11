@@ -2,6 +2,7 @@
 // (Settings › 연결) and their jobs, kept up to date over Ondra's own network (engine/hosts.ts).
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
+import type { Limit } from "../lib/native";
 import type { Project, SpaceId, Task } from "./types";
 
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
@@ -14,6 +15,15 @@ export interface HostMirror {
   projects: { id: string; name: string; folder: string }[];
   /** the jobs of the projects added here, as that Mac has them (ids as there) */
   tasks: Task[];
+  /** its workspaces, accounts and their plan use (sent by that Mac, refreshed as they change) */
+  info?: HostInfo;
+}
+
+export interface HostInfo {
+  spaces: { id: string; label: string }[];
+  accounts: { id: string; space: string; name: string; services: string[]; limits: Limit[]; credits?: string }[];
+  /** per workspace there: the account new work would run on now */
+  pick: Record<string, string>;
 }
 
 export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirror> }>({ hosts: {} });

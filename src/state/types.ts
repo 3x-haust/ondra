@@ -603,8 +603,9 @@ export interface Settings {
   /** other Macs this one works on, and the projects of theirs added here */
   hosts?: { id: string; name: string; pair?: string }[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
-  /** where new work goes from the main chat (Codex's run location): another Mac's id, or this Mac */
-  computer?: string;
+  /** where new work goes from each workspace here (Codex's run location): another Mac, its workspace
+   *  and account there (account empty = that workspace's own choice); missing = this Mac */
+  computers?: Record<string, { host: string; space?: string; account?: string }>;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */

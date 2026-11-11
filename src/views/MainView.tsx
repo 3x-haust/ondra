@@ -34,7 +34,7 @@ import { effortFor, setModelEffort } from "../engine/models";
 import { notesPath, notesVersion, readNotes } from "../engine/notes";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
-import { ComputerPicker, chosenComputer } from "../ui/ComputerPicker";
+import { ComputerPicker, HostStatus, chosenComputer } from "../ui/ComputerPicker";
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
@@ -531,7 +531,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
 function NewTask(props: { project?: string; onProject: (id?: string) => void; pane: string }) {
   const p = () => (props.project ? projectById(props.project) : undefined);
   const account = () => chooseAccount(state.space, p()?.name ?? "");
-  const computer = () => (p() ? p()!.host : chosenComputer());
+  const computer = () => (p() ? (p()!.host ? { host: p()!.host! } : undefined) : chosenComputer());
   const send = (text: string) => {
     const id = createTask({
       space: state.space,
@@ -542,7 +542,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
       project: p()?.id,
       isolate: state.settings.isolate,
       accountId: account(),
-      host: computer(),
+      host: computer()?.host,
+      hostSpace: computer()?.space,
+      hostAccount: computer()?.account,
     });
     setPaneDraft(props.pane, null);
     focusPane(props.pane);
@@ -563,9 +565,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           status={
             <Show
               when={computer()}
-              fallback={<StatusLine lead={<ComputerPicker value={undefined} fixed={!!p()} onPick={(h) => setState("settings", "computer", h)} />} accountId={account()} space={state.space} />}
+              fallback={<StatusLine lead={<ComputerPicker fixed={!!p()} />} accountId={account()} space={state.space} />}
             >
-              <div class="status-line"><ComputerPicker value={computer()} fixed={!!p()} onPick={(h) => setState("settings", "computer", h)} /></div>
+              <HostStatus place={computer()!} fixed={!!p()} />
             </Show>
           }
           left={
@@ -624,12 +626,12 @@ export function MainView() {
   const started = (m: CaptainMessage) =>
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   // where it runs (Codex's run location): a project's own Mac, else the one picked under the composer
-  const computer = () => (project() ? project()!.host : chosenComputer());
+  const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
   const sendMain = (text: string) => {
     const p = project();
-    const host = computer();
+    const at = computer();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
-    if (host) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host }));
+    if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: at.account }));
     return throwThought(text, state.space, { project: p?.id });
   };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
@@ -732,9 +734,9 @@ export function MainView() {
       status={
         <Show
           when={computer()}
-          fallback={<StatusLine lead={<ComputerPicker value={undefined} fixed={!!project()} onPick={(h) => setState("settings", "computer", h)} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
         >
-          <div class="status-line"><ComputerPicker value={computer()} fixed={!!project()} onPick={(h) => setState("settings", "computer", h)} /></div>
+          <HostStatus place={computer()!} fixed={!!project()} />
         </Show>
       }
       plus={plusFor({ main: true })}
