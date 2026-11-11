@@ -1236,11 +1236,12 @@ function handlers(id: string, run: Run) {
     exit(code: number | null) {
       markDead(agent);
       const t = taskById(id);
-      logWarn("engine", `${id} engine exited (${code ?? "signal"})${appQuitting() ? " while quitting" : ""}: ${stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ")}`);
       // the app quitting took it down: it stays running and picks up again when the app opens
       if (appQuitting()) return;
       if (t && runs.get(id) === run && (t.status === "running" || t.status === "waiting")) {
+        // it died while working (a job that ended, or one Ondra stopped, is no news)
         const tail = stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ");
+        logWarn("engine", `${id} engine exited (${code ?? "signal"}): ${tail}`);
         fail(id, tail || `엔진 종료 (코드 ${code ?? "?"})`);
       }
     },

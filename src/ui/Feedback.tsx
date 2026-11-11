@@ -20,7 +20,7 @@ export const setFeedbackVersion = (v: string) => void (version = v);
 export const feedbackCommand = () => ({
   name: "feedback",
   get desc() {
-    return t("피드백 보내기 · GitHub 이슈");
+    return t("피드백 보내기");
   },
   icon: "flag",
   run: (arg: string) => openFeedback(arg.trim()),
