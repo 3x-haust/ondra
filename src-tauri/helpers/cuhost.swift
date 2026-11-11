@@ -14,9 +14,10 @@
 //   - never warps the real cursor, never posts to the global session (events go
 //     to the target pid only); where it points is shown with its own small pointer
 //     drawn just above the target window;
-//   - launches apps hidden and without activation (not one the user already has open); the
-//     tree and actions work on a hidden app, captures and events show it behind the user's
-//     windows for a moment and hide it again;
+//   - opens an app the job starts on an off-screen display it holds (a background-only
+//     copy, spawned suspended and assigned there before its first window): no Dock tile,
+//     no flash, focus never taken, and its login keychain kept; apps that can't be copied
+//     that way fall back to the real app launched hidden (not one the user already runs);
 //   - records the frontmost app, its front window id and mouse position BEFORE and
 //     AFTER every action and reports them, so the caller can verify nothing moved;
 //   - refuses event input while the user is working in the target app, and never
@@ -35,7 +36,8 @@
 // write one response object per line to stdout. version 1. Diagnostics: stderr.
 //   {"op":"frontmost"}                      → environment snapshot
 //   {"op":"apps"}                           → running, non-background apps
-//   {"op":"launch","app":"TextEdit"}        → launch hidden, no activation
+//   {"op":"launch","app":"TextEdit"}        → open in the background (off-screen copy),
+//                                             or a hidden real-app fallback; never activated
 //   {"op":"observe","pid":123,"full":bool}  → compact AX tree (full) or diff
 //   {"op":"look","pid":123}                 → window-only PNG (base64) of the key window,
 //                                             plus its frame; coordinates are image pixels
@@ -410,6 +412,8 @@ let keyCodes: [String: CGKeyCode] = [
 ]
 
 func postKey(pid: pid_t, keyCode: CGKeyCode, flags: CGEventFlags) {
+    // Return in a background Chromium app goes over the private pipe (its page drops key events)
+    if keyCode == 36, flags.isEmpty, let app = bgApp(pid), app.kind == .chromium, cdpEnter(app) { return }
     ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     let down = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true)
@@ -421,6 +425,8 @@ func postKey(pid: pid_t, keyCode: CGKeyCode, flags: CGEventFlags) {
 }
 
 func typeText(pid: pid_t, text: String) {
+    // A background Chromium app's page is never key: commit the text over the private pipe
+    if let app = bgApp(pid), app.kind == .chromium, cdpInsertText(app, text) { return }
     ensureDrawn(pid)
     let src = CGEventSource(stateID: .privateState)
     // Unit = one event carrying the UTF-16 for a chunk; keep chunks small.
@@ -714,6 +720,22 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     case "type":
         guard let text = action["text"] as? String else { throw ActError.message("BAD_ACTION", "missing text") }
+        // A background Chromium app's page is never key, so AX focus can't be verified and its
+        // editor drops key events; commit over the private pipe. Click the target first (if given)
+        // to place the caret, then insert into whatever the page has focused.
+        if let bg = bgApp(pid), bg.kind == .chromium {
+            if let _ = action["ref"] {
+                let el = try elementFor()
+                if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
+                _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+                if let (p, w) = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map) {
+                    if !focusIsOn(el, pid: pid) { postClick(pid: pid, at: p, button: .left, count: 1, window: w); usleep(80_000) }
+                    VirtualCursor.shared.show(at: p, window: w, click: false)
+                }
+            }
+            guard cdpInsertText(bg, text) else { throw ActError.message("TYPE_FAILED", "could not insert text into the page") }
+            return ["via": "cdp"]
+        }
         if let _ = action["ref"] {
             let el = try elementFor()
             if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
@@ -1042,6 +1064,460 @@ func findAppByName(_ name: String) -> URL? {
     return nil
 }
 
+// ───────────────────────── background launch (off-screen display) ─────────────────────────
+// The job's apps run on an off-screen display: nothing on the user's screen, nothing in
+// the Dock, focus never taken. An app the user already has open is theirs and is never
+// touched; this path is only for apps the job opens itself.
+//
+//   - One off-screen CGVirtualDisplay (Backdrop) is held for the helper's whole life.
+//     Adding or removing it flickers the Dock once, so it is made once and kept.
+//   - A new process is spawned suspended, assigned to that display's desktop, then
+//     resumed, so its first window opens off-screen — never a flash on the real screen.
+//   - It runs from a copy of the app whose Info.plist is background-only (no Dock tile).
+//     The copy is shaped by the app's kind so the login keychain keeps working:
+//       native   — Info.plist is a copy; everything else, the executable included, is a
+//                  symlink to the real app, so the kernel validates the real signature.
+//       chromium — an APFS clone with the real executable hard-linked and the real
+//                  Info.plist swapped back in the instant the app checks in (a modified
+//                  plist in place during a keychain read is what securityd rejects).
+//       sandboxed— the clone starts with the real plist (so sandbox init validates),
+//                  the background plist is swapped in once the sandbox is on, and the
+//                  real plist swapped back at check-in.
+//     Catalyst / iOS-on-Mac / System apps can't be copied this way: they fall back to
+//     the real app, launched hidden (the earlier launchHidden path), Dock tile and all.
+//   - An app that tries to make itself a Dock app and come forward (some Electron, tao)
+//     is held back by ondra-bgguard.dylib, injected when the app can't enforce it away.
+
+enum AppKind: String { case native, chromium, sandboxed, fallback }
+
+/// The off-screen display, made once and held for the helper's life.
+final class Backdrop {
+    static let shared = Backdrop()
+    private var display: CGVirtualDisplay?
+    private(set) var displayID: CGDirectDisplayID = 0
+    private let conn: Int32
+    private let copySpaces: (@convention(c) (Int32) -> Unmanaged<CFArray>)
+    private let assignFn: (@convention(c) (Int32, pid_t, UInt64) -> Int32)
+
+    private init() {
+        let sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_NOW)
+        conn = unsafeBitCast(dlsym(sky, "SLSMainConnectionID"), to: (@convention(c) () -> Int32).self)()
+        copySpaces = unsafeBitCast(dlsym(sky, "SLSCopyManagedDisplaySpaces"), to: (@convention(c) (Int32) -> Unmanaged<CFArray>).self)
+        assignFn = unsafeBitCast(dlsym(sky, "SLSProcessAssignToSpace"), to: (@convention(c) (Int32, pid_t, UInt64) -> Int32).self)
+    }
+
+    /// Make the display if it isn't up yet. Returns false if it could not be created.
+    @discardableResult func ensure() -> Bool {
+        if display != nil { return true }
+        let d = CGVirtualDisplayDescriptor()
+        d.queue = .main; d.name = "Ondra"
+        d.maxPixelsWide = 1920; d.maxPixelsHigh = 1200
+        d.sizeInMillimeters = CGSize(width: 480, height: 300)
+        d.productID = 0x4f44; d.vendorID = 0x1234; d.serialNum = 7
+        guard let v = CGVirtualDisplay(descriptor: d) else { return false }
+        let st = CGVirtualDisplaySettings(); st.hiDPI = 0
+        st.modes = [CGVirtualDisplayMode(width: 1920, height: 1200, refreshRate: 30)]
+        guard v.apply(st) else { return false }
+        // place it just off the bottom-right corner of the real displays
+        let main = CGDisplayBounds(CGMainDisplayID())
+        var cfg: CGDisplayConfigRef?
+        CGBeginDisplayConfiguration(&cfg)
+        CGConfigureDisplayOrigin(cfg, v.displayID, Int32(main.maxX), Int32(main.maxY))
+        CGCompleteDisplayConfiguration(cfg, .forSession)
+        display = v; displayID = v.displayID
+        return true
+    }
+
+    /// The current-space id of the off-screen display (recomputed each call: the space id
+    /// changes when displays are reconfigured).
+    var spaceID: UInt64 {
+        guard displayID != 0, let uuidRef = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue(),
+              let uuid = CFUUIDCreateString(nil, uuidRef) as String? else { return 0 }
+        for s in copySpaces(conn).takeRetainedValue() as! [[String: Any]] where (s["Display Identifier"] as? String) == uuid {
+            if let c = s["Current Space"] as? [String: Any], let id = c["id64"] as? UInt64 { return id }
+        }
+        return 0
+    }
+
+    func assign(_ pid: pid_t, to space: UInt64) { _ = assignFn(conn, pid, space) }
+
+    /// Is this window frame on the off-screen display?
+    func contains(_ frame: CGRect) -> Bool {
+        guard displayID != 0 else { return false }
+        return CGDisplayBounds(displayID).intersects(frame)
+    }
+}
+
+// ───────────────────────── app kind, copies, signing ─────────────────────────
+
+func infoPlist(_ app: URL) -> [String: Any] {
+    guard let d = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
+          let p = try? PropertyListSerialization.propertyList(from: d, options: [], format: nil) as? [String: Any] else { return [:] }
+    return p
+}
+
+func runCapturing(_ path: String, _ args: [String]) -> (out: Data, err: Data, status: Int32) {
+    let p = Process(); p.executableURL = URL(fileURLWithPath: path); p.arguments = args
+    let o = Pipe(), e = Pipe(); p.standardOutput = o; p.standardError = e
+    // read before wait so a full pipe cannot deadlock
+    do { try p.run() } catch { return (Data(), Data(), -1) }
+    let od = o.fileHandleForReading.readDataToEndOfFile()
+    let ed = e.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    return (od, ed, p.terminationStatus)
+}
+
+struct SignFacts { var hardened = false, sandbox = false, disableLibVal = false, allowDyldEnv = false }
+
+func signFacts(_ app: URL) -> SignFacts {
+    var f = SignFacts()
+    let flags = runCapturing("/usr/bin/codesign", ["--display", "--verbose=2", app.path])
+    // codesign prints e.g. "CodeDirectory v=… flags=0x10002(adhoc,runtime) hashes=…" to stderr;
+    // the hardened runtime shows as "runtime" inside the flags=0x…( ) parenthesis.
+    if let s = String(data: flags.err, encoding: .utf8), let r = s.range(of: "flags=0x") {
+        let after = s[r.upperBound...]
+        if let open = after.firstIndex(of: "("), let close = after[open...].firstIndex(of: ")") {
+            f.hardened = after[after.index(after: open)..<close].contains("runtime")
+        }
+    }
+    let ents = runCapturing("/usr/bin/codesign", ["-d", "--entitlements", "-", "--xml", app.path])
+    if let p = try? PropertyListSerialization.propertyList(from: ents.out, options: [], format: nil) as? [String: Any] {
+        f.sandbox = (p["com.apple.security.app-sandbox"] as? Bool) == true
+        f.disableLibVal = (p["com.apple.security.cs.disable-library-validation"] as? Bool) == true
+        f.allowDyldEnv = (p["com.apple.security.cs.allow-dyld-environment-variables"] as? Bool) == true
+    }
+    return f
+}
+
+func hasRendererHelper(_ app: URL) -> Bool {
+    let fw = app.appendingPathComponent("Contents/Frameworks")
+    guard let it = FileManager.default.enumerator(at: fw, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return false }
+    for case let u as URL in it where u.pathExtension == "app" && u.lastPathComponent.contains("(Renderer)") { return true }
+    return false
+}
+
+func detectKind(_ app: URL) -> AppKind {
+    if app.path.hasPrefix("/System/") { return .fallback }
+    let info = infoPlist(app)
+    // Catalyst and iOS-on-Mac apps crash libsecinit on a swapped plist and take their type
+    // from LaunchServices; they can't be background-copied.
+    if info["UIDeviceFamily"] != nil || (info["LSRequiresIPhoneOS"] as? Bool) == true { return .fallback }
+    let s = signFacts(app)
+    if s.sandbox { return .sandboxed }
+    if hasRendererHelper(app) { return .chromium }
+    return .native
+}
+
+/// Non-hardened apps honor DYLD_INSERT_LIBRARIES; hardened apps only with both the
+/// dyld-environment and library-validation exceptions. Otherwise the guard can't load.
+func guardEligible(_ app: URL) -> Bool {
+    let f = signFacts(app)
+    return f.hardened ? (f.allowDyldEnv && f.disableLibVal) : true
+}
+
+/// The injected guard dylib: a path the app passes in, else a file next to this helper.
+func guardDylibPath() -> String? {
+    if let p = ProcessInfo.processInfo.environment["ONDRA_COMPUTER_HOST_GUARD"], FileManager.default.fileExists(atPath: p) { return p }
+    let beside = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("ondra-bgguard.dylib")
+    return FileManager.default.fileExists(atPath: beside.path) ? beside.path : nil
+}
+
+struct Copy { let url: URL; let exe: String; let plist: String; let origPlist: String }
+
+func cacheAppsDir() -> URL {
+    let base = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Caches/dev.3xhaust.ondra/Applications", isDirectory: true)
+    try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+    return base
+}
+
+func setBackgroundOnly(_ plist: String) {
+    guard let d = try? Data(contentsOf: URL(fileURLWithPath: plist)),
+          var p = try? PropertyListSerialization.propertyList(from: d, options: [], format: nil) as? [String: Any] else { return }
+    p.removeValue(forKey: "LSUIElement")
+    p["LSBackgroundOnly"] = true
+    if let out = try? PropertyListSerialization.data(fromPropertyList: p, format: .xml, options: 0) {
+        try? out.write(to: URL(fileURLWithPath: plist))
+    }
+}
+
+func buildCopy(_ app: URL, kind: AppKind) throws -> Copy {
+    let fm = FileManager.default
+    let copy = cacheAppsDir().appendingPathComponent(app.lastPathComponent)
+    try? fm.removeItem(at: copy)
+    let exeName = (infoPlist(app)["CFBundleExecutable"] as? String) ?? app.deletingPathExtension().lastPathComponent
+    let contents = app.appendingPathComponent("Contents")
+    let copyContents = copy.appendingPathComponent("Contents")
+    if kind == .native {
+        try fm.createDirectory(at: copyContents, withIntermediateDirectories: true)
+        for entry in try fm.contentsOfDirectory(at: contents, includingPropertiesForKeys: nil, options: []) {
+            if entry.lastPathComponent == "Info.plist" { continue }
+            try fm.createSymbolicLink(at: copyContents.appendingPathComponent(entry.lastPathComponent), withDestinationURL: entry)
+        }
+        try fm.copyItem(at: contents.appendingPathComponent("Info.plist"), to: copyContents.appendingPathComponent("Info.plist"))
+    } else {
+        // APFS clone, then hard-link the real executable over the cloned one
+        let cp = runCapturing("/bin/cp", ["-c", "-R", app.path, cacheAppsDir().path])
+        if cp.status != 0 { throw ActError.message("COPY_FAILED", "could not clone the app") }
+        let realExe = contents.appendingPathComponent("MacOS/\(exeName)").path
+        let copyExe = copyContents.appendingPathComponent("MacOS/\(exeName)").path
+        try? fm.removeItem(atPath: copyExe)
+        if link(realExe, copyExe) != 0 { throw ActError.message("LINK_FAILED", "could not hard-link the executable") }
+    }
+    let plist = copyContents.appendingPathComponent("Info.plist").path
+    let origPlist = contents.appendingPathComponent("Info.plist").path
+    // native: the background plist stays (the real signature is validated via the symlink).
+    // chromium: start background, swap the real one back at check-in.
+    // sandboxed: start real, swap background in once sandboxed, real back at check-in.
+    if kind != .sandboxed { setBackgroundOnly(plist) }
+    return Copy(url: copy, exe: copyContents.appendingPathComponent("MacOS/\(exeName)").path, plist: plist, origPlist: origPlist)
+}
+
+// ───────────────────────── spawn, swap, assign ─────────────────────────
+
+private let csLib = dlopen("/System/Library/Frameworks/CoreServices.framework/CoreServices", RTLD_NOW)
+private let asnForPid = unsafeBitCast(dlsym(csLib, "_LSASNCreateWithPid"), to: (@convention(c) (CFAllocator?, pid_t) -> Unmanaged<CFTypeRef>?).self)
+private let lsInfoItem = unsafeBitCast(dlsym(csLib, "_LSCopyApplicationInformationItem"), to: (@convention(c) (Int32, CFTypeRef, CFString) -> Unmanaged<CFTypeRef>?).self)
+private let sbCheck = unsafeBitCast(dlsym(UnsafeMutableRawPointer(bitPattern: -2), "sandbox_check"), to: (@convention(c) (pid_t, UnsafePointer<CChar>?, Int32) -> Int32).self)
+
+/// The app has registered with LaunchServices (its NSApplication is up): the moment it
+/// is safe to swap the real Info.plist back, well before it reads the keychain.
+func checkedInType(_ pid: pid_t) -> String? {
+    guard let asn = asnForPid(nil, pid)?.takeRetainedValue() else { return nil }
+    return lsInfoItem(-2, asn, "ApplicationType" as CFString)?.takeRetainedValue() as? String
+}
+
+/// A background app the helper is driving. Holds the copy to clean up and, for Chromium,
+/// the private DevTools pipe used for text the page's own editor would otherwise drop.
+final class BgApp {
+    let pid: pid_t
+    let realURL: URL
+    let copyURL: URL
+    let kind: AppKind
+    let guarded: Bool
+    var cdpIn: Int32 = -1
+    var cdpOut: Int32 = -1
+    var cdpSeq = 0
+    var cdpSession: String?
+    var cdpFocusEmulated = false
+    var cdpBuf = Data()
+    init(pid: pid_t, realURL: URL, copyURL: URL, kind: AppKind, guarded: Bool) {
+        self.pid = pid; self.realURL = realURL; self.copyURL = copyURL; self.kind = kind; self.guarded = guarded
+    }
+}
+
+var bgApps: [pid_t: BgApp] = [:]
+let bgLock = NSLock()
+func bgApp(_ pid: pid_t) -> BgApp? { bgLock.lock(); defer { bgLock.unlock() }; return bgApps[pid] }
+
+/// Spawn the copy suspended, assign it to the off-screen desktop, resume it, and run the
+/// plist swap for its kind until it has checked in and a window is up (or a timeout).
+func launchBackground(real: URL, copy: Copy, kind: AppKind, guardDylib: String?) -> BgApp? {
+    let bd = Backdrop.shared
+    guard bd.ensure() else { return nil }
+    var env = ["HOME=\(NSHomeDirectory())", "USER=\(NSUserName())", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR=\(NSTemporaryDirectory())"]
+    let guarded = guardDylib != nil
+    if let g = guardDylib { env.append("DYLD_INSERT_LIBRARIES=\(g)") }
+
+    let disclaim = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim").map {
+        unsafeBitCast($0, to: (@convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32).self)
+    }
+    var attr: posix_spawnattr_t?; posix_spawnattr_init(&attr)
+    posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_START_SUSPENDED))
+    _ = disclaim?(&attr, 1)
+    let dbg = ProcessInfo.processInfo.environment["ONDRA_CU_DEBUG"] != nil
+    let appErr = dbg ? NSTemporaryDirectory() + "cu-app.err" : "/dev/null"
+    var fa: posix_spawn_file_actions_t?; posix_spawn_file_actions_init(&fa)
+    posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0)
+    posix_spawn_file_actions_addopen(&fa, 1, appErr, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+    posix_spawn_file_actions_adddup2(&fa, 1, 2)
+
+    // Chromium apps get a private DevTools pipe (fd 3 in, fd 4 out) for text the page drops.
+    var toApp: [Int32] = [-1, -1], fromApp: [Int32] = [-1, -1]
+    var argv: [UnsafeMutablePointer<CChar>?] = [strdup(copy.exe)]
+    if kind == .chromium {
+        pipe(&toApp); pipe(&fromApp)
+        posix_spawn_file_actions_adddup2(&fa, toApp[0], 3)
+        posix_spawn_file_actions_adddup2(&fa, fromApp[1], 4)
+        argv.append(strdup("--remote-debugging-pipe"))
+    }
+    argv.append(nil)
+    let envp: [UnsafeMutablePointer<CChar>?] = env.map { strdup($0) } + [nil]
+
+    // sandboxed: begin with the real plist; stage both the background plist and a fresh
+    // copy of the real one to swap at the right moments.
+    let bgStage = copy.plist + ".bg", origStage = copy.plist + ".orig"
+    if kind == .sandboxed {
+        unlink(bgStage); try? FileManager.default.copyItem(atPath: copy.plist, toPath: bgStage); setBackgroundOnly(bgStage)
+    }
+    if kind != .native {
+        unlink(origStage); try? FileManager.default.copyItem(atPath: copy.origPlist, toPath: origStage)
+    }
+
+    var pid: pid_t = 0
+    let rc = posix_spawn(&pid, copy.exe, &fa, &attr, argv, envp)
+    posix_spawn_file_actions_destroy(&fa); posix_spawnattr_destroy(&attr)
+    if kind == .chromium { close(toApp[0]); close(fromApp[1]) }
+    if dbg { FileHandle.standardError.write("cu: spawn rc=\(rc) pid=\(pid) exe=\(copy.exe)\n".data(using: .utf8)!) }
+    guard rc == 0, pid > 0 else {
+        if kind == .chromium { close(toApp[1]); close(fromApp[0]) }
+        return nil
+    }
+    let space = bd.spaceID
+    bd.assign(pid, to: space)
+    kill(pid, SIGCONT)
+
+    let t0 = nowMs(); var swappedIn = kind != .sandboxed; var restored = kind == .native
+    var checkinMs = 0.0
+    while nowMs() - t0 < 8000 {
+        if !swappedIn, sbCheck(pid, nil, 0) != 0 {
+            kill(pid, SIGSTOP); _ = rename(bgStage, copy.plist); kill(pid, SIGCONT); swappedIn = true
+        }
+        if swappedIn, !restored, checkedInType(pid) != nil {
+            kill(pid, SIGSTOP); _ = rename(origStage, copy.plist); kill(pid, SIGCONT); restored = true; checkinMs = nowMs() - t0
+        }
+        var st: Int32 = 0
+        if waitpid(pid, &st, WNOHANG) == pid {
+            if dbg { FileHandle.standardError.write("cu: app exited early after \(Int(nowMs()-t0))ms exit=\((st>>8)&0xff) sig=\(st&0x7f) swappedIn=\(swappedIn) restored=\(restored)\n".data(using: .utf8)!) }
+            if !restored, kind != .native { _ = rename(origStage, copy.plist) }
+            if kind == .chromium { close(toApp[1]); close(fromApp[0]) }
+            return nil
+        }
+        bd.assign(pid, to: space)
+        // give it a moment after check-in for its first window to open on the off-screen desktop
+        if restored, onScreenWindows(pid) > 0, nowMs() - t0 - checkinMs > 400 { break }
+        usleep(restored ? 20_000 : (swappedIn ? 200 : 20))
+    }
+    if !restored, kind != .native { _ = rename(origStage, copy.plist) }
+
+    let app = BgApp(pid: pid, realURL: real, copyURL: copy.url, kind: kind, guarded: guarded)
+    if kind == .chromium { app.cdpIn = toApp[1]; app.cdpOut = fromApp[0]; _ = fcntl(app.cdpOut, F_SETFL, O_NONBLOCK) }
+    bgLock.lock(); bgApps[pid] = app; bgLock.unlock()
+    return app
+}
+
+// ───────────────────────── private DevTools pipe (Chromium text input) ─────────────────────────
+// The off-screen window is never key, so its page is unfocused and editors like Slate drop
+// key events, and the user's input method can leave half-composed text. Committed text and
+// Return go straight to the page over the private pipe instead.
+
+func cdpSend(_ app: BgApp, _ method: String, _ params: [String: Any], session: Bool = true) -> [String: Any]? {
+    guard app.cdpIn >= 0 else { return nil }
+    app.cdpSeq += 1
+    let id = app.cdpSeq
+    var msg: [String: Any] = ["id": id, "method": method, "params": params]
+    if session, let s = app.cdpSession { msg["sessionId"] = s }
+    guard var data = try? JSONSerialization.data(withJSONObject: msg) else { return nil }
+    data.append(0)
+    _ = data.withUnsafeBytes { write(app.cdpIn, $0.baseAddress, data.count) }
+    // read NUL-delimited replies until the matching id (skipping events), with a deadline
+    let deadline = nowMs() + 3000
+    var tmp = [UInt8](repeating: 0, count: 65536)
+    while nowMs() < deadline {
+        let n = read(app.cdpOut, &tmp, tmp.count)
+        if n > 0 {
+            app.cdpBuf.append(contentsOf: tmp[0..<n])
+            while let i = app.cdpBuf.firstIndex(of: 0) {
+                let chunk = app.cdpBuf[app.cdpBuf.startIndex..<i]
+                app.cdpBuf.removeSubrange(app.cdpBuf.startIndex...i)
+                if let obj = (try? JSONSerialization.jsonObject(with: chunk)) as? [String: Any], (obj["id"] as? Int) == id {
+                    return obj
+                }
+            }
+        } else { usleep(2000) }
+    }
+    return nil
+}
+
+/// Attach to the app's page and turn on focus emulation, once.
+func cdpEnsureAttached(_ app: BgApp) -> Bool {
+    if app.cdpSession != nil { return true }
+    guard let targets = cdpSend(app, "Target.getTargets", [:], session: false),
+          let result = targets["result"] as? [String: Any],
+          let infos = result["targetInfos"] as? [[String: Any]] else { return false }
+    guard let page = infos.first(where: { ($0["type"] as? String) == "page" }),
+          let tid = page["targetId"] as? String else { return false }
+    guard let att = cdpSend(app, "Target.attachToTarget", ["targetId": tid, "flatten": true], session: false),
+          let ar = att["result"] as? [String: Any], let sid = ar["sessionId"] as? String else { return false }
+    app.cdpSession = sid
+    _ = cdpSend(app, "Emulation.setFocusEmulationEnabled", ["enabled": true])
+    app.cdpFocusEmulated = true
+    return true
+}
+
+/// Commit text into whatever the page has focused (the model clicked the field first).
+func cdpInsertText(_ app: BgApp, _ text: String) -> Bool {
+    guard cdpEnsureAttached(app) else { return false }
+    return cdpSend(app, "Input.insertText", ["text": text]) != nil
+}
+
+func cdpEnter(_ app: BgApp) -> Bool {
+    guard cdpEnsureAttached(app) else { return false }
+    let down: [String: Any] = ["type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 36, "text": "\r"]
+    let up: [String: Any] = ["type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 36]
+    return cdpSend(app, "Input.dispatchKeyEvent", down) != nil && cdpSend(app, "Input.dispatchKeyEvent", up) != nil
+}
+
+// ───────────────────────── cleanup ─────────────────────────
+
+/// Unregister a copy and its nested helper .app bundles from LaunchServices, then delete it.
+func teardownCopy(_ copy: URL) {
+    let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    var bundles = [copy]
+    if let it = FileManager.default.enumerator(at: copy, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+        for case let u as URL in it where u.pathExtension == "app" { bundles.append(u) }
+    }
+    for b in bundles { _ = runCapturing(lsregister, ["-u", b.path]) }
+    try? FileManager.default.removeItem(at: copy)
+}
+
+/// Terminate a background app the job opened, and clean up its copy.
+func releaseBackground(_ pid: pid_t) {
+    bgLock.lock(); let app = bgApps.removeValue(forKey: pid); bgLock.unlock()
+    guard let app = app else { return }
+    if app.cdpIn >= 0 { close(app.cdpIn) }; if app.cdpOut >= 0 { close(app.cdpOut) }
+    if kill(pid, 0) == 0 {
+        kill(pid, SIGTERM)
+        var st: Int32 = 0
+        for _ in 0..<30 { if waitpid(pid, &st, WNOHANG) == pid || kill(pid, 0) != 0 { break }; usleep(100_000) }
+        if kill(pid, 0) == 0 { kill(pid, SIGKILL); waitpid(pid, &st, 0) }  // reap so no zombie lingers
+    }
+    teardownCopy(app.copyURL)
+}
+
+func releaseAllBackground() {
+    bgLock.lock(); let pids = Array(bgApps.keys); bgLock.unlock()
+    for pid in pids { releaseBackground(pid) }
+}
+
+/// A window the user's own app left on the off-screen display (apps remember their frame):
+/// move it back onto the main display so the user can see it. Never touches a background app
+/// the job is running.
+func rescueStrayWindows() {
+    let main = CGDisplayBounds(CGMainDisplayID())
+    let infos = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+    var seen = Set<pid_t>()
+    for w in infos {
+        guard (w[kCGWindowLayer as String] as? Int) == 0,
+              let owner = w[kCGWindowOwnerPID as String] as? pid_t, !seen.contains(owner),
+              bgApp(owner) == nil,
+              let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+              let x = b["X"], let y = b["Y"], let wd = b["Width"], let ht = b["Height"] else { continue }
+        let frame = CGRect(x: x, y: y, width: wd, height: ht)
+        guard Backdrop.shared.contains(frame) else { continue }
+        seen.insert(owner)
+        let appEl = AXUIElementCreateApplication(owner)
+        var winsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appEl, kAXWindowsAttribute as CFString, &winsRef) == .success,
+              let wins = winsRef as? [AXUIElement] else { continue }
+        for win in wins {
+            guard let f = axFrame(win), Backdrop.shared.contains(f) else { continue }
+            var origin = CGPoint(x: main.midX - f.width / 2, y: main.midY - f.height / 2)
+            if let pv = AXValueCreate(.cgPoint, &origin) { AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, pv) }
+        }
+    }
+}
+
 // ───────────────────────── out of sight ─────────────────────────
 // An app the job opens is launched hidden: no window on the user's screen, no Stage Manager
 // switch, nothing in its strip. Accessibility reads and acts on a hidden app all the same. Only
@@ -1098,28 +1574,54 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, ["apps": apps, "env": before])
     case "launch":
         guard let name = req["app"] as? String else { return fail(id, "BAD_REQUEST", "missing app") }
-        // an app the user already has open is theirs to look at: never hidden; any other launches hidden
+        guard let target = appURL(name) else { return fail(id, "LAUNCH_FAILED", "app not found") }
+        // an app the user already has open is theirs; we never make a second background copy of it
         let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.standardizedFileURL })
-        let target = appURL(name)
-        let hide = target.map { !running.contains($0.standardizedFileURL) && ((req["hide"] as? Bool) ?? true) } ?? false
+        let alreadyOpen = running.contains(target.standardizedFileURL)
         // Stage Manager makes room for a window that opens behind: the user's own front window
         // is pushed aside and shrunk. Its frame is noted now and put back once the launch settles.
         let held = frontWindowFrame()
         let t0 = nowMs()
-        let sem = DispatchSemaphore(value: 0)
-        var out: (pid_t?, String?) = (nil, nil)
-        launchHidden(name, hide: hide) { pid, err in out = (pid, err); sem.signal() }
-        sem.wait()
+        var pid: pid_t?
+        var mode = "hidden"
+        var launchErr: String?
+        // Off-screen background copy: no Dock tile, no window on the user's screen, keychain kept.
+        // Catalyst/iOS/System apps, and an app the user already runs, fall back to the real app.
+        let kind = alreadyOpen ? AppKind.fallback : detectKind(target)
+        if kind != .fallback {
+            do {
+                let copy = try buildCopy(target, kind: kind)
+                let guardPath = (kind != .sandboxed && guardEligible(target)) ? guardDylibPath() : nil
+                if let app = launchBackground(real: target, copy: copy, kind: kind, guardDylib: guardPath) {
+                    pid = app.pid; mode = "background:\(kind.rawValue)\(guardPath != nil ? "+guard" : "")"
+                } else {
+                    teardownCopy(copy.url); launchErr = "background launch failed"
+                }
+            } catch ActError.message(_, let m) { launchErr = m } catch { launchErr = "\(error)" }
+        }
+        if pid == nil {
+            // the real app, hidden and never activated (its Dock tile may show)
+            let hide = !alreadyOpen && ((req["hide"] as? Bool) ?? true)
+            let sem = DispatchSemaphore(value: 0)
+            var out: (pid_t?, String?) = (nil, nil)
+            launchHidden(name, hide: hide) { p, e in out = (p, e); sem.signal() }
+            sem.wait()
+            pid = out.0; launchErr = out.1 ?? launchErr
+            mode = alreadyOpen ? "attached" : "hidden"
+        }
         if let held = held { keepFrame(held) }
+        // an app the user opened themselves may have come up off-screen (apps remember their
+        // frame): put any such window back where the user can see it
+        rescueStrayWindows()
         let after = environment()
-        if let pid = out.0 {
+        if let pid = pid {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
-            var result: [String: Any] = ["pid": Int(pid), "hidden": hide, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            var result: [String: Any] = ["pid": Int(pid), "mode": mode, "env": after, "envBefore": before, "backgroundPreserved": preserved]
             if !preserved, userInputSince(seconds: (nowMs() - t0) / 1000) { result["userInput"] = true }
             return ok(id, result)
         }
-        return fail(id, "LAUNCH_FAILED", out.1 ?? "launch failed")
+        return fail(id, "LAUNCH_FAILED", launchErr ?? "launch failed")
     case "observe":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
         guard let tree = observeTree(pid: pid_t(pidN), map: map) else {
@@ -1183,7 +1685,9 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, result)
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
-        hideAgain(pid_t(pidN))
+        // a background copy the job opened is terminated and cleaned up; a hidden fallback is hidden again
+        if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) } else { hideAgain(pid_t(pidN)) }
+        rescueStrayWindows()
         return ok(id, ["released": true, "env": environment()])
     case "selfcheck":
         let pidN = req["pid"] as? Int
@@ -1228,7 +1732,7 @@ func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
 // ───────────────────────── main loop ─────────────────────────
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.3.0")
+    print("ondra-cuhost 0.4.0")
     exit(0)
 }
 
@@ -1246,6 +1750,7 @@ let worker = Thread {
         }
         emit(handle(obj))
     }
+    releaseAllBackground()
     hideAllAgain()
     exit(0)
 }
@@ -1254,7 +1759,7 @@ worker.start()
 // Stopped: an app shown for a capture or events goes back out of sight first.
 signal(SIGTERM, SIG_IGN)
 let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-onTerm.setEventHandler { hideAllAgain(); exit(0) }
+onTerm.setEventHandler { releaseAllBackground(); hideAllAgain(); exit(0) }
 onTerm.resume()
 // No Dock icon, no menu bar, never activated: windows only for the pointer overlay.
 NSApplication.shared.setActivationPolicy(.accessory)

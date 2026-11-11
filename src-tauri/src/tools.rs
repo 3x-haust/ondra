@@ -126,6 +126,15 @@ pub fn resource(app: &AppHandle, name: &str) -> Option<PathBuf> {
     [bundled, Some(dev)].into_iter().flatten().find(|d| d.is_dir())
 }
 
+/// The background-activation guard dylib: beside the helper in the bundle's Resources,
+/// else src-tauri/binaries during development.
+pub fn guard_dylib(app: &AppHandle) -> Option<PathBuf> {
+    let name = "ondra-bgguard.dylib";
+    let bundled = app.path().resource_dir().ok().map(|d| d.join(name));
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join(name);
+    [bundled, Some(dev)].into_iter().flatten().find(|p| p.is_file())
+}
+
 /// The Chrome agent-browser drives: the browser component (see components.rs), the
 /// one an older app kept in its Resources, else a system Chrome.
 pub fn chrome_path(app: &AppHandle) -> Option<PathBuf> {
@@ -257,6 +266,12 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     if let Some(cuhost) = sidecar("ondra-cuhost") {
         env.push(("ONDRA_COMPUTER_HOST".into(), "1".into()));
         env.push(("ONDRA_COMPUTER_HOST_BIN".into(), cuhost.display().to_string()));
+        // The guard is injected into an app the helper opens in the background so the app
+        // cannot make itself a Dock app or come to the front. It ships beside the helper
+        // (bundle Resources) or, in development, in src-tauri/binaries.
+        if let Some(guard) = guard_dylib(&app) {
+            env.push(("ONDRA_COMPUTER_HOST_GUARD".into(), guard.display().to_string()));
+        }
     }
     let session = crate::browser::session_for(&worker_id, shared);
     match shared {
