@@ -176,7 +176,24 @@ fn landed(path: &str) -> Option<String> {
     let main = run(path, &["symbolic-ref", "--short", &format!("refs/remotes/{remote}/HEAD")])
         .ok()
         .or_else(|| ["main", "master"].iter().map(|b| format!("{remote}/{b}")).find(|b| run(path, &["rev-parse", "--verify", "-q", b]).is_ok()))?;
-    run(path, &["merge-base", "--is-ancestor", "HEAD", &main]).ok().map(|_| main)
+    if run(path, &["merge-base", "--is-ancestor", "HEAD", &main]).is_ok() {
+        return Some(main);
+    }
+    // A squash, a rebase or a PR from another branch puts other commits on main with the
+    // same changes: every commit of ours has its twin there, or the files we changed
+    // read the same on main.
+    let cherry = run(path, &["cherry", &main, "HEAD"]).ok()?;
+    if !cherry.is_empty() && cherry.lines().all(|l| l.starts_with('-')) {
+        return Some(main);
+    }
+    let base = run(path, &["merge-base", "HEAD", &main]).ok()?;
+    let files = run(path, &["diff", "--name-only", &base, "HEAD"]).ok()?;
+    if files.is_empty() {
+        return None;
+    }
+    let mut args = vec!["diff", "--quiet", "HEAD", main.as_str(), "--"];
+    args.extend(files.lines());
+    run(path, &args).ok().map(|_| main)
 }
 
 /// The job's branch is already merged on the remote: Some("origin/main").
@@ -365,6 +382,39 @@ mod tests {
         // Ondra's own notes in the folder are not work left behind
         std::fs::create_dir_all(root.join("wt/.ondra")).unwrap();
         std::fs::write(root.join("wt/.ondra/note.md"), "x").unwrap();
+        assert_eq!(landed(&wt).as_deref(), Some("origin/main"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn knows_when_the_work_landed_through_another_commit() {
+        let root = std::env::temp_dir().join(format!("wt-landed2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (up, repo) = (root.join("up.git"), root.join("repo"));
+        std::fs::create_dir_all(&repo).unwrap();
+        let (u, r) = (up.display().to_string(), repo.display().to_string());
+        let id = ["-c", "user.name=t", "-c", "user.email=t@t"];
+        sh(&root.display().to_string(), &["init", "-q", "--bare", "-b", "main", &u]);
+        sh(&r, &["init", "-q", "-b", "main"]);
+        sh(&r, &[&id[..], &["commit", "-q", "--allow-empty", "-m", "a"]].concat());
+        sh(&r, &["remote", "add", "origin", &u]);
+        sh(&r, &["push", "-q", "-u", "origin", "main"]);
+        sh(&r, &["remote", "set-head", "origin", "main"]);
+        let wt = root.join("wt").display().to_string();
+        sh(&r, &["worktree", "add", "-q", "-b", "job", &wt]);
+        std::fs::write(root.join("wt/f.txt"), "x").unwrap();
+        std::fs::write(root.join("wt/g.txt"), "y").unwrap();
+        sh(&wt, &["add", "f.txt"]);
+        sh(&wt, &[&id[..], &["commit", "-q", "-m", "one"]].concat());
+        sh(&wt, &["add", "g.txt"]);
+        sh(&wt, &[&id[..], &["commit", "-q", "-m", "two"]].concat());
+        assert_eq!(landed(&wt), None, "not on the remote yet");
+        // squashed into one commit on main by someone else (a PR from another branch)
+        std::fs::write(repo.join("f.txt"), "x").unwrap();
+        std::fs::write(repo.join("g.txt"), "y").unwrap();
+        sh(&r, &["add", "-A"]);
+        sh(&r, &[&id[..], &["commit", "-q", "-m", "squashed"]].concat());
+        sh(&r, &["push", "-q", "origin", "main"]);
         assert_eq!(landed(&wt).as_deref(), Some("origin/main"));
         let _ = std::fs::remove_dir_all(&root);
     }
