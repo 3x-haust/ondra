@@ -35,7 +35,7 @@ Every event carries the app version, the macOS version, the UI language and an i
 | `job_failed` | the same, plus why as one of `network`, `auth`, `usage_limit`, `context_limit`, `refused`, `engine_exit`, `timeout`, `no_model`, `unknown`, and the error message (see below) |
 | `job_merged`, `job_discarded` | hours since the job was made |
 | `update_installed` | whether it worked |
-| `feedback_sent` | where it went (`private` or `github`), whether the log was attached |
+| `feedback_sent` | whether the log was attached |
 | `telemetry_off` | |
 
 Two things carry words, both cut short and with keys, tokens, emails and your home folder's name removed first:
@@ -43,11 +43,11 @@ Two things carry words, both cut short and with keys, tokens, emails and your ho
 - a failed job's error message (200 characters), beside `job_failed`
 - an uncaught error in the app (`$exception`): its name, its message (300 characters) and a stack of file names and line numbers from Ondra's own code, at most five a launch
 
-Dev builds (`pnpm tauri dev`) send nothing. Neither does a build without `VITE_POSTHOG_KEY` (a fork, or your own build from source): the switch is not shown, and feedback is filed as a GitHub issue.
+Dev builds (`pnpm tauri dev`) send nothing. Neither does a build without `VITE_POSTHOG_KEY` (a fork, or your own build from source): the switch is not shown, and there is no `/feedback`.
 
 ## Feedback
 
-`/feedback` is separate from the numbers: it is sent only when you press **Send**, also when the numbers are off. By default it goes to the maintainers only, with the app version, the macOS version, the view you were in and, if ticked, the recent log (keys, tokens, emails and your home folder's name are removed before the log is written). Tick **File as a public GitHub issue** to post it on the repository instead.
+`/feedback` is separate from the numbers: it is sent only when you press **Send**, also when the numbers are off. By default it goes to the maintainers only, with the app version, the macOS version, the view you were in and, if ticked, the recent log (keys, tokens, emails and your home folder's name are removed before the log is written). It is never posted anywhere public.
 
 ### The log
 

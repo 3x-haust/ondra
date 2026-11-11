@@ -5,11 +5,10 @@
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tauri::AppHandle;
 
 const MAX_FILE: u64 = 8 * 1024 * 1024;
-const REPO: &str = "3x-haust/ondra";
 
 fn dir(app: &AppHandle) -> PathBuf {
     let d = crate::engine::data_dir(app).join("logs");
@@ -88,34 +87,6 @@ pub fn logs_recent(app: AppHandle, max_bytes: usize) -> String {
 #[tauri::command]
 pub fn os_version() -> String {
     Command::new("sw_vers").arg("-productVersion").output().ok().map(|o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim())).unwrap_or_else(|| "macOS".into())
-}
-
-/// File an issue on the app's repository with the user's own GitHub CLI login. Returns its URL.
-/// "NO_GH" when the CLI is missing or not signed in: the app opens the new-issue page instead.
-#[tauri::command]
-pub async fn feedback_issue(title: String, body: String) -> Result<String, String> {
-    let ok = Command::new("gh").env("PATH", crate::engine::user_path()).args(["auth", "status"]).stdout(Stdio::null()).stderr(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
-    if !ok {
-        return Err("NO_GH".into());
-    }
-    let mut c = Command::new("gh")
-        .env("PATH", crate::engine::user_path())
-        .args(["issue", "create", "-R", REPO, "--title", &title, "--body-file", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|_| "NO_GH".to_string())?;
-    if let Some(mut i) = c.stdin.take() {
-        let _ = i.write_all(body.as_bytes());
-    }
-    let out = c.wait_with_output().map_err(|e| e.to_string())?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).lines().last().unwrap_or("").trim().to_string())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(err.lines().filter(|l| !l.trim().is_empty()).last().unwrap_or("gh failed").to_string())
-    }
 }
 
 /// "2026-11-11 10:20:01" and "2026-11-11" in local time, the way the app side writes them.
