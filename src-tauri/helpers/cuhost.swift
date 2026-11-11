@@ -1105,6 +1105,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         // Stage Manager makes room for a window that opens behind: the user's own front window
         // is pushed aside and shrunk. Its frame is noted now and put back once the launch settles.
         let held = frontWindowFrame()
+        let t0 = nowMs()
         let sem = DispatchSemaphore(value: 0)
         var out: (pid_t?, String?) = (nil, nil)
         launchHidden(name, hide: hide) { pid, err in out = (pid, err); sem.signal() }
@@ -1112,8 +1113,11 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if let held = held { keepFrame(held) }
         let after = environment()
         if let pid = out.0 {
-            return ok(id, ["pid": Int(pid), "hidden": hide, "env": after, "envBefore": before,
-                           "backgroundPreserved": backgroundPreserved(before, after)])
+            let preserved = backgroundPreserved(before, after)
+            // the user's own mouse or keys while the app was starting are theirs, not the launch's
+            var result: [String: Any] = ["pid": Int(pid), "hidden": hide, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            if !preserved, userInputSince(seconds: (nowMs() - t0) / 1000) { result["userInput"] = true }
+            return ok(id, result)
         }
         return fail(id, "LAUNCH_FAILED", out.1 ?? "launch failed")
     case "observe":
