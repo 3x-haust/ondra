@@ -44,12 +44,10 @@ export function chosenComputer(mine: string = state.space): Place | undefined {
 }
 
 export function setComputer(mine: string, p: Omit<Place, "space"> | undefined) {
-  setState("settings", "computers", (m) => {
-    const next = { ...(m ?? {}) };
-    if (p) next[mine] = { host: p.host, account: p.account, model: p.model, thinking: p.thinking };
-    else delete next[mine];
-    return next;
-  });
+  // replaced whole (a store merges objects): this Mac clears it, another account drops the model
+  if (!state.settings.computers) setState("settings", "computers", {});
+  setState("settings", "computers", mine, undefined!);
+  if (p) setState("settings", "computers", mine, { host: p.host, account: p.account, model: p.model, thinking: p.thinking });
 }
 
 /** the account there new work runs on: the one picked, else what that workspace would pick */
@@ -151,10 +149,10 @@ export function HostStatus(props: { place: Place; fixed?: boolean; account?: str
       <ComputerPicker value={props.place} fixed={props.fixed} space={mine()} />
       <Show when={acc()}>
         {(a) => (
-          <button type="button" class="st-acc" disabled={!!props.account || pool().length < 2} onClick={pickAccount} title={t("{name}의 계정", { name: hostName(props.place.host) })}>
+          <button type="button" class="st-acc" disabled={!!props.account} onClick={pickAccount} title={t("{name}의 계정", { name: hostName(props.place.host) })}>
             <For each={a().services}>{(x) => <Logo name={x === "Claude" ? "claude" : x} size={12} />}</For>
             <span class="st-acc-name">{auto() ? `${t("자동")} · ${a().name}` : a().name}</span>
-            <Show when={!props.account && pool().length > 1}><Icon name="chevron" size={12} class="st-acc-chev" /></Show>
+            <Show when={!props.account}><Icon name="chevron" size={12} class="st-acc-chev" /></Show>
           </button>
         )}
       </Show>
