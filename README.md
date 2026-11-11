@@ -118,6 +118,7 @@ The canvas shows how main, projects, jobs and sub-agents connect, and what each 
 - **Hooks:** run your own shell commands before or after tools, on a request, or when a job starts or stops, per space.
 - **Notifications:** finished, needs an answer or stuck, with the space's name, when the window is in the back.
 - **Skills:** browser use, computer use, device use, deep research, code review, visual reports, web design and more. Call one with `/skill:<name>`.
+- **Telemetry:** anonymous usage numbers (counts, versions, model ids; never what you asked, your files or your accounts). Turn it off in Settings. [What is sent](docs/TELEMETRY.md).
 
 ## Install
 

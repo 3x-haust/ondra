@@ -4,6 +4,8 @@
 // row sits under the card. Files can be attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line.
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { logInfo } from "../lib/log";
+import { COMMANDS, pick, track } from "../lib/telemetry";
 import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
 import { focusId } from "../state/ui";
@@ -16,6 +18,13 @@ import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { midTrim } from "./bits";
 import { t } from "../i18n";
+
+/** A /command that ran, for the log a feedback report carries: its name, not what followed (a skill's own name stays out). */
+const ran = (name: string) => {
+  const known = name.startsWith("skill:") ? "skill" : name;
+  logInfo("command", `/${known}`);
+  track("command_used", { name: pick(COMMANDS, known, "other") });
+};
 
 /** The composers on screen that take dropped files: the focused pane's gets them (the last one shown outside panes). */
 const drops: { pane?: string; add: (paths: string[]) => void }[] = [];
@@ -246,6 +255,7 @@ export function Composer(props: {
       el.value = "";
       setPick(null);
       queueMicrotask(grow);
+      ran(c.name);
       c.run(arg);
       return;
     }
@@ -348,6 +358,7 @@ export function Composer(props: {
       setText("");
       el.value = "";
       queueMicrotask(grow);
+      ran(named[0].name);
       named[0].run(rest, [...new Set(named.slice(1).map((c) => c.name.replace(/^skill:/, "")))]);
       return;
     }
@@ -361,6 +372,7 @@ export function Composer(props: {
       el.value = "";
       if (f.length) setFiles([]);
       queueMicrotask(grow);
+      ran(cmd.name);
       cmd.run(m![2] ?? "", [], f);
       return;
     }

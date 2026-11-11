@@ -1,7 +1,8 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
-import { logError, logWarn } from "../lib/log";
+import { logError, logInfo, logWarn } from "../lib/log";
+import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
 import { cutTitle, describeBrowser, describeCommand } from "./describe";
 import { t as tr } from "../i18n";
@@ -958,6 +959,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);
+    logInfo("engine", `${id} engine started (${model || "account model"}, ${resume ? "resumed" : "new session"}${talkOnly ? ", no tools" : ""}${t.worktree ? ", worktree" : ""})`);
     markAlive(agent);
     const fresh = taskById(id)!;
     // a resumed session already has totals; only what happens from here counts
@@ -2245,6 +2247,7 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
   const t = taskById(id);
   if (!t) return;
   const wasPaused = t.status === "paused";
+  if (!opts.by) track("message_sent", { where: "task" });
   const agent = agentOf(id);
   // the user's words wait in line while it works; another agent's (a subagent reporting, its parent
   // answering) go in right away, after its current tool calls: they are part of the work, not the user's turn
@@ -2342,6 +2345,7 @@ function requeue(t: Task) {
 export async function decide(decisionId: string, optionId: string) {
   const d = state.decisions.find((x) => x.id === decisionId);
   if (!d) return;
+  track("decision_answered", { waited_s: Math.max(0, Math.round((Date.now() - d.at) / 1000)) });
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
   // main asked it: the answer goes back to main as the user's message
   if (d.taskId.startsWith("main:")) {

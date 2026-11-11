@@ -243,6 +243,7 @@ pub fn run() {
         .manage(browser::Shared::default())
         .manage(keys::Native::default())
         .setup(move |app| {
+            applog::install_panic_hook(app.handle());
             // the keys Settings › 단축키 set, before the page loads (keys.rs)
             let bound = keys::load(app.handle());
             #[cfg(target_os = "macos")]

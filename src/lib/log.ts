@@ -1,5 +1,7 @@
-// The app's log (one file a day in the data folder, a week kept): errors, engines ending, jobs
-// failing, updates. Read back for a feedback report, so every line is redacted before it is written.
+// The app's log (one file a day in the data folder, a week kept), read back for a feedback report:
+// the launch, where the user went, each job's states and engine, /commands, native commands that
+// failed, errors shown or uncaught, parts arriving, the network, updates. Ids and states only, never
+// a title, an ask or a file; every line is redacted before it is written.
 import { inTauri, logAppend } from "./native";
 
 type Level = "info" | "warn" | "error";
