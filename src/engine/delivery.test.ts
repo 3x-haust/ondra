@@ -114,7 +114,9 @@ describe("a subagent's result reaches its job", () => {
     await vi.waitFor(() => expect(sent("prompt")).toHaveLength(1));
     await new Promise((r) => setTimeout(r));
     await tell("job", "also do the onboarding pages", { now: true });
-    expect(sent("steer")).toEqual(["also do the onboarding pages"]);
+    expect(sent("steer")).toHaveLength(1);
+    // the user's words first, then the note that a question gets answered before more work
+    expect(sent("steer")[0]).toMatch(/^also do the onboarding pages\n\n\(Ondra\) The user said this while you were working/);
 
     exit();
     await startTask("job", true);
