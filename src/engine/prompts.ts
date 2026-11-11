@@ -186,7 +186,8 @@ tests while you implement, docs), send
 {"type":"subagent","title":"≤ 18 chars","task":"complete instruction"}
 (at most 4 at a time). Its result comes to you as a message: don't poll or
 sleep for it; keep working or end your turn. Not for trivial steps, and never
-to audit or review your own change.
+to audit or review your own change (a skill that asks for someone to try the
+result, without your code, is not that).
 
 # How to work
 1. Plan: send the plan block.
