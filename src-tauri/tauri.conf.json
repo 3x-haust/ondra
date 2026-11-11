@@ -73,6 +73,7 @@
       "minimumSystemVersion": "13.0"
     },
     "resources": {
+      "binaries/ondra-bgguard.dylib": "ondra-bgguard.dylib",
       "dmg/background.tiff": "dmg-background.tiff",
       "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/components.json": "components.json",

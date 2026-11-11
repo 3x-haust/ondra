@@ -24,13 +24,21 @@ and their front app stay as they are.
 - Actions go to the target app only: accessibility actions, or pointer and key
   events addressed to its window. The real cursor never moves; a small pointer
   of the helper's own shows where you act, just above the target window.
-- An app this session opens launches hidden and without activation: nothing shows
-  on the user's screen. The accessibility tree and actions work on a hidden app.
-  `look` and pointer or key events show its window for a moment, behind the user's
-  windows and never in front, then hide it again. It stays hidden after `stop`; the
-  user brings it up from the Dock. An app the user already had open is not hidden.
-- Some apps bring themselves forward when clicked. The helper hands the front
-  straight back to the user's app and reports `selfActivated` / `restored`.
+- An app this session opens runs on an off-screen display the helper holds: no
+  window on the user's screen, no Dock tile, focus never taken. It runs from a
+  background-only copy of the app, shaped per app kind so its login keychain keeps
+  working; the `start` result's `mode` says which kind was used
+  (`background:native` / `:chromium` / `:sandboxed`, `+guard` when the activation
+  guard is injected). A few apps can't be copied this way — Catalyst, iOS-on-Mac,
+  App Store and system apps — and fall back to the real app launched hidden
+  (`mode: hidden`); that one may show a Dock tile. On `stop` a background copy is
+  quit and cleaned up. An app the user already had open is used as-is, never copied.
+- Some apps try to make themselves a Dock app and come to the front. The injected
+  guard holds most of them back; one it can't (a hardened app without the dyld
+  exception) is handed the front straight back, reported as `selfActivated` /
+  `restored`.
+- A window the user's own app left on the off-screen display (apps remember their
+  frame) is moved back onto the main display automatically.
 - The user's own mouse and keys during an action are theirs, not a failure.
 
 Do not drive the host yourself. Do not use `agent-desktop`, AppleScript or System

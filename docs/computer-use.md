@@ -22,13 +22,27 @@ using only **public** APIs:
   screen.
 - **Launch** without activation (`NSWorkspace.OpenConfiguration.activates = false`),
   so the user's frontmost app stays in front.
-- **Hidden**: an app the launch opens starts hidden (`OpenConfiguration.hides`),
-  so nothing shows on the user's screen and Stage Manager doesn't switch. AX reads
-  and actions work on a hidden app. A capture or pointer/key events unhide it
-  without activation (behind the user's windows) for the moment they need, then
-  hide it again. Parking windows off-screen instead doesn't work: a visible window
-  is kept on the stage (Stage Manager) and a parked window can't be captured. An app
-  that was already running is not hidden.
+- **Off-screen display**: an app the job opens runs on a `CGVirtualDisplay` the
+  helper holds just off the corner of the real screens (`Backdrop`). The process is
+  spawned suspended, assigned to that display's desktop (`SLSProcessAssignToSpace`),
+  then resumed, so its first window opens off-screen — no flash, no Dock tile
+  (it runs from an `LSBackgroundOnly` copy), no focus taken. Capture and pointer/key
+  events address the window by id wherever it sits, so nothing is ever shown on the
+  user's screen. On `stop` the copy is quit and cleaned up (`lsregister -u`, delete).
+- **Keychain-safe copy**: the background copy is shaped per app kind so the app's
+  login keychain keeps working (a modified `Info.plist` in place during a keychain
+  read is rejected by securityd). `native` — `Info.plist` is a copy, everything else
+  a symlink to the real app. `chromium` — an APFS clone with the real executable
+  hard-linked and the real `Info.plist` swapped back the instant the app checks in
+  (`_LSCopyApplicationInformationItem(ApplicationType)`). `sandboxed` — the real
+  plist until the sandbox is on (`sandbox_check`), then the background plist, then
+  the real one back at check-in. The `start` result's `mode` reports which kind,
+  `+guard` when `ondra-bgguard.dylib` is injected to keep a self-activating app
+  background. Catalyst, iOS-on-Mac, App Store and system apps can't be copied this
+  way and fall back to the real app launched hidden (`mode: hidden`), which AX reads
+  and acts on all the same; a capture or events unhide it behind the user's windows
+  for the moment they need. An app the user already had open is used as-is, never
+  copied. A window the user's own app left on the off-screen display is moved back.
 
 The background contract is **verified, not masked**: the helper records the
 frontmost app, key window and mouse position before and after every action and
