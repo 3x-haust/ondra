@@ -1222,14 +1222,6 @@ body.resizing .panel {
   color: var(--ink-2);
   flex: none;
 }
-.nt-row:disabled {
-  color: var(--ink-4);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-}
-.nt-row:disabled .icon {
-  color: var(--ink-4);
-}
 .nt-label {
   flex: 1;
 }
@@ -1241,10 +1233,6 @@ body.resizing .panel {
   font-size: var(--fs-xs);
   color: var(--ink-2);
   letter-spacing: 0.04em;
-}
-.nt-hint {
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
 }
 
 /* ───────────── work fold: opens and closes smoothly ───────────── */

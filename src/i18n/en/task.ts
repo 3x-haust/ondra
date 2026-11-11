@@ -295,7 +295,6 @@ export default {
   "옆 대화": "Side chat",
   "터미널": "Terminal",
   "작업 정보": "Overview",
-  "작업에서만": "Only in a task",
   "탭 {n}개 더": "{n} more tab|{n} more tabs",
   "계정|one": "Account",
   "크기": "Size",

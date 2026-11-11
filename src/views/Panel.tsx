@@ -581,15 +581,14 @@ function NewTab(props: { t?: Task }) {
   return (
     <div class="nt">
       <div class="nt-head">{tr("새 탭")}</div>
-      <For each={TOOLS}>
+      {/* a task's own tools (Changes, Terminal…) are listed only where there is a task */}
+      <For each={TOOLS.filter((x) => !x.job || props.t)}>
         {(x) => (
-          <button class="nt-row" data-shortcut={x.kind} disabled={x.job && !props.t} onClick={() => setPanelTab(x.kind)}>
+          <button class="nt-row" data-shortcut={x.kind} onClick={() => setPanelTab(x.kind)}>
             <Icon name={x.icon} size={16} />
             <span class="nt-label">{tr(x.label)}</span>
             <Show when={ptabs().some((p) => p.kind === x.kind)}><span class="nt-open">{tr("열림")}</span></Show>
-            <Show when={x.job && !props.t} fallback={<Show when={x.keys && shortcutHint(x.keys)}>{(k) => <kbd class="nt-keys">{k()}</kbd>}</Show>}>
-              <span class="nt-hint">{tr("작업에서만")}</span>
-            </Show>
+            <Show when={x.keys && shortcutHint(x.keys)}>{(k) => <kbd class="nt-keys">{k()}</kbd>}</Show>
           </button>
         )}
       </For>
