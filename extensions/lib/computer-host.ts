@@ -332,6 +332,8 @@ export class ComputerHostSession {
     if (this.stopped) return { stopped: true };
     this.stopped = true;
     this.obs.reset();
+    // its windows were kept out of the user's sight while the job worked: put them back
+    if (this.pid !== undefined) await Promise.race([this.helper.request("release", { pid: this.pid }).catch(() => undefined), new Promise((r) => setTimeout(r, 2000))]);
     this.helper.stop();
     return { stopped: true };
   }
