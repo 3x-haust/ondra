@@ -2,6 +2,7 @@
 // URLs or reveal local paths, so nothing an agent writes can run in the app.
 import { Marked, type Tokens } from "marked";
 import { rangeTilde } from "./markdownTilde";
+import { cjkStrong } from "./markdownCjk";
 import { createEffect, onCleanup } from "solid-js";
 import { fileSrc } from "../lib/native";
 import { linkTip } from "../lib/links";
@@ -20,7 +21,7 @@ const GITHUB_IMG = /^https:\/\/(github\.com\/user-attachments\/|user-images\.git
 const make = (github: boolean) => new Marked({
   gfm: true,
   breaks: true,
-  tokenizer: { del: rangeTilde },
+  tokenizer: { del: rangeTilde, emStrong: cjkStrong },
   renderer: {
     html() {
       return "";
