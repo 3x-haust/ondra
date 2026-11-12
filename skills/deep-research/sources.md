@@ -82,6 +82,18 @@ Rules for the chain:
   `reader`. arXiv: read `arxiv.org/abs/<id>` or `arxiv.org/html/<id>`, not the PDF.
 - GitHub: `gh api repos/<o>/<r>/releases` and `gh api repos/<o>/<r>/contents/<path>`
   read dates and files exactly (the API, not the rendered page).
+- Videos (YouTube talks, launch events, interviews): the transcript is the
+  source. With `yt-dlp` on the machine:
+  `yt-dlp --skip-download --write-subs --write-auto-subs --sub-langs "ko,en" --convert-subs srt -o "$APP_SCRATCH_DIR/yt/%(id)s" <url>`
+  (exact languages: a pattern like `ko.*` also pulls every machine-translated
+  track and gets rate-limited), and `yt-dlp --print "%(title)s|%(upload_date)s|%(channel)s" <url>`
+  for the title, date and owner.
+  Without it, open the video in your tab, "더보기" → "스크립트 표시", and
+  `browse read`. To let `check-research.py` check quotes from it, save the text
+  as `$R/sources/yt-<id>.txt` and add its line to `$R/sources/index.jsonl`:
+  `{"url":"https://www.youtube.com/watch?v=<id>","file":"sources/yt-<id>.txt","via":"transcript","title":"…","published":"YYYY-MM-DD"}`.
+  Automatic captions mishear names and numbers: check those against another
+  source before citing them.
 
 ## Which sources count
 

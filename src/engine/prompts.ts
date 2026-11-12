@@ -20,7 +20,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - a Mac app on this machine → computer-use; a site or web app → browser-use;
   iOS or Android → device-use
 - research with sources, a survey or comparison → deep-research
-- a report document, a chart or a diagram → visual-report
+- a report document, a chart or a diagram → visual-report; a Word, Excel,
+  PowerPoint, PDF or HWPX file → office-docs
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)

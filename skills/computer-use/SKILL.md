@@ -116,6 +116,32 @@ Reuse an unchanged observation instead of re-capturing. Return changed structure
 text when it is enough, and include an image only when it is needed for the next
 decision or as evidence. Do not trade verification for fewer tokens.
 
+## Habits that save retries
+
+- A known shortcut or a settable field beats a walk through menus: `cmd+n`,
+  `cmd+f`, `set-value` on a search field or a pop-up button (its exact item
+  title). Opening a pop-up menu in a background app can stall its window.
+  Steps you already know go in one `act` with `steps` (up to 20); observe
+  before using anything they reveal.
+- Before filling a form or spreadsheet, read around it: other tabs or sheets,
+  notes, the values a drop-down allows. Use their exact wording and formats.
+- Save and Open sheets: put only the file name in the name field; for the
+  folder press `cmd+shift+g`, type the path, `return`, then `return` again to
+  save. Save a new document only when the task asks for a file.
+- Menus: after opening a menu the observation shows that menu; pick the item,
+  or `escape` to get the window back. A greyed-out item usually needs a
+  selection or focus first.
+- Still loading: observe once more. If it still loads, report it as pending
+  (neither failed nor done) or do other work meanwhile, rather than waiting in
+  a loop.
+- An Electron or Chromium app in the background can hold back the update that
+  follows an action (a "Saved" notice, a refreshed list). If the action reported
+  no error, don't repeat it; go on and say the confirmation didn't show.
+- Done means seen in the app: the Save sheet closed and the window title has
+  the new name, the sent message sits in the thread. Approval to use an app
+  doesn't cover buying, sending, deleting or accepting terms; those get an
+  `ask`.
+
 ## Capture and evidence
 
 Keep window captures in `$APP_ARTIFACTS_DIR`. Inspect each image before citing

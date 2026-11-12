@@ -6,8 +6,9 @@ description: >
   user asks for it. Use when a worker must open a site, check a web app, fill a
   form, read a page, take screenshots, or record proof of a change. Covers the
   shared browser (your own tab, shared logins), signing in from the macOS
-  keychain, live streaming to the app window, recordings as evidence, and how
-  to report with visual-report blocks.
+  keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
+  and canvas apps, Google Docs/Sheets and Gmail in the signed-in browser, and
+  how to report with visual-report blocks.
 metadata:
   ondra-commands: '\bagent-browser\b|(^|[\s/])browse\s'
 ---
@@ -44,6 +45,9 @@ browse look [-s <css>] [--all]       # more than the folded look shows
   `"wait --url **/done"`, `"wait @e5 --state hidden"`.
 - **Many items** (lists, tables, pages): one `browse do "eval ..."` or the site's
   own API, and recipes for sites you come back to: `reference.md`.
+- **Also in `reference.md`**: canvas, maps and other pixel-only controls; bot
+  checks and CAPTCHAs; Google Docs/Sheets, Gmail, Notion and Slack through the
+  signed-in page; finding pictures you may use.
 - Anything else agent-browser does works in the same tab, plain
   (`agent-browser <command> --help` for one command) or inside `browse do`. Don't
   print its official skill (`skills get core`).
