@@ -27,7 +27,7 @@ const fill = (s: string, vars?: Record<string, string>) => (vars ? s.replace(/\{
 const S = (label: string, now: string, target?: string, vars?: Record<string, string>): Said => ({ label: t(label, vars), now: t(now, vars), nowKo: fill(now, vars), target });
 
 /** The shapes a stored "now" line takes when a name is filled in (the rest are plain t() keys). */
-const NOW_FORMS = ["{f} 읽는 중", "{f}에 적는 중", "{f} 수정 중", "{f} 작성 중", "서브에이전트 {n}개 기다리는 중", "Aside로 {h} 보는 중", "{h} 요청 중", "{p} 실행 중"];
+const NOW_FORMS = ["{f} 읽는 중", "{f}에 적는 중", "{f} 수정 중", "{f} 작성 중", "서브에이전트 {n}개 기다리는 중", "{h} 요청 중", "{p} 실행 중"];
 const escape = (s: string) => s.replace(/[.*+?^$()[\]\\|]/g, "\\$&");
 const FORM_RES = NOW_FORMS.map((f) => ({ f, keys: [...f.matchAll(/\{(\w+)\}/g)].map((m) => m[1]), re: new RegExp(`^${escape(f).replace(/\{\w+\}/g, "(.+?)")}$`) }));
 
@@ -250,10 +250,6 @@ function unrun(k: string): string {
 export function describeCommand(cmd: string): Said {
   const c = cmd.trim();
   const waits = /\b(until|while)\b[\s\S]*\bsleep\b|\bfor\b[\s\S]*\bseq\b[\s\S]*\bsleep\b/.test(c);
-  if (/\baside\s+repl\b/.test(c)) {
-    const h = host(c);
-    return h ? S("Aside로 {h} 봄", "Aside로 {h} 보는 중", h, { h }) : S("Aside 브라우저 씀", "Aside 브라우저 쓰는 중");
-  }
   if (/\bpr-media\.sh\b/.test(c)) return S("PR에 사진 넣음", "PR에 사진 넣는 중");
   if (runsProgram(c, /\bgh\b/)) {
     if (/\bactions\b|\bgh\s+run\b/.test(c)) return waits ? S("GitHub 빌드 기다림", "GitHub 빌드 기다리는 중") : S("GitHub 빌드 확인함", "GitHub 빌드 확인 중");

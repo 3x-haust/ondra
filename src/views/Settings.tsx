@@ -398,17 +398,6 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
               <button class="btn sm" onClick={() => void spaceGhLogin(state.spaces.find((x) => x.id === cur!.id) ?? cur!)}>{tools()?.gh_user ? t("다시 로그인") : t("로그인")}</button>
             </div>
           </div>
-          {/* only for a space that already browses with an Aside account */}
-          <Show when={cur!.aside}>
-            <label class="sp-field">
-              <span>{t("Aside 계정")}</span>
-              <input
-                class="input"
-                value={state.spaces.find((x) => x.id === cur!.id)?.aside ?? ""}
-                onChange={(e) => setState("spaces", (x) => x.id === cur!.id, { aside: e.currentTarget.value.trim() || undefined })}
-              />
-            </label>
-          </Show>
           <div class="sp-field">
             <span>{t("커밋 작성자")}</span>
             <div class="sp-git-row">

@@ -1,9 +1,5 @@
 export default {
   // describe.ts: what a shell command does (label / going on now)
-  "Aside로 {h} 봄": "Viewed {h} in Aside",
-  "Aside로 {h} 보는 중": "Viewing {h} in Aside",
-  "Aside 브라우저 씀": "Used Aside browser",
-  "Aside 브라우저 쓰는 중": "Using Aside browser",
   "PR에 사진 넣음": "Added images to PR",
   "PR에 사진 넣는 중": "Adding images to PR",
   "GitHub 빌드 기다림": "Waited for GitHub build",
