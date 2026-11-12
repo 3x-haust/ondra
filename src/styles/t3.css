@@ -1,4 +1,4 @@
-/* Shapes after T3 Code (compact rows, quiet status dots, pill tabs, a calm
+/* Compact shapes (compact rows, quiet status dots, pill tabs, a calm
    composer) with Ondra's blue as the one accent. Loaded last; motion lives at
    the bottom and switches off for reduced motion. */
 
@@ -604,7 +604,7 @@
 }
 
 
-/* ───────────── code surfaces & diffs (Pierre, as in T3 Code) ───────────── */
+/* ───────────── code surfaces & diffs (Pierre themes) ───────────── */
 :root {
   --code-surface: #ffffff;
   --code-fg: #0a0a0a;
@@ -1333,7 +1333,7 @@ body.resizing .panel {
   opacity: 1;
 }
 
-/* ═════════════ shell v2: one canvas, content on cards (Arc / Codex app) ═════════════
+/* ═════════════ shell v2: one canvas, content on cards ═════════════
    The window is the sidebar colour. Main and the panel are cards that sit on it
    with an 8px gutter, so the list reads as the frame and the work as the page. */
 :root {
@@ -2266,7 +2266,7 @@ input[type="checkbox"] {
   right: -6px;
 }
 
-/* ═════════════ board: every job at a glance (Linear / GitHub Projects) ═════════════ */
+/* ═════════════ board: every job at a glance, in columns ═════════════ */
 .board-view {
   display: flex;
   flex-direction: column;
@@ -3760,7 +3760,7 @@ input[type="checkbox"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* ═════════════ + menu (after Codex) ═════════════ */
+/* ═════════════ + menu ═════════════ */
 .plus-wrap {
   position: relative;
 }
@@ -4104,7 +4104,7 @@ input[type="checkbox"] {
   margin-top: var(--s-4);
 }
 
-/* ───────── work log, after Codex: progress prose with quiet one-line tool rows between */
+/* ───────── work log: progress prose with quiet one-line tool rows between */
 .work-body {
   gap: var(--s-16);
   padding-top: var(--s-20);
@@ -4176,7 +4176,7 @@ input[type="checkbox"] {
   order: 4;
 }
 
-/* ───────── settings fill the window (Codex): sidebar = sections, main = the page */
+/* ───────── settings fill the window: sidebar = sections, main = the page */
 .settings-side .settings-back {
   color: var(--ink-3);
   margin-bottom: var(--s-12);
@@ -5224,7 +5224,7 @@ input[type="checkbox"] {
   pointer-events: none;
 }
 
-/* main, empty: one question, the box, a few starts under it (Codex) */
+/* main, empty: one question, the box, a few starts under it */
 .hero-page {
   overflow: auto;
 }
@@ -5282,7 +5282,7 @@ input[type="checkbox"] {
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
-/* the whole to-do list over the input (OmO) */
+/* the whole to-do list over the input */
 .todos,
 div.queued {
   width: 100%;
@@ -5383,7 +5383,7 @@ div.queued {
   font-weight: var(--fw-medium);
 }
 
-/* said while it worked: waits for the work to finish (Codex) */
+/* said while it worked: waits for the work to finish */
 div.queued {
   padding: var(--s-4) var(--s-8);
   display: grid;
@@ -7700,7 +7700,7 @@ textarea { resize: none !important; field-sizing: content; }
   box-shadow: none;
 }
 
-/* ═════════════ work lines: quiet, plain type, like the text around them (Codex) ═════════════ */
+/* ═════════════ work lines: quiet, plain type, like the text around them ═════════════ */
 .tool-row {
   height: auto;
   min-height: 30px;
@@ -7836,12 +7836,12 @@ textarea { resize: none !important; field-sizing: content; }
 .shimmer {
   color: var(--ink-3);
 }
-/* Codex order: the verb leads in the line's ink, the name follows quieter */
+/* the verb leads in the line's ink, the name follows quieter */
 .tool-row .tool-verb { order: 1; color: var(--ink-2); }
 .tool-row .tool-target { order: 2; color: var(--ink-4); }
 .tool.group > .tool-row .tool-target { font-size: var(--fs-sm); }
 .tool.group.open > .tool-row .tool-chev { opacity: 1; transform: rotate(90deg); }
-/* work lines sit close to what was said around them (Codex), and read quieter
+/* work lines sit close to what was said around them, and read quieter
    than the text: the verb a step dimmer than prose, the name dimmer still */
 .thread-inner > .msg-text + .tool,
 .thread-inner > .tool + .msg-text { margin-top: -12px; }
@@ -7855,7 +7855,7 @@ textarea { resize: none !important; field-sizing: content; }
 /* the chat moves only when we move it (keepBottom), never by the browser guessing */
 .thread { overflow-anchor: none; }
 
-/* a question as a list (Codex): numbered rows, the chosen one lit, and a last
+/* a question as a list: numbered rows, the chosen one lit, and a last
    row to answer in your own words */
 .decision-list {
   display: grid;
@@ -9089,7 +9089,7 @@ select.select.dev-space {
   padding: 0;
 }
 
-/* ═════════════ issues tab (gitsu-style list) ═════════════ */
+/* ═════════════ issues tab (grouped list) ═════════════ */
 .iss {
   display: flex;
   flex-direction: column;

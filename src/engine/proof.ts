@@ -1,4 +1,4 @@
-// Proof before "done" (after OmO's claim-receipt and gajae-code's quality gate):
+// Proof before "done" (a claim needs a receipt, and a quality gate checks it):
 // the job's evidence is checked against what actually happened in its session,
 // not taken on its word.
 //   test / build / run → the same command ran here, passed, and no code changed after it

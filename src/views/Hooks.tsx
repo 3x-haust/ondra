@@ -1,4 +1,4 @@
-// Settings › 훅: shell commands that run on agent events, like Claude Code hooks.
+// Settings › 훅: shell commands that run on agent events (hooks).
 // Saved as JSON in the app's data folder; extensions/hooks.ts reads it in every job.
 import { createSignal, For, onMount, Show } from "solid-js";
 import { hooksLoad, hooksSave } from "../lib/native";

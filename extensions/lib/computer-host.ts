@@ -6,7 +6,7 @@
 // captures. It never activates an app, never moves the cursor, never posts to the
 // global session. The helper reports the frontmost app / key window / mouse before
 // and after every action; this module refuses any action whose result shows those
-// changed, instead of papering over it the way Codex does.
+// changed, instead of papering over it.
 //
 // Two independently testable pieces live here:
 //   - envelope(): validates one helper response (version 1, {ok,result|error}).

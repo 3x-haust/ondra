@@ -67,7 +67,7 @@ One row per shot; status goes outline → posed → built → animated.
 ```
 ## 03 · ask  (5.30–9.30 s, f 159–279)        status: posed
 hero move   prompt bar rises 80 px and settles; camera follows the caret at 1.3×
-reads       5.6–6.4 "OMD에게 요청하기" (placeholder) · 6.5–9.0 the typed request
+reads       5.6–6.4 "<앱>에게 요청하기" (placeholder) · 6.5–9.0 the typed request
 sound       bed: pad, filter half open · hits: key ticks on typing times, enter at 9.1 · silence 9.1–9.3
 seam out    cut-the-curve upward into 04; carrier: the page thumbnail
 notes
@@ -78,7 +78,7 @@ time. A shot without a `reads` line is decoration; ask whether it should exist.
 
 ## Generic defaults to watch for
 
-Tells of generated video, on top of what users rejected (SKILL.md). Fine when
+Tells of generated video, on top of the choices that tend to fail (SKILL.md). Fine when
 the brand or the user asks for one; otherwise reach for something specific.
 
 - glow, bloom, particles, lens flares as decoration

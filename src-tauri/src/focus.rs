@@ -65,7 +65,7 @@ pub fn decide(s: &Signals) -> Verdict {
         return if s.restored_lately > 0 { Verdict::UserTook } else { Verdict::Leave };
     }
     if s.restored_lately > 0 {
-        // back right after a restore: typed in Spotlight/Raycast, or the app won't stay behind
+        // back right after a restore: typed in Spotlight or a launcher, or the app won't stay behind
         if s.since_key < 1.0 {
             return Verdict::UserTook;
         }

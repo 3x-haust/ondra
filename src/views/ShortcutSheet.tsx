@@ -1,4 +1,4 @@
-// `?` shows every shortcut, built from the same table the keys run on (after gitsu),
+// `?` shows every shortcut, built from the same table the keys run on,
 // so it can't go out of date, and shows the user's bindings. The names are the ones Settings › 단축키 shows.
 import { createMemo, createSignal, For, onCleanup } from "solid-js";
 import { appCommands } from "../state/commands";

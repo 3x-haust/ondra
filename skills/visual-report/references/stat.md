@@ -9,7 +9,7 @@ under the chart), `unit`, `x` / `y` (axis titles), `em: true` on an item or seri
 to highlight it (the rest go grey). `refs: [{x | y, label}]` adds dashed reference
 lines to histogram, density, ecdf, scatter, training and scree.
 `series` is always `[{label, …}]`; up to 8 colours, the rest are dropped or grey.
-Labels in Korean. Points can be `[x, y]`, `[x, y, "label"]` or `{x, y, label}`.
+Labels in the user's language. Points can be `[x, y]`, `[x, y, "label"]` or `{x, y, label}`.
 
 ## Distributions
 

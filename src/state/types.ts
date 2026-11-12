@@ -206,7 +206,7 @@ export interface Task {
   browser?: boolean;
   /** Messages sent while it was not running; delivered on start. */
   inbox: string[];
-  /** said while it was working: goes in, in order, once the current work is done (Codex queue).
+  /** said while it was working: goes in, in order, once the current work is done (a queue).
    * `by`: another agent sent it (see Entry); `sent`: what the model gets when it differs from `text` */
   queue?: { id: string; text: string; at: number; by?: string; sent?: string }[];
   /** sent to its running engine (a subagent's result, the user's words) and not taken by the model
@@ -612,7 +612,7 @@ export interface Settings {
   /** other Macs this one works on, and the projects of theirs added here */
   hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number }[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
-  /** where new work goes from each workspace here (Codex's run location): another Mac, its workspace
+  /** where new work goes from each workspace here (the run location): another Mac, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */
   computers?: Record<string, { host: string; account?: string; model?: string; thinking?: string }>;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */

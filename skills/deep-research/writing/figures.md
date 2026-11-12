@@ -54,7 +54,8 @@ When a cited paper or report has a figure that answers the question exactly
 2. Download it into `$R`, shrink it (`sips -Z 1400 fig.png`), and embed it as a
    data URI so the report stays one file:
    `base64 -i "$R/fig.png" | tr -d '\n'` into `src="data:image/png;base64,…"`.
-3. Caption: what to look at in it, in Korean, and "(출처: [n]의 Figure k)".
+3. Caption: what to look at in it, in the report's language, and the source
+   ("(출처: [n]의 Figure k)" in Korean, "(Source: [n], Figure k)" in English).
    An English figure gets the key labels explained in the caption.
 
 Never change what a source figure says. When it shows far more than the

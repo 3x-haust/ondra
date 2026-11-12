@@ -1,22 +1,21 @@
-// The quiet memory pass (Letta sleep-time agents, LangMem background extraction,
-// ACE curation, gbrain's dream cycle). While nothing is running, at most every few
+// The quiet memory pass: background extraction and curation while idle. While nothing is running, at most every few
 // hours, one small model call per space:
 //   1. learns from jobs that finished without saving anything (0–2 pieces each)
 //   2. finds patterns: a lesson or procedure seen in 3+ different finished jobs of
-//      the space (gbrain patterns), read from what the harness saw in each job
+//      the space, read from what the harness saw in each job
 //      (repeated failures, stalls, retries, failed commands, how long it took)
 //   3. merges pieces that say the same thing; of two that contradict, retires the older
 //   4. gives each piece related words (synonyms, Korean/English, the general idea)
 //      so recall finds it by meaning, and what it's about (tools, services) for hubs
 //   5. retires pieces that faded away (long unused; the user's rules never fade)
-//   6. a procedure used again and again grows into a skill (Codex / OMP / Hermes)
-// Finished jobs are read from 일 기록 up to a cursor (nanobot), so a pass that
+//   6. a procedure used again and again grows into a skill
+// Finished jobs are read from 일 기록 up to a cursor, so a pass that
 // stops halfway picks up where it was; patterns look back over the last few jobs
 // but need a new one among their evidence. Every change is checked here: unknown
 // ids are ignored, a piece learned from jobs carries a quote that must really be
-// in what those jobs said (gbrain quote_verify) or it is dropped, the user's own
-// pieces are never merged away, reworded or retired by the model (OmO / Qwen
-// pinned) — what contradicts one waits for the user (확인 필요, gbrain decide) —
+// in what those jobs said or it is dropped, the user's own
+// pieces are never merged away, reworded or retired by the model (pinned)
+// — what contradicts one waits for the user (확인 필요) —
 // and a space only ever sees its own pieces.
 import { createSignal } from "solid-js";
 import { expand } from "./rpc";
@@ -28,12 +27,12 @@ import { inTauri, pathsExist, skillSave } from "../lib/native";
 import { projectById, setState, spaceById, state, uid } from "../state/store";
 import type { Memory, MemoryConflict, MemoryKind, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
-import { t as tr } from "../i18n";
+import { memorySentence, t as tr } from "../i18n";
 
 const EVERY_MS = 6 * 60 * 60_000;
 /** finished jobs of a space a pass looks across for patterns */
 export const WINDOW = 30;
-/** different jobs a pattern needs (gbrain dream.patterns.min_evidence) */
+/** different jobs a pattern needs */
 export const MIN_EVIDENCE = 3;
 /** characters of job material one call gets (new jobs first) */
 const JOBS_BUDGET = 16_000;
@@ -137,7 +136,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
     `You keep the long-term memory of a coding agent for the space "${spaceById(space)?.label ?? space}". Tidy it. Be conservative: when unsure, change nothing.`,
     "",
     "Do these:",
-    "1. merge: pieces that say the same thing → keep one (prefer the user's own), drop the others, optionally a better merged text (one short Korean sentence). Never drop or reword a user's own piece.",
+    "1. merge: pieces that say the same thing → keep one (prefer the user's own), drop the others, optionally a better merged text (one short sentence, in the language the pieces are in). Never drop or reword a user's own piece.",
     "2. retire: when two pieces contradict, the older one (the newer replaces it). Never retire a user's own piece: when a piece that is not the user's own contradicts one that is, put the pair in conflict instead; the user's own stays and the other goes.",
     "3. keys: for EVERY piece without {keys}, 4–8 related search words a future task might use for it: synonyms, Korean and English forms, the general topic (e.g. 'iOS 빌드 실패' → 'Xcode, 시뮬레이터, build error, 캐시, 빌드 오류'). Short words only.",
     "4. about: for each piece, 0–3 named things it is about (tools, services, libraries, products, projects), in their usual spelling (e.g. 'Supabase', 'Next.js', 'GitHub').",
@@ -155,7 +154,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
     ...(learn || patterns
       ? [
           "",
-          `Each ${learn && patterns ? "learn or pattern" : learn ? "learn" : "pattern"} piece: one short Korean sentence ending in ~요, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved: the user's own stays).`,
+          `Each ${learn && patterns ? "learn or pattern" : learn ? "learn" : "pattern"} piece: ${memorySentence()}, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved: the user's own stays).`,
         ]
       : []),
     "",

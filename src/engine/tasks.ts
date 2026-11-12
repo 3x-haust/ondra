@@ -742,7 +742,7 @@ async function deliver(child: Task) {
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "repo";
 
-/** "feat/pstack-coding-rules": a type and a short ascii name, or nothing */
+/** "feat/signup-email-check": a type and a short ascii name, or nothing */
 function branchName(b?: string) {
   const m = /^(feat|fix|docs|refactor|test|chore|build|ci|perf|style)\/([a-z0-9][a-z0-9-]{1,40})$/.exec((b ?? "").trim().toLowerCase());
   return m ? `${m[1]}/${m[2].replace(/-+$/, "")}` : undefined;
@@ -1021,8 +1021,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const talkOnly = !canUseTools(account.id, model);
     if (talkOnly && !resume) updateTask(id, (x) => void push(x, { kind: "note", text: "이 모델은 도구를 못 써서 대화만 해요" }));
     await prepareQuery(relatedQuery(t));
-    // the memory given at the first start is kept for every later session (Hermes / Letta:
-    // a stable prompt); later saves reach the next job
+    // the memory given at the first start is kept for every later session (a
+    // stable prompt); later saves reach the next job
     if (!t0.memorySnapshot) {
       const picked = relatedMemory(t);
       markUsed(picked.map((m) => m.id));
@@ -1210,10 +1210,10 @@ function handlers(id: string, run: Run) {
             });
           });
           run.cursor = run.text.length;
-          // narration slipping into English for a Korean user: one reminder per session
+          // narration slipping into English for a user who writes Korean: one reminder per session
           if (run.streaming && !run.langNudged && text && notTheirLanguage(text, taskById(id))) {
             run.langNudged = true;
-            void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls are read by the user: write them in Korean (\"이제 사진을 올려요\"), not English." }).catch(() => {});
+            void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls are read by the user: write them in the language they write in (here Korean: \"이제 사진을 올려요\"), not English." }).catch(() => {});
           }
           const u = ev.message?.usage;
           noteCall(agentOf(id), u);

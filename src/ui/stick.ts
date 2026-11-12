@@ -17,7 +17,7 @@ export function holdScroll(ms = 600, at: Element | null = null) {
 }
 
 /**
- * Follow the newest content the way Codex does: the chat stays pinned to the
+ * Follow the newest content: the chat stays pinned to the
  * bottom while things arrive, and the moment the user scrolls up (wheel, touch,
  * keys, dragging the scrollbar) it lets go and stays where they put it. It
  * follows again only once they are back at the very bottom (or press "맨 아래로").

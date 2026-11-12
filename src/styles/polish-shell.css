@@ -737,7 +737,7 @@
   color: var(--ink);
 }
 
-/* ═════════════ ⌘K palette: Raycast/Linear ═════════════ */
+/* ═════════════ ⌘K palette ═════════════ */
 .backdrop:has(> .palette) {
   padding-top: 14vh;
 }
@@ -1555,7 +1555,7 @@
   }
 }
 
-/* update ready: a small blue round button by the window controls (Codex-style) */
+/* update ready: a small blue round button by the window controls */
 .update-btn {
   flex: none;
   display: inline-grid;
@@ -1737,7 +1737,7 @@
 .status-line .st-host.away {
   color: var(--warn);
 }
-/* the run location under the composer (Codex): which Mac new work goes to */
+/* the run location under the composer: which Mac new work goes to */
 .status-line .st-comp {
   gap: var(--s-6);
 }
@@ -1778,7 +1778,7 @@
   transition: opacity var(--dur-fast) var(--ease);
 }
 
-/* a job's browser floating in a corner (Codex's picture-in-picture): the page, small; on hover a bar
+/* a job's browser floating in a corner (picture-in-picture): the page, small; on hover a bar
    with the job, the site, 크게 보기 and ×. Drag to another corner. */
 .pip {
   position: fixed;

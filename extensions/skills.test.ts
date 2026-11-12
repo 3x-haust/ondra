@@ -38,8 +38,8 @@ describe("skill matching", () => {
   });
 
   it("maps a question about how another tool works to reverse engineering", () => {
-    expect(top("Codex 컴퓨터유즈가 어떻게 동작하는지 분석")[0]).toBe("reverse-engineering");
-    expect(skillHint(bundled, "Codex 컴퓨터유즈가 어떻게 동작하는지 분석")).toContain("- reverse-engineering:");
+    expect(top("다른 앱의 컴퓨터유즈가 어떻게 동작하는지 분석")[0]).toBe("reverse-engineering");
+    expect(skillHint(bundled, "다른 앱의 컴퓨터유즈가 어떻게 동작하는지 분석")).toContain("- reverse-engineering:");
   });
 
   it.each([
@@ -81,7 +81,7 @@ describe("skill matching", () => {
 
 describe("taskQuery", () => {
   const t: Task = {
-    id: "t1", space: "home", topic: "ondra", title: "Codex 분석", ask: "Codex 컴퓨터유즈가 어떻게 동작하는지 분석",
+    id: "t1", space: "home", topic: "ondra", title: "컴퓨터유즈 분석", ask: "다른 앱의 컴퓨터유즈가 어떻게 동작하는지 분석",
     cwd: "/repo", status: "queued", priority: 2, weight: "light", accountId: "default", createdAt: 1,
     now: "", plan: [], legs: [], entries: [], shells: [], inbox: [],
   };
@@ -89,7 +89,7 @@ describe("taskQuery", () => {
 
   it("takes the title and the ask from a job's first message", () => {
     const q = taskQuery(taskPrompt(t))!;
-    expect(q).toContain("Codex 분석");
+    expect(q).toContain("컴퓨터유즈 분석");
     expect(q).toContain(t.ask);
     expect(q).not.toContain("Folder:");
   });

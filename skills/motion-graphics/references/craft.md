@@ -1,6 +1,6 @@
 # Craft defaults
 
-Starting points that usually work, from rejected versions, measured
+Starting points that usually work, from versions that didn't work, measured
 reference films and public motion skills (sources at the end). Change a
 number when the film calls for it. Render defects (flashes, double images,
 drift) are correctness, not taste. 1920×1080 at 30 fps unless noted; f = frames.
@@ -9,14 +9,14 @@ drift) are correctness, not taste. 1920×1080 at 30 fps unless noted; f = frames
 
 Text is only ever one of three things:
 
-1. **Full-frame type**: kinetic type that is the shot (Apple "Make a beat.",
-   I/O "Level up" at ~30% of frame height).
+1. **Full-frame type**: kinetic type that is the shot (a verb card that
+   performs itself, a short slogan at ~30% of frame height).
 2. **Part of the shot's layout**: a headline placed on the grid, not
    centered at the bottom.
 3. **A label on what it points at**: selection box name, dimension, stamp,
    frame name.
 
-Not a caption chip at the bottom of the frame (rejected: "자막처럼 나오는 거 별로").
+Not a caption chip at the bottom of the frame: it reads as subtitles, not design.
 
 - **Sizes.** Text to be read: around 56 px rendered or more (font-size ×
   every ancestor scale × cos of any Y rotation), labels around 32 px, so it
@@ -37,8 +37,8 @@ Not a caption chip at the bottom of the frame (rejected: "자막처럼 나오는
 - **Anchor word + swapping word** lists many things in seconds ("SIMULATE
   ___", "plans / builds / tests", "Export directly to ___"), swapping every
   2nd–4th beat.
-- **Words become UI**: Canvas underlines "Canvas", a card grows out of the
-  word and shrinks into the real chip. Words can open around an image
+- **Words become UI**: an underline marks a word in the title, a card grows
+  out of the word and shrinks into the real chip. Words can open around an image
   ("Brands [image] don't wait.").
 - **Copy**: names the feature and a concrete benefit; the brief never leaks
   onto the screen (concept names, "AI가 만든 화면 예시").
@@ -47,12 +47,12 @@ Not a caption chip at the bottom of the frame (rejected: "자막처럼 나오는
 
 - The hero (prompt bar, generated page, window) usually fills 40% or more
   of the frame's width or height: prompt bar at ~1.3× camera, generated page
-  ~0.9 of the frame. Small UI in a void reads as a screen recording (rejected).
+  ~0.9 of the frame. Small UI in a void reads as a screen recording.
 - Isolate the action: rebuild only the piece the beat uses, at 1.6–2× its
   real size, then return it to its place in the workspace.
 - One composition per scene; don't jump the hero up and down between shots.
   When something docks (a prompt bar under a page), shrink the old hero.
-- Crops: one control at a time at 2–3× (Claude Design, GitHub); the full
+- Crops: one control at a time at 2–3×; the full
   window only briefly, then back in.
 - The stage background is the current scene's color, including what a
   camera move or scale-down reveals. Any seam whose summed opacity dips
@@ -110,7 +110,7 @@ functions return exactly 0 and 1 at the ends.
 Each recurring element moves one way the whole film: the mark always
 "draws as a rectangle" (handles pull in / push out); the cursor always
 glides on eased arcs; cards always rise the same way. A second style for
-the same thing reads as inconsistency (rejected: "네모 커지는 모션 이상").
+the same thing reads as inconsistency, even a mistake.
 
 ## Transitions and seams
 
@@ -136,7 +136,7 @@ Starting numbers per seam:
 | circle flood | from the source object; radius must clear the farthest corner (×1.05) in 0.3–0.35 s |
 | color flood | 0.4 s |
 | dip cut | outgoing frame darkens ~40% for 3 f before the cut |
-| rack focus | cut at peak blur 8–12 px with ~1.06 scale; sparingly; not on text being read (depth of field on text was rejected) |
+| rack focus | cut at peak blur 8–12 px with ~1.06 scale; sparingly; not on text being read (depth of field on text makes it unreadable) |
 | hidden cut | a foreground occluder sweeps 14 f, cut on the frame it covers the whole frame; or a light-leak burn cut at its peak. One technique per seam |
 
 Whips are rare in a calm film; when used, drive them from one velocity
@@ -154,7 +154,7 @@ show stepped ghosts.
 - 3D tilt (perspective ~1800–2400 px, 8–20°) while something enters or as a
   hero angle; face the camera before the viewer must read.
 - Station tour: fly ~20 f, dwell around 24 f (under ~15 f reads as a scan).
-- The camera may follow the caret while typing (Gemini reel) at a fixed
+- The camera may follow the caret while typing at a fixed
   scale. Close-up moves around 0.75 s or longer; at 0.45 s they smeared.
 
 ## Cursor
@@ -181,7 +181,7 @@ show stepped ghosts.
 - Caret solid while typing, blinks (~0.13 s half-period) only while waiting;
   after the last character it blinks twice and goes. Hold a moment (~1.7 s)
   after.
-- Don't type over text already on screen (rejected); the placeholder
+- Don't type over text already on screen (it reads as a glitch); the placeholder
   vanishes on the first key. Retyping: delete back to the change, then type,
   like a person; an error-and-retype beat works once, not as a habit.
 - Key sounds land on the key frames, heavier on space and enter.
@@ -198,26 +198,27 @@ show stepped ghosts.
 - Grounds: pure black and off-white (#f3f2f0) alternating is enough. Light
   from below the frame for dark scenes. A page's own color may bleed into
   the wall behind it and change with the page.
-- The clichéd AI palette (purple/pink/teal) only for showing the "before"
-  (rejected as the product's own look).
+- The clichéd AI palette (purple/pink/teal) only for showing the "before";
+  as the product's own look it reads as generic AI.
 - One glint or light sweep per hero is plenty, clipped to its radius.
 - Several worlds are fine if each is entered through an object on screen and
   there is one home stage to return to.
 
-## Big-tech details worth using
+## Details from launch films worth using
 
-- UI enters tilted and turns to face the camera to be read (Gemini Canvas);
-  a thin highlight on panels' top edge.
+- UI enters tilted and turns to face the camera to be read; a thin
+  highlight on panels' top edge.
 - While generating: grey skeleton with a light sweep, then the real content
-  fills in (Stitch). Status chip with changing verbs (Claude Design).
-- A fixed element with the background changing behind it (Claude Design).
+  fills in. A status chip with changing verbs ("Designing…", "Tweaking…").
+- A fixed element (the prompt box) with the world it describes changing
+  behind it.
 - Dot grid behind canvas scenes; rulers, 12-column grid, baselines, red
   dimension lines and a selection box for a designer's-artboard scene.
 - Before/after: the same page, comparison slider held ~6 s (center → right →
   left → center), cursor on the handle; ease out over 1 s.
 - End card: the mark lands where motion converges, in the last 5–10%,
   lockup 15–30% of frame width, performed not faded; CTA held 1.5–3 s; no
-  floating-cards finale after it (rejected).
+  floating-cards finale after it (the film has already ended).
 
 ## Sound
 
@@ -228,14 +229,14 @@ show stepped ghosts.
   (0.40 → 0.25 over six), and merge into one swoosh when too dense.
 - Closing phrase: riser → impact → sparkle, or swell into the final chord.
 - The old way sits near silence; the music opens when the product appears.
-  Before the drop, 0.1–1.5 s of near silence (Stitch, Canvas).
+  Before the drop, 0.1–1.5 s of near silence.
 - Bed energy below ~150 Hz is inaudible on phones; high-pass pads where
   they stack. A mix around −16 to −14 LUFS with sections within ~8–10 LU suits
   most platforms; keep peaks under −1 dBFS so the encode doesn't clip.
 - Ending: half-time drums → drums out → bass held, filter closing, plucks
   thinning 8th → quarter → half → the final chord opening slowly. Cutting
-  the music to zero and restarting a chord just before the logo was rejected
-  (a song that ends with a hard cut).
+  the music to zero and restarting a chord just before the logo sounds like
+  a song that ends with a hard cut.
 - AAC adds priming silence (~1 f): check sync by comparing a sharp hit's
   peak in the rendered MP4 with its picture frame.
 - Deliver with music and, if asked, an SFX-only master from the same cues.
@@ -243,8 +244,8 @@ show stepped ghosts.
 
 ## Sources
 
-Own work: the OMD promo film (19 rounds of user feedback) and frame-by-frame
-analysis of the films in `films.md`. Methods adapted (ideas and numbers, no
+Promo films iterated over many review rounds, and frame-by-frame analysis
+of the film types in `films.md`. Methods adapted (ideas and numbers, no
 code copied) from public skills:
 
 - HeyGen HyperFrames (Apache-2.0) — https://github.com/heygen-com/hyperframes:

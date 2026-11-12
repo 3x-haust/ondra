@@ -1,5 +1,5 @@
 {
-  "note": "Situations from the user's real messages that went wrong in replay",
+  "note": "Situations that went wrong in replay",
   "space": "work",
   "each": [
     { "id": "offer-trap", "note": "Finish and PR one job; the other stays as it is, and nothing is offered",
@@ -7,26 +7,26 @@
       "expect": { "has": ["append"], "new": 0 } },
     { "id": "correction-question", "note": "A correction to a question is answered (searching), not forked",
       "chat": [
-        { "from": "me", "text": "pstack 설명좀 해줘" },
-        { "from": "captain", "text": "pstack은 실행 중인 프로세스의 스레드 스택을 출력하는 리눅스 명령이에요." }
+        { "from": "me", "text": "flowkit 설명좀 해줘" },
+        { "from": "captain", "text": "flowkit은 데이터 파이프라인을 짜는 파이썬 라이브러리예요." }
       ],
-      "text": "아니 커서 pstack poteto 가 만든거;;",
+      "text": "아니 에디터 플러그인 flowkit hana 가 만든거;;",
       "expect": { "answerOnly": true } },
-    { "id": "known-name", "note": "The chat already says what pstack is: answer, don't ask",
+    { "id": "known-name", "note": "The chat already says what flowkit is: answer, don't ask",
       "chat": [
-        { "from": "me", "text": "poteto가 만든 pstack 이 뭐야" },
-        { "from": "captain", "text": "pstack은 poteto(Lauren Tan)가 만든 Cursor용 코딩 에이전트 플러그인이에요. /poteto-mode로 원인 분석부터 검증까지 하게 해요." }
+        { "from": "me", "text": "hana가 만든 flowkit 이 뭐야" },
+        { "from": "captain", "text": "flowkit은 hana가 만든 에디터용 코딩 에이전트 플러그인이에요. /flow-mode로 원인 분석부터 검증까지 하게 해요." }
       ],
-      "text": "그 나 pstack 구조가 어떻게 되어있는지 궁금해",
+      "text": "그 나 flowkit 구조가 어떻게 되어있는지 궁금해",
       "expect": { "answerOnly": true } }
   ],
-  "projects": [{ "name": "요메이츠 PC", "folder": "/Users/me/Work/projects/yomates-pc" }],
+  "projects": [{ "name": "초롱 PC", "folder": "/Users/me/Work/projects/chorong-pc" }],
   "tasks": [
-    { "id": "t-compact", "title": "PC 압축·비우기 버튼", "topic": "요메이츠 PC", "project": "요메이츠 PC", "status": "done", "summary": "압축·비우기 버튼을 만들고 스크린샷을 남겼어요 (PR 전)" },
-    { "id": "t-cu", "title": "Computer use 구현", "topic": "요메이츠 PC", "project": "요메이츠 PC", "status": "paused", "now": "권한 요청 다이얼로그 만드는 중" }
+    { "id": "t-compact", "title": "PC 압축·비우기 버튼", "topic": "초롱 PC", "project": "초롱 PC", "status": "done", "summary": "압축·비우기 버튼을 만들고 스크린샷을 남겼어요 (PR 전)" },
+    { "id": "t-cu", "title": "Computer use 구현", "topic": "초롱 PC", "project": "초롱 PC", "status": "paused", "now": "권한 요청 다이얼로그 만드는 중" }
   ],
   "chat": [
-    { "from": "me", "text": "https://app.notion.com/p/leviosa-ai/Computer-use-40bb 이것도 만들어줘" },
+    { "from": "me", "text": "https://app.notion.com/p/acme/Computer-use-40bb 이것도 만들어줘" },
     { "from": "captain", "text": "Computer use 만들게요 [fork t-cu]" }
   ]
 }

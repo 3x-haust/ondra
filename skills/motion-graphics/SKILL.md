@@ -3,7 +3,7 @@ name: motion-graphics
 description: >
   Making a motion graphic film: a product promo, launch film, teaser, reel or
   kinetic type video (모션그래픽, 홍보 영상, 프로모 영상, 런칭 영상, 소개 영상, 릴스,
-  키네틱 타이포, 티저, promo video, launch film, product film). Official big-tech
+  키네틱 타이포, 티저, promo video, launch film, product film). Strong product
   films as references, storylines and a numeric spec, a beat-timed storyboard,
   scenes built as deterministic HTML rendered frame by frame to MP4 with motion
   blur, synthesized sound, and measured checks for seams, pops, flicker and
@@ -17,16 +17,17 @@ metadata:
 
 A short film that makes a product feel made by a studio, not by AI. The
 product (its UI, its input → result moment) is the hero; 3D, glow and
-particles only support it. This skill comes from making one promo film
-through 19 rounds of user feedback, frame-by-frame study of official launch
-films, and the methods of public motion skills (sources at the end of
-`references/craft.md`). Where they disagree, the user's feedback wins.
+particles only support it. This skill comes from making promo films over
+many review rounds, frame-by-frame study of official launch films, and the
+methods of public motion skills (sources at the end of
+`references/craft.md`). The numbers are defaults; the brief and the
+reviewer's notes on this film come first.
 
 | file | what it holds |
 |---|---|
 | `references/craft.md` | defaults with numbers that usually work: text, composition, motion and timing, transitions, camera, cursor, color, sound |
 | `references/story.md` | storylines, beat shares, `SPEC.md` and storyboard templates, generic defaults to watch for |
-| `references/films.md` | what each reference film does, with timestamps and URLs |
+| `references/films.md` | kinds of product film and what each does, with timings |
 | `references/pipeline.md` | render contract, folder layout, commands, the checks and the review protocol |
 | `scripts/film.html` | working film skeleton: scenes, easing, typing, player, export hooks |
 | `scripts/export-film.mjs` | parallel render with motion blur and cut-aware sub-frames → MP4 |
@@ -52,7 +53,7 @@ films, and the methods of public motion skills (sources at the end of
 
 ## 1. References: watch frames, not thumbnails
 
-`references/films.md` already breaks down the main reference films. For anything new:
+`references/films.md` already breaks down common kinds of product film. For anything new:
 
 - Download (`yt-dlp -f "bv*+ba" --merge-output-format mp4 <url>`) into its
   own folder; Instagram needs a signed-in browser (see `browser-use`).
@@ -138,15 +139,18 @@ so and report the measurements.
 - Keep `README.md` in the film folder: versions, each round's feedback and
   what changed, how to rebuild. The next round starts from it.
 
-## What users rejected (do not repeat)
+## Choices that tend to fail
 
-- Subtitle-style text at the bottom; small UI floating in a big dark void
-  (reads as a screen recording); fake simplified UI under huge headlines
-  everywhere ("AI 같다").
+- Subtitle-style text at the bottom (reads as captions, not design); small
+  UI floating in a big dark void (reads as a screen recording); fake
+  simplified UI under huge headlines everywhere (reads as AI-made).
 - Mascots with eyes, blue orbs, purple/pink/teal "AI" gradients for the
-  product's own look, glass cards; a wall of 81 identical pages.
+  product's own look, glass cards; a wall of dozens of identical pages.
+  They look generic and hide the real product.
 - Blurred frames, depth of field on text, anything too fast to read; 3D
-  tilt while the viewer must read; whip pans and sudden zooms in a calm film.
+  tilt while the viewer must read; whip pans and sudden zooms in a calm
+  film. The viewer loses the one thing they should read.
 - An element moving a different way each time it appears; typing over text
-  already on screen.
-- A song that ends with a hard cut; a floating-cards finale after the ending.
+  already on screen. Both read as mistakes.
+- A song that ends with a hard cut; a floating-cards finale after the
+  ending. The film should end once, on the mark.

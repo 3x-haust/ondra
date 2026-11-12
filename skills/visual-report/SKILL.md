@@ -181,7 +181,7 @@ tone. A reply shows the message it answers too.
 
 - Show, don't tell: a `compare` beats "속도가 빨라졌습니다", a `diagram` beats a paragraph about how modules talk.
 - Screenshots and recordings go in `$APP_ARTIFACTS_DIR`; reference them by absolute path.
-- Labels in the user's language (Korean unless they wrote otherwise), plain words, no jargon.
+- Labels in the user's language (the one they wrote in), plain words, no jargon.
 - Valid JSON only: double quotes, no trailing commas, one object per line.
 
 ## Boards: an explanation drawn stroke by stroke

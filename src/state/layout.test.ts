@@ -71,7 +71,7 @@ describe("layout tree", () => {
     expect(L.remove(z, "c").zoom).toBeNull();
   });
 
-  it("equalizes by the panes each side holds, like Ghostty", () => {
+  it("equalizes by the panes each side holds", () => {
     let l = L.split(base(), "a", "right", "b", "B");
     l = L.split(l, "b", "right", "c", "C");
     l = L.setRatio(l, (l.root as L.Split).id, 0.8);

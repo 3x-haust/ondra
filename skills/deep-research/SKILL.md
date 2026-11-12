@@ -11,8 +11,7 @@ description: >-
 
 # Deep research
 
-How the strong research agents work (Gemini Deep Research, OpenAI deep
-research, Claude Research, Tongyi DeepResearch) and what the papers found:
+How strong research agents work, and what the papers found:
 
 - Plan first, and let the plan change: search, read, find what is still
   missing, search again. One pass of searching is not research.
@@ -140,7 +139,7 @@ Copy this skill's `report.html` to `$R/report.html` and fill it:
 - "확실하지 않은 것": what wasn't found, conflicts, unverified items. Caveats
   live here, not at the end of every paragraph.
 - Numbered sources: title, publisher, published date, the date you read it.
-- The user's language (Korean unless they wrote otherwise), 해요체, plain words.
+- The user's language (the one they wrote in), plain words; in Korean, 해요체.
 
 Then take the AI out of it: run `check-writing.py` on the report. It prints
 hints (long sentences, stock phrasing); read them and fix what helps the

@@ -58,9 +58,9 @@ using only **public** APIs:
 The background contract is **verified, not masked**: the helper records the
 frontmost app, key window and mouse position before and after every action and
 returns whether they changed; the tool refuses to continue if they did, rather
-than forging focus events the way Codex does (see `computer-use-host.md`). It
+than forging focus events to hide the change (see `computer-use-host.md`). It
 never activates an app, warps the cursor or posts global events. `act` re-observes
-in the **same call**, so one step is one round trip (Codex needs two). The
+in the **same call**, so one step is one round trip instead of two. The
 TypeScript side is `extensions/lib/computer-host.ts`; the tool is available when
 `ONDRA_COMPUTER_HOST=1`, which the app sets whenever the helper is bundled.
 `ONDRA_COMPUTER_EVALUATION_MODE=forced-full` makes every observation and image

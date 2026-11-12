@@ -3,6 +3,7 @@
 // what just finished. Kept for a few hours so the empty screen opens instantly.
 import { createSignal } from "solid-js";
 import { projectById, projectsIn, setState, spaceById, state } from "../state/store";
+import { lang, langName } from "../i18n";
 import type { SpaceId } from "../state/types";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
@@ -52,8 +53,8 @@ export async function refreshSuggestions(space: SpaceId, project?: string, force
       [
         "Suggest 4 things this user would likely ask their agents next, based only on the work below.",
         "Prefer concrete follow-ups of real items: review or merge a branch that is waiting, retry what failed, the next step after what finished, a check that was skipped.",
-        "Each is one short Korean request the user could send as is, ending like '~해 줘'. Name the actual project or job. No generic ideas, no greetings.",
-        'Reply with only a fenced block:\n```suggest\n[{"text": "...", "why": "3-8 words, Korean"}]\n```',
+        `Each is one short ${langName()} request the user could send as is${lang() === "en" ? "" : ", ending like '~해 줘'"}. Name the actual project or job. No generic ideas, no greetings.`,
+        `Reply with only a fenced block:\n\`\`\`suggest\n[{"text": "...", "why": "3-8 words, ${langName()}"}]\n\`\`\``,
         "",
         picture(space, project),
       ].join("\n"),

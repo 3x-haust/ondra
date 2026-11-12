@@ -1,4 +1,4 @@
-// Working on another Mac (Settings › 연결), like Codex's remote connections: its projects
+// Working on another Mac (Settings › 연결): its projects
 // added here show in the sidebar beside this Mac's, and their jobs run over there. This Mac
 // keeps a live copy of those jobs (state/mirror.ts) and sends what the user does with them
 // (a message, stop, merge…) to that Mac's Ondra, which does it. The other side is

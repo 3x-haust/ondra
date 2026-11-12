@@ -1,17 +1,16 @@
-// Memory as small pieces (one rule, fact or decision each), put together from
-// what works best in other agents (research: docs/research, 2026-11):
-//   • Claude Code / Qwen / Letta: one file per piece with a one-line index
-//   • ZeroClaw: a stable key is the identity (same key again → update, not a copy)
-//   • mem0 / Honcho: the same thing again → counted (seen), not stored twice
-//   • Agent Zero: paths, ports and one-off values never become memory
-//   • OmO / Qwen pinned: the user's own words are never changed by automation
-//   • Zep: a replaced piece is retired with a date, not deleted
-//   • Cursor / Claude rules / Kiro: path rules reach a job only when it touches the file
-//   • Copilot: code facts cite files; when the files are gone the piece is retired
-//   • CrewAI / ZeroClaw: recall = words + meaning + importance + recency (30-day
-//     half-life); the user's rules and preferences never fade
-//   • A-MEM: recall follows one link to neighbours
-//   • Codex / nanobot / Letta: the folder is a git repo (versions, restore) — memgit.ts
+// Memory as small pieces (one rule, fact or decision each):
+//   • one file per piece with a one-line index
+//   • a stable key is the identity (same key again → update, not a copy)
+//   • the same thing again → counted (seen), not stored twice
+//   • paths, ports and one-off values never become memory
+//   • the user's own words are never changed by automation (pinned)
+//   • a replaced piece is retired with a date, not deleted
+//   • path rules reach a job only when it touches the file
+//   • code facts cite files; when the files are gone the piece is retired
+//   • recall = words + meaning + importance + recency (30-day half-life);
+//     the user's rules and preferences never fade
+//   • recall follows one link to neighbours
+//   • the folder is a git repo (versions, restore) — memgit.ts
 //   • nothing is always-on: a few pieces at the start, the rest via memory_search
 import { similarity } from "./vectors";
 import { createEffect, createRoot } from "solid-js";
@@ -73,7 +72,7 @@ export function tokens(t: string): string[] {
     .replace(/[^\p{L}\p{N}\s._/-]/gu, " ")
     .split(/\s+/)
     .map((w) => w.replace(/(은|는|이|가|을|를|의|에|에서|으로|로|와|과|도|만|요|해요|했어요|돼요|하기|하고|해서)$/u, ""))
-    // one-syllable Korean nouns that name things ("레비오사 웹", "요메이츠 앱") count too
+    // one-syllable Korean nouns that name things ("버들 웹", "초롱 앱") count too
     .filter((w) => (w.length >= 2 || /^(웹|앱|폰|봇|맥|탭|창|키)$/.test(w)) && !/^(그리고|있어요|이에요|그냥|이거|그거|the|and|for|with|that|this)$/.test(w));
 }
 const overlap = (a: Set<string>, b: Set<string>) => {
@@ -478,7 +477,7 @@ export function recall(
     let rare = 0; // distinct query words it shares that few pieces have
     let onTopic = !opts.about;
     for (const t of q) {
-      // word stems match by prefix ("leviosa" ~ "leviosa-frontend"); numbers and dates only exactly
+      // word stems match by prefix ("acme" ~ "acme-web"); numbers and dates only exactly
       const stem = t.length >= 3 && !/^\d/.test(t);
       const tf = w.filter((x) => x === t || (stem && !/^\d/.test(x) && x.length >= 3 && (x.startsWith(t) || t.startsWith(x)))).length;
       if (!tf) continue;
@@ -570,7 +569,7 @@ export function migrateMemory() {
 }
 
 // ───────────── the memory folder (markdown, opens in Obsidian too; a git repo — memgit.ts)
-//   목차.md                       ← one line per piece (Claude Code / Qwen index)
+//   목차.md                       ← one line per piece (the index)
 //   일 기록/202611/05/<제목>.md    ← one per finished job (journal.ts)
 //   회사/ondra/지금.md            ← what was last going on there
 //   회사/회사.md                  ← folder note: its pieces by type (links)

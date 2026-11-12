@@ -61,7 +61,7 @@ function MoreMenu(props: { id: string }) {
   );
 }
 
-/** The whole to-do list (OmO-style): done, now, next. Opens from its part of the tray line. */
+/** The whole to-do list: done, now, next. Opens from its part of the tray line. */
 function TodoList(props: { t: Task }) {
   return (
     <ol class="todos-list">
@@ -136,8 +136,8 @@ function Tray(props: { t: Task; changes: boolean; made: number; bg: Shell[]; ope
   );
 }
 
-/** Said while it worked: these go in, in order, when the work is done. Like
- *  Codex: one quiet line each, actions on hover (send now, edit, remove). */
+/** Said while it worked: these go in, in order, when the work is done:
+ *  one quiet line each, actions on hover (send now, edit, remove). */
 function Queued(props: { t: Task }) {
   // a queued message is changed where it is: it keeps its place in line
   const [editing, setEditing] = createSignal<{ id: string; text: string } | null>(null);
@@ -152,7 +152,7 @@ function Queued(props: { t: Task }) {
     const e = untrack(editing);
     if (e && !props.t.queue?.some((q) => q.id === e.id)) (setEditing(null), setDraft(e.text));
   });
-  // dragged by its handle, a message changes its place in line (like Codex); the order is the one they go in
+  // dragged by its handle, a message changes its place in line; the order is the one they go in
   const [dragging, setDragging] = createSignal<string | null>(null);
   let list!: HTMLDivElement;
   const drag = (e: PointerEvent, qid: string) => {

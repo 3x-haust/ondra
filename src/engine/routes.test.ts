@@ -142,18 +142,18 @@ describe("a reply said twice", () => {
 });
 
 describe("which project new work joins", () => {
-  beforeEach(() => setState("projects", [{ id: "p-orbit", space: "home", name: "Orbit", folder: "/Users/me/projects/orbit", createdAt: 1 } as never]));
-  const shot = "리서치 해줘\n\n첨부한 파일:\n- /Users/me/Library/Application Support/Orbit/Captures/Orbit 2026-11-10.png";
+  beforeEach(() => setState("projects", [{ id: "p-pebble", space: "home", name: "Pebble", folder: "/Users/me/projects/pebble", createdAt: 1 } as never]));
+  const shot = "리서치 해줘\n\n첨부한 파일:\n- /Users/me/Library/Application Support/Pebble/Captures/Pebble 2026-11-10.png";
 
   it("a project's name only in an attached file's path doesn't put the work there", async () => {
-    for (const r of [{ kind: "new", title: "멱등함수 리서치", task: "research" }, { kind: "new", title: "멱등함수 리서치", task: "research", project: "Orbit" }]) {
+    for (const r of [{ kind: "new", title: "멱등함수 리서치", task: "research" }, { kind: "new", title: "멱등함수 리서치", task: "research", project: "Pebble" }]) {
       const out = await applyRoutes("home", [r], shot);
       expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBeUndefined();
     }
   });
 
   it("the user naming it still does", async () => {
-    const out = await applyRoutes("home", [{ kind: "new", title: "버그", task: "fix it" }], "orbit 캡처 버그 고쳐줘\n\n첨부한 파일:\n- /tmp/x.png");
-    expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("p-orbit");
+    const out = await applyRoutes("home", [{ kind: "new", title: "버그", task: "fix it" }], "pebble 캡처 버그 고쳐줘\n\n첨부한 파일:\n- /tmp/x.png");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("p-pebble");
   });
 });

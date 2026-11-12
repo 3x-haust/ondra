@@ -20,6 +20,12 @@ export const lang = (): Lang => {
   return l === "system" ? system() : l;
 };
 
+/** the app's language as a word for a model prompt: "Korean" or "English" */
+export const langName = (): string => (lang() === "en" ? "English" : "Korean");
+
+/** a memory piece's style: one short sentence in the app's language (Korean ends in ~요) */
+export const memorySentence = (): string => (lang() === "en" ? "one short plain English sentence" : "one short plain Korean sentence ending in ~요");
+
 /** "{n}개" with { n: 3 } → "3개". An English value "{n} file|{n} files" picks by n. */
 export function t(ko: string, vars?: Record<string, string | number>): string {
   // "일시정지|action": same Korean, its own English

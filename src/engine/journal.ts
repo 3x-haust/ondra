@@ -1,9 +1,7 @@
 // 일 기록 and 지금 — what finished jobs did, kept as written:
-//   • Codex rollout summaries / OpenClaw daily notes / nanobot history: one entry
-//     per finished job (title, ask, outcome, result). Never sent whole; searched by
-//     memory_search, and the quiet pass learns from new entries (cursor in tidy.ts).
-//   • Cline activeContext / progress: per project, what was last going on and what
-//     is left — given to the next job there only while it is fresh (two days).
+//   • one entry per finished job (title, ask, outcome, result). Never sent whole;
+//     searched by memory_search, and the quiet pass learns from new entries (cursor in tidy.ts).
+//   • per project, what was last going on and what is left — given to the next job there only while it is fresh (two days).
 import { createEffect, createRoot } from "solid-js";
 import { homeDir, loaded, setState, state, uid } from "../state/store";
 import type { JournalEntry, ProjectNow, Task } from "../state/types";

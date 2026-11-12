@@ -106,7 +106,7 @@ function NoPr(props: { t: Task }) {
   );
 }
 
-/** Commit / push / open a PR from the job's branch (like the git menu of Codex or Conductor). */
+/** Commit / push / open a PR from the job's branch (a git menu). */
 function ShipMenu(props: { t: Task }) {
   const [open, setOpen] = createSignal(false);
   const [busy, setBusy] = createSignal<string | null>(null);

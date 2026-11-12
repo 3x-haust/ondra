@@ -1,4 +1,4 @@
-// The center as split panes (Ghostty / cmux): every pane shows its own view with its own
+// The center as split panes: every pane shows its own view with its own
 // history; one has the focus. Panes are laid out from the tree in src/state/layout.ts and
 // drawn side by side (never re-mounted when another one opens), with dividers to drag.
 import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";

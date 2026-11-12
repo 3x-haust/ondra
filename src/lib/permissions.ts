@@ -1,5 +1,5 @@
 // Asking for a macOS permission: the system's own prompt (accessibility), its privacy list
-// opened, and a small panel over that list holding Ondra's tile to drag in, as cmux does.
+// opened, and a small panel over that list holding Ondra's tile to drag in.
 import { openPrivacySettings, permissionGuide, requestAccessibility } from "./native";
 import { t } from "../i18n";
 

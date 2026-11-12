@@ -21,7 +21,7 @@ export const shortcuts = {
   board: cmd("KeyB", true),
   memory: cmd("KeyM", true),
   results: cmd("KeyE", true),
-  // ⇧⌘D is Ghostty's split down (below): the devices take S for simulator
+  // ⇧⌘D is split down (below): the devices take S for simulator
   devices: cmd("KeyS", true),
   back: cmd("BracketLeft"),
   forward: cmd("BracketRight"),
@@ -51,12 +51,12 @@ export const shortcuts = {
   closeTab: ctrl("KeyW"),
   nextTab: ctrl("Tab"),
   previousTab: ctrl("Tab", true),
-  // ⇧⌘↵ is Ghostty's split zoom (below); ⇧Esc focuses the message input as in ChatGPT
+  // ⇧⌘↵ is split zoom (below); ⇧Esc focuses the message input
   focusInput: { code: "Escape", shift: true },
   zoomIn: cmd("Equal"),
   zoomOut: cmd("Minus"),
-  // panes, on Ghostty's macOS defaults (src/config/Config.zig). ⌘[ ⌘] stay back/forward, as in
-  // cmux: previous/next pane moves to ⌥⌘[ ⌥⌘].
+  // panes, on common macOS terminal split keys. ⌘[ ⌘] stay back/forward, so
+  // previous/next pane moves to ⌥⌘[ ⌥⌘].
   splitRight: cmd("KeyD"),
   splitDown: cmd("KeyD", true),
   previousPane: { code: "BracketLeft", meta: true, alt: true },
@@ -72,7 +72,7 @@ export const shortcuts = {
   resizePaneDown: { code: "ArrowDown", meta: true, ctrl: true },
   equalizePanes: { code: "Equal", meta: true, ctrl: true },
   closePane: cmd("KeyW"),
-  // cmux's jump to the latest unread
+  // jump to the latest unread
   attentionPane: cmd("KeyU", true),
   // ⌘1–9: the workspace in that place in the sidebar
   ws1: cmd("Digit1"), ws2: cmd("Digit2"), ws3: cmd("Digit3"), ws4: cmd("Digit4"), ws5: cmd("Digit5"),

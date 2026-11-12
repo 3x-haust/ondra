@@ -1,4 +1,4 @@
-// A job's browser, floating in a corner while it works (like Codex's picture-in-picture):
+// A job's browser, floating in a corner while it works (picture-in-picture):
 // the live page, small, wherever you are in the app. Clicking it opens that job on its browser tab;
 // × keeps it closed for that job; Settings can keep it from showing at all. Drag it to another corner.
 import { createMemo, createSignal, Show } from "solid-js";

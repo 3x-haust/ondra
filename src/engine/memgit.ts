@@ -1,6 +1,5 @@
-// Versions of the memory (Codex / Letta / nanobot keep theirs in git): the
-// memory folder is its own git repo. A quiet while after the pieces change, the
-// markdown files plus a JSON copy of the pieces are committed with a short
+// Versions of the memory: the memory folder is its own git repo. A quiet while
+// after the pieces change, the markdown files plus a JSON copy of the pieces are committed with a short
 // message ("기억 +2 · 바뀜 1 · 내림 1"). Any version can be brought back.
 import { createEffect, createRoot, createSignal, on } from "solid-js";
 import { inTauri, memoryGitCommit, memoryGitLog, memoryGitShow } from "../lib/native";

@@ -380,7 +380,7 @@ const ICON: Record<ToolCall["kind"], string> = {
   test: "test",
   other: "tools",
 };
-// short, like Codex ("편집함 a.ts"): the verb leads, the name follows quietly
+// short ("편집함 a.ts"): the verb leads, the name follows quietly
 const VERB: Record<ToolCall["kind"], [string, string]> = {
   read: ["읽는 중", "읽음"],
   search: ["찾는 중", "찾음"],
@@ -419,9 +419,8 @@ export function liveVerb(t: Task): string | undefined {
 }
 
 /**
- * Which calls belong on one line: reads/searches ("살펴봄", Codex's Explored),
- * file edits ("파일 수정함"), commands ("명령 5개 실행함", Claude Code's "Ran 5
- * shell commands") and browser steps. Other tools stay single.
+ * Which calls belong on one line: reads/searches ("살펴봄"),
+ * file edits ("파일 수정함"), commands ("명령 5개 실행함") and browser steps. Other tools stay single.
  */
 type Family = "explore" | "edit" | "browser" | "run" | "computer" | "image";
 const familyOf = (e: ToolEntry): Family | undefined =>
@@ -438,8 +437,8 @@ function runs(tools: ToolEntry[]): ToolEntry[][] {
 }
 
 /**
- * Calls made back to back read as one line, like other agent apps ("Ran 5 shell
- * commands", Codex's "파일 수정함 ⌄"): what was done, counted per kind; open it
+ * Calls made back to back read as one line ("명령 5개 실행함",
+ * "파일 수정함 ⌄"): what was done, counted per kind; open it
  * for each call. While one runs, the line says which.
  */
 function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
@@ -451,7 +450,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
 }
 
 /**
- * Pictures the agent looked at, as Codex shows them: "이미지 2개 확인함", folded; open it for
+ * Pictures the agent looked at: "이미지 2개 확인함", folded; open it for
  * the pictures themselves (click one to see it big).
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
@@ -522,7 +521,7 @@ function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
       const n = new Set(props.tools.map((t) => t.tool.target ?? t.id)).size;
       return done ? tr("파일 {n}개 수정함", { n }) : tr("파일 {n}개 수정 중", { n });
     }
-    // commands too, as Claude Code does ("Ran 5 shell commands")
+    // commands too ("명령 5개 실행함")
     // while running, the ones still running, not the ones already done
     if (fam() === "run") return done ? tr("명령 {n}개 실행함", { n: props.tools.length }) : tr("명령 {n}개 실행 중", { n: props.tools.filter((t) => !t.tool.endedAt && !halt(t)).length });
     return done ? tr("브라우저 {n}번 씀", { n: props.tools.length }) : tr("브라우저 쓰는 중");
@@ -580,7 +579,7 @@ function doneLabel(run: ToolEntry[]): string {
 }
 
 /**
- * Finished calls of several kinds back to back read as one quiet line, as Codex does
+ * Finished calls of several kinds back to back read as one quiet line
  * ("파일 수정함 · 명령 3개 실행함 · 웹 검색함"): only what was done, no names; open it for each line.
  */
 function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
@@ -958,7 +957,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
         </Show>
         {/* waiting on its subagents: their card above already shows that */}
         <Show when={working() && !liveText() && !toolRunning() && !kidsOf(props.task.id).some((k) => k.status === "running" || k.status === "queued")}>
-          {/* between steps the model is thinking: one quiet line, like Codex's "생각 중". What it did
+          {/* between steps the model is thinking: one quiet line, "생각 중". What it did
               is on the step rows above; a finished step isn't said again as if still going on. */}
           <div class="live-line thinking-line">
             <span class="shimmer">{tr("생각 중")}</span>

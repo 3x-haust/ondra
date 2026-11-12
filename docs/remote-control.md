@@ -1,6 +1,6 @@
 # Connections: working on another Mac
 
-This works like Codex's remote connections. You add another Mac's project to this app's sidebar. Jobs in that project run on that Mac, with its files, tools and accounts. They show up here like any other job.
+You add another Mac's project to this app's sidebar. Jobs in that project run on that Mac, with its files, tools and accounts. They show up here like any other job.
 
 ## Setting it up
 

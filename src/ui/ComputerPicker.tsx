@@ -1,4 +1,4 @@
-// Where work runs, like Codex's run location: this Mac or another one added in Settings › 연결.
+// Where work runs (the run location): this Mac or another one added in Settings › 연결.
 // The workspace is the tab at the top (another Mac's workspace of the same name), so this picks
 // only the Mac; a tab only another Mac has offers only Macs. That Mac's account, plan use and
 // models show the way this Mac's own do.

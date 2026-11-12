@@ -93,8 +93,8 @@ change bears on, look at the code, docs or a run:
 
 - `confirmed`: it holds. Give where you saw it.
 - `contradicted`: current evidence says otherwise. Give `path:line` and a
-  quote copied exactly from there, and `now`: one Korean sentence for what is
-  true now.
+  quote copied exactly from there, and `now`: one sentence for what is true
+  now, in the language the memory is written in.
 - `unchecked`: it bears on the change but you couldn't check it.
 
 Leave out pieces the change doesn't touch. A rule or preference the change
@@ -115,7 +115,7 @@ Check each candidate in the code. Drop what you can't confirm, or say exactly
 what evidence is missing. Run only safe, read-only checks (type check, tests)
 and report their real result.
 
-Finish with a `done` block whose `result` is in Korean. A shape like this
+Finish with a `done` block whose `result` is in the user's language. A shape like this
 keeps the two lenses easy to line up:
 
 설계 검토:

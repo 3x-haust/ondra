@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { focusSteal, foreignDevice } from "../../extensions/permissions";
 
-const mine = ["11111111-2222-3333-4444-555555555555", "ondra-tabc", "emulator-5556", "yomates-test"];
+const mine = ["11111111-2222-3333-4444-555555555555", "ondra-tabc", "emulator-5556", "acme-test"];
 const other = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
 
 describe("foreignDevice", () => {
   it("lets a job drive its own devices", () => {
     expect(foreignDevice(`xcrun simctl io ${mine[0]} screenshot a.png`, mine)).toBeUndefined();
     expect(foreignDevice("adb -s emulator-5556 shell input tap 1 2", mine)).toBeUndefined();
-    expect(foreignDevice("emulator -avd yomates-test -no-window", mine)).toBeUndefined();
+    expect(foreignDevice("emulator -avd acme-test -no-window", mine)).toBeUndefined();
     expect(foreignDevice("pnpm test && git status", mine)).toBeUndefined();
   });
   it("refuses a device of another space", () => {
