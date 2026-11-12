@@ -1,8 +1,9 @@
-# Craft rules
+# Craft defaults
 
-Each rule came from a rejected version, a measured reference film, or a
-public motion skill (sources at the end). Numbers are for 1920×1080 at
-30 fps unless noted; f = frames.
+Starting points that usually work, from rejected versions, measured
+reference films and public motion skills (sources at the end). Change a
+number when the film calls for it. Render defects (flashes, double images,
+drift) are correctness, not taste. 1920×1080 at 30 fps unless noted; f = frames.
 
 ## Text
 
@@ -15,66 +16,64 @@ Text is only ever one of three things:
 3. **A label on what it points at**: selection box name, dimension, stamp,
    frame name.
 
-Never a caption chip at the bottom of the frame ("자막처럼 나오는 거 별로").
+Not a caption chip at the bottom of the frame (rejected: "자막처럼 나오는 거 별로").
 
-- **Sizes.** Text the viewer must read is ≥ 56 px rendered (font-size × every
-  ancestor scale × cos of any Y rotation); supporting labels ≥ 32 px. Hero
-  words 12–30% of frame height or 60–90% of its width, once or twice per
-  film. Text is either "to be read" or deliberate texture, nothing between.
-- **Read time.** Hold = max(1.5 s, 0.5 s + 0.3 s × words); the last line
-  ≥ 2 s; a 1–2-word chapter word may flash for 0.4 s. At most 6 words per
-  line, one line to read at a time.
-- **Accent.** One word per line in the accent color, the rest white or ink.
+- **Sizes.** Text to be read: around 56 px rendered or more (font-size ×
+  every ancestor scale × cos of any Y rotation), labels around 32 px, so it
+  reads on a phone. Hero words (12–30% of frame height) land harder once or
+  twice a film. Text is either "to be read" or deliberate texture.
+- **Read time.** A hold of about max(1.5 s, 0.5 s + 0.3 s × words) is
+  usually enough; give the last line a bit longer; a 1–2-word chapter word
+  can flash briefly. Short lines (around six words), one line to read at a time.
+- **Accent.** Usually one accent word per line, the rest white or ink.
 - **Entrances** (vary them within a film, keep one per element type):
   word rises through its own mask (translateY 105% → 0, words 55–120 ms
   apart); per word blur 6 → 0 px + opacity in 0.13 s, 67 ms apart; per word
   grey → ink; per letter for a name, 0.1 s apart; slot-machine roll ~0.1 s
-  per word. Exit with a blur-and-fade over 0.13–0.25 s. A landed title holds
-  dead still.
-- **Waterfall** (a list cascading in): anchor words 60–80 px rise in
-  0.16–0.20 s, normal words 40–50 px in 0.13–0.16 s, light words 30–48 px in
-  0.10–0.13 s; opacity switches in one frame; gaps shrink along the cascade.
+  per word. Exit with a blur-and-fade over 0.13–0.25 s. A landed title
+  usually holds still.
+- **Waterfall** (a list cascading in): heavier words rise farther and slower
+  than light ones; opacity switches in one frame; gaps shrink along the cascade.
 - **Anchor word + swapping word** lists many things in seconds ("SIMULATE
   ___", "plans / builds / tests", "Export directly to ___"), swapping every
   2nd–4th beat.
 - **Words become UI**: Canvas underlines "Canvas", a card grows out of the
   word and shrinks into the real chip. Words can open around an image
   ("Brands [image] don't wait.").
-- **Copy**: names the feature and a concrete benefit; never leaks the brief
-  (concept names, "AI가 만든 화면 예시").
+- **Copy**: names the feature and a concrete benefit; the brief never leaks
+  onto the screen (concept names, "AI가 만든 화면 예시").
 
 ## Composition
 
-- The hero (prompt bar, generated page, window) fills ≥ 40% of the frame's
-  width or height: prompt bar at 1.3× camera, generated page ~0.9 of the
-  frame. Small UI in a void reads as a screen recording.
+- The hero (prompt bar, generated page, window) usually fills 40% or more
+  of the frame's width or height: prompt bar at ~1.3× camera, generated page
+  ~0.9 of the frame. Small UI in a void reads as a screen recording (rejected).
 - Isolate the action: rebuild only the piece the beat uses, at 1.6–2× its
   real size, then return it to its place in the workspace.
 - One composition per scene; don't jump the hero up and down between shots.
   When something docks (a prompt bar under a page), shrink the old hero.
-- Crops: one control at a time at 2–3× (Claude Design, GitHub); full window
-  for at most 1–2 s, then back in.
-- The stage background is always the current scene's color, including what
-  a camera move or scale-down reveals. Any seam whose summed opacity dips
+- Crops: one control at a time at 2–3× (Claude Design, GitHub); the full
+  window only briefly, then back in.
+- The stage background is the current scene's color, including what a
+  camera move or scale-down reveals. Any seam whose summed opacity dips
   below 1 flashes the stage.
 
 ## Motion and timing
 
-- **One hero move per shot.** Secondary moves travel 50–70% as far and start
-  100–200 ms later; everything else holds. Something new every 2–4 s.
+- **One hero move per shot** keeps the eye on one thing. Secondary moves
+  travel about 50–70% as far and start 100–200 ms later. Something new every
+  few seconds.
 - **Overlap.** The next element starts when the previous is 30–50% done.
-  Stagger: letters 1 f, words 60–120 ms, list items 40–80 ms; total stagger
-  ≤ 500 ms; one entrance ≤ ~800 ms.
+  Stagger: letters 1 f, words 60–120 ms, list items 40–80 ms; much past
+  ~0.5 s of stagger or ~0.8 s per entrance starts to drag.
 - **Exits are shorter** than entrances: 50–75% of the entry duration.
 - **Stillness before the payoff**: 0.3–0.75 s between the action (click,
   send) and its result. The payoff itself plays at normal speed.
 - **Batch entrances accelerate** (dealt cards), then 0.5 s of stillness.
 - **Speed contrast**: montage cuts 0.13–0.8 s; a demo holds one framing
   4–10 s while the UI acts.
-- **Follow-through**: a trailing layer is the main state sampled at t − 2 f
-  (shadow) or t − 4 f (ghost). Recoil: `exp(−d·t)·sin(2π·f·t)`.
-- **Zoom** in log space (interpolate `log(scale)`), never zoom in then
-  straight back out.
+- **Zoom** in log space (interpolate `log(scale)`); zooming in and straight
+  back out reads as indecision.
 
 ### Easing
 
@@ -88,11 +87,12 @@ Never a caption chip at the bottom of the frame ("자막처럼 나오는 거 별
 | anticipation | (.5,−.32,.25,1) | pulls back ~5% first |
 
 Spring presets (stiffness/damping): 320/30 snappy UI, 170/26 containers and
-camera, 120/24 heavy type and logos. No elastic or bounce eases.
+camera, 120/24 heavy type and logos. Elastic and bounce eases tend to read as
+cheap in a product film; use them on purpose or not at all.
 
-**Never quint/expo *in-out* on short moves**: peak speed ~5× average puts the
-move in 2–3 frames and motion blur turns it into a double image (measured
-in this pipeline). Out-only curves on arrivals are fine. Make easing
+**Avoid quint/expo *in-out* on short moves** (a render defect): peak speed ~5×
+average puts the move in 2–3 frames and motion blur turns it into a double
+image (measured in this pipeline). Out-only curves on arrivals are fine. Make easing
 functions return exactly 0 and 1 at the ends.
 
 ### Beat
@@ -101,28 +101,31 @@ functions return exactly 0 and 1 at the ends.
   its index; never add rounded beats (2 f drift in 32 beats at 128 BPM).
 - A move that lands on a hit starts 40–190 ms early; a reaction starts
   0–45 ms late; the hit itself is set on its frame, not eased.
-- Beat sync sets timing, not size. Whole-frame impacts (pump, shake, flash):
-  ≤ 3 per film, ≥ 16 beats apart, on the strongest hits. No per-beat zoom
-  pumping.
+- Beat sync sets timing, not size. Whole-frame impacts (pump, shake, flash)
+  lose force when repeated: a few per film, well apart, on the strongest hits.
+  Per-beat zoom pumping wears the viewer out.
 
 ## One motion language per element
 
 Each recurring element moves one way the whole film: the mark always
 "draws as a rectangle" (handles pull in / push out); the cursor always
 glides on eased arcs; cards always rise the same way. A second style for
-the same thing reads as inconsistency ("네모 커지는 모션 이상").
+the same thing reads as inconsistency (rejected: "네모 커지는 모션 이상").
 
 ## Transitions and seams
 
-- Use 3–5 kinds per film, each caused by something on screen. At most a
-  third of seams are hard cuts; worlds never crossfade into each other.
+- A handful of transition kinds (3–5 is typical), each caused by something
+  on screen. Mostly motivated seams rather than hard cuts; worlds
+  crossfading into each other look muddy.
 - **Vector law**: across a cut keep the same axis, direction and speed.
   One dominant direction per film; up = conclusion, zoom in = going deeper,
   zoom out = arrival. A receding exit answered by a grow-from-small entrance
   is the most common violation.
 - **Carriers**: hand a concrete object across the cut at matched position
   and velocity (cursor, the page thumbnail, the mark). Text inside a
-  morphing shape gets its own mask; never scale a blurred copy of text.
+  morphing shape gets its own mask; a scaled blurred copy of text looks soft.
+
+Starting numbers per seam:
 
 | seam | numbers |
 |---|---|
@@ -133,7 +136,7 @@ the same thing reads as inconsistency ("네모 커지는 모션 이상").
 | circle flood | from the source object; radius must clear the farthest corner (×1.05) in 0.3–0.35 s |
 | color flood | 0.4 s |
 | dip cut | outgoing frame darkens ~40% for 3 f before the cut |
-| rack focus | cut at peak blur 8–12 px with ~1.06 scale; ≤ once per ~8 s; never on text being read |
+| rack focus | cut at peak blur 8–12 px with ~1.06 scale; sparingly; not on text being read (depth of field on text was rejected) |
 | hidden cut | a foreground occluder sweeps 14 f, cut on the frame it covers the whole frame; or a light-leak burn cut at its peak. One technique per seam |
 
 Whips are rare in a calm film; when used, drive them from one velocity
@@ -145,45 +148,42 @@ show stepped ghosts.
 
 - Loop: window on its ground → one pane → push-in on one control. Moves
   arrive where the cursor needs to be, then hold while the UI acts.
-- Slow push-ins toward what is being read; pull-backs to reveal. No shake,
-  no handheld noise on UI. Camera moves always have a destination; no idle
-  breathing, floating or creeping push late in a scene.
-- 3D tilt (perspective ~1800–2400 px, 8–20°) only while something enters or
-  as a hero angle; face the camera before the viewer must read. Dense
-  information is front-on.
-- Station tour: fly ~20 f, dwell ≥ 24 f (under 15 f reads as a scan); pull
-  scale back ~8% mid-flight then push in.
+- Slow push-ins toward what is being read; pull-backs to reveal. Shake
+  fights readable UI; a move without a destination (idle breathing, a late
+  creeping push) reads as filler.
+- 3D tilt (perspective ~1800–2400 px, 8–20°) while something enters or as a
+  hero angle; face the camera before the viewer must read.
+- Station tour: fly ~20 f, dwell around 24 f (under ~15 f reads as a scan).
 - The camera may follow the caret while typing (Gemini reel) at a fixed
-  scale. Close-up moves ≥ 0.75 s; 0.45 s smeared.
+  scale. Close-up moves around 0.75 s or longer; at 0.45 s they smeared.
 
 ## Cursor
 
 - One cursor leads the film: arrow → pointing hand on buttons → grabbing
   hand on drag. Size ~7% of frame width (~134 px) over a full-frame UI,
   4.6–5.5% inside a window mock. Use the product's own cursor if it has one.
-- Enters from off-screen in one decelerating glide (0.4–0.9 s, power3-out),
-  never faded in. The tip lands on the target's centre; press scales about
+- Enters from off-screen in one decelerating glide (0.4–0.9 s, power3-out)
+  rather than fading in. The tip lands on the target's centre; press scales about
   the tip.
 - Click: 0.84× over 0.1 s, back over 0.22 s; the target reacts on the same
   frame (0.94×) and the click starts the next beat on that frame. Keep any
   click ripple subtle and small.
-- It starts 2 f before a camera move and arrives ≤ 6 f early. It drifts
-  aside during beats it doesn't own; exits off the nearest edge.
-- Handoff across a cut: in the last 0.3 s it accelerates toward the next
-  scene's first click; the next scene continues the same path.
-- Paths bend slightly perpendicular to their direction, straight at both ends.
+- It drifts aside during beats it doesn't own; exits off the nearest edge.
+  Across a cut it heads toward the next scene's first click and the next
+  scene continues the same path.
 
 ## Typing
 
-- Characters appear one per key time (never eased); per-character spans of
+- Characters appear one per key time (not eased); per-character spans of
   fixed position so the line doesn't reflow.
 - Human rhythm: 55–85 ms per key ±30% seeded jitter, +120–220 ms after a
   space or punctuation, the odd 300 ms pause.
 - Caret solid while typing, blinks (~0.13 s half-period) only while waiting;
-  after the last character it blinks twice and goes. Hold ≥ 1.7 s after.
-- Never type text already on screen; the placeholder vanishes on the first
-  key. Retyping: delete back to the change, then type, like a person; an
-  error-and-retype beat at most once per film.
+  after the last character it blinks twice and goes. Hold a moment (~1.7 s)
+  after.
+- Don't type over text already on screen (rejected); the placeholder
+  vanishes on the first key. Retyping: delete back to the change, then type,
+  like a person; an error-and-retype beat works once, not as a habit.
 - Key sounds land on the key frames, heavier on space and enter.
 
 ## Color and look
@@ -198,8 +198,9 @@ show stepped ghosts.
 - Grounds: pure black and off-white (#f3f2f0) alternating is enough. Light
   from below the frame for dark scenes. A page's own color may bleed into
   the wall behind it and change with the page.
-- The clichéd AI palette (purple/pink/teal) only for showing the "before".
-- At most one glint or light sweep per hero, clipped to its radius.
+- The clichéd AI palette (purple/pink/teal) only for showing the "before"
+  (rejected as the product's own look).
+- One glint or light sweep per hero is plenty, clipped to its radius.
 - Several worlds are fine if each is entered through an object on screen and
   there is one home stage to return to.
 
@@ -216,11 +217,11 @@ show stepped ghosts.
   left → center), cursor on the handle; ease out over 1 s.
 - End card: the mark lands where motion converges, in the last 5–10%,
   lockup 15–30% of frame width, performed not faded; CTA held 1.5–3 s; no
-  floating-cards finale after it.
+  floating-cards finale after it (rejected).
 
 ## Sound
 
-- Every visual hit has a sound, peaking 1 f after its picture, 3–6 dB over
+- Visual hits want a sound, peaking ~1 f after the picture, 3–6 dB over
   the bed. Clicks are press + release; pick-up and drop have their own.
   Whooshes pan with the movement.
 - Repeated sounds alternate 2–3 takes, step down in gain along a run
@@ -229,10 +230,12 @@ show stepped ghosts.
 - The old way sits near silence; the music opens when the product appears.
   Before the drop, 0.1–1.5 s of near silence (Stitch, Canvas).
 - Bed energy below ~150 Hz is inaudible on phones; high-pass pads where
-  they stack. Mix −16 to −14 LUFS, peaks ≤ −1 dBFS, sections within 8–10 LU.
+  they stack. A mix around −16 to −14 LUFS with sections within ~8–10 LU suits
+  most platforms; keep peaks under −1 dBFS so the encode doesn't clip.
 - Ending: half-time drums → drums out → bass held, filter closing, plucks
-  thinning 8th → quarter → half → the final chord opening slowly. Never cut
-  the music to zero and restart a chord 0.25 s before the logo.
+  thinning 8th → quarter → half → the final chord opening slowly. Cutting
+  the music to zero and restarting a chord just before the logo was rejected
+  (a song that ends with a hard cut).
 - AAC adds priming silence (~1 f): check sync by comparing a sharp hit's
   peak in the rendered MP4 with its picture frame.
 - Deliver with music and, if asked, an SFX-only master from the same cues.

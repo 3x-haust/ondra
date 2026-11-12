@@ -24,8 +24,8 @@ films, and the methods of public motion skills (sources at the end of
 
 | file | what it holds |
 |---|---|
-| `references/craft.md` | rules with numbers: text, composition, motion and timing, transitions, camera, cursor, color, sound |
-| `references/story.md` | storylines, beat shares, `SPEC.md` and storyboard templates, the banned-defaults list |
+| `references/craft.md` | defaults with numbers that usually work: text, composition, motion and timing, transitions, camera, cursor, color, sound |
+| `references/story.md` | storylines, beat shares, `SPEC.md` and storyboard templates, generic defaults to watch for |
 | `references/films.md` | what each reference film does, with timestamps and URLs |
 | `references/pipeline.md` | render contract, folder layout, commands, the checks and the review protocol |
 | `scripts/film.html` | working film skeleton: scenes, easing, typing, player, export hooks |
@@ -52,7 +52,7 @@ films, and the methods of public motion skills (sources at the end of
 
 ## 1. References: watch frames, not thumbnails
 
-Read `references/films.md` first. For anything new:
+`references/films.md` already breaks down the main reference films. For anything new:
 
 - Download (`yt-dlp -f "bv*+ba" --merge-output-format mp4 <url>`) into its
   own folder; Instagram needs a signed-in browser (see `browser-use`).
@@ -66,23 +66,25 @@ Read `references/films.md` first. For anything new:
   how text enters and leaves, sound and silences; then a table
   `technique | how the reference does it | adopt / reject`. Mark what you
   measured apart from what you guessed. Take the grammar, never the content.
-- Prefer official company films over influencer or AI-skill reels.
-- Show the 3–4 most relevant sheets as `shot` blocks.
+- Official company films teach more than influencer or AI-skill reels.
+- Show the most relevant sheets as `shot` blocks.
 
 ## 2. Story, spec, storyboard (see `references/story.md`)
 
-1. **Three storylines**, each a different film (device + form + first 2 s +
-   one-line beat chain + look + sound). Ask the user to pick with an `ask`
-   block unless the brief already fixes the story.
-2. **`SPEC.md`**: every adjective becomes a number (tempo, frames per beat,
-   type sizes, eases by role, durations), plus the film's `BANNED` line.
-3. **Storyboard** on the beat: per shot the frame range, the one hero move,
-   `reads` (what the viewer must understand, in order, with time windows
-   that never overlap) and `sound`. Scene changes on bar lines; one or two
-   "오 쩐다" moments placed on purpose.
-4. **Stills board**: pose every shot at its key moment in the real
-   composition with real copy and fonts (`film-snap.mjs`), show them, get a
-   yes before animating. A note re-poses only that shot.
+1. **A few storylines** (three is a good number), each a different film
+   (device + form + first 2 s + one-line beat chain + look + sound). Ask the
+   user to pick with an `ask` block unless the brief already fixes the story.
+2. **`SPEC.md`**: turn adjectives into numbers where you can (tempo, frames
+   per beat, type sizes, eases by role, durations) so "calm" means the same
+   in every scene, plus the film's `BANNED` line.
+3. **Storyboard** on the beat: per shot the frame range, the hero move,
+   `reads` (what the viewer must understand, in order, one thing at a time)
+   and `sound`. Scene changes on bar lines; one or two "오 쩐다" moments
+   placed on purpose.
+4. **Stills board**: pose each shot at its key moment in the real
+   composition with real copy and fonts (`film-snap.mjs`) and show them.
+   Stills are cheap to change; a yes before animating saves re-animating.
+   A note re-poses only that shot.
 
 ## 3. Build: one deterministic HTML page
 
@@ -99,7 +101,7 @@ Details in `references/pipeline.md`:
 - Fonts embedded or awaited with `document.fonts.ready`. UI that the camera
   pushes into is laid out at 2× and zoomed with CSS `zoom`, not
   `transform: scale`, so text stays sharp.
-- Follow `references/craft.md` for every motion.
+- `references/craft.md` has motion defaults that usually work.
 
 ## 4. Look before the full render
 
@@ -114,27 +116,23 @@ Details in `references/pipeline.md`:
 ## 5. Sound
 
 Cues in one table on the film's own timeline, each commented with its
-picture action, built with `scripts/sfx.py` or the user's track. Hits peak 1
-frame after their picture and sit 3–6 dB over the bed; key ticks use the
-typing times; whooshes pan with the motion; repeated sounds alternate takes
-and step down in gain. Noise-based whooshes, impacts and modelled clicks;
-avoid pure sine pings (they read as a game). Music opens when the product
-appears; before the drop, near silence. Measure with `loudness.sh`: sections
-within 8–10 LU, mix −16 to −14 LUFS, peaks ≤ −1 dBFS. You cannot hear it: say
+picture action, built with `scripts/sfx.py` or the user's track (defaults in
+`references/craft.md`). Pure sine pings read as a game; noise-based whooshes,
+impacts and modelled clicks don't. Measure with `loudness.sh` (around −16 to
+−14 LUFS, peaks under −1 dBFS so it doesn't clip). You cannot hear it: say
 so and report the measurements.
 
 ## 6. Check, review, deliver
 
-- `scripts/frames.py out.mp4 --known <CUTS>`: one-frame flashes, pops,
-  unexpected cuts, dead stretches > 3 s.
+- `scripts/frames.py out.mp4 --known <CUTS>`: one-frame flashes, pops and
+  unexpected cuts are render defects; fix them before delivering.
 - `sheet.sh` of the render at 2 fps; `ffprobe` for duration, size, fps, audio.
-- **Independent review**: give a fresh sub-agent only the sheets and the
-  storyboard's `reads`. It describes each beat as a stranger would and
-  checks each rule in `craft.md` with frame evidence. Any object that needs
-  explaining is a P0. Write notes as `t=4.2s · where · problem → change ·
-  what stays`, ranked P0/P1/P2; never a score. Fix P0/P1, re-render only
-  what changed.
-- Frame 0 is the thumbnail: it must already show the film's idea.
+- **Independent review**: a fresh sub-agent given only the sheets and the
+  storyboard's `reads` sees the film as a stranger would. An object that
+  needs explaining is a P0. Notes as `t=4.2s · where · problem → change ·
+  what stays`, ranked P0/P1/P2, not a score (a score finds nothing to fix).
+  Fix P0/P1, re-render only what changed (`references/pipeline.md`).
+- Frame 0 is the thumbnail, so it works best when it already shows the idea.
 - Report with a `link` (kind `video`) to the MP4, the sheet as a `shot`,
   the checks run with results, and what is unverified (the sound by ear).
 - Keep `README.md` in the film folder: versions, each round's feedback and
@@ -149,7 +147,6 @@ so and report the measurements.
   product's own look, glass cards; a wall of 81 identical pages.
 - Blurred frames, depth of field on text, anything too fast to read; 3D
   tilt while the viewer must read; whip pans and sudden zooms in a calm film.
-- An element moving a different way each time it appears; an icon that just
-  scales up; typing over text already on screen (placeholders).
-- A song that ends with a hard cut; a floating-cards finale after the real
-  ending.
+- An element moving a different way each time it appears; typing over text
+  already on screen.
+- A song that ends with a hard cut; a floating-cards finale after the ending.

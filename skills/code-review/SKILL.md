@@ -115,7 +115,8 @@ Check each candidate in the code. Drop what you can't confirm, or say exactly
 what evidence is missing. Run only safe, read-only checks (type check, tests)
 and report their real result.
 
-Finish with a `done` block whose `result` is, in Korean.
+Finish with a `done` block whose `result` is in Korean. A shape like this
+keeps the two lenses easy to line up:
 
 설계 검토:
 
@@ -138,8 +139,8 @@ Finish with a `done` block whose `result` is, in Korean.
 ```
 
 P1 blocks merge, P2 is an ordinary bug, P3 is minor. No findings → write
-"P1·P2 없음". One finding per line, starting with its level and its
-`path:line`, so Ondra can line the two lenses up.
+"P1·P2 없음". Start each finding line with its level and its `path:line`:
+Ondra lines the two lenses up by them.
 
 Every "it works" in the job is unproven until you see it in the diff, a log or
 a file. A finding you can't tie to a requirement and a location is a NOTE

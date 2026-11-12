@@ -6,7 +6,7 @@ Create a new directory under `$APP_ARTIFACTS_DIR`. Do not overwrite an earlier
 case. Keep originals read-only where practical. Do not commit proprietary samples,
 credentials, memory dumps or user data to the repository.
 
-Keep:
+A layout that works (the names are a default):
 - `target.json`: provenance/permission, absolute copied path, SHA-256, byte size,
   format, architecture/slice, OS/CPU and tool paths/versions.
 - `commands.jsonl`: timestamp, argv as an array, cwd, explicit environment changes,
