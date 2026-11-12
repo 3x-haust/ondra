@@ -621,7 +621,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
 
 // ───────────── main
 /** Main's conversation: every message, with the jobs each reply handed work to as rows. */
-export function MainView() {
+export function MainView(props: { interaction?: { send: (text: string, project?: string) => void; status: JSX.Element; disabled: boolean; top?: JSX.Element; plus: Parameters<typeof Composer>[0]["plus"] } } = {}) {
   let box!: HTMLDivElement;
   const pane = usePane();
   const here = useView();
@@ -664,6 +664,7 @@ export function MainView() {
   // where it runs (Codex's run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
   const sendMain = (text: string) => {
+    if (props.interaction) return props.interaction.send(text, project()?.id);
     const p = project();
     const at = computer();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
@@ -681,7 +682,10 @@ export function MainView() {
     const list = msgs();
     const i = list.findIndex((x) => x.id === m.id);
     const ask = list.slice(0, i).reverse().find((x) => x.from === "me");
-    if (ask?.text) void editMain(ask.id, ask.text);
+    if (ask?.text) {
+      if (props.interaction) props.interaction.send(ask.text, project()?.id);
+      else void editMain(ask.id, ask.text);
+    }
   };
   const asks = () =>
     state.decisions.filter((d) => {
@@ -739,7 +743,7 @@ export function MainView() {
   const sent = () => msgs().filter((m) => m.from === "me").length;
   createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(box))));
   // warm the cache as soon as a chat is open, so even the first message is cached
-  createEffect(on(key, () => void warmMain(state.space, project()?.id)));
+  createEffect(on(key, () => { if (!props.interaction) void warmMain(state.space, project()?.id); }));
 
   const composer = (big: boolean) => (
     <Composer
@@ -747,8 +751,8 @@ export function MainView() {
       draftKey={`main:${key()}`}
       big={big}
       autofocus
-      files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
-      commands={[
+      files={props.interaction ? undefined : () => fsFiles(expand(spaceById(state.space).folder || "~"))}
+      commands={props.interaction ? [] : [
         btwCommand(() => `main:${key()}`),
         ...feedbackCommands(),
         { name: "side", desc: t("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
@@ -765,9 +769,10 @@ export function MainView() {
       ]}
       placeholder={t("메시지 보내기|input")}
       onSend={sendMain}
-      onTyping={() => void warmMain(state.space, project()?.id)}
-      top={<BtwCard scope={`main:${key()}`} />}
-      status={
+      onTyping={() => { if (!props.interaction) void warmMain(state.space, project()?.id); }}
+      disabled={props.interaction?.disabled}
+      top={props.interaction ? props.interaction.top : <BtwCard scope={`main:${key()}`} />}
+      status={props.interaction ? props.interaction.status :
         <Show
           when={computer()}
           fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
@@ -775,7 +780,7 @@ export function MainView() {
           <HostStatus place={computer()!} fixed={!!project()} />
         </Show>
       }
-      plus={plusFor({ main: true })}
+      plus={props.interaction ? props.interaction.plus : plusFor({ main: true })}
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
       stopKind="stop"
@@ -902,7 +907,7 @@ export function MainView() {
                       }
                     >
                       {/* main's own question answered: the same compact card a task's thread keeps */}
-                      <Show when={answerOf(c().text ?? "")} fallback={<UserMsg id={c().id} text={c().text ?? ""} at={c().at} from={c().via === "main" ? t("메인에서") : undefined} onEdit={c().via === "main" ? undefined : (t) => void editMain(c().id, t)} />}>
+                      <Show when={answerOf(c().text ?? "")} fallback={<UserMsg id={c().id} text={c().text ?? ""} at={c().at} from={c().via === "main" ? t("메인에서") : undefined} onEdit={props.interaction || c().via === "main" ? undefined : (t) => void editMain(c().id, t)} />}>
                         {(a) => <AnsweredCard q={a().q} a={a().a} />}
                       </Show>
                     </Show>

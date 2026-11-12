@@ -435,7 +435,7 @@ function DoneFold(props: { id: string; tasks: Task[] }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar(props: { actions?: { newTask: () => void; memory: () => void; settings: () => void } } = {}) {
   const [showArchived, setShowArchived] = createSignal(false);
   // every job in the list, follow-ups too (counts go by these)
   const every = createMemo(() => tasksShown(state.space).filter(listed));
@@ -470,7 +470,7 @@ export function Sidebar() {
     <aside class="sidebar" onKeyDown={rowKeys}>
       <div class="sb-top" data-tauri-drag-region>
         <span class="spacer" data-tauri-drag-region />
-        <button class="icon-btn" classList={{ on: !!newTaskOpen() && view().name === "main" }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => void import("./MainView").then((m) => m.startNewTask())}>
+        <button class="icon-btn" classList={{ on: !!newTaskOpen() && view().name === "main" }} data-shortcut="new" title={`${tr("새 작업")} ${shortcutHint("new")}`} aria-label={tr("새 작업")} onClick={() => props.actions ? props.actions.newTask() : void import("./MainView").then((m) => m.startNewTask())}>
           <Icon name="compose" size={16} />
         </button>
         <button class="icon-btn" data-shortcut="search" title={`${tr("검색")} ${shortcutHint("search")}`} aria-label={tr("검색")} onClick={() => { setPaletteMode("all"); setPaletteOpen(true); }}>
@@ -520,7 +520,7 @@ export function Sidebar() {
             <span class="sb-live" title={tr("진행 중 {n}개", { n: boardLive() })}><span class="spin xs" />{boardLive()}</span>
           </Show>
         </button>
-        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => setView({ name: "memory" })} data-shortcut="memory">
+        <button class="sb-row sb-main" classList={{ on: view().name === "memory" }} onClick={() => props.actions ? props.actions.memory() : setView({ name: "memory" })} data-shortcut="memory">
           <Icon name="memory" size={16} class="sb-main-ic" />
           <span class="sb-title">{tr("메모리")}</span>
           <kbd class="sb-kbd">{shortcutHint("memory")}</kbd>
@@ -714,7 +714,7 @@ export function Sidebar() {
       <NeedsMenu />
 
       <div class="sb-foot">
-        <button class="row" data-shortcut="settings" onClick={() => setView({ name: "settings" })}>
+        <button class="row" data-shortcut="settings" onClick={() => props.actions ? props.actions.settings() : setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
           <span class="row-title">{tr("설정")}</span>
           <kbd class="sb-kbd">{shortcutHint("settings")}</kbd>
