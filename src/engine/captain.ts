@@ -15,7 +15,7 @@ import { accountById, addProject, projectById, projectFor, projectsIn, projectsS
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
-import { prose, readFences } from "./fences";
+import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
 import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
@@ -113,6 +113,16 @@ export const captainAgent = agentOf;
 /** what main reasons while it answers, per chat; cleared when the next answer starts */
 const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
 export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
+/** the answer main is writing, per chat, shown (with its board drawing) before it is done */
+const [draftsAll, setDraftsAll] = createSignal<Record<string, { id: string; text: string }>>({});
+/** which reply each chat is answering now */
+const answering = new Map<string, string>();
+export const mainDraft = (key: string, replyId: string) => (draftsAll()[key]?.id === replyId ? draftsAll()[key].text : "");
+function setDraft(key: string, text: string) {
+  const id = answering.get(key) ?? "";
+  const was = draftsAll()[key];
+  if (was?.id !== id || was.text !== text) setDraftsAll((all) => ({ ...all, [key]: { id, text } }));
+}
 export function addThought(key: string, delta: string) {
   if (!delta) return;
   setThoughtsAll((all) => ({ ...all, [key]: ((all[key] ?? "") + delta).slice(-40_000) }));
@@ -367,13 +377,16 @@ async function pump(space: string) {
     for (let next = queues.get(space)?.shift(); next; next = queues.get(space)?.shift()) {
       try {
         isolateOf.set(space, next.isolate);
+        answering.set(space, next.replyId ?? "");
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, { pending: false, routes, reply, at: Date.now() });
+        setDraft(space, "");
         keepResult(next.replyId);
         if (pj(space)) reportUp(space);
       } catch (e) {
         logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
+        setDraft(space, "");
         // the project couldn't answer: main still gets what the jobs reported
         if (pj(space)) reportUp(space);
       }
@@ -591,7 +604,7 @@ function noteStep(space: string, ev: any) {
   const m = [...state.captain].reverse().find((x) => inChat(x, space) && x.pending);
   if (!m) return;
   if (ev.type === "tool_execution_start") setState("captain", (x) => x.id === m.id, "step", step);
-  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-4) }));
+  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-6) }));
 }
 const stepName = (s: unknown, n = 24) => {
   const x = String(s ?? "").replace(/\s+/g, " ").trim();
@@ -607,6 +620,17 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
     const name = stepName(taskById(String(args?.id ?? ""))?.title ?? args?.id, 30);
     return done ? `작업 살펴봄 · ${name}` : `작업 살펴보는 중 · ${name}`;
   }
+  // the rest of what it looks at before answering, so a long wait shows where it is
+  const pick = (busy: string, did: string, what: string) => (what ? `${done ? did : busy} · ${what}` : undefined);
+  if (tool === "web_search") return pick("웹에서 찾는 중", "웹에서 찾음", stepName(args?.query, 30));
+  if (tool === "web_fetch") {
+    let site = String(args?.url ?? "");
+    try { site = new URL(site).hostname.replace(/^www\./, ""); } catch { /* as written */ }
+    return pick("페이지 읽는 중", "페이지 읽음", stepName(site, 30));
+  }
+  if (tool === "read") return pick("파일 읽는 중", "파일 읽음", stepName(String(args?.path ?? "").split("/").pop(), 30));
+  if (tool === "grep" || tool === "find" || tool === "ls") return pick("파일 찾는 중", "파일 찾음", stepName(args?.pattern ?? args?.path, 30));
+  if (tool === "bash") return pick("명령 실행 중", "명령 실행함", stepName(args?.command, 30));
   return undefined;
 }
 
@@ -646,6 +670,7 @@ async function ensureCaptain(space: string) {
         const t = (texts.get(space) ?? "") + ev.assistantMessageEvent.delta;
         texts.set(space, t);
         setLive(agent, prose(t));
+        setDraft(space, draftAnswer(t));
       }
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
@@ -917,6 +942,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const agent = agentOf(space);
   texts.set(space, "");
   setThoughtsAll((all) => ({ ...all, [space]: "" }));
+  setDraft(space, "");
   errors.delete(space);
   const done = new Promise<void>((resolve) => settled.set(space, resolve));
   genOf.set(space, { ms: 0 });

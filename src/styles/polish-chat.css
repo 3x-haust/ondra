@@ -1887,9 +1887,48 @@
   color: var(--ink-3);
   font-size: var(--fs-md);
   line-height: var(--lh-md);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   animation: think-open var(--dur-fast) ease-out;
+}
+.reply-thought-line {
+  margin: 0;
+}
+.reply-thought-head {
+  display: block;
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+.reply-thought-head:not(:first-child) {
+  margin-top: var(--s-6);
+}
+.reply-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: var(--s-8) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.reply-steps > li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+  animation: think-open var(--dur-fast) ease-out;
+}
+.reply-steps:first-child {
+  margin-top: 0;
+}
+/* closed: only what it is doing now, one quiet line */
+.reply-now {
+  margin-top: var(--s-4);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 @keyframes think-open {
   from {
@@ -2004,4 +2043,195 @@
 .md .md-svg-wait {
   color: var(--ink-3);
   font-size: var(--fs-sm);
+}
+
+/* a board (```board): an explanation drawn stroke by stroke, its steps named under it */
+.bd {
+  margin: var(--s-12) 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.bd-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-8) var(--s-8) 0 var(--s-16);
+  min-height: 36px;
+}
+.bd-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bd-tools {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.bd-stage {
+  position: relative;
+  aspect-ratio: var(--bd-ratio, 16 / 9);
+  max-height: 520px;
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-16);
+  /* drawing paper: a faint grid under the strokes */
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--line-soft) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--line-soft) 55%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+}
+.bd-svg text.bd-free {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.bd-stage svg g {
+  transition: opacity var(--dur-slow) ease;
+}
+.bd-stage svg .bd-past {
+  opacity: 0.5;
+}
+.bd-pen-tip {
+  fill: var(--accent);
+}
+.bd-pen-glow {
+  fill: var(--accent-soft);
+}
+.bd-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.bd-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.bd-leaders line {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+}
+.bd-leaders circle {
+  fill: var(--ink-2);
+}
+.bd-chip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  padding: 3px var(--s-8);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--warn) 30%, var(--card));
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+/* each name its own soft colour, so a tag is easy to match to its line */
+.bd-chip-1 {
+  background: color-mix(in srgb, var(--bad) 26%, var(--card));
+}
+.bd-chip-2 {
+  background: color-mix(in srgb, var(--accent) 26%, var(--card));
+}
+.bd-chip-3 {
+  background: color-mix(in srgb, var(--ok) 28%, var(--card));
+}
+.bd-chip-4 {
+  background: color-mix(in srgb, var(--merged) 28%, var(--card));
+}
+.bd-chip:hover,
+.bd-chip.is-on {
+  outline: 2px solid var(--accent-line);
+}
+.bd-chip[hidden] {
+  display: none;
+}
+.bd-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font);
+  overflow: visible;
+}
+.bd-3d {
+  padding: 0;
+  width: 100%;
+  background-image: none;
+}
+.bd-3d > canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+  touch-action: none;
+}
+.bd-3d > canvas:active {
+  cursor: grabbing;
+}
+.bd-tag {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-12);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.bd-tag[hidden] {
+  display: none;
+}
+.bd-steps {
+  margin: 0;
+  padding: var(--s-4) var(--s-16) var(--s-12) calc(var(--s-16) + 1.4em);
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-ui);
+  color: var(--ink-3);
+}
+.bd-steps[hidden] {
+  display: none;
+}
+.bd-steps > li {
+  padding: 2px 0;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.bd-steps > li:hover,
+.bd-steps > li.is-now {
+  color: var(--ink);
+}
+.lightbox .lb-board {
+  width: min(1100px, 92vw);
+  cursor: default;
+}
+.lightbox .lb-board > .bd {
+  margin: 0;
+  /* the same ground the board had in the chat, opaque here */
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg);
+  border-radius: var(--r-xl);
+}
+.lightbox .lb-board .bd-stage {
+  max-height: 76vh;
 }

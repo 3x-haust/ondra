@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { fileSrc, revealPath } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
+import { BoardView } from "./board/view";
 import { t } from "../i18n";
 
 const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(null);
@@ -10,6 +11,21 @@ const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(nul
 // a drawn picture (cleaned SVG markup from an answer), shown big on its own
 const [drawn, setDrawn] = createSignal<string | null>(null);
 export const openDrawing = (markup: string) => setDrawn(markup);
+
+// a board (an answer's drawn explanation), big; a 3D part asked about goes to the composer it came from
+const [board, setBoard] = createSignal<{ src: string; ask?: (text: string) => void } | null>(null);
+export const openBoard = (src: string, ask?: (text: string) => void) => setBoard({ src, ask });
+
+function BigBoard(props: { src: string; ask?: (text: string) => void }) {
+  let host!: HTMLDivElement;
+  onMount(() => {
+    const v = new BoardView({ big: true, onAsk: props.ask && ((text) => (props.ask!(text), setBoard(null))) });
+    host.appendChild(v.root);
+    v.update(props.src, true);
+    onCleanup(() => v.dispose());
+  });
+  return <div class="lb-board" ref={host} onClick={(e) => e.stopPropagation()} />;
+}
 
 export function openImage(path: string, list: string[] = [path]) {
   const l = list.includes(path) ? list : [path, ...list];
@@ -20,6 +36,7 @@ export function Lightbox() {
   const step = (d: number) => setShown((s) => s && { ...s, i: (s.i + d + s.list.length) % s.list.length });
   const onKey = (e: KeyboardEvent) => {
     if (drawn() && e.key === "Escape" && !ignoredKey(e)) return void (e.preventDefault(), e.stopPropagation(), setDrawn(null));
+    if (board() && e.key === "Escape" && !ignoredKey(e)) return void (e.preventDefault(), e.stopPropagation(), setBoard(null));
     if (!shown() || ignoredKey(e) || !noModifiers(e)) return;
     if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setShown(null));
     else if (e.key === "ArrowRight") (e.preventDefault(), e.stopPropagation(), step(1));
@@ -35,6 +52,16 @@ export function Lightbox() {
           <div class="lb-drawing" innerHTML={m()} onClick={(e) => e.stopPropagation()} />
           <div class="lb-bar" onClick={(e) => e.stopPropagation()}>
             <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setDrawn(null)}><Icon name="x" size={14} /></button>
+          </div>
+        </div>
+      )}
+    </Show>
+    <Show when={board()}>
+      {(b) => (
+        <div class="lightbox" onClick={() => setBoard(null)}>
+          <BigBoard src={b().src} ask={b().ask} />
+          <div class="lb-bar" onClick={(e) => e.stopPropagation()}>
+            <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setBoard(null)}><Icon name="x" size={14} /></button>
           </div>
         </div>
       )}

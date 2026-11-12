@@ -9,7 +9,7 @@ const REPLY = ".msg-text, .reply-line, .reply-body";
 const MAX = 4000;
 
 /** The composer beside a node: the one sharing its nearest view or panel. */
-function composerFor(node: Node) {
+export function composerFor(node: Node) {
   const el = node instanceof Element ? node : node.parentElement;
   for (let box = el?.closest(".jp-chat, .panel, .view") ?? null; box; box = box.parentElement?.closest(".jp-chat, .panel, .view") ?? null)
     for (const c of composers) if (box.contains(c.root)) return c;

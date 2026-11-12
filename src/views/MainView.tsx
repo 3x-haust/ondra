@@ -18,7 +18,7 @@ import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
-import { chatKey, editMain, inChat, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
+import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -190,30 +190,51 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
   );
 }
 
-/** "생각하는 중 · 12초": opened, what the model reasons streams under it as it comes */
+/**
+ * "생각하는 중 · 12초": opened, what the model reasons and what it has looked at so far
+ * stream under it as they come; closed, the latest of those waits under the line, so a
+ * long wait shows where it is.
+ */
 function Thinking(props: { m: CaptainMessage; label: string }) {
   const thought = () => mainThought(chatKey(props.m.space, props.m.project)).trim();
+  const steps = () => props.m.steps ?? [];
+  const has = () => !!thought() || steps().length > 0;
   const [open, setOpen] = createSignal(false);
   let box: HTMLDivElement | undefined;
   // it follows the newest line while the reader is at the end of it
   let atEnd = true;
-  createEffect(on(thought, () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
+  createEffect(on([thought, () => steps().length], () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
+  // reasoning summaries come as "**Heading**" lines between paragraphs: headings, no blank gaps
+  const lines = () => thought().split("\n").map((l) => l.trim()).filter(Boolean);
   return (
-    <div class="reply-think" classList={{ open: open() && !!thought() }}>
-      <button type="button" class="reply-thinking shimmer" disabled={!thought()} aria-expanded={open()} onClick={() => setOpen(!open())}>
+    <div class="reply-think" classList={{ open: open() && has() }}>
+      <button type="button" class="reply-thinking shimmer" disabled={!has()} aria-expanded={open()} onClick={() => setOpen(!open())}>
         {props.label}
-        <Show when={thought()}>
+        <Show when={has()}>
           <Icon name="chevron" size={12} class="reply-think-chev" />
         </Show>
       </button>
-      <Show when={open() && thought()}>
+      <Show when={open() && has()}>
         <div
           class="reply-thought"
           ref={(el) => ((box = el), queueMicrotask(() => (el.scrollTop = el.scrollHeight)))}
           onScroll={(e) => (atEnd = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 24)}
         >
-          {thought()}
+          <For each={lines()}>
+            {(line) => {
+              const head = /^\*\*(.+)\*\*$/.exec(line);
+              return head ? <b class="reply-thought-head">{head[1]}</b> : <p class="reply-thought-line">{line}</p>;
+            }}
+          </For>
+          <Show when={steps().length}>
+            <ul class="reply-steps">
+              <For each={steps()}>{(s) => <li><Icon name="check" size={12} />{noteText(s)}</li>}</For>
+            </ul>
+          </Show>
         </div>
+      </Show>
+      <Show when={!open() && steps().length}>
+        <div class="reply-now">{noteText(steps()[steps().length - 1])}</div>
       </Show>
     </div>
   );
@@ -223,6 +244,15 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
   const routes = () => props.m.routes ?? [];
   const rows = () => handed(props.m);
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
+  // the first answer's text: while main writes it, as far as it has come; one Markdown for both,
+  // so a board that started drawing while it was written goes on drawing when it is done
+  const firstAnswer = () => routes().findIndex((r) => r.kind === "answer");
+  const answerText = () => {
+    if (props.m.pending) return mainDraft(chatKey(props.m.space, props.m.project), props.m.id);
+    if (props.m.error) return "";
+    const r = routes()[firstAnswer()];
+    return r?.kind === "answer" ? r.text : "";
+  };
   return (
     <div class="reply" data-mid={props.m.id} classList={{ linked: rows().some((r) => r.taskId === hoverTask() || r.taskId === props.active) }}>
       <Show when={props.m.up ? projectById(props.m.up) : undefined}>
@@ -263,13 +293,17 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                 <button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>
               </div>
             </Show>
+          </Match>
+        </Switch>
+        <Show when={answerText()}><Markdown class="msg-text" text={answerText()} /></Show>
+        <Show when={!props.m.pending && !props.m.error}>
             <For each={routes()}>
               {(r) => (
                 <Switch>
                   <Match when={r.kind === "answer" && r}>
                     {(a) => (
                       <>
-                        <Show when={a().text}><Markdown class="msg-text" text={a().text} /></Show>
+                        <Show when={a().text && a() !== routes()[firstAnswer()]}><Markdown class="msg-text" text={a().text} /></Show>
                         <Show when={a().blocks.length}><div class="blocks"><For each={a().blocks}>{(b) => <BlockView block={b} />}</For></div></Show>
                       </>
                     )}
@@ -299,8 +333,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                 <For each={rows()}>{(r) => <JobRow taskId={r.taskId} relayed={r.relayed} live={props.lastRow(r.taskId) === props.m.id} active={props.active === r.taskId} full={props.full} />}</For>
               </div>
             </Show>
-          </Match>
-        </Switch>
+        </Show>
         <Show when={!props.m.pending && !props.m.error && (copyText() || props.m.usage)}>
           <div class="reply-foot">
             <Show when={copyText()}><MsgActions text={copyText()} onRetry={props.retry} /></Show>

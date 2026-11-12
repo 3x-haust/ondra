@@ -83,6 +83,16 @@ const NOTE_FORMS: { key: string; was?: string[] }[] = [
   { key: "작업 찾는 중 · {q}" },
   { key: "작업 살펴봄 · {name}" },
   { key: "작업 살펴보는 중 · {name}" },
+  { key: "웹에서 찾는 중 · {q}" },
+  { key: "웹에서 찾음 · {q}" },
+  { key: "페이지 읽는 중 · {site}" },
+  { key: "페이지 읽음 · {site}" },
+  { key: "파일 읽는 중 · {name}" },
+  { key: "파일 읽음 · {name}" },
+  { key: "파일 찾는 중 · {q}" },
+  { key: "파일 찾음 · {q}" },
+  { key: "명령 실행 중 · {cmd}" },
+  { key: "명령 실행함 · {cmd}" },
 ];
 /** what "확인 필요 · …" lists (stored Korean → its key) */
 const PROOF_PARTS: Record<string, string> = {
