@@ -1,5 +1,6 @@
 // The one app store, saved to disk (debounced). Live-only data (streaming
 // text, which panel is open) lives in `ui.ts`, not here.
+import { linkedProjects, mirroredTasks } from "./mirror";
 import { flushLog } from "../lib/log";
 import { createEffect, createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "solid-js/store";
@@ -73,8 +74,12 @@ const [state, writeState] = createStore<AppState>(freshState());
 const saver = new Saver();
 const saveSoon = debounce(() => void save());
 /** Every write to the store goes through here: it notes what changed and saves a moment later. */
+const writes: ((args: readonly unknown[]) => void)[] = [];
+/** hear every store write (its setState arguments), before it happens: for passing changes on */
+export const onWrite = (fn: (args: readonly unknown[]) => void) => void writes.push(fn);
 const setState = ((...args: unknown[]) => {
   saver.mark(args, unwrap(state));
+  for (const f of writes) f(args);
   saveSoon.poke();
   return (writeState as (...a: unknown[]) => void)(...args);
 }) as SetStoreFunction<AppState>;
@@ -187,7 +192,7 @@ const index = createRoot(() =>
   createMemo(() => {
     const byId = new Map<string, Task>();
     const kids = new Map<string, Task[]>();
-    for (const t of state.tasks) {
+    for (const t of [...state.tasks, ...mirroredTasks()]) {
       if (!byId.has(t.id)) byId.set(t.id, t);
       const p = t.parentId;
       if (p) {
@@ -207,7 +212,13 @@ export const tasksIn = (space: SpaceId) => state.tasks.filter((t) => t.space ===
 export const projectsIn = (space: SpaceId) => (state.projects ?? []).filter((p) => p.space === space);
 /** A project by id; with `space`, only that space's (ids are unique, but older state may share one). */
 export const projectById = (id?: string, space?: SpaceId) =>
-  id ? (state.projects ?? []).find((p) => p.id === id && (!space || p.space === space)) : undefined;
+  id ? ((state.projects ?? []).find((p) => p.id === id && (!space || p.space === space)) ?? (id.startsWith("r:") ? remoteProjects().find((p) => p.id === id && (!space || p.space === space)) : undefined)) : undefined;
+/** projects added from other Macs (Settings › 연결) */
+const remoteProjects = createRoot(() => createMemo(() => linkedProjects(state.settings.hostProjects, (h) => state.settings.hosts?.find((x) => x.id === h)?.name ?? "Mac")));
+/** what the sidebar lists: this Mac's projects and those added from other Macs */
+export const projectsShown = (space: SpaceId) => [...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)];
+/** this Mac's jobs and the other Macs' jobs shown here */
+export const tasksShown = (space: SpaceId) => [...tasksIn(space), ...mirroredTasks().filter((t) => t.space === space)];
 /** compare folders in "~/…" form (macOS home) */
 const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */

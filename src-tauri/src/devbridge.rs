@@ -30,7 +30,8 @@ pub fn start(app: AppHandle) {
     let dir = crate::engine::data_dir(&app);
     let _ = std::fs::write(dir.join("devbridge.token"), &token);
     std::thread::spawn(move || {
-        let Ok(listener) = TcpListener::bind("127.0.0.1:17321") else { return };
+        let port = std::env::var("ONDRA_DEVBRIDGE_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(17321);
+        let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) else { return };
         let mut seq = 0u64;
         for stream in listener.incoming().flatten() {
             seq += 1;

@@ -5,7 +5,9 @@ import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
-import { addProject, decisionsIn, projectsIn, removeProject, renameProject, kidsOf, state, taskById, tasksIn, listed, carriedOn, lineHead } from "../state/store";
+import { addProject, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
+import { mirror, splitProjectId } from "../state/mirror";
+import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
@@ -42,7 +44,7 @@ export const needsYou = (t: Task) => bucket(t) === "you" || bucket(t) === "faile
 /** Jobs of a space, most urgent first (the order ⌘⇧[ ] walks). */
 export function forkOrder(space: string): Task[] {
   const order: Bucket[] = ["you", "failed", "review", "work", "done"];
-  return tasksIn(space as Task["space"])
+  return tasksShown(space as Task["space"])
     .filter((t) => !t.parentId && !t.answer)
     .sort((a, b) => order.indexOf(bucket(a)) - order.indexOf(bucket(b)) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 }
@@ -74,7 +76,7 @@ function followUps(t: Task): Task[] {
   const seen = new Set([t.id]);
   let ring = new Set([t.id]);
   while (ring.size) {
-    const next = state.tasks.filter((x) => !seen.has(x.id) && listed(x) && ring.has(x.follows ?? "") && carriedOn(x));
+    const next = tasksShown(t.space).filter((x) => !seen.has(x.id) && listed(x) && ring.has(x.follows ?? "") && carriedOn(x));
     for (const x of next) seen.add(x.id);
     out.push(...next);
     ring = new Set(next.map((x) => x.id));
@@ -234,9 +236,27 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
 
 /** a project's menu: open, start a task there, rename, show the folder, remove it from the list */
 function projectMenu(id: string): MenuEntry[] {
-  const p = projectsIn(state.space).find((x) => x.id === id);
+  const p = projectsShown(state.space).find((x) => x.id === id);
   if (!p) return [];
-  const n = state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && !t.answer).length;
+  const n = tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.answer).length;
+  const far = splitProjectId(p.id);
+  // another Mac's project: it stays there; here it can only be taken off the list
+  if (far)
+    return [
+      { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
+      { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
+      "sep",
+      {
+        id: "remove",
+        label: tr("목록에서 제거"),
+        icon: "trash",
+        run: () => {
+          const v = view();
+          if (v.name === "main" && v.project === p.id) goMain();
+          void import("../engine/hosts").then((m) => m.removeHostProject(far.host, far.id));
+        },
+      },
+    ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
     { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
@@ -294,7 +314,7 @@ function NeedsMenu() {
     window.removeEventListener("keydown", esc, true);
   });
   const list = () => forkOrder(state.space).filter((t) => !t.archived && needsYou(t));
-  const where = (t: Task) => projectsIn(state.space).find((p) => p.id === t.project)?.name;
+  const where = (t: Task) => projectsShown(state.space).find((p) => p.id === t.project)?.name;
   createEffect(() => needsMenu() && !list().length && !memAsks() && close());
   return (
     <Show when={needsMenu()}>
@@ -430,7 +450,7 @@ function DoneFold(props: { id: string; tasks: Task[] }) {
 export function Sidebar() {
   const [showArchived, setShowArchived] = createSignal(false);
   // every job in the list, follow-ups too (counts go by these)
-  const every = createMemo(() => tasksIn(state.space).filter(listed));
+  const every = createMemo(() => tasksShown(state.space).filter(listed));
   // the rows: a job with its follow-ups under it, placed by the newest of its line
   const latest = (t: Task) => Math.max(...lineOf(t).map((x) => x.startedAt ?? x.createdAt));
   const pinned = (t: Task) => lineOf(t).some((x) => x.pinned);
@@ -439,12 +459,12 @@ export function Sidebar() {
       .filter((t) => !carriedOn(t))
       .sort((a, b) => Number(pinned(b)) - Number(pinned(a)) || latest(b) - latest(a)),
   );
-  const archived = createMemo(() => tasksIn(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
+  const archived = createMemo(() => tasksShown(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs fold away under their group after a few minutes; opening one
   // doesn't move it back up: it shows where it is, in its group's done fold
   const old = (t: Task) => lineOf(t).every((x) => !x.pinned && ended(x) && (x.finishedAt ?? x.createdAt) < soon() - DONE_FOR);
   const shown = createMemo(() => roots().filter((t) => !old(t)));
-  const filed = (t: Task) => !!t.project && projectsIn(state.space).some((p) => p.id === t.project);
+  const filed = (t: Task) => !!t.project && projectsShown(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
   const looseDone = createMemo(() => roots().filter((t) => old(t) && !filed(t)));
@@ -550,8 +570,8 @@ export function Sidebar() {
             <span class="sb-title">{tr("내 차례")}</span>
             <Show when={turn()}><span class="sb-need">{turn()}</span></Show>
           </button>
-        <Head id="projects" label={tr("프로젝트")} count={projectsIn(state.space).length}>
-          <Show when={projectsIn(state.space).length}>
+        <Head id="projects" label={tr("프로젝트")} count={projectsShown(state.space).length}>
+          <Show when={projectsShown(state.space).length}>
             <button class="icon-btn xs" title={tr("프로젝트 추가")} aria-label={tr("프로젝트 추가")} onClick={() => void addFolder()}>
               <Icon name="plus" size={14} />
             </button>
@@ -560,7 +580,7 @@ export function Sidebar() {
         <Fold open={!fold("projects")}>
         <div class="sb-projects">
           <For
-            each={projectsIn(state.space)}
+            each={projectsShown(state.space)}
             fallback={
               <button class="sb-row sb-proj sb-add" onClick={() => void addFolder()}>
                 <Icon name="plus" size={16} class="sb-main-ic" />
@@ -571,7 +591,7 @@ export function Sidebar() {
             {(p) => {
               const busy = () => state.captain.some((m) => m.space === state.space && m.project === p.id && m.pending);
               // top-level tasks only, like every running count (a subagent is part of its task)
-              const live = () => state.tasks.filter((t) => t.space === p.space && t.project === p.id && !t.parentId && t.status === "running").length;
+              const live = () => tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = createMemo(() => shown().filter((t) => t.project === p.id));
               const done = createMemo(() => roots().filter((t) => old(t) && t.project === p.id));
@@ -582,14 +602,14 @@ export function Sidebar() {
                 <>
                   <button
                     class="sb-row sb-proj"
-                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: ctxFor() === `project:${p.id}` }}
+                    classList={{ on: curProject() === p.id, has: all() > 0, open: open(), menu: ctxFor() === `project:${p.id}`, away: !!p.host && mirror.hosts[p.host]?.status !== "ok" }}
                     data-project={p.id}
                     onClick={() => renamingProject() !== p.id && goMain(p.id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);
                     }}
-                    title={p.folder}
+                    title={p.host ? `${p.hostName} · ${hostState(p.host)} · ${p.folder}` : p.folder}
                   >
                     <span
                       class="sb-proj-ic"
@@ -603,7 +623,7 @@ export function Sidebar() {
                       <ProjectBadge name={p.name} class="ic-folder" />
                       <Icon name="chevron" size={12} class="ic-chev" />
                     </span>
-                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}</span>}>
+                    <Show when={renamingProject() === p.id} fallback={<span class="sb-title">{p.name}<Show when={p.hostName}><span class="sb-host"><i class={`cn-dot is-${mirror.hosts[p.host!]?.status ?? "connecting"}`} aria-hidden="true" />{p.hostName}</span></Show></span>}>
                       <input
                         class="sb-rename"
                         value={p.name}
@@ -688,7 +708,7 @@ export function Sidebar() {
         </Fold>
 
         <Show when={loose().length || looseDone().length || archived().length}>
-        <Head id="jobs" label={projectsIn(state.space).length ? tr("프로젝트 없음") : tr("작업")} count={loose().length} />
+        <Head id="jobs" label={projectsShown(state.space).length ? tr("프로젝트 없음") : tr("작업")} count={loose().length} />
         <Fold open={!fold("jobs")}>
         <div class="sb-list">
           <For each={loose()}>

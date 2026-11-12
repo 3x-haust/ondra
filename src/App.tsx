@@ -1,3 +1,4 @@
+import { PairAskDialog } from "./views/RemoteSettings";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
@@ -73,9 +74,10 @@ export default function App() {
     }).then((u) => (unq = u));
     onCleanup(() => (un?.(), unq?.()));
   });
-  if (import.meta.env.DEV)
-    void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy")]).then(
-      ([store, tasks, captain, ui, native, memory, absorb, tidy]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy }),
+  // test builds (VITE_TEST_HOOKS=1) too: two copies of the app driven side by side
+  if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOKS === "1")
+    void Promise.all([import("./state/store"), import("./engine/tasks"), import("./engine/captain"), import("./state/ui"), import("./lib/native"), import("./engine/memory"), import("./engine/absorb"), import("./engine/tidy"), import("./engine/remote"), import("./engine/hosts"), import("./state/mirror")]).then(
+      ([store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror }),
     );
   let unCapture: (() => void) | undefined;
   onCleanup(() => unCapture?.());
@@ -91,6 +93,7 @@ export default function App() {
     // jobs still running in the engine from before a reload: hear them again
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs().then(() => m.sweepWorktrees(true))).catch(() => {});
     startScheduler();
+    if (!location.search.includes("fixture")) void import("./engine/remote").then((m) => m.initRemote());
     void import("./state/limits").then((m) => m.watchLimits(() => state.accounts.map((a) => a.id)));
     if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());
     void import("./engine/results").then((m) => m.backfillResults());
@@ -256,6 +259,7 @@ export default function App() {
       <FeedbackHost />
       <ShortcutHints commands={appCommands} enabled={() => loaded() && state.onboarded && !anyPop()} />
       <Lightbox />
+      <PairAskDialog />
       <VisualViewer />
       {/* one toast at a time (DESIGN.md §9.10): the newest shows; a kept one comes back after it */}
       <ContextMenuHost />

@@ -39,14 +39,6 @@ strip = "debuginfo"
 
 [profile.release.build-override]
 strip = false
-
-# the embedding model runs on these; unoptimized they are ~50x slower in dev builds
-[profile.dev.package.tokenizers]
-opt-level = 3
-[profile.dev.package.ort]
-opt-level = 3
-[profile.dev.package.ndarray]
-opt-level = 3
 [profile.dev.package.fastembed]
 opt-level = 3
 

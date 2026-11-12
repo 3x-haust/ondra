@@ -1919,3 +1919,174 @@ button.st-sh:hover { text-decoration: underline; }
   grid-column: 1 / -1;
   margin: 0;
 }
+
+/* ───────── settings › 연결 */
+.cn-host .set-label,
+.cn-proj .set-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+}
+.cn-host .set-label .muted,
+.cn-proj .set-label .muted {
+  font-size: var(--fs-sm);
+}
+.cn-host .set-value,
+.cn-proj .set-value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+}
+.cn-proj {
+  padding-left: var(--s-40);
+}
+.cn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-4);
+  transition: background 0.2s var(--ease);
+}
+.cn-dot.is-ok {
+  background: var(--ok);
+}
+.cn-dot.is-waiting,
+.cn-dot.is-connecting {
+  background: var(--warn);
+}
+.cn-dot.is-denied {
+  background: var(--bad);
+}
+.cn-folder-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+.cn-add {
+  width: 100%;
+  gap: var(--s-8);
+  color: var(--ink-2);
+  text-align: left;
+  min-height: 46px;
+}
+.cn-add:hover {
+  background: var(--hover);
+}
+.cn-form {
+  display: flex;
+  gap: var(--s-8);
+  align-items: center;
+}
+.cn-form .input {
+  flex: 1;
+  min-width: 0;
+}
+.cn-hint {
+  font-size: var(--fs-xs);
+}
+.cn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cn-pick {
+  background: var(--muted);
+  animation: rc-in 0.18s var(--ease);
+}
+.cn-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cn-pick-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+  padding: var(--s-8);
+  border-radius: var(--r-md);
+  text-align: left;
+  min-width: 0;
+}
+.cn-pick-item:hover {
+  background: var(--hover);
+}
+.cn-pick-name {
+  font-weight: var(--fw-medium);
+  flex: none;
+}
+.rc-ask {
+  position: fixed;
+  right: var(--s-20);
+  bottom: var(--s-20);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  max-width: 460px;
+  padding: var(--s-14) var(--s-16);
+  border-radius: var(--r-xl);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+  animation: rc-in 0.22s var(--ease);
+}
+.rc-ask-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--fs-sm);
+}
+.rc-ask-main b {
+  font-size: var(--fs-md);
+}
+@keyframes rc-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.cn-proj .set-label b,
+.cn-host .set-label b,
+.cn-host .cn-name {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cn-host .cn-name b {
+  max-width: none;
+}
+.cn-proj .set-label .cn-folder-path {
+  flex: 1;
+}
+/* a Mac's name: click to give it one of your own */
+.cn-name {
+  all: unset;
+  cursor: text;
+  border-radius: var(--r-sm);
+}
+.cn-name:hover b {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.cn-name:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.cn-name-input {
+  width: 180px;
+  height: var(--h-sm);
+}
+/* the two Macs run different Ondra versions */
+.cn-ver {
+  font-size: var(--fs-xs);
+  color: var(--warn);
+}
+.strip-far .cn-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+}

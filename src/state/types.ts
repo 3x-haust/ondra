@@ -24,6 +24,8 @@ export interface Space {
   aside?: string;
   /** The user's own simulators, emulators and phones that belong to this space (device ids). */
   devices?: string[];
+  /** made for another Mac's workspace of this name (Settings › 연결): its work runs there, none here */
+  only?: boolean;
 }
 
 /** One turn's tokens plus the plan limits right after it. */
@@ -221,6 +223,10 @@ export interface Task {
   issue?: { n: number; url: string; title: string };
   /** Answered on the spot by the router; no agent ran yet. */
   answer?: boolean;
+  /** runs on another Mac (Settings › 연결): that Mac's id. Shown here, worked there. */
+  host?: string;
+  /** asked for by another Mac (Settings › 연결): which one, and the space it was asked from there */
+  from?: { device: string; space: string };
   /** Work in its own git worktree (undefined = the app setting). */
   isolate?: boolean;
   /** The task's own worktree, when its folder is a git repo. */
@@ -594,6 +600,16 @@ export interface Settings {
   permission: Permission;
   /** where links open: the app's own browser (missing = inside) or the system's default one */
   links?: "inside" | "outside";
+  /** other Macs may use this one (Settings › 연결): the ones the user allowed get in */
+  remote?: boolean;
+  /** while others may work on this Mac, it doesn't sleep (on power) */
+  remoteAwake?: boolean;
+  /** other Macs this one works on, and the projects of theirs added here */
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number }[];
+  hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
+  /** where new work goes from each workspace here (Codex's run location): another Mac, its workspace
+   *  and account there (account empty = that workspace's own choice); missing = this Mac */
+  computers?: Record<string, { host: string; account?: string; model?: string; thinking?: string }>;
   /** a job's open PR gets new reviews, failed checks or a conflict: the job carries on */
   watchPullRequests?: boolean;
   /** jobs may change things on GitHub (comments, merges, releases); off = read only */
@@ -686,6 +702,9 @@ export interface Project {
   space: SpaceId;
   name: string;
   folder: string;
+  /** on another Mac (Settings › 연결): its id there and the name it goes by */
+  host?: string;
+  hostName?: string;
 }
 
 export interface SideMessage {

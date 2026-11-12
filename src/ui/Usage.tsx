@@ -1,6 +1,6 @@
 // What a turn cost and how much of the plan is left, kept right in the chat.
 import { openPanel } from "../state/ui";
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
 import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctx, pctText, reusePct } from "../state/ctx";
@@ -84,7 +84,7 @@ export function LimitBar(props: { accountId: string }) {
  * The status line under an input, like a terminal agent's footer:
  * account · plan windows · context used · permission · shells · branch.
  */
-export function StatusLine(props: { accountId: string; space?: string; onAccount?: (id: string) => void; running?: boolean; agent?: string; permission?: Permission; shells?: number; branch?: string; onCompact?: () => void; last?: Usage }) {
+export function StatusLine(props: { lead?: JSX.Element; accountId: string; space?: string; onAccount?: (id: string) => void; running?: boolean; agent?: string; permission?: Permission; shells?: number; branch?: string; onCompact?: () => void; last?: Usage }) {
   onMount(() => {
     void refreshLimits(props.accountId);
     void loadEmail(props.accountId);
@@ -102,7 +102,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   const c = () => (props.agent && !notStarted() ? ctx[props.agent] : undefined);
   const [ctxOpen, setCtxOpen] = createSignal(false);
   // with no account and nothing measured yet there is nothing to show: no empty strip
-  const any = () => !!state.accounts.some((a) => a.id === props.accountId) || !!c() || !!props.shells || !!props.branch;
+  const any = () => !!props.lead || !!state.accounts.some((a) => a.id === props.accountId) || !!c() || !!props.shells || !!props.branch;
   // one line, never cut: when it doesn't fit, whole items go, least needed first
   let line: HTMLDivElement | undefined;
   const fit = () => {
@@ -141,6 +141,7 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
   return (
     <Show when={any()}>
     <div class="status-line" ref={watch}>
+      {props.lead}
       <Show when={state.accounts.find((a) => a.id === props.accountId)}>
         {(a) => <AccountPicker accountId={a().id} space={props.space ?? a().space} onPick={props.onAccount} running={props.running} />}
       </Show>
@@ -192,4 +193,5 @@ export function StatusLine(props: { accountId: string; space?: string; onAccount
  * already says how full the context is (and opens the sheet). Renders nothing so
  * the task view's call still compiles; drop it there and this can go.
  */
+
 

@@ -34,6 +34,13 @@ import { effortFor, setModelEffort } from "../engine/models";
 import { notesPath, notesVersion, readNotes } from "../engine/notes";
 import { MsgActions, UserMsg } from "../ui/MsgActions";
 import { StatusLine, UsageLine } from "../ui/Usage";
+import { ComputerPicker, HostModel, HostStatus, chosenComputer, hostAccount, type Place } from "../ui/ComputerPicker";
+
+/** the model picked for work on another Mac, when that account there has it */
+const hostPick = (p: Place) => {
+  const a = hostAccount(p, state.space);
+  return p.model && a?.models.includes(p.model) ? { model: p.model, thinking: p.thinking } : p.thinking ? { thinking: p.thinking } : {};
+};
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
@@ -530,6 +537,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
 function NewTask(props: { project?: string; onProject: (id?: string) => void; pane: string }) {
   const p = () => (props.project ? projectById(props.project) : undefined);
   const account = () => chooseAccount(state.space, p()?.name ?? "");
+  const computer = () => (p() ? (p()!.host ? { host: p()!.host! } : undefined) : chosenComputer());
   const send = (text: string) => {
     const id = createTask({
       space: state.space,
@@ -540,6 +548,10 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
       project: p()?.id,
       isolate: state.settings.isolate,
       accountId: account(),
+      host: computer()?.host,
+      hostSpace: computer()?.space,
+      hostAccount: computer() ? hostAccount(computer()!, state.space)?.id : undefined,
+      ...(computer() ? hostPick(computer()!) : {}),
     });
     setPaneDraft(props.pane, null);
     focusPane(props.pane);
@@ -557,14 +569,21 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           placeholder={t("작업 내용")}
           files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
           onSend={send}
-          status={<StatusLine accountId={account()} space={state.space} />}
+          status={
+            <Show
+              when={computer()}
+              fallback={<StatusLine lead={<ComputerPicker fixed={!!p()} />} accountId={account()} space={state.space} />}
+            >
+              <HostStatus place={computer()!} fixed={!!p()} />
+            </Show>
+          }
           left={
             <>
               <ProjectPick value={props.project} onChange={props.onProject} />
               <PermissionPicker value={state.settings.permission ?? "edits"} onChange={(x) => setState("settings", "permission", x)} />
             </>
           }
-          right={<AccountModel accountId={account()} />}
+          right={<Show when={computer()} fallback={<AccountModel accountId={account()} />}>{(c) => <HostModel place={c()} />}</Show>}
         />
       </div>
     </div>
@@ -613,7 +632,15 @@ export function MainView() {
   const account = () => chooseAccount(state.space, project()?.name ?? "");
   const started = (m: CaptainMessage) =>
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
-  const sendMain = (text: string) => throwThought(text, state.space, { project: project()?.id });
+  // where it runs (Codex's run location): a project's own Mac, else the one picked under the composer
+  const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
+  const sendMain = (text: string) => {
+    const p = project();
+    const at = computer();
+    // on another Mac: what's typed is a job there (its own Ondra takes it from there)
+    if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
+    return throwThought(text, state.space, { project: p?.id });
+  };
   /** each job's last row in this chat: that one keeps up with it, earlier ones only name it */
   const lastRow = createMemo(() => {
     const at = new Map<string, string>();
@@ -711,13 +738,20 @@ export function MainView() {
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}
-      status={<StatusLine accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+      status={
+        <Show
+          when={computer()}
+          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+        >
+          <HostStatus place={computer()!} fixed={!!project()} />
+        </Show>
+      }
       plus={plusFor({ main: true })}
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<AccountModel accountId={account()} up={!big} rest="low" />}
+      right={<Show when={computer()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
     />
   );
 

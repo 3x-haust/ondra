@@ -321,6 +321,13 @@ export const toolStatus = () =>
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
+export const remoteStart = () => call<void>("remote_start");
+export const remoteStop = () => call<void>("remote_stop");
+export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
+export const remoteHostName = () => call<string>("remote_host_name", undefined, "Mac");
+export const remoteAwake = (on: boolean) => call<void>("remote_awake", { on });
+export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });
 /** Env every worker gets: bundled tools on PATH, its tab in the shared browser, keychain sign-in, artifacts dir. */
 export const workerEnv = async (workerId: string, space?: string) => {

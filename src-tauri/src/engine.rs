@@ -219,6 +219,13 @@ pub fn with_sidecars(path: &str) -> String {
 }
 
 pub fn data_dir(app: &AppHandle) -> PathBuf {
+    // debug builds: a second copy can run beside the first on its own data (tests of 연결)
+    #[cfg(debug_assertions)]
+    if let Some(d) = std::env::var_os("ONDRA_DATA_DIR") {
+        let dir = PathBuf::from(d);
+        let _ = std::fs::create_dir_all(&dir);
+        return dir;
+    }
     let dir = app.path().app_data_dir().unwrap_or_else(|_| std::env::temp_dir().join("ondra"));
     let _ = std::fs::create_dir_all(&dir);
     dir

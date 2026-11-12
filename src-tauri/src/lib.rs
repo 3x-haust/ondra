@@ -26,6 +26,7 @@ mod import;
 mod pty;
 mod store;
 mod tools;
+mod remote;
 mod worktree;
 mod fs;
 #[cfg(debug_assertions)]
@@ -429,6 +430,11 @@ pub fn run() {
             tools::request_accessibility,
             tools::open_privacy_settings,
             tools::permission_guide,
+            remote::remote_start,
+            remote::remote_stop,
+            remote::remote_cmd,
+            remote::remote_host_name,
+            remote::remote_awake,
             tools::worker_env,
             tools::worker_skills,
             tools::global_skills,

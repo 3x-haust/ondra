@@ -11,3 +11,6 @@ evals/workspace/
 .env
 docs/research/
 .claude/settings.local.json
+
+# remote control: build output
+remote/*/target/

@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { usePop } from "./ModelPicker";
 import { t } from "../i18n";
 
-const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
+export const service = (p: string) => (/anthropic|claude/.test(p) ? "Claude" : /codex|chatgpt|openai/.test(p) ? "ChatGPT" : /gemini|google/.test(p) ? "Gemini" : /copilot/.test(p) ? "Copilot" : p);
 const services = (a: Account) => [...new Set(a.providers.map(service))];
 const find = (a: Account | string | undefined) => (typeof a === "string" ? state.accounts.find((x) => x.id === a) : a);
 /** a label the person gave it (the default one is only the workspace's name, "회사 2", which says nothing) */
@@ -120,6 +120,62 @@ export function AccountPicker(props: {
           </For>
           <div class="pop-sep" />
           <button type="button" class="pop-item" onClick={() => (setOpen(false), setView({ name: "settings", tab: "accounts" }))}>
+            <span class="pop-item-main">{t("계정 관리")}</span>
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/** another Mac's account, as that Mac sent it (Settings › 연결) */
+export interface FarAccount { id: string; name: string; email?: string; services: string[]; usage: string }
+
+/** The same picker for work on another Mac: that workspace's accounts there, picked here. */
+export function FarAccountPicker(props: { accounts: FarAccount[]; current?: FarAccount; auto: boolean; onPick: (id: string | undefined) => void; onManage: () => void; title?: string }) {
+  const [open, setOpen] = usePop();
+  const [room, setRoom] = createSignal<{ up: boolean; max: number }>({ up: true, max: 480 });
+  const toggle = (el: HTMLElement) => {
+    if (!open()) {
+      const r = el.getBoundingClientRect();
+      const up = r.top > innerHeight - r.bottom;
+      setRoom({ up, max: Math.max(160, (up ? r.top : innerHeight - r.bottom) - 16) });
+    }
+    setOpen(!open());
+  };
+  const choose = (id: string | undefined) => (setOpen(false), props.onPick(id));
+  const Logos = (p: { a?: FarAccount }) => <For each={p.a?.services ?? []}>{(x) => <Logo name={x === "Claude" ? "claude" : x} size={12} />}</For>;
+  return (
+    <div class="picker" onClick={(e) => e.stopPropagation()}>
+      <button class="st-acc" classList={{ on: open() }} aria-label={props.current?.name} title={props.title} onClick={(e) => toggle(e.currentTarget)}>
+        <Logos a={props.current} />
+        <span class="st-acc-name">{props.auto ? `${t("자동")} · ${props.current?.name ?? ""}` : props.current?.name}</span>
+        <Icon name="chevron" size={12} class="st-acc-chev" />
+      </button>
+      <Show when={open()}>
+        <div class="pop acc-pop" classList={{ up: room().up }} style={{ "max-height": `${room().max}px`, "overflow-y": "auto" }}>
+          <div class="pop-label">{t("계정")}</div>
+          <button type="button" class="pop-item" onClick={() => choose(undefined)}>
+            <span class="pop-item-main">{t("자동")}</span>
+            <Show when={props.auto}><Icon name="check" size={14} /></Show>
+          </button>
+          <For each={props.accounts}>
+            {(x) => (
+              <button type="button" class="pop-item" onClick={() => choose(x.id)}>
+                <span class="pop-item-main">
+                  <span class="acc-row">
+                    <Logos a={x} />
+                    <span class="acc-name">{x.name}</span>
+                    <Show when={x.email && x.email !== x.name}><span class="acc-email">{x.email}</span></Show>
+                  </span>
+                  <span class="pop-item-sub">{x.usage}</span>
+                </span>
+                <Show when={!props.auto && props.current?.id === x.id}><Icon name="check" size={14} /></Show>
+              </button>
+            )}
+          </For>
+          <div class="pop-sep" />
+          <button type="button" class="pop-item" onClick={() => (setOpen(false), props.onManage())}>
             <span class="pop-item-main">{t("계정 관리")}</span>
           </button>
         </div>

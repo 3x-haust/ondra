@@ -1,0 +1,21 @@
+[package]
+name = "ondra-remote"
+version = "0.1.0"
+edition = "2021"
+publish = false
+rust-version = "1.91"
+
+# Its own workspace: built with a newer Rust than the app (iroh needs 1.91).
+[workspace]
+
+[dependencies]
+iroh = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
