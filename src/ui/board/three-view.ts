@@ -79,7 +79,7 @@ function sharedRenderer(): Shared {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   // a board's light never moves with its camera, so its shadow is worked out only when the model changes
   renderer.shadowMap.autoUpdate = false;
   // a soft room around the model, so metal reflects something instead of going black
@@ -105,7 +105,8 @@ function sharedRenderer(): Shared {
 
 export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void; onLost?: () => void }): ThreeView {
   const css = getComputedStyle(host);
-  const cssColor = (v: string) => css.getPropertyValue(v).trim() || "#888";
+  // a token may carry alpha (#rrggbbaa), which three.js doesn't read: the colour without it
+  const cssColor = (v: string) => (css.getPropertyValue(v).trim() || "#888").replace(/^(#[0-9a-f]{6})[0-9a-f]{2}$/i, "$1");
   // the board's drawing surface: the live renderer canvas while this board is drawn,
   // and under it a still picture of its last frame for when another board has the renderer
   const canvas = document.createElement("div");
@@ -462,7 +463,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     down = null;
     const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    const hit = ray.intersectObjects(shown.filter((s) => s.mesh.visible).map((s) => s.mesh), false)[0];
+    const hit = ray.intersectObjects(shown.filter((s) => merged || s.mesh.visible).map((s) => s.mesh), false)[0];
     const i = hit ? shown.findIndex((s) => s.mesh === hit.object) : -1;
     selected = i >= 0 ? i : null;
     highlight();
