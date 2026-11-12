@@ -10,10 +10,11 @@ import {
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
   GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, Minus, Maximize, LayoutGrid, Binary, CircleDot,
   Flag, Undo2, Hand, CircleArrowUp, FolderPlus, Keyboard, Languages, SunMoon, Columns2, Rows2, Maximize2, Equal, ChevronUp, WrapText,
-  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree,
+  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote,
 } from "lucide-solid";
 
 const map: Record<string, Component<any>> = {
+  quote: TextQuote,
   alert: AlertTriangle, arrow: ArrowRight, send: ArrowUp, read: BookOpen, brain: Brain, check: Check,
   down: ChevronDown, chevron: ChevronRight, dot: Circle, clock: Clock, handoff: CornerDownRight,
   download: Download, external: ExternalLink, diff: FileDiff, edit: FilePen, write: FilePlus, file: FileText,
