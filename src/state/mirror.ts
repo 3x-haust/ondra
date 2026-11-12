@@ -25,6 +25,7 @@ export interface HostInfo {
     id: string;
     space: string;
     name: string;
+    email?: string;
     services: string[];
     limits: Limit[];
     credits?: string;

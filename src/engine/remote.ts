@@ -14,7 +14,7 @@ import { inTauri, onRemote, remoteCmd, remoteHostName, remoteStop } from "../lib
 import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import type { HostInfo } from "../state/mirror";
-import { creditsOf, usageOf } from "../state/limits";
+import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
 import { accountName, service } from "../ui/AccountPicker";
 import { modelsNow, refreshModels } from "./modelList";
 import { connectionOf, connModelLabel, effortLevels } from "./connections";
@@ -139,7 +139,7 @@ function info(): HostInfo {
         const direct = !!connectionOf(a.id);
         const levels = direct ? Object.fromEntries(models.flatMap((m) => { const l = effortLevels(a.id, m); return l ? [[m, l]] : []; })) : undefined;
         const names = direct ? Object.fromEntries(models.flatMap((m) => { const n = connModelLabel(a.id, m); return n ? [[m, n]] : []; })) : undefined;
-        return { id: a.id, space: a.space, name: accountName(a, true), services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id), models, model: a.model || undefined, effort: effortFor(a.id), levels, names };
+        return { id: a.id, space: a.space, name: accountName(a, true), email: emails[a.id] || undefined, services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id), models, model: a.model || undefined, effort: effortFor(a.id), levels, names };
       }),
     pick: Object.fromEntries(state.spaces.map((s) => [s.id, jobs.chooseAccount(s.id, "")])),
   };
@@ -203,7 +203,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       c.info = undefined;
       sendInfo(conn, c);
       // the model lists, asked once (they're kept): the next info carries them
-      void Promise.all(state.accounts.filter((a) => a.providers.length).map((a) => refreshModels(a.id).catch(() => {}))).then(() => sendInfo(conn, c));
+      void Promise.all(state.accounts.filter((a) => a.providers.length).flatMap((a) => [refreshModels(a.id).catch(() => {}), loadEmail(a.id).catch(() => {})])).then(() => sendInfo(conn, c));
       break;
     case "watch":
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);

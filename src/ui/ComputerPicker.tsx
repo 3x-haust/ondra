@@ -10,6 +10,7 @@ import { windowLabel } from "../state/limits";
 import { Icon } from "./Icon";
 import { Logo } from "./Logos";
 import { ModelPicker, type RemoteModels } from "./ModelPicker";
+import { FarAccountPicker, type FarAccount } from "./AccountPicker";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 import { t } from "../i18n";
 
@@ -133,27 +134,40 @@ export function HostStatus(props: { place: Place; fixed?: boolean; account?: str
   const pool = () => (info()?.accounts ?? []).filter((a) => !sp() || a.space === sp());
   const auto = () => !props.account && !props.place.account;
   const acc = () => hostAccount(props.place, mine(), props.account);
-  const pickAccount = (e: MouseEvent) =>
-    openMenuAt(
-      "host-account",
-      () => [
-        { id: "auto", label: t("자동"), icon: "spark", checked: auto(), run: () => setComputer(mine(), { host: props.place.host }) },
-        // another account has its own models: the model picked goes back to that account's
-        ...pool().map((a) => ({ id: a.id, label: a.name, icon: "key", checked: !auto() && a.id === acc()?.id, run: () => setComputer(mine(), { host: props.place.host, account: a.id }) })),
-      ],
-      (e.currentTarget as HTMLElement).getBoundingClientRect(),
-    );
+  // as this Mac's own picker says it: "주간 59% 사용 · 크레딧 12.5"
+  const usageText = (a: HostAccount) => {
+    const now = Date.now();
+    const wins = a.limits.filter((l) => l.window > 0).map((l) => t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.resetsAt && l.resetsAt <= now ? 0 : l.used) }));
+    const n = Number(a.credits);
+    const cr = a.credits ? [Number.isFinite(n) ? t("크레딧 {n}", { n }) : `${t("크레딧")} ${a.credits}`] : [];
+    return [...wins, ...cr].join(" · ");
+  };
+  const far = (a: HostAccount): FarAccount => ({ id: a.id, name: a.name, email: a.email, services: a.services, usage: usageText(a) });
   const used = () => (acc()?.limits ?? []).filter((l) => l.window > 0).map((l) => (l.resetsAt && l.resetsAt <= Date.now() ? { ...l, used: 0 } : l));
   return (
     <div class="status-line">
       <ComputerPicker value={props.place} fixed={props.fixed} space={mine()} />
       <Show when={acc()}>
         {(a) => (
-          <button type="button" class="st-acc" disabled={!!props.account} onClick={pickAccount} title={t("{name}의 계정", { name: hostName(props.place.host) })}>
-            <For each={a().services}>{(x) => <Logo name={x === "Claude" ? "claude" : x} size={12} />}</For>
-            <span class="st-acc-name">{auto() ? `${t("자동")} · ${a().name}` : a().name}</span>
-            <Show when={!props.account}><Icon name="chevron" size={12} class="st-acc-chev" /></Show>
-          </button>
+          <Show
+            when={!props.account}
+            fallback={
+              <span class="st-acc" title={t("{name}의 계정", { name: hostName(props.place.host) })}>
+                <For each={a().services}>{(x) => <Logo name={x === "Claude" ? "claude" : x} size={12} />}</For>
+                <span class="st-acc-name">{a().name}</span>
+              </span>
+            }
+          >
+            {/* another account has its own models: the model picked goes back to that account's */}
+            <FarAccountPicker
+              accounts={pool().map(far)}
+              current={far(a())}
+              auto={auto()}
+              title={t("{name}의 계정", { name: hostName(props.place.host) })}
+              onPick={(id) => setComputer(mine(), id ? { host: props.place.host, account: id } : { host: props.place.host })}
+              onManage={() => setView({ name: "settings", tab: "remote" })}
+            />
+          </Show>
         )}
       </Show>
       <For each={used()}>
