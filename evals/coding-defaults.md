@@ -109,7 +109,7 @@ proof that agents follow the workflow.
 ## Evidence
 
 Local artifact directory:
-`/Users/lyu/Library/Application Support/dev.3xhaust.ondra/artifacts/tmw37bji6rkgq/`
+`~/Library/Application Support/dev.3xhaust.ondra/artifacts/tmw37bji6rkgq/`
 
 - `run-local-eval.mjs`: executed evaluation driver (final configuration).
 - `corrected-run/{task,subagent}-launch.json`: engine flags and isolated environment.

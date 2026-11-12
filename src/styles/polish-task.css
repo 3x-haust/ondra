@@ -438,7 +438,7 @@
   font-size: var(--fs-sm);
 }
 
-/* ───────────── PR tab: gitsu-style header card (§9.5), then checks, talk, files ───────────── */
+/* ───────────── PR tab: a header card, then checks, talk, files ───────────── */
 .panel-body .prv {
   gap: var(--s-16);
 }
@@ -605,7 +605,7 @@
   cursor: default;
 }
 
-/* ───────────── issues tab: gitsu's list (GITSU §4.3) ───────────── */
+/* ───────────── issues tab: quick filters over a grouped list ───────────── */
 .iss .iss-filters {
   flex-wrap: nowrap;
   gap: var(--s-6);
@@ -1882,7 +1882,7 @@ button.pf-ref:hover {
   cursor: zoom-in;
 }
 
-/* ───────── a finished turn's work, opened: three levels you can tell apart (Codex)
+/* ───────── a finished turn's work, opened: three levels you can tell apart
    the fold's head is a quiet label, the words stay the words, the work lines sit
    under them in grey; a line under the open fold ends it before the answer */
 .work-fold > .work-head {

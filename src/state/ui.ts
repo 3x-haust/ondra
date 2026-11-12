@@ -148,7 +148,7 @@ export function inPane<T extends Element = HTMLElement>(sel: string, id?: string
   return el ? el.querySelector<T>(sel) : document.querySelector<T>(sel);
 }
 
-// ── pane commands (Ghostty's split actions)
+// ── pane commands (split actions)
 /** The area the panes share, measured by the pane host (none in tests: everything fits). */
 let roomOf: () => L.Room | null = () => null;
 export const setPaneRoom = (f: () => L.Room | null) => void (roomOf = f);
@@ -194,7 +194,7 @@ export function gotoPane(to: L.Dir | "previous" | "next") {
 }
 export const toggleZoom = () => setLayout(L.toggleZoom(layout()));
 export const equalizePanes = (only?: string) => setLayout(L.equalize(layout(), only));
-/** Ghostty moves the divider 10px a press; a chat column needs bigger steps to feel like it moved. */
+/** A terminal moves the divider 10px a press; a chat column needs bigger steps to feel like it moved. */
 const RESIZE_STEP = 40;
 export function resizePane(dir: L.Dir, px = RESIZE_STEP) {
   const room = roomOf() ?? { w: 1440, h: 900, gap: 0, minW: 0, minH: 0 };

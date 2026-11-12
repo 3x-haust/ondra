@@ -1072,7 +1072,7 @@ function existingProject(space: SpaceId, r: any, original: string) {
   const named = typeof r.project === "string" ? r.project : typeof r.project?.name === "string" && !r.project.folder ? r.project.name : "";
   const low = (x: string) => x.toLowerCase().replace(/\s+/g, "");
   // the user's words, without the files they attached: a screenshot saved by an app
-  // ("…/Orbit/Captures/x.png") says where the file lives, not what the work is about
+  // ("…/Pebble/Captures/x.png") says where the file lives, not what the work is about
   const words = low(spokenPart(original));
   const onlyInPaths = (p: Project) => !words.includes(low(p.name)) && low(original).includes(low(p.name));
   if (named) {

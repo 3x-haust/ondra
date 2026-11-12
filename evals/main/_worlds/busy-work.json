@@ -1,25 +1,25 @@
 {
   "space": "work",
   "projects": [
-    { "name": "요메이츠", "folder": "/Users/me/Work/projects/yomates-mobile" },
-    { "name": "요메이츠 PC", "folder": "/Users/me/Work/projects/yomates-pc" },
+    { "name": "초롱", "folder": "/Users/me/Work/projects/chorong-mobile" },
+    { "name": "초롱 PC", "folder": "/Users/me/Work/projects/chorong-pc" },
     { "name": "아크메 웹", "folder": "/Users/me/Work/projects/acme-frontend" }
   ],
   "repos": ["/Users/me/Work/projects/acme-admin", "/Users/me/Work/projects/notes-bot"],
   "memory": [
     "아크메 본 앱은 acme-frontend, 관리자 페이지는 acme-admin이에요.",
     "회사 레포 PR은 dev로 열고 main으로는 열지 않아요. 머지는 사람이 해요.",
-    "요메이츠 안드로이드는 GitHub Actions로 AAB를 빌드해서 릴리즈에 붙여요."
+    "초롱 안드로이드는 GitHub Actions로 AAB를 빌드해서 릴리즈에 붙여요."
   ],
   "tasks": [
-    { "id": "t-rej", "title": "요메이츠 심사 리젝 확인", "topic": "요메이츠", "project": "요메이츠", "status": "running", "now": "Play 콘솔에서 리젝 사유 확인 중" },
-    { "id": "t-build", "title": "Play 빌드", "topic": "요메이츠", "project": "요메이츠", "status": "done", "summary": "AAB 빌드 성공, 릴리즈 v1.4.2에 붙였어요" },
+    { "id": "t-rej", "title": "초롱 심사 리젝 확인", "topic": "초롱", "project": "초롱", "status": "running", "now": "Play 콘솔에서 리젝 사유 확인 중" },
+    { "id": "t-build", "title": "Play 빌드", "topic": "초롱", "project": "초롱", "status": "done", "summary": "AAB 빌드 성공, 릴리즈 v1.4.2에 붙였어요" },
     { "id": "t-tong", "title": "통신판매업 번호 적용", "topic": "아크메 웹", "project": "아크메 웹", "status": "done", "branch": "feat/mail-order-number", "summary": "푸터에 통신판매업 신고번호를 넣고 PR #301(dev)을 열었어요" },
-    { "id": "t-cu", "title": "Computer use 구현", "topic": "요메이츠 PC", "project": "요메이츠 PC", "status": "running", "now": "권한 요청 다이얼로그 만드는 중" },
-    { "id": "t-qa", "title": "Computer use 검증", "topic": "요메이츠 PC", "project": "요메이츠 PC", "status": "queued" }
+    { "id": "t-cu", "title": "Computer use 구현", "topic": "초롱 PC", "project": "초롱 PC", "status": "running", "now": "권한 요청 다이얼로그 만드는 중" },
+    { "id": "t-qa", "title": "Computer use 검증", "topic": "초롱 PC", "project": "초롱 PC", "status": "queued" }
   ],
   "chat": [
-    { "from": "me", "text": "요메이츠 PC에 Computer use 기능 노션 요구사항대로 만들고 검증까지 해줘" },
+    { "from": "me", "text": "초롱 PC에 Computer use 기능 노션 요구사항대로 만들고 검증까지 해줘" },
     { "from": "captain", "text": "만들고 이어서 검증할게요 [fork t-cu] [fork t-qa]" }
   ]
 }

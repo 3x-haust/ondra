@@ -315,7 +315,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
         <Show when={(props.showTask !== false || props.d.context.length) && context().length}>
           <div class="decision-ctx"><For each={context()}>{(b) => <BlockView block={b} />}</For></div>
         </Show>
-        {/* like Codex: the choices as a list, and a line to answer in your own words */}
+        {/* the choices as a list, and a line to answer in your own words */}
         <div class="decision-list" role="group" aria-label={props.d.question} tabIndex={0} onKeyDown={keys} onMouseLeave={() => hi() < n() && setHi(-1)} ref={list}>
           <For each={props.d.options}>
             {(o, i) => (

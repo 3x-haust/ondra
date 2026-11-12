@@ -3,7 +3,7 @@
 // send ↔ stop. Strips (paused, plan, background…) dock on top, an optional
 // row sits under the card. Files can be attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line; while a task works, Enter puts the
-// words in now and Cmd+Enter queues them for after (as Codex does).
+// words in now and Cmd+Enter queues them for after.
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
@@ -413,7 +413,7 @@ export function Composer(props: {
     queueMicrotask(grow);
   };
 
-  // Thin until used (ChatGPT-style): one row with +, model and send. Pressing or
+  // Thin until used: one row with +, model and send. Pressing or
   // typing in it opens it; a press anywhere else, sending or Esc closes it.
   // Closing waits until that press has finished as a click: shrinking under the
   // pointer moved the page (and the size transition covered it), so the first

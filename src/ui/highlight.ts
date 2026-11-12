@@ -1,5 +1,5 @@
 // Syntax colour for diffs, files and code in chat: Shiki (JS regex engine, no
-// wasm) with the Pierre themes T3 Code uses (Apache-2.0, @pierre/theme). Light and
+// wasm) with the Pierre themes (Apache-2.0, @pierre/theme). Light and
 // dark colours come out together so switching the app theme needs no re-render.
 import type { HighlighterCore, ThemedToken } from "shiki/core";
 

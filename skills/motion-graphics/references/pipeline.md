@@ -84,7 +84,7 @@ python3 src/sound.py out/film.wav                                      # cues â†
 node $S/export-film.mjs src/film.src.html out/film-16x9.mp4 --sub 10 --workers 5 --wav out/film.wav
 node $S/export-film.mjs src/film.src.html out/film-9x16.mp4 --ar v --sub 10 --wav out/film.wav
 python3 $S/frames.py out/film-16x9.mp4 --known 5.3,16.5,25.8          # flashes, pops, unexpected cuts, dead stretches
-python3 $S/frames.py refs/stitch.mp4 --cuts                             # a reference's cuts and shot lengths
+python3 $S/frames.py refs/reference.mp4 --cuts                             # a reference's cuts and shot lengths
 bash $S/sheet.sh out/film-16x9.mp4 out/sheet.jpg 2                     # whole film at a glance
 bash $S/loudness.sh out/film.wav 0,5.3,16.5,25.8,39.2                  # per-section loudness
 ffmpeg -i out/film-16x9.mp4 -i out/new.wav -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest out/film-v2.mp4   # swap audio only

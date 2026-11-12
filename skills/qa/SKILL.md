@@ -13,10 +13,6 @@ description: >
 Use the app the way its users will, find what is broken, prove each problem,
 then report it, or fix it until nothing serious is left.
 
-Built from gstack's `/qa` and `/qa-only` (Garry Tan), agent-browser's
-`dogfood`, Anthropic's `webapp-testing`, the Test Heuristics Cheat Sheet
-(Hendrickson, Lyndsay, Emery), Bach's HTSM, Whittaker's tours and W3C Easy Checks.
-
 This skill decides *what* to test and how to report it. *How* to drive each
 surface is in the other skills; read the one you need, don't repeat it:
 web → `browser-use`, iOS/Android → `device-use`, a Mac app → `computer-use`,
@@ -186,8 +182,8 @@ flows on phone and desktop. Don't commit, push or open a PR unless the task says
 
 ## 7. Report
 
-Plain Korean (the user's language), short sentences, no filler ("꼼꼼하게
-살펴봤습니다" adds nothing). Blocks (`visual-report`) that work well:
+The user's language, plain words, short sentences, no filler ("꼼꼼하게
+살펴봤습니다" / "I thoroughly reviewed" adds nothing). Blocks (`visual-report`) that work well:
 
 - **Coverage**: a `table` of screens or flows × viewports/devices/themes
   (`✓`, `✗ P2`, `–` not run), or a `checklist` of the plan with `done`.

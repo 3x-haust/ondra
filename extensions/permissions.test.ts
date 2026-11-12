@@ -130,7 +130,7 @@ describe("focusSteal", () => {
     expect(focusSteal("open -gj -a Calculator")).toBeUndefined();
     expect(focusSteal(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
     expect(focusSteal('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
-    expect(focusSteal('agent-desktop --session "$SID" snapshot --app Orbit -i')).toBeUndefined();
+    expect(focusSteal('agent-desktop --session "$SID" snapshot --app Pebble -i')).toBeUndefined();
     expect(focusSteal('agent-desktop click @s1:e2 --session "$SID"')).toBeUndefined();
     expect(focusSteal("agent-desktop launch Calculator")).toBeUndefined();
     expect(focusSteal("git log --oneline | head")).toBeUndefined();

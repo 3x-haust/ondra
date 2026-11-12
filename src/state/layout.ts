@@ -1,4 +1,4 @@
-// The center as a tree of panes (Ghostty's split tree): each split holds two
+// The center as a tree of panes (a split tree, as in a tiling terminal): each split holds two
 // children side by side ("row") or stacked ("col") at a ratio. Pure functions
 // only; the app keeps one Layout per space (src/state/panes.ts).
 
@@ -142,7 +142,7 @@ export function canSplit<P>(l: Layout<P>, target: string, dir: Dir, room: Room):
 
 const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0);
 
-/** The pane `dir` of `from`, nearest on screen; past the edge it wraps around (Ghostty's goto_split). */
+/** The pane `dir` of `from`, nearest on screen; past the edge it wraps around. */
 export function neighbour(root: Node, from: string, dir: Dir): string | null {
   const all = rects(root);
   const ids = leaves(root);
@@ -184,7 +184,7 @@ export function step(root: Node, from: string, by: -1 | 1): string | null {
   return ids[(i + by + ids.length) % ids.length];
 }
 
-/** Move the divider nearest to the pane on that axis by `px` (right/down grow the first side), as Ghostty's resize_split. */
+/** Move the divider nearest to the pane on that axis by `px` (right/down grow the first side). */
 export function resize<P>(l: Layout<P>, pane: string, dir: Dir, px: number, room: Room): Layout<P> {
   const axis = axisOf(dir);
   const path = pathTo(l.root, pane);
@@ -217,7 +217,7 @@ export function findSplit(n: Node, id: string): Split | null {
   return findSplit(n.a, id) ?? findSplit(n.b, id);
 }
 
-/** How many panes a subtree lines up along an axis (Ghostty's equalize weight). */
+/** How many panes a subtree lines up along an axis (its weight when equalizing). */
 function weight(n: Node, axis: Axis): number {
   if (isLeaf(n)) return 1;
   return n.axis === axis ? weight(n.a, axis) + weight(n.b, axis) : 1;

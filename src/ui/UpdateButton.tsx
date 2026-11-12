@@ -1,4 +1,4 @@
-// A newer version at the window's top left (as Codex has it). While it downloads, a ring around the
+// A newer version at the window's top left. While it downloads, a ring around the
 // button fills with the download and the percent counts up beside it; once it's in, the button turns
 // solid blue. A press restarts into it (right after the download if it's still coming), or, while jobs
 // are at work, once they end (a second press doesn't wait).

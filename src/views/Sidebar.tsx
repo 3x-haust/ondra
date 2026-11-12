@@ -1,4 +1,4 @@
-// The left side, after T3 Code: main on top, then one quiet row per job with a
+// The left side: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
 import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";

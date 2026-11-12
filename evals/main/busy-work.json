@@ -26,16 +26,16 @@
     },
     {
       "id": "icon",
-      "text": "요메이츠 앱 아이콘 바꿔줘\n\n첨부한 파일:\n- /tmp/new-icon.png",
+      "text": "초롱 앱 아이콘 바꿔줘\n\n첨부한 파일:\n- /tmp/new-icon.png",
       "expect": {
         "new": 1,
         "append": false,
-        "project": "요메이츠"
+        "project": "초롱"
       }
     },
     {
       "id": "reach-home",
-      "text": "개인 쪽 스토픽 자료 참고해서 회사 청소년 금융교육 제안서 써줘",
+      "text": "개인 쪽 머니랩 자료 참고해서 회사 청소년 금융교육 제안서 써줘",
       "expect": {
         "new": 1,
         "reach": [
@@ -70,7 +70,7 @@
     },
     {
       "id": "ios-review",
-      "text": "요메이츠 리젝 사유 뭐였어?",
+      "text": "초롱 리젝 사유 뭐였어?",
       "expect": {
         "answerOnly": true
       }
@@ -80,7 +80,7 @@
       "chat": [
         {
           "from": "me",
-          "text": "요메이츠 빌드 어떻게 됐어?"
+          "text": "초롱 빌드 어떻게 됐어?"
         },
         {
           "from": "captain",
@@ -121,11 +121,11 @@
     },
     {
       "id": "pc-other",
-      "text": "요메이츠 PC 자동 업데이트도 붙여줘",
+      "text": "초롱 PC 자동 업데이트도 붙여줘",
       "expect": {
         "new": 1,
         "append": false,
-        "project": "요메이츠 PC"
+        "project": "초롱 PC"
       }
     }
   ]

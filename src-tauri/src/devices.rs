@@ -538,14 +538,14 @@ mod tests {
     fn only_a_jobs_own_avd_copy_is_deleted() {
         let home = std::env::temp_dir().join(format!("ondra-avd-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
-        for n in ["ondra-tjob", "yomates-test"] {
+        for n in ["ondra-tjob", "acme-test"] {
             std::fs::create_dir_all(home.join(format!("{n}.avd"))).unwrap();
             std::fs::write(home.join(format!("{n}.ini")), "").unwrap();
         }
-        drop_clone(&home, "yomates-test");
-        drop_clone(&home, "ondra-../yomates-test");
+        drop_clone(&home, "acme-test");
+        drop_clone(&home, "ondra-../acme-test");
         drop_clone(&home, "ondra-tjob");
-        assert!(home.join("yomates-test.avd").exists() && home.join("yomates-test.ini").exists());
+        assert!(home.join("acme-test.avd").exists() && home.join("acme-test.ini").exists());
         assert!(!home.join("ondra-tjob.avd").exists() && !home.join("ondra-tjob.ini").exists());
         let _ = std::fs::remove_dir_all(&home);
     }

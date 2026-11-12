@@ -106,8 +106,9 @@ Use `pr-media.sh` in this skill's folder; don't drive the comment box yourself:
 ```
 
 It uploads through the PR page in your tab (nothing gets posted) and writes the
-links into the description's `## 화면` section. A rerun adds to its block:
-earlier pictures stay, and a file with the same name replaces its old one
+links into the description's screenshots section: the one the repo's PR
+template has, else a new one in the description's language (`## 화면` or
+`## Screenshots`; `--heading` picks another). A rerun adds to its block: earlier pictures stay, and a file with the same name replaces its old one
 (`--replace` only when the user wants the old pictures gone). Look at the
 pictures yourself first, then check the result with `gh pr view <PR> --json
 body`. The same script posts pictures with words where a reviewer reads them:

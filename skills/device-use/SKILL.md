@@ -25,8 +25,8 @@ If `agent-device` is missing: `npm i -g agent-device`.
 
 ## 1. Your own device, never someone else's
 
-The user's spaces (개인, 회사) are separate workspaces, and each has its own
-devices. Booted devices may belong to the other space, to other jobs or to the
+Each of the user's spaces is a separate workspace with its own
+devices. Booted devices may belong to another space, to other jobs or to the
 user. Don't control, shut down or delete a device you didn't make. The devices
 this job's space has are in `$ONDRA_DEVICES_ALLOWED` (ids, names, serials); the
 app refuses commands that name any other device, `booted`, `all`, or `adb`

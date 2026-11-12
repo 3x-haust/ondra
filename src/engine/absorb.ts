@@ -10,6 +10,7 @@
 import { createSignal } from "solid-js";
 import { memorySources } from "../lib/native";
 import { projectsIn, setState, state } from "../state/store";
+import { memorySentence } from "../i18n";
 import type { MemoryKind, SpaceId } from "../state/types";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
@@ -78,7 +79,7 @@ function parts(text: string): string[] {
 const ask = (n: Note, part: string, i: number, total: number) =>
   [
     `A file another tool kept as memory/rules for an AI coding agent: ${tilde(n.path)}${total > 1 ? ` (part ${i + 1} of ${total})` : ""}.`,
-    `Turn what LASTS into small memory pieces for the ${n.project ? `project ${tilde(n.project)}` : "workspace"}. One idea per piece, one short plain Korean sentence ending in ~요, max ~200 chars; name the repo/tool in the sentence when it is specific.`,
+    `Turn what LASTS into small memory pieces for the ${n.project ? `project ${tilde(n.project)}` : "workspace"}. One idea per piece, ${memorySentence()}, max ~200 chars; name the repo/tool in the sentence when it is specific.`,
     "Kinds: rule (must/never), preference (how the user likes things), decision (X over Y), fact (stable: what a repo is, its stack, where things live), procedure (how to do a recurring task), lesson (a pitfall and how to avoid it).",
     "Skip: status tables, today's progress, open questions, dated one-off log lines (but keep a lesson/decision a log teaches), instructions about maintaining this file itself, and anything superseded later in the text.",
     "Never copy secrets (tokens, passwords, keys, connection strings); keep only the rule around them.",

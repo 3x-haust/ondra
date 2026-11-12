@@ -657,7 +657,7 @@
   }
 }
 
-/* ── board: columns of tasks by state (gitsu-like panels) */
+/* ── board: columns of tasks by state (panels) */
 :root {
   --bd-col: #f4f4f5;
   --bd-card: #ffffff;

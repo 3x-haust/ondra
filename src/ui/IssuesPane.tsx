@@ -1,4 +1,4 @@
-// GitHub issues of the project's repo, after gitsu: quick filters, GitHub search,
+// GitHub issues of the project's repo: quick filters, GitHub search,
 // and a way to hand an issue to a job. GitHub stays the record; nothing here edits it.
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import type { Task } from "../state/types";
@@ -70,7 +70,7 @@ export function IssuesPane(props: { t?: Task }) {
     const all = list() ?? [];
     return filter() === "working" && !typed().trim() ? all.filter((i) => jobsByIssue().has(i.url)) : all;
   };
-  // grouped like gitsu's list: what an agent works on first, then open, then closed
+  // grouped: what an agent works on first, then open, then closed
   const groups = createMemo(() => {
     const g: { id: string; label: string; items: Issue[] }[] = [
       { id: "working", label: "작업 중|issue", items: [] },

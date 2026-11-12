@@ -1024,7 +1024,7 @@ const settingsTab = () => {
   return (v.name === "settings" && v.tab) || "general";
 };
 
-/** Like Codex: settings take the whole window. The sidebar becomes the list of sections. */
+/** Settings take the whole window. The sidebar becomes the list of sections. */
 export function SettingsNav(props: { onBack: () => void }) {
   return (
     <aside class="sidebar settings-side">

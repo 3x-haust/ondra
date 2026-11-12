@@ -1,5 +1,7 @@
 #!/bin/bash
-# Put pictures and videos into a PR description's "## 화면" section.
+# Put pictures and videos into a PR description's screenshots section: the one the
+# repo's PR template already has ("## Screenshots", "## 화면" …), else a new one in
+# the description's language ("## 화면" when it is Korean, "## Screenshots" otherwise).
 # The files go up through the PR page's comment box in a browser signed in to
 # GitHub; the comment is never sent. GitHub hands back user-attachments links,
 # and gh writes them into the description. No AI in between.
@@ -13,6 +15,7 @@
 #   --reply <comment id> "text" <PR> file...  # reply in a review thread (an inline comment's id)
 #   --at <path:line> "text" <PR> file...      # a new review comment on that line of the PR's head
 #   --via browser                            # Ondra's shared browser (the default)
+#   --heading "## Demo"                       # the section to use or add (default: as above)
 #
 # Running it again adds to the block it put in (<!-- pr-media --> … <!-- /pr-media -->): earlier
 # pictures stay, a file with the same name replaces its old picture. --replace starts the block over.
@@ -20,6 +23,7 @@
 set -euo pipefail
 
 PRINT=0; PR=""; FILES=(); VIA=browser; REPLACE=0; MODE=body; TEXT=""; REPLY=""; AT=""
+HEADING=""
 while (($#)); do
   case $1 in
     --print) PRINT=1 ;;
@@ -28,11 +32,12 @@ while (($#)); do
     --reply) MODE=reply; shift; REPLY=$1; shift; TEXT=$1 ;;
     --at) MODE=at; shift; AT=$1; shift; TEXT=$1 ;;
     --via) shift; VIA=$1 ;;
+    --heading) shift; HEADING=$1 ;;
     --dir)
       shift
       while IFS= read -r f; do FILES+=("$f"); done < <(find "$1" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.mp4' -o -iname '*.mov' \) | sort)
       ;;
-    -h|--help) sed -n 2,20p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,23p "$0"; exit 0 ;;
     *) if [[ -z $PR ]]; then PR=$1; else FILES+=("$1"); fi ;;
   esac
   shift
@@ -149,7 +154,7 @@ if [[ $MODE != body ]]; then
 fi
 
 BODY=$(gh pr view "$URL" --json body -q .body)
-NEW=$(BLOCK="$BLOCK" REPLACE="$REPLACE" python3 -c '
+NEW=$(BLOCK="$BLOCK" REPLACE="$REPLACE" HEADING="$HEADING" python3 -c '
 import os, re, sys
 body, block = sys.stdin.read(), os.environ["BLOCK"]
 
@@ -171,10 +176,20 @@ if old and os.environ["REPLACE"] != "1":
     block = "<!-- pr-media -->\n" + "\n\n".join(parts) + "\n<!-- /pr-media -->"
 if old:
     body = re.sub(r"<!-- pr-media -->.*?<!-- /pr-media -->", lambda m: block, body, flags=re.S)
-elif re.search(r"^## 화면[^\n]*$", body, flags=re.M):
-    body = re.sub(r"^(## 화면[^\n]*\n)", lambda m: m.group(1) + "\n" + block + "\n\n", body, count=1, flags=re.M)
 else:
-    body = body.rstrip() + "\n\n## 화면\n\n" + block + "\n"
+    want = os.environ.get("HEADING", "").strip()
+    if want:
+        pat = r"^" + re.escape(want) + r"[ \t]*$"
+    else:
+        # a section the PR template already has
+        pat = r"^#{2,3}[ \t]+(화면|스크린샷|Screenshots?|Screen ?shots?|Screen recordings?|Demo|Visuals?|Media)\b[^\n]*$"
+    found = re.search(pat, body, flags=re.M | re.I)
+    if found:
+        at = found.end()
+        body = body[:at] + "\n\n" + block + "\n" + body[at:]
+    else:
+        heading = want or ("## 화면" if re.search(r"[\uac00-\ud7a3]", body) else "## Screenshots")
+        body = body.rstrip() + "\n\n" + heading + "\n\n" + block + "\n"
 print(body, end="")' <<<"$BODY")
 gh pr edit "$URL" --body "$NEW" >/dev/null
 echo "added to $URL (${#ABS[@]} file(s))"

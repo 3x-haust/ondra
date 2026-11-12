@@ -1,4 +1,4 @@
-// Settings › 연결, like Codex's Connections: other Macs this one works on (their projects
+// Settings › 연결: other Macs this one works on (their projects
 // show in the sidebar, their jobs run there), and other Macs allowed to work on this one.
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { setState, state } from "../state/store";

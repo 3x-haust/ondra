@@ -190,7 +190,7 @@
   color: var(--ink-3);
 }
 
-/* ═════════════ model menu (Linear / Raycast) ═════════════ */
+/* ═════════════ model menu (compact, keyboard-first) ═════════════ */
 .pop.model-pop {
   width: 296px;
   padding: var(--s-4);
@@ -1524,7 +1524,7 @@
   margin-bottom: 0;
 }
 
-/* where a Main reply came from ("레비오사 웹에서") sits on its own line above it, so the
+/* where a Main reply came from ("버들 웹에서") sits on its own line above it, so the
    reply keeps the column's full width and left edge instead of being pushed right */
 .reply:has(> .reply-from) {
   flex-direction: column;

@@ -107,7 +107,7 @@ export function appCommands(): ShortcutCommand[] {
     command("previousTab", "이전 패널 탭", "패널", "back", () => stepTab(-1), () => visiblePanel() && ptabs().length > 1),
     command("nextTab", "다음 패널 탭", "패널", "arrow", () => stepTab(1), () => visiblePanel() && ptabs().length > 1),
     command("focusInput", "메시지 입력", "대화|section", "message", () => input()?.focus(), () => !!input()),
-    // panes (Ghostty's split actions); the sidebar, palette and ⌘K act on the focused one
+    // panes (split actions, as in a terminal); the sidebar, palette and ⌘K act on the focused one
     command("splitRight", "오른쪽으로 나누기", "창", "splitRight", () => splitNew("right"), notSettings, true),
     command("splitDown", "아래로 나누기", "창", "splitDown", () => splitNew("down"), notSettings, true),
     command("previousPane", "이전 창", "창", "back", () => gotoPane("previous"), many, true),

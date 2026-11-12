@@ -391,7 +391,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
   );
 }
 
-/** Empty chat: the input, and a few starts under it (like Codex). The header already says where you are. */
+/** Empty chat: the input, and a few starts under it. The header already says where you are. */
 /** this space's accounts only: jobs here never run on the other space's */
 const loggedIn = () => accountsIn(state.space).some((a) => a.providers.length);
 
@@ -711,7 +711,7 @@ export function MainView() {
   const account = () => chooseAccount(state.space, project()?.name ?? "");
   const started = (m: CaptainMessage) =>
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
-  // where it runs (Codex's run location): a project's own Mac, else the one picked under the composer
+  // where it runs (the run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
   const sendMain = (text: string) => {
     const p = project();

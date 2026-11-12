@@ -25,8 +25,7 @@
 // When an app ignores an AX action, the helper clicks the element with pointer
 // events addressed to its window; when an app brings itself forward on a click, the
 // helper hands the front straight back to the user's app. It never falls back to
-// foreground. This is the opposite of Codex's SyntheticAppFocusEnforcer /
-// SystemFocusStealPreventer, which activate and then suppress/forge focus events.
+// foreground. It never activates an app and then suppresses or forges focus events.
 //
 // Build: src-tauri/helpers/build.sh (→ src-tauri/binaries/ondra-cuhost-<triple>).
 // Signed with cuhost.entitlements. Needs Accessibility and (for `capture`/`look`)

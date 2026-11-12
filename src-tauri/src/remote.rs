@@ -69,7 +69,7 @@ pub fn remote_cmd(cmd: serde_json::Value) -> Result<(), String> {
     r.stdin.write_all(line.as_bytes()).map_err(|e| e.to_string())
 }
 
-/// The Mac's name as people know it ("성윤의 MacBook Pro").
+/// The Mac's name as people know it ("Alex의 MacBook Pro").
 #[tauri::command]
 pub fn remote_host_name() -> String {
     Command::new("/usr/sbin/scutil")
@@ -83,8 +83,7 @@ pub fn remote_host_name() -> String {
 
 static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
 
-/// Keep this Mac from sleeping while others may work on it (on power only, like Codex's
-/// "Keep this Mac awake"): a `caffeinate` tied to this app, so it never outlives it.
+/// Keep this Mac from sleeping while others may work on it (on power only): a `caffeinate` tied to this app, so it never outlives it.
 #[tauri::command]
 pub fn remote_awake(on: bool) -> Result<(), String> {
     let mut slot = AWAKE.lock().map_err(|e| e.to_string())?;
