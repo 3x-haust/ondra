@@ -119,11 +119,14 @@ Copy this skill's `report.html` to `$R/report.html` and fill it:
 - Title = the answer in one plain sentence. Then "지금 할 일" (1–3 actions the
   user can take) and 3 takeaways with source numbers.
 - One section per sub-question, its heading the question in the user's
-  words: the answer in the first sentence, then why.
+  words: the answer in the first sentence, then why. Lean on pictures, the
+  way an artifact explains: where a section's answer can be seen (how much,
+  when, how it works, what there is to choose from), show it and keep the
+  words around it short. Where words say it better, use words.
 - Options to choose between → the decision grid (●◐○, the pick marked), not a
   table of sentences. A table only for short facts (cells of a few words or a
   number, numbers right-aligned).
-- 1–4 pictures drawn the way a good paper draws them (`writing/figures.md`):
+- Pictures drawn the way a good paper draws them (`writing/figures.md`):
   how something works → the method diagram (numbered stages, boxes colored by
   role, arrows, a loop when something comes back); how much → bars on one
   scale from zero; when → a timeline; a cited paper's own figure (embedded,
