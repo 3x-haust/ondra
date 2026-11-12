@@ -192,8 +192,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
 
 /**
  * "생각하는 중 · 12초": opened, what the model reasons and what it has looked at so far
- * stream under it as they come; closed, the latest of those waits under the line, so a
- * long wait shows where it is.
+ * stream under it as they come; closed, only the line shows (what it looked at is inside).
  */
 function Thinking(props: { m: CaptainMessage; label: string }) {
   const thought = () => mainThought(chatKey(props.m.space, props.m.project)).trim();
@@ -232,9 +231,6 @@ function Thinking(props: { m: CaptainMessage; label: string }) {
             </ul>
           </Show>
         </div>
-      </Show>
-      <Show when={!open() && steps().length}>
-        <div class="reply-now">{noteText(steps()[steps().length - 1])}</div>
       </Show>
     </div>
   );
