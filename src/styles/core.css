@@ -875,6 +875,18 @@ button.chip:hover,
   place-items: center;
   color: var(--ink-3);
 }
+/* pasted text as a card: its name opens it */
+.attach .attach-open {
+  width: auto;
+  height: auto;
+  display: inline;
+  color: inherit;
+  font: inherit;
+}
+.attach .attach-open:hover {
+  background: none;
+  color: var(--ink);
+}
 .attach button:hover {
   background: var(--active);
   color: var(--ink);

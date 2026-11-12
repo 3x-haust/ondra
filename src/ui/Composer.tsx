@@ -9,7 +9,7 @@ import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
 import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
-import { focusId } from "../state/ui";
+import { focusId, previewFile } from "../state/ui";
 import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
@@ -18,6 +18,7 @@ import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { midTrim } from "./bits";
+import { isPastedText, longPaste } from "./paste";
 import { t } from "../i18n";
 
 /** A /command that ran, for the log a feedback report carries: its name, not what followed (a skill's own name stays out). */
@@ -58,6 +59,9 @@ export const withFiles = (text: string, files: string[]) => {
 
 /** The composers on screen, so a quote from a reply goes into the one beside it. */
 export const composers = new Set<{ root: HTMLElement; quote: (text: string) => void }>();
+
+/** what the card says about it: its lines, counted when it was pasted */
+const pastedLines = new Map<string, number>();
 
 export const isImage = (p: string) => /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(p);
 
@@ -558,9 +562,13 @@ export function Composer(props: {
                 <Show
                   when={isImage(f)}
                   fallback={
-                    <span class="attach" title={tilde(f)}>
-                      <Icon name="file" size={13} />
-                      <span class="attach-name">{base(f)}</span>
+                    <span class="attach" classList={{ pasted: isPastedText(f) }} title={tilde(f)}>
+                      <Icon name={isPastedText(f) ? "quote" : "file"} size={13} />
+                      <Show when={isPastedText(f)} fallback={<span class="attach-name">{base(f)}</span>}>
+                        <button type="button" class="attach-name attach-open" onClick={() => previewFile(f)}>
+                          {pastedLines.has(f) ? t("붙여넣은 글 · {n}줄", { n: pastedLines.get(f)! }) : t("붙여넣은 글")}
+                        </button>
+                      </Show>
                       <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
                         <Icon name="x" size={12} />
                       </button>
@@ -624,6 +632,22 @@ export function Composer(props: {
               return;
             }
             const imgs = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+            // a long text: a file of its own, shown as a card (the job reads it like any attachment)
+            if (!imgs.length && longPaste(plain) && inTauri) {
+              e.preventDefault();
+              const path = await savePaste([...new TextEncoder().encode(plain)], "txt");
+              if (path) {
+                pastedLines.set(path, plain.split("\n").length);
+                return add([path]);
+              }
+              // couldn't save it: paste the text as usual
+              const at = el.selectionStart ?? el.value.length;
+              const next = `${el.value.slice(0, at)}${plain}${el.value.slice(el.selectionEnd ?? at)}`;
+              el.value = next;
+              setText(next);
+              grow();
+              return;
+            }
             if (!imgs.length) return;
             e.preventDefault();
             for (const f of imgs) {
