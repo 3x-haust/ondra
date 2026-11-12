@@ -71,18 +71,25 @@ export function soonIndex() {
   timer = setTimeout(() => void indexMemory(), 2500);
 }
 
-/** Embed a search text ahead, so the (sync) recall can use it. */
-export async function prepareQuery(q: string) {
+/**
+ * Embed a search text ahead, so the (sync) recall can use it. A reply never waits
+ * long for it: while the model is still downloading or loading (a first run), it
+ * goes on by words after a moment and the vector lands for next time.
+ */
+export async function prepareQuery(q: string, waitMs = 1500) {
   if (!inTauri || !q.trim() || queries.has(q)) return;
-  try {
-    const [v] = await embedTexts([q.slice(0, 2000)], true);
-    if (v) {
+  const embed = embedTexts([q.slice(0, 2000)], true)
+    .then(([v]) => {
+      if (!v) return;
       queries.set(q, Float32Array.from(v));
       if (queries.size > 64) queries.delete(queries.keys().next().value!);
-    }
-  } catch {
-    /* words only */
-  }
+    })
+    .catch(() => {
+      /* words only */
+    });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([embed, new Promise<void>((r) => (timer = setTimeout(r, waitMs)))]);
+  clearTimeout(timer);
 }
 
 /** Cosine of a piece with a prepared query (undefined = no vectors). */
