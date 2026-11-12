@@ -604,7 +604,7 @@ function noteStep(space: string, ev: any) {
   const m = [...state.captain].reverse().find((x) => inChat(x, space) && x.pending);
   if (!m) return;
   if (ev.type === "tool_execution_start") setState("captain", (x) => x.id === m.id, "step", step);
-  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-4) }));
+  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-6) }));
 }
 const stepName = (s: unknown, n = 24) => {
   const x = String(s ?? "").replace(/\s+/g, " ").trim();
@@ -620,6 +620,17 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
     const name = stepName(taskById(String(args?.id ?? ""))?.title ?? args?.id, 30);
     return done ? `작업 살펴봄 · ${name}` : `작업 살펴보는 중 · ${name}`;
   }
+  // the rest of what it looks at before answering, so a long wait shows where it is
+  const pick = (busy: string, did: string, what: string) => (what ? `${done ? did : busy} · ${what}` : undefined);
+  if (tool === "web_search") return pick("웹에서 찾는 중", "웹에서 찾음", stepName(args?.query, 30));
+  if (tool === "web_fetch") {
+    let site = String(args?.url ?? "");
+    try { site = new URL(site).hostname.replace(/^www\./, ""); } catch { /* as written */ }
+    return pick("페이지 읽는 중", "페이지 읽음", stepName(site, 30));
+  }
+  if (tool === "read") return pick("파일 읽는 중", "파일 읽음", stepName(String(args?.path ?? "").split("/").pop(), 30));
+  if (tool === "grep" || tool === "find" || tool === "ls") return pick("파일 찾는 중", "파일 찾음", stepName(args?.pattern ?? args?.path, 30));
+  if (tool === "bash") return pick("명령 실행 중", "명령 실행함", stepName(args?.command, 30));
   return undefined;
 }
 

@@ -212,8 +212,20 @@ function Thinking(props: { m: CaptainMessage; label: string }) {
           ref={(el) => ((box = el), queueMicrotask(() => (el.scrollTop = el.scrollHeight)))}
           onScroll={(e) => (atEnd = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 24)}
         >
-          {thought()}
+          {/* reasoning summaries come as "**Heading**" lines: shown as headings, not asterisks */}
+          <For each={thought().split("\n")}>
+            {(line) => {
+              const head = /^\*\*(.+)\*\*$/.exec(line.trim());
+              return head ? <b class="reply-thought-head">{head[1]}</b> : <>{line}{"\n"}</>;
+            }}
+          </For>
         </div>
+      </Show>
+      {/* what it has looked at so far, one quiet line each, so a long wait shows where it is */}
+      <Show when={props.m.steps?.length}>
+        <ul class="reply-steps">
+          <For each={props.m.steps}>{(s) => <li><Icon name="check" size={12} />{noteText(s)}</li>}</For>
+        </ul>
       </Show>
     </div>
   );

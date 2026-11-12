@@ -1891,6 +1891,31 @@
   overflow-wrap: anywhere;
   animation: think-open var(--dur-fast) ease-out;
 }
+.reply-thought-head {
+  display: block;
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+.reply-thought-head:not(:first-child) {
+  margin-top: var(--s-6);
+}
+.reply-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: var(--s-6) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.reply-steps > li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+  animation: think-open var(--dur-fast) ease-out;
+}
 @keyframes think-open {
   from {
     opacity: 0;
