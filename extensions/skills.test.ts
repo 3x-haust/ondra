@@ -65,6 +65,10 @@ describe("skill matching", () => {
     ["find bugs in the checkout flow", "qa"],
     ["dogfood the site before launch", "qa"],
     ["테스트 짜줘", "test-ci"],
+    ["이 엑셀 파일 정리해줘", "office-docs"],
+    ["워드 문서로 만들어줘", "office-docs"],
+    ["PPT 만들어줘", "office-docs"],
+    ["merge these PDF files", "office-docs"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
     expect(skillHint(bundled, query)).toContain(`- ${skill}:`);
@@ -130,6 +134,9 @@ describe("skill router", () => {
     expect(r.forTool("device", {})?.skill.name).toBe("device-use");
     // the skill's own `browse` steps into it too
     expect(router().forTool("bash", { command: "browse open https://example.com" })?.skill.name).toBe("browser-use");
+    // an office file read or written
+    expect(router().forTool("read", { path: "/Users/me/Downloads/견적서.xlsx" })?.skill.name).toBe("office-docs");
+    expect(router().forTool("write", { path: "out/report.docx" })?.skill.name).toBe("office-docs");
   });
 
   it("offers the web guides for web UI code, not for other work", () => {
