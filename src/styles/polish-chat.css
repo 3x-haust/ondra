@@ -1669,6 +1669,11 @@
   overflow-y: auto;
   padding-left: calc(14px + var(--s-8));
 }
+/* a page to look at (a mockup, a draft): opened on purpose, so it shows at its own height */
+.decision.dock .decision-ctx:has(.blk-page) {
+  /* tall, but the answers under it stay in sight */
+  max-height: clamp(200px, 100vh - 520px, 960px);
+}
 .decision.dock .decision-notes {
   display: grid;
   gap: var(--s-2);
