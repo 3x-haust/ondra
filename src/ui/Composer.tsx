@@ -437,7 +437,7 @@ export function Composer(props: {
     for (const k of ends) window.removeEventListener(k, up, true);
     window.removeEventListener("blur", left);
   });
-  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
+  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || quotes().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input
   const inStrips = (n: EventTarget | null) => n instanceof Element && !!n.closest(".strips");
   const [open, setOpenState] = createSignal(want());
