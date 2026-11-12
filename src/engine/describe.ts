@@ -489,7 +489,8 @@ const SCROLL_WAY: Record<string, string> = { up: "위로", down: "아래로", le
  * the call returns (its label, see tasks.ts).
  */
 export function computerStep(args: any): { action: ComputerAction; target?: string } {
-  const input = args?.input ?? {};
+  // several steps in one call: named by the first ("입력함 ‘hello’")
+  const input = args?.input ?? (Array.isArray(args?.steps) ? args.steps[0] : undefined) ?? {};
   switch (args?.action) {
     case "start":
       return { action: "open", target: typeof args.app === "string" ? args.app : undefined };
@@ -515,6 +516,8 @@ export function computerStep(args: any): { action: ComputerAction; target?: stri
           return { action: "scroll", target: typeof input.direction === "string" ? input.direction : undefined };
         case "drag":
           return { action: "drag" };
+        case "action":
+          return { action: "click" };
       }
   }
   return { action: "other" };

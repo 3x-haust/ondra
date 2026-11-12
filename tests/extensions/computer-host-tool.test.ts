@@ -7,6 +7,7 @@ const { default: computer } = await import("../../extensions/computer");
 
 const vision = { model: { provider: "fixture", id: "vision", input: ["text", "image"] } };
 const data = (r: any) => JSON.parse(r.content[0].text);
+const text = (r: any): string => r.content[0].text;
 
 // A fake ondra-cuhost: launches return a pid + env; observe returns a tiny tree;
 // act echoes backgroundPreserved and a changed tree; look returns a 1x1 PNG.
@@ -58,14 +59,11 @@ describe("computer tool — host background mode", () => {
 
   it("starts, observes with stable-id tree, acts in one round trip, looks, and never breaks the background invariant", async () => {
     const { call } = load();
-    const start = data(await call({ action: "start", app: "TextEdit" }));
-    expect(start.pid).toBe(4242);
-    expect(start.observation.kind).toBe("full");
-    const epoch = start.observation.epoch;
-    const set = data(await call({ action: "act", input: { kind: "set-value", epoch, ref: "w/AXTextField#entry", value: "hello" } }));
-    expect(set.action.outcome).toBe("verified");
+    const start = text(await call({ action: "start", app: "TextEdit" }));
+    expect(start).toBe('Opened TextEdit in the background.\nscreen h1:\n[1] window\n  [2] textfield = "a"\n  [3] button "Go"');
+    const set = text(await call({ action: "act", input: { kind: "set-value", ref: 2, value: "hello" } }));
     // the re-observation after the action carries the change, in the same call
-    expect(JSON.stringify(set.observation)).toContain("hello");
+    expect(set).toBe('set-value [2]: done, screen changed\nscreen h2, changes since h1 (~ changed, + new, - gone):\n~ [2] textfield = "hello"');
     const look = await call({ action: "look" });
     expect(look.content.length).toBe(2);
     expect(look.content[1].type).toBe("image");
@@ -76,17 +74,16 @@ describe("computer tool — host background mode", () => {
   it("leaves no session behind after a start that failed, so another name can be tried", async () => {
     const { call } = load();
     await expect(call({ action: "start", app: "Nope" })).rejects.toThrow(/app not found/);
-    const start = data(await call({ action: "start", app: "TextEdit" }));
-    expect(start.pid).toBe(4242);
+    expect(text(await call({ action: "start", app: "TextEdit" }))).toContain("Opened TextEdit");
     await call({ action: "stop" });
   });
 
   it("names the clicked element for the step line, outside what the model reads", async () => {
     const { call } = load();
-    const epoch = data(await call({ action: "start", app: "TextEdit" })).observation.epoch;
-    const r = await call({ action: "act", input: { kind: "click", epoch, ref: "w/AXButton#go" } });
+    await call({ action: "start", app: "TextEdit" });
+    const r = await call({ action: "act", input: { kind: "click", ref: 3 } });
     expect(r.details).toEqual({ label: "Go" });
-    expect(r.content[0].text).not.toContain("label");
+    expect(text(r)).toMatch(/^click \[3\] “Go”: done, sent, but nothing on screen changed/);
     await call({ action: "stop" });
   });
 
@@ -137,14 +134,27 @@ describe("computer tool — host background mode", () => {
     vi.stubEnv("ONDRA_COMPUTER_EVALUATION_MODE", "forced-full");
     const { call } = load();
     await call({ action: "start", app: "TextEdit" });
-    expect(data(await call({ action: "observe" })).kind).toBe("full");
+    expect(text(await call({ action: "observe" }))).toMatch(/^screen h2:\n\[1\] window/);
     await call({ action: "stop" });
   });
 
   it("observes compactly by default", async () => {
     const { call } = load();
     await call({ action: "start", app: "TextEdit" });
-    expect(data(await call({ action: "observe" })).kind).toBe("unchanged");
+    expect(text(await call({ action: "observe" }))).toBe("screen h2: unchanged since h1");
+    expect(text(await call({ action: "observe", query: "go" }))).toBe('screen h3, 1 line(s) matching "go" with their parents:\n[1] window\n  [3] button "Go"');
+    await call({ action: "stop" });
+  });
+
+  it("runs several steps in one call and shows the screen once", async () => {
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    const r = await call({ action: "act", steps: [{ kind: "set-value", ref: 2, value: "hi" }, { kind: "click", ref: 3 }] });
+    expect(text(r)).toBe('1. set-value [2]: done, screen changed\n2. click [3] “Go”: done, screen changed\nscreen h3: unchanged since h1');
+    const bad = await call({ action: "act", steps: [{ kind: "click", ref: 40 }] });
+    expect(bad.isError).toBe(true);
+    expect(text(bad)).toMatch(/^1\. click failed: Element \[40\] is not on the current screen/);
+    await expect(call({ action: "act", input: { kind: "click", ref: 3 }, steps: [] })).rejects.toThrow("not both");
     await call({ action: "stop" });
   });
 

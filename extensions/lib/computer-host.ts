@@ -16,6 +16,7 @@
 // ComputerHostHelper spawns the process and matches responses to requests by id.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { renderTree, screenDelta, screenQuery, screenText, type ScreenLine } from "./computer-screen";
 
 export type HostNode = {
   id: string;
@@ -87,87 +88,105 @@ function validateNode(node: unknown, depth: number): HostNode {
   return node as HostNode;
 }
 
-type Change = { op: "set"; path: (string | number)[]; value: unknown } | { op: "remove"; path: (string | number)[] };
-export type HostSnapshot =
-  | { epoch: string; kind: "full"; tree: HostNode }
-  | { epoch: string; kind: "delta"; base_epoch: string; changes: Change[] }
-  | { epoch: string; kind: "unchanged"; base_epoch: string };
-
-function diff(before: unknown, after: unknown, path: (string | number)[], out: Change[]): void {
-  if (before === after) return;
-  if (Array.isArray(before) && Array.isArray(after) && before.length === after.length) {
-    for (let i = 0; i < after.length; i++) diff(before[i], after[i], [...path, i], out);
-  } else if (isRecord(before) && isRecord(after)) {
-    for (const key of Object.keys(before)) if (!(key in after)) out.push({ op: "remove", path: [...path, key] });
-    for (const key of Object.keys(after)) {
-      if (!(key in before)) out.push({ op: "set", path: [...path, key], value: after[key] });
-      else diff(before[key], after[key], [...path, key], out);
-    }
-  } else {
-    out.push({ op: "set", path, value: after });
-  }
-}
+export type HostSnapshot = {
+  epoch: string;
+  /** full: the whole screen · delta: only what changed since base_epoch · unchanged · query: only matching lines */
+  kind: "full" | "delta" | "unchanged" | "query";
+  base_epoch?: string;
+  text: string;
+  matches?: number;
+};
 
 const encoder = new TextEncoder();
-const size = (v: unknown) => encoder.encode(JSON.stringify(v)).length;
+const MAX_SCREEN = 40 * 1024;
+
+/** Cut a long screen at a line boundary, saying how to see the rest. */
+function cap(text: string): string {
+  if (encoder.encode(text).length <= MAX_SCREEN) return text;
+  const lines = text.split("\n");
+  let used = 0, n = 0;
+  while (n < lines.length && used + encoder.encode(lines[n]).length + 1 <= MAX_SCREEN) used += encoder.encode(lines[n++]).length + 1;
+  return `${lines.slice(0, n).join("\n")}\n… ${lines.length - n} more lines not shown: observe {query} for what you need, or scroll`;
+}
 
 /**
- * One window's observation history. Holds per-session stable element ids (the
- * helper derives each from the element's structural path + role + identifier, so
- * the same control keeps its id across observations). Actions reference an id,
- * valid only for the current epoch. Later observations are a JSON diff from the
- * previous tree, or "unchanged" — never re-sending the whole tree for free.
+ * One app's observation history. The helper gives each element a stable structural id;
+ * here each id gets a short session number ([12]) that the model uses as a ref. The model
+ * is shown the whole screen once, then only what changed since what it last saw.
+ * A ref is valid while its element is on the current screen.
  */
 export class HostObservation {
   private revision = 0;
   private epoch = "";
-  private baseEpoch = "";
   private tree?: HostNode;
+  private raw = "";
   private ids = new Set<string>();
+  private numbers = new Map<string, number>();
+  private byNumber = new Map<number, string>();
+  private lines: ScreenLine[] = [];
+  private shown?: { epoch: string; lines: ScreenLine[] };
 
-  accept(rawTree: unknown, full: boolean): HostSnapshot {
+  private number(id: string): number {
+    let n = this.numbers.get(id);
+    if (n === undefined) { n = this.numbers.size + 1; this.numbers.set(id, n); this.byNumber.set(n, id); }
+    return n;
+  }
+
+  /**
+   * Take a new tree. show false: an intermediate state of a batch (refs update, nothing is
+   * shown and the model's view is kept). query: show only matching lines, keeping the view.
+   */
+  accept(rawTree: unknown, options: boolean | { full?: boolean; show?: boolean; query?: string } = {}): HostSnapshot & { changed: boolean } {
+    const o = typeof options === "boolean" ? { full: options } : options;
     const tree = validateNode(rawTree, 0);
+    const raw = JSON.stringify(tree);
+    const changed = raw !== this.raw;
+    this.tree = tree;
+    this.raw = raw;
+    const ids = new Set<string>();
+    const walk = (n: HostNode) => { ids.add(n.id); for (const c of n.children ?? []) walk(c); };
+    walk(tree);
+    this.ids = ids;
+    this.lines = renderTree(tree, (id) => this.number(id));
     const epoch = `h${++this.revision}`;
-    this.collectIds(tree);
-    const out: HostSnapshot = (() => {
-      if (!full && this.tree && this.baseEpoch) {
-        const changes: Change[] = [];
-        diff(this.tree, tree, [], changes);
-        if (changes.length === 0) return { epoch, kind: "unchanged", base_epoch: this.baseEpoch };
-        const delta: HostSnapshot = { epoch, kind: "delta", base_epoch: this.baseEpoch, changes };
-        const whole: HostSnapshot = { epoch, kind: "full", tree };
-        return size(delta) <= size(whole) ? delta : whole;
-      }
-      return { epoch, kind: "full", tree };
-    })();
-    this.tree = JSON.parse(JSON.stringify(tree)) as HostNode;
     this.epoch = epoch;
-    this.baseEpoch = epoch;
-    return out;
+    if (o.query !== undefined) {
+      const found = screenQuery(this.lines, o.query);
+      return { epoch, kind: "query", text: cap(found.text), matches: found.matches, changed };
+    }
+    if (o.show === false) return { epoch, kind: "unchanged", base_epoch: this.shown?.epoch, text: "", changed };
+    const whole = screenText(this.lines);
+    let out: HostSnapshot = { epoch, kind: "full", text: cap(whole) };
+    if (!o.full && this.shown) {
+      const delta = screenDelta(this.shown.lines, this.lines);
+      if (delta === undefined) out = { epoch, kind: "unchanged", base_epoch: this.shown.epoch, text: "" };
+      else if (delta.length < whole.length * 0.7) out = { epoch, kind: "delta", base_epoch: this.shown.epoch, text: cap(delta) };
+    }
+    this.shown = { epoch, lines: this.lines };
+    return { ...out, changed };
   }
 
-  private collectIds(node: HostNode): void {
-    // Rebuild the id set for the just-accepted tree; only its own ids are actionable.
-    const next = new Set<string>();
-    const walk = (n: HostNode) => { next.add(n.id); for (const c of n.children ?? []) walk(c); };
-    walk(node);
-    this.ids = next;
-  }
-
-  /** An action may only target an id present in the current epoch. */
-  resolve(epoch: string, ref: string): string {
-    if (!this.epoch || epoch !== this.epoch) throw new Error("Stale observation epoch");
-    if (!this.ids.has(ref)) throw new Error("Unknown element ref");
-    return ref;
+  /** The helper id for a ref the model gave ([12], 12 or "12"), if its element is on the current screen. */
+  resolve(ref: unknown): string {
+    if (!this.tree || !this.ids.size) throw new Error("No current screen; observe first");
+    const s = String(ref ?? "").trim().replace(/^\[|\]$/g, "");
+    const id = /^\d+$/.test(s) ? this.byNumber.get(Number(s)) : s;
+    if (!id || !this.ids.has(id)) throw new Error(`Element [${s}] is not on the current screen; observe again and use a ref from it`);
+    return id;
   }
 
   currentEpoch(): string { return this.epoch; }
+
+  private find(ref: string): HostNode | undefined {
+    const id = /^\[?\d+\]?$/.test(ref) ? this.byNumber.get(Number(ref.replace(/[[\]]/g, ""))) : ref;
+    const find = (n: HostNode): HostNode | undefined => n.id === id ? n : (n.children ?? []).reduce<HostNode | undefined>((hit, c) => hit ?? find(c), undefined);
+    return id && this.tree ? find(this.tree) : undefined;
+  }
 
   /** What an element is called, for showing the step to the user: its own title or
    *  description, else the first text inside it ("보내기"). */
   label(ref: string): string | undefined {
     const text = (n: HostNode) => [n.title, n.desc, n.placeholder].find((v): v is string => typeof v === "string" && !!v.trim());
-    const find = (n: HostNode): HostNode | undefined => n.id === ref ? n : (n.children ?? []).reduce<HostNode | undefined>((hit, c) => hit ?? find(c), undefined);
     const inner = (n: HostNode, depth: number): string | undefined => {
       if (depth > 3) return undefined;
       for (const c of n.children ?? []) {
@@ -176,7 +195,7 @@ export class HostObservation {
       }
       return undefined;
     };
-    const node = this.tree && find(this.tree);
+    const node = this.find(ref);
     const name = node && (text(node) ?? inner(node, 0));
     return name ? name.replace(/\s+/g, " ").trim().slice(0, 80) : undefined;
   }
@@ -198,8 +217,12 @@ export class HostObservation {
     return parts.length ? parts.join(" · ").slice(0, 80) : undefined;
   }
 
-  invalidate(): void { this.epoch = ""; }
-  reset(): void { this.epoch = ""; this.baseEpoch = ""; this.tree = undefined; this.ids = new Set(); }
+  /** Refs can't be trusted until the next observation, which is shown whole. */
+  invalidate(): void { this.ids = new Set(); this.shown = undefined; }
+  reset(): void {
+    this.epoch = ""; this.tree = undefined; this.raw = ""; this.ids = new Set(); this.lines = []; this.shown = undefined;
+    this.numbers = new Map(); this.byNumber = new Map();
+  }
 }
 
 type Pending = { id: string; resolve: (r: HostResult) => void; reject: (e: Error) => void };
@@ -259,6 +282,8 @@ export class ComputerHostHelper {
 }
 
 /** One app in one background host session. */
+export type HostAction = { kind: string; ref?: unknown; epoch?: string } & Record<string, unknown>;
+
 export class ComputerHostSession {
   private pid?: number;
   private readonly obs = new HostObservation();
@@ -283,16 +308,18 @@ export class ComputerHostSession {
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
     this.pid = pid;
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
-    return { pid, env: launched.env, ...("kind" in (observed as object) ? { observation: observed } : observed) };
+    return { pid, ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}),
+      ...("kind" in (observed as object) ? { observation: observed } : observed) };
   }
 
   /** Which screen the app is on, from the last observation (for the user's step line). */
   screen(): string | undefined { return this.obs.screen(); }
 
-  async observe(full: boolean, signal?: AbortSignal): Promise<HostSnapshot> {
+  async observe(full: boolean, signal?: AbortSignal, query?: string): Promise<HostSnapshot> {
     return this.guard(async () => {
       const r = await this.helper.request("observe", { pid: this.requirePid(), full }, signal);
-      return this.obs.accept(r.tree, full);
+      const { changed: _, ...snap } = this.obs.accept(r.tree, { full, ...(query !== undefined ? { query } : {}) });
+      return snap;
     });
   }
 
@@ -309,32 +336,63 @@ export class ComputerHostSession {
   }
 
   /** One action, then re-observe, in a single helper round trip. Refuses to proceed if the action moved the foreground. */
-  async act(action: { kind: string; epoch: string; ref?: string } & Record<string, unknown>, signal?: AbortSignal): Promise<HostResult> {
+  async act(action: HostAction, signal?: AbortSignal): Promise<HostResult> {
+    return this.guard(() => this.once(action, true, signal));
+  }
+
+  /**
+   * Several actions in order, as one call: each settles before the next, refs are checked
+   * against the screen as it is at that step, and the first failure stops the rest. Returns
+   * what each step did and the screen once, as a change from what the model last saw.
+   */
+  async steps(actions: HostAction[], signal?: AbortSignal): Promise<HostResult> {
     return this.guard(async () => {
-      // Refs are checked against the epoch the caller observed, not the latest one.
-      const translated = this.translate(action, String(action.epoch));
-      const ref = action.ref ?? (isRecord(action.from) ? action.from.ref : undefined);
-      const label = typeof ref === "string" ? this.obs.label(ref) : undefined;
-      const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
-      // the user's own mouse or keys moved things: theirs, not the action's
-      if (r.backgroundPreserved === false && r.userInput !== true) {
-        this.obs.invalidate();
-        throw new Error(r.selfActivated
-          ? "The app brought itself to the front and the user's app could not be put back in front; observe, and tell the user if they need to switch back"
-          : "Action changed the foreground or cursor; this cannot be done in the background");
+      const done: Record<string, unknown>[] = [];
+      for (let i = 0; i < actions.length; i++) {
+        try {
+          const r = await this.once(actions[i], i === actions.length - 1, signal);
+          const { observation, observationError, ...step } = r;
+          done.push(step);
+          if (i === actions.length - 1) return { steps: done, ...(observation ? { observation } : { observationError }) };
+        } catch (e) {
+          // what has happened so far stays done; show the screen as it is now
+          const error = (e as Error).message;
+          const r = await this.helper.request("observe", { pid: this.requirePid(), full: false }, signal).catch(() => undefined);
+          const observation = r?.tree !== undefined ? (({ changed: _, ...snap }) => snap)(this.obs.accept(r.tree, {})) : undefined;
+          return { steps: done, failed: { step: i + 1, error }, skipped: actions.length - i - 1, ...(observation ? { observation } : {}) };
+        }
       }
-      const snapshot = r.tree !== undefined ? this.obs.accept(r.tree, false) : undefined;
-      // Delivery is not success: an unchanged tree after the action means it probably did nothing.
-      const effect = snapshot ? (snapshot.kind === "unchanged" ? "no_change" : "changed") : "unknown";
-      return { action: { ok: true, outcome: "verified", effect, ...(typeof r.via === "string" ? { via: r.via } : {}),
-          ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}) }, actionMs: r.actionMs, env: r.env,
-        ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}), ...(label ? { label } : {}),
-        ...(snapshot ? { observation: snapshot } : { observationError: "NO_WINDOW" }) };
+      return { steps: done };
     });
   }
 
-  private translate(action: { kind: string; epoch: string; ref?: string } & Record<string, unknown>, epoch: string): Record<string, unknown> {
-    const ref = () => this.obs.resolve(epoch, String(action.ref));
+  private async once(action: HostAction, show: boolean, signal?: AbortSignal): Promise<HostResult> {
+    const translated = this.translate(action);
+    const ref = action.ref ?? (isRecord(action.from) ? action.from.ref : undefined);
+    const label = ref !== undefined ? this.obs.label(String(ref)) : undefined;
+    const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
+    // the user's own mouse or keys moved things: theirs, not the action's
+    if (r.backgroundPreserved === false && r.userInput !== true) {
+      this.obs.invalidate();
+      throw new Error(r.selfActivated
+        ? "The app brought itself to the front and the user's app could not be put back in front; observe, and tell the user if they need to switch back"
+        : "Action changed the foreground or cursor; this cannot be done in the background");
+    }
+    const seen = r.tree !== undefined ? this.obs.accept(r.tree, { show }) : undefined;
+    // Delivery is not success: an unchanged tree after the action means it probably did nothing.
+    const effect = seen ? (seen.changed ? "changed" : "no_change") : "unknown";
+    const observation = seen && show ? (({ changed: _, ...snap }) => snap)(seen) : undefined;
+    return {
+      kind: action.kind, ...(ref !== undefined ? { ref: String(ref).replace(/^\[|\]$/g, "") } : {}),
+      action: { ok: true, effect, ...(typeof r.via === "string" ? { via: r.via } : {}),
+        ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}) },
+      ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}), ...(label ? { label } : {}),
+      ...(observation ? { observation } : seen ? {} : { observationError: "NO_WINDOW" }),
+    };
+  }
+
+  private translate(action: HostAction): Record<string, unknown> {
+    const ref = () => this.obs.resolve(action.ref);
     switch (action.kind) {
       // AXPress first; a view that ignores it gets a pointer click addressed to its window
       case "click": return {
@@ -342,6 +400,12 @@ export class ComputerHostSession {
         count: action.count === 2 ? 2 : 1, button: action.button === "right" ? "right" : "left",
         ...(action.pointer === true ? { pointer: true } : {}),
       };
+      // an accessibility action the element lists (Increment, Confirm, Pick, …), no events at all
+      case "action": {
+        const name = String(action.name ?? "").trim();
+        if (!/^(AX)?[A-Za-z]{2,40}$/.test(name)) throw new Error("action needs the name of an action the element lists");
+        return { kind: "press-action", ref: ref(), action: name.startsWith("AX") ? name : `AX${name}` };
+      }
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
       case "type": return action.ref !== undefined ? { kind: "type", ref: ref(), text: String(action.text ?? "") } : { kind: "type", text: String(action.text ?? "") };
       case "press": return { kind: "press", key: String(action.key), modifiers: action.modifiers ?? [] };
@@ -357,7 +421,7 @@ export class ComputerHostSession {
           if (!isRecord(value)) throw new Error(`drag ${name} must be {ref} or {x, y}`);
           if (value.ref !== undefined) {
             if (value.x !== undefined || value.y !== undefined) throw new Error(`drag ${name} takes either ref or x/y`);
-            return { ref: this.obs.resolve(epoch, String(value.ref)) };
+            return { ref: this.obs.resolve(value.ref) };
           }
           return { x: pixel(value.x, `${name}.x`), y: pixel(value.y, `${name}.y`) };
         };

@@ -40,29 +40,57 @@ const tree = (value: string): HostNode => ({
 });
 
 describe("HostObservation", () => {
-  it("emits a full baseline, then a minimal delta, then unchanged", () => {
+  it("shows the whole screen as numbered lines, then only what changed, then unchanged", () => {
     const obs = new HostObservation();
     const first = obs.accept(tree("a"), false);
     expect(first.kind).toBe("full");
+    expect(first.text).toBe('[1] window\n  [2] textfield = "a"\n  [3] button "Go"');
     const second = obs.accept(tree("b"), false);
-    expect(second.kind).toBe("delta");
-    if (second.kind === "delta") {
-      expect(second.base_epoch).toBe(first.epoch);
-      expect(second.changes).toEqual([{ op: "set", path: ["children", 0, "value"], value: "b" }]);
-    }
+    expect(second).toMatchObject({ kind: "delta", base_epoch: first.epoch, text: '~ [2] textfield = "b"', changed: true });
     const third = obs.accept(tree("b"), false);
-    expect(third.kind).toBe("unchanged");
+    expect(third).toMatchObject({ kind: "unchanged", changed: false });
   });
-  it("resolves only ids present in the current epoch, and rejects stale epochs", () => {
+  it("says what appeared and what went, under which parent", () => {
     const obs = new HostObservation();
-    const first = obs.accept(tree("a"), false);
-    expect(obs.resolve(first.epoch, "w/AXButton#go")).toBe("w/AXButton#go");
-    expect(() => obs.resolve(first.epoch, "missing")).toThrow("Unknown element ref");
-    const second = obs.accept(tree("a"), false);
-    expect(() => obs.resolve(first.epoch, "w/AXButton#go")).toThrow("Stale observation epoch");
-    expect(obs.resolve(second.epoch, "w/AXButton#go")).toBe("w/AXButton#go");
+    const big = (extra: HostNode[]) => ({ id: "w", role: "AXWindow", children: [
+      { id: "list", role: "AXList", children: [{ id: "r0", role: "AXStaticText", value: "one" }, { id: "r1", role: "AXStaticText", value: "two" }, ...extra] },
+      { id: "a", role: "AXButton", title: "A" }, { id: "b", role: "AXButton", title: "B" }, { id: "c", role: "AXButton", title: "C" },
+      { id: "d", role: "AXButton", title: "D" }, { id: "x", role: "AXButton", title: "Cancel" },
+    ] });
+    obs.accept(big([]), false);
+    const grown = obs.accept({ ...big([{ id: "r2", role: "AXStaticText", value: "three" }]), children: big([{ id: "r2", role: "AXStaticText", value: "three" }]).children!.slice(0, -1) }, false);
+    expect(grown.kind).toBe("delta");
+    expect(grown.text).toBe('- [9] button "Cancel"\n+ [10] text "three" (in [2])');
   });
-  it("force-full re-sends the whole tree even when it could diff", () => {
+  it("keeps the model's view across hidden intermediate states and filtered looks", () => {
+    const obs = new HostObservation();
+    obs.accept(tree("a"), false);
+    expect(obs.accept(tree("b"), { show: false }).changed).toBe(true);
+    expect(obs.accept(tree("c"), { query: "go" })).toMatchObject({ kind: "query", matches: 1, text: '[1] window\n  [3] button "Go"' });
+    // compared with what was last shown ("a"), not with the hidden or filtered states
+    expect(obs.accept(tree("c"), false).text).toBe('~ [2] textfield = "c"');
+  });
+  it("hides empty containers and labels that repeat their parent", () => {
+    const obs = new HostObservation();
+    const out = obs.accept({ id: "w", role: "AXWindow", title: "Doc", children: [
+      { id: "g", role: "AXGroup", children: [{ id: "b", role: "AXButton", title: "Save", children: [{ id: "t", role: "AXStaticText", value: "Save" }] }] },
+      { id: "c", role: "AXCheckBox", title: "Bold", value: "1" },
+      { id: "s", role: "AXSlider", value: "40", settable: true, actions: ["AXIncrement", "AXDecrement"] },
+    ] }, true);
+    expect(out.text).toBe('[1] window "Doc"\n  [3] button "Save"\n  [5] checkbox "Bold" checked\n  [6] slider = "40" settable actions=Increment,Decrement');
+  });
+  it("resolves numbers to elements on the current screen only", () => {
+    const obs = new HostObservation();
+    obs.accept(tree("a"), false);
+    expect(obs.resolve(3)).toBe("w/AXButton#go");
+    expect(obs.resolve("[3]")).toBe("w/AXButton#go");
+    expect(() => obs.resolve(9)).toThrow("not on the current screen");
+    obs.accept({ id: "w", role: "AXWindow", children: [] }, false);
+    expect(() => obs.resolve(3)).toThrow("not on the current screen");
+    obs.invalidate();
+    expect(() => obs.resolve(1)).toThrow("observe first");
+  });
+  it("force-full re-sends the whole screen even when it could diff", () => {
     const obs = new HostObservation();
     obs.accept(tree("a"), false);
     expect(obs.accept(tree("b"), true).kind).toBe("full");
@@ -152,13 +180,11 @@ process.stdin.on("data", c => {
     const helper = new ComputerHostHelper(process.execPath, [path]);
     helper.start();
     const session = new ComputerHostSession(helper);
-    const started = await session.start("Test") as { observation: { epoch: string } };
-    let epoch = started.observation.epoch;
-    const moved = await session.act({ kind: "drag", epoch, from: { x: 40, y: 100 }, to: { x: 300, y: 220 } }) as Record<string, any>;
+    await session.start("Test");
+    const moved = await session.act({ kind: "drag", from: { x: 40, y: 100 }, to: { x: 300, y: 220 } }) as Record<string, any>;
     expect(moved.action.effect).toBe("changed");
     expect(moved.dragMs).toBe(90);
-    epoch = moved.observation.epoch;
-    const same = await session.act({ kind: "drag", epoch, from: { ref: "e2" }, to: { ref: "e3" } }) as Record<string, any>;
+    const same = await session.act({ kind: "drag", from: { ref: 3 }, to: { ref: 4 } }) as Record<string, any>;
     expect(same.action.effect).toBe("no_change");
     expect(acts(log)).toEqual([
       { kind: "drag", from: { x: 40, y: 100 }, to: { x: 300, y: 220 } },
@@ -167,19 +193,17 @@ process.stdin.on("data", c => {
     await session.stop();
   });
 
-  it("refuses mixed, fractional or stale drag ends before anything is sent", async () => {
+  it("refuses mixed, fractional or unknown drag ends before anything is sent", async () => {
     const { path, log } = recordingHelper();
     const helper = new ComputerHostHelper(process.execPath, [path]);
     helper.start();
     const session = new ComputerHostSession(helper);
-    const started = await session.start("Test") as { observation: { epoch: string } };
-    const epoch = started.observation.epoch;
-    await expect(session.act({ kind: "drag", epoch, from: { ref: "e2" }, to: { x: 1, y: 2 } })).rejects.toThrow("same kind");
-    await expect(session.act({ kind: "drag", epoch, from: { x: 1.5, y: 2 }, to: { x: 3, y: 4 } })).rejects.toThrow("non-negative integer");
-    await expect(session.act({ kind: "drag", epoch, from: { ref: "gone" }, to: { ref: "e3" } })).rejects.toThrow("Unknown element ref");
-    await expect(session.act({ kind: "drag", epoch: "h0", from: { x: 1, y: 2 }, to: { x: 3, y: 4 } })).resolves.toBeDefined();
-    await expect(session.act({ kind: "drag", epoch, from: { ref: "e2" }, to: { ref: "e3" } })).rejects.toThrow("Stale observation epoch");
-    await expect(session.act({ kind: "scroll", epoch: "h2", ref: "e2", direction: "down" })).resolves.toBeDefined();
+    await session.start("Test");
+    await expect(session.act({ kind: "drag", from: { ref: 3 }, to: { x: 1, y: 2 } })).rejects.toThrow("same kind");
+    await expect(session.act({ kind: "drag", from: { x: 1.5, y: 2 }, to: { x: 3, y: 4 } })).rejects.toThrow("non-negative integer");
+    await expect(session.act({ kind: "drag", from: { ref: 99 }, to: { ref: 4 } })).rejects.toThrow("not on the current screen");
+    await expect(session.act({ kind: "drag", from: { x: 1, y: 2 }, to: { x: 3, y: 4 } })).resolves.toBeDefined();
+    await expect(session.act({ kind: "scroll", ref: 3, direction: "down" })).resolves.toBeDefined();
     expect(acts(log)).toEqual([
       { kind: "drag", from: { x: 1, y: 2 }, to: { x: 3, y: 4 } },
       { kind: "scroll", ref: "e2", direction: "down", amount: 3 },
@@ -192,17 +216,56 @@ process.stdin.on("data", c => {
     const helper = new ComputerHostHelper(process.execPath, [path]);
     helper.start();
     const session = new ComputerHostSession(helper);
-    const started = await session.start("Test") as { observation: { epoch: string } };
-    const forward = await session.act({ kind: "click", epoch: started.observation.epoch, ref: "e2", count: 2 }) as Record<string, any>;
+    await session.start("Test");
+    const forward = await session.act({ kind: "click", ref: 3, count: 2 }) as Record<string, any>;
     expect(forward.action).toMatchObject({ via: "pointer", selfActivated: true, restored: true });
-    const mine = await session.act({ kind: "click", epoch: forward.observation.epoch, ref: "e3", button: "right" }) as Record<string, any>;
+    const mine = await session.act({ kind: "click", ref: 4, button: "right" }) as Record<string, any>;
     expect(mine.action.ok).toBe(true);
-    await expect(session.act({ kind: "click", epoch: mine.observation.epoch, ref: "e1" })).rejects.toThrow("brought itself to the front");
+    await expect(session.act({ kind: "click", ref: 2 })).rejects.toThrow("brought itself to the front");
     expect(acts(log).map(a => [a.kind, a.ref, a.count, a.button, a.fallbackClick])).toEqual([
       ["press-action", "e2", 2, "left", true],
       ["press-action", "e3", 1, "right", true],
       ["press-action", "e1", 1, "left", true],
     ]);
+    await session.stop();
+  });
+});
+
+describe("ComputerHostSession steps", () => {
+  it("runs steps in order, shows the screen once, and stops at the first failure", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cuhost-steps-"));
+    const path = join(dir, "steps.mjs"), log = join(dir, "acts.jsonl");
+    writeFileSync(path, `
+import { appendFileSync } from "node:fs";
+const env = { frontmostApp: "a", frontmostPid: 1, frontmostWindowId: 5, mouse: { x: 1, y: 2 } };
+let value = "", buf = "";
+const tree = () => ({ id: "w", role: "AXWindow", children: [
+  { id: "f", role: "AXTextField", value, settable: true }, { id: "go", role: "AXButton", title: "Go" } ] });
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", c => { buf += c; let nl;
+  while ((nl = buf.indexOf("\\n")) >= 0) { const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
+    const req = JSON.parse(line); let result = { env };
+    if (req.op === "launch") result = { pid: 42, env, backgroundPreserved: true };
+    if (req.op === "observe") result = { tree: tree(), env };
+    if (req.op === "act") {
+      appendFileSync(${JSON.stringify(log)}, JSON.stringify(req.action) + "\\n");
+      if (req.action.kind === "set-value") value = req.action.value;
+      result = { tree: tree(), env, backgroundPreserved: true, via: "ax" };
+    }
+    process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
+  }
+});
+`);
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Test");
+    const ok = await session.steps([{ kind: "set-value", ref: 2, value: "hi" }, { kind: "click", ref: 3 }]) as Record<string, any>;
+    expect(ok.steps.map((s: any) => s.action.effect)).toEqual(["changed", "no_change"]);
+    expect(ok.observation).toMatchObject({ kind: "delta", text: '~ [2] textfield = "hi"' });
+    const bad = await session.steps([{ kind: "set-value", ref: 2, value: "yo" }, { kind: "click", ref: 77 }, { kind: "press", key: "return" }]) as Record<string, any>;
+    expect(bad).toMatchObject({ failed: { step: 2 }, skipped: 1, observation: { text: '~ [2] textfield = "yo"' } });
+    expect(readFileSync(log, "utf8").trim().split("\n").map(l => JSON.parse(l).kind)).toEqual(["set-value", "press-action", "set-value"]);
     await session.stop();
   });
 });
