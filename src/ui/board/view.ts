@@ -5,6 +5,7 @@
 // into its re-rendered text and keep drawing where it was.
 import { parseBoard, type Board, type Mark, type Tone } from "./parse";
 import { completePart, engineReady, isProgram, loadEngine, runProgram } from "./program";
+import { short } from "./names";
 import { box, head, polyline, ring, swipe, type Pt } from "./sketch";
 import type { ThreeView } from "./three-view";
 import { t } from "../../i18n";
@@ -496,8 +497,13 @@ export class BoardView {
     const p = i === null ? undefined : this.board?.parts[i];
     if (!p || !at) return void (this.tag.hidden = true);
     this.tag.textContent = "";
+    // a part with no name of its own (a pin in a row) goes by the nearest named part of its step, or the step
+    const dist = (q: typeof p) => Math.hypot(q.at[0] - p.at[0], q.at[1] - p.at[1], q.at[2] - p.at[2]);
+    const kin = this.board!.parts.filter((q) => q.label && q.step === p.step).sort((a, b) => dist(a) - dist(b))[0];
+    const label = short(p.label) || (kin ? short(kin.label) : "") || this.board!.steps[p.step]?.text || "";
+    if (!label) return void (this.tag.hidden = true);
     const name = document.createElement("b");
-    name.textContent = p.label;
+    name.textContent = label;
     this.tag.append(name);
     if (this.opts.onAsk) {
       const ask = document.createElement("button");
@@ -505,7 +511,7 @@ export class BoardView {
       ask.textContent = t("이 부분 묻기");
       ask.onclick = (e) => {
         e.stopPropagation();
-        this.opts.onAsk!(this.board?.title ? `${this.board.title} · ${p.label}` : p.label);
+        this.opts.onAsk!(this.board?.title ? `${this.board.title} · ${label}` : label);
         this.tag.hidden = true;
         this.three?.select(null);
       };

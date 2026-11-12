@@ -7,6 +7,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Material, Part, Tone } from "./parse";
+import { short } from "./names";
 
 const LOOKS: Record<Material, { color: string; metal: number; rough: number; opacity?: number }> = {
   steel: { color: "#a9adb3", metal: 0.85, rough: 0.32 },
@@ -58,29 +59,54 @@ export type ThreeView = {
   dispose(): void;
 };
 
-/** a part's name as a tag: the name before any explanation ("RAM — 작업 공간" → "RAM"), kept short */
-export function short(label: string): string {
-  const name = label.split(/\s+[—–-]\s+|:\s|\(/)[0].trim();
-  return name.length > 18 ? name.slice(0, 17) + "…" : name;
+/**
+ * One WebGL renderer for every 3D board in the app. Each board draws its scene with it
+ * and copies the picture onto its own plain canvas. A page with many 3D boards then
+ * holds one GPU context (and one lighting room) instead of one each, which is what
+ * makes WebKit drop contexts. If the context is lost anyway, a new renderer is made
+ * and every board draws again.
+ */
+type Shared = { renderer: THREE.WebGLRenderer; env: THREE.Texture };
+let shared: Shared | undefined;
+const boards = new Set<() => void>();
+function sharedRenderer(): Shared {
+  if (shared) return shared;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
+  renderer.setPixelRatio(1);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // a board's light never moves with its camera, so its shadow is worked out only when the model changes
+  renderer.shadowMap.autoUpdate = false;
+  // a soft room around the model, so metal reflects something instead of going black
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  const env = pmrem.fromScene(room, 0.04).texture;
+  room.dispose?.();
+  pmrem.dispose();
+  const made: Shared = { renderer, env };
+  renderer.domElement.addEventListener("webglcontextlost", (e) => {
+    e.preventDefault();
+    if (shared !== made) return;
+    shared = undefined;
+    env.dispose();
+    renderer.dispose();
+    setTimeout(() => boards.forEach((redraw) => redraw()), 200);
+  });
+  shared = made;
+  return made;
 }
 
 export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void; onLost?: () => void }): ThreeView {
   const css = getComputedStyle(host);
   const cssColor = (v: string) => css.getPropertyValue(v).trim() || "#888";
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  // this board's own picture: a plain canvas the shared renderer's frame is copied onto
+  const canvas = document.createElement("canvas");
+  const paint = canvas.getContext("2d")!;
+  host.appendChild(canvas);
   // 1.5× is sharp enough with antialiasing and much lighter than 2× on a retina screen
-  renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  // the light never moves with the camera, so the shadow is worked out only when the model changes
-  renderer.shadowMap.autoUpdate = false;
-  // WebKit may drop the GPU context under pressure: the board builds a new view then
-  // (not when this view lets go of it itself)
-  let gone = false;
-  renderer.domElement.addEventListener("webglcontextlost", () => !gone && opts.onLost?.());
-  host.appendChild(renderer.domElement);
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
   // each part's name beside it, joined to it by a thin line; kept next to the part as the model turns
   const labels = document.createElement("div");
   labels.className = "bd-labels";
@@ -107,15 +133,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const fill = new THREE.DirectionalLight(0xffffff, 0.6);
   fill.position.set(-5, 2, -3);
   scene.add(fill);
-  // a soft room around the model, so metal reflects something instead of going black
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const envMap = pmrem.fromScene(room, 0.04).texture;
-  scene.environment = envMap;
   scene.environmentIntensity = 0.55;
-  room.dispose?.();
-  pmrem.dispose();
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.enablePan = false;
 
@@ -142,8 +161,19 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       if (t === 0) next = Math.min(next, s.from);
       if (t === 1) shadowStale = true;
     }
-    if (shadowStale) { renderer.shadowMap.needsUpdate = true; shadowStale = false; }
-    renderer.render(scene, camera);
+    const w = canvas.width, h = canvas.height;
+    if (w && h) {
+      const { renderer, env } = sharedRenderer();
+      scene.environment = env;
+      const size = renderer.getSize(new THREE.Vector2());
+      if (size.x !== w || size.y !== h) renderer.setSize(w, h, false);
+      renderer.shadowMap.needsUpdate = shadowStale;
+      shadowStale = false;
+      renderer.render(scene, camera);
+      renderer.shadowMap.needsUpdate = false;
+      paint.clearRect(0, 0, w, h);
+      paint.drawImage(renderer.domElement, 0, 0);
+    }
     placeLabels();
     // frames only while something moves; a part still to come wakes it at its moment
     if (moving) frame = requestAnimationFrame(draw);
@@ -239,7 +269,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const resize = () => {
     const w = host.clientWidth, h = host.clientHeight;
     if (!w || !h) return;
-    renderer.setSize(w, h, false);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     wake();
@@ -249,7 +280,9 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   // put back into the page or scrolled into view: draw it again
   const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && wake());
   io.observe(host);
-  renderer.domElement.addEventListener("webglcontextrestored", wake);
+  // the shared renderer was made again: this board's shadow and picture with it
+  const redraw = () => { shadowStale = true; wake(); };
+  boards.add(redraw);
 
   /** frame the whole model from a three-quarter view, once its extent is known */
   const fit = (parts: Part[]) => {
@@ -326,7 +359,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const onUp = (e: PointerEvent) => {
     if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return void (down = null);
     down = null;
-    const r = renderer.domElement.getBoundingClientRect();
+    const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const hit = ray.intersectObjects(shown.filter((s) => s.mesh.visible).map((s) => s.mesh), false)[0];
     const i = hit ? shown.findIndex((s) => s.mesh === hit.object) : -1;
@@ -336,13 +369,13 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   };
   const onMove = (e: PointerEvent) => {
     if (e.buttons) return;
-    const r = renderer.domElement.getBoundingClientRect();
+    const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    renderer.domElement.style.cursor = ray.intersectObjects(shown.map((s) => s.mesh), false)[0] ? "pointer" : "grab";
+    canvas.style.cursor = ray.intersectObjects(shown.map((s) => s.mesh), false)[0] ? "pointer" : "grab";
   };
-  renderer.domElement.addEventListener("pointerdown", onDown);
-  renderer.domElement.addEventListener("pointerup", onUp);
-  renderer.domElement.addEventListener("pointermove", onMove);
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointermove", onMove);
 
   return {
     set(parts, delays) {
@@ -356,7 +389,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
         mesh.position.set(...p.at);
         mesh.rotation.set(...(p.rot.map((d) => (d * Math.PI) / 180) as [number, number, number]));
         mesh.userData.label = p.label;
-        mesh.castShadow = mesh.receiveShadow = true;
+        mesh.castShadow = true;
         if (shape.edges) mesh.add(new THREE.LineSegments(shape.edges, EDGE));
         mesh.userData.size = mesh.geometry.boundingSphere?.radius ?? 0;
         scene.add(mesh);
@@ -376,7 +409,6 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     select(i) { selected = i; highlight(); },
     wake,
     dispose() {
-      gone = true;
       cancelAnimationFrame(frame);
       ro.disconnect();
       io.disconnect();
@@ -386,10 +418,9 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       clearTimeout(later);
       catcher.geometry.dispose();
       (catcher.material as THREE.Material).dispose();
-      envMap.dispose();
-      renderer.dispose();
-      renderer.forceContextLoss();
-      renderer.domElement.remove();
+      boards.delete(redraw);
+      sun.shadow.dispose();
+      canvas.remove();
       labels.remove();
     },
   };
