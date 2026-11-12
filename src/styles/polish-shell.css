@@ -1752,3 +1752,28 @@
 .status-line .st-comp.away {
   color: var(--warn);
 }
+
+/* ⌘Q's hint, as Chrome's: in the middle of the window while the key is down, gone a second after */
+.quit-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: var(--z-toast);
+  padding: var(--s-20) var(--s-28);
+  border-radius: var(--r-2xl);
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
+  color: var(--bg);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--dur-slow) var(--ease), visibility 0s linear var(--dur-slow);
+}
+.quit-hint.shown {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-fast) var(--ease);
+}

@@ -48,13 +48,21 @@ const TRAY_ID: &str = "main";
 // window (show, focus, title) and its page as a webview (events), never as a
 // single "webview window", which a window with two webviews isn't.
 /// ⌘Q quits only when held, like Chrome: a tap shows a hint and does nothing.
-/// Choosing Quit from the menu with the mouse quits at once. Quit can be on another
-/// key (keys.rs); one hold_to_quit can't watch quits at once.
+/// Held past HOLD, every window fades out and the app quits once the key is let go;
+/// a second press within DOUBLE quits at once. Choosing Quit from the menu with the
+/// mouse quits at once. Quit can be on another key (keys.rs); one hold_to_quit can't
+/// watch quits at once.
 #[cfg(target_os = "macos")]
 fn hold_to_quit(app: &AppHandle) {
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
+    // Chrome's numbers (chrome/browser/ui/cocoa/confirm_quit*.mm): the quit commits
+    // half a second in, and a press within a second of the last one is a double tap
+    const HOLD: Duration = Duration::from_millis(500);
+    const DOUBLE: Duration = Duration::from_secs(1);
     static HOLDING: AtomicBool = AtomicBool::new(false);
+    static LAST: Mutex<Option<Instant>> = Mutex::new(None);
     #[link(name = "CoreGraphics", kind = "framework")]
     unsafe extern "C" {
         fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
@@ -74,19 +82,29 @@ fn hold_to_quit(app: &AppHandle) {
     if HOLDING.swap(true, Ordering::SeqCst) {
         return;
     }
-    if let Some(w) = app.get_webview("main") {
-        let _ = w.emit("quit:hold", ());
-    }
+    let now = Instant::now();
+    let double = LAST.lock().map(|mut l| l.replace(now).is_some_and(|t| now - t < DOUBLE)).unwrap_or(false);
+    let say = |app: &AppHandle, event: &str| {
+        if let Some(w) = app.get_webview("main") {
+            let _ = w.emit(event, ());
+        }
+    };
     let app = app.clone();
     std::thread::spawn(move || {
-        let start = Instant::now();
-        while start.elapsed() < Duration::from_millis(800) {
-            if !held() {
-                HOLDING.store(false, Ordering::SeqCst);
-                return;
+        if !double {
+            say(&app, "quit:hold");
+            let start = Instant::now();
+            while start.elapsed() < HOLD {
+                if !held() {
+                    HOLDING.store(false, Ordering::SeqCst);
+                    say(&app, "quit:let-go");
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(30));
             }
-            std::thread::sleep(Duration::from_millis(30));
         }
+        // the quit is settled: the windows go so the user lets go (a double tap's at once)
+        fade_windows(&app, !double);
         // quit once Q is let go: quitting while it is still down hands the
         // repeating ⌘Q to the next app, which quits too
         let held_at = Instant::now();
@@ -94,6 +112,25 @@ fn hold_to_quit(app: &AppHandle) {
             std::thread::sleep(Duration::from_millis(30));
         }
         app.exit(0);
+    });
+}
+
+/// Every window to transparent, faded (AppKit's animator) or at once.
+#[cfg(target_os = "macos")]
+fn fade_windows(app: &AppHandle, animate: bool) {
+    let windows: Vec<_> = app.windows().into_values().collect();
+    let _ = app.run_on_main_thread(move || {
+        use objc2::{msg_send, runtime::AnyObject};
+        for w in windows {
+            let Ok(ns) = w.ns_window() else { continue };
+            let Some(ns) = (unsafe { (ns as *mut AnyObject).as_ref() }) else { continue };
+            unsafe {
+                let target: *mut AnyObject = if animate { msg_send![ns, animator] } else { ns as *const _ as *mut _ };
+                if let Some(target) = target.as_ref() {
+                    let _: () = msg_send![target, setAlphaValue: 0.0f64];
+                }
+            }
+        }
     });
 }
 
