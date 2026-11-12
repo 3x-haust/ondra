@@ -3,8 +3,8 @@
 # The files go up through the PR page's comment box in a browser signed in to
 # GitHub; the comment is never sent. GitHub hands back user-attachments links,
 # and gh writes them into the description. No AI in between.
-# The browser: Ondra's shared browser (your own tab); when GitHub isn't signed in
-# there, Aside (aside repl, no AI) with this space's account, if it is signed in.
+# The browser: Ondra's shared browser (your own tab). Sign in to GitHub in
+# the browser panel before uploading.
 #
 #   pr-media.sh <PR number|URL> file...       # inside the repo folder a number is enough
 #   pr-media.sh <PR> --dir <folder>           # every png/jpg/gif/webp/mp4/mov in the folder
@@ -12,15 +12,14 @@
 #   --comment "text" <PR> file...             # post them as a PR comment under that text instead
 #   --reply <comment id> "text" <PR> file...  # reply in a review thread (an inline comment's id)
 #   --at <path:line> "text" <PR> file...      # a new review comment on that line of the PR's head
-#   --account <id>                            # Aside account (default: this space's, $ONDRA_ASIDE_ACCOUNT)
-#   --via aside|browser                       # force one browser
+#   --via browser                            # Ondra's shared browser (the default)
 #
 # Running it again adds to the block it put in (<!-- pr-media --> … <!-- /pr-media -->): earlier
 # pictures stay, a file with the same name replaces its old picture. --replace starts the block over.
 # Pictures sit side by side at 300px; each video gets its own player.
 set -euo pipefail
 
-PRINT=0; PR=""; FILES=(); ACCOUNT="${ONDRA_ASIDE_ACCOUNT:-}"; VIA=""; REPLACE=0; MODE=body; TEXT=""; REPLY=""; AT=""
+PRINT=0; PR=""; FILES=(); VIA=browser; REPLACE=0; MODE=body; TEXT=""; REPLY=""; AT=""
 while (($#)); do
   case $1 in
     --print) PRINT=1 ;;
@@ -28,7 +27,6 @@ while (($#)); do
     --comment) MODE=comment; shift; TEXT=$1 ;;
     --reply) MODE=reply; shift; REPLY=$1; shift; TEXT=$1 ;;
     --at) MODE=at; shift; AT=$1; shift; TEXT=$1 ;;
-    --account) shift; ACCOUNT=$1 ;;
     --via) shift; VIA=$1 ;;
     --dir)
       shift
@@ -40,6 +38,7 @@ while (($#)); do
   shift
 done
 [[ -n $PR && ${#FILES[@]} -gt 0 ]] || { sed -n 2,20p "$0"; exit 1; }
+[[ $VIA == browser ]] || { echo "--via supports only browser." >&2; exit 1; }
 [[ $MODE != at || $AT == *:* ]] || { echo "--at needs <path:line>" >&2; exit 1; }
 ABS=()
 for f in "${FILES[@]}"; do
@@ -54,63 +53,6 @@ done
 
 URL=$(gh pr view "$PR" --json url -q .url)
 echo "PR: $URL / ${#ABS[@]} file(s)"
-
-# whatever happens (a timeout, Ctrl-C), the file server stops and its folder goes
-PM_SRV=""; PM_TMP=""
-trap '[[ -n $PM_SRV ]] && kill "$PM_SRV" 2>/dev/null; [[ -n $PM_TMP ]] && rm -rf "$PM_TMP"' EXIT
-LINK_RE='https:\/\/github\.com\/user-attachments\/[^\s"<>)]+'
-
-# Aside: its scripts can't read files outside their folder, so the files are
-# served for a moment on this machine only.
-via_aside() {
-  local acct=() tmp port srv i=0 spec=() out line
-  [[ -n $ACCOUNT ]] && acct=(--account "$ACCOUNT")
-  [[ -n $ACCOUNT ]] || { echo "no Aside account for this space" >&2; return 1; }
-  tmp=$(mktemp -d)
-  PM_TMP=$tmp
-  for f in "${ABS[@]}"; do ln -s "$f" "$tmp/$i.$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')"; i=$((i + 1)); done
-  port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
-  python3 -m http.server "$port" --bind 127.0.0.1 --directory "$tmp" >/dev/null 2>&1 &
-  srv=$!
-  PM_SRV=$srv
-  for _ in $(seq 20); do curl -s -o /dev/null "http://127.0.0.1:$port/" && break; sleep 0.2; done
-  local all=() k e m
-  for ((s0 = 0; s0 < ${#ABS[@]}; s0 += 4)); do # four per run: one Aside run has 120 s
-    spec=()
-    for ((k = s0; k < s0 + 4 && k < ${#ABS[@]}; k++)); do
-      f=${ABS[k]}; e=$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')
-      case $e in png) m=image/png ;; jpg|jpeg) m=image/jpeg ;; gif) m=image/gif ;; webp) m=image/webp ;; mp4) m=video/mp4 ;; mov) m=video/quicktime ;; *) m=application/octet-stream ;; esac
-      spec+=("[\"$k.$e\",$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$(basename "$f")"),\"$m\"]")
-    done
-    out=$(aside repl ${acct[@]+"${acct[@]}"} "
-const pmPage = await openTab('$URL');
-try {
-  const pmFiles = [];
-  for (const [srv, name, type] of [$(IFS=,; echo "${spec[*]}")]) {
-    const r = await fetch('http://127.0.0.1:$port/' + srv);
-    if (!r.ok) throw new Error('local fetch ' + r.status);
-    pmFiles.push({ name, mimeType: type, buffer: Buffer.from(await r.arrayBuffer()) });
-  }
-  const box = pmPage.locator('#new_comment_field');
-  await box.fill('');
-  await pmPage.locator('#fc-new_comment_field').setInputFiles(pmFiles);
-  let val = '';
-  for (let t = 0; t < 100; t++) {
-    val = await box.inputValue();
-    const n = (val.match(/$LINK_RE/g) || []).length;
-    if (n >= pmFiles.length && !/Uploading/.test(val)) break;
-    await sleep(1000);
-  }
-  await box.fill('');
-  console.log('PMRESULT ' + JSON.stringify(val.match(/$LINK_RE/g) || []));
-} finally { await closeTab(pmPage); }" 2>&1) || true
-    line=$(printf '%s\n' "$out" | grep '^PMRESULT ' | tail -1)
-    if [[ -z $line ]]; then kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; rm -rf "$tmp"; printf '%s\n' "$out" | tail -4 >&2; return 1; fi
-    while IFS= read -r u; do all+=("$u"); done < <(printf '%s' "${line#PMRESULT }" | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)))')
-  done
-  kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; rm -rf "$tmp"
-  LINKS=$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1:]))' ${all[@]+"${all[@]}"})
-}
 
 ab() { agent-browser "$@"; }
 # eval prints its result as JSON: a string comes back as plain text, anything else as JSON
@@ -161,31 +103,13 @@ via_browser() {
   js "(() => { const b = document.querySelector('[data-ondra-box]'); b.value = ''; b.dispatchEvent(new Event('input', { bubbles: true })); return 1; })()" >/dev/null
 }
 
-# this space's account is signed in; no account for the space means no Aside
-# (Aside's active account may belong to the other space)
-aside_ready() {
-  [[ -n $ACCOUNT ]] && command -v aside >/dev/null 2>&1 || return 1
-  local rows
-  rows=$(aside account list 2>/dev/null) || return 1
-  printf '%s\n' "$rows" | grep -E "^[* ] *$ACCOUNT[[:space:]]" | grep -v "signed out" | grep -q "signed in"
-}
 LINKS=""
-if [[ $VIA == aside ]]; then
-  echo "via Aside${ACCOUNT:+ ($ACCOUNT)}"
-  via_aside || { echo "Aside upload failed." >&2; exit 1; }
-else
-  echo "via Ondra's browser"
-  rc=0; via_browser || rc=$?
-  if ((rc)); then
-    if [[ -z $VIA ]] && aside_ready; then
-      echo "Ondra's browser couldn't; via Aside${ACCOUNT:+ ($ACCOUNT)}" >&2
-      via_aside || { echo "Aside upload failed." >&2; exit 1; }
-    elif ((rc == 3)); then
-      echo "GitHub is not signed in in Ondra's browser. Ask the user to sign in to GitHub (the account that opens PRs) in the browser panel, then run this again." >&2; exit 3
-    else
-      exit 1
-    fi
-  fi
+echo "via Ondra's browser"
+rc=0; via_browser || rc=$?
+if ((rc == 3)); then
+  echo "GitHub is not signed in in Ondra's browser. Ask the user to sign in to GitHub (the account that opens PRs) in the browser panel, then run this again." >&2; exit 3
+elif ((rc)); then
+  exit 1
 fi
 
 BLOCK=$(LINKS="$LINKS" python3 - "${ABS[@]}" <<'EOF'

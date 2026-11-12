@@ -127,8 +127,8 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
 - **Screenshots mostly for problems** and before/after proof: reading
   structure (`snapshot -i --delta`, `eval`) is faster for checking; look at
   pixels for layout, overflow and theme.
-- **Surfaces**: web through `browser-use` (the built-in browser; Aside only
-  when the user asks); iOS/Android through `device-use` (your own device, `stop` it
+- **Surfaces**: web through `browser-use` (the built-in browser);
+  iOS/Android through `device-use` (your own device, `stop` it
   at the end); a Mac app through `computer-use` (one app, one worker at a time).
 - **In parallel, by area**: a big app or several platforms goes faster split
   across a few subagents, one area each (e.g. 가입·로그인 / 목록·검색 / 결제 /

@@ -2,8 +2,8 @@
 name: browser-use
 description: >
   Browser use: the app's bundled browser, driven with `browse` (agent-browser
-  underneath): light pages, lean looks, one call per step. Aside only when the
-  user asks for it. Use when a worker must open a site, check a web app, fill a
+  underneath): light pages, lean looks, one call per step. Use when a worker
+  must open a site, check a web app, fill a
   form, read a page, take screenshots, or record proof of a change. Covers the
   shared browser (your own tab, shared logins), signing in from the macOS
   keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
@@ -18,8 +18,7 @@ metadata:
 The browser is the app's own: `browse` and `agent-browser` are on your `PATH`
 (else `<this skill's folder>/browse`) with their environment set. Never run
 `agent-browser install`, never use `npx`, never change any `AGENT_BROWSER_*`
-variable, and never ask the user to set anything up. Aside (the user's own
-browser app) only when the user asks for it: `aside.md` in this folder.
+variable, and never ask the user to set anything up.
 
 ## The loop: one call per step
 
@@ -104,7 +103,7 @@ looking for them.
 
 When agent-browser answers "Resource temporarily unavailable" (os error 35),
 another job is using the browser this moment: wait a few seconds and retry
-once, then switch to Aside rather than retrying in a loop.
+once, then report that the browser is unavailable rather than retrying in a loop.
 
 ## Fast loop: fewer turns, smaller pages
 

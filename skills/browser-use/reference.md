@@ -106,9 +106,8 @@ Use `pr-media.sh` in this skill's folder; don't drive the comment box yourself:
 ```
 
 It uploads through the PR page in your tab (nothing gets posted) and writes the
-links into the description's `## 화면` section. When GitHub isn't signed in
-there and this space's Aside account is, it uses Aside. A rerun adds to its
-block: earlier pictures stay, and a file with the same name replaces its old one
+links into the description's `## 화면` section. A rerun adds to its block:
+earlier pictures stay, and a file with the same name replaces its old one
 (`--replace` only when the user wants the old pictures gone). Look at the
 pictures yourself first, then check the result with `gh pr view <PR> --json
 body`. The same script posts pictures with words where a reviewer reads them:
@@ -123,8 +122,8 @@ Review comment ids come from `gh api repos/<o>/<r>/pulls/<n>/comments --jq
 '.[]|{id,path,line,body}'`. A comment notifies people: post one only when the
 user asked, or when the job is answering that PR's review (each fixed point gets
 its reply, with the before/after picture when the change shows on screen). Exit
-code 3 means GitHub isn't signed in in the built-in browser (and Aside wasn't
-there or failed): `ask` the user to sign in to GitHub in the browser panel (name
+code 3 means GitHub isn't signed in in the built-in browser: `ask` the user to
+sign in to GitHub in the browser panel (name
 the account that opens the PR), then run it again.
 
 ## Pixel-only controls
