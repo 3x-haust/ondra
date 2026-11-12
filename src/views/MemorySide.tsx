@@ -3,11 +3,11 @@
 // saved versions of the memory as a timeline.
 import { createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js";
 import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, sourcesOf, updateMemory, userOwned } from "../engine/memory";
-import { conflictsIn, keepMine, tidyParts, useNew } from "../engine/tidy";
+import { tidyParts } from "../engine/tidy";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
 import { fsRead, openInEditor, revealPath } from "../lib/native";
 import { setState, state, taskById } from "../state/store";
-import type { JournalEntry, Memory, MemoryConflict, MemoryKind } from "../state/types";
+import type { JournalEntry, Memory, MemoryKind } from "../state/types";
 import { openTask, previewFile, toast } from "../state/ui";
 import { ago } from "../ui/bits";
 import { Fold } from "../ui/Fold";
@@ -271,9 +271,6 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
           ].filter((x, i) => i === 0 || x.n)}
         />
       </Show>
-      <Show when={all()}>
-        <Conflicts onSel={props.onSel} />
-      </Show>
       <Show when={nows().length}>
         <H>{t("최근")}</H>
         <div class="ms-list">
@@ -356,89 +353,6 @@ function Summary(props: { model: Model; id: string; onSel: (id: string) => void 
         <Empty>{t("없음")}</Empty>
       </Show>
     </div>
-  );
-}
-
-/** 확인 필요: a learned piece says otherwise than the user's own; the user picks (theirs is replaced only after a second click, and can be undone) */
-function Conflicts(props: { onSel: (id: string) => void }) {
-  const list = () => conflictsIn(state.space);
-  const [ask, setAsk] = createSignal<string>();
-  const mem = (id?: string) => (id ? state.memory.find((m) => m.id === id) : undefined);
-  const other = (c: MemoryConflict) => {
-    const m = mem(c.theirs);
-    return { text: m?.text ?? c.text ?? "", kind: m ? kindOf(m) : (c.kind ?? "fact"), jobs: m ? sourcesOf(m).length : (c.sources?.length ?? 0), id: m?.id };
-  };
-  const replace = (id: string) => {
-    setAsk();
-    const undo = useNew(id);
-    toast(t("메모리 바꿈"), "info", undo && { label: t("되돌리기"), run: undo });
-  };
-  /** the learned text, its job count kept whole with its dot (it never wraps apart) */
-  const Text = (p: { c: MemoryConflict }) => (
-    <span>
-      {other(p.c).text}
-      <Show when={other(p.c).jobs}>
-        {" "}
-        <small>· {t("작업 {n}개", { n: other(p.c).jobs })}</small>
-      </Show>
-    </span>
-  );
-  return (
-    <Show when={list().length}>
-      <H n={list().length}>{t("확인 필요|memory")}</H>
-      <div class="mc-list">
-        <For each={list()}>
-          {(c) => (
-            <div class="mc">
-              <button class={`mc-row mk-${kindOf(mem(c.mine)!)}`} onClick={() => props.onSel(`m:${c.mine}`)} title={mem(c.mine)?.text}>
-                <em>{t("내 것")}</em>
-                <span>{mem(c.mine)?.text}</span>
-              </button>
-              <Show
-                when={other(c).id}
-                fallback={
-                  <div class={`mc-row mk-${other(c).kind}`}>
-                    <em>{t("새 것")}</em>
-                    <Text c={c} />
-                  </div>
-                }
-              >
-                <button class={`mc-row mk-${other(c).kind}`} onClick={() => props.onSel(`m:${other(c).id}`)} title={other(c).text}>
-                  <em>{t("새 것")}</em>
-                  <Text c={c} />
-                </button>
-              </Show>
-              {/* 새 것으로 asks once more in the same row: 바꾸기 / 취소 and what happens to yours */}
-              <Show
-                when={ask() === c.id}
-                fallback={
-                  <div class="mc-acts">
-                    <button class="btn sm" onClick={() => keepMine(c.id)}>{t("내 것 유지")}</button>
-                    <button
-                      class="btn sm"
-                      onClick={(e) => {
-                        // from the keyboard, focus goes on to 바꾸기 (the button pressed is gone)
-                        const box = e.detail === 0 ? e.currentTarget.closest(".mc") : null;
-                        setAsk(c.id);
-                        box?.querySelector<HTMLElement>(".mc-acts .primary")?.focus();
-                      }}
-                    >
-                      {t("새 것으로")}
-                    </button>
-                  </div>
-                }
-              >
-                <div class="mc-acts ask" onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setAsk())}>
-                  <button class="btn sm primary" onClick={() => replace(c.id)}>{t("바꾸기")}</button>
-                  <button class="btn sm" onClick={() => setAsk()}>{t("취소")}</button>
-                  <span class="mc-note">{t("내 메모리를 내려요")}</span>
-                </div>
-              </Show>
-            </div>
-          )}
-        </For>
-      </div>
-    </Show>
   );
 }
 

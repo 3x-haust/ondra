@@ -23,7 +23,7 @@ import { expand } from "./rpc";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
-import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, restoreMemory, retireMemory, unionSources, userOwned } from "./memory";
+import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, unionSources, userOwned } from "./memory";
 import { inTauri, pathsExist, skillSave } from "../lib/native";
 import { projectById, setState, spaceById, state, uid } from "../state/store";
 import type { Memory, MemoryConflict, MemoryKind, SpaceId, Task } from "../state/types";
@@ -138,7 +138,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
     "",
     "Do these:",
     "1. merge: pieces that say the same thing → keep one (prefer the user's own), drop the others, optionally a better merged text (one short Korean sentence). Never drop or reword a user's own piece.",
-    "2. retire: when two pieces contradict, the older one (the newer replaces it). Never retire a user's own piece: when a piece that is not the user's own contradicts one that is, put the pair in conflict instead; the user decides.",
+    "2. retire: when two pieces contradict, the older one (the newer replaces it). Never retire a user's own piece: when a piece that is not the user's own contradicts one that is, put the pair in conflict instead; the user's own stays and the other goes.",
     "3. keys: for EVERY piece without {keys}, 4–8 related search words a future task might use for it: synonyms, Korean and English forms, the general topic (e.g. 'iOS 빌드 실패' → 'Xcode, 시뮬레이터, build error, 캐시, 빌드 오류'). Short words only.",
     "4. about: for each piece, 0–3 named things it is about (tools, services, libraries, products, projects), in their usual spelling (e.g. 'Supabase', 'Next.js', 'GitHub').",
     "5. kind: fix a wrong kind (rule, preference, decision, fact, procedure, lesson).",
@@ -155,7 +155,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
     ...(learn || patterns
       ? [
           "",
-          `Each ${learn && patterns ? "learn or pattern" : learn ? "learn" : "pattern"} piece: one short Korean sentence ending in ~요, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved; the user decides).`,
+          `Each ${learn && patterns ? "learn or pattern" : learn ? "learn" : "pattern"} piece: one short Korean sentence ending in ~요, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved: the user's own stays).`,
         ]
       : []),
     "",
@@ -200,9 +200,10 @@ const words = (v: unknown, max: number, len: number) =>
 
 /** keep pending ones, and the last answers so the same thing isn't asked again */
 const keepConflicts = (l: MemoryConflict[]) => [...l.filter((c) => !c.done), ...l.filter((c) => c.done).slice(-40)];
-/** 확인 필요: put one in front of the user (the quiet pass and 교차 검토 both ask this way) */
-export const queueConflict = (space: SpaceId, c: Omit<MemoryConflict, "id" | "at" | "space">, at = Date.now()) =>
-  setState("memoryConflicts", (l) => keepConflicts([...(l ?? []), { id: uid("c"), at, space, ...c }]));
+/** a learned piece said otherwise than the user's own: the user's own stays, nothing is asked. Kept on
+ *  record so the same thing isn't learned again. */
+const recordConflict = (space: SpaceId, c: Omit<MemoryConflict, "id" | "at" | "space">, at = Date.now()) =>
+  setState("memoryConflicts", (l) => keepConflicts([...(l ?? []), { id: uid("c"), at, space, ...c, done: "mine" }]));
 /** the same new text was already asked about for this piece (and not taken) */
 export const askedBefore = (mine: string, text: string) => (state.memoryConflicts ?? []).some((c) => c.mine === mine && !!c.text && flat(c.text) === flat(text) && c.done !== "new");
 
@@ -214,14 +215,14 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
   const now = Date.now();
   const conflicts = () => state.memoryConflicts ?? [];
   const ask = (c: Omit<MemoryConflict, "id" | "at" | "space">) => {
-    queueConflict(seen.space, c, now);
+    recordConflict(seen.space, c, now);
     n.held++;
   };
-  /** a piece already kept says otherwise than the user's own: out of use until the user picks */
+  /** a piece already kept says otherwise than the user's own: it goes, the user's own stays */
   const hold = (user: Memory, other: Memory) => {
     if (!userOwned(user) || userOwned(other) || other.invalidAt || user.invalidAt) return;
     if (conflicts().some((c) => c.mine === user.id && c.theirs === other.id)) return;
-    retireMemory(other.id, undefined, "내 메모리와 달라서 확인 중이에요");
+    retireMemory(other.id, undefined, "내 메모리와 달라서 내렸어요");
     ask({ mine: user.id, theirs: other.id });
   };
   for (const g of plan.merge ?? []) {
@@ -320,51 +321,12 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
   return n;
 }
 
-// ───────────── 확인 필요: the user picks
-
-/** what waits for the user in this space (their piece still there, and the other one too) */
-export const conflictsIn = (space: SpaceId) =>
-  (state.memoryConflicts ?? []).filter((c) => !c.done && c.space === space && state.memory.some((m) => m.id === c.mine && isLive(m)) && (c.text || state.memory.some((m) => m.id === c.theirs)));
-
-const settle = (id: string, done: MemoryConflict["done"]) => setState("memoryConflicts", (l) => keepConflicts((l ?? []).map((c) => (c.id === id ? { ...c, done } : c))));
-
-/** keep the user's own piece: the learned one stays out */
-export function keepMine(id: string) {
-  const c = (state.memoryConflicts ?? []).find((x) => x.id === id && !x.done);
-  if (!c) return;
-  if (c.theirs) setState("memory", (m) => m.id === c.theirs, { why: "내 메모리와 달라서 내렸어요" });
-  settle(id, "mine");
-}
-
-/** use the learned piece instead: the user's own is retired (they confirmed), replaced by it.
- *  Returns an undo: yours back as it was, the new one gone again (held, or never saved), the question open again. */
-export function useNew(id: string): (() => void) | undefined {
-  const c = (state.memoryConflicts ?? []).find((x) => x.id === id && !x.done);
-  if (!c) return;
-  const before = new Map(state.memory.map((m) => [m.id, JSON.stringify(m)]));
-  const user = state.memory.find((m) => m.id === c.mine && isLive(m));
-  // retired first, so the new piece isn't counted as the same thing again
-  if (user) retireMemory(user.id, undefined, "새 메모리로 바꿨어요");
-  let next = c.theirs;
-  if (c.theirs) restoreMemory(c.theirs);
-  else if (c.text)
-    next =
-      addMemory(c.text, c.scope ?? "space", { space: c.space, project: c.project, kind: c.kind, sources: c.sources, taskId: c.sources?.[0], source: "ondra", by: "agent", importance: 3, quiet: true }) ?? undefined;
-  if (user && next) setState("memory", (m) => m.id === user.id, { supersededBy: next });
-  settle(id, "new");
-  // what this changed: pieces added, and pieces whose fields changed (put back whole)
-  const added = new Set(state.memory.filter((m) => !before.has(m.id)).map((m) => m.id));
-  const changed = new Map(
-    state.memory.filter((m) => before.has(m.id) && before.get(m.id) !== JSON.stringify(m)).map((m) => [m.id, JSON.parse(before.get(m.id)!) as Memory]),
-  );
-  return () => {
-    setState("memory", (l) => l.filter((m) => !added.has(m.id)).map((m) => changed.get(m.id) ?? m));
-    // asked again, back in its place among the open ones
-    setState("memoryConflicts", (l) => {
-      const all = (l ?? []).map((x) => (x.id === id ? { ...x, done: undefined } : x));
-      return [...all.filter((x) => !x.done).sort((a, b) => a.at - b.at), ...all.filter((x) => x.done)];
-    });
-  };
+/** questions left from before (memory used to ask): the user's own stays in each */
+function settleOpen() {
+  const open = (state.memoryConflicts ?? []).filter((c) => !c.done);
+  if (!open.length) return;
+  for (const c of open) if (c.theirs) setState("memory", (m) => m.id === c.theirs, { why: "내 메모리와 달라서 내렸어요" });
+  setState("memoryConflicts", (l) => keepConflicts((l ?? []).map((c) => (c.done ? c : { ...c, done: "mine" as const }))));
 }
 
 /**
@@ -498,6 +460,7 @@ async function growSkills(only?: SpaceId): Promise<number> {
 
 /** Every 10 minutes: run the pass when nothing is working (and it's due). */
 export function startTidy() {
+  settleOpen();
   const tick = () => {
     const busy = state.tasks.some((t) => t.status === "running") || state.captain.some((m) => m.pending);
     if (!busy && !document.hidden) void tidyMemory();
@@ -512,7 +475,7 @@ export const tidyParts = (x: { learned?: number; merged?: number; retired?: numb
     x.learned && tr("새 메모리 {n}", { n: x.learned }),
     x.merged && tr("병합 {n}", { n: x.merged }),
     x.retired && tr("내림 {n}", { n: x.retired }),
-    x.held && tr("물어봄 {n}", { n: x.held }),
+    x.held && tr("내 것 유지 {n}", { n: x.held }),
     x.keyed && tr("관련어 {n}", { n: x.keyed }),
   ].filter((p): p is string => !!p);
 
