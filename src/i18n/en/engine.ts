@@ -165,6 +165,7 @@ export default {
   "이어서 작업 중": "Resuming",
   "시작 중": "Starting",
   "웹 검색 중": "Searching the web",
+  "웹 검색함": "Searched the web",
   "웹 페이지 읽는 중": "Reading a web page",
   "테스트 실행 중": "Running tests",
   "서브에이전트 결과 확인 중": "Checking subagent results",

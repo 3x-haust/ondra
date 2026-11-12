@@ -1,6 +1,6 @@
 // Main: the conversation with the one who splits your requests into jobs.
 import { feedbackCommands } from "../ui/Feedback";
-import { noteText, nowText } from "../engine/describe";
+import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
@@ -18,7 +18,7 @@ import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
-import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
+import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -190,25 +190,63 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
   );
 }
 
+const STEP_ICON: Record<StepKind, string> = { jobs: "list", web: "globe", read: "read", search: "search", shell: "shell" };
+
+/** one of main's steps as a row, the way a job's tool rows say it: icon, verb, name ("읽음 SKILL.md") */
+function StepRow(props: { text: string; live?: boolean; tail?: string }) {
+  const p = () => stepParts(props.text);
+  return (
+    <span class="step-row">
+      <Icon name={p().kind ? STEP_ICON[p().kind!] : "check"} size={14} />
+      <span class="step-verb" classList={{ shimmer: !!props.live }}>{p().verb}</span>
+      <Show when={p().name}><span class="step-name" classList={{ cmd: p().kind === "shell" }}>{p().name}</span></Show>
+      <Show when={props.tail}><span class="step-tail">· {props.tail}</span></Show>
+    </span>
+  );
+}
+
+/** what main's steps did, counted per kind, as a job's work line says it ("살펴봄 · 명령 2개 실행함") */
+function stepsSummary(steps: string[]): string {
+  const kinds = steps.map((s) => stepParts(s).kind);
+  const runs = kinds.filter((k) => k === "shell").length;
+  return [...(kinds.some((k) => k !== "shell") ? [t("살펴봄")] : []), ...(runs ? [t("명령 {n}개 실행함", { n: runs })] : [])].join(" · ");
+}
+
+/** the opened line: reasoning dim, each step one row, in the order they came */
+function StepLines(props: { lines: string[] }) {
+  return (
+    <For each={props.lines}>
+      {(line) => (
+        <Show when={line.startsWith(STEP_MARK)} fallback={<p class="reply-thought-line">{line.replace(/^\*\*(.+)\*\*$/, "$1")}</p>}>
+          <StepRow text={line.slice(STEP_MARK.length)} />
+        </Show>
+      )}
+    </For>
+  );
+}
+
 /**
- * "생각하는 중 · 12초": opened, what the model reasons and what it has looked at so far
- * stream under it as they come; closed, only the line shows (what it looked at is inside).
+ * While main answers: "생각하는 중 · 12초", or the step it is on ("읽는 중 SKILL.md · 12초").
+ * Opened, what it reasons and the steps it took stream under it in order; closed, only the line.
  */
-function Thinking(props: { m: CaptainMessage; label: string }) {
+function Thinking(props: { m: CaptainMessage }) {
   const thought = () => mainThought(chatKey(props.m.space, props.m.project)).trim();
   const steps = () => props.m.steps ?? [];
   const has = () => !!thought() || steps().length > 0;
+  const time = () => short(soon() - props.m.at);
   const [open, setOpen] = createSignal(false);
   let box: HTMLDivElement | undefined;
   // it follows the newest line while the reader is at the end of it
   let atEnd = true;
   createEffect(on([thought, () => steps().length], () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
-  // reasoning summaries come as "**Heading**" lines between paragraphs: headings, no blank gaps
-  const lines = () => thought().split("\n").map((l) => l.trim()).filter(Boolean);
+  // the steps are in the reasoning where they happened; before any reasoning comes, the steps alone
+  const lines = () => (thought() ? thought().split("\n").map((l) => l.trim()).filter(Boolean) : steps().map((s) => STEP_MARK + s));
   return (
     <div class="reply-think" classList={{ open: open() && has() }}>
-      <button type="button" class="reply-thinking shimmer" disabled={!has()} aria-expanded={open()} onClick={() => setOpen(!open())}>
-        {props.label}
+      <button type="button" class="reply-thinking" disabled={!has()} aria-expanded={open()} onClick={() => setOpen(!open())}>
+        <Show when={props.m.step} fallback={<span class="shimmer">{t("생각하는 중")} · {time()}</span>}>
+          {(s) => <StepRow text={s()} live tail={time()} />}
+        </Show>
         <Show when={has()}>
           <Icon name="chevron" size={12} class="reply-think-chev" />
         </Show>
@@ -219,17 +257,27 @@ function Thinking(props: { m: CaptainMessage; label: string }) {
           ref={(el) => ((box = el), queueMicrotask(() => (el.scrollTop = el.scrollHeight)))}
           onScroll={(e) => (atEnd = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 24)}
         >
-          <For each={lines()}>
-            {(line) => {
-              const head = /^\*\*(.+)\*\*$/.exec(line);
-              return head ? <b class="reply-thought-head">{head[1]}</b> : <p class="reply-thought-line">{line}</p>;
-            }}
-          </For>
-          <Show when={steps().length}>
-            <ul class="reply-steps">
-              <For each={steps()}>{(s) => <li><Icon name="check" size={12} />{noteText(s)}</li>}</For>
-            </ul>
-          </Show>
+          <StepLines lines={lines()} />
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/** an answered reply that looked things up: one quiet line above it ("살펴봄 · 12초"), opened, each step */
+function Worked(props: { m: CaptainMessage }) {
+  const [open, setOpen] = createSignal(false);
+  const steps = () => props.m.steps ?? [];
+  const label = () => [stepsSummary(steps()), ...(props.m.took && props.m.took >= 1000 ? [short(props.m.took)] : [])].join(" · ");
+  return (
+    <div class="reply-think worked" classList={{ open: open() }}>
+      <button type="button" class="reply-thinking" aria-expanded={open()} onClick={() => setOpen(!open())}>
+        {label()}
+        <Icon name="chevron" size={12} class="reply-think-chev" />
+      </button>
+      <Show when={open()}>
+        <div class="reply-thought">
+          <StepLines lines={steps().map((s) => STEP_MARK + s)} />
         </div>
       </Show>
     </div>
@@ -262,7 +310,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
       <div class="reply-body">
         <Switch>
           <Match when={props.m.pending}>
-            <Thinking m={props.m} label={`${props.m.step ? noteText(props.m.step) : t("생각하는 중")} · ${short(soon() - props.m.at)}`} />
+            <Thinking m={props.m} />
           </Match>
           <Match when={props.m.error}>
             {(err) => (
@@ -280,7 +328,8 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
             )}
           </Match>
           <Match when={true}>
-            {/* the jobs main looked up show on the thinking line while it answers ("작업 살펴보는 중 · …"); the answer stands alone */}
+            {/* what it looked up while answering stays as one quiet line above the answer */}
+            <Show when={props.m.steps?.length}><Worked m={props.m} /></Show>
             <Show when={props.m.reply}><p class="reply-line">{props.m.reply}</p></Show>
             <Show when={!props.m.reply && !routes().length}>
               <div class="reply-error">

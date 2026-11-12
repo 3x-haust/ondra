@@ -1878,14 +1878,17 @@
 .reply-think.open .reply-think-chev {
   transform: rotate(90deg);
 }
+/* opened: indented under the line (no rule beside it); reasoning dim, each step one row */
 .reply-thought {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
   margin: var(--s-6) 0 0;
-  padding: 0 0 0 var(--s-12);
+  padding: 0 0 0 var(--s-20);
   max-height: 260px;
   overflow-y: auto;
-  border-left: 2px solid var(--line-soft);
   color: var(--ink-3);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   line-height: var(--lh-md);
   overflow-wrap: anywhere;
   animation: think-open var(--dur-fast) ease-out;
@@ -1893,33 +1896,46 @@
 .reply-thought-line {
   margin: 0;
 }
-.reply-thought-head {
-  display: block;
+/* a step, as a job's tool row says it: icon, verb, name */
+.step-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+  max-width: 100%;
+  animation: think-open var(--dur-fast) ease-out;
+}
+.step-row > .icon {
+  flex-shrink: 0;
+  color: var(--ink-4);
+}
+.step-verb {
+  flex-shrink: 0;
   color: var(--ink-2);
-  font-weight: var(--fw-medium);
 }
-.reply-thought-head:not(:first-child) {
-  margin-top: var(--s-6);
+.step-name,
+.step-tail {
+  min-width: 0;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.reply-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  margin: var(--s-8) 0 0;
-  padding: 0;
-  list-style: none;
+.step-tail {
+  flex-shrink: 0;
+  margin-left: calc(-1 * var(--s-4));
+}
+.step-name.cmd {
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+}
+/* an answer's steps, folded above it: a quiet line, not the live one */
+.reply-think.worked > .reply-thinking {
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }
-.reply-steps > li {
-  display: flex;
-  align-items: center;
-  gap: var(--s-6);
-  min-width: 0;
-  animation: think-open var(--dur-fast) ease-out;
-}
-.reply-steps:first-child {
-  margin-top: 0;
+.reply-think.worked > .reply-thinking:hover {
+  color: var(--ink-2);
 }
 @keyframes think-open {
   from {

@@ -146,6 +146,31 @@ export function noteText(text: string): string {
 }
 
 /**
+ * One of main's steps ("파일 읽음 · SKILL.md", as stored) as a row: what kind it is (its icon),
+ * the verb, and the name it touched, the way a job's tool rows say it ("읽음 SKILL.md").
+ */
+export type StepKind = "jobs" | "web" | "read" | "search" | "shell";
+const STEP_FORMS: { re: RegExp; kind: StepKind; verb: [string, string] }[] = [
+  { re: /^작업 (찾는 중|찾음) · ([\s\S]+)$/, kind: "jobs", verb: ["찾는 중", "찾음"] },
+  { re: /^작업 (살펴보는 중|살펴봄) · ([\s\S]+)$/, kind: "jobs", verb: ["살펴보는 중", "살펴봄"] },
+  { re: /^작업 목록 (보는 중|봄)()$/, kind: "jobs", verb: ["작업 목록 보는 중", "작업 목록 봄"] },
+  { re: /^웹에서 (찾는 중|찾음) · ([\s\S]+)$/, kind: "web", verb: ["웹 검색 중", "웹 검색함"] },
+  { re: /^페이지 (읽는 중|읽음) · ([\s\S]+)$/, kind: "web", verb: ["읽는 중", "읽음"] },
+  { re: /^파일 (읽는 중|읽음) · ([\s\S]+)$/, kind: "read", verb: ["읽는 중", "읽음"] },
+  { re: /^파일 (찾는 중|찾음) · ([\s\S]+)$/, kind: "search", verb: ["찾는 중", "찾음"] },
+  { re: /^명령 (실행 중|실행함) · ([\s\S]+)$/, kind: "shell", verb: ["실행 중", "실행함"] },
+];
+export function stepParts(text: string): { kind: StepKind | undefined; verb: string; name: string; busy: boolean } {
+  for (const f of STEP_FORMS) {
+    const m = text.match(f.re);
+    if (!m) continue;
+    const busy = m[1].endsWith("중");
+    return { kind: f.kind, verb: t(f.verb[busy ? 0 : 1]), name: m[2], busy };
+  }
+  return { kind: undefined, verb: noteText(text), name: "", busy: false };
+}
+
+/**
  * A title that fits in `max` characters (80: views truncate it with CSS), cut where a
  * word ends with "…" (never mid-word unless one word is longer than half of it).
  */

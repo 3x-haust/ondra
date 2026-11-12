@@ -113,6 +113,8 @@ export const captainAgent = agentOf;
 /** what main reasons while it answers, per chat; cleared when the next answer starts */
 const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
 export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
+/** a line of main's reasoning that is one of its steps ("\0step:파일 읽음 · a.md") */
+export const STEP_MARK = "\u0000step:";
 /** the answer main is writing, per chat, shown (with its board drawing) before it is done */
 const [draftsAll, setDraftsAll] = createSignal<Record<string, { id: string; text: string }>>({});
 /** which reply each chat is answering now */
@@ -379,7 +381,7 @@ async function pump(space: string) {
         isolateOf.set(space, next.isolate);
         answering.set(space, next.replyId ?? "");
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
-        setState("captain", (m) => m.id === next.replyId, { pending: false, routes, reply, at: Date.now() });
+        setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
         keepResult(next.replyId);
         if (pj(space)) reportUp(space);
@@ -604,7 +606,11 @@ function noteStep(space: string, ev: any) {
   const m = [...state.captain].reverse().find((x) => inChat(x, space) && x.pending);
   if (!m) return;
   if (ev.type === "tool_execution_start") setState("captain", (x) => x.id === m.id, "step", step);
-  else setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-6) }));
+  else {
+    setState("captain", (x) => x.id === m.id, (x) => ({ step: undefined, steps: x.steps?.includes(step) ? x.steps : [...(x.steps ?? []), step].slice(-30) }));
+    // in the reasoning too, where it happened, so the opened line reads in order
+    addThought(space, `\n\n${STEP_MARK}${step}\n\n`);
+  }
 }
 const stepName = (s: unknown, n = 24) => {
   const x = String(s ?? "").replace(/\s+/g, " ").trim();

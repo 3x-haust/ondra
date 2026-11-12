@@ -7736,10 +7736,10 @@ textarea { resize: none !important; field-sizing: content; }
 /* a run of work lines sits together; the thread's 24px gap stays around it */
 .thread-inner > .tool + .tool { margin-top: -22px; }
 .tool.explore.open > .tool-row .tool-chev { opacity: 1; transform: rotate(90deg); }
+/* opened: indented under the row, no rule beside it */
 .explore-body {
   margin: 2px 0 4px 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+  padding-left: 13px;
 }
 
 /* pictures the agent looked at ("이미지 2개 확인함"): the pictures under the row, small, open big on click */
