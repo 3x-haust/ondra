@@ -434,6 +434,8 @@ export interface CaptainMessage {
   step?: string;
   /** the steps main took for this reply (job lookups), as noteText() lines */
   steps?: string[];
+  /** how long the answer took, from the request to the reply */
+  took?: number;
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson";

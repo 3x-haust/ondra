@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { setState } from "../state/store";
-import { computerStep, cutTitle, describeBrowser as b, describeComputer, mainCommand, noteText, nowText, unwrapCommand, describeCommand as d } from "./describe";
+import { computerStep, cutTitle, describeBrowser as b, describeComputer, mainCommand, noteText, nowText, unwrapCommand, stepParts, describeCommand as d } from "./describe";
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
@@ -258,5 +258,20 @@ describe("computer steps", () => {
   it("stores the step going on in Korean, as a task's now line", () => {
     expect(describeComputer("scroll", "up").nowKo).toBe("스크롤 중 위로");
     expect(describeComputer("look").nowKo).toBe("화면 보는 중");
+  });
+});
+
+describe("stepParts", () => {
+  it("reads main's stored steps as a job's tool rows say them", () => {
+    setState("settings", "language", "ko");
+    expect(stepParts("파일 읽음 · SKILL.md")).toEqual({ kind: "read", verb: "읽음", name: "SKILL.md", busy: false });
+    expect(stepParts("파일 읽는 중 · SKILL.md")).toMatchObject({ verb: "읽는 중", busy: true });
+    expect(stepParts("명령 실행함 · pnpm test")).toMatchObject({ kind: "shell", verb: "실행함", name: "pnpm test" });
+    expect(stepParts("웹에서 찾음 · marked cjk")).toMatchObject({ kind: "web", verb: "웹 검색함", name: "marked cjk" });
+    expect(stepParts("작업 살펴봄 · 리디자인")).toMatchObject({ kind: "jobs", verb: "살펴봄", name: "리디자인" });
+    expect(stepParts("작업 목록 봄")).toMatchObject({ kind: "jobs", verb: "작업 목록 봄", name: "" });
+  });
+  it("leaves a line it doesn't know as written", () => {
+    expect(stepParts("뭔가 다른 일")).toMatchObject({ kind: undefined, verb: "뭔가 다른 일", name: "" });
   });
 });
