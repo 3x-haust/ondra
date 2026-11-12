@@ -5,7 +5,8 @@ fails. `web.py` is in this skill's folder; `R` is the research folder.
 
 ## Queries
 
-Each sub-question gets 4–8 different queries, not the same one reworded:
+Over its rounds a sub-question usually takes several queries (a few per
+round), each from a different angle, not the same one reworded:
 
 | aim | query shape |
 |---|---|
@@ -18,9 +19,9 @@ Each sub-question gets 4–8 different queries, not the same one reworded:
 
 - Put the year in queries about anything current ("2026", "2025..2026").
 - Search in the topic's own language first: Korean for Korean markets,
-  laws, companies and communities; English for global tech. Then 1–2
-  queries in the other language, in the words people there use.
-- A comparison: one query per item, never "best X" lists alone.
+  laws, companies and communities; English for global tech. Then a query or
+  two in the other language, in the words people there use.
+- A comparison: one query per item; "best X" lists alone miss items.
 
 ## Searching when web_search can't
 
@@ -107,7 +108,7 @@ conflict.
   missing, what conflicts, and the **leads**: things seen but not chased
   (`lead: <what> — why: <why it matters> — query: <next query>`). Check a new
   lead against every lead already listed, chased or dropped, before chasing it.
-- Stop a sub-question when its "done when" holds; or after two rounds with no
-  new facts and no new leads; or after three rounds (then "찾지 못함").
+- Stop a sub-question when its "done when" holds, or when rounds stop turning
+  up new facts and leads (then "찾지 못함").
 - Stop the whole run when every sub-question stopped, or the search budget is
   spent; list the leads left in "확실하지 않은 것" only if they change the answer.
