@@ -4,6 +4,7 @@ import { Markdown } from "./Markdown";
 import { Sheet } from "./Sheet";
 import "./releaseNotes.css";
 import { lang, t } from "../i18n";
+import { isBeta } from "../lib/beta";
 
 const day = (t?: number) => (t ? new Date(t).toLocaleDateString(lang() === "en" ? "en-US" : "ko-KR", { year: "numeric", month: "long", day: "numeric" }) : "");
 
@@ -36,6 +37,7 @@ export function ReleaseNotes(props: { current: string }) {
               <section class="rn-entry" data-version={r.version}>
                 <header class="rn-head">
                   <b>{r.version}</b>
+                  <Show when={isBeta(r.version)}><span class="beta-chip">{t("베타")}</span></Show>
                   <Show when={r.version === props.current}><span class="rn-now">{t("현재 버전")}</span></Show>
                   <span class="rn-date">{day(r.date)}</span>
                 </header>

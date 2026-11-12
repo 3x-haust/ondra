@@ -44,6 +44,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { available, checkedAt, checkUpdate, freshen, installNow, jobsWorking, restartQueued, restartWhenIdle, updateProgress, updateReady, updateStatus } from "../engine/update";
 import { setNotesFor } from "../engine/releaseNotes";
 import { version as appVersion } from "../../package.json";
+import { isBeta } from "../lib/beta";
 import { LogIn } from "lucide-solid";
 
 /** a workspace folder as shown: "~" is the home folder */
@@ -268,7 +269,7 @@ function UpdateRow() {
   };
   const busy = () => updateStatus() === "installing";
   return (
-    <Row title={`Ondra ${version() ?? appVersion}`}>
+    <Row title={`Ondra ${version() ?? appVersion}${isBeta(version() ?? appVersion) ? ` ${t("베타")}` : ""}`}>
       <span class="set-note" title={checkedAt() ? ago(checkedAt()) : undefined}>{note()}</span>
       <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>{t("릴리스 노트")}</button>
       <Show when={!busy()}>
