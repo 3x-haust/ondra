@@ -132,6 +132,11 @@ describe("skill router", () => {
     expect(router().forTool("bash", { command: "browse open https://example.com" })?.skill.name).toBe("browser-use");
   });
 
+  it("offers the web guides for web UI code, not for other work", () => {
+    expect(router().forMessage("설정 화면 모달을 팝오버로 바꾸고 접근성도 챙겨줘").map((s) => s.name)).toContain("modern-web-guidance");
+    expect(router().forMessage("README 오타 고쳐줘").map((s) => s.name)).not.toContain("modern-web-guidance");
+  });
+
   it("leaves ordinary work alone", () => {
     const r = router();
     expect(r.forTool("bash", { command: "pnpm install && git status" })).toBeUndefined();
