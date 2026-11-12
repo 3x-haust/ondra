@@ -21,7 +21,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
   iOS or Android → device-use
 - research with sources, a survey or comparison → deep-research
 - a report document, a chart or a diagram → visual-report
-- a supplied design (Figma) → mimikyu; a new look → web-design
+- a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
+  (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
   → motion-graphics
 - writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
