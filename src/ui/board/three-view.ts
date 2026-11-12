@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Material, Part, Tone } from "./parse";
 import { short } from "./names";
 
@@ -45,6 +46,7 @@ function outline(p: Part): THREE.BufferGeometry | undefined {
     default: return undefined;
   }
 }
+const sizeNow = new THREE.Vector2();
 const EDGE = new THREE.LineBasicMaterial({ color: "#16181b", transparent: true, opacity: 0.6 });
 
 const key = (p: Part) => JSON.stringify([p.shape, p.dims, p.at, p.rot, p.look]);
@@ -144,6 +146,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   scene.environmentIntensity = 0.55;
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
+  // follows the hand closely, with only a short glide after letting go
+  controls.dampingFactor = 0.2;
   controls.enablePan = false;
 
   type Shown = { key: string; mesh: THREE.Mesh; from: number };
@@ -160,7 +164,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     const now = performance.now();
     let moving = controls.update();
     let next = Infinity;
-    for (const s of shown) {
+    if (!merged) for (const s of shown) {
       const t = s.from <= now ? Math.min(1, (now - s.from) / 420) : 0;
       if (t === 1 && s.mesh.scale.x === 1 && s.mesh.visible) continue;
       s.mesh.scale.setScalar(Math.max(0.0001, ease(t)));
@@ -169,6 +173,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       if (t === 0) next = Math.min(next, s.from);
       if (t === 1) shadowStale = true;
     }
+    // built and still: draw it as a handful of merged shapes from now on
+    if (!merged && !moving && next === Infinity && shown.length) consolidate();
     if (cssW && cssH) {
       const sh = sharedRenderer();
       // take the live canvas over; the board that had it keeps a picture of its last frame
@@ -205,7 +211,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     for (const i of order) {
       const s = shown[i];
       const name = short(String(s.mesh.userData.label ?? ""));
-      if (!name || named.has(name) || !s.mesh.visible || s.mesh.scale.x < 0.6 || want.length >= 8) continue;
+      if (!name || named.has(name) || (!merged && !s.mesh.visible) || s.mesh.scale.x < 0.6 || want.length >= 8) continue;
       named.add(name);
       want.push({ i, name, p: toScreen(s.mesh.position, w, h) });
     }
@@ -275,7 +281,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     const { renderer } = sh;
     scene.environment = sh.env;
     if (renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
-    const size = renderer.getSize(new THREE.Vector2());
+    const size = renderer.getSize(sizeNow);
     if (size.x !== cssW || size.y !== cssH) renderer.setSize(cssW, cssH, false);
     renderer.shadowMap.needsUpdate = shadowStale;
     shadowStale = false;
@@ -378,8 +384,73 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       const m = s.mesh.material as THREE.MeshStandardMaterial;
       m.emissive.set(i === selected ? cssColor("--accent") : "#000000");
       m.emissiveIntensity = i === selected ? 0.35 : 0;
+      // over the merged model, the picked part is drawn again on its own, lit, just in front
+      m.polygonOffset = i === selected;
+      m.polygonOffsetFactor = m.polygonOffsetUnits = -2;
+      if (merged) s.mesh.visible = i === selected;
     });
     wake();
+  };
+
+  /**
+   * Each part is its own draw (and its outline another), a few hundred for a detailed
+   * model, which is what makes turning it stutter in WebKit. Once the model is built
+   * and still, its parts are merged by look into a handful of shapes and one outline;
+   * the parts stay, unseen, for picking and for the next change.
+   */
+  let merged: THREE.Group | null = null;
+  let mergedMats: THREE.Material[] = [];
+  const unmerge = () => {
+    if (!merged) return;
+    scene.remove(merged);
+    merged.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    mergedMats.forEach((m) => m.dispose());
+    merged = null;
+    mergedMats = [];
+    for (const s of shown) s.mesh.visible = true;
+    shadowStale = true;
+  };
+  const consolidate = () => {
+    if (merged || shown.length < 12) return;
+    const looks = new Map<string, { mat: THREE.MeshStandardMaterial; geos: THREE.BufferGeometry[] }>();
+    const lines: THREE.BufferGeometry[] = [];
+    const only = (g: THREE.BufferGeometry, keep: string[]) => { for (const n of Object.keys(g.attributes)) if (!keep.includes(n)) g.deleteAttribute(n); return g; };
+    for (const s of shown) {
+      s.mesh.updateMatrixWorld(true);
+      const m = s.mesh.material as THREE.MeshStandardMaterial;
+      const k = `${m.color.getHexString()}|${m.metalness}|${m.roughness}|${m.opacity}`;
+      let l = looks.get(k);
+      if (!l) {
+        const mat = m.clone();
+        mat.emissive.set("#000000");
+        mat.emissiveIntensity = 0;
+        mat.polygonOffset = false;
+        looks.set(k, (l = { mat, geos: [] }));
+      }
+      const g = only(s.mesh.geometry.index ? s.mesh.geometry.toNonIndexed() : s.mesh.geometry.clone(), ["position", "normal"]);
+      l.geos.push(g.applyMatrix4(s.mesh.matrixWorld));
+      const edge = s.mesh.children[0] as THREE.LineSegments | undefined;
+      if (edge) lines.push(only(edge.geometry.clone(), ["position"]).applyMatrix4(s.mesh.matrixWorld));
+    }
+    const group = new THREE.Group();
+    let ok = true;
+    for (const l of looks.values()) {
+      const g = mergeGeometries(l.geos);
+      l.geos.forEach((x) => x.dispose());
+      mergedMats.push(l.mat);
+      if (!g) { ok = false; continue; }
+      const mesh = new THREE.Mesh(g, l.mat);
+      mesh.castShadow = true;
+      group.add(mesh);
+    }
+    const lg = lines.length ? mergeGeometries(lines) : null;
+    lines.forEach((x) => x.dispose());
+    if (lg) group.add(new THREE.LineSegments(lg, EDGE));
+    merged = group;
+    if (!ok) return unmerge();
+    scene.add(group);
+    shown.forEach((s, i) => (s.mesh.visible = i === selected));
+    shadowStale = true;
   };
 
   // a click (not a drag) picks the part under the pointer
@@ -410,6 +481,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   return {
     set(parts, delays) {
       const now = performance.now();
+      // a change to the model: back to separate parts until it is still again
+      if (parts.length !== shown.length || parts.some((p, i) => shown[i]?.key !== key(p))) unmerge();
       const next: Shown[] = parts.map((p, i) => {
         const old = shown[i];
         if (old && old.key === key(p)) return old;
@@ -443,6 +516,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       ro.disconnect();
       io.disconnect();
       controls.dispose();
+      unmerge();
       for (const s of shown) drop(s.mesh);
       for (const g of shapes.values()) { g.geo.dispose(); g.edges?.dispose(); }
       clearTimeout(later);
