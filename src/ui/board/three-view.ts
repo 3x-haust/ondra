@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Material, Part, Tone } from "./parse";
 
 const LOOKS: Record<Material, { color: string; metal: number; rough: number; opacity?: number }> = {
@@ -14,7 +15,7 @@ const LOOKS: Record<Material, { color: string; metal: number; rough: number; opa
   gold: { color: "#d4a73c", metal: 1, rough: 0.28 },
   copper: { color: "#c57b4f", metal: 1, rough: 0.35 },
   rubber: { color: "#2b2b2e", metal: 0, rough: 0.9 },
-  plastic: { color: "#e8e8ea", metal: 0, rough: 0.45 },
+  plastic: { color: "#34373c", metal: 0, rough: 0.5 },
   stone: { color: "#9b958c", metal: 0, rough: 0.95 },
   paper: { color: "#f4f1ea", metal: 0, rough: 1 },
 };
@@ -23,7 +24,8 @@ const TONE_VAR: Record<Tone, string> = { ink: "--ink-2", quiet: "--ink-3", accen
 function geometry(p: Part): THREE.BufferGeometry {
   const [a, b, c] = p.dims;
   switch (p.shape) {
-    case "box": return new THREE.BoxGeometry(a, b, c);
+    // corners softened a little, as made things have
+    case "box": return new RoundedBoxGeometry(a, b, c, 2, Math.min(a, b, c) * 0.05);
     case "cylinder": return new THREE.CylinderGeometry(c ?? a, a, b, 40);
     case "cone": return new THREE.ConeGeometry(a, b, 40);
     case "sphere": return new THREE.SphereGeometry(a, 40, 24);
@@ -32,6 +34,18 @@ function geometry(p: Part): THREE.BufferGeometry {
   }
 }
 
+/** the drawn outline of a shape: its edges as thin dark lines, so it reads like an illustration */
+function outline(p: Part): THREE.BufferGeometry | undefined {
+  const [a, b, c] = p.dims;
+  switch (p.shape) {
+    case "box": return new THREE.EdgesGeometry(new THREE.BoxGeometry(a, b, c));
+    case "cylinder": return new THREE.EdgesGeometry(new THREE.CylinderGeometry(c ?? a, a, b, 40), 30);
+    case "cone": return new THREE.EdgesGeometry(new THREE.ConeGeometry(a, b, 40), 30);
+    default: return undefined;
+  }
+}
+const EDGE = new THREE.LineBasicMaterial({ color: "#16181b", transparent: true, opacity: 0.6 });
+
 const key = (p: Part) => JSON.stringify([p.shape, p.dims, p.at, p.rot, p.look]);
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -39,8 +53,16 @@ export type ThreeView = {
   /** show these parts; each new one appears after its delay (ms), or at once when delays are absent */
   set(parts: Part[], delays?: number[]): void;
   select(i: number | null): void;
+  /** draw again: after the board was moved in the page (WebKit clears a moved canvas) */
+  wake(): void;
   dispose(): void;
 };
+
+/** a part's name as a tag: the name before any explanation ("RAM — 작업 공간" → "RAM"), kept short */
+export function short(label: string): string {
+  const name = label.split(/\s+[—–-]\s+|:\s|\(/)[0].trim();
+  return name.length > 18 ? name.slice(0, 17) + "…" : name;
+}
 
 export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void }): ThreeView {
   const css = getComputedStyle(host);
@@ -49,6 +71,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   host.appendChild(renderer.domElement);
   // each part's name beside it, joined to it by a thin line; kept next to the part as the model turns
   const labels = document.createElement("div");
@@ -62,9 +86,17 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.01, 1000);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a90, 0.8));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
   sun.position.set(4, 7, 5);
-  scene.add(sun);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.radius = 4;
+  scene.add(sun, sun.target);
+  // no floor, only the soft shadow the model casts on where a floor would be
+  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.22 }));
+  catcher.rotation.x = -Math.PI / 2;
+  catcher.receiveShadow = true;
+  scene.add(catcher);
   const fill = new THREE.DirectionalLight(0xffffff, 0.6);
   fill.position.set(-5, 2, -3);
   scene.add(fill);
@@ -73,6 +105,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const room = new RoomEnvironment();
   const envMap = pmrem.fromScene(room, 0.04).texture;
   scene.environment = envMap;
+  scene.environmentIntensity = 0.55;
   room.dispose?.();
   pmrem.dispose();
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -106,63 +139,81 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     v.copy(p).project(camera);
     return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
   };
+  /**
+   * The names of the parts that matter (the biggest, at most 8), as coloured tags in a
+   * row above the model and a row below it, each joined to its part by a thin line, so
+   * they never cover the model or each other. A part without a tag is still named on click.
+   */
   const placeLabels = () => {
     const w = host.clientWidth, h = host.clientHeight;
     leaders.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    const mid = toScreen(center, w, h);
-    const placed: { x: number; y: number; w: number; h: number }[] = [];
     const named = new Set<string>();
-    shown.forEach((s, i) => {
-      const name = String(s.mesh.userData.label ?? "");
+    const order = shown.map((_, i) => i).sort((a, b) => (shown[b].mesh.userData.size ?? 0) - (shown[a].mesh.userData.size ?? 0));
+    const want: { i: number; name: string; p: { x: number; y: number } }[] = [];
+    for (const i of order) {
+      const s = shown[i];
+      const name = short(String(s.mesh.userData.label ?? ""));
+      if (!name || named.has(name) || !s.mesh.visible || s.mesh.scale.x < 0.6 || want.length >= 8) continue;
+      named.add(name);
+      want.push({ i, name, p: toScreen(s.mesh.position, w, h) });
+    }
+    const on = new Set(want.map((x) => x.i));
+    for (const [i, l] of chips) if (!on.has(i)) { l.chip.hidden = true; l.line.setAttribute("visibility", "hidden"); l.dot.setAttribute("visibility", "hidden"); }
+    const tag = (i: number, name: string): Label => {
       let l = chips.get(i);
-      const show = s.mesh.visible && s.mesh.scale.x > 0.6 && !!name && !named.has(name);
-      if (name) named.add(name);
-      if (!show) {
-        if (l) l.chip.hidden = true, l.line.setAttribute("visibility", "hidden"), l.dot.setAttribute("visibility", "hidden");
-        return;
+      if (l) return l;
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `bd-chip bd-chip-${chips.size % 5}`;
+      chip.textContent = name;
+      chip.title = String(shown[i].mesh.userData.label ?? "");
+      chip.onclick = (e) => {
+        e.stopPropagation();
+        const r = host.getBoundingClientRect(), c = chip.getBoundingClientRect();
+        selected = i;
+        highlight();
+        opts.onPick(i, { x: c.left - r.left, y: c.bottom - r.top + 40 });
+      };
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("r", "2.5");
+      leaders.append(line, dot);
+      labels.appendChild(chip);
+      l = { chip, line, dot };
+      chips.set(i, l);
+      return l;
+    };
+    // a row: each tag over its part, pushed right past the one before, then back left from the edge
+    const lay = (row: typeof want, top: boolean) => {
+      const items = row.map((x) => {
+        const l = tag(x.i, x.name);
+        l.chip.hidden = false;
+        return { ...x, l, cw: l.chip.offsetWidth || x.name.length * 9 + 20, ch: l.chip.offsetHeight || 24, x: 0 };
+      }).sort((a, b) => a.p.x - b.p.x);
+      let edge = 8;
+      for (const it of items) { it.x = Math.max(edge, it.p.x - it.cw / 2); edge = it.x + it.cw + 8; }
+      edge = w - 8;
+      for (const it of [...items].reverse()) { it.x = Math.min(it.x, edge - it.cw); edge = it.x - 8; }
+      for (const it of items) {
+        const fits = it.x >= 4;
+        const y = top ? 10 : h - it.ch - 10;
+        it.l.chip.hidden = !fits;
+        it.l.line.setAttribute("visibility", fits ? "visible" : "hidden");
+        it.l.dot.setAttribute("visibility", fits ? "visible" : "hidden");
+        if (!fits) continue;
+        it.l.chip.style.transform = `translate(${Math.round(it.x)}px, ${Math.round(y)}px)`;
+        it.l.chip.classList.toggle("is-on", selected === it.i);
+        const ex = Math.max(it.x + 6, Math.min(it.x + it.cw - 6, it.p.x)), ey = top ? y + it.ch : y;
+        for (const [k, val] of [["x1", it.p.x], ["y1", it.p.y], ["x2", ex], ["y2", ey]] as const) it.l.line.setAttribute(k, String(Math.round(val)));
+        it.l.dot.setAttribute("cx", String(Math.round(it.p.x)));
+        it.l.dot.setAttribute("cy", String(Math.round(it.p.y)));
       }
-      if (!l) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "bd-chip";
-        chip.textContent = name;
-        chip.onclick = (e) => {
-          e.stopPropagation();
-          const r = host.getBoundingClientRect(), c = chip.getBoundingClientRect();
-          selected = i;
-          highlight();
-          opts.onPick(i, { x: c.left - r.left, y: c.bottom - r.top + 40 });
-        };
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("r", "2.5");
-        leaders.append(line, dot);
-        labels.appendChild(chip);
-        l = { chip, line, dot };
-        chips.set(i, l);
-      }
-      const p = toScreen(s.mesh.position, w, h);
-      let dx = p.x - mid.x, dy = p.y - mid.y;
-      const len = Math.hypot(dx, dy);
-      if (len < 8) { dx = 0; dy = -1; } else { dx /= len; dy /= len; }
-      const cw = l.chip.offsetWidth || name.length * 8 + 20, ch = l.chip.offsetHeight || 24;
-      let reach = 46, x = 0, y = 0;
-      for (let k = 0; k < 6; k++, reach += 24) {
-        x = Math.max(4, Math.min(w - cw - 4, p.x + dx * reach - cw / 2));
-        y = Math.max(4, Math.min(h - ch - 4, p.y + dy * reach - ch / 2));
-        if (!placed.some((o) => x < o.x + o.w + 6 && o.x < x + cw + 6 && y < o.y + o.h + 4 && o.y < y + ch + 4)) break;
-      }
-      placed.push({ x, y, w: cw, h: ch });
-      l.chip.hidden = false;
-      l.chip.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-      l.chip.classList.toggle("is-on", selected === i);
-      const ex = Math.max(x, Math.min(x + cw, p.x)), ey = Math.max(y, Math.min(y + ch, p.y));
-      for (const [k, val] of [["x1", p.x], ["y1", p.y], ["x2", ex], ["y2", ey]] as const) l.line.setAttribute(k, String(Math.round(val)));
-      l.line.setAttribute("visibility", "visible");
-      l.dot.setAttribute("cx", String(Math.round(p.x)));
-      l.dot.setAttribute("cy", String(Math.round(p.y)));
-      l.dot.setAttribute("visibility", "visible");
-    });
+    };
+    // the higher half of the parts name above, the lower half below
+    const byY = [...want].sort((a, b) => a.p.y - b.p.y);
+    const half = Math.ceil(byY.length / 2);
+    lay(byY.slice(0, half), true);
+    lay(byY.slice(half), false);
     for (const [i, l] of chips) if (i >= shown.length) (l.chip.remove(), l.line.remove(), l.dot.remove(), chips.delete(i));
   };
   const wake = () => { if (!frame) frame = requestAnimationFrame(draw); };
@@ -178,6 +229,10 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   };
   const ro = new ResizeObserver(resize);
   ro.observe(host);
+  // put back into the page or scrolled into view: draw it again
+  const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && wake());
+  io.observe(host);
+  renderer.domElement.addEventListener("webglcontextrestored", wake);
 
   /** frame the whole model from a three-quarter view, once its extent is known */
   const fit = (parts: Part[]) => {
@@ -190,7 +245,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     center.copy(sphere.center);
     const r = Math.max(0.05, sphere.radius);
-    const dist = (r / Math.sin((camera.fov * Math.PI) / 360)) * 0.95;
+    const dist = (r / Math.sin((camera.fov * Math.PI) / 360)) * 0.85;
     controls.target.copy(sphere.center);
     camera.position.set(sphere.center.x + dist * 0.62, sphere.center.y + dist * 0.42, sphere.center.z + dist * 0.66);
     camera.near = dist / 100;
@@ -198,6 +253,19 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     camera.updateProjectionMatrix();
     controls.minDistance = r * 0.8;
     controls.maxDistance = dist * 4;
+    // the light and its shadow sized to the model
+    sun.target.position.copy(sphere.center);
+    sun.position.copy(sphere.center).add(new THREE.Vector3(0.6, 1.4, 0.8).multiplyScalar(r * 2));
+    const sc = sun.shadow.camera;
+    sc.left = sc.bottom = -r * 1.4;
+    sc.right = sc.top = r * 1.4;
+    sc.near = r * 0.1;
+    sc.far = r * 6;
+    sc.updateProjectionMatrix();
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = r * 0.004;
+    catcher.scale.setScalar(r * 6);
+    catcher.position.set(sphere.center.x, box.min.y - r * 0.002, sphere.center.z);
   };
 
   const material = (p: Part) => {
@@ -209,6 +277,12 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     // a #hex is the colour the thing really has; a tone is the app's colour
     const color = p.look.startsWith("#") ? p.look : cssColor(TONE_VAR[p.look as Tone] ?? "--ink-3");
     return new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.55 });
+  };
+
+  const drop = (m: THREE.Mesh) => {
+    m.geometry.dispose();
+    (m.material as THREE.Material).dispose();
+    for (const c of m.children) (c as THREE.LineSegments).geometry?.dispose();
   };
 
   const highlight = () => {
@@ -229,7 +303,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     down = null;
     const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    const hit = ray.intersectObjects(shown.filter((s) => s.mesh.visible).map((s) => s.mesh))[0];
+    const hit = ray.intersectObjects(shown.filter((s) => s.mesh.visible).map((s) => s.mesh), false)[0];
     const i = hit ? shown.findIndex((s) => s.mesh === hit.object) : -1;
     selected = i >= 0 ? i : null;
     highlight();
@@ -239,7 +313,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     if (e.buttons) return;
     const r = renderer.domElement.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    renderer.domElement.style.cursor = ray.intersectObjects(shown.map((s) => s.mesh))[0] ? "pointer" : "grab";
+    renderer.domElement.style.cursor = ray.intersectObjects(shown.map((s) => s.mesh), false)[0] ? "pointer" : "grab";
   };
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
@@ -251,17 +325,22 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       const next: Shown[] = parts.map((p, i) => {
         const old = shown[i];
         if (old && old.key === key(p)) return old;
-        if (old) { scene.remove(old.mesh); old.mesh.geometry.dispose(); (old.mesh.material as THREE.Material).dispose(); }
+        if (old) { scene.remove(old.mesh); drop(old.mesh); }
         const mesh = new THREE.Mesh(geometry(p), material(p));
         mesh.position.set(...p.at);
         mesh.rotation.set(...(p.rot.map((d) => (d * Math.PI) / 180) as [number, number, number]));
         mesh.userData.label = p.label;
+        mesh.castShadow = mesh.receiveShadow = true;
+        const edges = outline(p);
+        if (edges) mesh.add(new THREE.LineSegments(edges, EDGE));
+        mesh.geometry.computeBoundingSphere();
+        mesh.userData.size = mesh.geometry.boundingSphere?.radius ?? 0;
         scene.add(mesh);
         // a part replaced in place is just there; a new one grows in at its moment
         const from = old || !delays ? now - 1000 : now + (delays[i] ?? 0);
         return { key: key(p), mesh, from };
       });
-      for (const s of shown.slice(parts.length)) { scene.remove(s.mesh); s.mesh.geometry.dispose(); (s.mesh.material as THREE.Material).dispose(); }
+      for (const s of shown.slice(parts.length)) { scene.remove(s.mesh); drop(s.mesh); }
       shown = next;
       // measure at full size, then let draw() scale them in
       for (const s of shown) s.mesh.scale.setScalar(1);
@@ -270,11 +349,15 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       resize();
     },
     select(i) { selected = i; highlight(); },
+    wake,
     dispose() {
       cancelAnimationFrame(frame);
       ro.disconnect();
+      io.disconnect();
       controls.dispose();
-      for (const s of shown) { s.mesh.geometry.dispose(); (s.mesh.material as THREE.Material).dispose(); }
+      for (const s of shown) drop(s.mesh);
+      catcher.geometry.dispose();
+      (catcher.material as THREE.Material).dispose();
       envMap.dispose();
       renderer.dispose();
       renderer.forceContextLoss();

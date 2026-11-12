@@ -31,12 +31,28 @@ function __mark(m, o) {
 function title(s) { __o.title = String(s); }
 function size(w, h) { __o.w = __n(w, 800); __o.h = __n(h, 450); }
 function step(s) { __o.steps.push(String(s === undefined ? "" : s)); }
-function box(x, y, w, h, o) { o = o || {}; __mark({ kind: "box", x: __n(x), y: __n(y), w: __n(w), h: __n(h), label: __s(o.label), fill: !!o.fill }, o); }
-function circle(x, y, r, o) { o = o || {}; __mark({ kind: "circle", x: __n(x), y: __n(y), r: __n(r), label: __s(o.label), fill: !!o.fill }, o); }
-function line(x1, y1, x2, y2, o) { o = o || {}; __mark({ kind: o.arrow ? "arrow" : "line", pts: [[__n(x1), __n(y1)], [__n(x2), __n(y2)]], label: __s(o.label), head: !!o.arrow }, o); }
-function arrow(x1, y1, x2, y2, o) { line(x1, y1, x2, y2, Object.assign({}, o, { arrow: true })); }
-function pen(pts, o) { o = o || {}; __mark({ kind: "curve", pts: (pts || []).slice(0, 400).map(__pt), label: __s(o.label), head: !!o.arrow }, o); }
-function curve(pts, o) { pen(pts, o); }
+// every shape gives back where it is, so the next can be placed by it, not by guessed numbers
+const __g = (x, y, w, h) => ({ x, y, w, h, left: x, top: y, right: x + w, bottom: y + h, cx: x + w / 2, cy: y + h / 2 });
+function measure(s, size) {
+  size = __n(size, 18); let w = 0;
+  for (const ch of String(s)) { const c = ch.codePointAt(0); w += c > 0x2e80 ? 0.96 : ch === " " ? 0.3 : /[A-Z0-9%]/.test(ch) ? 0.64 : /[il.,:;'|!]/.test(ch) ? 0.3 : 0.54; }
+  return w * size;
+}
+function box(x, y, w, h, o) {
+  o = o || {}; x = __n(x); y = __n(y); w = __n(w); h = __n(h);
+  __mark({ kind: "box", x, y, w, h, label: __s(o.label), size: o.size, fill: !!o.fill, bare: !!o.bare }, o);
+  return __g(x, y, w, h);
+}
+function circle(x, y, r, o) {
+  o = o || {}; x = __n(x); y = __n(y); r = __n(r);
+  __mark({ kind: "circle", x, y, r, label: __s(o.label), size: o.size, fill: !!o.fill }, o);
+  return __g(x - r, y - r, 2 * r, 2 * r);
+}
+const __span = (p) => { const xs = p.map((q) => q[0]), ys = p.map((q) => q[1]); const x = Math.min(...xs), y = Math.min(...ys); return __g(x, y, Math.max(...xs) - x, Math.max(...ys) - y); };
+function line(x1, y1, x2, y2, o) { o = o || {}; const p = [[__n(x1), __n(y1)], [__n(x2), __n(y2)]]; __mark({ kind: o.arrow ? "arrow" : "line", pts: p, label: __s(o.label), head: !!o.arrow }, o); return __span(p); }
+function arrow(x1, y1, x2, y2, o) { return line(x1, y1, x2, y2, Object.assign({}, o, { arrow: true })); }
+function pen(pts, o) { o = o || {}; const p = (pts || []).slice(0, 400).map(__pt); if (p.length < 2) return undefined; __mark({ kind: "curve", pts: p, label: __s(o.label), head: !!o.arrow }, o); return __span(p); }
+function curve(pts, o) { return pen(pts, o); }
 function poly(pts, o) {
   o = o || {};
   const p = (pts || []).slice(0, 400).map(__pt);
@@ -45,23 +61,117 @@ function poly(pts, o) {
   for (let i = 1; i < p.length; i++) d += "L" + p[i][0] + " " + p[i][1];
   if (o.open !== true) d += "Z";
   __mark({ kind: "path", d, fill: !!o.fill }, o);
+  return __span(p);
 }
 function path(d, o) { o = o || {}; __mark({ kind: "path", d: String(d), fill: !!o.fill }, o); }
 function ellipse(cx, cy, rx, ry, o) {
   o = o || {};
   cx = __n(cx); cy = __n(cy); rx = __n(rx); ry = __n(ry, rx);
   __mark({ kind: "path", d: "M" + (cx - rx) + " " + cy + "A" + rx + " " + ry + " 0 1 1 " + (cx + rx) + " " + cy + "A" + rx + " " + ry + " 0 1 1 " + (cx - rx) + " " + cy + "Z", fill: !!o.fill }, o);
+  return __g(cx - rx, cy - ry, 2 * rx, 2 * ry);
 }
 function arc(cx, cy, r, from, to, o) {
   o = o || {};
   const a0 = (__n(from) * Math.PI) / 180, a1 = (__n(to) * Math.PI) / 180, n = Math.max(6, Math.min(90, Math.round(Math.abs(a1 - a0) * 12)));
   const p = [];
   for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; p.push([__n(cx) + Math.cos(a) * __n(r), __n(cy) + Math.sin(a) * __n(r)]); }
-  pen(p, o);
+  return pen(p, o);
 }
-function text(x, y, s, o) { o = o || {}; __mark({ kind: "text", x: __n(x), y: __n(y), text: String(s), size: __n(o.size, 18), bold: !!o.bold, align: __s(o.align) }, o); }
-function highlight(x, y, w, h, o) { o = o || {}; __mark({ kind: "mark", x: __n(x), y: __n(y), w: __n(w), h: __n(h) }, Object.assign({ color: "yellow" }, o)); }
-function dot(x, y, o) { o = o || {}; __mark({ kind: "dot", x: __n(x), y: __n(y), r: __n(o.r, 5) }, o); }
+function text(x, y, s, o) {
+  o = o || {}; x = __n(x); y = __n(y); s = String(s);
+  const size = __n(o.size, 18), w = measure(s, size) * (o.bold ? 1.04 : 1);
+  __mark({ kind: "text", x, y, text: s, size, bold: !!o.bold, align: __s(o.align) }, o);
+  const x0 = o.align === "center" ? x - w / 2 : o.align === "right" ? x - w : x;
+  return __g(x0, y - size * 0.62, w, size * 1.24);
+}
+/** a word or short phrase in a rounded tag, sized to its words; {center: true} puts its middle at x, y */
+function chip(x, y, s, o) {
+  o = o || {}; s = String(s);
+  const size = __n(o.size, 16), h = Math.round(size * 2.1), w = Math.round(measure(s, size) + size * 1.5);
+  if (o.center) { x = __n(x) - w / 2; y = __n(y) - h / 2; }
+  return box(x, y, w, h, Object.assign({}, o, { label: s, size }));
+}
+/** chips side by side (or {down: true} stacked), returned in order; {center: true} centres the row on x */
+function row(x, y, items, o) {
+  o = o || {}; items = (items || []).slice(0, 40);
+  const gap = __n(o.gap, 10), size = __n(o.size, 16), h = Math.round(size * 2.1);
+  const ws = items.map((s) => Math.round(measure(String(s), size) + size * 1.5));
+  const total = o.down ? items.length * h + (items.length - 1) * gap : ws.reduce((a, b) => a + b, 0) + (items.length - 1) * gap;
+  let at = o.down ? __n(y) - (o.center ? total / 2 : 0) : __n(x) - (o.center ? total / 2 : 0);
+  return items.map((s, i) => {
+    const per = Array.isArray(o.colors) ? Object.assign({}, o, { color: o.colors[i] }) : o;
+    const g = o.down ? box(__n(x) - (o.center ? ws[i] / 2 : 0), at, ws[i], h, Object.assign({}, per, { label: String(s), size })) : box(at, __n(y), ws[i], h, Object.assign({}, per, { label: String(s), size }));
+    at += (o.down ? h : ws[i]) + gap;
+    return g;
+  });
+}
+const __isG = (a) => a && typeof a === "object" && !Array.isArray(a) && "cx" in a;
+/** where a line toward (tx, ty) leaves a shape's edge */
+function __edge(a, tx, ty, pad) {
+  if (!__isG(a)) return __pt(a);
+  const dx = tx - a.cx, dy = ty - a.cy;
+  if (!dx && !dy) return [a.cx, a.cy];
+  const k = Math.min(dx ? (a.w / 2 + pad) / Math.abs(dx) : Infinity, dy ? (a.h / 2 + pad) / Math.abs(dy) : Infinity);
+  return [a.cx + dx * k, a.cy + dy * k];
+}
+const __ok = (a) => __isG(a) || (Array.isArray(a) && typeof a[0] === "number" && typeof a[1] === "number" && isFinite(a[0]) && isFinite(a[1]));
+const __c = (a) => (__isG(a) ? [a.cx, a.cy] : __pt(a));
+/** an arrow from one shape (or point) to another, edge to edge; {bend: 40} curves it, {label} names it */
+function connect(a, b, o) {
+  o = o || {};
+  if (!__ok(a) || !__ok(b)) return undefined;
+  const ca = __c(a), cb = __c(b);
+  const p = __edge(a, cb[0], cb[1], 6), q = __edge(b, ca[0], ca[1], 8);
+  const bend = __n(o.bend);
+  if (!bend) return line(p[0], p[1], q[0], q[1], Object.assign({ arrow: o.arrow !== false }, o));
+  const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+  pen([p, [mx - ((q[1] - p[1]) / l) * bend, my + ((q[0] - p[0]) / l) * bend], q], Object.assign({ arrow: o.arrow !== false }, o));
+}
+/** a short note at (x, y) with a thin leader to what it is about (a shape or a point) */
+function label(x, y, s, to, o) {
+  o = o || {};
+  const t = text(x, y, s, Object.assign({ size: 15, color: "quiet" }, o, { align: o.align || "left" }));
+  if (__ok(to)) {
+    const c = __c(to), from = __edge(t, c[0], c[1], 4), end = __isG(to) ? __edge(to, from[0], from[1], 2) : c;
+    line(from[0], from[1], end[0], end[1], { color: "quiet", width: 1 });
+    dot(end[0], end[1], { r: 2.5, color: "quiet" });
+  }
+  return t;
+}
+/** a small bar chart: [["이름", 값], …]; {pick: i} colours the one that matters, values ≤ 1 show as % */
+function bars(x, y, items, o) {
+  o = o || {}; items = (items || []).slice(0, 12); x = __n(x); y = __n(y);
+  const size = __n(o.size, 15), h = Math.round(size * 1.5), gap = Math.round(size * 0.6), W = __n(o.w, 220);
+  const nameW = Math.max(0, ...items.map((it) => measure(String(it[0]), size))) + 14;
+  const max = Math.max(1e-9, ...items.map((it) => Math.abs(__n(it[1]))));
+  const pct = items.every((it) => __n(it[1]) >= 0 && __n(it[1]) <= 1);
+  items.forEach((it, i) => {
+    const v = __n(it[1]), yy = y + i * (h + gap), on = o.pick === i, c = on ? o.color || "accent" : "quiet";
+    text(x, yy + h / 2, it[0], { size, color: on ? "ink" : "quiet", bold: on });
+    box(x + nameW, yy, Math.max(4, (Math.abs(v) / max) * W), h, { color: c, fill: true });
+    text(x + nameW + Math.max(4, (Math.abs(v) / max) * W) + 8, yy + h / 2, pct ? Math.round(v * 100) + "%" : String(v), { size: size - 1, color: on ? "ink" : "quiet" });
+  });
+  return __g(x, y, nameW + W + 50, items.length * (h + gap) - gap);
+}
+/** numbers in a row of cells (a vector, a row of a table); strong values are tinted */
+function cells(x, y, values, o) {
+  o = o || {}; values = (values || []).slice(0, 24); x = __n(x); y = __n(y);
+  const s = __n(o.size, 40), max = Math.max(1e-9, ...values.map((v) => Math.abs(__n(v))));
+  values.forEach((v, i) => {
+    const n = __n(v), strong = Math.abs(n) >= max * 0.5;
+    box(x + i * s, y, s, s * 0.8, { color: strong ? (n < 0 ? "warn" : o.color || "accent") : "quiet", fill: strong, label: String(v), size: Math.round(s * 0.3) });
+  });
+  return __g(x, y, values.length * s, s * 0.8);
+}
+/** a quiet frame around a part of the board, its name at its top-left */
+function panel(x, y, w, h, name, o) {
+  o = o || {};
+  const g = box(x, y, w, h, Object.assign({ color: "quiet", dash: true, bare: true }, o, { label: undefined }));
+  if (name) text(__n(x) + 12, __n(y) + 16, name, { size: 13, color: "quiet", bold: true });
+  return g;
+}
+function highlight(x, y, w, h, o) { o = o || {}; __mark({ kind: "mark", x: __n(x), y: __n(y), w: __n(w), h: __n(h) }, Object.assign({ color: "yellow" }, o)); return __g(__n(x), __n(y), __n(w), __n(h)); }
+function dot(x, y, o) { o = o || {}; const r = __n(o.r, 5); __mark({ kind: "dot", x: __n(x), y: __n(y), r }, o); return __g(__n(x) - r, __n(y) - r, 2 * r, 2 * r); }
 function part(name, shape, dims, at, o) {
   o = o || {};
   if (__o.parts.length >= 160) throw new Error("too many parts (160 at most)");
@@ -128,16 +238,18 @@ export function boardOf(raw: any): Board {
     const width = m?.width !== undefined ? num(m.width, 0.5, 40) : undefined;
     switch (m?.kind) {
       case "box":
-        if (num(m.w) > 0 && num(m.h) > 0) b.marks.push({ kind: "box", ...common, x: num(m.x), y: num(m.y), w: num(m.w), h: num(m.h), ...(label ? { label } : {}), ...(m.fill ? { fill: true } : {}) });
+        if (num(m.w) > 0 && num(m.h) > 0) b.marks.push({ kind: "box", ...common, x: num(m.x), y: num(m.y), w: num(m.w), h: num(m.h), ...(label ? { label } : {}),
+          ...(m.fill ? { fill: true } : {}), ...(m.bare ? { bare: true } : {}), ...(typeof m.size === "number" ? { size: num(m.size, 9, 48) } : {}) });
         break;
       case "circle":
-        if (num(m.r) > 0) b.marks.push({ kind: "circle", ...common, x: num(m.x), y: num(m.y), r: num(m.r), ...(label ? { label } : {}), ...(m.fill ? { fill: true } : {}) });
+        if (num(m.r) > 0) b.marks.push({ kind: "circle", ...common, x: num(m.x), y: num(m.y), r: num(m.r), ...(label ? { label } : {}), ...(m.fill ? { fill: true } : {}),
+          ...(typeof m.size === "number" ? { size: num(m.size, 9, 48) } : {}) });
         break;
       case "line":
       case "arrow":
       case "curve": {
         const pts = (Array.isArray(m.pts) ? m.pts.slice(0, 400) : []).map((p: any) => [num(p?.[0]), num(p?.[1])] as [number, number]);
-        if (pts.length >= 2) b.marks.push({ kind: m.kind, ...common, pts, ...(label ? { label } : {}), ...(m.head ? { head: true } : {}) });
+        if (pts.length >= 2) b.marks.push({ kind: m.kind, ...common, pts, ...(label ? { label } : {}), ...(m.head ? { head: true } : {}), ...(width ? { width } : {}) });
         break;
       }
       case "path": {
@@ -176,7 +288,7 @@ export function boardOf(raw: any): Board {
 
 /** Is this board a program (calls like `box(…)`, statements), not the line form? */
 export function isProgram(src: string): boolean {
-  return /^\s*(?:title|step|size|box|circle|ellipse|line|arrow|curve|pen|poly|path|arc|text|highlight|dot|part)\s*\(/m.test(src) || /^\s*(?:const|let|var|for|function|if)\b/m.test(src);
+  return /^\s*(?:title|step|size|box|circle|ellipse|line|arrow|curve|pen|poly|path|arc|text|highlight|dot|part|chip|row|connect|label|bars|cells|panel)\s*\(/m.test(src) || /^\s*(?:const|let|var|for|function|if)\b/m.test(src);
 }
 
 /** the part of a program that is complete so far: up to the last line that ends outside any bracket, string or comment */

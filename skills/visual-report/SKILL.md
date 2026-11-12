@@ -134,54 +134,67 @@ Use only the numbers you really have; never invent data to fill a chart.
 ## Boards: an explanation drawn stroke by stroke
 
 Explaining how something works, a concept, or what a real thing is made of
-(how an engine runs, how DNS resolves, the parts of a camera) → a fenced ```board
-in "text": your own chalkboard. Write it as a short JavaScript program that draws;
-the user watches it drawn stroke by stroke as you write it, each step's sentence
-under it, so keep the prose around it to a line or two. Draw the things themselves,
-not a flowchart of boxes: a laptop as its screen and base, a tunnel as two curves,
-a lock, a wave, a gear with its teeth. Loops and arithmetic make repeats and curves
-(Math works). Canvas 800 wide, y down, cropped to what you draw. One call per line:
-  title("짧은 제목")   step("이 단계에서 일어나는 일")   (what follows a step belongs to it; 3–6 steps)
-  box(x, y, w, h, o)   circle(x, y, r, o)   ellipse(cx, cy, rx, ry, o)   poly([[x, y], …], o) closed
-  line(x1, y1, x2, y2, o)   arrow(x1, y1, x2, y2, o)   pen([[x, y], …], o) a smooth stroke through points
-  arc(cx, cy, r, fromDeg, toDeg, o)   path("M… C… A… Z", o)   text(x, y, "글", o)   highlight(x, y, w, h)   dot(x, y, o)
-  o: {label, color, fill, dash, arrow, width, size, bold, align: "center"}; color: ink quiet accent ok warn bad
-  live violet, red orange yellow green teal sky blue purple pink brown, or a #hex
-Short labels, under 80 marks. For a physical object, build a 3D model instead (the
-user turns it and clicks a part to ask about it), parts in building order:
+(how an engine runs, how DNS resolves, how an LLM answers) → a fenced ```board in
+"text": your own chalkboard, written as a short JavaScript program that draws. The
+user watches it drawn as you write it, each step's sentence shown under it and the
+earlier steps dimmed while a new one draws; keep the prose around it to a line or two.
+Make it explain, not decorate:
+- One concrete example carried through every step (a real sentence, a real request,
+  real numbers), each step adding to the same picture. Never a separate mini-diagram
+  per step, never a page of sentences.
+- Draw the things (a laptop, a tunnel, a lock, tokens as tags, chances as bars).
+  Words on the board are 1–4 word labels on what they name; the step says the sentence.
+- One flow (left→right or top→down) on a few columns kept in variables; place each
+  shape from the ones before it (every shape returns {x,y,w,h,cx,cy,left,right,top,bottom});
+  room between things; 3–5 steps.
+- Colour carries meaning: accent for what this step is about, quiet for context.
+  Quantities get real-looking values (bars, cells, a number), not "많음".
+Functions, one call per line, canvas 800 wide, y down, cropped to what you draw:
+  title("짧은 제목")   step("이 단계에서 일어나는 일, 짧은 한 문장")   (what follows a step belongs to it)
+  chip(x, y, "글", o) a tag sized to its words   row(x, y, ["a", "b"], o) tags in a row → [shapes] ({down: true} a column)
+  connect(a, b, o) an arrow edge to edge between shapes or [x, y] points ({bend: 30} curves it, {label})
+  label(x, y, "글", target, o) a note with a thin leader to a shape or point
+  bars(x, y, [["이름", 0.62], …], {pick: 0, w}) chances or amounts   cells(x, y, [0.8, -0.2, …]) a vector
+  panel(x, y, w, h, "이름") a frame around a part   measure("글", size) its width
+  box(x, y, w, h, o) circle(x, y, r, o) ellipse(cx, cy, rx, ry, o) poly([[x, y], …], o) path("M… C… Z", o)
+  line / arrow(x1, y1, x2, y2, o) pen([[x, y], …], o) a smooth stroke arc(cx, cy, r, fromDeg, toDeg, o)
+  text(x, y, "글", o) highlight(x, y, w, h) dot(x, y, o)
+  o: {label, color, fill, dash, arrow, width, size, bold, align: "center"|"right", center: true}
+  color: ink quiet accent ok warn bad live violet, red orange yellow green teal sky blue purple pink brown, #hex
+For a physical object, build a 3D model instead (the user turns it and clicks a
+part to ask about it), parts in building order under their steps. Model it like a
+product illustration: real proportions in real units (mm for a board, m for a house),
+the visible details the real thing has (pin rows, vents, keys, screws) made in loops,
+real colours (a dark green board, black chips, silver ports). Name only the 3–8 parts
+the explanation is about, 1–3 words ("RAM", "USB 3.0"); every other part is named "".
+What a part does goes in the step, never in its name:
   part("이름", "box", [w, h, d], [x, y, z], {color, rot: [rx, ry, rz]})   shapes: box [w, h, d]
   cylinder [r, h, r_top] cone [r, h] sphere [r] torus [R, r] capsule [r, h]; y up, the ground at 0;
   color: the colour the real thing has, or a material steel wood glass gold copper rubber plastic stone paper
-5–40 parts placed where the real ones sit, so it reads as the thing.
+20–150 parts placed where the real ones sit, so it reads as the thing.
 
 Example:
 
 ```board
-title("VPN이 내 데이터를 지키는 방법")
-step("내 노트북이 VPN 서버와 암호화된 터널을 만들어요")
-// 노트북
-box(70, 150, 120, 76, { color: "blue", fill: true })
-path("M50 232L210 232L198 246L62 246Z", { color: "blue" })
-text(130, 272, "내 노트북", { align: "center", size: 16 })
-// 서버: 같은 칸 세 개
-for (let i = 0; i < 3; i++) box(560, 140 + i * 34, 110, 28, { color: "purple" })
-for (let i = 0; i < 3; i++) dot(578, 154 + i * 34, { r: 4, color: "green" })
-text(615, 262, "VPN 서버", { align: "center", size: 16 })
-// 터널
-pen([[200, 168], [300, 146], [460, 146], [555, 168]], { color: "accent" })
-pen([[200, 218], [300, 240], [460, 240], [555, 218]], { color: "accent" })
-step("데이터는 잠긴 상자에 담겨 터널 안을 지나가요")
-for (let i = 0; i < 4; i++) box(240 + i * 80, 184, 26, 18, { color: "sky", fill: true })
-arc(383, 176, 13, 180, 360, { width: 2.4 })
-box(366, 176, 34, 28, { color: "orange", fill: true })
-text(383, 282, "통신사·와이파이는 내용을 못 봐요", { align: "center", size: 15, color: "quiet" })
-step("서버가 대신 사이트에 접속해서, 사이트에는 서버 주소만 보여요")
-circle(735, 320, 42, { color: "green" })
-ellipse(735, 320, 17, 42, { color: "green" })
-line(693, 320, 777, 320, { color: "green" })
-arrow(628, 212, 700, 284)
-text(676, 236, "대신 접속", { size: 14, color: "quiet" })
-text(735, 385, "웹사이트", { align: "center", size: 16 })
-highlight(650, 404, 170, 20)
-text(735, 414, "보이는 주소: VPN 서버", { align: "center", size: 14 })
+title("LLM이 다음 말을 고르는 방법")
+step("입력 문장을 토큰이라는 조각으로 나눠요")
+const t = row(40, 96, ["오늘", "날씨가", "정말"], { gap: 44 })
+label(40, 64, "입력", undefined, { size: 14 })
+step("각 토큰은 뜻을 담은 숫자 묶음, 벡터가 돼요")
+const vec = [[0.8, -0.2, 0.4], [0.1, 0.9, -0.6], [0.7, 0.3, 0.9]]
+const v = t.map((c, i) => cells(c.cx - 42, 172, vec[i], { size: 28 }))
+t.forEach((c, i) => connect(c, v[i], { color: "quiet" }))
+step("모델은 토큰끼리 비교해서, 무엇에 주목할지 정해요")
+const m = box(40, 246, t[2].right - 40, 64, { label: "LLM", size: 18, color: "violet", fill: true })
+v.forEach((c) => connect(c, m, { color: "quiet" }))
+connect([t[2].cx, t[2].top], [t[1].cx, t[1].top], { bend: 34, color: "accent", width: 3, arrow: false })
+connect([t[2].cx, t[2].top], [t[0].cx, t[0].top], { bend: 56, color: "accent", width: 1, arrow: false, dash: true })
+label(t[2].right + 18, 40, "'정말'은 '날씨가'를 가장 많이 봐요", [t[1].cx + 40, 58])
+step("다음에 올 토큰마다 확률을 매겨요")
+const b = bars(m.right + 90, 200, [["좋네요", 0.62], ["춥네요", 0.21], ["덥네요", 0.12], ["별로", 0.05]], { pick: 0, w: 150 })
+connect(m, [b.left - 6, m.cy])
+step("가장 그럴듯한 토큰을 붙이고, 처음부터 다시 반복해요")
+const n = chip(t[2].right + 44, 96, "좋네요", { color: "accent", fill: true })
+connect([b.left + 30, b.top - 8], n, { bend: -24 })
+label(n.right + 16, n.cy, "한 토큰씩 붙여 답이 돼요")
 ```

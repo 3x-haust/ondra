@@ -47,16 +47,19 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
 function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] } {
   const g = el("g", { class: "bd-mark" });
   const pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] = [];
-  const pen = (d: string, len: number, width = m.kind === "path" && m.width ? m.width : 1.8) => {
+  const pen = (d: string, len: number, width = "width" in m && m.width ? m.width : 1.8) => {
     const p = el("path", { d, fill: "none", stroke: m.color ?? LINE[m.tone], "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round", pathLength: 1 });
-    if (m.dash) p.setAttribute("stroke-dasharray", "0.012 0.018");
+    // short even dashes whatever the stroke's length (it is measured as 1)
+    if (m.dash) p.setAttribute("stroke-dasharray", `${(6 / Math.max(len, 1)).toFixed(5)} ${(5 / Math.max(len, 1)).toFixed(5)}`);
     g.appendChild(p);
     pieces.push({ e: p, ms: stroke(len), kind: m.dash ? "fade" : "pen" });
     return p;
   };
-  const words = (x: number, y: number, s: string, size: number, opts: { anchor?: string; bold?: boolean; tone?: Tone; color?: string } = {}) => {
+  const words = (x: number, y: number, s: string, size: number, opts: { anchor?: string; bold?: boolean; tone?: Tone; color?: string; free?: boolean } = {}) => {
     const tx = el("text", { x, y, "font-size": size, "text-anchor": opts.anchor ?? "start", "dominant-baseline": "middle",
       fill: opts.color ?? INK[opts.tone ?? (m.tone === "ink" ? "ink" : m.tone)], "font-weight": opts.bold ? 600 : 500 });
+    // words standing on the paper (not inside a shape) keep a little paper around them, so a line under them doesn't cut them
+    if (opts.free) tx.setAttribute("class", "bd-free");
     tx.textContent = s;
     g.appendChild(tx);
     pieces.push({ e: tx, ms: Math.max(180, Math.min(600, s.length * 28)), kind: "fade" });
@@ -65,11 +68,11 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
     case "box": {
       // the outline first, then its tint washes in (stronger when asked to be filled)
       const r = Math.min(8, m.w / 4, m.h / 4);
-      const f = el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color) });
-      g.appendChild(f);
-      pen(box(m.x, m.y, m.w, m.h), 2 * (m.w + m.h));
-      pieces.push({ e: f, ms: 260, kind: "fade" });
-      if (m.label) words(m.x + m.w / 2, m.y + m.h / 2, m.label, Math.max(13, Math.min(20, m.h * 0.34)), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
+      const f = m.bare ? undefined : el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color) });
+      if (f) g.appendChild(f);
+      pen(box(m.x, m.y, m.w, m.h), 2 * (m.w + m.h), m.bare ? 1.2 : undefined);
+      if (f) pieces.push({ e: f, ms: 260, kind: "fade" });
+      if (m.label) words(m.x + m.w / 2, m.y + m.h / 2, m.label, m.size ?? Math.max(13, Math.min(20, m.h * 0.34)), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
       break;
     }
     case "circle": {
@@ -77,7 +80,7 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
       g.appendChild(f);
       pen(ring(m.x, m.y, m.r), 2 * Math.PI * m.r);
       pieces.push({ e: f, ms: 260, kind: "fade" });
-      if (m.label) words(m.x, m.y, m.label, Math.max(13, Math.min(20, m.r * 0.45)), { anchor: "middle", tone: "ink" });
+      if (m.label) words(m.x, m.y, m.label, m.size ?? Math.max(13, Math.min(20, m.r * 0.45)), { anchor: "middle", tone: "ink" });
       break;
     }
     case "line":
@@ -90,12 +93,12 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
       if (m.label) {
         const mid = pts[Math.floor((pts.length - 1) / 2)], nxt = pts[Math.floor((pts.length - 1) / 2) + 1];
         const vertical = Math.abs(nxt[0] - mid[0]) < Math.abs(nxt[1] - mid[1]);
-        words((mid[0] + nxt[0]) / 2 + (vertical ? 10 : 0), (mid[1] + nxt[1]) / 2 + (vertical ? 0 : -14), m.label, 15, { anchor: vertical ? "start" : "middle", tone: m.tone === "ink" ? "quiet" : m.tone });
+        words((mid[0] + nxt[0]) / 2 + (vertical ? 10 : 0), (mid[1] + nxt[1]) / 2 + (vertical ? 0 : -14), m.label, 15, { anchor: vertical ? "start" : "middle", tone: m.tone === "ink" ? "quiet" : m.tone, free: true });
       }
       break;
     }
     case "text":
-      words(m.x, m.y, m.text, m.size, { bold: m.bold, tone: m.tone, color: m.color, anchor: m.align });
+      words(m.x, m.y, m.text, m.size, { bold: m.bold, tone: m.tone, color: m.color, anchor: m.align, free: true });
       break;
     case "path": {
       // a shape the program drew: its tint first when filled, then the pen goes round it
@@ -226,6 +229,8 @@ export class BoardView {
 
   /** the board's source as it stands; new strokes are drawn after the ones already there */
   update(src: string, done = false): void {
+    // the chat may have moved this board into a new spot, which WebKit leaves blank until drawn again
+    this.three?.wake();
     if (src === this.src && !done) return;
     const first = !this.src;
     this.src = src;
@@ -288,10 +293,16 @@ export class BoardView {
 
   private nowStep(i: number | null) {
     [...this.stepsEl.children].forEach((li, k) => li.classList.toggle("is-now", k === i));
+    // while a step is drawn, what came before it steps back so the eye goes to the new part
+    for (const d of this.drawn) {
+      const past = i !== null && d.step < i;
+      d.g.classList.toggle("bd-past", past);
+      d.under?.classList.toggle("bd-past", past);
+    }
   }
 
   /** when the next new piece may start, and the step marker for it */
-  private slot(step: number, ms: number): number {
+  private slot(step: number, ms: number, gap = GAP): number {
     const now = performance.now();
     let at = Math.max(now, this.clock);
     if (step !== this.lastStep) {
@@ -300,7 +311,7 @@ export class BoardView {
       this.timers.push(window.setTimeout(() => this.nowStep(s), at - now));
       this.lastStep = step;
     }
-    this.clock = at + ms + GAP;
+    this.clock = at + ms + gap;
     return at - now;
   }
 
@@ -359,7 +370,8 @@ export class BoardView {
     const any = Number.isFinite(top) && Number.isFinite(bottom);
     // the width it was drawn for, widened only when something reaches past it
     const x0 = any ? Math.min(0, Math.floor(left - 16)) : 0;
-    const w = any ? Math.max(b.w, Math.ceil(right + 16)) - x0 : b.w;
+    // as wide as the drawing (so a small one is not lost in empty paper), never narrower than 480
+    const w = any ? Math.max(480, Math.ceil(right + 24) - x0) : b.w;
     const y0 = any ? Math.max(0, Math.floor(top - 24)) : 0;
     const h = any ? Math.max(140, Math.ceil(bottom + 24 - y0)) : b.h;
     this.svg!.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
@@ -427,7 +439,10 @@ export class BoardView {
       });
       return;
     }
-    const delays = this.instant ? undefined : b.parts.map((p, i) => (this.parts3d > i ? 0 : this.slot(p.step, 420)));
+    // a step is built in about two seconds however many parts it has (a row of 40 pins comes in as a sweep)
+    const per = new Map<number, number>();
+    for (const p of b.parts) per.set(p.step, (per.get(p.step) ?? 0) + 1);
+    const delays = this.instant ? undefined : b.parts.map((p, i) => (this.parts3d > i ? 0 : this.slot(p.step, Math.max(25, Math.min(420, 2200 / (per.get(p.step) ?? 1))), 0)));
     const grew = b.parts.length > this.parts3d;
     this.parts3d = b.parts.length;
     this.three.set(b.parts, delays);

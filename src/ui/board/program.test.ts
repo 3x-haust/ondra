@@ -37,3 +37,25 @@ describe("board programs", () => {
     expect(b.parts[0].look).toBe("#1f6b3e");
   });
 });
+
+describe("drawing helpers", () => {
+  it("place shapes by the ones before them", async () => {
+    const { loadEngine, runProgram } = await import("./program");
+    await loadEngine();
+    const out = runProgram(
+      'const t = row(0, 0, ["오늘", "날씨"], { gap: 20 })\n' +
+      "connect(t[0], t[1])\n" +
+      'bars(0, 100, [["a", 0.6], ["b", 0.4]], { pick: 0 })\n' +
+      'text(0, 0, String(t[1].left - t[0].right))\n',
+    )!;
+    const kinds = out.board.marks.map((m) => m.kind);
+    expect(kinds.slice(0, 3)).toEqual(["box", "box", "arrow"]);
+    const [a, b] = out.board.marks as any[];
+    const arrow = out.board.marks[2] as any;
+    // the arrow runs between the two tags' edges, not their centres
+    expect(arrow.pts[0][0]).toBeGreaterThan(a.x + a.w);
+    expect(arrow.pts[1][0]).toBeLessThan(b.x);
+    expect((out.board.marks[out.board.marks.length - 1] as any).text).toBe("20");
+    expect(out.board.marks.filter((m) => m.kind === "text").map((m: any) => m.text)).toContain("60%");
+  });
+});

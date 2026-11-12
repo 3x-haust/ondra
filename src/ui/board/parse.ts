@@ -24,9 +24,10 @@ export const MATERIALS: Material[] = ["steel", "wood", "glass", "gold", "copper"
 /** `color`: a checked #hex, used in place of the tone */
 type Common = { step: number; tone: Tone; color?: string; dash?: boolean };
 export type Mark =
-  | (Common & { kind: "box"; x: number; y: number; w: number; h: number; label?: string; fill?: boolean })
-  | (Common & { kind: "circle"; x: number; y: number; r: number; label?: string; fill?: boolean })
-  | (Common & { kind: "line" | "arrow" | "curve"; pts: [number, number][]; label?: string; head?: boolean })
+  /** size: the label's; bare: an outline only */
+  | (Common & { kind: "box"; x: number; y: number; w: number; h: number; label?: string; fill?: boolean; bare?: boolean; size?: number })
+  | (Common & { kind: "circle"; x: number; y: number; r: number; label?: string; fill?: boolean; size?: number })
+  | (Common & { kind: "line" | "arrow" | "curve"; pts: [number, number][]; label?: string; head?: boolean; width?: number })
   | (Common & { kind: "text"; x: number; y: number; text: string; size: number; bold?: boolean; align?: "middle" | "end" })
   | (Common & { kind: "mark"; x: number; y: number; w: number; h: number })
   | (Common & { kind: "dot"; x: number; y: number; r: number })
