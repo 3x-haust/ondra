@@ -73,7 +73,6 @@ export default {
   "로그인 안 됨": "Not signed in",
   "다시 로그인": "Sign in again",
   "로그인": "Sign in",
-  "Aside 계정": "Aside account",
   "커밋 작성자": "Commit author",
   "이메일": "Email",
   "워크스페이스를 삭제했어요": "Workspace deleted",

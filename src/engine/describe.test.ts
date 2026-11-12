@@ -4,7 +4,6 @@ import { computerStep, cutTitle, describeBrowser as b, describeComputer, mainCom
 
 describe("describeCommand", () => {
   it("names what commands do, not the command", () => {
-    expect(d(`aside repl --account u5 "const pb = await openTab('https://play.google.com/console/u/0'); console.log(1)"`).label).toBe("Aside로 play.google.com 봄");
     expect(d(`date -u +%H:%MZ; gh api repos/a/b/actions/jobs/12771658931 --jq '.status'`).label).toBe("GitHub 빌드 확인함");
     expect(d(`for i in $(seq 1 7); do s=$(gh api repos/a/b/actions/jobs/1 --jq .status); [ "$s" = completed ] && break; sleep 60; done`).label).toBe("GitHub 빌드 기다림");
     expect(d(`gh pr create --base dev --title x --body y`).label).toBe("PR 올림");
