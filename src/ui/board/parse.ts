@@ -1,5 +1,6 @@
-// A board: an explanation the agent draws, one line per stroke, in the order it
-// explains. It is data, never code: each line is a word and its numbers/words.
+// A board in its first form: one line per stroke, data only. Boards are written as
+// drawing programs now (program.ts); this form is still read for boards already in
+// chats and for a model that writes it.
 //
 //   title 커피가 내려지는 원리
 //   step 뜨거운 물이 위에서 부어져요
@@ -20,14 +21,17 @@ export const TONES: Tone[] = ["ink", "quiet", "accent", "ok", "warn", "bad", "li
 export type Material = "steel" | "wood" | "glass" | "gold" | "copper" | "rubber" | "plastic" | "stone" | "paper";
 export const MATERIALS: Material[] = ["steel", "wood", "glass", "gold", "copper", "rubber", "plastic", "stone", "paper"];
 
-type Common = { step: number; tone: Tone; dash?: boolean };
+/** `color`: a checked #hex, used in place of the tone */
+type Common = { step: number; tone: Tone; color?: string; dash?: boolean };
 export type Mark =
   | (Common & { kind: "box"; x: number; y: number; w: number; h: number; label?: string; fill?: boolean })
   | (Common & { kind: "circle"; x: number; y: number; r: number; label?: string; fill?: boolean })
   | (Common & { kind: "line" | "arrow" | "curve"; pts: [number, number][]; label?: string; head?: boolean })
-  | (Common & { kind: "text"; x: number; y: number; text: string; size: number; bold?: boolean })
+  | (Common & { kind: "text"; x: number; y: number; text: string; size: number; bold?: boolean; align?: "middle" | "end" })
   | (Common & { kind: "mark"; x: number; y: number; w: number; h: number })
-  | (Common & { kind: "dot"; x: number; y: number; r: number });
+  | (Common & { kind: "dot"; x: number; y: number; r: number })
+  /** any shape the program drew: SVG path data, its length for the pen's pace */
+  | (Common & { kind: "path"; d: string; len: number; fill?: boolean; width?: number; head?: [[number, number], [number, number]] });
 
 export type Shape = "box" | "cylinder" | "cone" | "sphere" | "torus" | "capsule";
 export type Part = {
@@ -39,13 +43,14 @@ export type Part = {
   at: [number, number, number];
   /** degrees about x, y, z */
   rot: [number, number, number];
-  look: Material | Tone;
+  /** a material, a tone, or a checked #hex */
+  look: Material | Tone | string;
 };
 
 export type Step = { text: string };
 export type Board = { title?: string; w: number; h: number; steps: Step[]; marks: Mark[]; parts: Part[]; problems: string[] };
 
-const DIMS: Record<Shape, [number, number]> = { box: [3, 3], cylinder: [2, 3], cone: [2, 2], sphere: [1, 1], torus: [2, 2], capsule: [2, 2] };
+export const DIMS: Record<Shape, [number, number]> = { box: [3, 3], cylinder: [2, 3], cone: [2, 2], sphere: [1, 1], torus: [2, 2], capsule: [2, 2] };
 const MAX_MARKS = 300;
 const MAX_PARTS = 120;
 

@@ -135,35 +135,53 @@ Use only the numbers you really have; never invent data to fill a chart.
 
 Explaining how something works, a concept, or what a real thing is made of
 (how an engine runs, how DNS resolves, the parts of a camera) → a fenced ```board
-in "text". It is drawn stroke by stroke in the order you write it, with each
-step's line shown under it; keep the prose around it to a line or two. One line
-per command, quoted text in "…", canvas 800×450 (size W H to change it):
-  title 짧은 제목
-  step 이 단계에서 일어나는 일 (one plain sentence; the strokes after it belong to it)
-  box x y w h "이름" [fill]      circle x y r "이름" [fill]
-  arrow x1 y1 x2 y2 [x3 y3 …] ["동사"]     line … / curve … (same points; curve is smooth)
-  text x y "글" [size=18] [bold]    mark x y w h (highlighter behind)    dot x y [r]
-  any of them: a colour word ink | quiet | accent | ok | warn | bad | live | violet, and dash
-3–6 steps, under 40 strokes, labels short, nothing past the canvas edge. For a
-physical object, build a 3D model instead (the user turns it and clicks a part
-to ask about it): a part per line, in building order under its step, sizes and
-places in one unit (y is up, the ground at 0):
-  part "이름" box w h d | cylinder r h [r_top] | cone r h | sphere r | torus R r | capsule r h  at x y z [rot rx ry rz]
-  with a material: steel wood glass gold copper rubber plastic stone paper (or a colour word)
-5–40 parts that sit where the real ones do, so it reads as the thing.
+in "text": your own chalkboard. Write it as a short JavaScript program that draws;
+the user watches it drawn stroke by stroke as you write it, each step's sentence
+under it, so keep the prose around it to a line or two. Draw the things themselves,
+not a flowchart of boxes: a laptop as its screen and base, a tunnel as two curves,
+a lock, a wave, a gear with its teeth. Loops and arithmetic make repeats and curves
+(Math works). Canvas 800 wide, y down, cropped to what you draw. One call per line:
+  title("짧은 제목")   step("이 단계에서 일어나는 일")   (what follows a step belongs to it; 3–6 steps)
+  box(x, y, w, h, o)   circle(x, y, r, o)   ellipse(cx, cy, rx, ry, o)   poly([[x, y], …], o) closed
+  line(x1, y1, x2, y2, o)   arrow(x1, y1, x2, y2, o)   pen([[x, y], …], o) a smooth stroke through points
+  arc(cx, cy, r, fromDeg, toDeg, o)   path("M… C… A… Z", o)   text(x, y, "글", o)   highlight(x, y, w, h)   dot(x, y, o)
+  o: {label, color, fill, dash, arrow, width, size, bold, align: "center"}; color: ink quiet accent ok warn bad
+  live violet, red orange yellow green teal sky blue purple pink brown, or a #hex
+Short labels, under 80 marks. For a physical object, build a 3D model instead (the
+user turns it and clicks a part to ask about it), parts in building order:
+  part("이름", "box", [w, h, d], [x, y, z], {color, rot: [rx, ry, rz]})   shapes: box [w, h, d]
+  cylinder [r, h, r_top] cone [r, h] sphere [r] torus [R, r] capsule [r, h]; y up, the ground at 0;
+  color: the colour the real thing has, or a material steel wood glass gold copper rubber plastic stone paper
+5–40 parts placed where the real ones sit, so it reads as the thing.
 
 Example:
 
 ```board
-title 드립 커피가 내려지는 원리
-step 뜨거운 물을 원두 위에 부어요
-box 300 30 200 56 "뜨거운 물" live fill
-arrow 400 86 400 150
-step 물이 원두 가루를 지나며 맛 성분을 녹여요
-circle 400 210 60 "원두 가루" warn fill
-text 480 210 "약 3–4분" quiet
-step 필터가 가루를 거르고 커피만 내려가요
-line 330 280 470 280 dash
-arrow 400 290 400 370 "커피"
-box 320 370 160 56 "서버"
+title("VPN이 내 데이터를 지키는 방법")
+step("내 노트북이 VPN 서버와 암호화된 터널을 만들어요")
+// 노트북
+box(70, 150, 120, 76, { color: "blue", fill: true })
+path("M50 232L210 232L198 246L62 246Z", { color: "blue" })
+text(130, 272, "내 노트북", { align: "center", size: 16 })
+// 서버: 같은 칸 세 개
+for (let i = 0; i < 3; i++) box(560, 140 + i * 34, 110, 28, { color: "purple" })
+for (let i = 0; i < 3; i++) dot(578, 154 + i * 34, { r: 4, color: "green" })
+text(615, 262, "VPN 서버", { align: "center", size: 16 })
+// 터널
+pen([[200, 168], [300, 146], [460, 146], [555, 168]], { color: "accent" })
+pen([[200, 218], [300, 240], [460, 240], [555, 218]], { color: "accent" })
+step("데이터는 잠긴 상자에 담겨 터널 안을 지나가요")
+for (let i = 0; i < 4; i++) box(240 + i * 80, 184, 26, 18, { color: "sky", fill: true })
+arc(383, 176, 13, 180, 360, { width: 2.4 })
+box(366, 176, 34, 28, { color: "orange", fill: true })
+text(383, 282, "통신사·와이파이는 내용을 못 봐요", { align: "center", size: 15, color: "quiet" })
+step("서버가 대신 사이트에 접속해서, 사이트에는 서버 주소만 보여요")
+circle(735, 320, 42, { color: "green" })
+ellipse(735, 320, 17, 42, { color: "green" })
+line(693, 320, 777, 320, { color: "green" })
+arrow(628, 212, 700, 284)
+text(676, 236, "대신 접속", { size: 14, color: "quiet" })
+text(735, 385, "웹사이트", { align: "center", size: 16 })
+highlight(650, 404, 170, 20)
+text(735, 414, "보이는 주소: VPN 서버", { align: "center", size: 14 })
 ```

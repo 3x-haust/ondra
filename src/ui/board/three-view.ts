@@ -4,6 +4,7 @@
 // a part appearing): no frame loop runs while nothing moves.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { Material, Part, Tone } from "./parse";
 
 const LOOKS: Record<Material, { color: string; metal: number; rough: number; opacity?: number }> = {
@@ -60,16 +61,20 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const chips = new Map<number, Label>();
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.01, 1000);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a90, 1.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a90, 0.8));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.position.set(4, 7, 5);
   scene.add(sun);
   const fill = new THREE.DirectionalLight(0xffffff, 0.6);
   fill.position.set(-5, 2, -3);
   scene.add(fill);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ color: cssColor("--line-soft"), transparent: true, opacity: 0.5 }));
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+  // a soft room around the model, so metal reflects something instead of going black
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  const envMap = pmrem.fromScene(room, 0.04).texture;
+  scene.environment = envMap;
+  room.dispose?.();
+  pmrem.dispose();
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
@@ -191,9 +196,6 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     camera.near = dist / 100;
     camera.far = dist * 10;
     camera.updateProjectionMatrix();
-    // a soft floor just wider than the model's footprint
-    ground.scale.setScalar(Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * 0.62 + r * 0.08);
-    ground.position.set(sphere.center.x, box.min.y - 0.001, sphere.center.z);
     controls.minDistance = r * 0.8;
     controls.maxDistance = dist * 4;
   };
@@ -204,7 +206,9 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       return new THREE.MeshStandardMaterial({ color: l.color, metalness: l.metal, roughness: l.rough,
         ...(l.opacity ? { transparent: true, opacity: l.opacity } : {}) });
     }
-    return new THREE.MeshStandardMaterial({ color: cssColor(TONE_VAR[p.look as Tone]), metalness: 0.05, roughness: 0.5 });
+    // a #hex is the colour the thing really has; a tone is the app's colour
+    const color = p.look.startsWith("#") ? p.look : cssColor(TONE_VAR[p.look as Tone] ?? "--ink-3");
+    return new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.55 });
   };
 
   const highlight = () => {
@@ -271,8 +275,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       ro.disconnect();
       controls.dispose();
       for (const s of shown) { s.mesh.geometry.dispose(); (s.mesh.material as THREE.Material).dispose(); }
-      ground.geometry.dispose();
-      (ground.material as THREE.Material).dispose();
+      envMap.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
