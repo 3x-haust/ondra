@@ -18,7 +18,7 @@ import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
 import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
-import { chatKey, editMain, inChat, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
+import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import { sendSide } from "../engine/aside";
@@ -223,6 +223,15 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
   const routes = () => props.m.routes ?? [];
   const rows = () => handed(props.m);
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
+  // the first answer's text: while main writes it, as far as it has come; one Markdown for both,
+  // so a board that started drawing while it was written goes on drawing when it is done
+  const firstAnswer = () => routes().findIndex((r) => r.kind === "answer");
+  const answerText = () => {
+    if (props.m.pending) return mainDraft(chatKey(props.m.space, props.m.project), props.m.id);
+    if (props.m.error) return "";
+    const r = routes()[firstAnswer()];
+    return r?.kind === "answer" ? r.text : "";
+  };
   return (
     <div class="reply" data-mid={props.m.id} classList={{ linked: rows().some((r) => r.taskId === hoverTask() || r.taskId === props.active) }}>
       <Show when={props.m.up ? projectById(props.m.up) : undefined}>
@@ -263,13 +272,17 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                 <button class="retry" onClick={props.retry}><Icon name="refresh" size={14} />{t("다시 시도")}</button>
               </div>
             </Show>
+          </Match>
+        </Switch>
+        <Show when={answerText()}><Markdown class="msg-text" text={answerText()} /></Show>
+        <Show when={!props.m.pending && !props.m.error}>
             <For each={routes()}>
               {(r) => (
                 <Switch>
                   <Match when={r.kind === "answer" && r}>
                     {(a) => (
                       <>
-                        <Show when={a().text}><Markdown class="msg-text" text={a().text} /></Show>
+                        <Show when={a().text && a() !== routes()[firstAnswer()]}><Markdown class="msg-text" text={a().text} /></Show>
                         <Show when={a().blocks.length}><div class="blocks"><For each={a().blocks}>{(b) => <BlockView block={b} />}</For></div></Show>
                       </>
                     )}
@@ -299,8 +312,7 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                 <For each={rows()}>{(r) => <JobRow taskId={r.taskId} relayed={r.relayed} live={props.lastRow(r.taskId) === props.m.id} active={props.active === r.taskId} full={props.full} />}</For>
               </div>
             </Show>
-          </Match>
-        </Switch>
+        </Show>
         <Show when={!props.m.pending && !props.m.error && (copyText() || props.m.usage)}>
           <div class="reply-foot">
             <Show when={copyText()}><MsgActions text={copyText()} onRetry={props.retry} /></Show>

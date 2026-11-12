@@ -15,7 +15,7 @@ import { accountById, addProject, projectById, projectFor, projectsIn, projectsS
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
-import { prose, readFences } from "./fences";
+import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
 import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
@@ -113,6 +113,16 @@ export const captainAgent = agentOf;
 /** what main reasons while it answers, per chat; cleared when the next answer starts */
 const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
 export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
+/** the answer main is writing, per chat, shown (with its board drawing) before it is done */
+const [draftsAll, setDraftsAll] = createSignal<Record<string, { id: string; text: string }>>({});
+/** which reply each chat is answering now */
+const answering = new Map<string, string>();
+export const mainDraft = (key: string, replyId: string) => (draftsAll()[key]?.id === replyId ? draftsAll()[key].text : "");
+function setDraft(key: string, text: string) {
+  const id = answering.get(key) ?? "";
+  const was = draftsAll()[key];
+  if (was?.id !== id || was.text !== text) setDraftsAll((all) => ({ ...all, [key]: { id, text } }));
+}
 export function addThought(key: string, delta: string) {
   if (!delta) return;
   setThoughtsAll((all) => ({ ...all, [key]: ((all[key] ?? "") + delta).slice(-40_000) }));
@@ -367,13 +377,16 @@ async function pump(space: string) {
     for (let next = queues.get(space)?.shift(); next; next = queues.get(space)?.shift()) {
       try {
         isolateOf.set(space, next.isolate);
+        answering.set(space, next.replyId ?? "");
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, { pending: false, routes, reply, at: Date.now() });
+        setDraft(space, "");
         keepResult(next.replyId);
         if (pj(space)) reportUp(space);
       } catch (e) {
         logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
+        setDraft(space, "");
         // the project couldn't answer: main still gets what the jobs reported
         if (pj(space)) reportUp(space);
       }
@@ -646,6 +659,7 @@ async function ensureCaptain(space: string) {
         const t = (texts.get(space) ?? "") + ev.assistantMessageEvent.delta;
         texts.set(space, t);
         setLive(agent, prose(t));
+        setDraft(space, draftAnswer(t));
       }
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
@@ -917,6 +931,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const agent = agentOf(space);
   texts.set(space, "");
   setThoughtsAll((all) => ({ ...all, [space]: "" }));
+  setDraft(space, "");
   errors.delete(space);
   const done = new Promise<void>((resolve) => settled.set(space, resolve));
   genOf.set(space, { ms: 0 });
