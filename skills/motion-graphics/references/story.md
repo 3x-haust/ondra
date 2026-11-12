@@ -1,25 +1,27 @@
 # Story, spec and storyboard
 
-## Storylines: three films, then one
+## Storylines: a few films, then one
 
-Sketch 5+ ideas, each a **device** (result first; before/after on the same
+Sketch several ideas, each a **device** (result first; before/after on the same
 page; one object travelling across apps; the old way failing, then the
 product) paired with a **form** (one continuous take; object-to-object
 chain; endless zoom; kinetic type with UI wedged between words; a designer's
-artboard). Keep three that are genuinely different films. For each write:
+artboard). Keep a few (three is a good number) that are genuinely different
+films. For each write:
 
 - world (ground, light, scale) and device + form
-- the exact first 2 s (frame 0 is the thumbnail and must carry the idea;
-  never a logo alone, never "Introducing", never typing into an empty box)
+- the exact first 2 s (frame 0 is the thumbnail, so it should carry the
+  idea; a logo alone, "Introducing" or typing into an empty box wastes it)
 - the beat chain in one line
 - look and sound in a line each
 
-Save as `STORYLINES.md`, show the three, let the user pick. Pick for story,
+Save as `STORYLINES.md`, show them, let the user pick. Pick for story,
 not for the most striking frame.
 
 ## Beat shares
 
-For a ~30–40 s launch film (shares of the total):
+A shape that usually works for a ~30–40 s launch film (rough shares of the
+total; bend it to the story):
 
 | beat | share | what happens |
 |---|---|---|
@@ -35,8 +37,8 @@ Alternative arc (feature-heavy): brand open 8–12% → one hero action arc ≥ 
 → feature climb 55–65% alternating high and low energy with 2–4 breathing
 title cards → finale at peak energy. Put the densest shot 2nd–3rd from last.
 
-Every core feature gets a shot; every technique is the hero only once. Ask
-of each shot "what new information does this give?" and cut repeats.
+Give each core feature a shot and let a technique be the hero once. Ask of
+each shot "what new information does this give?" and cut repeats.
 
 ## SPEC.md
 
@@ -54,8 +56,9 @@ BANNED    (below, plus what each render reveals)
 QA        frames.py clean · every cut strip reviewed · loudness within 10 LU · review P0 = 0
 ```
 
-Every adjective becomes a number: "clean" = 12 columns, 96 px margins, one
-accent word per shot; "calm" = camera moves ≥ 0.75 s, no impacts.
+Adjectives as numbers keep every scene meaning the same thing: "clean" =
+12 columns, 96 px margins; "calm" = camera moves ≥ 0.75 s, no impacts. The
+numbers above are an example, not a house style.
 
 ## Storyboard
 
@@ -70,24 +73,21 @@ seam out    cut-the-curve upward into 04; carrier: the page thumbnail
 notes
 ```
 
-`reads` windows never overlap: one thing to read at a time. A shot without
-a `reads` line is decoration; ask whether it should exist.
+`reads` windows work best when they don't overlap: one thing to read at a
+time. A shot without a `reads` line is decoration; ask whether it should exist.
 
-## Banned defaults
+## Generic defaults to watch for
 
-Each is a tell of generated video. Use one only when the brand or the user
-asks for it, and write why in the spec.
+Tells of generated video, on top of what users rejected (SKILL.md). Fine when
+the brand or the user asks for one; otherwise reach for something specific.
 
-- dark void with small floating UI
 - glow, bloom, particles, lens flares as decoration
-- purple/blue or mesh gradients, glassmorphism cards
 - cream paper + serif + mono labels as a default
 - everything centred; everything fading and sliding up
 - corner labels, HUD readouts, fake metrics
-- three cards in a row; logo docked in a corner the whole film
 - copy words: "Introducing", "unlock", "seamless", "supercharge",
-  "game-changer", "revolutionize", "effortless", "in seconds" (unless measured)
-- subtitle chips at the bottom; idle floating/breathing loops on UI or titles
+  "game-changer", "effortless", "in seconds" (unless measured)
+- idle floating/breathing loops on UI or titles
 
-After each render, add any new default you spot to the film's `BANNED` line.
+A new default you spot in a render can go on the film's `BANNED` line.
 Rewrite the copy once the picture is locked.

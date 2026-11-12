@@ -37,9 +37,8 @@ design, not the agent's taste. The measurement gates below are fixed.
 
 ## Tools and evidence
 
-This skill is a workflow, not an installed measurement toolchain. Read the
-`browser-use` skill before browser work; use Ondra's shared browser and your
-own tab. Discover available Figma tools with `tool_search`; use the user's
+This skill is a workflow, not an installed measurement toolchain. `browser-use`
+covers driving the browser; use Ondra's shared browser and your own tab. Discover available Figma tools with `tool_search`; use the user's
 existing access rather than assuming a particular MCP server is installed.
 
 Inspect the project's measurement tools first. If it already has screenshot,
@@ -72,9 +71,10 @@ screenshots by eye or invent a percentage.
    `figma-data.json`. Preserve node IDs, hierarchy, bounds, text and styles.
 3. Download real assets (photos, illustrations, logos) and export the target
    frame as a reference PNG. Record viewport dimensions and export scale.
-4. During the loop, read the saved contract, not Figma again. Re-extract only
-   if the user changes the reference or the original extraction is incomplete;
-   record the change and restart measurements against that contract.
+4. During the loop, read the saved contract rather than Figma again, so every
+   iteration is measured against the same thing. Re-extract when the user
+   changes the reference or the extraction was incomplete; record the change
+   and restart measurements against the new contract.
 
 Verify every requested node, or state the user-approved node scope explicitly.
 For a supplied screenshot without Figma data, preserve it as the reference and
@@ -120,9 +120,9 @@ than scaling desktop coordinates and calling that a mobile match.
 
 Use an independent visual critic only when the work's size or uncertainty
 justifies it. Give it the frozen contract, captures, measured differences and
-node-to-selector mapping; it does not edit source. Ask for at most five issues
-with expected/actual/delta, confidence, priority, root cause, bounded fixes and
-what must not change. When children share an offset, inspect their nearest
+node-to-selector mapping; it does not edit source. A short ranked list works
+best: each issue with expected/actual/delta, confidence, root cause, a bounded
+fix and what must not change. When children share an offset, inspect their nearest
 common parent first. The owner verifies the combined result; deterministic
 pixel and DOM checks, not the critic's opinion, decide acceptance.
 
@@ -131,8 +131,8 @@ pixel and DOM checks, not the critic's opinion, decide acceptance.
 Fix the biggest measured differences first: structure/viewport, position and
 spacing, typography and color, then borders, shadows and one-pixel details.
 Find the node in `figma-data.json`, make the smallest justified change and
-rerun both checks. Protect already matching geometry from regressions. When
-stuck above 95%, re-read exact colors, coordinates and font values instead of
+rerun both checks. Protect already matching geometry from regressions. Near
+the threshold, re-read exact colors, coordinates and font values instead of
 guessing.
 
 ### 5. Behaviors
@@ -143,12 +143,12 @@ inputs focus, links navigate and modals open and close. Run the project's
 required tests, type checks and lint too; visual fidelity does not replace
 functional verification.
 
-## Hard rules
+## Rules that protect the match
 
-1. Never code values from memory. Re-read the saved design contract.
-2. Never approximate design values. Convert normalized colors once; preserve
-   exact geometry and typography rather than rounding to convenient values.
-3. Never invent design decisions or add decoration absent from the reference.
+1. Take values from the saved design contract, not from memory.
+2. Keep design values exact: convert normalized colors once; preserve
+   geometry and typography rather than rounding to convenient values.
+3. Don't invent design decisions or add decoration absent from the reference.
 4. Reference screenshots are measuring inputs, never app assets. Only real
    photos, illustrations, logos and other design assets belong in the app.
 5. Never declare done while a required gate fails or remains unmeasured.
@@ -172,9 +172,10 @@ unless the user explicitly changes the scope.
 
 ## Stop condition and report
 
-After three consecutive iterations without improvement, re-derive the fix list
-from the contract. After another three without improvement, hand over with
-concrete per-element deltas, failed gates and the next useful action. Access or
+When several iterations bring no improvement, re-derive the fix list from the
+contract instead of nudging values. If that still doesn't move the numbers,
+hand over with concrete per-element deltas, failed gates and the next useful
+action. Access or
 dependency blockers also require an honest incomplete report, not a pass.
 
 Use Ondra's reporting blocks and the user's language. Include the actual overall

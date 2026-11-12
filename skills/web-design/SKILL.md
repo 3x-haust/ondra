@@ -34,31 +34,31 @@ design direction and carrying an approved direction into later work.
 
 ## 1. References first (before a new layout)
 
-- Open what the user pointed at and 4–6 more of the best real examples of the
+- Open what the user pointed at and a handful of the best real examples of the
   same kind (personal sites the user named, awwwards / siteinspire / godly.website
   winners, the products they admire). Use the browser; take screenshots.
-- For each, write down the 2–3 concrete moves that make it good: the type pairing
-  and sizes, the grid, one signature interaction, how motion responds to the
+- For each, write down the concrete moves that make it good: the type pairing
+  and sizes, the grid, a signature interaction, how motion responds to the
   user, what is real content (video, photos, product) vs decoration.
 - Use brand names and style catalogs as search leads, not authoritative rules.
   Inspect the current site or official guidelines before describing its design.
   Extract useful principles rather than copying branding or a whole page.
 - Save screenshots and notes in the project's existing reference location
   (`docs/refs/` if none). Record source URLs and what each reference informs.
-  Show the best 3–4 as `shot` blocks so the user sees what you saw.
+  Show the most telling ones as `shot` blocks so the user sees what you saw.
 
 ## 2. Concepts as live prototypes, not boards
 
-- 2–3 directions, each built as a real page (one HTML file each, real fonts,
-  real motion, the user's actual content and photos), not a static sketch with
-  labels. Each must have one signature interaction the user can try (scroll
-  scene, drag, hover reveal, cursor-reactive element, a playful toy).
-- Directions must differ in idea, not just color: e.g. "desktop/scrapbook",
-  "editorial typography", "single 3D/canvas scene".
+- A few directions (two or three is usually enough), each a real page (real
+  fonts, real motion, the user's content and photos), not a labelled sketch:
+  people judge a design by using it. Where interaction matters, give each
+  something to try (scroll scene, drag, hover reveal).
+- Directions that differ in idea, not just color, are worth comparing:
+  e.g. "desktop/scrapbook", "editorial typography", "single 3D/canvas scene".
 - Screenshot each at desktop and phone width, record a short clip of its
   interaction, and send: `shot` blocks + a `link` to the file to open live.
 - Ask with options `{label, note}` (note = the feeling in one line) and the shots
-  as `context`. Build nothing more until the user picks.
+  as `context`, then wait for the pick before building further.
 
 ## 3. Keep the chosen design reusable
 
@@ -100,7 +100,7 @@ rules. Resolve a conflict with the approved direction before changing its look.
 - Generic headlines ("불편을 발견하고, 작동하는 흐름으로."), filler copy, fake
   metrics. Use the user's real words, projects, numbers, photos.
 - Motion that loops by itself or decorates; fade-up on every block. Motion
-  answers the user (scroll, cursor, click) and has one hero moment.
+  that answers the user (scroll, cursor, click) reads as designed.
 - An arbitrary font pairing or a default font stack chosen without context.
   Keep the brand's fonts, including system fonts when intentional; for a new
   direction, choose typography from the references and verify language coverage.
@@ -137,11 +137,11 @@ for comparable data. Keep meaning and readability ahead of novelty.
 
 ## 6. Check the rendered result
 
-Read `browser-use` before browser work. Reuse the project's existing checks and
+`browser-use` covers driving the browser. Reuse the project's existing checks and
 capture the real page, not just source or a successful build.
 
 - Compare the approved direction and implementation side by side at desktop and
-  390px phone width (plus requested widths). Inspect hierarchy, alignment,
+  a phone width (around 390px), plus requested widths. Inspect hierarchy, alignment,
   wrapping, navigation, asset loading and consistent tokens across sections.
 - Exercise the primary action and the states the changed flow can enter. Check
   keyboard order, visible focus, labels and touch access; essential information

@@ -28,9 +28,9 @@ tests → `test-ci`, the fix loop → `goal-loop`, blocks → `visual-report`.
   "확인해 봐". Change no product code or tests; write only notes and evidence.
 - **Fix**: the user asked for a fix or a finish ("고쳐줘", "고쳐서", "완벽하게",
   "출시할 수 있게", "될 때까지"). Go through §6 after the first pass.
-- Ask nothing unless truly blocked: no way to run the app, a login only the
-  user has, or a device you may not touch. Everything else, decide and say so
-  in the report.
+- QA is most useful when it runs without waiting on the user: ask only when
+  truly blocked (no way to run the app, a login only the user has, a device you
+  may not touch); otherwise decide and say so in the report.
 - **Never** use real customers' accounts, payments or production data. Use
   test accounts, seed data, a guest session, or mock the request (§3). A
   `localhost` that talks to a production API is production.
@@ -61,14 +61,15 @@ Work out what to cover from the request, without asking:
   settings tabs, keyboard shortcuts. Add the sitemap and the nav links.
   Dynamic routes: one representative id per template, not every id.
 
-Show it: a `scope` block (in / out) and a `tree` of screens, changed ones
-marked `state: "changed"`.
+A `scope` block (in / out) and a `tree` of screens (changed ones marked
+`state: "changed"`) let the user see and correct the coverage early.
 
 ## 2. Plan
 
-A `checklist` block, risk first. For each feature, the **happy path end to
-end** comes first (a user reaching their goal); then the axes below. Order by:
-what changed > money, data loss and security paths > most-used flows > the rest.
+A `checklist` of what you'll try, riskiest first so the time goes where bugs
+cost most. For each feature the **happy path end to end** (a user reaching
+their goal) usually comes first, then the axes below. A sensible order: what
+changed > money, data loss and security paths > most-used flows > the rest.
 Leave out what doesn't apply (no login → no auth line; one language → no
 language line) and name it in "확인 못 한 것" only if it does apply but you
 can't run it.
@@ -79,10 +80,10 @@ can't run it.
 | inputs | required/invalid/boundary values, paste, emoji, Korean IME, very long text, special characters, double submit, submit with Enter |
 | auth | guest vs signed in, a role without access, expired session mid-action, sign-in redirect back to where you were |
 | navigation | refresh on every screen, back/forward, deep link straight in, open in a new tab, a URL with a bad id |
-| sizes | web: phone (390×844) and desktop (1440×900), tablet only when targeted; desktop app: its minimum window size (from its config) and a large one; mobile: a small and a large device |
+| sizes | web: a phone and a desktop size (e.g. 390×844, 1440×900) or the ones the project targets; desktop app: its minimum window size (from its config) and a large one; mobile: a small and a large device |
 | themes, languages | light and dark; each shipped language, the longest one for overflow |
 | a11y | keyboard only (Tab, Enter, Esc), visible focus, labels and names, contrast, 200% text |
-| health | console errors, failed requests (4xx/5xx), loads over 3 s, layout jumps |
+| health | console errors, failed requests (4xx/5xx), slow loads, layout jumps |
 
 Inputs, states and per-platform lists to pick from: `references/checklist.md`.
 
@@ -103,7 +104,7 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   in your tab and prints `ok|SLOW|FAIL path  ms  js:n console:n http:n
   (status path…)  [first heading]`, with `BLANK` for an empty screen and
   `hscroll` for sideways scrolling. Set size, theme and login first; loop over
-  them (13 screens × 2 sizes × 2 themes takes about a minute on a build):
+  them:
   ```bash
   for size in 390x844 1440x900; do for theme in light dark; do
     agent-browser set viewport ${size%x*} ${size#*x}; agent-browser set media $theme
@@ -111,10 +112,9 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   done; done
   ```
   Screens without their own URL: steps `label=js:<expression>` that click the
-  real nav (`board=js:document.querySelector('[data-nav=board]').click()`).
-  Click what users click; debug hooks (`window.__app`) are usually dev-only
-  and missing from a build. The heading in `[…]` shows you landed where you meant.
-  Then look at the `FAIL` lines only. Noise you have explained (a missing
+  real nav (`board=js:document.querySelector('[data-nav=board]').click()`);
+  debug hooks (`window.__app`) are usually missing from a build. Then look at
+  the `FAIL` lines. Noise you have explained (a missing
   favicon, a dev-only asset): `QA_IGNORE='favicon|/@fs/'`, said once in the report.
 - **Every page you touch**: read page errors, console and failed requests
   (`agent-browser errors`, `console`, `network requests --status 400-599`),
@@ -124,22 +124,22 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   (many items), `set offline on`, `set media dark`, `set device "iPhone 15"`.
   `agent-browser a11y` runs axe on a page; `vitals` gives load numbers.
   Save shots to absolute paths (`$APP_ARTIFACTS_DIR/...`).
-- **Screenshots only when something is wrong**, or as before/after proof.
-  Read structure (`snapshot -i --delta`, `eval`) to check; look at pixels
-  for layout, overflow and theme.
+- **Screenshots mostly for problems** and before/after proof: reading
+  structure (`snapshot -i --delta`, `eval`) is faster for checking; look at
+  pixels for layout, overflow and theme.
 - **Surfaces**: web through `browser-use` (the built-in browser; Aside only
   when the user asks); iOS/Android through `device-use` (your own device, `stop` it
   at the end); a Mac app through `computer-use` (one app, one worker at a time).
-- **In parallel, by area**: more than ~15 screens or several platforms → up to
-  4 subagents, one area each (e.g. 가입·로그인 / 목록·검색 / 결제 / 설정), each
-  with its own tab or device. Each task gives the base URL or build, the area's
-  plan lines, the viewports, "report-only: no edits", and the issue format of §4
-  to return. You merge and dedupe. Not for a Mac app (one app at a time).
+- **In parallel, by area**: a big app or several platforms goes faster split
+  across a few subagents, one area each (e.g. 가입·로그인 / 목록·검색 / 결제 /
+  설정), each with its own tab or device. Give each the base URL or build, the
+  area's plan lines, the sizes, "report-only: no edits", and the issue format
+  of §4. You merge and dedupe. Not for a Mac app (one app at a time).
 
 ## 4. Each issue
 
-Write each one down when you find it (`$APP_ARTIFACTS_DIR/qa/issues.md`), not
-at the end: the notes survive an interruption or a handoff.
+Writing each one down when you find it (`$APP_ARTIFACTS_DIR/qa/issues.md`)
+rather than at the end means the notes survive an interruption or a handoff.
 
 - **Severity**: **P1** broken core flow, crash, data loss, security or privacy
   exposure; **P2** wrong behaviour with a workaround, a feature broken on one
@@ -174,19 +174,12 @@ Go straight to §7. Don't fix, even small things; the issue list is the result.
 
 ## 6. Fix mode: loop until no P1/P2
 
-Follow `goal-loop` with the confirmed P1/P2 repros as the checks. Each round,
-most severe first:
-
-1. A regression test that fails for this bug (`test-ci`): unit or integration
-   where it can catch it, an e2e step only when smaller tests can't. Pure
-   layout bugs: the before shot and a measured check (sizes, overflow) instead.
-2. The smallest fix in the source; no refactors on the way.
-3. The test passes; the exact repro from §4 now works (after shot, same
-   viewport); console and requests are clean.
-4. Re-run the plan lines that touch the changed files (§1's mapping again).
-   Something that passed now fails → undo and try another fix.
-
-Same issue failing three rounds → stop and rethink (`goal-loop`). P3s: fix
+Follow `goal-loop` with the confirmed P1/P2 repros as the checks, most severe
+first. Per bug: a regression test that fails for it (`test-ci`; for pure
+layout bugs, the before shot and a measured check), the smallest fix, then
+the test passes, the exact repro works (after shot, same viewport) and console
+and requests are clean. Re-run the plan lines that touch the changed files;
+something that passed now fails → undo and try another fix. P3s: fix
 them when the user asked for "완벽하게" and the fix is local; else list them.
 When no P1/P2 remain: a fresh production build and a final sweep of the main
 flows on phone and desktop. Don't commit, push or open a PR unless the task says so.
@@ -194,13 +187,13 @@ flows on phone and desktop. Don't commit, push or open a PR unless the task says
 ## 7. Report
 
 Plain Korean (the user's language), short sentences, no filler ("꼼꼼하게
-살펴봤습니다" adds nothing). Blocks (`visual-report`):
+살펴봤습니다" adds nothing). Blocks (`visual-report`) that work well:
 
 - **Coverage**: a `table` of screens or flows × viewports/devices/themes
   (`✓`, `✗ P2`, `–` not run), or a `checklist` of the plan with `done`.
-- **Issues**: a `table` — 심각도 · 화면 · 문제 · 재현 · 위치 — P1 first.
-  A `shot` for each P1/P2 (the broken state), a `link` `kind: "video"` for
-  a flow you recorded.
+- **Issues**: e.g. a `table` (심각도 · 화면 · 문제 · 재현 · 위치), P1 first,
+  with a `shot` of the broken state for P1/P2 and a `link` `kind: "video"`
+  for a flow you recorded.
 - **Fixes** (fix mode): a `beforeAfter` per fixed issue on screen, a `tests`
   block for the regression tests, `files` changed.
 - **Not covered**: what you didn't or couldn't check and why (no test account,

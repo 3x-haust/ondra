@@ -50,7 +50,7 @@ Bach's HTSM, Whittaker's tours, W3C Easy Checks and common mobile QA lists.
 
 ## Web
 
-- Phone (390×844) and desktop (1440×900): no horizontal scroll, nothing cut
+- Phone and desktop widths: no horizontal scroll, nothing cut
   off, tap targets reachable, menus open and close, sticky bars don't cover
   inputs.
 - Light and dark (`set media dark`): text and icons readable, no white flashes,
