@@ -595,6 +595,8 @@ export interface Settings {
   isolate: boolean;
   /** Send apps a job starts back behind the user's window when they come forward. */
   focusGuard: boolean;
+  /** a job's browser floats in a corner while it works (missing = on) */
+  browserPip?: boolean;
   /** Model / effort for new forks ("" = automatic). */
   forkModel: string;
   forkThinking: string;

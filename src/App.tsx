@@ -43,6 +43,7 @@ import { installLog, logInfo, logWarn } from "./lib/log";
 import { EFFORTS, faultOf, jobFailed, modelOf, PANEL_TABS, PERMISSIONS, pick, startTelemetry, THEMES, track, VIEWS, WEIGHTS } from "./lib/telemetry";
 import { FeedbackHost, setFeedbackVersion } from "./ui/Feedback";
 import { VisualViewer } from "./ui/exportVisual";
+import { BrowserPip } from "./ui/BrowserPip";
 import { warmModels } from "./engine/modelList";
 import { soonIndex } from "./engine/vectors";
 import { startBridge } from "./engine/bridge";
@@ -265,6 +266,7 @@ export default function App() {
       <Lightbox />
       <PairAskDialog />
       <VisualViewer />
+      <Show when={loaded() && state.onboarded}><BrowserPip /></Show>
       {/* one toast at a time (DESIGN.md §9.10): the newest shows; a kept one comes back after it */}
       <ContextMenuHost />
       <ConfirmHost />

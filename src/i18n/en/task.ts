@@ -164,6 +164,8 @@ export default {
   "공유 브라우저": "Shared browser",
   "브라우저 없음": "No browser yet",
   "연결 중": "Connecting",
+  "{name} 브라우저 크게 보기": "Open {name}'s browser",
+  "눌러서 크게 보기": "Click to open",
   "브라우저 닫힘": "Browser closed",
   "마지막 스크린샷": "Last screenshot",
   "눌러서 조작": "Click to interact",
