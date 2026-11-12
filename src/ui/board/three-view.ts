@@ -60,13 +60,14 @@ export type ThreeView = {
 };
 
 /**
- * One WebGL renderer for every 3D board in the app. Each board draws its scene with it
- * and copies the picture onto its own plain canvas. A page with many 3D boards then
- * holds one GPU context (and one lighting room) instead of one each, which is what
- * makes WebKit drop contexts. If the context is lost anyway, a new renderer is made
- * and every board draws again.
+ * One WebGL renderer for every 3D board in the app, so a page with many 3D boards holds
+ * one GPU context (and one lighting room) instead of one each, which is what makes
+ * WebKit drop contexts. Its canvas sits live in the board being drawn (turned, built);
+ * the board it leaves keeps a still picture of its last frame. Copying every frame
+ * instead would read the picture back from the GPU each time, which stutters.
+ * If the context is lost anyway, a new renderer is made and every board draws again.
  */
-type Shared = { renderer: THREE.WebGLRenderer; env: THREE.Texture };
+type Shared = { renderer: THREE.WebGLRenderer; env: THREE.Texture; owner?: { leave: () => void } };
 let shared: Shared | undefined;
 const boards = new Set<() => void>();
 function sharedRenderer(): Shared {
@@ -85,11 +86,13 @@ function sharedRenderer(): Shared {
   const env = pmrem.fromScene(room, 0.04).texture;
   room.dispose?.();
   pmrem.dispose();
+  renderer.domElement.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block";
   const made: Shared = { renderer, env };
   renderer.domElement.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
     if (shared !== made) return;
     shared = undefined;
+    renderer.domElement.remove();
     env.dispose();
     renderer.dispose();
     setTimeout(() => boards.forEach((redraw) => redraw()), 200);
@@ -101,12 +104,17 @@ function sharedRenderer(): Shared {
 export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void; onLost?: () => void }): ThreeView {
   const css = getComputedStyle(host);
   const cssColor = (v: string) => css.getPropertyValue(v).trim() || "#888";
-  // this board's own picture: a plain canvas the shared renderer's frame is copied onto
-  const canvas = document.createElement("canvas");
-  const paint = canvas.getContext("2d")!;
+  // the board's drawing surface: the live renderer canvas while this board is drawn,
+  // and under it a still picture of its last frame for when another board has the renderer
+  const canvas = document.createElement("div");
+  canvas.className = "bd-surface";
+  const still = document.createElement("canvas");
+  still.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block";
+  canvas.appendChild(still);
   host.appendChild(canvas);
   // 1.5× is sharp enough with antialiasing and much lighter than 2× on a retina screen
   const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+  let cssW = 0, cssH = 0;
   // each part's name beside it, joined to it by a thin line; kept next to the part as the model turns
   const labels = document.createElement("div");
   labels.className = "bd-labels";
@@ -161,18 +169,16 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       if (t === 0) next = Math.min(next, s.from);
       if (t === 1) shadowStale = true;
     }
-    const w = canvas.width, h = canvas.height;
-    if (w && h) {
-      const { renderer, env } = sharedRenderer();
-      scene.environment = env;
-      const size = renderer.getSize(new THREE.Vector2());
-      if (size.x !== w || size.y !== h) renderer.setSize(w, h, false);
-      renderer.shadowMap.needsUpdate = shadowStale;
-      shadowStale = false;
-      renderer.render(scene, camera);
-      renderer.shadowMap.needsUpdate = false;
-      paint.clearRect(0, 0, w, h);
-      paint.drawImage(renderer.domElement, 0, 0);
+    if (cssW && cssH) {
+      const sh = sharedRenderer();
+      // take the live canvas over; the board that had it keeps a picture of its last frame
+      if (sh.owner !== me) {
+        sh.owner?.leave();
+        sh.owner = me;
+        canvas.appendChild(sh.renderer.domElement);
+      }
+      paintFrame(sh);
+      still.hidden = true;
     }
     placeLabels();
     // frames only while something moves; a part still to come wakes it at its moment
@@ -264,13 +270,37 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     for (const [i, l] of chips) if (i >= shown.length) (l.chip.remove(), l.line.remove(), l.dot.remove(), chips.delete(i));
   };
   const wake = () => { if (!frame) frame = requestAnimationFrame(draw); };
+  /** this board's scene, drawn by the shared renderer at this board's size */
+  const paintFrame = (sh: Shared) => {
+    const { renderer } = sh;
+    scene.environment = sh.env;
+    if (renderer.getPixelRatio() !== dpr) renderer.setPixelRatio(dpr);
+    const size = renderer.getSize(new THREE.Vector2());
+    if (size.x !== cssW || size.y !== cssH) renderer.setSize(cssW, cssH, false);
+    renderer.shadowMap.needsUpdate = shadowStale;
+    shadowStale = false;
+    renderer.render(scene, camera);
+    renderer.shadowMap.needsUpdate = false;
+  };
+  const me = {
+    /** another board takes the renderer: keep a picture of this one (read back once, not every frame) */
+    leave: () => {
+      const sh = shared;
+      if (!sh) return;
+      paintFrame(sh);
+      still.width = sh.renderer.domElement.width;
+      still.height = sh.renderer.domElement.height;
+      still.getContext("2d")?.drawImage(sh.renderer.domElement, 0, 0);
+      still.hidden = false;
+    },
+  };
   controls.addEventListener("change", wake);
 
   const resize = () => {
     const w = host.clientWidth, h = host.clientHeight;
     if (!w || !h) return;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+    cssW = w;
+    cssH = h;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     wake();
@@ -420,6 +450,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       (catcher.material as THREE.Material).dispose();
       boards.delete(redraw);
       sun.shadow.dispose();
+      if (shared?.owner === me) { shared.owner = undefined; shared.renderer.domElement.remove(); }
       canvas.remove();
       labels.remove();
     },
