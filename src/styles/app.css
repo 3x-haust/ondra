@@ -2047,13 +2047,46 @@ button.st-sh:hover { text-decoration: underline; }
   from { opacity: 0; transform: translateY(6px); }
 }
 .cn-proj .set-label b,
-.cn-host .set-label b {
+.cn-host .set-label b,
+.cn-host .cn-name {
   flex: none;
   max-width: 50%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cn-host .cn-name b {
+  max-width: none;
+}
 .cn-proj .set-label .cn-folder-path {
   flex: 1;
+}
+/* a Mac's name: click to give it one of your own */
+.cn-name {
+  all: unset;
+  cursor: text;
+  border-radius: var(--r-sm);
+}
+.cn-name:hover b {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.cn-name:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.cn-name-input {
+  width: 180px;
+  height: var(--h-sm);
+}
+/* the two Macs run different Ondra versions */
+.cn-ver {
+  font-size: var(--fs-xs);
+  color: var(--warn);
+}
+.strip-far .cn-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
 }

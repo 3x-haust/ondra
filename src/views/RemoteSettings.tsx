@@ -1,10 +1,11 @@
 // Settings › 연결, like Codex's Connections: other Macs this one works on (their projects
 // show in the sidebar, their jobs run there), and other Macs allowed to work on this one.
-import { createSignal, For, onCleanup, Show } from "solid-js";
-import { state } from "../state/store";
-import { mirror, remoteProjectId, type HostStatus } from "../state/mirror";
-import { addHost, addHostFolder, addHostProject, removeHost, removeHostProject } from "../engine/hosts";
-import { answerPair, connectLink, remote, revokeDevice, setRemoteOn } from "../engine/remote";
+import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
+import { setState, state } from "../state/store";
+import { mirror, remoteProjectId } from "../state/mirror";
+import { addHost, addHostFolder, addHostProject, reconnect, removeHost, removeHostProject } from "../engine/hosts";
+import { answerPair, connectLink, keepAwake, remote, revokeDevice, setRemoteOn } from "../engine/remote";
+import { hostState } from "../ui/ComputerPicker";
 import { toast } from "../state/ui";
 import { ago } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -12,24 +13,20 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { Row, Switch_ } from "./Settings";
 import { t } from "../i18n";
 
-const STATUS: Record<HostStatus, string> = {
-  ok: "연결됨",
-  connecting: "연결 중",
-  waiting: "그 Mac에서 허용을 기다려요",
-  lost: "연결 안 됨",
-  denied: "거절됨",
-  off: "꺼짐",
-};
-
-function statusText(s: HostStatus | undefined, reason?: string) {
-  if (s === "denied" && reason === "off") return t("그 Mac에서 연결을 꺼 뒀어요");
-  if (s === "denied" && reason === "unknown") return t("그 Mac에서 이 Mac을 뺐어요");
-  return t(STATUS[s ?? "connecting"]);
-}
+const [mine] = createResource(() => import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => ""));
 
 /** one Mac this one works on: its state, its projects added here, adding more */
 function HostRow(props: { id: string; name: string }) {
   const h = () => mirror.hosts[props.id];
+  // a name of the user's own for it, used everywhere (sidebar, the run chip, jobs)
+  const [naming, setNaming] = createSignal(false);
+  const rename = (v: string) => {
+    setNaming(false);
+    const name = v.trim();
+    if (name && name !== props.name) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === props.id ? { ...x, name } : x)));
+  };
+  const theirs = () => h()?.info?.version;
+  const off = () => !!theirs() && !!mine() && theirs() !== mine();
   const [picking, setPicking] = createSignal(false);
   const [folder, setFolder] = createSignal("");
   const linked = () => (state.settings.hostProjects ?? []).filter((l) => l.host === props.id);
@@ -45,10 +42,35 @@ function HostRow(props: { id: string; name: string }) {
         <div class="set-label">
           <span class={`cn-dot is-${h()?.status ?? "connecting"}`} aria-hidden="true" />
           <Icon name="monitor" size={16} class="muted" />
-          <b>{props.name}</b>
-          <span class="muted">{statusText(h()?.status, h()?.reason)}</span>
+          <Show
+            when={naming()}
+            fallback={
+              <button class="cn-name" title={t("이름 바꾸기")} onClick={() => setNaming(true)}>
+                <b>{props.name}</b>
+              </button>
+            }
+          >
+            <input
+              class="input cn-name-input"
+              aria-label={t("이름")}
+              value={props.name}
+              ref={(el) => setTimeout(() => (el.focus(), el.select()), 0)}
+              onBlur={(e) => rename(e.currentTarget.value)}
+              onKeyDown={(e) => (e.key === "Enter" ? rename(e.currentTarget.value) : e.key === "Escape" && (e.stopPropagation(), setNaming(false)))}
+            />
+          </Show>
+          <span class="muted">{hostState(props.id)}</span>
+          <Show when={off()}>
+            <span class="cn-ver" title={t("두 Mac의 Ondra 버전이 달라요: 이 Mac {a}, 그 Mac {b}", { a: mine()!, b: theirs()! })}>{t("버전 다름")}</span>
+          </Show>
         </div>
         <div class="set-value">
+          <Show when={h()?.status !== "ok" && h()?.status !== "waiting"}>
+            <button class="btn sm" onClick={() => reconnect(props.id)}>
+              <Icon name="refresh" size={13} />
+              {t("다시 연결")}
+            </button>
+          </Show>
           <button class="btn sm" disabled={h()?.status !== "ok"} onClick={() => setPicking(!picking())} aria-expanded={picking()}>
             <Icon name="plus" size={13} />
             {t("프로젝트 추가")}
@@ -153,6 +175,9 @@ function ThisMac() {
         <Switch_ on={!!state.settings.remote} set={(v) => void setRemoteOn(v)} label={t("다른 Mac에서 이 Mac 쓰기")} />
       </Row>
       <Show when={state.settings.remote}>
+        <Row title={t("잠자기 방지")} desc={t("전원에 연결돼 있는 동안 이 Mac이 잠들지 않아요")}>
+          <Switch_ on={!!state.settings.remoteAwake} set={(v) => (setState("settings", "remoteAwake", v), keepAwake())} label={t("잠자기 방지")} />
+        </Row>
         <div class="set-row">
           <div class="set-label cn-stack">
             <b>{t("연결 링크")}</b>

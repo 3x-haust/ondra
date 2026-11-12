@@ -602,8 +602,10 @@ export interface Settings {
   links?: "inside" | "outside";
   /** other Macs may use this one (Settings › 연결): the ones the user allowed get in */
   remote?: boolean;
+  /** while others may work on this Mac, it doesn't sleep (on power) */
+  remoteAwake?: boolean;
   /** other Macs this one works on, and the projects of theirs added here */
-  hosts?: { id: string; name: string; pair?: string; spaces?: string[] }[];
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number }[];
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** where new work goes from each workspace here (Codex's run location): another Mac, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */

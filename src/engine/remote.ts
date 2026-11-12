@@ -10,7 +10,7 @@
 // fields when they did, and the entries from the first one that differs.
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { inTauri, onRemote, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
+import { inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
 import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import type { HostInfo } from "../state/mirror";
@@ -129,8 +129,12 @@ function flush() {
 }
 
 /** this Mac's workspaces, accounts and how much of each plan is used: what the other Mac shows */
+let version: string | undefined;
+void import("@tauri-apps/api/app").then((m) => m.getVersion()).then((v) => (version = v)).catch(() => {});
+
 function info(): HostInfo {
   return {
+    version,
     spaces: state.spaces.map((s) => ({ id: s.id, label: s.label })),
     accounts: state.accounts
       .filter((a) => a.providers.length)
@@ -246,8 +250,14 @@ export function answerPair(conn: number, ok: boolean) {
 
 export const revokeDevice = (id: string) => void remoteCmd({ cmd: "revoke", id }).catch(() => {});
 
+/** keep this Mac awake while others may work on it (and only then) */
+export function keepAwake() {
+  void remoteAwake(!!state.settings.remote && !!state.settings.remoteAwake).catch(() => {});
+}
+
 export async function setRemoteOn(on: boolean) {
   setState("settings", "remote", on);
+  keepAwake();
   if (on) await startHosts();
   else {
     await remoteCmd({ cmd: "host", on: false }).catch(() => {});
@@ -264,6 +274,7 @@ let started = false;
 export function initRemote() {
   if (!inTauri || started) return;
   started = true;
+  keepAwake();
   void onRemote((ev) => {
     switch (ev.ev) {
       case "ready":

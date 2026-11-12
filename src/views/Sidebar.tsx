@@ -7,6 +7,7 @@ import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { addProject, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
+import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
@@ -608,7 +609,7 @@ export function Sidebar() {
                       e.preventDefault();
                       openMenuAt(`project:${p.id}`, () => projectMenu(p.id), e);
                     }}
-                    title={p.host ? `${p.hostName} · ${p.folder}` : p.folder}
+                    title={p.host ? `${p.hostName} · ${hostState(p.host)} · ${p.folder}` : p.folder}
                   >
                     <span
                       class="sb-proj-ic"

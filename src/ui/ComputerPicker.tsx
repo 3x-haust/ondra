@@ -3,7 +3,8 @@
 // only the Mac; a tab only another Mac has offers only Macs. That Mac's account, plan use and
 // models show the way this Mac's own do.
 import { For, Show } from "solid-js";
-import { mirror, type HostInfo } from "../state/mirror";
+import { hostStatusText, mirror, type HostInfo } from "../state/mirror";
+import { ago } from "./bits";
 import { accountsIn, setState, state } from "../state/store";
 import { setView } from "../state/ui";
 import { windowLabel } from "../state/limits";
@@ -18,6 +19,8 @@ export interface Place { host: string; space?: string; account?: string; model?:
 type HostAccount = HostInfo["accounts"][number];
 
 const hostName = (id: string) => state.settings.hosts?.find((h) => h.id === id)?.name ?? "Mac";
+/** "연결됨" / "10분 전부터 연결 안 됨" … for one Mac */
+export const hostState = (id: string) => hostStatusText(mirror.hosts[id], state.settings.hosts?.find((h) => h.id === id)?.seen, t, ago);
 const infoOf = (host: string): HostInfo | undefined => mirror.hosts[host]?.info;
 const labelOf = (space: string) => state.spaces.find((s) => s.id === space)?.label;
 
@@ -74,7 +77,7 @@ export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: 
     ...(localHere(mine()) ? [{ id: "local", label: t("이 Mac"), icon: "monitor", checked: !props.value, run: () => setComputer(mine(), undefined) }] : []),
     ...macsHere(mine()).map((h) => ({
       id: h.id,
-      label: mirror.hosts[h.id]?.status === "ok" ? h.name : `${h.name} · ${t("연결 안 됨")}`,
+      label: mirror.hosts[h.id]?.status === "ok" ? h.name : `${h.name} · ${hostState(h.id)}`,
       icon: "monitor",
       checked: props.value?.host === h.id,
       run: () => props.value?.host !== h.id && setComputer(mine(), { host: h.id }),
@@ -89,7 +92,7 @@ export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: 
         class="st-acc st-comp"
         classList={{ away: status() !== "ok" }}
         disabled={props.fixed}
-        title={props.fixed ? t("이 프로젝트는 {name}에 있어요", { name: label() }) : t("어느 Mac에서 할지")}
+        title={[props.fixed ? t("이 프로젝트는 {name}에 있어요", { name: label() }) : t("어느 Mac에서 할지"), props.value ? hostState(props.value.host) : ""].filter(Boolean).join(" · ")}
         onClick={(e) => openMenuAt("computer", items, e.currentTarget.getBoundingClientRect())}
       >
         <i class={`cn-dot is-${status()}`} aria-hidden="true" />

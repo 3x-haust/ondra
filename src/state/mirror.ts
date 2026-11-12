@@ -11,6 +11,8 @@ export interface HostMirror {
   status: HostStatus;
   /** why it isn't connected, when it says */
   reason?: string;
+  /** connected once and then not: since when */
+  since?: number;
   /** every project on that Mac (to pick from) */
   projects: { id: string; name: string; folder: string }[];
   /** the jobs of the projects added here, as that Mac has them (ids as there) */
@@ -20,6 +22,8 @@ export interface HostMirror {
 }
 
 export interface HostInfo {
+  /** that Mac's Ondra version */
+  version?: string;
   spaces: { id: string; label: string }[];
   accounts: {
     id: string;
@@ -68,4 +72,20 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
     const p = mirror.hosts[l.host]?.projects.find((x) => x.id === l.id);
     return { id: remoteProjectId(l.host, l.id), space: l.space, name: p?.name ?? l.name ?? "", folder: p?.folder ?? l.folder ?? "", host: l.host, hostName: hostName(l.host) };
   });
+}
+
+/** a Mac's state in words, the same everywhere (settings, sidebar, the run chip, a job): "연결됨",
+ *  "10분 전부터 연결 안 됨" … */
+export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: string, v?: Record<string, string | number>) => string = (k) => k, ago: (at?: number) => string = () => ""): string {
+  const s = h?.status ?? "connecting";
+  if (s === "denied" && h?.reason === "off") return t("그 Mac에서 연결을 꺼 뒀어요");
+  if (s === "denied" && h?.reason === "unknown") return t("그 Mac에서 이 Mac을 뺐어요");
+  if (s === "denied") return t("거절됨");
+  if (s === "waiting") return t("그 Mac에서 허용을 기다려요");
+  if (s === "ok") return t("연결됨");
+  const at = h?.since ?? seen;
+  if (s === "connecting" && !at) return t("연결 중");
+  // just now: it's trying again; later: since when
+  if (at && Date.now() - at < 60_000) return s === "connecting" ? t("연결이 끊겨서 다시 연결하는 중") : t("연결이 끊겼어요");
+  return at ? t("{ago}부터 연결 안 됨", { ago: ago(at) }) : t("연결 안 됨");
 }

@@ -21,8 +21,20 @@ export const hostName = (id: string) => state.settings.hosts?.find((h) => h.id =
 const sendTo = (host: string, data: Record<string, unknown>) => remoteCmd({ cmd: "peer-send", peer: host, data });
 
 function status(host: string, s: HostStatus, reason?: string) {
-  if (!mirror.hosts[host]) setMirror("hosts", host, { status: s, reason, projects: [], tasks: [] });
-  else setMirror("hosts", host, (h) => ({ ...h, status: s, reason }));
+  const was = mirror.hosts[host]?.status;
+  // the moment it stopped being connected (kept while it tries again), and when it last was
+  const since = s === "ok" ? undefined : was === "ok" ? Date.now() : mirror.hosts[host]?.since;
+  if (was === "ok" && s !== "ok") setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, seen: Date.now() } : x)));
+  if (!mirror.hosts[host]) setMirror("hosts", host, { status: s, reason, since, projects: [], tasks: [] });
+  else setMirror("hosts", host, (h) => ({ ...h, status: s, reason, since }));
+}
+
+/** try now (the "다시 연결" button), not at the next retry */
+export function reconnect(host: string) {
+  const r = retry.get(host);
+  clearTimeout(r?.timer);
+  retry.set(host, { n: 0 });
+  void startHosts().then(() => dial(host));
 }
 
 /** ask that Mac's Ondra to do something; its answer (or why not) comes back */

@@ -25,7 +25,9 @@ import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
 import { StatusLine } from "../ui/Usage";
-import { HostStatus, hostAccount, remoteModels } from "../ui/ComputerPicker";
+import { HostStatus, hostAccount, hostState, remoteModels } from "../ui/ComputerPicker";
+import { mirror } from "../state/mirror";
+import { reconnect } from "../engine/hosts";
 import { liveVerb, Transcript } from "../ui/Transcript";
 import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
@@ -325,6 +327,17 @@ export function TaskView(props: { id: string }) {
         void loadArtifacts(task().id);
         const strips = () => {
           const out: JSX.Element[] = [];
+          // its Mac is out of reach: say so, and that the work may well go on there
+          const far = task().host;
+          if (far && mirror.hosts[far]?.status !== "ok")
+            out.push(
+              <button class="strip strip-far" onClick={() => reconnect(far)}>
+                <i class={`cn-dot is-${mirror.hosts[far]?.status ?? "connecting"}`} aria-hidden="true" />
+                <b>{hostState(far)}</b>
+                <span class="rest muted">{tr("그 Mac에서는 작업이 계속 돌고 있을 수 있어요")}</span>
+                <span class="strip-act"><Icon name="refresh" size={12} />{tr("다시 연결")}</span>
+              </button>,
+            );
           if (task().status === "paused" && !discarded(task()))
             out.push(
               <button class="strip" onClick={() => resumeTask(task().id)}>

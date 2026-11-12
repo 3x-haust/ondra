@@ -80,3 +80,27 @@ pub fn remote_host_name() -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "Mac".into())
 }
+
+static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
+
+/// Keep this Mac from sleeping while others may work on it (on power only, like Codex's
+/// "Keep this Mac awake"): a `caffeinate` tied to this app, so it never outlives it.
+#[tauri::command]
+pub fn remote_awake(on: bool) -> Result<(), String> {
+    let mut slot = AWAKE.lock().map_err(|e| e.to_string())?;
+    if let Some(mut c) = slot.take() {
+        let _ = c.kill();
+        let _ = c.wait();
+    }
+    if on {
+        let child = Command::new("/usr/bin/caffeinate")
+            .args(["-s", "-i", "-w", &std::process::id().to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        *slot = Some(child);
+    }
+    Ok(())
+}
