@@ -37,6 +37,7 @@ import { startUpdates } from "./engine/update";
 import { afterLaunch, notesFor } from "./engine/releaseNotes";
 import { ReleaseNotes } from "./ui/ReleaseNotes";
 import { ConfirmHost, ContextMenuHost } from "./ui/taskMenu";
+import { installAppMenu } from "./ui/appMenu";
 import { getVersion } from "@tauri-apps/api/app";
 import { installLog, logInfo, logWarn } from "./lib/log";
 import { EFFORTS, faultOf, jobFailed, modelOf, PANEL_TABS, PERMISSIONS, pick, startTelemetry, THEMES, track, VIEWS, WEIGHTS } from "./lib/telemetry";
@@ -61,6 +62,8 @@ export default function App() {
     if (v.name !== "settings") lastView = v;
   });
   const back = () => setView(lastView);
+  // a right-click shows Ondra's menu for what is under it, never the web view's 새로 고침
+  onMount(() => onCleanup(installAppMenu()));
   onMount(() => watchDevices(() => Object.values(layout().panes).some((p) => p.view.name === "devices")));
   onMount(() => {
     let un: (() => void) | undefined;

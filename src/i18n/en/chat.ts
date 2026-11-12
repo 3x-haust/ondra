@@ -245,6 +245,8 @@ export default {
   "게이트웨이": "Gateway",
   "이미지로 저장": "Save as image",
   "이미지 복사": "Copy image",
+  "이미지 저장": "Save image",
+  "이미지 주소 복사": "Copy image address",
   "닫기": "Close",
   "닫기 (Esc)": "Close (Esc)",
   "이미지를 만들지 못했어요": "Couldn't create the image",
