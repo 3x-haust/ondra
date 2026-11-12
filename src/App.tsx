@@ -51,6 +51,7 @@ import { lang, t as tr } from "./i18n";
 
 export default function App() {
   const [appVersion, setAppVersion] = createSignal("");
+  const [quitHint, setQuitHint] = createSignal(false);
   keepSpaces();
   // settings fill the window; "back" returns to wherever you were
   let lastView: View = { name: "main" };
@@ -65,14 +66,14 @@ export default function App() {
     let un: (() => void) | undefined;
     // ⌘W (menu): the focused pane when there are several, else the right panel
     void onEvent("panel:close", () => !shortcutOverlay() && !anyPop() && !menuClose() && panelShown() && closePanel()).then((u) => (un = u));
-    // Quit's key tapped, not held (Rust quits once it has been held)
-    let hint = 0;
+    // Quit's key went down (Rust quits once it has been held): the hint stays while it is,
+    // and a second after it is let go, as Chrome's does
     let unq: (() => void) | undefined;
-    void onEvent("quit:hold", () => {
-      if (Date.now() - hint > 4000) toast(tr("{keys} 눌러 종료", { keys: keyText("quit") }));
-      hint = Date.now();
-    }).then((u) => (unq = u));
-    onCleanup(() => (un?.(), unq?.()));
+    let unl: (() => void) | undefined;
+    let away = 0;
+    void onEvent("quit:hold", () => (clearTimeout(away), setQuitHint(true))).then((u) => (unq = u));
+    void onEvent("quit:let-go", () => (clearTimeout(away), (away = window.setTimeout(() => setQuitHint(false), 1000)))).then((u) => (unl = u));
+    onCleanup(() => (un?.(), unq?.(), unl?.(), clearTimeout(away)));
   });
   // test builds (VITE_TEST_HOOKS=1) too: two copies of the app driven side by side
   if (import.meta.env.DEV || import.meta.env.VITE_TEST_HOOKS === "1")
@@ -264,6 +265,9 @@ export default function App() {
       {/* one toast at a time (DESIGN.md §9.10): the newest shows; a kept one comes back after it */}
       <ContextMenuHost />
       <ConfirmHost />
+      <div class="quit-hint" classList={{ shown: quitHint() }} role="status" aria-live="assertive">
+        {tr("{keys} 눌러 종료", { keys: keyText("quit") })}
+      </div>
       <div class="toasts" aria-live="polite" style={toastAt() ? { left: `${toastAt()!.left}px`, bottom: `${toastAt()!.bottom}px` } : undefined}>
         <For each={toasts().slice(-1)}>
           {(t) => (
