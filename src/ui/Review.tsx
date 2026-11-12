@@ -2,7 +2,6 @@
 // Diffs are parsed into files → hunks → lines with old/new line numbers, shown
 // as collapsible cards with sticky headers. Files is a searchable tree; a file
 // opens in a numbered viewer and can flip to its diff.
-import { confirmDiscard } from "./taskMenu";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
 import { openChanges, panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
@@ -716,8 +715,6 @@ export function FilesPane(props: { t: Task }) {
 export type { GitChanges };
 
 // ───────────── throwing a task's changes away ─────────────
-/** 버리기 asks once, with the same words everywhere (review bar, changes tab, ⋯ menu, /discard). */
-export const askDiscard = (t: Pick<Task, "id" | "title">) => confirmDiscard(t.id);
 
 /** A discarded task's mark: the shared glyph's muted trash (Sidebar.tsx). */
 export function DiscardGlyph(props: { class?: string }) {

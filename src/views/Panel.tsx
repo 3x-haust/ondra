@@ -11,7 +11,7 @@ import { BrowserView } from "./Browser";
 import { useBrowserStream } from "../ui/browserStream";
 import { openLink } from "../ui/links";
 import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
-import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
+import { gitEnv, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
@@ -24,7 +24,7 @@ import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
 import { usesReverse } from "../engine/reverse";
-import { askDiscard, ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
+import { ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
 import { ignoredKey, noModifiers, shortcutHint, viewKey, withHint, type ShortcutId } from "../lib/shortcuts";
@@ -37,10 +37,7 @@ export function BranchCard(props: { t: Task }) {
 }
 function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
   const w = () => props.w;
-  const [busy, setBusy] = createSignal(false);
   const actionable = () => w().state === "open" && props.t.status !== "running" && props.t.status !== "queued";
-  // merge / discard are for finished work; a paused or failed one keeps its git menu
-  const finished = () => props.t.status === "done";
   return (
     <Switch>
       <Match when={actionable()}>
@@ -48,28 +45,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
           <ShipMenu t={props.t} />
           <span class="bc-branch" title={w().branch}>{w().branch}</span>
           <span class="spacer" />
-          <Show when={finished()}>
-            <button class="btn sm ghost" onClick={() => askDiscard(props.t)}>{tr("버리기")}</button>
-          </Show>
-          <Show
-            when={prOf(props.t)}
-            fallback={
-              <Show when={finished()}>
-                <button
-                  class="btn sm primary"
-                  disabled={busy()}
-                  onClick={async () => {
-                    setBusy(true);
-                    await mergeTask(props.t.id);
-                    setBusy(false);
-                  }}
-                >
-                  <Icon name="merge" size={14} />
-                  {busy() ? tr("병합 중") : tr("병합")}
-                </button>
-              </Show>
-            }
-          >
+          <Show when={prOf(props.t)}>
             {(pr) => <button class="btn sm primary" onClick={() => setPanelTab("pr")}>PR #{pr().n}</button>}
           </Show>
         </div>

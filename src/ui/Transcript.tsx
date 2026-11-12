@@ -190,7 +190,7 @@ const assigner = (t: Task) => {
   return p ? tr("{name}에서", { name: p.title }) : undefined;
 };
 /** a message another agent sent (main's append, a job's job_tell): who it came from */
-const sender = (e: { by?: string }) => (e.by === "main" ? tr("메인에서") : e.by ? tr("{name}에서", { name: taskById(e.by)?.title ?? e.by }) : undefined);
+const sender = (e: { by?: string }) => (e.by === "main" ? tr("메인에서") : e.by === "ondra" ? "Ondra" : e.by ? tr("{name}에서", { name: taskById(e.by)?.title ?? e.by }) : undefined);
 
 /** Explanations drawn as pictures: they stay in view when the work folds. */
 const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence", "steps", "page", "flow", "deps", "classes", "er", "arch", "states", "diff", "tests", "options", "trace", "git"]);

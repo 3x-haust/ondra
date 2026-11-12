@@ -41,6 +41,8 @@ interface Run {
   done?: string;
   handoff?: Handoff;
   asked: boolean;
+  /** what the job said becomes of its branch at the end ({"type":"merge"} / {"type":"discard"}) */
+  land?: "merge" | "discard";
   error?: string;
   turnStart: number;
   /** time spent generating (between assistant message start and end) this turn */
@@ -434,6 +436,11 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         void writeNotes(p.id, md).then((ok) => ok && updateTask(t.id, (x) => void push(x, { kind: "note", text: "프로젝트 노트 갱신" })));
         break;
       }
+      // the branch's fate, when the user (or a memory rule) already said: done after the turn
+      case "merge":
+      case "discard":
+        run.land = b.type;
+        break;
       case "handoff":
         run.handoff = {
           did: Array.isArray(b.did) ? b.did.map(String) : [],
@@ -816,9 +823,17 @@ async function isolate(id: string): Promise<boolean> {
 /** Merge the task's branch into the repo's current branch, then remove the worktree. */
 export async function mergeTask(id: string): Promise<boolean> {
   { const r = far(id, "mergeTask", [id]); if (r) return r as never; }
+  const why = await mergeWhy(id);
+  if (why === undefined) return true;
+  toast(/conflict|충돌/i.test(why) ? tr("충돌이 있어서 병합하지 못했어요") : tr("병합하지 못했어요 · {why}", { why: why.split("\n")[0] }), "bad");
+  return false;
+}
+
+/** Merge here and now: nothing back when it went in, else git's own words for what stopped it. */
+async function mergeWhy(id: string): Promise<string | undefined> {
   const t = taskById(id);
   const w = t?.worktree;
-  if (!t || !w || w.state !== "open") return false;
+  if (!t || !w || w.state !== "open") return "이 작업에는 합칠 브랜치가 없어요";
   if (t.status === "running" || t.status === "waiting") pauseTask(id);
   try {
     const env = await gitEnv(t);
@@ -838,12 +853,60 @@ export async function mergeTask(id: string): Promise<boolean> {
       }
     });
     toast(tr("{into}에 병합했어요", { into }));
-    return true;
+    return undefined;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    toast(/conflict|충돌/i.test(msg) ? tr("충돌이 있어서 병합하지 못했어요") : tr("병합하지 못했어요 · {why}", { why: msg.split("\n")[0] }), "bad");
-    return false;
+    return e instanceof Error ? e.message : String(e);
   }
+}
+
+/** What the job is told when its merge did not go in: it finds out why and sorts it out with the user. */
+const mergeFailed = (why: string, home: string) =>
+  `(Ondra) Merging your branch into ${home} failed. Git said:\n${why.trim()}\n` +
+  "Find out why. If the original folder has the user's own uncommitted changes in the way, don't touch them: " +
+  "name the files and ask (an ask block) what to do with them. A conflict: resolve it on your branch (merge the target in, fix, commit). " +
+  'Once the way is clear, send {"type":"merge"} with your done to try again.';
+
+/**
+ * A finished job with changes on its branch: it asks the user what becomes of
+ * them (merge, a pull request, or throw them away), every time. Nothing to ask
+ * when the work went into a PR or has already landed.
+ */
+async function askMerge(id: string) {
+  const t = taskById(id);
+  const w = t?.worktree;
+  if (!t || t.parentId || !w || w.state !== "open" || t.status !== "done" || prOf(t)) return;
+  if (state.decisions.some((d) => d.taskId === id)) return;
+  const c = await gitChanges(w.path, w.base).catch(() => null);
+  if (!c?.isRepo || !c.files.length) return;
+  const home = homeDir(t).split("/").filter(Boolean).pop() ?? homeDir(t);
+  const d: Decision = {
+    id: uid("d"),
+    taskId: id,
+    at: Date.now(),
+    kind: "merge",
+    question: tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home }),
+    options: [
+      { id: "merge", label: tr("합치기"), primary: true, note: tr("원래 폴더의 지금 브랜치에 합쳐요") },
+      { id: "pr", label: tr("PR로 올리기"), note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
+      { id: "discard", label: tr("버리기"), note: tr("이 작업이 바꾼 것을 지워요") },
+    ],
+    context: [],
+  };
+  setState("decisions", (list) => [...list.filter((x) => x.taskId !== id), d]);
+  updateTask(id, (x) => (x.unread = true));
+}
+
+/** The job's own say on its branch, then the question if it is still open. */
+async function landBranch(id: string, land?: "merge" | "discard") {
+  const t = taskById(id);
+  if (!t || t.worktree?.state !== "open") return;
+  if (land === "discard") return discardTask(id);
+  if (land === "merge") {
+    const why = await mergeWhy(id);
+    if (why !== undefined) await tell(id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
+    return;
+  }
+  await askMerge(id);
 }
 
 /** Throw the task's changes away (worktree and branch). */
@@ -1816,7 +1879,8 @@ function finish(id: string, summary: string, run?: Run) {
     void deliver(t);
   } else if (t && !drainQueue(id)) {
     releaseBrowser(id);
-    void dropEmptyBranch(id);
+    const land = run?.land;
+    void dropEmptyBranch(id).then(() => landBranch(id, land));
     endedHook?.(t);
   }
 }
@@ -1868,7 +1932,11 @@ const prMerged = (raw: string) => {
 
 /** Finished jobs whose branch has landed since (merged on GitHub later, or before this check existed). */
 export async function sweepLanded() {
-  for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) await dropEmptyBranch(t.id);
+  for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) {
+    await dropEmptyBranch(t.id);
+    // one that finished lately and still holds changes (from before this was asked): asked now
+    if (Date.now() - (taskById(t.id)?.finishedAt ?? 0) < 7 * DAY) await askMerge(t.id);
+  }
 }
 
 // ─────────────────────────────── watching pull requests
@@ -2470,6 +2538,15 @@ export async function decide(decisionId: string, optionId: string) {
       push(x, { kind: "user", text: label });
     });
     void agentSend(agent, reply);
+    return;
+  }
+  if (d.kind === "merge" && (optionId === "merge" || optionId === "pr" || optionId === "discard")) {
+    updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
+    if (optionId === "discard") return void (await discardTask(t.id));
+    if (optionId === "pr")
+      return void (await tell(t.id, "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.", { shown: label }));
+    const why = await mergeWhy(t.id);
+    if (why !== undefined) await tell(t.id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;
   }
   if (d.kind === "stalled" && optionId === "finish") {

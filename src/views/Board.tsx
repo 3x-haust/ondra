@@ -6,7 +6,7 @@ import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-
 import { decisionFor, projectsIn, kidsOf, state } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
-import { mergeTask, stopTask, resumeTask, startTask, tell } from "../engine/tasks";
+import { stopTask, resumeTask, startTask, tell } from "../engine/tasks";
 import { ago, compact, IssueTag, now, soon } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
@@ -373,7 +373,6 @@ function Card(props: { t: Task; byProject: boolean }) {
         <Show when={job().status === "paused" && !gone()}>{act(t("다시 시작"), "play", () => resumeTask(job().id))}</Show>
         <Show when={job().status === "failed" && !gone()}>{act(t("다시 시도"), "refresh", () => resumeTask(job().id), true)}</Show>
         <Show when={job().status === "queued"}>{act(t("지금 시작"), "play", () => void startTask(job().id))}</Show>
-        <Show when={st() === "review"}>{act(t("병합"), "merge", () => void mergeTask(job().id), true)}</Show>
         <Show when={st() === "you"}>{act(t("응답"), "arrow", () => openTask(job().id), true)}</Show>
       </div>
 
