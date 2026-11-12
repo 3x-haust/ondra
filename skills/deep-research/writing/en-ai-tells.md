@@ -1,4 +1,4 @@
-<!-- Vendored from blader/humanizer (SKILL.md), MIT License, Copyright (c) 2025 Siqi Chen. See LICENSES.md. Read for English text; the patterns hold in Korean too. -->
+<!-- Vendored from blader/humanizer (SKILL.md), MIT License, Copyright (c) 2025 Siqi Chen. See LICENSES.md. A reference of tells for English text (the patterns hold in Korean too), not a checklist: use what helps the reader. -->
 
 # Humanizer: remove AI writing patterns
 
