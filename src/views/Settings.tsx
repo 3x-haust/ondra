@@ -879,6 +879,8 @@ function Shortcuts() {
     setNote(null);
     stop();
     setRec(id);
+    // WebKit doesn't focus a button on click: the keys must reach the chip
+    chip(id)?.focus();
   };
   const done = (id: string, next: Record<string, string>) => {
     writeBindings(next);
