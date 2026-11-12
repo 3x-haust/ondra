@@ -2043,6 +2043,61 @@
   max-height: 520px;
   margin: 0 auto;
   padding: var(--s-8) var(--s-16);
+  /* drawing paper: a faint grid under the strokes */
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+.bd-pen-tip {
+  fill: var(--accent);
+}
+.bd-pen-glow {
+  fill: var(--accent-soft);
+}
+.bd-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.bd-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.bd-leaders line {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+}
+.bd-leaders circle {
+  fill: var(--ink-2);
+}
+.bd-chip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  padding: 2px var(--s-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bd-chip:hover,
+.bd-chip.is-on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.bd-chip[hidden] {
+  display: none;
 }
 .bd-svg {
   display: block;
@@ -2054,6 +2109,7 @@
 .bd-3d {
   padding: 0;
   width: 100%;
+  background-image: none;
 }
 .bd-3d > canvas {
   display: block;

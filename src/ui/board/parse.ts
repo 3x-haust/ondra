@@ -85,7 +85,8 @@ export function parseBoard(src: string): Board {
     const rest = sp < 0 ? "" : line.slice(sp + 1).trim();
     const bad = (why: string) => void (b.problems.length < 20 && b.problems.push(`${n + 1}: ${why}`));
     if (head === "title") return void (b.title = rest.replace(/^"|"$/g, "").slice(0, 120));
-    if (head === "step") return void b.steps.push({ text: rest.replace(/^"|"$/g, "").slice(0, 300) });
+    // the list numbers its steps itself: a "1." the model wrote is dropped
+    if (head === "step") return void b.steps.push({ text: rest.replace(/^"|"$/g, "").replace(/^\s*(?:\d{1,2}[.)]|[①-⑳]|\(\d{1,2}\))\s*/, "").slice(0, 300) });
     const ws = words(rest);
     if (!ws) return bad("unclosed quote");
     const nums = ws.filter(isNum).map(Number);

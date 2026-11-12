@@ -49,6 +49,15 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   host.appendChild(renderer.domElement);
+  // each part's name beside it, joined to it by a thin line; kept next to the part as the model turns
+  const labels = document.createElement("div");
+  labels.className = "bd-labels";
+  const leaders = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  leaders.setAttribute("class", "bd-leaders");
+  labels.appendChild(leaders);
+  host.appendChild(labels);
+  type Label = { chip: HTMLButtonElement; line: SVGLineElement; dot: SVGCircleElement };
+  const chips = new Map<number, Label>();
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.01, 1000);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a90, 1.6));
@@ -58,7 +67,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   const fill = new THREE.DirectionalLight(0xffffff, 0.6);
   fill.position.set(-5, 2, -3);
   scene.add(fill);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ color: cssColor("--line-soft"), transparent: true, opacity: 0.8 }));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ color: cssColor("--line-soft"), transparent: true, opacity: 0.5 }));
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -83,7 +92,73 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       if (t < 1) moving = true;
     }
     renderer.render(scene, camera);
+    placeLabels();
     if (moving) frame = requestAnimationFrame(draw);
+  };
+  const center = new THREE.Vector3();
+  const v = new THREE.Vector3();
+  const toScreen = (p: THREE.Vector3, w: number, h: number) => {
+    v.copy(p).project(camera);
+    return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
+  };
+  const placeLabels = () => {
+    const w = host.clientWidth, h = host.clientHeight;
+    leaders.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    const mid = toScreen(center, w, h);
+    const placed: { x: number; y: number; w: number; h: number }[] = [];
+    const named = new Set<string>();
+    shown.forEach((s, i) => {
+      const name = String(s.mesh.userData.label ?? "");
+      let l = chips.get(i);
+      const show = s.mesh.visible && s.mesh.scale.x > 0.6 && !!name && !named.has(name);
+      if (name) named.add(name);
+      if (!show) {
+        if (l) l.chip.hidden = true, l.line.setAttribute("visibility", "hidden"), l.dot.setAttribute("visibility", "hidden");
+        return;
+      }
+      if (!l) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "bd-chip";
+        chip.textContent = name;
+        chip.onclick = (e) => {
+          e.stopPropagation();
+          const r = host.getBoundingClientRect(), c = chip.getBoundingClientRect();
+          selected = i;
+          highlight();
+          opts.onPick(i, { x: c.left - r.left, y: c.bottom - r.top + 40 });
+        };
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("r", "2.5");
+        leaders.append(line, dot);
+        labels.appendChild(chip);
+        l = { chip, line, dot };
+        chips.set(i, l);
+      }
+      const p = toScreen(s.mesh.position, w, h);
+      let dx = p.x - mid.x, dy = p.y - mid.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 8) { dx = 0; dy = -1; } else { dx /= len; dy /= len; }
+      const cw = l.chip.offsetWidth || name.length * 8 + 20, ch = l.chip.offsetHeight || 24;
+      let reach = 46, x = 0, y = 0;
+      for (let k = 0; k < 6; k++, reach += 24) {
+        x = Math.max(4, Math.min(w - cw - 4, p.x + dx * reach - cw / 2));
+        y = Math.max(4, Math.min(h - ch - 4, p.y + dy * reach - ch / 2));
+        if (!placed.some((o) => x < o.x + o.w + 6 && o.x < x + cw + 6 && y < o.y + o.h + 4 && o.y < y + ch + 4)) break;
+      }
+      placed.push({ x, y, w: cw, h: ch });
+      l.chip.hidden = false;
+      l.chip.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      l.chip.classList.toggle("is-on", selected === i);
+      const ex = Math.max(x, Math.min(x + cw, p.x)), ey = Math.max(y, Math.min(y + ch, p.y));
+      for (const [k, val] of [["x1", p.x], ["y1", p.y], ["x2", ex], ["y2", ey]] as const) l.line.setAttribute(k, String(Math.round(val)));
+      l.line.setAttribute("visibility", "visible");
+      l.dot.setAttribute("cx", String(Math.round(p.x)));
+      l.dot.setAttribute("cy", String(Math.round(p.y)));
+      l.dot.setAttribute("visibility", "visible");
+    });
+    for (const [i, l] of chips) if (i >= shown.length) (l.chip.remove(), l.line.remove(), l.dot.remove(), chips.delete(i));
   };
   const wake = () => { if (!frame) frame = requestAnimationFrame(draw); };
   controls.addEventListener("change", wake);
@@ -108,6 +183,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     if (sig === fitted) return;
     fitted = sig;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
+    center.copy(sphere.center);
     const r = Math.max(0.05, sphere.radius);
     const dist = (r / Math.sin((camera.fov * Math.PI) / 360)) * 0.95;
     controls.target.copy(sphere.center);
@@ -200,6 +276,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
+      labels.remove();
     },
   };
 }

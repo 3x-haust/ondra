@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseBoard, words } from "./parse";
-import { box, polyline, ring, rng } from "./sketch";
+import { box, polyline } from "./sketch";
 
 describe("parseBoard", () => {
   it("reads strokes in order, each under the step before it", () => {
@@ -53,14 +53,22 @@ part "틀림" cylinder at 0 0 0`);
 });
 
 describe("sketch", () => {
-  it("draws the same strokes for the same seed", () => {
-    expect(box(0, 0, 100, 50, rng(3))).toBe(box(0, 0, 100, 50, rng(3)));
-    expect(ring(50, 50, 20, rng(1))).not.toBe(ring(50, 50, 20, rng(2)));
-  });
-  it("makes one continuous stroke through a bent line", () => {
-    const d = polyline([[0, 0], [100, 0], [100, 100]], rng(5));
+  it("draws a box as one closed stroke from its top-left", () => {
+    const d = box(0, 0, 100, 50);
     expect(d.match(/M/g)).toHaveLength(1);
-    expect(d).toMatch(/^M0 0C/);
-    expect(d).toMatch(/100 100$/);
+    expect(d).toMatch(/^M8 0H92A8 8/);
+    expect(d).toMatch(/Z$/);
+  });
+  it("makes one continuous stroke through a bent line, rounding the bend", () => {
+    const d = polyline([[0, 0], [100, 0], [100, 100]]);
+    expect(d.match(/M/g)).toHaveLength(1);
+    expect(d).toBe("M0 0L88 0Q100 0 100 12L100 100");
+  });
+});
+
+describe("steps", () => {
+  it("drops the numbers the model put on its steps", () => {
+    expect(parseBoard("step 1. 연결해요\nstep 2) 보내요\nstep ② 받아요\nstep 2024년에 나왔어요").steps.map((s) => s.text))
+      .toEqual(["연결해요", "보내요", "받아요", "2024년에 나왔어요"]);
   });
 });

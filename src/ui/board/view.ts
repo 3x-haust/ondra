@@ -1,9 +1,10 @@
 // A board on screen: the drawing appears stroke by stroke in the order it explains,
-// with the step being drawn named under it. A board already seen is shown whole.
+// a pen point at the end of the line being drawn, the step being drawn named under
+// it. A board already seen is shown whole.
 // Plain DOM (no Solid) so a reply that is still streaming can move the same board
 // into its re-rendered text and keep drawing where it was.
 import { parseBoard, type Board, type Mark, type Tone } from "./parse";
-import { box, head, polyline, ring, rng, swipe, type Pt } from "./sketch";
+import { box, head, polyline, ring, swipe, type Pt } from "./sketch";
 import type { ThreeView } from "./three-view";
 import { t } from "../../i18n";
 
@@ -12,6 +13,8 @@ const INK: Record<Tone, string> = {
   ink: "var(--ink)", quiet: "var(--ink-3)", accent: "var(--accent)", ok: "var(--ok)", warn: "var(--warn)",
   bad: "var(--bad)", live: "var(--live)", violet: "var(--merged)",
 };
+/** lines in plain ink are drawn a shade lighter than text */
+const LINE: Record<Tone, string> = { ...INK, ink: "var(--ink-2)" };
 const soft = (tone: Tone, pct = 12) => `color-mix(in srgb, ${INK[tone]} ${pct}%, transparent)`;
 
 // pen pace
@@ -19,6 +22,8 @@ const PX_PER_MS = 0.9;
 const GAP = 70;
 const STEP_GAP = 450;
 const stroke = (len: number) => Math.max(160, Math.min(900, len / PX_PER_MS));
+/** the pen speeds up and slows down at the ends of a stroke */
+const ease = (p: number) => 0.5 - Math.cos(Math.PI * p) / 2;
 
 // boards already drawn once: shown whole when they come back (scrolling, reopening the job)
 const SEEN_KEY = "ondra.boards.seen";
@@ -38,12 +43,11 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
 }
 
 /** what one mark draws: its pieces in drawing order, each with how long the pen takes */
-function build(m: Mark, seed: number): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] } {
-  const rand = rng(seed);
+function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] } {
   const g = el("g", { class: "bd-mark" });
   const pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] = [];
-  const pen = (d: string, len: number, width = 2.4) => {
-    const p = el("path", { d, fill: "none", stroke: INK[m.tone], "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round", pathLength: 1 });
+  const pen = (d: string, len: number, width = 1.8) => {
+    const p = el("path", { d, fill: "none", stroke: LINE[m.tone], "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round", pathLength: 1 });
     if (m.dash) p.setAttribute("stroke-dasharray", "0.012 0.018");
     g.appendChild(p);
     pieces.push({ e: p, ms: stroke(len), kind: m.dash ? "fade" : "pen" });
@@ -58,14 +62,20 @@ function build(m: Mark, seed: number): { g: SVGGElement; under?: SVGElement; pie
   };
   switch (m.kind) {
     case "box": {
-      if (m.fill) { const f = el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: 10, fill: soft(m.tone) }); g.appendChild(f); pieces.push({ e: f, ms: 200, kind: "fade" }); }
-      pen(box(m.x, m.y, m.w, m.h, rand), 2 * (m.w + m.h));
+      // the outline first, then its tint washes in (stronger when asked to be filled)
+      const r = Math.min(8, m.w / 4, m.h / 4);
+      const f = el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" ? 4 : 10) });
+      g.appendChild(f);
+      pen(box(m.x, m.y, m.w, m.h), 2 * (m.w + m.h));
+      pieces.push({ e: f, ms: 260, kind: "fade" });
       if (m.label) words(m.x + m.w / 2, m.y + m.h / 2, m.label, Math.max(13, Math.min(20, m.h * 0.34)), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
       break;
     }
     case "circle": {
-      if (m.fill) { const f = el("circle", { cx: m.x, cy: m.y, r: m.r, fill: soft(m.tone) }); g.appendChild(f); pieces.push({ e: f, ms: 200, kind: "fade" }); }
-      pen(ring(m.x, m.y, m.r, rand), 2 * Math.PI * m.r);
+      const f = el("circle", { cx: m.x, cy: m.y, r: m.r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" ? 4 : 10) });
+      g.appendChild(f);
+      pen(ring(m.x, m.y, m.r), 2 * Math.PI * m.r);
+      pieces.push({ e: f, ms: 260, kind: "fade" });
       if (m.label) words(m.x, m.y, m.label, Math.max(13, Math.min(20, m.r * 0.45)), { anchor: "middle", tone: "ink" });
       break;
     }
@@ -74,8 +84,8 @@ function build(m: Mark, seed: number): { g: SVGGElement; under?: SVGElement; pie
     case "curve": {
       const pts = m.pts as Pt[];
       const len = pts.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0);
-      pen(polyline(pts, rand, m.kind === "curve"), len);
-      if (m.head) pen(head(pts[pts.length - 2], pts[pts.length - 1], rand), 30);
+      pen(polyline(pts, m.kind === "curve"), len, 1.6);
+      if (m.head) pen(head(pts[pts.length - 2], pts[pts.length - 1]), 24, 1.6);
       if (m.label) {
         const mid = pts[Math.floor((pts.length - 1) / 2)], nxt = pts[Math.floor((pts.length - 1) / 2) + 1];
         const vertical = Math.abs(nxt[0] - mid[0]) < Math.abs(nxt[1] - mid[1]);
@@ -87,7 +97,7 @@ function build(m: Mark, seed: number): { g: SVGGElement; under?: SVGElement; pie
       words(m.x, m.y, m.text, m.size, { bold: m.bold, tone: m.tone });
       break;
     case "mark": {
-      const p = el("path", { d: swipe(m.x, m.y, m.w, m.h, rand), fill: "none", stroke: soft(m.tone, 38), "stroke-width": m.h, "stroke-linecap": "round", pathLength: 1 });
+      const p = el("path", { d: swipe(m.x, m.y, m.w, m.h), fill: "none", stroke: soft(m.tone, 38), "stroke-width": m.h, "stroke-linecap": "round", pathLength: 1 });
       pieces.push({ e: p, ms: stroke(m.w), kind: "pen" });
       return { g, under: p, pieces };
     }
@@ -99,6 +109,22 @@ function build(m: Mark, seed: number): { g: SVGGElement; under?: SVGElement; pie
     }
   }
   return { g, pieces };
+}
+
+/** the part of the board a mark covers, labels included (text width is a guess) */
+function extent(m: Mark): [number, number, number, number] {
+  const tw = (s: string, size: number) => s.length * size * 0.62;
+  switch (m.kind) {
+    case "box": return [m.x, m.y, m.x + m.w, m.y + m.h];
+    case "circle": return [m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r];
+    case "text": return [m.x, m.y - m.size, m.x + tw(m.text, m.size), m.y + m.size];
+    case "mark": return [m.x, m.y, m.x + m.w, m.y + m.h];
+    case "dot": return [m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r];
+    default: {
+      const xs = m.pts.map((p) => p[0]), ys = m.pts.map((p) => p[1]);
+      return [Math.min(...xs), Math.min(...ys) - (m.label ? 26 : 0), Math.max(...xs), Math.max(...ys)];
+    }
+  }
 }
 
 type Drawn = { key: string; g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[]; step: number };
@@ -119,6 +145,10 @@ export class BoardView {
   private settle = 0;
   private svg?: SVGSVGElement;
   private ink?: SVGGElement;
+  private penDot?: SVGGElement;
+  /** pen strokes waiting or being drawn, each revealed along its length on its own clock */
+  private strokes: { e: SVGElement; at: number; ms: number }[] = [];
+  private raf = 0;
   private underLayer?: SVGGElement;
   private three?: ThreeView;
   private threeLoading = false;
@@ -240,17 +270,25 @@ export class BoardView {
       this.svg = el("svg", { class: "bd-svg", role: "img" });
       this.underLayer = el("g", {});
       this.ink = el("g", {});
-      this.svg.append(this.underLayer, this.ink);
+      this.penDot = el("g", { class: "bd-pen", visibility: "hidden" });
+      this.penDot.append(el("circle", { r: 9, class: "bd-pen-glow" }), el("circle", { r: 3.5, class: "bd-pen-tip" }));
+      this.svg.append(this.underLayer, this.ink, this.penDot);
       this.stage.appendChild(this.svg);
     }
-    this.svg.setAttribute("viewBox", `0 0 ${b.w} ${b.h}`);
+    // only as tall as what is drawn (it grows downward as the board comes in; the scale stays)
+    let top = Infinity, bottom = -Infinity;
+    for (const m of b.marks) { const e = extent(m); top = Math.min(top, e[1]); bottom = Math.max(bottom, e[3]); }
+    const y0 = b.marks.length ? Math.max(0, Math.floor(top - 28)) : 0;
+    const h = b.marks.length ? Math.max(140, Math.ceil(bottom + 28 - y0)) : b.h;
+    this.svg.setAttribute("viewBox", `0 ${y0} ${b.w} ${h}`);
+    this.root.style.setProperty("--bd-ratio", `${b.w} / ${h}`);
     if (b.title) this.svg.setAttribute("aria-label", b.title);
     let added = false;
     b.marks.forEach((m, i) => {
       const key = JSON.stringify(m);
       const old = this.drawn[i];
       if (old?.key === key) return;
-      const made = build(m, i * 7919 + 17);
+      const made = build(m);
       const d: Drawn = { key, step: m.step, ...made };
       if (old) {
         // changed while the line was still arriving: swap it in place, no second drawing
@@ -272,10 +310,49 @@ export class BoardView {
   private play(d: Drawn) {
     for (const p of d.pieces) {
       const delay = this.slot(d.step, p.kind === "pen" ? p.ms : Math.min(p.ms, 220));
-      const frames = p.kind === "pen" ? [{ strokeDashoffset: 1, strokeDasharray: "1 1" }, { strokeDashoffset: 0, strokeDasharray: "1 1" }] : [{ opacity: 0 }, { opacity: 1 }];
-      this.anims.push(p.e.animate(frames, { duration: p.ms, delay, easing: p.kind === "pen" ? "cubic-bezier(.35,.1,.25,1)" : "ease-out", fill: "backwards" }));
+      if (p.kind === "pen") this.pen(p.e, delay, p.ms);
+      else this.anims.push(p.e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: p.ms, delay, easing: "ease-out", fill: "backwards" }));
     }
   }
+
+  /** a stroke hidden until its turn, then drawn from start to end with the pen point on its tip */
+  private pen(e: SVGElement, delay: number, ms: number) {
+    e.style.strokeDasharray = "1 1";
+    e.style.strokeDashoffset = "1";
+    this.strokes.push({ e, at: performance.now() + delay, ms });
+    if (!this.raf) this.raf = requestAnimationFrame(this.tick);
+  }
+
+  private tick = () => {
+    this.raf = 0;
+    const now = performance.now();
+    let tip: { e: SVGElement; k: number } | undefined;
+    this.strokes = this.strokes.filter((s) => {
+      const p = (now - s.at) / s.ms;
+      if (p >= 1) {
+        s.e.style.strokeDasharray = "";
+        s.e.style.strokeDashoffset = "";
+        return false;
+      }
+      if (p > 0) {
+        const k = ease(p);
+        s.e.style.strokeDashoffset = String(1 - k);
+        tip = { e: s.e, k };
+      }
+      return true;
+    });
+    const dot = this.penDot;
+    if (dot) {
+      const path = tip?.e as SVGPathElement | undefined;
+      // a wide highlighter swipe has no pen point
+      if (path && path.getTotalLength && Number(path.getAttribute("stroke-width")) < 4) {
+        const at = path.getPointAtLength(path.getTotalLength() * tip!.k);
+        dot.setAttribute("transform", `translate(${at.x.toFixed(1)} ${at.y.toFixed(1)})`);
+        dot.setAttribute("visibility", "visible");
+      } else if (!this.strokes.length || !tip) dot.setAttribute("visibility", "hidden");
+    }
+    if (this.strokes.length) this.raf = requestAnimationFrame(this.tick);
+  };
 
   private render3d(b: Board) {
     if (!this.three) {
@@ -347,6 +424,11 @@ export class BoardView {
   private stopAll() {
     for (const a of this.anims) a.cancel();
     this.anims = [];
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    for (const s of this.strokes) { s.e.style.strokeDasharray = ""; s.e.style.strokeDashoffset = ""; }
+    this.strokes = [];
+    this.penDot?.setAttribute("visibility", "hidden");
     for (const id of this.timers) clearTimeout(id);
     this.timers = [];
     this.nowStep(null);
