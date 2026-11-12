@@ -4,6 +4,8 @@ export default {
   // header and ⋯ menu
   "더 보기": "More",
   "완료로 표시": "Mark as done",
+  "끝내기": "End",
+  "이 작업을 여기서 끝내요": "End this job here",
   "이름 바꾸기": "Rename",
   "고정 해제": "Unpin",
   "고정": "Pin",

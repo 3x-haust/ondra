@@ -6,7 +6,7 @@ import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
-import { chooseAccount, createTask, NO_ACCOUNT } from "../engine/tasks";
+import { chooseAccount, createTask, finishTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -47,6 +47,7 @@ import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
 import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
 import { PaneControls } from "./PaneControls";
+import { taskContextMenu } from "../ui/taskMenu";
 
 /** "{task}에 전달했어요" with the task name in bold */
 function withName(key: string, name: string) {
@@ -1243,8 +1244,8 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
           <ul class="req-list">
             <For each={reqs()}>
               {(r) => (
-                <li>
-                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} title={r.text}>
+                <li classList={{ "req-paused": rowState(r) === "paused" }}>
+                  <button class="req-row" onClick={() => (r.state === "done" ? props.onJump(resultOf(r) ?? r.id) : openTask(focus(r).id))} onContextMenu={taskContextMenu(focus(r).id)} title={r.text}>
                     {/* 버림 and 검토 read by shape too: the shared muted trash, the review ring */}
                     <Switch fallback={<i class={`req-dot ${rowState(r) === "merged" ? "done" : rowState(r)}`} />}>
                       <Match when={rowState(r) === "discarded"}><GlyphMark g="discarded" class="req-glyph" /></Match>
@@ -1272,6 +1273,12 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
                     </Show>
                     <span class={`req-state ${rowState(r)}`}>{tr(REQ_WORD[rowState(r)])}</span>
                   </button>
+                  {/* paused work stays listed until it goes on or is ended: ending it is right here, on hover */}
+                  <Show when={rowState(r) === "paused"}>
+                    <button class="req-end" title={tr("이 작업을 여기서 끝내요")} onClick={() => r.tasks.filter((x) => x.status === "paused").forEach((x) => finishTask(x.id))}>
+                      {tr("끝내기")}
+                    </button>
+                  </Show>
                   {/* several tasks: one line each, all of them, so the count above adds up */}
                   <Show when={r.tasks.length > 1}>
                     <For each={r.tasks}>
