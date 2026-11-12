@@ -437,7 +437,7 @@ export function Composer(props: {
     for (const k of ends) window.removeEventListener(k, up, true);
     window.removeEventListener("blur", left);
   });
-  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || plusOpen() || !!pick();
+  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || quotes().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input
   const inStrips = (n: EventTarget | null) => n instanceof Element && !!n.closest(".strips");
   const [open, setOpenState] = createSignal(want());
@@ -539,22 +539,20 @@ export function Composer(props: {
             </div>
           )}
         </Show>
-        <Show when={quotes().length}>
-          <div class="quote-row">
+        <Show when={files().length || quotes().length}>
+          <div class="attach-row">
+            {/* a quoted bit sits with the attachments, as a small card of its own */}
             <For each={quotes()}>
               {(q) => (
-                <div class="cquote" title={q}>
+                <span class="cquote" title={q}>
+                  <Icon name="quote" size={13} />
                   <span class="cquote-text">{q}</span>
                   <button type="button" class="cquote-x" aria-label={t("인용 빼기")} title={t("인용 빼기")} onClick={() => setQuotes((l) => l.filter((x) => x !== q))}>
-                    <Icon name="x" size={12} />
+                    <Icon name="x" size={11} />
                   </button>
-                </div>
+                </span>
               )}
             </For>
-          </div>
-        </Show>
-        <Show when={files().length}>
-          <div class="attach-row">
             <For each={files()}>
               {(f) => (
                 <Show

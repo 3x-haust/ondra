@@ -7502,6 +7502,7 @@ textarea { resize: none !important; field-sizing: content; }
 }
 .composer-wrap.slim .composer-meta,
 .composer-wrap.slim .attach-row,
+.composer-wrap.slim .quote-row,
 .composer-wrap.slim .cpick {
   display: none;
 }

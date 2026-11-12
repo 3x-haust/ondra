@@ -1938,25 +1938,29 @@
 }
 
 /* a quote from a reply waits above what is typed: the quoted words behind a thin rule, no box */
-.composer .quote-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-4);
-  padding: var(--s-12) var(--s-16) 0;
-}
+/* a quote waits with the attachments: a small card, its words in two lines, its × in its corner */
 .cquote {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: flex-start;
-  gap: var(--s-8);
-  padding: 1px 0 1px var(--s-10);
-  border-left: 2px solid var(--line);
+  gap: var(--s-6);
+  max-width: 280px;
+  padding: var(--s-6) var(--s-24) var(--s-6) var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--muted);
   color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: var(--lh-md);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
   animation: think-open var(--dur-fast) ease-out;
 }
+.cquote > .icon,
+.cquote > svg:first-child {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
 .cquote-text {
-  flex: 1;
   min-width: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1966,23 +1970,19 @@
   overflow-wrap: anywhere;
 }
 .cquote-x {
-  flex: none;
+  position: absolute;
+  top: 7px;
+  right: 4px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 50%;
   background: none;
   color: var(--ink-3);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--dur-fast) ease;
-}
-.cquote:hover .cquote-x,
-.cquote-x:focus-visible {
-  opacity: 1;
 }
 .cquote-x:hover {
   background: var(--hover);
@@ -2106,6 +2106,12 @@
 }
 .bd-pen-glow {
   fill: var(--accent-soft);
+}
+.bd-surface {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
 }
 .bd-labels {
   position: absolute;
