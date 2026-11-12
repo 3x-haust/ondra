@@ -939,6 +939,36 @@
   overflow: visible;
 }
 
+/* a paused row: 끝내기 takes the state word's place on hover (paused work stays listed until ended) */
+.req-list > li.req-paused {
+  position: relative;
+}
+.req-end {
+  position: absolute;
+  top: 50%;
+  right: var(--s-8);
+  transform: translateY(-50%);
+  padding: var(--s-2) var(--s-8);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  background: var(--card);
+  opacity: 0;
+  pointer-events: none;
+}
+.req-list > li.req-paused:hover .req-end,
+.req-end:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.req-list > li.req-paused:hover .req-state {
+  visibility: hidden;
+}
+.req-end:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
 /* the strip's open list lines up with its head: same edges, the dots under "작업" */
 .main-view .req-board .req-list .req-row {
   padding-left: 5px;

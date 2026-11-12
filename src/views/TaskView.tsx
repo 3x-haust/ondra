@@ -340,11 +340,14 @@ export function TaskView(props: { id: string }) {
             );
           if (task().status === "paused" && !discarded(task()))
             out.push(
-              <button class="strip" onClick={() => resumeTask(task().id)}>
+              // paused, it stays on the list until it goes on or is ended here
+              <div class="strip paused-strip">
                 <Glyph t={task()} />
                 <b>{tr("일시정지")}</b>
-                <span class="strip-act"><Icon name="play" size={12} />{tr("다시 시작")}</span>
-              </button>,
+                <button class="strip-act" onClick={() => resumeTask(task().id)}><Icon name="play" size={12} />{tr("다시 시작")}</button>
+                <span class="rest" />
+                <button class="btn sm ghost" title={tr("이 작업을 여기서 끝내요")} onClick={() => finishTask(task().id)}>{tr("끝내기")}</button>
+              </div>,
             );
           // what it changed comes first and stays in sight in a short window (artifacts and background give way)
           // its work went into a pull request: nothing to merge here, just the PR and tidying up
