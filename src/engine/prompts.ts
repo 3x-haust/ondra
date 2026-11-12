@@ -22,6 +22,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - research with sources, a survey or comparison → deep-research
 - a report document, a chart or a diagram → visual-report
 - a supplied design (Figma) → mimikyu; a new look → web-design
+- a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
+  → motion-graphics
 - writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
 Read only the skills you pick, once per session; resolve their reference
