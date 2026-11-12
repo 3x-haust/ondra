@@ -8,7 +8,6 @@ import { reviewUnresolved } from "./proof";
 import { handoffPrompt, taskPrompt } from "./prompts";
 import { startRpc } from "./rpc";
 import { pauseTask, startTask } from "./tasks";
-import { conflictsIn } from "./tidy";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Login fix",
@@ -236,10 +235,10 @@ describe("memory is checked, not trusted", () => {
     expect(mem("m_ok").verifiedAt).toBeGreaterThan(0);
     expect(mem("m_agent").invalidAt).toBeGreaterThan(0);
     expect(mem("m_agent").why).toContain("교차 검토에서 코드와 달라서 내렸어요 · src/auth.ts:2");
-    // the user's own piece is never changed: it waits in 확인 필요
+    // the user's own piece is never changed, and nothing is asked
     expect(mem("m_user").invalidAt).toBeUndefined();
     expect(mem("m_user").text).toBe("로그인은 세션 쿠키를 써요");
-    expect(conflictsIn("home")).toEqual([expect.objectContaining({ mine: "m_user", text: "로그인은 Authorization 헤더 토큰을 써요", sources: ["job"] })]);
+    expect((state.memoryConflicts ?? []).filter((c) => !c.done)).toHaveLength(0);
     // no quote, or not given to the job: nothing happens
     expect(mem("m_loose").invalidAt).toBeUndefined();
     expect(mem("m_other").invalidAt).toBeUndefined();
@@ -248,7 +247,7 @@ describe("memory is checked, not trusted", () => {
     expect(mem("m_split").verifiedAt).toBeUndefined();
     const m = sent("t:job").find((x) => x.includes("교차 검토 결과가 왔어요"))!;
     expect(m).toContain("- 메모리 [m_split] — 설계: 맞음 · 코드: 틀림 (src/auth.ts:2 `const retries = 5`)");
-    expect(m).toContain("# 메모리 확인\n- 맞음 1개 (확인 표시함) · 틀린 에이전트 메모리 1개 내림 · 사용자 메모리 1개는 코드와 달라 확인 필요에 올림 (사용자가 정해요) · 근거 없어 버림 2개");
+    expect(m).toContain("# 메모리 확인\n- 맞음 1개 (확인 표시함) · 틀린 에이전트 메모리 1개 내림 · 사용자 메모리 1개는 코드와 다르지만 그대로 둠 (사용자가 쓴 것) · 근거 없어 버림 2개");
   });
 
   it("drops a quote that isn't in the file it cites", async () => {

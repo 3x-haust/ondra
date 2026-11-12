@@ -266,11 +266,9 @@ export default {
   "새 것으로": "Use new",
   "바꾸기": "Replace",
   "출처 · 작업 {n}개": "Source · {n} task|Source · {n} tasks",
-  "물어봄 {n}": "{n} asked",
   "내 메모리를 내려요": "Yours will be retired",
   "메모리 바꿈": "Memory replaced",
   "메모리 확인": "Memory review",
-  "확인 필요 {n}개": "{n} to review",
 
   // ── devices
   "디바이스": "Devices",

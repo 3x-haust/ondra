@@ -72,7 +72,7 @@ export async function settleMemory(job: Task, group: Task[]): Promise<{ lines: s
       if (!ok) dropped++;
       else by.set(c.id, [...(by.get(c.id) ?? []), { k, c }]);
     }
-  const n = { confirmed: 0, retired: 0, asked: 0, unchecked: 0 };
+  const n = { confirmed: 0, retired: 0, kept: 0, unchecked: 0 };
   const split: string[] = [];
   const now = Date.now();
   for (const [id, list] of by) {
@@ -90,12 +90,8 @@ export async function settleMemory(job: Task, group: Task[]): Promise<{ lines: s
         retireMemory(id, undefined, `교차 검토에서 코드와 달라서 내렸어요 · ${c.evidence}`.slice(0, 300));
         n.retired++;
       } else if (c.now) {
-        // the user's own piece is never changed: they pick in 확인 필요 (tidy loads on use: it imports the
-        // task engine, which imports this)
-        const { askedBefore, queueConflict } = await import("./tidy");
-        if (!askedBefore(id, c.now))
-          queueConflict(job.space, { mine: id, text: c.now, kind: m.kind, scope: m.scope === "project" ? "project" : "space", project: m.project, sources: [job.id] }, now);
-        n.asked++;
+        // the user's own piece is never changed and nothing is asked: it stays as they wrote it
+        n.kept++;
       } else dropped++;
       continue;
     }
@@ -107,7 +103,7 @@ export async function settleMemory(job: Task, group: Task[]): Promise<{ lines: s
   const parts = [
     n.confirmed ? `맞음 ${n.confirmed}개 (확인 표시함)` : "",
     n.retired ? `틀린 에이전트 메모리 ${n.retired}개 내림` : "",
-    n.asked ? `사용자 메모리 ${n.asked}개는 코드와 달라 확인 필요에 올림 (사용자가 정해요)` : "",
+    n.kept ? `사용자 메모리 ${n.kept}개는 코드와 다르지만 그대로 둠 (사용자가 쓴 것)` : "",
     n.unchecked ? `확인 못 함 ${n.unchecked}개` : "",
     dropped ? `근거 없어 버림 ${dropped}개` : "",
   ].filter(Boolean);
