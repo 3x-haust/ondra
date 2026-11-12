@@ -1921,15 +1921,6 @@
 .reply-steps:first-child {
   margin-top: 0;
 }
-/* closed: only what it is doing now, one quiet line */
-.reply-now {
-  margin-top: var(--s-4);
-  font-size: var(--fs-sm);
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 @keyframes think-open {
   from {
     opacity: 0;
