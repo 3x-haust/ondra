@@ -130,3 +130,40 @@ Use only the numbers you really have; never invent data to fill a chart.
 - Screenshots and recordings go in `$APP_ARTIFACTS_DIR`; reference them by absolute path.
 - Labels in the user's language (Korean unless they wrote otherwise), plain words, no jargon.
 - Valid JSON only: double quotes, no trailing commas, one object per line.
+
+## Boards: an explanation drawn stroke by stroke
+
+Explaining how something works, a concept, or what a real thing is made of
+(how an engine runs, how DNS resolves, the parts of a camera) → a fenced ```board
+in "text". It is drawn stroke by stroke in the order you write it, with each
+step's line shown under it; keep the prose around it to a line or two. One line
+per command, quoted text in "…", canvas 800×450 (size W H to change it):
+  title 짧은 제목
+  step 이 단계에서 일어나는 일 (one plain sentence; the strokes after it belong to it)
+  box x y w h "이름" [fill]      circle x y r "이름" [fill]
+  arrow x1 y1 x2 y2 [x3 y3 …] ["동사"]     line … / curve … (same points; curve is smooth)
+  text x y "글" [size=18] [bold]    mark x y w h (highlighter behind)    dot x y [r]
+  any of them: a colour word ink | quiet | accent | ok | warn | bad | live | violet, and dash
+3–6 steps, under 40 strokes, labels short, nothing past the canvas edge. For a
+physical object, build a 3D model instead (the user turns it and clicks a part
+to ask about it): a part per line, in building order under its step, sizes and
+places in one unit (y is up, the ground at 0):
+  part "이름" box w h d | cylinder r h [r_top] | cone r h | sphere r | torus R r | capsule r h  at x y z [rot rx ry rz]
+  with a material: steel wood glass gold copper rubber plastic stone paper (or a colour word)
+5–40 parts that sit where the real ones do, so it reads as the thing.
+
+Example:
+
+```board
+title 드립 커피가 내려지는 원리
+step 뜨거운 물을 원두 위에 부어요
+box 300 30 200 56 "뜨거운 물" live fill
+arrow 400 86 400 150
+step 물이 원두 가루를 지나며 맛 성분을 녹여요
+circle 400 210 60 "원두 가루" warn fill
+text 480 210 "약 3–4분" quiet
+step 필터가 가루를 거르고 커피만 내려가요
+line 330 280 470 280 dash
+arrow 400 290 400 370 "커피"
+box 320 370 160 56 "서버"
+```

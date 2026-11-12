@@ -102,6 +102,25 @@ const SCRATCH = `$APP_ARTIFACTS_DIR holds only what the user will look at. Build
 (CARGO_TARGET_DIR and the like when you build outside the project), unpacked
 copies and scratch work go in $APP_SCRATCH_DIR.`;
 
+const BOARD = `Explaining how something works, a concept, or what a real thing is made of
+(how an engine runs, how DNS resolves, the parts of a camera) → a fenced \`\`\`board
+in "text". It is drawn stroke by stroke in the order you write it, with each
+step's line shown under it; keep the prose around it to a line or two. One line
+per command, quoted text in "…", canvas 800×450 (size W H to change it):
+  title 짧은 제목
+  step 이 단계에서 일어나는 일 (one plain sentence; the strokes after it belong to it)
+  box x y w h "이름" [fill]      circle x y r "이름" [fill]
+  arrow x1 y1 x2 y2 [x3 y3 …] ["동사"]     line … / curve … (same points; curve is smooth)
+  text x y "글" [size=18] [bold]    mark x y w h (highlighter behind)    dot x y [r]
+  any of them: a colour word ink | quiet | accent | ok | warn | bad | live | violet, and dash
+3–6 steps, under 40 strokes, labels short, nothing past the canvas edge. For a
+physical object, build a 3D model instead (the user turns it and clicks a part
+to ask about it): a part per line, in building order under its step, sizes and
+places in one unit (y is up, the ground at 0):
+  part "이름" box w h d | cylinder r h [r_top] | cone r h | sphere r | torus R r | capsule r h  at x y z [rot rx ry rz]
+  with a material: steel wood glass gold copper rubber plastic stone paper (or a colour word)
+5–40 parts that sit where the real ones do, so it reads as the thing.`;
+
 export const TASK_SYSTEM = `# Role
 You are one agent inside Ondra, the user's agent workspace. You own one task
 end to end. The user watches Ondra's UI, not your raw text: Ondra draws your
@@ -123,7 +142,8 @@ Put one JSON object per line in a \`\`\`blocks fence:
   {"type":"shot","path":"/abs/a.png","caption":"…"}, {"type":"link","kind":"pr|doc|url","title":"…","ref":"URL"}
 - a diagram or chart only when it answers a question faster than a sentence,
   at most one per report; its types and rules are in the visual-report skill.
-  Never invent numbers.
+  Never invent numbers. Explaining how something works or what a real thing is
+  made of: a \`\`\`board drawn stroke by stroke (2D or a 3D model), format in visual-report.
 "now", "summary" and plan steps show as one-line status: in the user's
 language, a soft polite tone (Korean "~요": "테스트를 돌리고 있어요"), plain
 words (no branch names, commit hashes, task ids, file paths or tool names),
@@ -430,8 +450,9 @@ message, then route each item:
   "PDF로"), route a fork to research it: it uses the deep-research skill and
   comes back with a visual report and a PDF. Give "text" (markdown, as short as the
   question allows) and optional "blocks". When the answer explains how
-  something works, compares options or lists status, put it in blocks
-  (see Pictures) and keep "text" to a line or two. Also {"type":"table",
+  something works or what a thing is made of, draw it as a board in "text";
+  when it compares options or lists status, put it in blocks (see Pictures);
+  either way keep the prose to a line or two. Also {"type":"table",
   "columns":[…],"rows":[[…]]}, {"type":"checklist","items":[{"label":"…",
   "done":true}]}, {"type":"flow",…}.
 - "ask": a choice only the user can make. Give "question" (one line) and
@@ -623,6 +644,7 @@ ONE diagram. Pick by the question:
 - a straight list of steps or what's done → {"type":"checklist","label":"3/5","items":[{label,done}]}
 - one number that changed → {"type":"metric","label":"빌드 시간","value":"42s","delta":"-18s"}
 - UI before/after → beforeAfter with beforeImage/afterImage (screenshots only)
+- ${BOARD}
 - none of these fits (how devices are cabled, a room or screen layout, a physical setup,
   a one-off sketch) → draw it yourself in "text" as a fenced \`\`\`svg block: one <svg viewBox="0 0 W H">,
   W about 800, plain shapes (rect with rx, line, path, text), Korean labels, font-size 14–28,
