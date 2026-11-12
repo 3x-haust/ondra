@@ -11,7 +11,7 @@ import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsIn, setState, spaceById, kidsOf, state, taskById } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
-import { decide, mergeTask, resumeTask, startTask, tell } from "../engine/tasks";
+import { decide, resumeTask, startTask, tell } from "../engine/tasks";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, soon, statusLabel, taskTitle, tokens } from "../ui/bits";
 import { browserStreamPort, fileSrc } from "../lib/native";
@@ -20,7 +20,6 @@ import { DotGrid } from "../ui/DotGrid";
 import { Markdown } from "../ui/Markdown";
 import { changes, Glyph, SidebarToggle } from "./Sidebar";
 import { discarded, pausedAt, planCount, stepState, taskDiff } from "../state/progress";
-import { confirmDiscard } from "../ui/taskMenu";
 import { linkMenu, openLink } from "../ui/links";
 import { Board, BoardGroup, cardMenu, Kids, LinesChanged, NewTask, StateGlyph } from "./Board";
 import { ChevronsDownUp, ChevronsUpDown, Map as MapIcon } from "lucide-solid";
@@ -864,7 +863,6 @@ function Drawer(props: { t: Task; onClose: () => void }) {
     const i = q.findIndex((x) => x.id === job().id);
     return i < 0 ? "" : i === 0 ? t("다음 차례") : t("앞에 작업 {n}개", { n: i });
   };
-  const [merging, setMerging] = createSignal(false);
   const [msg, setMsg] = createSignal("");
   const say = () => {
     const m = msg().trim();
@@ -907,22 +905,6 @@ function Drawer(props: { t: Task; onClose: () => void }) {
               <button class="btn primary sm" onClick={() => void startTask(job().id)}>
                 <Icon name="play" size={14} />
                 {t("지금 시작")}
-              </button>
-            </Show>
-            {/* waiting on a merge: the review bar's two actions, with its confirm */}
-            <Show when={review()}>
-              <button class="btn sm ghost cv-dr-discard" onClick={() => confirmDiscard(job().id)}>{t("버리기")}</button>
-              <button
-                class="btn sm primary cv-dr-merge"
-                disabled={merging()}
-                onClick={async () => {
-                  setMerging(true);
-                  await mergeTask(job().id);
-                  setMerging(false);
-                }}
-              >
-                <Icon name="merge" size={14} />
-                {merging() ? t("병합 중") : t("병합")}
               </button>
             </Show>
           </div>

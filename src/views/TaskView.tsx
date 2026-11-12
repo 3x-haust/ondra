@@ -15,8 +15,7 @@ import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
-import { askDiscard } from "../ui/Review";
-import { rawStats, closeWorktree, prOf, renameTask, finishTask, mergeTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
+import { rawStats, closeWorktree, prOf, renameTask, finishTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -310,10 +309,7 @@ export function TaskView(props: { id: string }) {
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
         createEffect(on(() => task().unread, (u) => u && updateTask(task().id, (x) => (x.unread = false))));
         const ready = () => task().worktree?.state === "open" && (task().status === "done" || task().status === "paused" || task().status === "failed");
-        // merge / discard are for finished work: a paused, failed or running task only shows what it changed so far
-        const inReview = () => task().status === "done" && task().worktree?.state === "open";
         const diff = () => taskDiff(task());
-        const [merging, setMerging] = createSignal(false);
         const openPanel = (tab: PanelTab) => showTool(tab);
         // with the panel already open, show what matters for this job
         onMount(() => {
@@ -361,38 +357,9 @@ export function TaskView(props: { id: string }) {
                 <button class="btn sm ghost" title={tr("변경은 PR에 남아요")} onClick={() => void closeWorktree(task().id)}>{tr("워크트리 정리")}</button>
               </div>,
             );
-          // the changes tab already has merge / discard
-          else if (inReview() && !(mine() && panelTab() === "changes"))
-            out.push(
-              <div class="strip keep">
-                <Icon name="branch" size={14} />
-                <b>{tr("병합 필요")}</b>
-                <span class="rest">
-                  <Show when={diff().files.length} fallback={tr("변경 없음")}>
-                    <button class="link-btn" onClick={() => openPanel("changes")}>
-                      {tr("파일 {n}개", { n: diff().files.length })} <span class="add">+{diff().add}</span>{" "}
-                      <span class="del">−{diff().del}</span>
-                    </button>
-                  </Show>
-                </span>
-                <button class="btn sm ghost" onClick={() => askDiscard(task())}>{tr("버리기")}</button>
-                <button
-                  class="btn sm primary"
-                  disabled={merging()}
-                  onClick={async () => {
-                    setMerging(true);
-                    await mergeTask(task().id);
-                    setMerging(false);
-                  }}
-                >
-                  <Icon name="merge" size={13} />
-                  {merging() ? tr("병합 중") : tr("병합")}
-                </button>
-              </div>,
-            );
-          // not finished yet: what it changed so far (no merge), the to-dos, what it made and what runs
+          // what it changed (merging it is the job's to ask), the to-dos, what it made and what runs
           // in the background, as one line
-          const changes = !inReview() && task().worktree?.state === "open" && diff().files.length > 0 && !(mine() && panelTab() === "changes");
+          const changes = !pr && task().worktree?.state === "open" && diff().files.length > 0 && !(mine() && panelTab() === "changes");
           const made = artifacts[task().id] ?? [];
           const shown = made.length && !(mine() && panelTab() === "artifacts") ? made.length : 0;
           if (changes || shown || bg().length || (task().plan.length && task().status !== "done"))
@@ -565,8 +532,6 @@ export function TaskView(props: { id: string }) {
                     ...(task().status === "failed" ? [{ name: "retry", desc: tr("다시 시도"), icon: "play", run: () => resumeTask(task().id) }] : []),
                     ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
                     ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),
-                    ...(inReview() && !prOf(task()) ? [{ name: "merge", desc: tr("병합"), icon: "merge", run: () => void mergeTask(task().id) }] : []),
-                    ...(ready() ? [{ name: "discard", desc: tr("버리기"), icon: "undo", run: () => askDiscard(task()) }] : []),
                     { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim())) },
                     { ...drawCommand(() => task().id), desc: tr("작업 흐름 그림") },
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },

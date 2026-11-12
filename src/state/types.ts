@@ -394,7 +394,8 @@ export interface Decision {
   /** From an engine dialog (extension UI request). */
   ui?: { requestId: string; method: "select" | "confirm" | "input" };
   /** "stalled": the task stopped without saying it was done. */
-  kind: "ask" | "stalled";
+  /** "merge": the job finished with changes on its branch; the user says what becomes of them. */
+  kind: "ask" | "stalled" | "merge";
 }
 
 export type Route =

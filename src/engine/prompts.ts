@@ -851,7 +851,7 @@ function gitNote(t: Task): string[] {
   const w = t.worktree;
   if (!w || w.state !== "open") return [];
   return [
-    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done; the user merges it from Ondra. Only what is meant to be merged goes in this folder: scripts you run to check something, notes and downloads for a question or research go in $APP_SCRATCH_DIR, reports in $APP_ARTIFACTS_DIR. A job that leaves the repo unchanged ends without a merge.`,
+    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done. When you finish with changes, Ondra asks the user whether to merge them, open a PR or throw them away: don't ask that yourself. When the user or the project's memory already said what happens to this work, do it: push and open the PR yourself, or send {\"type\":\"merge\"} (merge into the original folder's current branch) or {\"type\":\"discard\"} with your done, and Ondra does it after your turn. Only what is meant to be merged goes in this folder: scripts you run to check something, notes and downloads for a question or research go in $APP_SCRATCH_DIR, reports in $APP_ARTIFACTS_DIR. A job that leaves the repo unchanged ends without a merge.`,
   ];
 }
 
