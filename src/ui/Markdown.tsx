@@ -54,6 +54,23 @@ const make = (github: boolean) => new Marked({
 });
 // boards in the text being parsed, numbered so each keeps its view while the text streams in
 let boardN = 0;
+/**
+ * Boards whose text just went away, kept a moment: the same reply re-rendered (its answer
+ * finishing, the list around it redrawn) picks its board up again and it draws on from
+ * where it was instead of starting over.
+ */
+const parked: { v: BoardView; timer: number }[] = [];
+function park(v: BoardView) {
+  parked.push({ v, timer: window.setTimeout(() => { const i = parked.findIndex((p) => p.v === v); if (i >= 0) parked.splice(i, 1); v.dispose(); }, 1500) });
+}
+function unpark(src: string): BoardView | undefined {
+  const same = (a: string, b: string) => { const n = Math.min(a.length, b.length, 120); return n >= 8 && a.slice(0, n) === b.slice(0, n); };
+  const i = parked.findIndex((p) => same(p.v.source, src));
+  if (i < 0) return undefined;
+  const [p] = parked.splice(i, 1);
+  clearTimeout(p.timer);
+  return p.v;
+}
 const md = make(false);
 const mdGithub = make(true);
 
@@ -85,7 +102,7 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
   };
   let el!: HTMLDivElement;
   const boards = new Map<number, BoardView>();
-  onCleanup(() => boards.forEach((b) => b.dispose()));
+  onCleanup(() => boards.forEach((b) => park(b)));
   const html = () => {
     boardN = 0;
     return (props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string;
@@ -110,18 +127,24 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
       for (const spot of el?.querySelectorAll<HTMLElement>("div.md-board") ?? []) {
         const n = Number(spot.dataset.n);
         here.add(n);
+        const src = spot.querySelector("pre")?.textContent ?? "";
         let v = boards.get(n);
         if (!v) {
-          v = new BoardView({
-            onExpand: (src) => openBoard(src, (text) => composerFor(el)?.quote(text)),
-            onAsk: (text) => composerFor(el)?.quote(text),
-          });
+          // its own root finds the composer: a board picked up by another render lives in that one's text
+          v = unpark(src);
+          if (!v) {
+            const made: BoardView = new BoardView({
+              onExpand: (src) => openBoard(src, (text) => composerFor(made.root)?.quote(text)),
+              onAsk: (text) => composerFor(made.root)?.quote(text),
+            });
+            v = made;
+          }
           boards.set(n, v);
         }
         spot.replaceWith(v.root);
-        v.update(spot.querySelector("pre")?.textContent ?? "");
+        v.update(src);
       }
-      for (const [n, v] of boards) if (!here.has(n)) (v.dispose(), boards.delete(n));
+      for (const [n, v] of boards) if (!here.has(n)) (park(v), boards.delete(n));
       for (const code of el?.querySelectorAll<HTMLElement>("pre > code[class*='language-']") ?? []) {
         const lang = langOf(/language-([\w+-]+)/.exec(code.className)?.[1] ?? "");
         const src = code.textContent ?? "";

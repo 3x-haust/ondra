@@ -194,6 +194,11 @@ export class BoardView {
     return b;
   }
 
+  /** the source drawn so far */
+  get source(): string {
+    return this.src;
+  }
+
   /** the board's source as it stands; new strokes are drawn after the ones already there */
   update(src: string, done = false): void {
     if (src === this.src && !done) return;
