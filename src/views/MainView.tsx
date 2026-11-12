@@ -190,42 +190,51 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
   );
 }
 
-/** "생각하는 중 · 12초": opened, what the model reasons streams under it as it comes */
+/**
+ * "생각하는 중 · 12초": opened, what the model reasons and what it has looked at so far
+ * stream under it as they come; closed, the latest of those waits under the line, so a
+ * long wait shows where it is.
+ */
 function Thinking(props: { m: CaptainMessage; label: string }) {
   const thought = () => mainThought(chatKey(props.m.space, props.m.project)).trim();
+  const steps = () => props.m.steps ?? [];
+  const has = () => !!thought() || steps().length > 0;
   const [open, setOpen] = createSignal(false);
   let box: HTMLDivElement | undefined;
   // it follows the newest line while the reader is at the end of it
   let atEnd = true;
-  createEffect(on(thought, () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
+  createEffect(on([thought, () => steps().length], () => open() && box && atEnd && queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
+  // reasoning summaries come as "**Heading**" lines between paragraphs: headings, no blank gaps
+  const lines = () => thought().split("\n").map((l) => l.trim()).filter(Boolean);
   return (
-    <div class="reply-think" classList={{ open: open() && !!thought() }}>
-      <button type="button" class="reply-thinking shimmer" disabled={!thought()} aria-expanded={open()} onClick={() => setOpen(!open())}>
+    <div class="reply-think" classList={{ open: open() && has() }}>
+      <button type="button" class="reply-thinking shimmer" disabled={!has()} aria-expanded={open()} onClick={() => setOpen(!open())}>
         {props.label}
-        <Show when={thought()}>
+        <Show when={has()}>
           <Icon name="chevron" size={12} class="reply-think-chev" />
         </Show>
       </button>
-      <Show when={open() && thought()}>
+      <Show when={open() && has()}>
         <div
           class="reply-thought"
           ref={(el) => ((box = el), queueMicrotask(() => (el.scrollTop = el.scrollHeight)))}
           onScroll={(e) => (atEnd = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 24)}
         >
-          {/* reasoning summaries come as "**Heading**" lines: shown as headings, not asterisks */}
-          <For each={thought().split("\n")}>
+          <For each={lines()}>
             {(line) => {
-              const head = /^\*\*(.+)\*\*$/.exec(line.trim());
-              return head ? <b class="reply-thought-head">{head[1]}</b> : <>{line}{"\n"}</>;
+              const head = /^\*\*(.+)\*\*$/.exec(line);
+              return head ? <b class="reply-thought-head">{head[1]}</b> : <p class="reply-thought-line">{line}</p>;
             }}
           </For>
+          <Show when={steps().length}>
+            <ul class="reply-steps">
+              <For each={steps()}>{(s) => <li><Icon name="check" size={12} />{noteText(s)}</li>}</For>
+            </ul>
+          </Show>
         </div>
       </Show>
-      {/* what it has looked at so far, one quiet line each, so a long wait shows where it is */}
-      <Show when={props.m.steps?.length}>
-        <ul class="reply-steps">
-          <For each={props.m.steps}>{(s) => <li><Icon name="check" size={12} />{noteText(s)}</li>}</For>
-        </ul>
+      <Show when={!open() && steps().length}>
+        <div class="reply-now">{noteText(steps()[steps().length - 1])}</div>
       </Show>
     </div>
   );
