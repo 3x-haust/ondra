@@ -879,6 +879,8 @@ function Shortcuts() {
     setNote(null);
     stop();
     setRec(id);
+    // WebKit doesn't focus a button on click: the keys must reach the chip
+    chip(id)?.focus();
   };
   const done = (id: string, next: Record<string, string>) => {
     writeBindings(next);
@@ -925,6 +927,7 @@ function Shortcuts() {
   };
   return (
     <>
+      <div class="set-sticky">
       <div class="set-head">
         <h2>{t("단축키")}</h2>
         <button class="btn sm" disabled={!anyChanged()} onClick={() => (stop(), setNote(null), writeBindings({}), toast(t("기본값으로 되돌렸어요")))}>{t("모두 기본값으로")}</button>
@@ -933,6 +936,7 @@ function Shortcuts() {
         <Icon name="search" size={14} />
         <input placeholder={t("검색")} aria-label={t("단축키 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
       </label>
+      </div>
       <For each={shown()} fallback={<div class="set-group"><div class="empty-line">{t("결과 없음")}</div></div>}>
         {([section, list]) => (
           <>
