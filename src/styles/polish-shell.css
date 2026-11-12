@@ -1777,3 +1777,131 @@
   visibility: visible;
   transition: opacity var(--dur-fast) var(--ease);
 }
+
+/* a job's browser floating in a corner (Codex's picture-in-picture): the page, small; on hover a bar
+   with the job, the site, 크게 보기 and ×. Drag to another corner. */
+.pip {
+  position: fixed;
+  z-index: var(--z-pop);
+  width: 300px;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  animation: pip-in var(--dur-slow) var(--ease-drawer);
+  transition: top var(--dur-drawer) var(--ease-drawer), bottom var(--dur-drawer) var(--ease-drawer), left var(--dur-drawer) var(--ease-drawer), right var(--dur-drawer) var(--ease-drawer);
+}
+/* clear of the title bar above and the composer below */
+.pip.at-tl { top: 64px; left: var(--s-20); }
+.pip.at-tr { top: 64px; right: var(--s-20); }
+.pip.at-bl { bottom: 112px; left: var(--s-20); }
+.pip.at-br { bottom: 112px; right: var(--s-20); }
+.pip.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+.pip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pip-screen {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--muted);
+}
+.pip-screen > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  pointer-events: none;
+}
+.pip-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.pip-bar {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-6) var(--s-6) var(--s-6) var(--s-10);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.pip:hover .pip-bar,
+.pip:focus-within .pip-bar {
+  opacity: 1;
+  transform: none;
+}
+.pip-live {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 18%, transparent);
+}
+.pip-what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.pip-title,
+.pip-site {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pip-title {
+  font-size: var(--fs-xs);
+  color: var(--ink);
+}
+.pip-site {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.pip-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.pip-btn:hover {
+  background: var(--muted);
+  color: var(--ink);
+}
+@keyframes pip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pip,
+  .pip-bar {
+    animation: none;
+    transition: none;
+  }
+}

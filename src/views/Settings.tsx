@@ -187,6 +187,9 @@ function General() {
         <Row title={t("내 창 앞에 두기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
           <Switch_ label={t("내 창 앞에 두기")} on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
         </Row>
+        <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
+          <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
+        </Row>
       </div>
 
       <GroupTitle title={t("공통 지침")}>

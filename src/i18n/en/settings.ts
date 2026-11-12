@@ -22,6 +22,8 @@ export default {
   "끄면 읽기만 해요": "Off: read only",
   "메모리 자동 저장": "Save memories automatically",
   "내 창 앞에 두기": "Keep my window in front",
+  "작업 브라우저 미리보기": "Job browser preview",
+  "작업이 브라우저를 쓰면 구석에 작게 띄워요": "Shows a job's browser small in a corner while it works",
   "에이전트|group": "Agents",
   "기본 모델": "Default model",
   "기본 권한": "Default permissions",

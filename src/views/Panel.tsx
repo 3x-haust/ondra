@@ -8,11 +8,12 @@ import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, S
 import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
+import { useBrowserStream } from "../ui/browserStream";
 import { openLink } from "../ui/links";
 import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, mergeTask, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { browserStreamPort, fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
+import { fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
@@ -360,55 +361,15 @@ function TerminalPane(props: { t: Task }) {
 }
 
 function BrowserPane(props: { t: Task }) {
-  const [frame, setFrame] = createSignal<string | null>(null);
-  const [size, setSize] = createSignal({ w: 1280, h: 800 });
-  const [url, setUrl] = createSignal("");
-  let ws: WebSocket | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let alive = true;
-
-  const connect = async () => {
-    if (!alive) return;
-    const port = await browserStreamPort(props.t.id, props.t.space);
-    if (!alive) return;
-    if (!port) {
-      timer = setTimeout(connect, 2500);
-      return;
-    }
-    ws = new WebSocket(`ws://127.0.0.1:${port}/?maxFps=10`);
-    ws.onmessage = (m) => {
-      try {
-        const msg = JSON.parse(m.data);
-        if (msg.type === "frame") {
-          setFrame(`data:image/jpeg;base64,${msg.data}`);
-          if (msg.metadata?.deviceWidth) setSize({ w: msg.metadata.deviceWidth, h: msg.metadata.deviceHeight });
-        } else if (msg.type === "url" && msg.url) setUrl(msg.url);
-      } catch {
-        /* ignore */
-      }
-    };
-    ws.onclose = () => {
-      if (alive) timer = setTimeout(connect, 2500);
-    };
-  };
-  onMount(connect);
-  onCleanup(() => {
-    alive = false;
-    clearTimeout(timer);
-    ws?.close();
-  });
-
+  const { frame, url, click: clickAt } = useBrowserStream(() => props.t);
   const browsing = () => props.t.entries.flatMap((e) => (e.kind === "tool" && e.tool.kind === "browser" ? [{ ...e.tool, at: e.at }] : []));
   const lastPage = () => {
     const hit = [...browsing()].reverse().find((b) => /[\w-]+\.[a-z]{2,}(\/\S*)?/.test(b.target));
     return hit?.target.match(/[\w.-]+\.[a-z]{2,}(\/\S*)?/)?.[0];
   };
   const click = (e: MouseEvent) => {
-    if (ws?.readyState !== WebSocket.OPEN) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = Math.round(((e.clientX - r.left) / r.width) * size().w);
-    const y = Math.round(((e.clientY - r.top) / r.height) * size().h);
-    for (const eventType of ["mousePressed", "mouseReleased"]) ws.send(JSON.stringify({ type: "input_mouse", eventType, x, y, button: "left", clickCount: 1 }));
+    clickAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   };
 
   const shown = () => url() || (lastPage() ? `https://${lastPage()}` : "");
