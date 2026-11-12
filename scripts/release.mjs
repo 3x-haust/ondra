@@ -132,7 +132,7 @@ const parts = fresh.map((c) => {
 for (const c of manifest.components.filter((c) => !fresh.includes(c))) say(`${c.name} ${c.version}: unchanged (from ${c.url.split("/download/")[1].split("/")[0]})`);
 
 const assets = [dmg, archive, join(macos, "latest.json"), join(macos, "components.json"), ...parts];
-const gh = ["release", "create", tag, "--target", head, "--title", `${name} ${version}`, ...(notes ? ["--notes-file", notes] : ["--notes", ""]), ...assets];
+const gh = ["release", "create", tag, "--target", head, "--title", `${name} ${version}${/^0\./.test(version) ? " Beta" : ""}`, ...(notes ? ["--notes-file", notes] : ["--notes", ""]), ...assets];
 if (publish) {
   run("gh", gh);
   say(`published ${tag}`);

@@ -184,6 +184,7 @@ export default {
   "브라우저에서 로그인하세요": "Sign in in your browser",
   "다시 열기": "Reopen",
   "링크 복사": "Copy link",
+  "베타": "Beta",
   "주소 또는 코드": "URL or code",
   "로그인했어요": "Signed in",
 

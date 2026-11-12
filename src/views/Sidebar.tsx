@@ -1,5 +1,7 @@
 // The left side, after T3 Code: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
+import { version as appVersion } from "../../package.json";
+import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
@@ -716,7 +718,8 @@ export function Sidebar() {
       <div class="sb-foot">
         <button class="row" data-shortcut="settings" onClick={() => setView({ name: "settings" })}>
           <Icon name="gear" size={16} />
-          <span class="row-title">{tr("설정")}</span>
+          {/* Ondra is in beta until 1.0: the mark sits right after the word */}
+          <span class="row-title">{tr("설정")}<Show when={isBeta(appVersion)}><span class="beta-chip">{tr("베타")}</span></Show></span>
           <kbd class="sb-kbd">{shortcutHint("settings")}</kbd>
         </button>
         <UpdateButton />
