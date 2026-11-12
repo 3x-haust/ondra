@@ -15,7 +15,7 @@ import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
-import { rawStats, closeWorktree, prOf, renameTask, finishTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
+import { rawStats, prOf, renameTask, finishTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -346,7 +346,7 @@ export function TaskView(props: { id: string }) {
               </div>,
             );
           // what it changed comes first and stays in sight in a short window (artifacts and background give way)
-          // its work went into a pull request: nothing to merge here, just the PR and tidying up
+          // its work went into a pull request: nothing to merge here; its folder goes by itself once the PR is merged
           const pr = prOf(task());
           if (ready() && pr)
             out.push(
@@ -354,7 +354,6 @@ export function TaskView(props: { id: string }) {
                 <Icon name="branch" size={14} />
                 <button class="link-btn" onClick={() => openPanel("pr")}>PR #{pr.n}</button>
                 <span class="rest" />
-                <button class="btn sm ghost" title={tr("변경은 PR에 남아요")} onClick={() => void closeWorktree(task().id)}>{tr("워크트리 정리")}</button>
               </div>,
             );
           // what it changed (merging it is the job's to ask), the to-dos, what it made and what runs

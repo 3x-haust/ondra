@@ -1990,6 +1990,8 @@ export async function watchPrs() {
       }
       if (snap.state && snap.state !== "OPEN") {
         patchWatch(w.url, { done: true });
+        // merged: a finished job's folder goes now, not at the next half-hourly sweep
+        if (snap.state === "MERGED") await dropEmptyBranch(t.id);
         continue;
       }
       if (w.conflict && snap.mergeable !== "CONFLICTING") patchWatch(w.url, { conflict: false });
@@ -2792,9 +2794,9 @@ export function startScheduler() {
   for (const t of state.tasks) if (t.status === "running" && !runs.get(t.id)) updateTask(t.id, (x) => requeue(x));
   // finished jobs from before plans were closed on finish
   for (const t of state.tasks) if (t.status === "done" && t.plan.some((s) => s.state === "now" || s.state === "todo")) updateTask(t.id, (x) => (x.plan = closePlan(x.plan)));
-  // branches merged on GitHub since: their merge bar goes; checked again every half hour
+  // branches merged on GitHub since: their folders go; checked again every ten minutes (a watched PR sooner)
   setTimeout(() => void sweepLanded(), 20_000);
-  setInterval(() => void sweepLanded(), 30 * 60_000);
+  setInterval(() => void sweepLanded(), 10 * 60_000);
   // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
   setTimeout(() => void watchPrs(), 40_000);
   setInterval(() => void watchPrs(), 3 * 60_000);
