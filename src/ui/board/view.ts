@@ -427,14 +427,16 @@ export class BoardView {
 
   private render3d(b: Board) {
     if (!this.three) {
-      if (this.threeLoading) return;
+      if (this.threeLoading || this.asleep) return;
       this.threeLoading = true;
       this.stage.textContent = "";
       this.stage.classList.add("bd-3d");
       this.stage.appendChild(this.tag);
       void import("./three-view").then(({ createThreeView }) => {
         if (this.disposed) return;
-        this.three = createThreeView(this.stage, { onPick: (i, at) => this.pick(i, at) });
+        this.threeLoading = false;
+        this.three = createThreeView(this.stage, { onPick: (i, at) => this.pick(i, at), onLost: () => this.lost() });
+        this.watch();
         this.render3d(this.board!);
       });
       return;
@@ -449,6 +451,45 @@ export class BoardView {
     if (grew && !this.instant) this.finish();
   }
   private parts3d = 0;
+  private asleep = false;
+  private revived = 0;
+  private io?: IntersectionObserver;
+  private nap = 0;
+
+  /** let go of the 3D view (and its GPU context) and build it again, at once and whole, when wanted */
+  private release() {
+    this.three?.dispose();
+    this.three = undefined;
+    this.parts3d = 0;
+    this.tag.hidden = true;
+  }
+  private rebuild() {
+    if (!this.board?.parts.length || this.disposed) return;
+    this.instant = true;
+    this.render3d(this.board);
+  }
+  /** the GPU context was taken away: a new view in its place (a few times at most) */
+  private lost() {
+    queueMicrotask(() => {
+      this.release();
+      if (this.revived++ < 3) this.rebuild();
+    });
+  }
+  /** a 3D board out of sight for a while gives its GPU context back; it is rebuilt when seen again */
+  private watch() {
+    if (this.io) return;
+    this.io = new IntersectionObserver((es) => {
+      const seen = es.some((e) => e.isIntersecting);
+      clearTimeout(this.nap);
+      if (seen && this.asleep) {
+        this.asleep = false;
+        this.rebuild();
+      } else if (!seen && this.three) {
+        this.nap = window.setTimeout(() => { this.asleep = true; this.release(); }, 4000);
+      }
+    });
+    this.io.observe(this.stage);
+  }
 
   /** a part clicked: its name by it, and a way to ask about it */
   private pick(i: number | null, at?: { x: number; y: number }) {
@@ -514,5 +555,7 @@ export class BoardView {
     this.stopAll();
     this.three?.dispose();
     this.three = undefined;
+    this.io?.disconnect();
+    clearTimeout(this.nap);
   }
 }

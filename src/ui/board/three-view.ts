@@ -64,15 +64,22 @@ export function short(label: string): string {
   return name.length > 18 ? name.slice(0, 17) + "…" : name;
 }
 
-export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void }): ThreeView {
+export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | null, at?: { x: number; y: number }) => void; onLost?: () => void }): ThreeView {
   const css = getComputedStyle(host);
   const cssColor = (v: string) => css.getPropertyValue(v).trim() || "#888";
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // 1.5× is sharp enough with antialiasing and much lighter than 2× on a retina screen
+  renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // the light never moves with the camera, so the shadow is worked out only when the model changes
+  renderer.shadowMap.autoUpdate = false;
+  // WebKit may drop the GPU context under pressure: the board builds a new view then
+  // (not when this view lets go of it itself)
+  let gone = false;
+  renderer.domElement.addEventListener("webglcontextlost", () => !gone && opts.onLost?.());
   host.appendChild(renderer.domElement);
   // each part's name beside it, joined to it by a thin line; kept next to the part as the model turns
   const labels = document.createElement("div");
@@ -81,7 +88,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   leaders.setAttribute("class", "bd-leaders");
   labels.appendChild(leaders);
   host.appendChild(labels);
-  type Label = { chip: HTMLButtonElement; line: SVGLineElement; dot: SVGCircleElement };
+  type Label = { chip: HTMLButtonElement; line: SVGLineElement; dot: SVGCircleElement; cw: number; ch: number };
   const chips = new Map<number, Label>();
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.01, 1000);
@@ -118,20 +125,29 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
   let frame = 0;
   let fitted = "";
 
+  let later = 0;
+  let shadowStale = true;
   const draw = () => {
     frame = 0;
+    clearTimeout(later);
     const now = performance.now();
     let moving = controls.update();
+    let next = Infinity;
     for (const s of shown) {
       const t = s.from <= now ? Math.min(1, (now - s.from) / 420) : 0;
-      const k = Math.max(0.0001, ease(t));
-      s.mesh.scale.setScalar(k);
+      if (t === 1 && s.mesh.scale.x === 1 && s.mesh.visible) continue;
+      s.mesh.scale.setScalar(Math.max(0.0001, ease(t)));
       s.mesh.visible = t > 0;
-      if (t < 1) moving = true;
+      if (t > 0 && t < 1) moving = true;
+      if (t === 0) next = Math.min(next, s.from);
+      if (t === 1) shadowStale = true;
     }
+    if (shadowStale) { renderer.shadowMap.needsUpdate = true; shadowStale = false; }
     renderer.render(scene, camera);
     placeLabels();
+    // frames only while something moves; a part still to come wakes it at its moment
     if (moving) frame = requestAnimationFrame(draw);
+    else if (next < Infinity) later = window.setTimeout(wake, Math.max(16, next - now));
   };
   const center = new THREE.Vector3();
   const v = new THREE.Vector3();
@@ -179,7 +195,8 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       dot.setAttribute("r", "2.5");
       leaders.append(line, dot);
       labels.appendChild(chip);
-      l = { chip, line, dot };
+      // measured once: reading sizes every frame makes the page lay itself out again each time
+      l = { chip, line, dot, cw: chip.offsetWidth || name.length * 9 + 20, ch: chip.offsetHeight || 24 };
       chips.set(i, l);
       return l;
     };
@@ -188,7 +205,7 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       const items = row.map((x) => {
         const l = tag(x.i, x.name);
         l.chip.hidden = false;
-        return { ...x, l, cw: l.chip.offsetWidth || x.name.length * 9 + 20, ch: l.chip.offsetHeight || 24, x: 0 };
+        return { ...x, l, cw: l.cw, ch: l.ch, x: 0 };
       }).sort((a, b) => a.p.x - b.p.x);
       let edge = 8;
       for (const it of items) { it.x = Math.max(edge, it.p.x - it.cw / 2); edge = it.x + it.cw + 8; }
@@ -279,11 +296,19 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
     return new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.55 });
   };
 
-  const drop = (m: THREE.Mesh) => {
-    m.geometry.dispose();
-    (m.material as THREE.Material).dispose();
-    for (const c of m.children) (c as THREE.LineSegments).geometry?.dispose();
+  // the same shape at the same size (a row of pins) shares one geometry and one outline
+  const shapes = new Map<string, { geo: THREE.BufferGeometry; edges?: THREE.BufferGeometry }>();
+  const shapeOf = (p: Part) => {
+    const k = JSON.stringify([p.shape, p.dims]);
+    let g = shapes.get(k);
+    if (!g) {
+      g = { geo: geometry(p), edges: outline(p) };
+      g.geo.computeBoundingSphere();
+      shapes.set(k, g);
+    }
+    return g;
   };
+  const drop = (m: THREE.Mesh) => (m.material as THREE.Material).dispose();
 
   const highlight = () => {
     shown.forEach((s, i) => {
@@ -326,14 +351,13 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
         const old = shown[i];
         if (old && old.key === key(p)) return old;
         if (old) { scene.remove(old.mesh); drop(old.mesh); }
-        const mesh = new THREE.Mesh(geometry(p), material(p));
+        const shape = shapeOf(p);
+        const mesh = new THREE.Mesh(shape.geo, material(p));
         mesh.position.set(...p.at);
         mesh.rotation.set(...(p.rot.map((d) => (d * Math.PI) / 180) as [number, number, number]));
         mesh.userData.label = p.label;
         mesh.castShadow = mesh.receiveShadow = true;
-        const edges = outline(p);
-        if (edges) mesh.add(new THREE.LineSegments(edges, EDGE));
-        mesh.geometry.computeBoundingSphere();
+        if (shape.edges) mesh.add(new THREE.LineSegments(shape.edges, EDGE));
         mesh.userData.size = mesh.geometry.boundingSphere?.radius ?? 0;
         scene.add(mesh);
         // a part replaced in place is just there; a new one grows in at its moment
@@ -345,17 +369,21 @@ export function createThreeView(host: HTMLElement, opts: { onPick: (i: number | 
       // measure at full size, then let draw() scale them in
       for (const s of shown) s.mesh.scale.setScalar(1);
       fit(parts);
+      shadowStale = true;
       highlight();
       resize();
     },
     select(i) { selected = i; highlight(); },
     wake,
     dispose() {
+      gone = true;
       cancelAnimationFrame(frame);
       ro.disconnect();
       io.disconnect();
       controls.dispose();
       for (const s of shown) drop(s.mesh);
+      for (const g of shapes.values()) { g.geo.dispose(); g.edges?.dispose(); }
+      clearTimeout(later);
       catcher.geometry.dispose();
       (catcher.material as THREE.Material).dispose();
       envMap.dispose();
