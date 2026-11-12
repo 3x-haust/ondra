@@ -125,3 +125,84 @@ its reply, with the before/after picture when the change shows on screen). Exit
 code 3 means GitHub isn't signed in in the built-in browser: `ask` the user to
 sign in to GitHub in the browser panel (name
 the account that opens the PR), then run it again.
+
+## Pixel-only controls
+
+Canvas editors (slides, whiteboards, image editors), maps, sliders, drag
+handles, crop boxes and timelines often have no ref, or a ref that keeps
+hitting the wrong spot. Work from a picture there, and only there:
+
+```bash
+browse shot "$APP_SCRATCH_DIR/s.png"                  # see where things are
+agent-browser screenshot --annotate "$APP_SCRATCH_DIR/a.png"  # refs drawn on, when some exist
+agent-browser mouse move 420 315; agent-browser mouse down; agent-browser mouse up        # a click
+agent-browser mouse move 240 540; agent-browser mouse down
+agent-browser mouse move 410 540 --steps 12; agent-browser mouse up                      # a drag
+agent-browser mouse move 600 400; agent-browser mouse wheel 300                         # scroll that spot
+```
+
+- Coordinates are the page's CSS pixels. If the picture is wider than
+  `window.innerWidth`, divide by `window.devicePixelRatio`.
+- Take a new picture after each action that changes the page, before the next
+  one. A popup, cookie banner or dialog in the way comes first.
+- Two or three misses on the same spot: change approach (the tool's toolbar or
+  menu, a keyboard shortcut, the app's own API, zooming in) rather than nudging
+  the numbers again.
+- Back to refs and `read` as soon as the pixel step is done.
+
+## Bot checks and CAPTCHAs
+
+These guard sites against automation, so the aim is to let the user get on
+with their own work, not to defeat them.
+
+- Many clear themselves: a "checking your browser" page usually passes in a few
+  seconds. Wait for something of the real page (`browse do "wait --text …"`) or
+  open it once more.
+- A single "I'm not a robot" checkbox on a site the user is using themselves:
+  click it once, as a person would, and look at the result.
+- Anything more (picture grids, puzzles, typed letters, audio), or the box
+  comes back: the user solves it. Open the page in your tab, then an `ask` as
+  for a failed sign-in (rule 4): question "<site>에서 로봇 확인이 나왔어요",
+  options "풀었어요" first, then the real alternatives.
+- Stay on the visible, honest path: no solving services, no stealth or
+  fingerprint tricks, no rotating addresses, no retry loops. A site that keeps
+  asking is saying slow down; its API or export is usually the better road.
+- Searches through your tab go one at a time, each read before the next: bursts
+  of parallel queries are what bring these checks on.
+
+## Google, Notion, Slack and other signed-in apps
+
+The shared browser is often signed in already. Work through the page: never
+lift tokens or cookies out of it (no reading a session token from
+`localStorage` to build an API client).
+
+- **Several Google accounts**: their URLs carry `/u/<n>/`. Check which account
+  is the right one (the account menu, the link the user gave) before reading or
+  writing, and keep that `/u/<n>/` in every URL.
+- **Google Docs, Sheets, Slides as text**: from a page on docs.google.com, fetch
+  the export in `eval` (GET, signed in through the page):
+  `fetch("https://docs.google.com/document/d/<id>/export?format=txt", { credentials: "include" }).then(r => r.text())`.
+  Sheets: `/spreadsheets/d/<id>/export?format=csv&gid=<gid>`, one sheet at a
+  time (the `gid` is in the sheet tab's URL). Slides: `/presentation/d/<id>/export?format=txt`.
+  The export holds every row; a long sheet read off the screen holds only the
+  rows that have loaded.
+- **Gmail**: read threads with `browse read`. To write, open the compose window
+  with its fields filled,
+  `https://mail.google.com/mail/u/<n>/?view=cm&fs=1&to=<to>&su=<subject>&body=<body>`
+  (URL-encoded), and stop at the draft: sending is an `ask` (visual-report,
+  "Drafts before they go out").
+- **Notion, Slack, Linear and the like**: `browse read` a page or thread
+  (scroll for older messages); change things through the page as a user would.
+  Posting or sending goes through an `ask` first.
+
+## Finding pictures
+
+- **To look at** (what a thing looks like, design references): an image search
+  in your tab (`https://www.google.com/search?udm=2&q=<query>`, or Naver or
+  Bing images), then `browse shot`.
+- **To use in the user's work**: take it from a source that states a license:
+  Wikimedia Commons (`web_fetch "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=<query>&prop=imageinfo&iiprop=url|extmetadata&format=json"`
+  gives file URLs with author and license), Unsplash or Pexels under their own
+  terms, a company's press kit. Download the original from its page rather than
+  a search thumbnail, and keep where it came from and its license next to it
+  (`sources.txt`). A search engine's license filter is a hint, not permission.

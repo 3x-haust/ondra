@@ -60,6 +60,14 @@
   .row { display: flex; gap: 6px; } .row > .node { flex: 1 1 0; min-width: 0; }
   .down { text-align: center; color: var(--faint); font-size: 13px; line-height: 1; }
   .go { flex: none; align-self: center; width: 22px; text-align: center; color: var(--faint); font-size: 18px; }
+  /* "What there is" figure: one card per thing (a vendor, an option, a finding), its
+     one number big, a few words under it; the answer's card marked. Not a table of sentences. */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; break-inside: avoid; }
+  .card.pick { border-color: #2f6fde; box-shadow: inset 0 0 0 1px #2f6fde; }
+  .card b { display: block; font-size: 13.5px; }
+  .card .big { display: block; margin: 6px 0 2px; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card small { display: block; color: var(--soft); font-size: 12px; line-height: 1.4; }
   .loop { margin: 10px 4px 0; padding: 6px 10px; border: 1.5px dashed #9aa0aa; border-radius: 99px; text-align: center; font-size: 12.5px; color: var(--soft); }
   @media (max-width: 600px) {
     .flow { flex-direction: column; gap: 6px; }
@@ -129,7 +137,7 @@
 <h2>{{사용자 말로 쓴 질문 1?}}</h2>
 <p>{{답 한 문장.}} {{왜 그런지 한두 문장.}}<sup><a href="#s1">1</a></sup></p>
 
-<!-- Decision grid: options × 3–4 criteria the user cares about. ●●● good, ●●○ so-so, ●○○ weak. The pick's row marked. One-line verdict per option, no sentences in cells. -->
+<!-- Decision grid: options × the few criteria the user cares about. ●●● good, ●●○ so-so, ●○○ weak. The pick's row marked. A one-line verdict per option; sentences belong in paragraphs. -->
 <table class="grid">
   <thead><tr><th>{{선택지}}</th><th>{{기준 1: 예) 배우기}}</th><th>{{기준 2: 예) 만들기 쉬움}}</th><th>{{기준 3: 예) 비용}}</th><th>한 줄</th></tr></thead>
   <tbody>
@@ -147,11 +155,11 @@
   </tbody>
 </table>
 
-<!-- "How it works" figure, as papers draw a method (see writing/figures.md): 2–4 numbered
-     stages, ≤4 boxes each, colored by role (c1 input/data, c2 stored/memory, c3 the step
+<!-- "How it works" figure, as papers draw a method (see writing/figures.md): a few numbered
+     stages, a few boxes each, colored by role (c1 input/data, c2 stored/memory, c3 the step
      that changes things, c4 what is learned/decided; .dash for something optional or
      derived; .state for a short state like 고정/학습). .down between boxes in a stage, .go
-     between stages, .loop only when something really comes back. Words, not formulas. -->
+     between stages, .loop only when something really comes back. Words read easier than formulas. -->
 <figure>
   <div class="flow">
     <section class="stage">
@@ -182,11 +190,21 @@
   <figcaption><b>그림 1.</b> {{이 그림이 보여 주는 것 한 문장}} {{출처 [n]의 Figure 2를 다시 그림}}</figcaption>
 </figure>
 
+<!-- Cards, when they help: what there is, one card each (vendors, options, findings), its one number big. -->
+<figure>
+  <div class="cards">
+    <div class="card pick"><b>{{A}} · 추천</b><span class="big">{{$20}}</span><small>{{몇 단어}}</small></div>
+    <div class="card"><b>{{B}}</b><span class="big">{{$35}}</span><small>{{몇 단어}}</small></div>
+    <div class="card"><b>{{C}}</b><span class="big">{{무료}}</span><small>{{몇 단어}}</small></div>
+  </div>
+  <figcaption><b>그림 2.</b> {{카드들이 보여 주는 것 한 문장}} (출처 [n])</figcaption>
+</figure>
+
 <!-- A figure taken from a source (a paper's or a report's own figure), only when it answers
      the question exactly: embedded as a data URI so the file stays self-contained. -->
 <figure>
   <img src="data:image/png;base64,{{…}}" alt="{{무엇을 보여 주는 그림인지}}">
-  <figcaption><b>그림 2.</b> {{이 그림에서 볼 것 한 문장}} (출처: [n]의 Figure {{k}})</figcaption>
+  <figcaption><b>그림 3.</b> {{이 그림에서 볼 것 한 문장}} (출처: [n]의 Figure {{k}})</figcaption>
 </figure>
 
 <!-- Bar chart: inline SVG. Bars are lengths on one scale from zero; the answer's bar in --accent, the rest grey. -->
@@ -206,7 +224,7 @@
       <text x="140" y="140">0</text><text x="540" y="140">{{100}}</text>
     </g>
   </svg>
-  <figcaption><b>그림 3.</b> {{이 그림이 말하는 한 문장}} (단위: {{%}}, 출처 [1][2])</figcaption>
+  <figcaption><b>그림 4.</b> {{이 그림이 말하는 한 문장}} (단위: {{%}}, 출처 [1][2])</figcaption>
 </figure>
 
 <!-- Timeline: dated events in order. -->

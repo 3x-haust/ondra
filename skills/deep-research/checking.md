@@ -13,17 +13,18 @@ One fact per line in `notes.jsonl` (subagents: `notes-<n>.jsonl`):
 
 - `id`: the same fact seen on several pages shares one id (`q<n>-<few words>`).
   That is how agreement and disagreement are counted.
-- `quote`: copied from the page, in the page's language, ≤ 2 lines, with the
-  number or name the claim depends on. `…` may join two parts of one passage.
+- `quote`: copied from the page, in the page's language, short (a line or
+  two), with the number or name the claim depends on. `…` may join two parts of one passage.
   Never a paraphrase or a translation: the checker looks for it on the page.
 - `published`: the page's own date, `YYYY-MM-DD`; `unknown` when it has none.
   An archived copy: the copy's date. Never the day you read it.
 - `source`: `primary` when the owner of the fact says it (see `sources.md`).
 - `risk: "high"` for the claims the answer stands on: prices, counts, shares,
   dates, versions, laws, "A causes B", anything in the title, the takeaways or
-  the decision grid. These need `counter`: the query you ran looking for
-  evidence against the claim (a newer price, a correction, a critic). What it
-  found goes in its own notes, under the same `id`.
+  the decision grid. Their number has to be in the quote. They're worth one
+  search for evidence against them (a newer price, a correction, a critic);
+  put that query in `counter`, and what it found in its own notes, under the
+  same `id`.
 - A claim you can settle by running something (a command works, a limit, a
   speed): run the smallest test in `$APP_SCRATCH_DIR`, save its output, and
   note it with `"url":"file://<output file>"`, `"source":"primary"`, the
@@ -48,18 +49,20 @@ notes by `id` and writes `$R/claims.json`:
 | `conflict` | the sources' numbers differ | both sides with their dates, `출처 엇갈림` |
 | `quote-missing` | no quote of it is on its page | fix the note or drop the claim |
 
-Fix every `[must]` and run it again until it exits 0. A `[must]` is never
-fixed by loosening the note: copy the real passage, find a primary source,
-or move the claim to "확실하지 않은 것".
+`[error]` means a fact doesn't hold up yet: fix each one and run it again
+until it exits 0. An error is never fixed by loosening the note: copy the
+real passage, find a primary source, or move the claim to "확실하지 않은 것".
+`[warn]` lines (date format, a missing `counter`, tags in the report) don't
+block; fix the ones that matter.
 
 Write the report from `claims.json`: the answer, the takeaways and the
 decision grid use `verified` claims only. When the answer itself rests on a
 `single` or `conflict` claim, say that in the answer.
 
 After the report is written, run it once more: it then also checks that
-every link in the report has a note, every `[n]` points to a source, every
-source shows its published date (or "날짜 없음"), and conflicts and
-unverified claims appear under "확실하지 않은 것".
+every link in the report has a note and every `[n]` points to a source
+(errors), and warns when a source shows no published date or conflicts and
+unverified claims don't appear under "확실하지 않은 것".
 
 ## Numbers and dates
 

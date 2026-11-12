@@ -5,7 +5,8 @@ fails. `web.py` is in this skill's folder; `R` is the research folder.
 
 ## Queries
 
-Each sub-question gets 4–8 different queries, not the same one reworded:
+Over its rounds a sub-question usually takes several queries (a few per
+round), each from a different angle, not the same one reworded:
 
 | aim | query shape |
 |---|---|
@@ -18,9 +19,9 @@ Each sub-question gets 4–8 different queries, not the same one reworded:
 
 - Put the year in queries about anything current ("2026", "2025..2026").
 - Search in the topic's own language first: Korean for Korean markets,
-  laws, companies and communities; English for global tech. Then 1–2
-  queries in the other language, in the words people there use.
-- A comparison: one query per item, never "best X" lists alone.
+  laws, companies and communities; English for global tech. Then a query or
+  two in the other language, in the words people there use.
+- A comparison: one query per item; "best X" lists alone miss items.
 
 ## Searching when web_search can't
 
@@ -81,6 +82,18 @@ Rules for the chain:
   `reader`. arXiv: read `arxiv.org/abs/<id>` or `arxiv.org/html/<id>`, not the PDF.
 - GitHub: `gh api repos/<o>/<r>/releases` and `gh api repos/<o>/<r>/contents/<path>`
   read dates and files exactly (the API, not the rendered page).
+- Videos (YouTube talks, launch events, interviews): the transcript is the
+  source. With `yt-dlp` on the machine:
+  `yt-dlp --skip-download --write-subs --write-auto-subs --sub-langs "ko,en" --convert-subs srt -o "$APP_SCRATCH_DIR/yt/%(id)s" <url>`
+  (exact languages: a pattern like `ko.*` also pulls every machine-translated
+  track and gets rate-limited), and `yt-dlp --print "%(title)s|%(upload_date)s|%(channel)s" <url>`
+  for the title, date and owner.
+  Without it, open the video in your tab, "더보기" → "스크립트 표시", and
+  `browse read`. To let `check-research.py` check quotes from it, save the text
+  as `$R/sources/yt-<id>.txt` and add its line to `$R/sources/index.jsonl`:
+  `{"url":"https://www.youtube.com/watch?v=<id>","file":"sources/yt-<id>.txt","via":"transcript","title":"…","published":"YYYY-MM-DD"}`.
+  Automatic captions mishear names and numbers: check those against another
+  source before citing them.
 
 ## Which sources count
 
@@ -107,7 +120,7 @@ conflict.
   missing, what conflicts, and the **leads**: things seen but not chased
   (`lead: <what> — why: <why it matters> — query: <next query>`). Check a new
   lead against every lead already listed, chased or dropped, before chasing it.
-- Stop a sub-question when its "done when" holds; or after two rounds with no
-  new facts and no new leads; or after three rounds (then "찾지 못함").
+- Stop a sub-question when its "done when" holds, or when rounds stop turning
+  up new facts and leads (then "찾지 못함").
 - Stop the whole run when every sub-question stopped, or the search budget is
   spent; list the leads left in "확실하지 않은 것" only if they change the answer.

@@ -7,9 +7,9 @@
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
-import { clipboardFiles, fileSrc, inTauri, pickFiles, savePaste } from "../lib/native";
+import { clipboardFiles, fileSrc, fsRead, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
-import { focusId } from "../state/ui";
+import { focusId, previewFile } from "../state/ui";
 import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
@@ -18,6 +18,7 @@ import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { midTrim } from "./bits";
+import { isPastedText, longPaste } from "./paste";
 import { t } from "../i18n";
 
 /** A /command that ran, for the log a feedback report carries: its name, not what followed (a skill's own name stays out). */
@@ -58,6 +59,10 @@ export const withFiles = (text: string, files: string[]) => {
 
 /** The composers on screen, so a quote from a reply goes into the one beside it. */
 export const composers = new Set<{ root: HTMLElement; quote: (text: string) => void }>();
+
+/** pasted text kept as a file: its words, so the card can show the first line and put it back */
+const pastedText = new Map<string, string>();
+const firstLine = (s: string) => s.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 
 export const isImage = (p: string) => /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(p);
 
@@ -171,6 +176,19 @@ export function Composer(props: {
     else drafts.delete(key);
   });
 
+  /** a pasted-text card back into the box, as the text it was, where the cursor is */
+  const unpaste = async (path: string) => {
+    const words = pastedText.get(path) ?? (await fsRead(path).then((r) => r.text).catch(() => ""));
+    if (!words) return;
+    setFiles((l) => l.filter((x) => x !== path));
+    const at = el.selectionStart ?? el.value.length;
+    const next = `${el.value.slice(0, at)}${words}${el.value.slice(el.selectionEnd ?? at)}`;
+    el.value = next;
+    setText(next);
+    el.focus();
+    el.setSelectionRange(at + words.length, at + words.length);
+    grow();
+  };
   const add = (paths: string[]) => {
     setFiles((f) => [...f, ...paths.filter((p) => !f.includes(p))]);
     el?.focus();
@@ -558,13 +576,35 @@ export function Composer(props: {
                 <Show
                   when={isImage(f)}
                   fallback={
-                    <span class="attach" title={tilde(f)}>
-                      <Icon name="file" size={13} />
-                      <span class="attach-name">{base(f)}</span>
-                      <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
-                        <Icon name="x" size={12} />
-                      </button>
-                    </span>
+                    <Show
+                      when={isPastedText(f)}
+                      fallback={
+                        <span class="attach" title={tilde(f)}>
+                          <Icon name="file" size={13} />
+                          <span class="attach-name">{base(f)}</span>
+                          <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                            <Icon name="x" size={12} />
+                          </button>
+                        </span>
+                      }
+                    >
+                      {/* pasted text as a card: its first line, and a way back into the box */}
+                      <span class="paste-card">
+                        <span class="paste-card-icon"><Icon name="file" size={18} /></span>
+                        <span class="paste-card-body">
+                          <button type="button" class="paste-card-line" title={t("열기")} onClick={() => previewFile(f)}>
+                            {firstLine(pastedText.get(f) ?? "") || t("붙여넣은 글")}
+                          </button>
+                          <button type="button" class="paste-card-back" onClick={() => void unpaste(f)}>
+                            {t("텍스트 필드에 표시")}
+                            <Icon name="chevron" size={12} />
+                          </button>
+                        </span>
+                        <button type="button" class="paste-card-x" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                          <Icon name="x" size={11} />
+                        </button>
+                      </span>
+                    </Show>
                   }
                 >
                   <span class="attach-img" title={tilde(f)}>
@@ -624,6 +664,22 @@ export function Composer(props: {
               return;
             }
             const imgs = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+            // a long text: a file of its own, shown as a card (the job reads it like any attachment)
+            if (!imgs.length && longPaste(plain) && inTauri) {
+              e.preventDefault();
+              const path = await savePaste([...new TextEncoder().encode(plain)], "txt");
+              if (path) {
+                pastedText.set(path, plain);
+                return add([path]);
+              }
+              // couldn't save it: paste the text as usual
+              const at = el.selectionStart ?? el.value.length;
+              const next = `${el.value.slice(0, at)}${plain}${el.value.slice(el.selectionEnd ?? at)}`;
+              el.value = next;
+              setText(next);
+              grow();
+              return;
+            }
             if (!imgs.length) return;
             e.preventDefault();
             for (const f of imgs) {

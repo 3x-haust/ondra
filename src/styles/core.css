@@ -852,15 +852,15 @@ button.chip:hover,
 .attach {
   display: inline-flex;
   align-items: center;
-  gap: var(--s-6);
-  height: var(--h-sm);
-  padding: 0 var(--s-4) 0 var(--s-10);
-  border-radius: var(--r-md);
+  gap: var(--s-8);
+  height: 40px;
+  padding: 0 var(--s-6) 0 var(--s-12);
+  border-radius: var(--r-lg);
   background: var(--muted);
   border: 1px solid var(--line);
   font-size: var(--fs-sm);
   color: var(--ink-2);
-  max-width: 240px;
+  max-width: 300px;
 }
 .attach-name {
   white-space: nowrap;
@@ -874,6 +874,18 @@ button.chip:hover,
   display: grid;
   place-items: center;
   color: var(--ink-3);
+}
+/* pasted text as a card: its name opens it */
+.attach .attach-open {
+  width: auto;
+  height: auto;
+  display: inline;
+  color: inherit;
+  font: inherit;
+}
+.attach .attach-open:hover {
+  background: none;
+  color: var(--ink);
 }
 .attach button:hover {
   background: var(--active);
@@ -2639,4 +2651,69 @@ body {
   font-size: var(--fs-2xs);
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+/* pasted text, kept as a file: a card with its first line and a way back into the box */
+.paste-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-10);
+  min-width: 240px;
+  max-width: 340px;
+  padding: var(--s-10) var(--s-32) var(--s-10) var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--muted);
+}
+.paste-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--ink-3);
+}
+.paste-card-body {
+  display: grid;
+  min-width: 0;
+  gap: var(--s-2);
+  justify-items: start;
+}
+.paste-card-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  text-align: left;
+}
+.paste-card-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.paste-card-back:hover,
+.paste-card-line:hover {
+  color: var(--ink);
+}
+.paste-card-x {
+  position: absolute;
+  top: var(--s-6);
+  right: var(--s-6);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--ink-3);
+}
+.paste-card-x:hover {
+  background: var(--active);
+  color: var(--ink);
 }

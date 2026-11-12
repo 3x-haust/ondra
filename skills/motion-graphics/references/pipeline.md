@@ -68,8 +68,8 @@ window.__film = {
   CSS `zoom` (layout-level). `transform: scale` rasterizes at layout size
   first, so zoomed text goes soft. Blurry text is a resolution problem,
   never something to hide with depth of field.
-- Never `transition`, `animation`, `requestAnimationFrame`-driven state, or
-  `Date.now()` inside scenes. Video elements: set `currentTime` from `t`
+- No `transition`, `animation`, `requestAnimationFrame`-driven state, or
+  `Date.now()` inside scenes: the frame-by-frame render can't reproduce them. Video elements: set `currentTime` from `t`
   and await `seeked` (slow); prefer image sequences.
 
 ## Commands
@@ -123,11 +123,11 @@ unverified.
    would, then restates the film's message from the frames alone. An object
    that needs explaining, or a message it cannot restate, is a P0. Cover the
    words: the pictures alone should still tell it.
-3. It checks the rules of `craft.md` one by one, ✓/✗ with frame numbers,
-   and lists what it could not verify.
+3. It checks the film against `craft.md` where it bears on what it sees,
+   with frame numbers, and lists what it could not verify.
 4. Notes are `t=4.2s · where · problem → exact change · what stays`, ranked
-   P0/P1/P2. Never a score: a score finds nothing to fix. A busy film:
-   remove a third of the motion.
+   P0/P1/P2, not a score: a score finds nothing to fix. A busy film usually
+   gets better by removing motion, not adding it.
 5. Compare your numbers with the reference's style guide: cuts per minute,
    longest hold, loudness, sounds per picture change.
 6. Fix P0/P1, re-render only the changed range (`--start/--dur`), re-check.

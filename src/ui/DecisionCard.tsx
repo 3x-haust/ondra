@@ -9,7 +9,7 @@ import { usePaneFocused, useView } from "../state/panes";
 import { decide } from "../engine/tasks";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
-import { dropAsked } from "./decisionText";
+import { bareLabel, dropAsked } from "./decisionText";
 import { ProjectBadge } from "./ProjectBadge";
 import { t as tr } from "../i18n";
 
@@ -261,7 +261,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
                 <For each={props.d.options.filter((o) => o.note)}>
                   {(o) => (
                     <p>
-                      <b>{o.label}</b> {o.note}
+                      <b>{bareLabel(o.label)}</b> {o.note}
                     </p>
                   )}
                 </For>
@@ -296,7 +296,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
                 {(o, i) => (
                   <button class="decision-chip" classList={{ primary: !!o.primary }} onClick={() => choose(i())} title={o.note || undefined}>
                     <Show when={props.keys !== false}><span class="decision-n">{i() + 1}</span></Show>
-                    <span class="decision-label">{o.label}</span>
+                    <span class="decision-label">{bareLabel(o.label)}</span>
                     <Show when={o.primary}><Rec /></Show>
                   </button>
                 )}
@@ -324,7 +324,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
                 <span class="decision-text">
                   {/* marked beside its label, never preselected */}
                   <span class="decision-label">
-                    {o.label}
+                    {bareLabel(o.label)}
                     <Show when={o.primary}><Rec /></Show>
                   </span>
                   <Show when={o.note}><span class="decision-note">{o.note}</span></Show>

@@ -83,8 +83,8 @@ installation guide. Do not assume an old JDK recipe applies to the current
 release or that the source archive is an executable distribution. macOS, Linux
 and Windows have separate native-component requirements.
 
-Read the installed `support/analyzeHeadlessREADME.html` in full before running.
-A documented import/analysis skeleton is:
+Check the installed `support/analyzeHeadlessREADME.html` for the options your
+release supports. A documented import/analysis skeleton is:
 
 ```sh
 "$GHIDRA_HOME/support/analyzeHeadless" "$OUT/projects" case-name \

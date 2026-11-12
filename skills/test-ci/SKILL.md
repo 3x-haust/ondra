@@ -51,38 +51,37 @@ then the open-source projects above. A pattern the project already has wins.
   regression test, named after the behaviour, not the ticket.
 
 **How each test looks**
-- One behaviour per test. Name says it as a sentence:
+- One behaviour per test, named as a sentence, so a failure says what broke:
   `returns null when the cache is empty`, `test_rejects_expired_token`.
-- Arrange → act → assert, in that order, blank line between. Asserts check
-  the exact value (`toEqual(...)`), not just `toBeTruthy()`.
+- Assert the exact value (`toEqual(...)`), not just `toBeTruthy()`.
 - Same shape, many inputs → a table (`it.each`, `@pytest.mark.parametrize`,
   Go table tests, a `for` over cases in Rust) instead of copied tests.
 - Small inline fixtures; a builder (`makeUser({ name })`) when objects are
   big. No shared mutable state between tests: every test can run alone, in
   any order, in parallel.
 
-**Deterministic, always**
+**Deterministic** (a test that fails at random gets ignored)
 - No real network, real clock, real randomness, or real home folder:
   fake timers / injected clock, seeded random, temp dirs (`tmp_path`,
   `fs.mkdtemp`, `tempfile`), local fake servers or recorded responses.
-- No `sleep` to wait: wait for the condition (`await vi.waitFor`, Playwright
-  auto-waiting, polling with a deadline).
+- Wait for the condition (`await vi.waitFor`, Playwright auto-waiting, polling
+  with a deadline), not a fixed `sleep`.
 - Mock only the boundary you don't own (network, filesystem, OS, time).
   Don't mock the code under test or its own modules.
-- Snapshots only for large stable output (generated code, serialized ASTs),
-  kept small and reviewed; never for UI markup that changes often.
+- Snapshots suit large stable output (generated code, serialized ASTs); on UI
+  markup that changes often they get updated blindly.
 
 **Then prove they test something**
-- Run the suite. Break the code on purpose (flip a condition, return early):
-  the relevant test must fail with a readable message. Put it back.
-- Run the new tests 3 times (or `--repeat`/`--count`): same result each time.
+- Run the suite. Breaking the code on purpose (flip a condition, return
+  early) and seeing the test fail readably is a quick proof; put it back.
+- Running new tests a few times (`--repeat`/`--count`) catches flakiness.
 - Coverage is a guide for missed branches, not a goal; don't write tests that
   only execute lines.
 
 ## 2. Local scripts first
 
-CI calls scripts; it never holds logic of its own. Make sure these exist and
-pass locally before writing any workflow (names after the repo's own style):
+CI calls the same scripts a person runs locally, so every CI failure
+reproduces on a laptop. Make sure these exist and pass (repo's own names):
 
 ```
 lint        # eslint / biome / ruff / clippy -D warnings
@@ -168,11 +167,12 @@ Rules:
   `uv sync --locked`, `cargo … --locked`. Use the setup action's built-in
   cache (`cache: pnpm`, `enable-cache: true`, `Swatinem/rust-cache`) before
   hand-written `actions/cache`.
-- Runtime version from the repo's version file, not typed into the workflow.
-- `timeout-minutes` on every job. `fail-fast: false` on matrices.
-- Matrix only what users really run: extra OSes/versions when the project
+- Runtime version from the repo's version file, so local and CI agree.
+- `timeout-minutes` on jobs so a hang doesn't burn hours. `fail-fast: false`
+  on matrices.
+- Matrix what users really run: extra OSes/versions when the project
   promises them (a library: supported runtime versions; a macOS app:
-  `macos-latest` and nothing else).
+  usually just `macos-latest`).
 - Lint/format/typecheck in one fast job, tests in another, so a typo fails in
   a minute. A single gate job (`ci-ok`) is what branch protection points to,
   so matrix names can change freely.
@@ -181,8 +181,8 @@ Rules:
   runs blocks the merge); otherwise let it run.
 - No secrets in pull_request jobs; never `pull_request_target` with a
   checkout of the PR's code.
-- Every `run:` is a command that also works locally. No inline scripts
-  longer than a few lines: put them in `scripts/`.
+- Every `run:` is a command that also works locally; longer inline scripts
+  are easier to test and reuse from `scripts/`.
 
 ## 4. Check it before saying done
 
@@ -198,7 +198,7 @@ Rules:
 ## Report
 
 - `files` block with the test files and the workflow, then a `test` evidence
-  item per command you ran (`kind: "test"`, `ok`), the count of tests added,
-  and the deliberate-break check (which change, which test caught it).
+  item per command you really ran (`kind: "test"`, `ok`), and the
+  deliberate-break check if you did one (which change, which test caught it).
 - `unverified`: the first real CI run, and any matrix OS you couldn't run
   locally.

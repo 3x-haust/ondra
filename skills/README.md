@@ -15,6 +15,7 @@ The app passes them to every pi worker with `--skill`.
 | `qa` | QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검"): scope from a diff or the screen map, a risk-ordered plan, fast sweeps (`sweep.sh`), confirmed issues with evidence, report-only or fix until no P1/P2 remain. |
 | `test-ci` | Tests and CI the way large open-source projects do them: behaviour tests that fail for real, local scripts first, a locked-down GitHub Actions workflow checked locally. |
 | `deep-research` | Research with sources (리서치, 조사해서 정리, 논문 찾아): plan sub-questions, search and read primary sources in rounds with findings on disk, check every claim, then a visual HTML report shown in the chat and printed to PDF (`pdf.sh`). |
+| `office-docs` | Word, Excel, PowerPoint, PDF and HWPX files: read them with `office.py` (no install), pick the library for a change, keep an existing file's look, and check the result as page pictures. |
 | `computer-use` | Computer use with the bundled agent-desktop: one worker at a time, headless input only, traces and screenshots as proof. |
 
 ## When a skill is offered

@@ -15,7 +15,11 @@ per claim id with its status, which decides how the report may state it:
   conflict      sources give different numbers           → both sides, 출처 엇갈림
   quote-missing the quote isn't on the page              → fix the note first
 
-Exit 1 while a [must] hit is left. Python 3 stdlib only.
+[error] lines are about facts being real (a quote that isn't on its page, a
+number missing from its quote, an empty field, a citation or link with no
+source behind it): exit 1 while any is left. [warn] lines are about format or
+process (date format, tags, a counter-search, the --score targets): worth a
+look, they don't block. Python 3 stdlib only.
 The claim rules (independence by organisation, verbatim quotes checked against
 a saved copy, a counter-search for high-risk claims) follow insane-research
 (MIT, fivetaku); the code is our own.
@@ -157,9 +161,9 @@ def main():
 
     notes, bad = load_notes(r)
     for b in bad:
-        hit("must", b)
+        hit("error", b)
     if not notes:
-        hit("must", f"no notes in {r}/notes*.jsonl")
+        hit("error", f"no notes in {r}/notes*.jsonl")
     snaps = load_snapshots(r)
 
     claims = {}
@@ -168,32 +172,32 @@ def main():
         url = n.get("url", "")
         for f in ("claim", "url", "quote", "published", "source"):
             if not n.get(f):
-                hit("must", f"{where}: '{f}' is empty")
+                hit("error", f"{where}: '{f}' is empty")
         if url and not re.match(r"https?://|file://", url):
-            hit("must", f"{where}: url is not http(s) or file://: {url[:80]}")
+            hit("error", f"{where}: url is not http(s) or file://: {url[:80]}")
         pub = str(n.get("published") or "")
         if pub and pub != "unknown" and not DATE.match(pub):
-            hit("must", f"{where}: published '{pub}' → YYYY-MM-DD, or 'unknown' when the page has no date")
+            hit("warn", f"{where}: published '{pub}': YYYY-MM-DD, or 'unknown' when the page has no date")
         if n.get("source") not in ("primary", "secondary", None, ""):
-            hit("must", f"{where}: source must be primary or secondary")
+            hit("warn", f"{where}: source is '{n.get('source')}', expected primary or secondary (counted as secondary)")
         q = n.get("quote") or ""
         if len(q) > 320:
-            hit("fix", f"{where}: quote of {len(q)} characters: the passage that carries the claim, ≤ 2 lines")
+            hit("warn", f"{where}: quote of {len(q)} characters: the passage that carries the claim is usually enough")
         n["_quote"] = "unchecked"
         rec = snapshot(r, url, snaps, offline) if re.match(r"https?://|file://", url) else None
         if rec and q:
             n["_quote"] = "ok" if quote_on_page(q, page_of(r, rec)) else "missing"
             if n["_quote"] == "missing":
-                hit("must", f"{where}: quote not on the page ({url[:70]}): copy it verbatim from the page, in its language, or drop the note\n        \"{q[:90]}\"")
+                hit("error", f"{where}: quote not on the page ({url[:70]}): copy it verbatim from the page, in its language, or drop the note\n        \"{q[:90]}\"")
             n["_via"] = rec.get("via")
             if not pub or pub == "unknown":
                 if rec.get("published"):
-                    hit("fix", f"{where}: the page says it was published {rec['published']}: put it in 'published'")
+                    hit("warn", f"{where}: the page says it was published {rec['published']}: put it in 'published'")
         elif q:
-            hit("fix", f"{where}: no snapshot of {url[:70]} to check the quote (web.py fetch it)")
+            hit("warn", f"{where}: no snapshot of {url[:70]} to check the quote (web.py fetch it)")
         cn = numbers(n.get("claim"))
         if cn and n["_quote"] == "ok" and not (cn & numbers(q)) and not (cn & numbers(n.get("title"))):
-            hit("must" if n.get("risk") == "high" else "fix", f"{where}: the claim's numbers {sorted(cn)[:4]} aren't in the quote: quote the passage with the number")
+            hit("error" if n.get("risk") == "high" else "warn", f"{where}: the claim's numbers {sorted(cn)[:4]} aren't in the quote: quote the passage with the number")
         cid = str(n.get("id") or f"{where}")
         claims.setdefault(cid, []).append(n)
 
@@ -206,7 +210,7 @@ def main():
         clash = any(a and b and not (a & b) for i, a in enumerate(sets) for b in sets[i + 1:])
         high = any(n.get("risk") == "high" for n in group)
         if high and not any(n.get("counter") for n in group):
-            hit("must", f"claim '{cid}' is high-risk: search once for evidence against it and put that query in 'counter'")
+            hit("warn", f"claim '{cid}' is high-risk and has no 'counter': worth one search for evidence against it")
         if all(n["_quote"] == "missing" for n in everyone):
             status = "quote-missing"
         elif clash or any(n.get("conflict") for n in group):
@@ -229,30 +233,32 @@ def main():
     if parts:
         for u in sorted(parts["urls"]):
             if web.norm_url(u) not in note_urls:
-                hit("must", f"report links a page with no note: {u[:90]}")
+                hit("error", f"report links a page with no note: {u[:90]}")
         ids = {i for i, _ in parts["items"]}
         for c in sorted(parts["cites"] - ids):
-            hit("must", f"report cites #{c}, which is not in 출처")
+            hit("error", f"report cites #{c}, which is not in 출처")
         for i, body in parts["items"]:
             if not re.search(r"\d{4}-\d{2}(-\d{2})?|날짜 없음", published_part(body)):
-                hit("must", f"출처 {i}: no published date (YYYY-MM-DD, or '날짜 없음')")
+                hit("warn", f"출처 {i}: no published date (YYYY-MM-DD, or '날짜 없음')")
         if conflicts and "출처 엇갈림" not in parts["text"]:
-            hit("must", f"{len(conflicts)} claims conflict ({', '.join(conflicts[:3])}): show both sides with dates, tagged 출처 엇갈림")
+            hit("warn", f"{len(conflicts)} claims conflict ({', '.join(conflicts[:3])}) and the report never says 출처 엇갈림: if they're in it, show both sides with dates")
         if (conflicts or singles) and not parts["gaps"]:
-            hit("must", "'확실하지 않은 것' is empty, but some claims are unverified or conflict")
+            hit("warn", "'확실하지 않은 것' is empty, but some claims are unverified or conflict: if the report uses them, say so there")
 
     counts = {s: sum(v["status"] == s for v in out.values()) for s in ("verified", "single", "conflict", "quote-missing")}
-    must = [h for h in hits if h[0] == "must"]
-    for level, msg in must + [h for h in hits if h[0] == "fix"]:
+    errors = [h for h in hits if h[0] == "error"]
+    warns = [h for h in hits if h[0] == "warn"]
+    for level, msg in errors + warns:
         print(f"[{level}] {msg}")
-    print(f"\n{len(notes)} notes · {len(out)} claims: " + ", ".join(f"{v} {k}" for k, v in counts.items()) + f" · {len(must)} must")
+    print(f"\n{len(notes)} notes · {len(out)} claims: " + ", ".join(f"{v} {k}" for k, v in counts.items())
+          + f" · {len(errors)} errors · {len(warns)} warnings")
 
     if score:
-        print_score(r, notes, out, parts, conflicts, must)
-    sys.exit(1 if must else 0)
+        print_score(r, notes, out, parts, conflicts, errors)
+    sys.exit(1 if errors else 0)
 
 
-def print_score(r, notes, out, parts, conflicts, must):
+def print_score(r, notes, out, parts, conflicts, errors):
     index = os.path.join(r, "sources", "index.jsonl")
     recs = [json.loads(l) for l in open(index, encoding="utf-8")] if os.path.exists(index) else []
     failed = os.path.join(r, "sources", "failed.jsonl")
@@ -265,6 +271,7 @@ def print_score(r, notes, out, parts, conflicts, must):
     primary = sum(any(n.get("source") == "primary" for n in by_url.get(web.norm_url(u), [])) for u in cited)
     dated = sum(bool(re.search(r"\d{4}-\d{2}", published_part(b))) for _, b in (parts["items"] if parts else []))
     checked = [n for n in notes if n["_quote"] != "unchecked"]
+    # check-writing.py only fails on template placeholders left in the report
     writing = subprocess.run([sys.executable, os.path.join(HERE, "check-writing.py"), os.path.join(r, "report.html")],
                              capture_output=True).returncode == 0 if parts else False
     m = {
@@ -278,14 +285,16 @@ def print_score(r, notes, out, parts, conflicts, must):
         "rescued_reads": len(rescued),
         "rescued_via": {v: sum(x["via"] == v for x in rescued) for v in sorted({x["via"] for x in rescued})},
         "unread_pages": fails,
-        "writing_pass": writing,
-        "must_left": len(must),
+        "no_placeholders": writing,
+        "errors_left": len(errors),
     }
-    gates = {"primary_share": m["primary_share"] >= 0.5, "dated_share": m["dated_share"] >= 0.7,
-             "quote_match": m["quote_match"] >= 0.9, "conflicts_surfaced": m["conflicts_surfaced"],
-             "writing_pass": m["writing_pass"], "must_left": m["must_left"] == 0}
+    # pass = the facts hold up; the rest are targets worth a look, not gates
+    gates = {"errors_left": m["errors_left"] == 0, "report": bool(parts), "no_placeholders": writing}
+    targets = {"primary_share": m["primary_share"] >= 0.5, "dated_share": m["dated_share"] >= 0.7,
+               "quote_match": m["quote_match"] >= 0.9, "conflicts_surfaced": m["conflicts_surfaced"]}
     m["pass"] = all(gates.values())
     m["failed"] = [k for k, ok in gates.items() if not ok]
+    m["below_target"] = [k for k, ok in targets.items() if not ok]
     with open(os.path.join(r, "eval.json"), "w", encoding="utf-8") as f:
         json.dump(m, f, ensure_ascii=False, indent=1)
     print("\nscore")

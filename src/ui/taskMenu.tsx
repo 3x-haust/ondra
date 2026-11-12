@@ -5,9 +5,9 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import { Portal } from "solid-js/web";
 import { kidsOf, taskById } from "../state/store";
 import { goMain, openPanel, openTask, shownIn, splitPane, toast, view } from "../state/ui";
-import { archiveTask, discardTask, duplicateTask, finishTask, mergeTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
+import { archiveTask, duplicateTask, finishTask, removeTask, resumeTask, startTask, stopTask, togglePin, transcriptMarkdown } from "../engine/tasks";
 import { expand } from "../engine/rpc";
-import { discarded, taskDiff } from "../state/progress";
+import { discarded } from "../state/progress";
 import { openInEditor, revealPath } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { anyPop, closePops } from "./ModelPicker";
@@ -56,18 +56,6 @@ export function taskMenuItems(id: string): MenuEntry[] {
       ...(x.status === "queued" ? [{ id: "start", label: t("지금 시작"), icon: "play", run: () => void startTask(id) }] : []),
       ...(x.status !== "done" ? [{ id: "done", label: t("완료로 표시"), icon: "flag", run: () => finishTask(id) }] : []),
     ],
-    x.worktree?.state === "open" && !live && !discarded(x)
-      ? [
-          { id: "merge", label: t("병합"), icon: "merge", run: () => void mergeTask(id) },
-          {
-            id: "discard",
-            label: t("버리기"),
-            icon: "undo",
-            // the work goes with the worktree: asked first, like delete
-            run: () => confirmDiscard(id),
-          },
-        ]
-      : [],
     [
       // a fresh run of the same ask: only once it has stopped (running or waiting: paused instead;
       // failed: tried again above)
@@ -252,24 +240,6 @@ const [ask, setAsk] = createSignal<Ask | null>(null);
 export const confirmAsk = (a: Ask) => (closePops(), setCtx(null), setAsk(a));
 
 /** 버리기 / Discard, wherever it is offered (menu, review bar, /discard, Panel): asked once, same words */
-export function confirmDiscard(id: string) {
-  const x = taskById(id);
-  if (!x) return;
-  // the body says what goes: its files and lines, counted the one way every screen does
-  // (+ and − coloured like the review bar)
-  const lost = () => {
-    const d = taskDiff(x);
-    return d.files.length ? (
-      <>
-        {t("파일 {n}개", { n: d.files.length })} · <span class="add">+{d.add}</span> <span class="del">−{d.del}</span>
-      </>
-    ) : (
-      x.title
-    );
-  };
-  confirmAsk({ title: t("변경을 버릴까요?"), body: lost, action: t("버리기"), danger: true, run: () => void discardTask(id) });
-}
-
 export function confirmDeleteTask(id: string) {
   const x = taskById(id);
   if (!x) return;

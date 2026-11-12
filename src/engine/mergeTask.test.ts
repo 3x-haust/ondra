@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { mergeTask } from "./tasks";
+import { decide, mergeTask, sweepLanded } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Fix login",
@@ -50,5 +50,44 @@ describe("mergeTask", () => {
     expect(await mergeTask("job")).toBe(false);
     expect(state.tasks[0].mergedAt).toBeUndefined();
     expect(state.tasks[0].worktree?.state).toBe("open");
+  });
+});
+
+describe("the merge question", () => {
+  const changes = { isRepo: true, files: [{ path: "src/a.ts", add: 3, del: 1 }] } as never;
+  beforeEach(() => {
+    vi.spyOn(native, "gitChanges").mockResolvedValue(changes);
+    vi.spyOn(native, "worktreeLanded").mockResolvedValue(null as never);
+  });
+
+  it("is asked of a finished job that still holds changes, with merge, PR and discard", async () => {
+    setState("tasks", [job({ finishedAt: Date.now() })]);
+    await sweepLanded();
+    const d = state.decisions.find((x) => x.taskId === "job");
+    expect(d?.kind).toBe("merge");
+    expect(d?.options.map((o) => o.id)).toEqual(["merge", "pr", "discard"]);
+    // asked once, not again on the next sweep
+    await sweepLanded();
+    expect(state.decisions.filter((x) => x.taskId === "job")).toHaveLength(1);
+  });
+
+  it("is not asked when the work went into a pull request", async () => {
+    setState("tasks", [job({ finishedAt: Date.now(), entries: [{ id: "e", at: 1, kind: "text", text: "https://github.com/a/b/pull/7" } as never] })]);
+    vi.spyOn(native, "ghPrState").mockResolvedValue("" as never);
+    await sweepLanded();
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("merges or throws the work away on the answer", async () => {
+    setState("tasks", [job({ finishedAt: Date.now() })]);
+    await sweepLanded();
+    await decide(state.decisions[0].id, "merge");
+    expect(state.tasks[0].worktree?.state).toBe("merged");
+
+    setState("tasks", [job({ finishedAt: Date.now() })]);
+    setState("decisions", []);
+    await sweepLanded();
+    await decide(state.decisions[0].id, "discard");
+    expect(state.tasks[0].worktree?.state).toBe("discarded");
   });
 });

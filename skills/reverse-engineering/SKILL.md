@@ -20,9 +20,10 @@ metadata:
 Answer a narrow question about how a program actually works. A skill is a
 workflow; Ondra supplies its native analysis engine through `ondra-binary`.
 Tool output is evidence; prose and reconstructed
-pseudocode are not execution. Read [the tool guide](references/tools.md) before
-choosing commands and [the evidence guide](references/evidence.md) before analysis.
-Resolve every relative path from this skill's directory, never the task cwd.
+pseudocode are not execution. [The tool guide](references/tools.md) has command
+recipes and host limits; [the evidence guide](references/evidence.md) has the
+case layout and completion gates. Resolve every relative path from this
+skill's directory, never the task cwd.
 
 ## 1. Establish the target and boundary
 
@@ -57,9 +58,9 @@ an unavailable backend with invented output. See the platform matrix in
 Use `ondra-binary` first for supported static targets. It is on the worker's
 bundled PATH and includes radare2, r2ghidra, SLEIGH data and native libraries.
 No Java, Python, Xcode, Homebrew, MCP server or separate engine install is needed.
-Read [the bundled analyzer guide](references/bundled.md) in full, then check
-`ondra-binary --help` and `ondra-binary --version`. Save `inspect`, `functions`,
-`disassemble` and, where successful, `decompile` JSON plus stderr. A missing or
+[The bundled analyzer guide](references/bundled.md) explains its output, size
+limits and failure codes; check `ondra-binary --help` and `--version` too. Keep
+the JSON and stderr of each operation you run as evidence. A missing or
 failed bundled engine is incomplete; never silently use a system installation.
 
 Other format-aware tools are optional for unsupported targets or deeper work.
@@ -134,7 +135,7 @@ into a pass. This lab does not perform decompilation.
 
 ## Report
 
-Give the answer first, then:
+Lead with the answer. A useful report also covers:
 - Scope: exact target hash, permission boundary, host and tool capabilities.
 - Findings: observation → location/log → hypothesis → test → result/confidence.
 - Reproduction: commands in order, inputs, cwd, versions and raw evidence paths.

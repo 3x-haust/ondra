@@ -185,6 +185,8 @@ export default {
   "다시 열기": "Reopen",
   "링크 복사": "Copy link",
   "베타": "Beta",
+  "붙여넣은 글": "Pasted text",
+  "텍스트 필드에 표시": "Show in text field",
   "주소 또는 코드": "URL or code",
   "로그인했어요": "Signed in",
 

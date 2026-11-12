@@ -3645,8 +3645,8 @@ input[type="checkbox"] {
 /* ═════════════ pictures: in the input, in the chat, big ═════════════ */
 .attach-img {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 72px;
+  height: 72px;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--line);

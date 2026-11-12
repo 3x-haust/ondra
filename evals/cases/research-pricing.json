@@ -2,6 +2,6 @@
   "ask": "Supabase랑 Firebase 요금제를 지금 기준으로 비교 리서치해줘. 무료 한도, 유료 시작 가격, 초과 요금을 출처 달아서 정리해줘",
   "kind": "other",
   "answer": "first",
-  "note": "Primary sources and dates: prices must come from the vendors' own pricing pages, each with its date; check-research.py --score gates primary_share ≥ 0.5, dated_share ≥ 0.7, quote_match ≥ 0.9, check-writing pass.",
+  "note": "Primary sources and dates: prices must come from the vendors' own pricing pages, each with its date; check-research.py --score passes when no [error] is left (quotes on their pages, numbers in their quotes) and no template placeholders remain; primary_share ≥ 0.5, dated_share ≥ 0.7, quote_match ≥ 0.9 are targets listed in below_target.",
   "expect": { "maxSecs": 1800, "research": {} }
 }

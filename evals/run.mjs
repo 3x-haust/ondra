@@ -172,7 +172,7 @@ function scoreResearch(dir) {
   const checker = join(HERE, "..", "skills", "deep-research", "check-research.py");
   try {
     execFileSync("python3", [checker, dir, "--score"], { encoding: "utf8", timeout: 600_000 });
-  } catch {} // exit 1 = [must] hits left; the scorecard is still written
+  } catch {} // exit 1 = [error] hits left; the scorecard is still written
   try {
     return JSON.parse(readFileSync(join(dir, "eval.json"), "utf8"));
   } catch (err) {
