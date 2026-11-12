@@ -8,3 +8,8 @@ export function dropAsked(blocks: Block[]): Block[] {
   if (text === last.text) return blocks;
   return text ? [...blocks.slice(0, -1), { ...last, text } as Block] : blocks.slice(0, -1);
 }
+
+/** The card marks the pick itself: drop a "· 추천" / "(recommended)" the label already carries. */
+export function bareLabel(label: string): string {
+  return label.replace(/\s*(?:[·\-–—,]\s*|\(\s*)(?:추천|권장|recommended)\s*\)?\s*$/i, "").trim() || label;
+}
