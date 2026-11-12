@@ -2102,7 +2102,7 @@ func runGuide(_ args: [String]) -> Never {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
     panel.appearance = NSAppearance(named: .darkAqua)
     let bg = NSView(frame: NSRect(x: 0, y: 0, width: W, height: H))
-    bg.wantsLayer = true; bg.layer?.cornerRadius = 16; bg.layer?.masksToBounds = true
+    bg.wantsLayer = true; bg.layer?.cornerRadius = 12; bg.layer?.masksToBounds = true
     bg.layer?.backgroundColor = NSColor(white: 0.11, alpha: 0.98).cgColor
     bg.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor; bg.layer?.borderWidth = 1
     panel.contentView = bg
@@ -2152,10 +2152,13 @@ func runGuide(_ args: [String]) -> Never {
         }
         settingsSeen = Date()
         guard testFrame != nil || front == "com.apple.systempreferences" else { panel.orderOut(nil); return }
-        // over the bottom of the window, inside it, where the list's + and − sit
-        let w = min(W, win.width - 32)
+        // over the bottom of the list column, edge to edge with its cards: they start 269pt in from
+        // the window's left (past the sidebar) and stop 21pt short of its right (the scroller)
+        let left: CGFloat = 269, right: CGFloat = 21, bottom: CGFloat = 20
+        let w = max(W, win.width - left - right)
+        let x = win.width - left - right >= W ? win.minX + left : win.midX - W / 2
         let top = NSScreen.screens.first?.frame.maxY ?? 0
-        let frame = NSRect(x: win.midX - w / 2, y: top - (win.maxY - 14), width: w, height: H)
+        let frame = NSRect(x: x, y: top - (win.maxY - bottom), width: w, height: H)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
         if !panel.isVisible { panel.orderFrontRegardless() }
     }
@@ -2170,7 +2173,7 @@ func runGuide(_ args: [String]) -> Never {
 if CommandLine.arguments.contains("--guide") { runGuide(CommandLine.arguments) }
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.5")
+    print("ondra-cuhost 0.4.6")
     exit(0)
 }
 
