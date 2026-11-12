@@ -2,12 +2,14 @@
 // URLs or reveal local paths, so nothing an agent writes can run in the app.
 import { Marked, type Tokens } from "marked";
 import { rangeTilde } from "./markdownTilde";
-import { createEffect } from "solid-js";
+import { createEffect, onCleanup } from "solid-js";
 import { fileSrc } from "../lib/native";
 import { linkTip } from "../lib/links";
 import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
-import { openDrawing, openImage } from "./Lightbox";
+import { openBoard, openDrawing, openImage } from "./Lightbox";
+import { BoardView } from "./board/view";
+import { composerFor } from "./QuoteBar";
 import { safeSvg } from "./svgSafe";
 import { langOf, tokenize, toHtml } from "./highlight";
 import { t } from "../i18n";
@@ -25,6 +27,9 @@ const make = (github: boolean) => new Marked({
     },
     // a picture the agent drew: shown when it is a clean drawing, else the code as it was
     code({ text, lang }: Tokens.Code) {
+      // an explanation drawn stroke by stroke: a place for it, filled in once the HTML is in
+      if ((lang ?? "").trim().toLowerCase() === "board")
+        return `<div class="md-board" data-n="${boardN++}"><pre hidden>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre></div>`;
       if ((lang ?? "").trim().toLowerCase() !== "svg") return false;
       const svg = safeSvg(text);
       if (svg) return `<figure class="md-svg" title="${t("크게 보기")}">${svg}</figure>`;
@@ -47,6 +52,8 @@ const make = (github: boolean) => new Marked({
     },
   },
 });
+// boards in the text being parsed, numbered so each keeps its view while the text streams in
+let boardN = 0;
 const md = make(false);
 const mdGithub = make(true);
 
@@ -77,6 +84,12 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
     if (a) linkMenu(decodeURI(a.dataset.href ?? ""))(e);
   };
   let el!: HTMLDivElement;
+  const boards = new Map<number, BoardView>();
+  onCleanup(() => boards.forEach((b) => b.dispose()));
+  const html = () => {
+    boardN = 0;
+    return (props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string;
+  };
   // colour fenced code once the HTML is in; a block keeps its plain text until then
   createEffect(() => {
     void props.text;
@@ -92,6 +105,23 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
         if (img.complete && !img.naturalWidth) swap();
         else img.addEventListener("error", swap, { once: true });
       }
+      // boards: the same view moves into the re-rendered text and draws on from where it was
+      const here = new Set<number>();
+      for (const spot of el?.querySelectorAll<HTMLElement>("div.md-board") ?? []) {
+        const n = Number(spot.dataset.n);
+        here.add(n);
+        let v = boards.get(n);
+        if (!v) {
+          v = new BoardView({
+            onExpand: (src) => openBoard(src, (text) => composerFor(el)?.quote(text)),
+            onAsk: (text) => composerFor(el)?.quote(text),
+          });
+          boards.set(n, v);
+        }
+        spot.replaceWith(v.root);
+        v.update(spot.querySelector("pre")?.textContent ?? "");
+      }
+      for (const [n, v] of boards) if (!here.has(n)) (v.dispose(), boards.delete(n));
       for (const code of el?.querySelectorAll<HTMLElement>("pre > code[class*='language-']") ?? []) {
         const lang = langOf(/language-([\w+-]+)/.exec(code.className)?.[1] ?? "");
         const src = code.textContent ?? "";
@@ -104,5 +134,5 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
       }
     });
   });
-  return <div ref={el} class={`md ${props.class ?? ""}`} onClick={onClick} onContextMenu={onMenu} innerHTML={(props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string} />;
+  return <div ref={el} class={`md ${props.class ?? ""}`} onClick={onClick} onContextMenu={onMenu} innerHTML={html()} />;
 }

@@ -2005,3 +2005,113 @@
   color: var(--ink-3);
   font-size: var(--fs-sm);
 }
+
+/* a board (```board): an explanation drawn stroke by stroke, its steps named under it */
+.bd {
+  margin: var(--s-12) 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.bd-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-8) var(--s-8) 0 var(--s-16);
+  min-height: 36px;
+}
+.bd-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bd-tools {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.bd-stage {
+  position: relative;
+  aspect-ratio: var(--bd-ratio, 16 / 9);
+  max-height: 520px;
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-16);
+}
+.bd-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font);
+  overflow: visible;
+}
+.bd-3d {
+  padding: 0;
+  width: 100%;
+}
+.bd-3d > canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+  touch-action: none;
+}
+.bd-3d > canvas:active {
+  cursor: grabbing;
+}
+.bd-tag {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-12);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.bd-tag[hidden] {
+  display: none;
+}
+.bd-steps {
+  margin: 0;
+  padding: var(--s-4) var(--s-16) var(--s-12) calc(var(--s-16) + 1.4em);
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-ui);
+  color: var(--ink-3);
+}
+.bd-steps[hidden] {
+  display: none;
+}
+.bd-steps > li {
+  padding: 2px 0;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.bd-steps > li:hover,
+.bd-steps > li.is-now {
+  color: var(--ink);
+}
+.lightbox .lb-board {
+  width: min(1100px, 92vw);
+  cursor: default;
+}
+.lightbox .lb-board > .bd {
+  margin: 0;
+  /* the same ground the board had in the chat, opaque here */
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg);
+  border-radius: var(--r-xl);
+}
+.lightbox .lb-board .bd-stage {
+  max-height: 76vh;
+}

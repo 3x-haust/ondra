@@ -50,6 +50,7 @@
     "shiki": "^3.23.0",
     "simple-icons": "13.21.0",
     "solid-js": "^1.9.3",
+    "three": "0.186.1",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },
@@ -67,6 +68,7 @@
     "@types/d3-scale": "^4.0.9",
     "@types/d3-shape": "^3.2.0",
     "@types/node": "^24.19.2",
+    "@types/three": "0.186.0",
     "@types/topojson-client": "^3.1.5",
     "agent-browser": "^0.41.1",
     "agent-desktop": "^1.1.0",
