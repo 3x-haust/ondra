@@ -1,4 +1,5 @@
 /* @refresh reload */
+import { lazy } from "solid-js";
 import { render } from "solid-js/web";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./styles/tokens.css";
@@ -25,7 +26,9 @@ const isCapture = location.hash === "#capture";
 document.documentElement.classList.toggle("capture-window", isCapture);
 // every chart kind with its examples, for checking them side by side (?gallery)
 const isGallery = new URLSearchParams(location.search).has("gallery");
-render(() => (isCapture ? <Capture /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
+const SpacePreview = import.meta.env.DEV && !("__TAURI_INTERNALS__" in window) && new URLSearchParams(location.search).has("space-preview")
+  ? lazy(() => import("./previews/SpacePreview")) : undefined;
+render(() => (SpacePreview ? <SpacePreview /> : isCapture ? <Capture /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
 
 // text boxes grow with what's typed (WebKit without field-sizing)
 if (!CSS.supports("field-sizing", "content")) {
