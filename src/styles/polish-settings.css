@@ -1138,7 +1138,7 @@
 
 /* ═════════════ Settings, round 3: page heads, two-line rows, search, empty states, theme picker */
 
-/* the tab's head: icon tile · title · one line on what it is for · its one action */
+/* the tab's head: icon tile · title · its one action */
 .settings-inner .set-page-head {
   display: flex;
   align-items: center;
@@ -1149,9 +1149,9 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-xl);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-lg);
   background: var(--accent-soft);
   color: var(--accent-text);
 }
@@ -1161,12 +1161,6 @@
 }
 .settings-inner .set-page-text h2 {
   margin: 0;
-}
-.settings-inner .set-page-text p {
-  margin: var(--s-2) 0 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  color: var(--ink-3);
 }
 .settings-inner .set-page-act {
   display: flex;
