@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadCases } from "../main-cases.mjs";
+import { loadCases, mainInput } from "../main-cases.mjs";
 import { check } from "../main-sim-check.mjs";
 import { lint } from "../main-sim-lint.mjs";
 
@@ -77,7 +77,7 @@ async function run() {
       else {
         if (system !== undefined && !(await app(`return typeof __ui.captain.mainSystem === "function"`)))
           throw new Error("the running dev app can't try another prompt: start `pnpm tauri dev` from this branch");
-        const sim = { ...c, name: undefined, note: undefined, expect: undefined, each: undefined, ...(system !== undefined ? { system } : {}) };
+        const sim = { ...mainInput(c), ...(system !== undefined ? { system } : {}) };
         // an answer that isn't a list is the bridge hiccuping, not main deciding: try again
         for (let i = 0; i < 3 && !Array.isArray(steps); i++) steps = await app(`return await __ui.captain.simulateMain(${JSON.stringify(sim)})`);
         if (!Array.isArray(steps)) throw new Error(`simulateMain gave ${JSON.stringify(steps)?.slice(0, 200)}`);

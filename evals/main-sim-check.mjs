@@ -1,4 +1,10 @@
 // What a case's "expect" can ask of one of main's decisions (evals/main-sim.mjs, evals/gepa).
+
+// Every key check() reads. A key it doesn't know is skipped without a word, so a typo in a
+// case would pass every time: evals/main-cases.mjs rejects keys not here, and
+// evals/cases.test.mjs fails when this list and check() drift apart.
+export const EXPECT_KEYS = ["new", "append", "stop", "answerOnly", "ask", "project", "cwdIncludes", "reach", "taskIncludes", "taskExcludes", "has", "hasNot", "stopCount", "follows", "appendAny", "cwdEmpty", "appendOrAfter", "afterTask", "answerIncludes", "answerIncludesAny", "quiet", "maxAnswer", "after", "noAfter"];
+
 /** Every check a step's "expect" can hold; each returns a problem or "". */
 export function check(step, x) {
   const routes = step.routes ?? [];

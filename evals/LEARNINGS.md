@@ -1,6 +1,6 @@
 # What the evals taught us
 
-date · case · cause · fix · before → after
+date · case · cause · fix · before → after (passes/runs, from `node evals/compare.mjs`)
 
 - 2026-11-05 · coding defaults · real engine delivered both full worker prompts, but local-model workers skipped pre-edit reproduction and post-edit CLI verification · no speculative production change; [behavioral evidence and limits](coding-defaults.md) · independent CLI output 9 → 23 in both fixtures, workflow gate still failed
 
@@ -35,3 +35,15 @@ honest. 42/42 after the change.
 - demo-after: appending the demo to the queued check job (t-qa) that follows t-cu is right too.
 - Runs on its own empty data: `ONDRA_DATA_DIR=… ONDRA_DEVBRIDGE_PORT=17322` and vite on 1430
   (see evals/gepa/README.md); a simulation adds a space the app lacks and borrows any account.
+
+## Counting runs (2026-11-13)
+
+Read back the saved runs with `compare.mjs`. Of the nine `run.mjs` runs on 2026-11-05,
+four were the app not answering ("runner" on every case); they were logged as 0/6 like
+real failures. Harness errors are now counted apart and left out of pass rates. Every
+saved run from 11-05 and 11-06 had one run per case, so no before → after from those days
+shows its noise: the cu-calculator 0/1 → 1/1 between two runs that day is "no measurable difference" (p = 1).
+Runs now keep the commit, a note and a hash of each case; a case edited between two runs
+is not compared. The project and folder a job case runs in were named "평가 …" and
+".../evals-workspace", and simulated jobs were "sim-t1": all told main and the jobs it was
+a test, now "새 폴더 …", ".../workspace" and "job-1".
