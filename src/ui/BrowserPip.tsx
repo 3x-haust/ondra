@@ -39,7 +39,7 @@ const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 export function BrowserPip() {
   const [corner, setCorner] = createSignal<Corner>(cornerOf(stored()));
   const job = createMemo(() =>
-    state.settings.browserPip === false ? undefined : pipJob(state.tasks.filter((x) => x.space === state.space), closed()),
+    state.settings.browserPip === false ? undefined : pipJob(state.tasks.filter((x) => x.space === state.space), closed(), ((v) => (v.name === "task" ? v.id : undefined))(view())),
   );
   // its own browser tab is on screen already: no second copy of it
   const onScreen = () => {

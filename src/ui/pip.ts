@@ -13,11 +13,16 @@ const lastBrowse = (t: Task) => {
   return t.startedAt ?? t.createdAt;
 };
 
-/** The running job whose browser to show: the one that browsed last, leaving out the ones closed here. */
-export function pipJob(tasks: Task[], closed: ReadonlySet<string>): Task | undefined {
+/** The running job whose browser to show, leaving out the ones closed here: the job open on screen
+ *  when it is one of them (you went into it, so it is its browser you want to watch), else the one
+ *  that browsed last. */
+export function pipJob(tasks: Task[], closed: ReadonlySet<string>, viewing?: string): Task | undefined {
+  const shows = (t: Task) => !!t.browser && t.status === "running" && !closed.has(t.id);
+  const here = viewing ? tasks.find((t) => t.id === viewing) : undefined;
+  if (here && shows(here)) return here;
   let best: Task | undefined;
   for (const t of tasks) {
-    if (!t.browser || t.status !== "running" || closed.has(t.id)) continue;
+    if (!shows(t)) continue;
     if (!best || lastBrowse(t) > lastBrowse(best)) best = t;
   }
   return best;

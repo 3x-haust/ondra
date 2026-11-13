@@ -22,6 +22,13 @@ describe("the floating browser", () => {
     expect(pipJob(list, new Set(["c"]))?.id).toBe("d");
     expect(pipJob(list, new Set(["c", "d"]))).toBeUndefined();
   });
+  it("shows the job you went into when it is browsing, else the one that browsed last", () => {
+    const list = [job("a", { browsedAt: 10 }), job("b", { browsedAt: 30 }), job("c", { status: "done", browsedAt: 40 })];
+    expect(pipJob(list, new Set(), "a")?.id).toBe("a");
+    // the open job isn't browsing (done, or closed here): the latest browsing job, as before
+    expect(pipJob(list, new Set(), "c")?.id).toBe("b");
+    expect(pipJob(list, new Set(["a"]), "a")?.id).toBe("b");
+  });
   it("snaps to the nearest corner", () => {
     expect(nearestCorner(100, 100, 1000, 800)).toBe("tl");
     expect(nearestCorner(900, 100, 1000, 800)).toBe("tr");
