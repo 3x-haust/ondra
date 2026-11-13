@@ -57,6 +57,12 @@ export const JOB_CALLS = [
   "moveQueued",
   "setTaskModel",
   "setTaskPermission",
+  "finishTask",
+  "pauseTask",
+  "togglePin",
+  "setPriority",
+  "setWeight",
+  "setTaskAccount",
 ] as const;
 export type JobCall = (typeof JOB_CALLS)[number];
 const jobCalls = new Set<string>(JOB_CALLS);

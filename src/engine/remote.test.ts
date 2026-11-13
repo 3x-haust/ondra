@@ -74,6 +74,20 @@ describe("calls from a Mac allowed in", () => {
     expect(state.projects?.find((p) => p.folder === "/tmp/new")?.space).toBe("home");
     setDeviceSpaces(DEV, undefined);
   });
+  it("answer, hand over and read secrets only for what it may reach", async () => {
+    setState("decisions", [
+      { id: "dApp", taskId: "inApp", at: 1, question: "?", options: [{ id: "a", label: "A" }], context: [], kind: "ask" },
+      { id: "dSecret", taskId: "inSecret", at: 1, question: "?", options: [{ id: "a", label: "A" }], context: [], kind: "ask" },
+    ] as never);
+    expect((await call("decide", ["dSecret", "a"]))?.error).toBeTruthy();
+    expect(state.decisions.some((d) => d.id === "dSecret")).toBe(true);
+    expect((await call("handOn", ["inApp", "inSecret"]))?.error).toBeTruthy();
+    expect((await call("secretList", ["secret"]))?.error).toBeTruthy();
+    expect((await call("secretSet", [{ project: "secret", name: "K", value: "v" }]))?.error).toBeTruthy();
+    expect((await call("togglePin", ["inSecret"]))?.error).toBeTruthy();
+    expect((await call("togglePin", ["inApp"]))?.error).toBeUndefined();
+    expect(taskById("inApp")?.pinned).toBe(true);
+  });
   it("never reach a project shown here from a third Mac", async () => {
     expect((await call("create", [{ id: "n2", title: "n", ask: "do", project: `r:${"c".repeat(64)}:app` }]))?.error).toBeTruthy();
   });

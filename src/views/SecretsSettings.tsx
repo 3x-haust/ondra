@@ -4,9 +4,16 @@
 // value typed here goes to the keychain (and, for a project, into its .env if asked) and never
 // comes back to this page; jobs get it in their shell and the model sees [secret:NAME] wherever
 // it would show (extensions/secrets.ts).
-import { createMemo, createResource, createSignal, For, onMount, Show } from "solid-js";
+//
+// A project added from another Mac keeps its secrets there (its jobs run there): picking it asks
+// that Mac (engine/remote.ts secret*), which takes in its .env files and says the names it keeps. A
+// value typed here goes there once, to be saved in that Mac's keychain; none ever comes back.
+import { createMemo, createResource, createSignal, For, on, onMount, Show, createEffect } from "solid-js";
 import { secretDelete, secretList, secretOverview, secretSet, secretSync, type SavedSecrets, type SecretGroup } from "../lib/native";
-import { state } from "../state/store";
+import { projectsShown, state } from "../state/store";
+import { splitProjectId } from "../state/mirror";
+import { viaHost } from "../engine/hosts";
+import type { FarSecrets } from "../engine/remote";
 import { forgetSecret, noteSecrets } from "../engine/secretMemory";
 import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
@@ -26,18 +33,38 @@ export function SecretsSettings() {
   const [groups, { refetch: regroup }] = createResource(secretOverview, { initialValue: [] as SecretGroup[] });
   // each secret also gets a memory piece (where it is, what it is for), so jobs find its use there
   const mutate = (s: SavedSecrets) => (setSaved(s), regroup(), noteSecrets(s, state.projects ?? []));
-  // this Mac's projects of the current workspace (a project on another Mac has its .env there)
-  const projects = createMemo(() => (state.projects ?? []).filter((p) => p.space === state.space && !p.host));
+  // the current workspace's projects: this Mac's, and those added from another Mac (kept there)
+  const projects = createMemo(() => projectsShown(state.space));
+  const mine = createMemo(() => projects().filter((p) => !p.host));
   const [scope, setScope] = createSignal(GLOBAL);
   const project = () => projects().find((p) => p.id === scope());
-  const items = () => saved().projects[scope()] ?? [];
+  // another Mac's project: its names as that Mac last said them
+  const [far, setFar] = createSignal<Record<string, string[]>>({});
+  const farOf = () => splitProjectId(project()?.id);
+  const items = () => (farOf() ? (far()[scope()] ?? []) : (saved().projects[scope()] ?? []));
+  const askFar = async <T extends FarSecrets>(fn: string, arg: unknown): Promise<T> => {
+    const at = farOf()!;
+    const id = scope();
+    const r = await viaHost<T>(at.host, fn, [arg]);
+    setFar((m) => ({ ...m, [id]: r.items ?? [] }));
+    return r;
+  };
+  // picked: that Mac takes in its .env files first, as this page does here when it opens
+  createEffect(
+    on(farOf, (at) => {
+      if (!at) return;
+      void askFar("secretSync", at.id)
+        .then((r) => r.added && toast(t("프로젝트 .env에서 {n}개를 가져왔어요", { n: r.added })))
+        .catch(() => {});
+    }),
+  );
   const placeLabel = (pl: SecretGroup["places"][number]) => {
     const p = pl.project ? (state.projects ?? []).find((x) => x.id === pl.project) : undefined;
     const dir = split(pl.item).dir;
     return pl.project ? `${p?.name ?? t("지운 프로젝트")}${dir ? `/${dir}` : ""}` : t("모든 작업");
   };
   const groupKey = (g: SecretGroup) => g.places.map((pl) => `${pl.project ?? ""}/${pl.item}`).join("|");
-  const count = (id: string) => saved().projects[id]?.length ?? 0;
+  const count = (id: string) => (splitProjectId(id) ? far()[id] : saved().projects[id])?.length ?? 0;
   const [name, setName] = createSignal("");
   const [value, setValue] = createSignal("");
   const [toEnv, setToEnv] = createSignal(true);
@@ -50,7 +77,7 @@ export function SecretsSettings() {
   // what the projects' .env files already hold comes in by itself
   onMount(async () => {
     try {
-      const r = await secretSync(projects().map((p) => [p.id, p.folder]));
+      const r = await secretSync(mine().map((p) => [p.id, p.folder]));
       mutate(r.saved);
       if (r.added.length) toast(t("프로젝트 .env에서 {n}개를 가져왔어요", { n: r.added.length }));
     } catch (e) {
@@ -64,7 +91,11 @@ export function SecretsSettings() {
     try {
       const p = project();
       const replaced = items().includes(clean());
-      mutate(await secretSet({ name: clean(), value: value(), project: p?.id, folder: p?.folder, writeDotenv: !!p && toEnv(), addIgnore }));
+      const at = farOf();
+      if (at) {
+        // .env isn't ignored by git there: asked here first, as for this Mac's
+        if ((await askFar("secretSet", { project: at.id, name: clean(), value: value(), writeDotenv: toEnv(), addIgnore })).notIgnored) return void setAskIgnore(true);
+      } else mutate(await secretSet({ name: clean(), value: value(), project: p?.id, folder: p?.folder, writeDotenv: !!p && toEnv(), addIgnore }));
       toast(replaced ? t("{name}을(를) 바꿨어요", { name: clean() }) : t("{name}을(를) 저장했어요", { name: clean() }));
       setName("");
       setValue("");
@@ -80,8 +111,12 @@ export function SecretsSettings() {
   const remove = async (item: string) => {
     try {
       const p = project();
-      mutate(await secretDelete({ name: item, project: p?.id, folder: p?.folder }));
-      forgetSecret(p?.id, item);
+      const at = farOf();
+      if (at) await askFar("secretDelete", { project: at.id, name: item });
+      else {
+        mutate(await secretDelete({ name: item, project: p?.id, folder: p?.folder }));
+        forgetSecret(p?.id, item);
+      }
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), "bad");
     }
@@ -108,7 +143,8 @@ export function SecretsSettings() {
       <PageHead tab="secrets">
         <select class="select" aria-label={t("적용 범위")} value={scope()} onChange={(e) => (setScope(e.currentTarget.value), setAskIgnore(false), setConfirm(null))}>
           <option value={GLOBAL}>{t("전체")}</option>
-          <For each={projects()}>{(p) => <option value={p.id}>{count(p.id) ? `${p.name} · ${count(p.id)}` : p.name}</option>}</For>
+          {/* another Mac's project names that Mac: its secrets are kept there */}
+          <For each={projects()}>{(p) => { const name = () => (p.host ? `${p.name} (${p.hostName ?? "Mac"})` : p.name); return <option value={p.id}>{count(p.id) ? `${name()} · ${count(p.id)}` : name()}</option>; }}</For>
         </select>
       </PageHead>
 

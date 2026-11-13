@@ -14,7 +14,7 @@ import { applyZoom, zoom } from "./state/zoom";
 import { keyText, ShortcutSheet, sheetOpen } from "./views/ShortcutSheet";
 import { binding, chordText, dispatchShortcut, NATIVE, noModifiers, shortcutContext, shortcutLabel, shortcutOverlay, viewKey } from "./lib/shortcuts";
 import { anyPop } from "./ui/ModelPicker";
-import { spaceById, taskById } from "./state/store";
+import { allDecisions, allTasks, spaceById, taskById } from "./state/store";
 import { throwThought } from "./engine/captain";
 import { scan } from "./engine/importer";
 import { engine, refreshEngine, startRpc } from "./engine/rpc";
@@ -199,11 +199,15 @@ export default function App() {
   // a job that finishes or needs you while Ondra is in the background: tell the system
   const seen = new Map<string, string>();
   createEffect(() => {
-    for (const t of state.tasks) {
+    // another Mac's jobs too (that Mac tells its own screen; this one tells this screen). Counted
+    // there, not here.
+    for (const t of allTasks()) {
       const was = seen.get(t.id);
       seen.set(t.id, t.status);
-      if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
-      countLanded(t);
+      if (!t.host) {
+        if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
+        countLanded(t);
+      }
       if (!was || was === t.status || document.hasFocus()) continue;
       // which space it is in, so a company job never reads as a personal one
       const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;
@@ -213,7 +217,7 @@ export default function App() {
     }
   });
   createEffect(() => {
-    setTrayCount(state.tasks.filter((t) => t.status === "running" && !t.parentId).length, state.decisions.length);
+    setTrayCount(allTasks().filter((t) => t.status === "running" && !t.parentId).length, allDecisions().length);
   });
   createEffect(() => {
     void setFocusGuard(state.settings.focusGuard);

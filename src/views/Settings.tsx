@@ -7,7 +7,8 @@ import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, modifierHo
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { setState, state, uid, updateAccount } from "../state/store";
+import { projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
+import { mirror, setMirror } from "../state/mirror";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
@@ -479,12 +480,15 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
 /** Removing a space keeps its work: jobs, projects, accounts and memory move to 개인. */
 function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
   const [sure, setSure] = createSignal(false);
-  const n = () => state.tasks.filter((x) => x.space === props.id).length + (state.projects ?? []).filter((p) => p.space === props.id).length;
+  const n = () => tasksShown(props.id).length + projectsShown(props.id).length;
   const home = () => t(state.spaces.find((s) => s.id === "home")?.label ?? "개인");
   const remove = () => {
     const to = "home";
     setState("tasks", (x) => x.space === props.id, "space", to);
     setState("projects", (p) => p.space === props.id, "space", to);
+    // another Mac's projects added here move too, and their jobs with them
+    setState("settings", "hostProjects", (l) => (l ?? []).map((p) => (p.space === props.id ? { ...p, space: to } : p)));
+    for (const h of Object.keys(mirror.hosts)) setMirror("hosts", h, "tasks", (x) => x.space === props.id, "space", to);
     setState("accounts", (a) => a.space === props.id, "space", to);
     setState("memory", (m) => m.space === props.id, "space", to);
     setState("captain", (m) => m.space === props.id, "space", to);
@@ -699,7 +703,7 @@ function Accounts() {
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
-              <button class="btn ghost sm" onClick={() => setEditing(s.id)} title={`${folderName(s.folder)} · ${t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}`}>
+              <button class="btn ghost sm" onClick={() => setEditing(s.id)} title={`${folderName(s.folder)} · ${t("작업 {n}개", { n: tasksShown(s.id).filter((x) => !x.parentId && !x.answer && !x.archived).length })}`}>
                 <Icon name="gear" size={14} />
                 {t("워크스페이스 설정")}
               </button>

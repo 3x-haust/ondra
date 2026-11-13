@@ -9,7 +9,7 @@ import { Fold } from "./Fold";
 import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
-import { kidsOf, state, taskById } from "../state/store";
+import { kidsOf, queueWith, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
 import { describeBrowser, describeCommand, describeComputer, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
@@ -911,7 +911,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   // (not deferred: a deferred `on` never learns the first value, so the very first send would go unnoticed)
   createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(scroller))));
   const queuePos = () => {
-    const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+    const q = queueWith(props.task);
     const i = q.findIndex((t) => t.id === props.task.id);
     return i >= 0 ? i + 1 : 0;
   };

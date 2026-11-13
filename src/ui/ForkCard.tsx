@@ -2,7 +2,7 @@
 // progress, its subagents. Used in the main conversation and inside forks.
 import { nowText } from "../engine/describe";
 import { For, Show } from "solid-js";
-import { kidsOf, state, taskById } from "../state/store";
+import { decisionFor, kidsOf, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask } from "../state/ui";
 import { ago, compact, endedAt, now, short, statusLabel, taskTitle } from "./bits";
@@ -46,7 +46,7 @@ export function plain(text: string): string {
 export function line(t: Task): string {
   if (t.status === "done") return plain(t.summary || "") || tr("완료");
   if (t.status === "failed") return t.error || tr("실패");
-  if (t.status === "waiting") return state.decisions.find((d) => d.taskId === t.id)?.question ?? tr("응답 대기 중");
+  if (t.status === "waiting") return decisionFor(t.id)?.question ?? tr("응답 대기 중");
   if (t.status === "queued") return tr("대기 중");
   if (t.status === "paused") return tr("일시정지");
   return plain(nowText(t.now)) || tr("시작하는 중");

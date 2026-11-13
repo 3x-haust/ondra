@@ -2,7 +2,7 @@
 // top, coloured by what it needs. Subagents hang off their job on a dotted twig.
 // Lives in the right panel's Flow tab.
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import { kidsOf as childrenOf, state, taskById, tasksIn } from "../state/store";
+import { kidsOf as childrenOf, state, taskById, tasksShown } from "../state/store";
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, setHoverTask, view } from "../state/ui";
 import { ago, compact, now } from "../ui/bits";
@@ -54,7 +54,7 @@ export function Flow() {
   const [older, setOlder] = createSignal(false);
   const [kidsOpen, setKidsOpen] = createSignal<Record<string, boolean>>({});
   const roots = createMemo(() =>
-    tasksIn(state.space)
+    tasksShown(state.space)
       .filter((t) => !t.parentId && !t.answer)
       .sort((a, b) => b.createdAt - a.createdAt),
   );
