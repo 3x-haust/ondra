@@ -738,7 +738,7 @@ export function Sidebar() {
         </button>
         <UpdateButton />
       </div>
-      {/* once another Mac is added: which Mac the current workspace's new work runs on (⌃1…) */}
+      {/* this Mac, and once another is added, which Mac the current workspace's new work runs on (⌃1…) */}
       <MacBar />
     </aside>
   );

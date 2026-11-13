@@ -1,5 +1,5 @@
-// The Mac bar at the foot of the sidebar, once another Mac is added (Settings › 연결): this Mac
-// and each added one as a mark. Picking one (or ⌃1…⌃9) makes it where the current workspace's new
+// The Mac bar at the foot of the sidebar: this Mac, always (its name, icon and color are set from
+// here too), and each Mac added in Settings › 연결 as a mark. Picking one (or ⌃1…⌃9) makes it where the current workspace's new
 // work runs. Right-click: rename, an emoji or icon, a color (that can tint the whole window, so
 // it's plain which Mac is in use), connection settings, disconnect or remove. The workspace tabs at the top
 // stay as they are.
@@ -54,7 +54,8 @@ export function macs(): Mac[] {
     ...(state.settings.hosts ?? []).map((h) => ({ id: h.id, name: h.name, icon: h.icon, emoji: h.emoji, hue: h.hue, colors: h.colors, grain: h.grain, theme: h.theme, local: false })),
   ];
 }
-export const showMacBar = () => (state.settings.hosts ?? []).length > 0;
+/** another Mac is added: picking where new work runs means something */
+export const otherMacs = () => (state.settings.hosts ?? []).length > 0;
 
 const statusOf = (m: Mac) => (m.local ? "ok" : (mirror.hosts[m.id]?.status ?? "connecting"));
 const current = () => chosenComputer(state.space)?.host ?? LOCAL;
@@ -475,14 +476,14 @@ export function MacBar() {
   // the Mac in use tints the window when its color is set to: set on <html>, read by .app
   createEffect(() => {
     const root = document.documentElement.style;
-    const m = showMacBar() ? macs().find((x) => x.id === current()) : undefined;
+    const m = macs().find((x) => x.id === current());
     if (!m?.theme && !m?.grain) return void (root.removeProperty("--mac-wash"), root.removeProperty("--mac-work"));
     root.setProperty("--mac-wash", washOf(m));
     if (m.theme || m.grain) root.setProperty("--mac-work", workOf(m));
     else root.removeProperty("--mac-work");
   });
   return (
-    <Show when={showMacBar()}>
+    <>
       <div class="mbar" role="toolbar" aria-label={t("Mac")}>
         <For each={macs()}>
           {(m, i) => (
@@ -516,6 +517,6 @@ export function MacBar() {
           )}
         </Show>
       </Portal>
-    </Show>
+    </>
   );
 }
