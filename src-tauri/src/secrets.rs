@@ -113,30 +113,93 @@ fn account(project: Option<&str>, name: &str) -> String {
     }
 }
 
+/// Every secret value in one keychain item (service `ai.ondra.secret`, account `vault`, a JSON
+/// map from account to value), read once per run and kept in memory: macOS asks about an app's
+/// access once per item, so one item means one question at most (a dev build, re-signed on every
+/// rebuild, is asked again; a signed release isn't asked at all).
 #[cfg(target_os = "macos")]
 mod store {
-    use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
+    use security_framework::passwords::{get_generic_password, set_generic_password};
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
 
+    const VAULT: &str = "vault";
+    /// errSecItemNotFound: no vault yet, which is an empty one
+    const NOT_FOUND: i32 = -25300;
+    static CACHE: Mutex<Option<BTreeMap<String, String>>> = Mutex::new(None);
+
+    fn load() -> Result<BTreeMap<String, String>, String> {
+        let mut cache = CACHE.lock().unwrap();
+        if let Some(v) = cache.as_ref() {
+            return Ok(v.clone());
+        }
+        let vault = match get_generic_password(super::SERVICE, VAULT) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| "키체인의 시크릿을 읽지 못했어요".to_string())?,
+            Err(e) if e.code() == NOT_FOUND => BTreeMap::new(),
+            // denied or locked: nothing is written over what is there
+            Err(e) => return Err(format!("키체인을 열지 못했어요: {e}")),
+        };
+        *cache = Some(vault.clone());
+        Ok(vault)
+    }
+
+    fn save(vault: BTreeMap<String, String>) -> Result<(), String> {
+        let json = serde_json::to_vec(&vault).map_err(|e| e.to_string())?;
+        set_generic_password(super::SERVICE, VAULT, &json).map_err(|e| format!("키체인에 저장하지 못했어요: {e}"))?;
+        *CACHE.lock().unwrap() = Some(vault);
+        Ok(())
+    }
+
+    pub fn set_many(pairs: Vec<(String, String)>) -> Result<(), String> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
+        let mut vault = load()?;
+        vault.extend(pairs);
+        save(vault)
+    }
     pub fn set(account: &str, value: &str) -> Result<(), String> {
-        set_generic_password(super::SERVICE, account, value.as_bytes()).map_err(|e| format!("키체인에 저장하지 못했어요: {e}"))
+        set_many(vec![(account.to_string(), value.to_string())])
     }
     pub fn get(account: &str) -> Option<String> {
-        get_generic_password(super::SERVICE, account).ok().and_then(|b| String::from_utf8(b).ok())
+        load().ok()?.get(account).cloned()
     }
-    pub fn delete(account: &str) {
-        let _ = delete_generic_password(super::SERVICE, account);
+    pub fn has(account: &str) -> bool {
+        load().is_ok_and(|v| v.contains_key(account))
+    }
+    /// The vault can be read (asking the user if macOS wants to).
+    pub fn check() -> Result<(), String> {
+        load().map(|_| ())
+    }
+    pub fn delete(account: &str) -> Result<(), String> {
+        let mut vault = load()?;
+        if vault.remove(account).is_some() {
+            save(vault)?;
+        }
+        Ok(())
     }
 }
 
 #[cfg(not(target_os = "macos"))]
 mod store {
+    pub fn set_many(_: Vec<(String, String)>) -> Result<(), String> {
+        Err("시크릿은 macOS에서만 쓸 수 있어요".into())
+    }
     pub fn set(_: &str, _: &str) -> Result<(), String> {
         Err("시크릿은 macOS에서만 쓸 수 있어요".into())
     }
     pub fn get(_: &str) -> Option<String> {
         None
     }
-    pub fn delete(_: &str) {}
+    pub fn has(_: &str) -> bool {
+        false
+    }
+    pub fn check() -> Result<(), String> {
+        Err("시크릿은 macOS에서만 쓸 수 있어요".into())
+    }
+    pub fn delete(_: &str) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 // ───────────────── .env
@@ -373,24 +436,31 @@ pub struct Synced {
 /// 시크릿 opens; values never leave this process.
 #[tauri::command]
 pub fn secret_sync(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synced, String> {
+    // a vault that can't be opened (denied, locked) changes nothing
+    store::check()?;
     let mut saved = read_saved(&app);
     let mut added = Vec::new();
+    let mut values = Vec::new();
     for (id, folder) in projects {
         if !valid_project(&id) || !Path::new(&folder).is_dir() {
             continue;
         }
+        // listed but without a value (a vault that was reset): taken again
+        if let Some(list) = saved.projects.get_mut(&id) {
+            list.retain(|item| store::has(&account(Some(&id), item)));
+        }
         let found = found_in(Path::new(&folder));
         for name in to_take(&saved, &id, &found) {
-            store::set(&account(Some(&id), &name), &found[&name].1)?;
+            values.push((account(Some(&id), &name), found[&name].1.clone()));
             let list = saved.projects.entry(id.clone()).or_default();
             list.push(name.clone());
             list.sort();
             added.push(format!("{id}/{name}"));
         }
     }
-    if !added.is_empty() {
-        write_saved(&app, &saved)?;
-    }
+    saved.projects.retain(|_, l| !l.is_empty());
+    store::set_many(values)?;
+    write_saved(&app, &saved)?;
     Ok(Synced { saved, added })
 }
 
@@ -468,7 +538,7 @@ pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, fold
             }
         }
     }
-    store::delete(&acct);
+    store::delete(&acct)?;
     let mut saved = read_saved(&app);
     match &project {
         Some(p) => {
