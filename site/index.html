@@ -136,7 +136,7 @@
       </div>
     </div>
   </div>
-  <p class="demo-note"><span>실제 앱 화면을 HTML로 옮겨 그린 장면이에요. 실제 스크린샷은 <a href="#real">아래</a>에 있어요.</span><button class="replay" type="button">다시 보기</button></p>
+  <p class="demo-note"><button class="replay" type="button">다시 보기</button></p>
 </div>
 
 <section class="wrap lead" aria-labelledby="s-check">
@@ -146,8 +146,7 @@
       <h2 id="s-check">“다 했어요” 대신, 확인한 결과를 받아요.</h2>
       <p class="sub">작업이 끝나면 Ondra가 실제로 돌린 명령과 바뀐 파일을 기록과 맞춰 봐요. 확인 못 한 건 확인 못 했다고 표시해요.</p>
       <ul class="points">
-        <li>맞지 않으면 이유를 붙여 작업에 돌려보내요(최대 2번). 그래도 남은 건 <b>확인 안 됨</b>으로 따로 보여요.</li>
-        <li>앱을 바꾼 작업은 실제 앱을 따로 하나 띄워 직접 눌러 보고, 화면과 기록을 증거로 남겨요. 프로젝트마다 띄우는 법·조작하는 법·확인할 기능 목록을 확인 스킬로 한 번 정리해 두고, 다음 작업부터 그대로 써요.</li>
+        <li>앱을 바꾼 작업은 실제 앱을 띄워 직접 눌러 보고, 화면을 증거로 남겨요.</li>
         <li>위험한 변경은 끝내기 전에 설계 검토와 코드 검토 서브에이전트 둘이 나란히 봐요.</li>
         <li>결과는 말보다 diff, 전후 화면, 영상, 테스트 결과로 와요.</li>
       </ul>
@@ -171,7 +170,7 @@
   <div class="rv">
     <p class="kicker">어느 탭이 무슨 일을 하던 중인지, 머릿속으로 붙잡고 있었죠.</p>
     <h2 id="s-one">말은 메인에게 한 번. 흐름은 캔버스에서 봐요.</h2>
-    <p class="sub">메인이 일을 작업으로 나눠 동시에 진행해요. 캔버스는 메인부터 프로젝트, 작업, 서브에이전트까지 선으로 이어서, 각 작업이 지금 무슨 도구를 쓰는지 보여줘요.</p>
+    <p class="sub">메인이 일을 작업으로 나눠 동시에 진행하고, 캔버스에서 각 작업이 지금 뭘 하는지 한눈에 보여요.</p>
   </div>
   <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="캔버스: 메인에서 ondra, acme, blog 프로젝트로, 다시 각 작업과 서브에이전트로 선이 이어지고, 작업 카드의 진행 단계가 바뀌는 장면">
     <div class="cv-head"><b>캔버스</b><span><i class="dot"></i>진행 중 2</span><span><i class="dot ask"></i>응답 필요 1</span></div>
@@ -227,11 +226,9 @@
     <div class="rv">
       <p class="kicker">어느 탭이 내 대답을 기다리는지 몰라서, 하나씩 열어 봤죠.</p>
       <h2 id="s-ask">정해야 할 때만 물어봐요.</h2>
-      <p class="sub">의도나 취향이 필요한 순간에만, 선택지와 맥락을 담은 카드가 메인에 올라와요. 옆의 카드를 직접 골라 보세요.</p>
+      <p class="sub">의도나 취향이 필요한 순간에만, 선택지와 맥락을 담은 카드가 메인에 올라와요.</p>
       <ul class="points">
-        <li>왼쪽 목록의 <b>확인할 일</b>을 누르면 응답이 필요한 다음 작업으로 넘어가요.</li>
         <li>창이 뒤에 있어도, 작업이 끝나거나 응답이 필요하면 시스템 알림으로 알려줘요.</li>
-        <li>진행 중인 작업에 들어가 방향을 바꿀 수도 있어요.</li>
       </ul>
     </div>
     <div class="dc mock" id="decide" data-done-ok="완료" data-done-run="진행 중" data-reset="다시 해 보기">
@@ -282,9 +279,7 @@
       <h2 id="s-routine">반복되는 일은 루틴에 맡겨요.</h2>
       <p class="sub">정해진 시간이나 GitHub에서 일이 생기면 작업을 알아서 시작해요. 채팅에서 “평일 9시마다 …”라고 하면 루틴을 카드로 제안해요.</p>
       <ul class="points">
-        <li>매일, 요일마다, N분마다, 또는 한 번.</li>
         <li>새 이슈나 PR, 리뷰 요청, 내 PR의 댓글, CI 실패, 새 릴리스가 생기면.</li>
-        <li>Mac이 잠든 사이 놓친 실행은 깨어나서 한 번만 돌아요.</li>
       </ul>
     </div>
     <div class="rt mock" data-scene="routine">
@@ -308,7 +303,6 @@
       <h2 id="s-mac">오래 걸리는 일은 다른 Mac에서 돌려요.</h2>
       <p class="sub">다른 Mac을 연결하면 그 Mac의 프로젝트가 내 목록에 그대로 보여요. 작업은 그 Mac에서 돌아가니, 노트북을 덮어도 그 Mac의 작업은 계속돼요.</p>
       <ul class="points">
-        <li>결정 카드와 알림, 메인 채팅, 변경 사항과 파일, 터미널, 결과물까지 내 Mac에서 쓰던 그대로 써요.</li>
         <li>Mac끼리는 종단 간 암호화로 연결되고, 연결된 Mac은 허락한 워크스페이스와 프로젝트만 봐요.</li>
       </ul>
     </div>
@@ -381,7 +375,6 @@
 
 <section class="wrap" id="real" aria-labelledby="s-real">
   <div class="rv">
-    <p class="kicker">위의 장면들은 실제 앱을 HTML로 옮겨 그린 거예요.</p>
     <h2 id="s-real">실제 Ondra는 이렇게 생겼어요.</h2>
   </div>
   <div class="real-tabs" role="tablist" aria-label="실제 화면">

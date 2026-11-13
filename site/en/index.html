@@ -136,7 +136,7 @@
       </div>
     </div>
   </div>
-  <p class="demo-note"><span>A recreation of the app in HTML. Real screenshots are <a href="#real">further down</a>.</span><button class="replay" type="button">Play again</button></p>
+  <p class="demo-note"><button class="replay" type="button">Play again</button></p>
 </div>
 
 <section class="wrap lead" aria-labelledby="s-check">
@@ -146,8 +146,7 @@
       <h2 id="s-check">Done should mean checked.</h2>
       <p class="sub">When a task says it's finished, Ondra matches that claim against the commands it actually ran and the files it actually changed, and flags anything it couldn't verify.</p>
       <ul class="points">
-        <li>Anything that doesn't line up goes back to the task with the reason, up to twice. Whatever still doesn't hold up is marked <b>Unverified</b>.</li>
-        <li>A task that changes an app runs its own copy of the app, uses it for real and keeps the screens and logs as proof. How to start it, drive it and what to check is written down once per project as a check skill, and every later task reuses it.</li>
+        <li>A task that changes an app opens the app, uses it for real and keeps the screens as proof.</li>
         <li>Risky changes get two reviewers before they finish, one for the design and one for the code.</li>
         <li>You get diffs, before-and-after screenshots, videos and test results, not just a summary.</li>
       </ul>
@@ -171,7 +170,7 @@
   <div class="rv">
     <p class="kicker">You were keeping every tab's state in your head.</p>
     <h2 id="s-one">Talk to one chat. See it all on the canvas.</h2>
-    <p class="sub">Main splits the work into tasks and runs them at the same time. The canvas links Main to projects, tasks and subagents, and shows which tool each task is using right now.</p>
+    <p class="sub">Main splits the work into tasks and runs them at once; the canvas shows what each one is doing.</p>
   </div>
   <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="The canvas: Main connects to the ondra, acme and blog projects and on to their tasks and subagents, while the task cards move through their steps">
     <div class="cv-head"><b>Canvas</b><span><i class="dot"></i>Running 2</span><span><i class="dot ask"></i>Needs reply 1</span></div>
@@ -227,11 +226,9 @@
     <div class="rv">
       <p class="kicker">One of your tabs was waiting on you. You didn't know which.</p>
       <h2 id="s-ask">It only asks when the call is yours.</h2>
-      <p class="sub">When a task needs your intent or your taste, a card shows up in Main with the options and the context behind them. Try answering this one.</p>
+      <p class="sub">When a task needs your intent or your taste, a card shows up in Main with the options and the context behind them.</p>
       <ul class="points">
-        <li><b>Your turn</b> in the sidebar takes you to the next task that needs a reply.</li>
         <li>With the window in the background, you get a system notification when a task finishes or needs you.</li>
-        <li>You can step into a running task and change its direction.</li>
       </ul>
     </div>
     <div class="dc mock" id="decide" data-done-ok="Done" data-done-run="Running" data-reset="Try again">
@@ -282,9 +279,7 @@
       <h2 id="s-routine">Hand recurring work to a routine.</h2>
       <p class="sub">Tasks start on their own at a set time or when something happens on GitHub. Write “every weekday at 9…” in the chat and Ondra suggests the routine as a card.</p>
       <ul class="points">
-        <li>Daily, on certain weekdays, every N minutes, or once.</li>
         <li>A new issue or PR, a review request, a comment on your PR, a failed CI run or a new release.</li>
-        <li>A run missed while your Mac slept runs once when it wakes.</li>
       </ul>
     </div>
     <div class="rt mock" data-scene="routine">
@@ -308,7 +303,6 @@
       <h2 id="s-mac">Run the long jobs on your other Mac.</h2>
       <p class="sub">Connect another Mac and its projects show up in your sidebar. Their tasks run on that Mac, so they keep going after you close your laptop.</p>
       <ul class="points">
-        <li>Decision cards, notifications, Main, changes and files, the terminal and results all work as they do locally.</li>
         <li>The connection is end-to-end encrypted, and a connected Mac only sees the workspaces and projects you allow.</li>
       </ul>
     </div>
@@ -381,7 +375,6 @@
 
 <section class="wrap" id="real" aria-labelledby="s-real">
   <div class="rv">
-    <p class="kicker">The scenes above are HTML recreations of the app.</p>
     <h2 id="s-real">Here's what Ondra actually looks like.</h2>
   </div>
   <div class="real-tabs" role="tablist" aria-label="Real screenshots">
