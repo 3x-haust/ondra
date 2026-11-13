@@ -911,23 +911,25 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let forcePointer = (action["pointer"] as? Bool) ?? false
         if right || name == kAXShowMenuAction || opensMenu(el) { try refuseMenuInBackground(pid) }
         let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
+        // the arrow gets there first, so the press lands where the user sees it point
+        VirtualCursor.shared.lead(spot)
         // an item of an open menu: the menu closes and applies the choice after the press
         // returns, so wait for that before the next step reads or acts on the result
         let menuOwner = axString(el, kAXRoleAttribute) == kAXMenuItemRole ? axParent(el).flatMap(axParent) : nil
         if count == 1 && !right && !forcePointer && AXUIElementPerformAction(el, name as CFString) == .success {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             if let owner = menuOwner { _ = waitForMenuClosed(owner) }
             return ["via": "ax"]
         }
         if count == 1 && right && !forcePointer && axActions(el).contains(kAXShowMenuAction),
            AXUIElementPerformAction(el, kAXShowMenuAction as CFString) == .success {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             return ["via": "ax-menu"]
         }
         // A row's text or cell has no press: select its row the accessibility way (no events,
         // so the window is never lifted the way a pointer click lifts it)
         if count == 1 && !right && !forcePointer, let row = selectableRow(el), selectRow(row) {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             return ["via": "ax-select"]
         }
         // The view ignores accessibility actions (custom rows, profile cards, …): click it
@@ -938,7 +940,7 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         if userActive(in: pid) { throw ActError.message("USER_ACTIVE", "the user is working in this app; nothing was sent") }
         try refusePointerIfItRaises(pid)
         guard let (p, w) = spot else { throw ActError.message("NO_BOUNDS", "this element has no visible bounds to click") }
-        VirtualCursor.shared.show(at: p, window: w, click: true)
+        VirtualCursor.shared.press()
         postClick(pid: pid, at: p, button: right ? .right : .left, count: count, window: w)
         return ["via": "pointer"]
     case "set-value":
@@ -994,6 +996,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
             if !focusIsOn(el, pid: pid), !(background && axSettable(el, kAXValueAttribute)),
                let (p, w) = spot, (try? refusePointerIfItRaises(pid)) != nil {
                 // some fields only take focus from a click: one addressed to the window, cursor untouched
+                VirtualCursor.shared.lead((p, w))
+                VirtualCursor.shared.press()
                 postClick(pid: pid, at: p, button: .left, count: 1, window: w)
                 usleep(80_000)
             }
@@ -1031,7 +1035,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let (p, w) = try resolvePoint(action, pid: pid, map: map)
         let button: CGMouseButton = (action["button"] as? String) == "right" ? .right : .left
         let count = (action["count"] as? Int) ?? 1
-        VirtualCursor.shared.show(at: p, window: w, click: true)
+        VirtualCursor.shared.lead((p, w))
+        VirtualCursor.shared.press()
         postClick(pid: pid, at: p, button: button, count: count, window: w)
     case "scroll":
         // Scroll wheel events posted to a background app carry no window and are
@@ -1056,10 +1061,13 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         }
         let (a, w) = try resolvePoint(fromSpec, pid: pid, map: map)
         let (b, _) = try resolvePoint(toSpec, pid: pid, map: map)
-        VirtualCursor.shared.show(at: a, window: w, click: false)
+        VirtualCursor.shared.lead((a, w))
+        VirtualCursor.shared.press()
         let t0 = nowMs()
+        // the arrow carries the drag across while the events go to the app
+        VirtualCursor.shared.show(at: b, window: w, click: false)
         let steps = postDrag(pid: pid, from: a, to: b, window: w)
-        VirtualCursor.shared.show(at: b, window: w, click: true)
+        VirtualCursor.shared.press()
         // a drop lands only in an app that carries ondra-bgguard.dylib, which runs the drag inside the app
         return ["dragSteps": steps, "dragMs": nowMs() - t0, "dropInApp": bgApp(pid)?.guarded == true]
     default:
@@ -1196,68 +1204,152 @@ func giveFrontBack(to pid: pid_t, from target: pid_t) -> Bool {
 }
 
 // ───────────────────────── virtual cursor ─────────────────────────
-// Shows where the agent points without touching the real cursor: a small pointer of
-// its own, drawn just above the target window (so the user's front windows still
-// cover it), gliding between points and pulsing once on a click. Click-through,
-// never key, never activates; it goes away a moment after the last action.
+// Shows where the agent points without touching the real cursor: Ondra's own pointer, drawn
+// on a click-through overlay ordered just above the target window, so the user's windows in
+// front still cover it and the user's cursor and focus stay where they are. It glides to
+// each point along a slight arc, arrives before the action lands, presses on a click, and
+// fades a few seconds after the last action. Never key, never activates.
 
-final class PointerView: NSView {
-    let ring = CAShapeLayer()
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        ring.fillColor = NSColor.clear.cgColor
-        ring.strokeColor = NSColor.controlAccentColor.cgColor
-        ring.lineWidth = 2
-        ring.opacity = 0
-        let r: CGFloat = 12
-        ring.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
-        ring.position = CGPoint(x: 14, y: frame.height - 14)
-        layer?.addSublayer(ring)
+/// Ondra's pointer: a rounded arrowhead in Ondra's blue, a white rim, a soft shadow.
+final class PointerLayer: CALayer {
+    static let box = CGSize(width: 32, height: 32)
+    /// the tip, in the box's bottom-left coordinates
+    static let tip = CGPoint(x: 6, y: 26)
+    private let body = CAGradientLayer()
+    private let rim = CAShapeLayer()
+    private let ripple = CAShapeLayer()
+
+    override init() {
+        super.init()
+        bounds = CGRect(origin: .zero, size: Self.box)
+        anchorPoint = CGPoint(x: Self.tip.x / Self.box.width, y: Self.tip.y / Self.box.height)
+        contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        let path = Self.arrow()
+        // the press: a soft ring that opens under the tip
+        let r: CGFloat = 15
+        ripple.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r), transform: nil)
+        ripple.position = Self.tip
+        ripple.fillColor = NSColor(srgbRed: 0.30, green: 0.61, blue: 0.94, alpha: 0.20).cgColor
+        ripple.strokeColor = NSColor(srgbRed: 0.30, green: 0.61, blue: 0.94, alpha: 0.55).cgColor
+        ripple.lineWidth = 1.25
+        ripple.opacity = 0
+        addSublayer(ripple)
+        shadowPath = path
+        shadowColor = NSColor.black.cgColor
+        shadowOpacity = 0.32
+        shadowRadius = 3.5
+        shadowOffset = CGSize(width: 0, height: -1.5)
+        // Ondra's accent (#1f6fd8), a touch lighter at the top so it reads on dark and light
+        body.frame = bounds
+        body.colors = [NSColor(srgbRed: 0.42, green: 0.71, blue: 0.97, alpha: 1).cgColor, NSColor(srgbRed: 0.12, green: 0.44, blue: 0.85, alpha: 1).cgColor]
+        body.startPoint = CGPoint(x: 0.3, y: 1)
+        body.endPoint = CGPoint(x: 0.6, y: 0)
+        let mask = CAShapeLayer()
+        mask.path = path
+        body.mask = mask
+        addSublayer(body)
+        rim.path = path
+        rim.fillColor = nil
+        rim.strokeColor = NSColor.white.cgColor
+        rim.lineWidth = 1.5
+        rim.lineJoin = .round
+        addSublayer(rim)
+        for l in [body, rim, ripple, mask] as [CALayer] { l.contentsScale = contentsScale }
     }
+    override init(layer: Any) { super.init(layer: layer) }
     required init?(coder: NSCoder) { nil }
-    override func draw(_ dirty: NSRect) {
-        // the tip sits at (14, h-14) so the click ring can centre on it
-        let tip = NSPoint(x: 14, y: bounds.height - 14)
-        let p = NSBezierPath()
-        p.move(to: tip)
-        p.line(to: NSPoint(x: tip.x, y: tip.y - 17))
-        p.line(to: NSPoint(x: tip.x + 4.2, y: tip.y - 13))
-        p.line(to: NSPoint(x: tip.x + 7.2, y: tip.y - 19.5))
-        p.line(to: NSPoint(x: tip.x + 9.8, y: tip.y - 18.3))
-        p.line(to: NSPoint(x: tip.x + 6.9, y: tip.y - 11.9))
-        p.line(to: NSPoint(x: tip.x + 12.2, y: tip.y - 11.9))
-        p.close()
-        p.lineJoinStyle = .round
-        NSColor.controlAccentColor.setFill()
-        p.fill()
-        NSColor.white.setStroke()
-        p.lineWidth = 1.5
-        p.stroke()
+
+    /// A navigation arrow pointing up-left: tip, a right wing, a notch, a lower wing; corners rounded.
+    static func arrow() -> CGPath {
+        let t = tip
+        let pts: [(CGPoint, CGFloat)] = [
+            (t, 1.8),
+            (CGPoint(x: t.x + 23, y: t.y - 8), 2.5),
+            (CGPoint(x: t.x + 10.4, y: t.y - 10.4), 1.4),
+            (CGPoint(x: t.x + 8, y: t.y - 23), 2.5),
+        ]
+        let p = CGMutablePath()
+        let n = pts.count
+        let start = CGPoint(x: (pts[n - 1].0.x + pts[0].0.x) / 2, y: (pts[n - 1].0.y + pts[0].0.y) / 2)
+        p.move(to: start)
+        for i in 0..<n { p.addArc(tangent1End: pts[i].0, tangent2End: pts[(i + 1) % n].0, radius: pts[i].1) }
+        p.closeSubpath()
+        return p
     }
-    func pulse() {
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = 0.4; scale.toValue = 1.0
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0.9; fade.toValue = 0
+
+    /// The press: the arrow dips and springs back while the ring opens and fades.
+    func press(after delay: CFTimeInterval = 0) {
+        let at = convertTime(CACurrentMediaTime(), from: nil) + delay
+        let dip = CAKeyframeAnimation(keyPath: "transform.scale")
+        dip.values = [1, 0.84, 1.05, 1]
+        dip.keyTimes = [0, 0.35, 0.72, 1]
+        dip.duration = 0.28
+        dip.beginTime = at
+        dip.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .easeOut)]
+        add(dip, forKey: "press")
+        let grow = CABasicAnimation(keyPath: "transform.scale")
+        grow.fromValue = 0.3; grow.toValue = 1.0
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.values = [0, 1, 0]; fade.keyTimes = [0, 0.2, 1]
         let g = CAAnimationGroup()
-        g.animations = [scale, fade]
-        g.duration = 0.35
+        g.animations = [grow, fade]
+        g.duration = 0.45
+        g.beginTime = ripple.convertTime(CACurrentMediaTime(), from: nil) + delay + 0.06
         g.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        ring.add(g, forKey: "pulse")
+        ripple.add(g, forKey: "ripple")
     }
 }
 
 final class VirtualCursor {
     static let shared = VirtualCursor()
+    /// room around the window so the arrow and its ring can sit at the window's edge
+    private let margin: CGFloat = 40
     private var panel: NSPanel?
-    private var view: PointerView?
+    private var pointer: PointerLayer?
     private var hide: DispatchWorkItem?
-    private let size = NSSize(width: 44, height: 44)
+    /// where the tip is headed (global top-left coordinates) and over which window; read from
+    /// the action thread to time the glide, written on main
+    private let lock = NSLock()
+    private var lastAt: CGPoint?
+    private var lastWindow: CGWindowID?
+    private var lastFrame: CGRect = .zero
+    private var shown = false
 
-    func show(at point: CGPoint, window: EventWindow?, click: Bool) {
-        guard let w = window, shownAsIs(w), visible(w.id, at: point) else { return }
-        DispatchQueue.main.async { self.place(point, above: w.id, click: click) }
+    /// Glide to `point` over `window`, pressing on arrival when `click`. Returns the glide's
+    /// length in seconds (0 when nothing is drawn: the window is hidden, minimized or covered).
+    @discardableResult
+    func show(at point: CGPoint, window: EventWindow?, click: Bool) -> TimeInterval {
+        guard let w = window, shownAsIs(w), visible(w.id, at: point) else { return 0 }
+        lock.lock()
+        let from = shown && lastWindow == w.id ? lastAt : nil
+        lastAt = point
+        lastWindow = w.id
+        shown = true
+        lock.unlock()
+        let travel = from.map { Self.travel(from: $0, to: point) } ?? 0
+        DispatchQueue.main.async { self.place(point, over: w, from: from, travel: travel, click: click) }
+        return travel
+    }
+
+    /// Glide there first and wait (briefly) until the arrow arrives, so the action lands
+    /// where the user sees it point. Used right before a click or a press.
+    func lead(_ spot: (CGPoint, EventWindow?)?) {
+        guard let (p, w) = spot else { return }
+        let t = show(at: p, window: w, click: false)
+        if t > 0 { usleep(UInt32(min(t, 0.32) * 1_000_000)) }
+    }
+
+    /// The press where the arrow is now.
+    func press() {
+        lock.lock(); let on = shown; lock.unlock()
+        guard on else { return }
+        DispatchQueue.main.async { self.pointer?.press(); self.keepAlive() }
+    }
+
+    /// Longer moves take a little longer, like a hand (Fitts): about 0.15 s to 0.5 s.
+    static func travel(from a: CGPoint, to b: CGPoint) -> TimeInterval {
+        let d = hypot(b.x - a.x, b.y - a.y)
+        return d < 2 ? 0 : min(0.5, 0.14 + 0.075 * log2(1 + d / 24))
     }
 
     /// On screen at its real size: not hidden, minimized or a Stage Manager thumbnail.
@@ -1282,7 +1374,7 @@ final class VirtualCursor {
     }
 
     private func make() -> NSPanel {
-        let p = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
+        let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
@@ -1291,38 +1383,103 @@ final class VirtualCursor {
         p.isReleasedWhenClosed = false
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
-        let v = PointerView(frame: NSRect(origin: .zero, size: size))
+        let v = NSView(frame: p.contentLayoutRect)
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
         p.contentView = v
-        view = v
+        let ptr = PointerLayer()
+        ptr.opacity = 0
+        v.layer?.addSublayer(ptr)
+        pointer = ptr
         return p
     }
 
-    private func place(_ point: CGPoint, above id: CGWindowID, click: Bool) {
+    /// AppKit frame of the overlay for a window (global top-left coordinates in).
+    private func overlayFrame(_ r: CGRect) -> NSRect {
+        let primary = NSScreen.screens.first?.frame.height ?? CGDisplayBounds(CGMainDisplayID()).height
+        return NSRect(x: r.minX - margin, y: primary - r.maxY - margin, width: r.width + 2 * margin, height: r.height + 2 * margin)
+    }
+
+    /// A global top-left point in the overlay's layer (bottom-left) coordinates.
+    private func local(_ g: CGPoint, in r: CGRect) -> CGPoint {
+        CGPoint(x: g.x - r.minX + margin, y: r.maxY + margin - g.y)
+    }
+
+    private func place(_ point: CGPoint, over w: EventWindow, from: CGPoint?, travel: TimeInterval, click: Bool) {
         let p = panel ?? make()
         panel = p
-        // global top-left coordinates → AppKit's bottom-left, tip at the point
-        let primary = NSScreen.screens.first?.frame.height ?? CGDisplayBounds(CGMainDisplayID()).height
-        let origin = NSPoint(x: point.x - 14, y: primary - point.y - (size.height - 14))
-        if p.isVisible && p.alphaValue > 0 {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.18
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                p.animator().setFrameOrigin(origin)
-            }
-        } else {
-            p.setFrameOrigin(origin)
-            p.alphaValue = 1
+        guard let ptr = pointer else { return }
+        if lastFrame != w.frame || !p.isVisible {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            p.setFrame(overlayFrame(w.frame), display: false)
+            if let f = from { ptr.position = local(f, in: w.frame) }
+            CATransaction.commit()
+            lastFrame = w.frame
         }
-        p.order(.above, relativeTo: Int(id))
-        if click { view?.pulse() }
+        p.order(.above, relativeTo: Int(w.id))
+        let to = local(point, in: w.frame)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if ptr.opacity < 0.5 || from == nil {
+            // appear: drift in from a little below-right of the point and settle
+            ptr.removeAllAnimations()
+            ptr.position = to
+            ptr.opacity = 1
+            let drift = CABasicAnimation(keyPath: "position")
+            drift.fromValue = NSValue(point: CGPoint(x: to.x + 14, y: to.y - 14))
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            let grow = CABasicAnimation(keyPath: "transform.scale")
+            grow.fromValue = 0.7
+            let g = CAAnimationGroup()
+            g.animations = [drift, fade, grow]
+            g.duration = 0.22
+            g.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.3, 1)
+            ptr.add(g, forKey: "appear")
+            ptr.transform = CATransform3DIdentity
+            CATransaction.commit()
+            if click { ptr.press(after: 0.2) }
+            keepAlive()
+            return
+        }
+        // glide along a slight arc (a hand never moves in a ruler-straight line)
+        let start = (ptr.presentation() ?? ptr).position
+        ptr.position = to
+        ptr.removeAnimation(forKey: "appear")
+        if travel > 0 {
+            let dx = to.x - start.x, dy = to.y - start.y
+            let d = max(1, hypot(dx, dy))
+            let bend = min(48, d * 0.12)
+            let control = CGPoint(x: (start.x + to.x) / 2 - dy / d * bend, y: (start.y + to.y) / 2 + dx / d * bend)
+            let path = CGMutablePath()
+            path.move(to: start)
+            path.addQuadCurve(to: to, control: control)
+            let glide = CAKeyframeAnimation(keyPath: "position")
+            glide.path = path
+            glide.duration = travel
+            glide.calculationMode = .paced
+            glide.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0, 0.18, 1)
+            ptr.add(glide, forKey: "glide")
+        }
+        CATransaction.commit()
+        if click { ptr.press(after: travel) }
+        keepAlive()
+    }
+
+    /// Fade out a few seconds after the last action.
+    private func keepAlive() {
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let p = self?.panel else { return }
-            NSAnimationContext.runAnimationGroup({ ctx in ctx.duration = 0.25; p.animator().alphaValue = 0 },
-                                                 completionHandler: { if p.alphaValue == 0 { p.orderOut(nil) } })
+            guard let self, let p = self.panel, let ptr = self.pointer else { return }
+            self.lock.lock(); self.shown = false; self.lock.unlock()
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.3)
+            CATransaction.setCompletionBlock { if ptr.opacity == 0 { p.orderOut(nil) } }
+            ptr.opacity = 0
+            ptr.transform = CATransform3DMakeScale(0.85, 0.85, 1)
+            CATransaction.commit()
         }
         hide = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
     }
 }
 
