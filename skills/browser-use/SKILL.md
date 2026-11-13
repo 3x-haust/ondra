@@ -8,7 +8,8 @@ description: >
   shared browser (your own tab, shared logins), signing in from the macOS
   keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
   and canvas apps, Google Docs/Sheets and Gmail in the signed-in browser, and
-  how to report with visual-report blocks.
+  how to report with visual-report blocks. Not for a public page you only need
+  to read: web_fetch does that.
 metadata:
   ondra-commands: '\bondra-browser\b|(^|[\s/])browse\s'
 ---
@@ -39,8 +40,9 @@ browse look [-s <css>] [--all]       # more than the folded look shows
 - **Read, don't look, for text.** `look` lists controls (`role "name" @ref`,
   menus and footers folded); `read` gives the words. Public pages you only read
   (docs, articles, a README): `web_fetch` needs no browser at all.
-- **Never wait for a time.** `open` and `do` already wait for the page to settle.
-  For a specific end state put it in the batch: `"wait --text Saved"`,
+- **Never wait for a time** (no `wait <ms>`, no `sleep` for a page to load).
+  `open` and `do` already wait for the page to settle. For a specific end state
+  put it in the batch: `"wait --text Saved"`,
   `"wait --url **/done"`, `"wait @e5 --state hidden"`.
 - **Many items** (lists, tables, pages): one `browse do "eval ..."` or the site's
   own API, and recipes for sites you come back to: `reference.md`.
@@ -73,15 +75,18 @@ looking for them.
    your tab. Never pass `--session` or `--cdp`, never run `close --all`, and
    never switch to a tab you did not open (`tab list` shows other jobs' tabs
    too). A popup your page opens is yours: `ondra-browser tab <tN>` to it, and
-   back when done. If a command fails with `tab_gone`, run
-   `ondra-browser tab new <url>` and carry on. If it fails with `Failed to read`
+   back when done. If your tab was closed (`tab_gone`), `browse open <url>` opens
+   a new one by itself; for a plain command, run `ondra-browser tab new <url>`
+   and carry on. If it fails with `Failed to read`
    / `no response came back`, the shared browser stopped answering and the app
    restarts it on the same port: wait 10 seconds, then `browse open <url>`
    again. Don't loop on `tab list` or `get url`, and don't pass a `timeout`
    under 60 to browser commands.
 2. **Leave the shared state alone.** Never sign out, never `cookies clear` or
    `storage ... clear`, never `cookies get` into files: that would sign out, or
-   copy the logins of, every job and the user.
+   copy the logins of, every job and the user. To see a local dev server signed
+   out, open it on its other host name (`127.0.0.1` for `localhost`, or the
+   reverse): it has its own cookies and storage. A live site: ask the user.
 3. **The user watches already.** Your tab streams to the app on its own; don't
    run any `stream` command. Keep the `now` line current.
 4. **Signing in.** Re-open the page first: you may already be signed in. A login
