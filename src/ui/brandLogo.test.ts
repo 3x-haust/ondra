@@ -32,6 +32,11 @@ describe("a name → a logo", () => {
     // an internal name: nothing at all
     expect(resolve({ label: "billing-service", note: "주문 처리" }, full)).toEqual({});
     expect(resolve({ label: "주문 서비스" }, full)).toEqual({});
+    // words of another script around a brand word: no guess ("파일·git" is not Git)
+    expect(resolve({ label: "파일·git", note: "상태 파일, 작업별 worktree" }, full)).toEqual({});
+    expect(resolve({ label: "작업 지휘", note: "TypeScript · 웹뷰 안" }, full)).toEqual({});
+    expect(resolve({ label: "네이티브 셸", note: "Rust · Tauri 2" }, full)).toMatchObject({ icon: { slug: "rust" } });
+    expect(resolve({ label: "파일·git", logo: "git" }, full)).toMatchObject({ icon: { slug: "git" }, online: "Git" });
     // a logo: by its brand title when simple-icons has it, else as written
     expect(resolve({ label: "DB", logo: "postgres" }, full)).toMatchObject({ icon: { slug: "postgresql" }, online: "PostgreSQL" });
     expect(resolve({ label: "auth", logo: "clerk" }, full)).toMatchObject({ icon: { slug: "clerk" }, online: "Clerk" });

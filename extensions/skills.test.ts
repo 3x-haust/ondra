@@ -401,6 +401,54 @@ describe("code-map skill", () => {
     expect(api.nodes.find((n: { id: string }) => n.id === "orders").zone).toBe("api");
     expect(api.nodes.find((n: { id: string }) => n.id === "web")).toMatchObject({ kind: "app" });
     expect(api.edges).toContainEqual({ from: "web", to: "orders", label: "주문 생성" });
+    expect(sys.zones).toEqual([{ id: "sys", label: "Shop" }, { id: "outside", label: "외부" }]);
+  }, 30_000);
+
+  it("keeps pictures readable: main lines only, flows of six parts in plain words", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const dir = mkdtempSync(join(tmpdir(), "codemap-read-"));
+    for (const f of ["a", "b", "c", "d", "e", "f", "g"]) {
+      mkdirSync(join(dir, f));
+      writeFileSync(join(dir, f, "x.ts"), "export {};\n");
+    }
+    const run = (...args: string[]) => {
+      try {
+        return { code: 0, out: execFileSync(process.execPath, [script, ...args, "--repo", dir], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CODEMAP_DIR: join(dir, "map") } }) };
+      } catch (e) {
+        return { code: (e as { status: number }).status, out: (e as { stdout: string }).stdout };
+      }
+    };
+    const box = (id: string, container: string) => ({ id, container, label: id.toUpperCase(), paths: [`${id}/**`], note: "x" });
+    const map = {
+      containers: [{ id: "ui", label: "UI", note: "x" }, { id: "core", label: "Core", note: "x" }, { id: "native", label: "Native", note: "x" }],
+      externals: [{ id: "llm", label: "LLM" }],
+      actors: [{ id: "me", label: "Me" }],
+      components: [box("a", "ui"), box("b", "ui"), box("c", "core"), box("d", "core"), box("e", "native"), box("f", "native"), box("g", "native")],
+      relations: [
+        { from: "a", to: "c", label: "작업 시작" }, { from: "b", to: "d", label: "설정 저장" }, { from: "c", to: "a", label: "결과 돌려주기" },
+        { from: "d", to: "e", label: "agent_spawn", tech: "invoke" }, { from: "e", to: "llm", label: "모델에게 묻기" }, { from: "f", to: "llm", label: "x", overview: false },
+      ],
+      flows: [{ id: "go", label: "요청", steps: [
+        { from: "me", to: "a", label: "입력" }, { from: "a", to: "b", label: "넘기기" }, { from: "b", to: "c", label: "작업 시작" },
+        { from: "c", to: "d", label: "나누기" }, { from: "d", to: "e", label: "agent_spawn" }, { from: "e", to: "f", label: "실행" }, { from: "f", to: "llm", label: "모델에게 묻기" },
+      ] }],
+    };
+    mkdirSync(join(dir, "map"));
+    writeFileSync(join(dir, "map", "map.json"), JSON.stringify(map));
+    const check = run("check").out;
+    expect(check).toContain('"agent_spawn" names code');
+    // eight parts fold into containers: Me, UI, Core, Native, LLM; hops inside one container go
+    const [flow] = run("blocks", "--flow", "go").out.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+    expect(flow.actors).toEqual(["Me", "UI", "Core", "Native", "LLM"]);
+    expect(flow.steps.map((x: { label: string }) => x.label)).toEqual(["입력", "작업 시작", "agent_spawn", "모델에게 묻기"]);
+    // both ways is one line with both verbs, the request's way; overview:false stays out
+    const [sys] = run("blocks").out.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+    expect(sys.edges).toContainEqual({ from: "ui", to: "core", label: "작업 시작 ⇄ 결과 돌려주기" });
+    expect(sys.edges.filter((x: { from: string; to: string }) => [x.from, x.to].sort().join() === "core,ui")).toHaveLength(1);
+    expect(sys.nodes.find((n: { id: string }) => n.id === "llm").zone).toBe("outside");
+    expect(sys.edges).toContainEqual({ from: "native", to: "llm", label: "모델에게 묻기" });
   }, 30_000);
 
   it("reads an existing Groma map into a draft", async () => {

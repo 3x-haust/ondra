@@ -51,6 +51,7 @@ and unique across the whole map. Write labels and notes in the user's language.
 
 | where | field | meaning |
 |---|---|---|
+| top | `system.label`, `system.outside` | the system's name; the label of the box around outside systems (`외부` by default) |
 | top | `summary` | 2–3 sentences: what the system is and how it is split. Shown under the system picture. |
 | top | `built.commit` | the commit the map was last true for; only `check --stamp` writes it |
 | top | `ignore` | globs for source files that belong to no part (tests, fixtures, generated, samples) |
@@ -58,18 +59,21 @@ and unique across the whole map. Write labels and notes in the user's language.
 | container | `tech`, `entry` | what it is built with; the file where it starts (opens from the picture) |
 | component | `container` | the container id it lives in |
 | component | `paths` | globs relative to the repo: `**` any depth, `*` one folder level; a bare folder means all of it. A file belongs to the most specific match. |
+| any box | `short` | a name of 10 characters at most, used where space is tight (flow pictures) |
+| any box | `logo` | a real product's brand name or slug. Without it, a box shows a logo only when its label or note is all Latin and names a brand (`Postgres`, `Next.js · Vercel`); `파일·git` gets none |
 | component | `kind` | its box in the container picture, as for containers (`service` when left out; `app` for UI parts) |
 | component | `entry`, `gotchas`, `files` | where to start reading (opens from the picture); traps a changer must know; notes on single files |
 | relation | `from`, `to` | any two ids (actor, external, container or component). A component-to-component relation shows as a container-to-container line on the system picture. |
-| relation | `label`, `tech`, `ref`, `async` | the verb; how (HTTP, IPC, socket, stdin, import); `path:line` of the call; a dashed line |
-| flow | `steps` | `{from, to, label, note?}` in order |
+| relation | `label`, `tech`, `ref`, `async` | what happens, in plain words (no function or event names); how (HTTP, IPC, socket, stdin, import); `path:line` of the call; a dashed line |
+| relation | `overview` | `true` keeps its line on the system picture, `false` leaves it to the container pictures |
+| flow | `steps` | `{from, to, label, note?}` in order; six parts at most, plain-sentence labels |
 
 ## What the blocks look like
 
 `codemap blocks` (system):
 
 ```json
-{"type":"arch","label":"Shop 구조","zones":[{"id":"sys","label":"Shop"}],"nodes":[{"id":"shopper","label":"구매자","kind":"user"},{"id":"web","label":"웹앱","zone":"sys","kind":"app","note":"Next.js"},{"id":"api","label":"API 서버","zone":"sys","kind":"service","note":"Hono · Node"},{"id":"stripe","label":"Stripe","kind":"external","logo":"stripe"}],"edges":[{"from":"web","to":"api","label":"주문 생성"},{"from":"api","to":"stripe","label":"카드 청구"}],"say":"…"}
+{"type":"arch","label":"Shop 구조","zones":[{"id":"sys","label":"Shop"},{"id":"outside","label":"외부"}],"nodes":[{"id":"shopper","label":"구매자","kind":"user"},{"id":"web","label":"웹앱","zone":"sys","kind":"app","note":"Next.js"},{"id":"api","label":"API 서버","zone":"sys","kind":"service","note":"Hono · Node"},{"id":"stripe","label":"Stripe","zone":"outside","kind":"external","logo":"stripe"}],"edges":[{"from":"web","to":"api","label":"주문 생성"},{"from":"api","to":"stripe","label":"카드 청구"}],"say":"…"}
 ```
 
 `codemap blocks --container api` draws the same kind of picture one level down:

@@ -382,6 +382,18 @@ function check() {
     if (!r.label) warn.push(`relation ${r.from} → ${r.to}: no label (a verb: "저장", "calls", "streams events")`);
   }
   for (const fl of map.flows ?? []) for (const s of fl.steps ?? []) if (!ids.has(s.from) || !ids.has(s.to)) errors.push(`flow ${fl.id}: step ${s.from} → ${s.to} names an unknown id`);
+  // pictures a newcomer can read: plain verbs, flows of six parts at most, names that fit
+  for (const r of map.relations ?? []) if (codeLike(r.label)) warn.push(`relation ${r.from} → ${r.to}: "${r.label}" names code; say what happens and put the mechanism in tech`);
+  if (!errors.length) {
+    const byId = byIdOf(map);
+    const containerOf = (id) => (byId.get(id)?.level === "component" ? byId.get(id).container : id);
+    for (const fl of map.flows ?? []) {
+      const { steps, parts, name } = flowSteps(map, fl, byId, containerOf);
+      if (parts.length > MAX_PARTS) errors.push(`flow ${fl.id}: ${parts.length} parts even with components folded into containers (at most ${MAX_PARTS}): drop minor hops`);
+      for (const s of steps) if (codeLike(s.label)) warn.push(`flow ${fl.id}: step "${s.label}" names code; say what happens`);
+      for (const id of parts) if ([...name(id)].length > 10) warn.push(`flow ${fl.id}: "${name(id)}" is too long for the picture; give ${id} a short name (≤ 10 characters)`);
+    }
+  }
 
   const all = files();
   const src = all.filter(isSource);
@@ -486,7 +498,7 @@ const abs = (ref) => {
 };
 const KINDS = new Set(["user", "app", "service", "function", "db", "cache", "queue", "storage", "external", "gateway"]);
 
-/** Relations seen at one level: each end lifted to the node that stands for it there. */
+/** Relations seen at one level: each end lifted to the node that stands for it there, one entry per direction. */
 function lifted(map, standFor) {
   const seen = new Map();
   for (const r of map.relations ?? []) {
@@ -494,17 +506,71 @@ function lifted(map, standFor) {
     const b = standFor(r.to);
     if (!a || !b || a === b) continue;
     const k = `${a}>${b}`;
-    const x = seen.get(k);
-    if (!x) seen.set(k, { from: a, to: b, labels: r.label ? [r.label] : [], async: !!r.async, kind: r.kind, direct: r.from === a && r.to === b });
-    else {
-      if (r.from === a && r.to === b && !x.direct) {
-        x.direct = true;
-        x.labels = r.label ? [r.label] : x.labels;
-      }
-      x.async &&= !!r.async;
-    }
+    const direct = r.from === a && r.to === b;
+    const x = seen.get(k) ?? seen.set(k, { from: a, to: b, labels: [], count: 0, async: true, overview: false, out: 0 }).get(k);
+    x.count++;
+    if (r.label && !x.labels.includes(r.label)) direct ? x.labels.unshift(r.label) : x.labels.push(r.label);
+    x.async &&= !!r.async;
+    if (r.overview === true) x.overview = true;
+    if (r.overview === false) x.out++;
   }
-  return [...seen.values()].map((x) => ({ from: x.from, to: x.to, label: x.labels.join(" · ") || undefined, async: x.async || undefined, kind: x.kind }));
+  // forced in by any of its relations, left out only when all of them say so
+  return [...seen.values()].map(({ out, ...x }) => ({ ...x, overview: x.overview ? true : out === x.count ? false : undefined }));
+}
+
+/** A label that names code (agent_spawn, bridge:call, invoke) instead of saying what happens. */
+const CODE_WORD = /^(invoke|emit|spawn|exec|rpc|ipc|dispatch|subscribe|listen|callback)$/i;
+const codeLike = (label) => !!label && (/[_`]|::|\w:\w|\(\)|=>|[a-z][A-Z]/.test(label) || label.split(/\s*[·,/]\s*/).some((w) => CODE_WORD.test(w.trim())));
+
+/**
+ * The overview's lines: one per pair of boxes (the busier direction, the other one's verb
+ * added), and only the main ones: every box keeps its busiest line, then the busiest of the
+ * rest up to a cap. `overview: true|false` on a relation forces it in or out.
+ */
+function overviewEdges(map, standFor, boxes) {
+  const pairs = new Map();
+  const order = new Map(boxes.map((id, i) => [id, i]));
+  for (const e of lifted(map, standFor)) {
+    const k = [e.from, e.to].sort().join("|");
+    const p = pairs.get(k);
+    if (!p) {
+      pairs.set(k, { ...e, label: e.labels[0], weight: e.count });
+      continue;
+    }
+    // both ways: one line, drawn the way a request goes (from the box listed first), both verbs on it
+    const [main, back] = (order.get(e.from) ?? 0) < (order.get(p.from) ?? 0) ? [e, p] : [p, e];
+    const label = [main.labels[0], back.labels[0] ?? back.label].filter(Boolean).join(" ⇄ ") || undefined;
+    pairs.set(k, { ...main, label, weight: p.weight + e.count, async: main.async && back.async, overview: p.overview || e.overview ? true : p.overview === false && e.overview === false ? false : undefined });
+  }
+  const all = [...pairs.values()].filter((e) => e.overview !== false).sort((a, b) => b.weight - a.weight);
+  const keep = new Set(all.filter((e) => e.overview === true));
+  for (const id of boxes) {
+    const best = all.find((e) => e.from === id || e.to === id);
+    if (best) keep.add(best);
+  }
+  const cap = Math.max(5, Math.round(boxes.length * 0.75));
+  for (const e of all) if (keep.size < cap) keep.add(e);
+  return all.filter((e) => keep.has(e)).map((e) => ({ from: e.from, to: e.to, label: e.label, async: e.async || undefined }));
+}
+
+const MAX_PARTS = 6;
+/** A flow as drawn: past six parts, components fold into their containers and the hops inside one container go. */
+function flowSteps(map, fl, byId, containerOf) {
+  const parts = (st) => new Set(st.flatMap((s) => [s.from, s.to]));
+  const plain = (s, from, to) => {
+    if (s.label && !codeLike(s.label)) return s.label;
+    const r = (map.relations ?? []).find((x) => x.from === from && x.to === to && x.label && !codeLike(x.label));
+    return r?.label ?? s.label;
+  };
+  let steps = (fl.steps ?? []).map((s) => ({ from: s.from, to: s.to, label: plain(s, s.from, s.to), note: s.note }));
+  if (parts(steps).size > MAX_PARTS) {
+    steps = steps
+      .map((s) => ({ ...s, from: containerOf(s.from) ?? s.from, to: containerOf(s.to) ?? s.to }))
+      .filter((s) => s.from !== s.to)
+      .filter((s, i, all) => !(i && all[i - 1].from === s.from && all[i - 1].to === s.to));
+  }
+  const name = (id) => byId.get(id)?.short ?? byId.get(id)?.label ?? id;
+  return { steps, parts: [...parts(steps)], name };
 }
 
 const clean = (o) => JSON.stringify(o, (_, v) => (v === undefined || (Array.isArray(v) && !v.length) ? undefined : v));
@@ -517,6 +583,7 @@ function blocks() {
     const x = byId.get(id);
     return !x ? undefined : x.level === "component" ? x.container : id;
   };
+  const kindOf = (x, fallback) => (x?.level === "actor" ? "user" : KINDS.has(x?.kind) ? x.kind : x?.level === "external" ? "external" : fallback);
   const cId = flag("container");
   const compId = flag("component");
   const flowId = flag("flow");
@@ -531,13 +598,13 @@ function blocks() {
     const outsideIds = [...new Set(edges.flatMap((e) => [e.from, e.to]).filter((id) => !inside.has(id)))];
     // the same picture as the system one, one level down: this container as the zone, its neighbours around it
     const nodes = [
-      ...mine.map((c) => ({ id: c.id, label: c.label, zone: cId, kind: KINDS.has(c.kind) ? c.kind : "service", note: c.note, ref: abs(c.entry ?? (c.paths?.[0] && !/[*?]/.test(c.paths[0]) && extname(c.paths[0]) ? c.paths[0] : undefined)) })),
+      ...mine.map((c) => ({ id: c.id, label: c.label, zone: cId, kind: kindOf(c, "service"), note: c.note, logo: c.logo, ref: abs(c.entry ?? (c.paths?.[0] && !/[*?]/.test(c.paths[0]) && extname(c.paths[0]) ? c.paths[0] : undefined)) })),
       ...outsideIds.map((id) => {
         const x = byId.get(id);
-        return { id, label: x?.label ?? id, kind: x?.level === "actor" ? "user" : KINDS.has(x?.kind) ? x.kind : x?.level === "external" ? "external" : "app", note: x?.tech ?? x?.note, logo: x?.logo };
+        return { id, label: x?.label ?? id, kind: kindOf(x, "app"), note: x?.tech ?? x?.note, logo: x?.logo };
       }),
     ];
-    out.push(clean({ type: "arch", label: `${cont.label} 안`, zones: [{ id: cId, label: cont.label }], nodes, edges: edges.map((e) => ({ from: e.from, to: e.to, label: e.label, async: e.async })), say: cont.note }));
+    out.push(clean({ type: "arch", label: `${cont.label} 안`, zones: [{ id: cId, label: cont.label }], nodes, edges: edges.map((e) => ({ from: e.from, to: e.to, label: e.labels[0], async: e.async || undefined })), say: cont.note }));
   } else if (typeof compId === "string") {
     const c = byId.get(compId);
     if (!c || c.level !== "component") throw new Error(`no component "${compId}"`);
@@ -549,18 +616,20 @@ function blocks() {
   } else if (typeof flowId === "string") {
     const fl = (map.flows ?? []).find((f) => f.id === flowId);
     if (!fl) throw new Error(`no flow "${flowId}"; flows: ${(map.flows ?? []).map((f) => f.id).join(", ")}`);
-    const actors = [...new Set(fl.steps.flatMap((s) => [s.from, s.to]))].map((id) => byId.get(id)?.label ?? id);
-    out.push(clean({ type: "sequence", label: fl.label, actors, steps: fl.steps.map((s) => ({ from: byId.get(s.from)?.label ?? s.from, to: byId.get(s.to)?.label ?? s.to, label: s.label, note: s.note })) }));
+    const { steps, parts, name } = flowSteps(map, fl, byId, containerOf);
+    if (parts.length > MAX_PARTS) console.error(`flow ${flowId}: ${parts.length} parts even at container level (at most ${MAX_PARTS}); cut minor hops in map.json`);
+    out.push(clean({ type: "sequence", label: fl.label, actors: parts.map(name), steps: steps.map((s) => ({ from: name(s.from), to: name(s.to), label: s.label, note: s.note })) }));
   } else {
-    // the whole system: who uses it, its containers, what it talks to outside
+    // the whole system: who uses it, its containers, what it talks to outside; the main lines only
     const sys = map.system?.label ?? basename(root);
     const zones = [{ id: "sys", label: sys }];
+    if (map.externals?.length) zones.push({ id: "outside", label: map.system?.outside ?? "외부" });
     const nodes = [
       ...(map.actors ?? []).map((a) => ({ id: a.id, label: a.label, kind: "user", note: a.note })),
-      ...(map.containers ?? []).map((c) => ({ id: c.id, label: c.label, zone: "sys", kind: KINDS.has(c.kind) ? c.kind : "app", note: c.tech ?? c.note, logo: c.logo, ref: abs(c.entry) })),
-      ...(map.externals ?? []).map((x) => ({ id: x.id, label: x.label, kind: KINDS.has(x.kind) ? x.kind : "external", note: x.note, logo: x.logo })),
+      ...(map.containers ?? []).map((c) => ({ id: c.id, label: c.label, zone: "sys", kind: kindOf(c, "app"), note: c.tech ?? c.note, logo: c.logo, ref: abs(c.entry) })),
+      ...(map.externals ?? []).map((x) => ({ id: x.id, label: x.label, zone: "outside", kind: kindOf(x, "external"), note: x.note, logo: x.logo })),
     ];
-    const edges = lifted(map, containerOf).map((e) => ({ from: e.from, to: e.to, label: e.label, async: e.async }));
+    const edges = overviewEdges(map, containerOf, nodes.map((n) => n.id));
     out.push(clean({ type: "arch", label: map.system?.label ? `${map.system.label} 구조` : "구조", zones, nodes, edges, say: map.summary }));
   }
   console.log(["```blocks", ...out, "```"].join("\n"));
