@@ -339,13 +339,19 @@
     });
   }
 
-  // ── intro video: shown once its file loads ──
+  // ── intro video: its section shows once the file loads; it plays (muted) while in view ──
   function video() {
     var v = $("video[data-src]"); if (!v) return;
-    var fig = v.closest("figure");
+    var sec = v.closest("section");
     v.addEventListener("loadedmetadata", function () {
-      fig.hidden = false;
-      if (motion) { var p = v.play(); if (p && p.catch) p.catch(quiet); }
+      sec.hidden = false;
+      if (!motion || !("IntersectionObserver" in window)) return;
+      new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (e.isIntersecting) { var p = v.play(); if (p && p.catch) p.catch(quiet); }
+          else v.pause();
+        });
+      }, { threshold: 0.5 }).observe(v);
     });
     v.src = v.getAttribute("data-src");
   }
