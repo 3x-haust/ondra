@@ -188,26 +188,26 @@ export function BrowserPip() {
           onPointerCancel={cancel}
           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}
         >
-          <div class="pip-screen">
-            <Show
-              when={live.frame()}
-              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={srcOf(p(), j().host)} alt="" draggable={false} />}</Show>}
-            >
-              {(f) => <img class="pip-live-frame" src={f()} alt="" draggable={false} />}
-            </Show>
-          </div>
-          <div class="pip-label">
+          <div class="pip-head">
             <span class="pip-live" aria-hidden="true" />
-            <span class="pip-title">{j().title}</span>
-            <Show when={site()}><span class="pip-site">{site()}</span></Show>
-          </div>
-          <div class="pip-tools">
+            <span class="pip-what">
+              <span class="pip-title">{j().title}</span>
+              <Show when={site()}><span class="pip-site">{site()}</span></Show>
+            </span>
             <button class="pip-btn" title={t("크게 보기")} aria-label={t("크게 보기")} onClick={(e) => (e.stopPropagation(), open())}>
               <Icon name="fit" size={13} />
             </button>
             <button class="pip-btn" title={t("닫기")} aria-label={t("닫기")} onClick={close}>
               <Icon name="x" size={13} />
             </button>
+          </div>
+          <div class="pip-screen">
+            <Show
+              when={live.frame()}
+              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={srcOf(p(), j().host)} alt="" draggable={false} />}</Show>}
+            >
+              {(f) => <img src={f()} alt="" draggable={false} />}
+            </Show>
           </div>
         </div>
       )}
