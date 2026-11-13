@@ -22,3 +22,16 @@ on the old job's branch, handed its result. Cases that expected an append to a
 finished job expect `"follows": "<id>"` instead; an append to a finished job is
 still turned into a follow-up in code, but the check fails so the prompt stays
 honest. 42/42 after the change.
+
+## 2026-11-13 · GEPA on main's prompt (evals/gepa)
+
+- One run per case mostly measured luck (31/32 → 32/32 on a single sample). Now `--repeats 3`, and
+  `--focus` trains on the cases main gets wrong while still validating on the rest.
+- 10 moments the user had to correct main in real use (`from-real-hard.json`): 9 already pass 3/3.
+- Two independent runs proposed the same rule: a project's report answers the request it was
+  handed, even after newer messages; say what finished and what's pending. All 104 cases × 3:
+  97.4% → 99.4% (two-handdowns 0/3 → 3/3, repo-no-project 2/3 → 3/3; review-fix and known-name
+  each lost one of three runs).
+- demo-after: appending the demo to the queued check job (t-qa) that follows t-cu is right too.
+- Runs on its own empty data: `ONDRA_DATA_DIR=… ONDRA_DEVBRIDGE_PORT=17322` and vite on 1430
+  (see evals/gepa/README.md); a simulation adds a space the app lacks and borrows any account.
