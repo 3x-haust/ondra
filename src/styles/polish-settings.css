@@ -1416,3 +1416,49 @@
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }
+
+/* 시크릿: one row per key (name · its folder · delete), then the add row */
+.settings-inner .sec-row {
+  gap: var(--s-8);
+}
+.settings-inner .sec-key {
+  font-size: var(--fs-sm);
+}
+.settings-inner .sec-add {
+  display: flex;
+  gap: var(--s-8);
+  align-items: center;
+}
+.settings-inner .sec-add .sec-name {
+  flex: 0 0 180px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.settings-inner .sec-add .sec-value {
+  flex: 1;
+  min-width: 0;
+}
+.settings-inner .sec-env {
+  flex: none;
+  gap: var(--s-4);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.settings-inner .sec-warn {
+  gap: var(--s-8);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.settings-inner .sec-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.settings-inner .sec-place {
+  padding: 1px var(--s-6);
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}

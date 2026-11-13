@@ -250,6 +250,8 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         tauri::async_runtime::spawn_blocking(move || crate::browser::ensure(&app, &space).ok()).await.ok().flatten()
     };
     let mut env = Vec::new();
+    // agent_spawn swaps this for the saved secrets (secrets.rs); the page only sees the flag
+    env.push((crate::secrets::MARKER.into(), "1".into()));
     if let Some(dir) = sidecar_dir() {
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));

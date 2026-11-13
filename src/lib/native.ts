@@ -598,3 +598,24 @@ export const onUpdateProgress = (f: (p: { version: string; percent: number }) =>
   inTauri ? listen<{ version: string; percent: number }>("update:progress", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Save bytes as a file in ~/Downloads (a free name); returns the path. */
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
+/** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
+export interface SavedSecrets {
+  global: string[];
+  /** project id → names */
+  projects: Record<string, string[]>;
+}
+export const secretList = () => call<SavedSecrets>("secret_list", undefined, { global: [], projects: {} });
+/** For a project: `writeDotenv` also writes it into the project's .env; `addIgnore` first adds .env to .gitignore. */
+export const secretSet = (o: { name: string; value: string; project?: string; folder?: string; writeDotenv?: boolean; addIgnore?: boolean }) =>
+  call<SavedSecrets>("secret_set", o, { global: [], projects: {} });
+export const secretDelete = (o: { name: string; project?: string; folder?: string }) => call<SavedSecrets>("secret_delete", o, { global: [], projects: {} });
+/** Takes the keys, tokens and passwords this Mac's projects keep in .env into the keychain (values stay native). */
+export const secretSync = (projects: [string, string][]) =>
+  call<{ saved: SavedSecrets; added: string[] }>("secret_sync", { projects }, { saved: { global: [], projects: {} }, added: [] });
+export interface SecretGroup {
+  names: string[];
+  /** project: undefined for a secret of every job; item: "NAME" or "dir/sub:NAME" */
+  places: { project?: string | null; item: string }[];
+}
+/** Every saved secret, those with the same value as one (compared natively, values never sent). */
+export const secretOverview = () => call<SecretGroup[]>("secret_overview", undefined, []);

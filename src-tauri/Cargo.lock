@@ -3017,6 +3017,7 @@ dependencies = [
  "portable-pty",
  "reqwest 0.13.5",
  "rustls",
+ "security-framework",
  "serde",
  "serde_json",
  "sha2",

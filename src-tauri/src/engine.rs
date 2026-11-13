@@ -324,6 +324,9 @@ pub fn agent_spawn(
     // several parts may add to PATH (bundled tools, a space's CLI shims): all of them go first, in order
     let mut path_parts: Vec<&str> = Vec::new();
     for (k, v) in &env {
+        if k == crate::secrets::MARKER {
+            continue;
+        }
         if k == "PATH" {
             path_parts.push(v);
         } else {
@@ -333,6 +336,8 @@ pub fn agent_spawn(
     if !path_parts.is_empty() {
         cmd.env("PATH", format!("{}:{}", path_parts.join(":"), with_sidecars(user_path())));
     }
+    // a job's engine: the saved secrets, read here and never sent to the page
+    crate::secrets::inject(&app, &mut cmd, &env);
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

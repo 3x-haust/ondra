@@ -1,4 +1,21 @@
 export default {
+  // secrets
+  "시크릿": "Secrets",
+  "API 키와 비밀번호를 작업이 쓰되, 에이전트는 값을 보지 못하게 해요": "API keys and passwords jobs can use without the agent seeing the values",
+  "적용 범위": "Applies to",
+  "모든 작업": "All jobs",
+  "지운 프로젝트": "Removed project",
+  "{n}곳에서 삭제": "Delete from {n} places",
+  "값": "Value",
+  "없어요": "None",
+  "프로젝트 .env에서 {n}개를 가져왔어요": "Brought in {n} from project .env files",
+  "{name}을(를) 저장했어요": "Saved {name}",
+  "{name}을(를) 바꿨어요": "Replaced {name}",
+  "{name} 삭제": "Delete {name}",
+  "Ondra 밖에서 실행해도 같은 값이 쓰여요": "Also written to .env, so runs outside Ondra get it",
+  ".env가 .gitignore에 없어요": ".env isn't in .gitignore",
+  ".gitignore에 추가": "Add to .gitignore",
+  ".env 빼고 저장": "Save without .env",
   // general
   "테마": "Theme",
   "화면 크기": "Zoom",
