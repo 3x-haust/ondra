@@ -10,6 +10,8 @@ export interface PaneInfo {
   view: Accessor<View>;
   /** it has the focus (the sidebar and the keyboard act on it) */
   focused: Accessor<boolean>;
+  /** it touches the window's top right: when split, the one panel button is drawn there */
+  edge: Accessor<boolean>;
 }
 export const PaneCtx = createContext<PaneInfo>();
 /** The pane this component is drawn in (none outside the panes: settings, the panel, overlays). */

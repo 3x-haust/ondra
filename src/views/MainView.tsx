@@ -19,7 +19,7 @@ import { splitProjectId } from "../state/mirror";
 import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
-import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, togglePanel, view, type Draft, type View, previewFile } from "../state/ui";
+import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -44,12 +44,12 @@ const hostPick = (p: Place) => {
   const a = hostAccount(p, state.space);
   return p.model && a?.models.includes(p.model) ? { model: p.model, thinking: p.thinking } : p.thinking ? { thinking: p.thinking } : {};
 };
-import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
+import { noModifiers, shortcutHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta, type GlyphKind } from "./Sidebar";
 import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
-import { PaneControls } from "./PaneControls";
+import { PaneControls, PanelButton } from "./PaneControls";
 import { taskContextMenu } from "../ui/taskMenu";
 
 /** "{task}에 전달했어요" with the task name in bold */
@@ -922,9 +922,7 @@ export function MainView() {
             <Icon name="file" size={16} />
           </button>
         </Show>
-        <button class="icon-btn" classList={{ on: panelOpen() && focused() }} data-shortcut="panel" title={withHint(t("패널"), "panel")} onClick={togglePanel}>
-          <Icon name="panel" size={16} />
-        </button>
+        <PanelButton on={panelOpen() && focused()} />
         <PaneControls />
       </header>
       <Show

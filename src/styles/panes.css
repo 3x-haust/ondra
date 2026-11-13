@@ -51,13 +51,16 @@
   border-color: var(--line);
 }
 /* the panes you aren't in: their header steps back */
-.main.split .pane .head > * {
+.main.split .pane .head > *,
+.main.split .pane .head-actions > * {
   transition: opacity var(--dur) var(--ease);
 }
-.main.split .pane:not(.focused) .head > * {
+.main.split .pane:not(.focused) .head > :not(.head-actions, .panel-btn),
+.main.split .pane:not(.focused) .head-actions > :not(.panel-btn) {
   opacity: 0.55;
 }
-.main.split .pane:not(.focused):hover .head > * {
+.main.split .pane:not(.focused):hover .head > :not(.head-actions, .panel-btn),
+.main.split .pane:not(.focused):hover .head-actions > :not(.panel-btn) {
   opacity: 0.8;
 }
 /* a job that needs you, in a pane you aren't looking at: a still ring until you go there */

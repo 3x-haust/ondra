@@ -8,7 +8,7 @@ import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, hadTab, inPane, openChanges, openPanel as showTool, openTask, panelOpen, panelTab, setView, toast, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, hadTab, inPane, openChanges, openPanel as showTool, openTask, panelOpen, panelTab, setView, toast, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
 import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
@@ -32,7 +32,7 @@ import { Glyph, renaming, setRenaming, SidebarToggle } from "./Sidebar";
 import { StatusIcon } from "../ui/ForkCard";
 import { TaskMenuPanel } from "../ui/taskMenu";
 import { t as tr } from "../i18n";
-import { PaneControls } from "./PaneControls";
+import { PaneControls, PanelButton } from "./PaneControls";
 import { usePaneFocused } from "../state/panes";
 
 
@@ -482,9 +482,7 @@ export function TaskView(props: { id: string }) {
             <span class="spacer" data-tauri-drag-region />
             <div class="head-actions">
               <MoreMenu id={task().id} />
-              <button class="icon-btn" classList={{ on: mine() }} data-shortcut="panel" title={withHint(tr("패널"), "panel")} onClick={togglePanel}>
-                <Icon name="panel" size={16} />
-              </button>
+              <PanelButton on={mine()} />
               <PaneControls />
             </div>
           </header>
