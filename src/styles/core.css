@@ -25,6 +25,11 @@ body {
   overflow: hidden;
   letter-spacing: var(--tracking);
 }
+/* bold is 600: the scale has three weights (400 / 500 / 600), never the browser's 700 */
+b,
+strong {
+  font-weight: var(--fw-strong);
+}
 button {
   font: inherit;
   color: inherit;

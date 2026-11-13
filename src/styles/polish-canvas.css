@@ -29,7 +29,7 @@
   padding: 0 var(--s-8);
   border-radius: var(--r-sm);
   color: var(--ink-3);
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   white-space: nowrap;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);

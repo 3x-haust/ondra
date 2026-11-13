@@ -248,7 +248,10 @@ export function SideChat() {
       </Show>
       <div class="side-list" ref={box}>
         <Show when={!msgs().length}>
-          <div class="side-empty">{t("작업과 상관없이 따로 묻는 대화예요")}</div>
+          <div class="side-empty">
+            <Icon name="message" size={20} />
+            <span>{t("작업과 상관없이 따로 묻는 대화예요")}</span>
+          </div>
         </Show>
         <For each={msgs()} >
           {(m) => (
