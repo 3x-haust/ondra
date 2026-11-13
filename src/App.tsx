@@ -30,6 +30,7 @@ import { Sidebar } from "./views/Sidebar";
 import { Panel } from "./views/Panel";
 import { migrateMemory } from "./engine/memory";
 import { startTidy } from "./engine/tidy";
+import { startSkillReflect } from "./engine/skillReflect";
 import { Icon } from "./ui/Icon";
 import { ShortcutHints } from "./ui/ShortcutHints";
 import { QuoteBar } from "./ui/QuoteBar";
@@ -109,7 +110,7 @@ export default function App() {
       for (const m of state.memory) void (m.text, m.invalidAt, m.keys, m.about);
       soonIndex();
     });
-    if (!location.search.includes("fixture")) startTidy();
+    if (!location.search.includes("fixture")) (startTidy(), startSkillReflect());
     if (!location.search.includes("fixture")) {
       startUpdates();
       void getVersion().then((v) => { setAppVersion(v); installLog(v); setFeedbackVersion(v); void afterLaunch(v); void countLaunch(v); }).catch(() => {});
