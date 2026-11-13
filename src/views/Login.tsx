@@ -43,7 +43,7 @@ const say = (m: string) =>
     .replace(/^Complete login in your browser.*$/i, () => t("로그인 후 주소 붙여넣기"))
     .replace(/^Enter (.+) API key:?$/i, (_, name) => t("{name} API 키", { name }));
 
-export function LoginSheet(props: { accountId: string; title?: string; onClose: () => void }) {
+export function LoginSheet(props: { accountId: string; title?: string; onClose: () => void; /** open on the other services and API keys */ more?: boolean }) {
   const agent = `login:${props.accountId}:${Date.now()}`;
   // the last list shows at once; the engine (≈2s to start) refreshes it behind
   const KEY = `ondra.loginProviders.${props.accountId}`;
@@ -57,7 +57,7 @@ export function LoginSheet(props: { accountId: string; title?: string; onClose: 
   const [providers, setProviders] = createSignal<Provider[] | null>(kept());
   const [error, setError] = createSignal("");
   const [step, setStep] = createSignal<Step>({ kind: "pick" });
-  const [more, setMore] = createSignal(false);
+  const [more, setMore] = createSignal(!!props.more);
   const [q, setQ] = createSignal("");
   const [answer, setAnswer] = createSignal("");
   let loginId = "";

@@ -6,6 +6,7 @@ import "./styles/core.css";
 import "./styles/app.css";
 import "./styles/t3.css";
 import "./styles/polish-shell.css";
+import "./styles/onboarding.css";
 import "./styles/polish-chat.css";
 import "./styles/polish-task.css";
 import "./styles/polish-canvas.css";

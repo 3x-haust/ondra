@@ -243,7 +243,7 @@ export default function App() {
 
   return (
     <Show when={loaded()}>
-      <div class="app" classList={{ "sb-hidden": sidebarAway(), "panel-wide": panelWide() && panelShown() }}>
+      <div class="app" classList={{ "sb-hidden": sidebarAway(), "panel-wide": panelWide() && panelShown() }} inert={!state.onboarded || undefined}>
         <div class="sb-wrap" inert={sidebarAway() || undefined}>
           <Show when={view().name === "settings"} fallback={<Sidebar />}><SettingsNav onBack={back} /></Show>
         </div>
