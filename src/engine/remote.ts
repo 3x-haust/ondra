@@ -10,10 +10,11 @@
 // fields when they did, and the entries from the first one that differs.
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
-import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
-import type { Task } from "../state/types";
-import type { HostInfo } from "../state/mirror";
+import { inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, type SavedSecrets } from "../lib/native";
+import { forgetSecret, noteSecrets } from "./secretMemory";
+import { addProject, onWrite, projectById, setState, state, taskById, updateTask } from "../state/store";
+import type { Decision, Task } from "../state/types";
+import type { FarAsk, HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
 import { accountName, service } from "../ui/AccountPicker";
 import { modelsNow, refreshModels } from "./modelList";
@@ -49,6 +50,8 @@ interface Conn {
   all: boolean;
   /** the workspaces and accounts as last sent */
   info?: string;
+  /** the questions of its jobs as last sent */
+  decisions?: string;
 }
 const conns = new Map<number, Conn>();
 const send = (conn: number, data: Record<string, unknown>) => remoteCmd({ cmd: "send", conn, data }).catch(() => {});
@@ -122,10 +125,28 @@ function flush() {
     }
     ship(true);
     c.all = false;
+    sendDecisions(conn, c);
   }
   dirty.clear();
   dirtyAll = false;
   projectsDirty = false;
+}
+
+/** the questions the jobs that Mac keeps wait on (its cards, "내 차례"), sent when they change.
+ *  A Mac too old to know {t:"decisions"} passes it by. */
+export function decisionsFor(device: string, watch: Set<string>): Decision[] {
+  const c = { device, watch } as Conn;
+  return state.decisions.filter((d) => {
+    const t = d.taskId.startsWith("main:") ? undefined : taskById(d.taskId);
+    return !!t && !t.host && wanted(c, t);
+  });
+}
+function sendDecisions(conn: number, c: Conn) {
+  const list = decisionsFor(c.device, c.watch);
+  const json = JSON.stringify(list);
+  if (json === c.decisions) return;
+  c.decisions = json;
+  void send(conn, { t: "decisions", list });
 }
 
 /** this Mac's workspaces, accounts and how much of each plan is used: what the other Mac shows */
@@ -167,18 +188,80 @@ async function sendProjects(conn: number) {
 
 /** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
-function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; hostSpace?: string; spaceLabel?: string; account?: string; model?: string; thinking?: string; display?: string }) {
+export function create(c: { device: string }, f: FarAsk) {
   const p = f.project ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
   const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
   const from = { device: c.device, space: f.space ?? "" };
   const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
-  return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: account, from, model: f.model, thinking: f.thinking });
+  // ids it builds on must be jobs of this Mac in that workspace (the ones that Mac was shown)
+  const mine = (id: unknown) => {
+    const t = typeof id === "string" ? taskById(id) : undefined;
+    return t && !t.host && t.space === space ? t.id : undefined;
+  };
+  const after = (Array.isArray(f.after) ? f.after : []).map(mine).filter((x): x is string => !!x);
+  const reach = (Array.isArray(f.reach) ? f.reach : []).map((l) => state.spaces.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space);
+  const id = jobs.createTask({
+    id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id,
+    isolate: typeof f.isolate === "boolean" ? f.isolate : state.settings.isolate, accountId: account, from, model: f.model, thinking: f.thinking,
+    ...(typeof f.branch === "string" && f.branch ? { branch: f.branch } : {}),
+    ...(f.priority === 0 || f.priority === 1 || f.priority === 2 || f.priority === 3 ? { priority: f.priority } : {}),
+    ...(f.weight === "light" || f.weight === "heavy" ? { weight: f.weight } : {}),
+    ...(f.origin && typeof f.origin.path === "string" ? { origin: f.origin } : {}),
+    ...(after.length ? { after } : {}),
+    ...(reach.length ? { reach } : {}),
+    ...(mine(f.follows) ? { follows: mine(f.follows) } : {}),
+    ...(f.issue && typeof f.issue.n === "number" ? { issue: f.issue } : {}),
+    ...(typeof f.by === "string" && f.by ? { by: f.by } : {}),
+  });
+  // asked with a permission of its own (that Mac's default, or the one picked there)
+  if (f.permission === "ask" || f.permission === "edits" || f.permission === "full") updateTask(id, (x) => (x.permission = f.permission));
+  return id;
 }
+
+/** One of this Mac's projects' secrets, for Settings › 시크릿 on the Mac that added it: its saved names
+ *  (and how many came in from its .env), never a value. A value comes this way only to be saved. */
+export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean }
+const projectFolder = (id: unknown) => {
+  const p = typeof id === "string" ? projectById(id) : undefined;
+  if (!p || p.host) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  return p;
+};
+const namesOf = (s: SavedSecrets, project: string): string[] => s.projects[project] ?? [];
+export const secretCalls = {
+  secretList: async (project: string): Promise<FarSecrets> => ({ items: namesOf(await secretList(), projectFolder(project).id) }),
+  // what its .env files hold comes in first, as when the page opens here
+  secretSync: async (project: string): Promise<FarSecrets> => {
+    const p = projectFolder(project);
+    const r = await secretSync([[p.id, p.folder]]);
+    noteSecrets(r.saved, state.projects ?? []);
+    return { items: namesOf(r.saved, p.id), added: r.added.length };
+  },
+  secretSet: async (o: { project: string; name: string; value: string; writeDotenv?: boolean; addIgnore?: boolean }): Promise<FarSecrets> => {
+    const p = projectFolder(o?.project);
+    if (typeof o.name !== "string" || typeof o.value !== "string" || !o.name || !o.value) throw new Error("이름과 값이 필요해요");
+    try {
+      const s = await secretSet({ name: o.name, value: o.value, project: p.id, folder: p.folder, writeDotenv: !!o.writeDotenv, addIgnore: !!o.addIgnore });
+      noteSecrets(s, state.projects ?? []);
+      return { items: namesOf(s, p.id) };
+    } catch (e) {
+      // .env isn't ignored by git there: that Mac's user is asked first, as here
+      if (String(e instanceof Error ? e.message : e).startsWith("ENV_NOT_IGNORED")) return { items: namesOf(await secretList(), p.id), notIgnored: true };
+      throw e;
+    }
+  },
+  secretDelete: async (o: { project: string; name: string }): Promise<FarSecrets> => {
+    const p = projectFolder(o?.project);
+    const s = await secretDelete({ name: String(o.name ?? ""), project: p.id, folder: p.folder });
+    forgetSecret(p.id, String(o.name ?? ""));
+    return { items: namesOf(s, p.id) };
+  },
+};
 
 /** what another Mac may do here: the same the user does with a job, and add a project */
 const CALLS: Record<string, (...a: never[]) => unknown> = {
-  addProject: (folder: string) => addProject(state.space, folder),
+  // in the workspace that Mac named (by its name here), else the one open here
+  addProject: (folder: string, space?: string) => addProject(state.spaces.find((s) => s.label === space)?.id ?? state.space, folder),
   tell: jobs.tell,
   stopTask: jobs.stopTask,
   resumeTask: jobs.resumeTask,
@@ -197,6 +280,16 @@ const CALLS: Record<string, (...a: never[]) => unknown> = {
   moveQueued: jobs.moveQueued,
   setTaskModel: jobs.setTaskModel,
   setTaskPermission: jobs.setTaskPermission,
+  finishTask: jobs.finishTask,
+  pauseTask: jobs.pauseTask,
+  togglePin: jobs.togglePin,
+  setPriority: jobs.setPriority,
+  setWeight: jobs.setWeight,
+  setTaskAccount: jobs.setTaskAccount,
+  decide: jobs.decide,
+  handOn: jobs.handOn,
+  // a project's secrets (Settings › 시크릿): names come back, never a value
+  ...secretCalls,
 };
 
 async function handle(conn: number, msg: Record<string, unknown>) {

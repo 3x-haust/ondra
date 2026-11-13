@@ -5,10 +5,10 @@
 // engine/remote.ts; the network is the ondra-remote helper.
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { mirror, remoteProjectId, setMirror, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
+import { mirror, readAt, remoteProjectId, seenHere, setMirror, type FarAsk, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
 import { accountsIn, projectsIn, setState, state, tasksIn, uid } from "../state/store";
 import { switchSpace } from "../state/workspace";
-import type { Entry, SpaceId, Task } from "../state/types";
+import type { Decision, Entry, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
 
@@ -60,7 +60,7 @@ export function far(id: string, fn: string, args: unknown[]): Promise<unknown> |
 }
 
 /** a new job in another Mac's project: shown here at once, made and run there */
-export function startFar(host: string, task: Task, ask: { id: string; title: string; ask: string; project?: string; space: string; hostSpace?: string; spaceLabel?: string; account?: string; model?: string; thinking?: string; display?: string }) {
+export function startFar(host: string, task: Task, ask: FarAsk) {
   if (!mirror.hosts[host]) status(host, "lost");
   setMirror("hosts", host, "tasks", (l) => [...l, task]);
   void viaHost(host, "create", [ask]).catch(() => setMirror("hosts", host, "tasks", (l) => l.filter((x) => x.id !== task.id)));
@@ -79,7 +79,11 @@ function place(host: string, t: Task, list: Task[]) {
 
 interface Patch { id: string; head?: Omit<Task, "entries">; from?: number; entries?: Entry[]; n?: number }
 
-function apply(host: string, patches: Patch[], gone: string[] = [], all = false) {
+const ending = (s?: string) => s === "done" || s === "failed";
+
+export function apply(host: string, patches: Patch[], gone: string[] = [], all = false) {
+  // the jobs seen to end in this patch (not those already ended when first heard of)
+  const was = new Map((mirror.hosts[host]?.tasks ?? []).map((x) => [x.id, x.status]));
   setMirror(
     "hosts",
     host,
@@ -105,6 +109,8 @@ function apply(host: string, patches: Patch[], gone: string[] = [], all = false)
           x.entries.splice(p.from ?? 0, x.entries.length - (p.from ?? 0), ...p.entries);
           if (p.n !== undefined && x.entries.length > p.n) x.entries.length = p.n;
         }
+        // opened here since it last said something: still read here
+        if (x.unread && seenHere(x)) x.unread = false;
       }
       for (const id of gone) {
         const i = list.findIndex((y) => y.id === id);
@@ -112,6 +118,36 @@ function apply(host: string, patches: Patch[], gone: string[] = [], all = false)
       }
     }),
   );
+  for (const x of mirror.hosts[host]?.tasks ?? []) {
+    const before = was.get(x.id);
+    if (before && !ending(before) && ending(x.status)) for (const f of endedHooks) f(x);
+  }
+}
+
+const endedHooks: ((t: Task) => void)[] = [];
+/** another Mac's job was seen to end (done or failed): main hears it as it hears this Mac's own */
+export const onFarEnded = (f: (t: Task) => void) => void endedHooks.push(f);
+
+/** the questions that Mac's jobs (those kept here) wait on */
+export const applyDecisions = (host: string, list: Decision[]) => mirror.hosts[host] && setMirror("hosts", host, "decisions", list);
+
+/** opened here: its dot goes here until it says more (that Mac's own dot is left alone) */
+export function markFarRead(id: string) {
+  for (const [host, h] of Object.entries(mirror.hosts)) {
+    const i = h.tasks.findIndex((x) => x.id === id);
+    if (i < 0) continue;
+    readAt.set(id, h.tasks[i].entries.length);
+    if (h.tasks[i].unread) setMirror("hosts", host, "tasks", i, "unread", false);
+  }
+}
+
+/** answer another Mac's question there; its card goes now and comes back if that Mac can't take it */
+export async function farDecide(d: Decision, optionId: string) {
+  const host = Object.keys(mirror.hosts).find((h) => mirror.hosts[h].decisions?.some((x) => x.id === d.id));
+  if (!host) return;
+  setMirror("hosts", host, "decisions", (l) => (l ?? []).filter((x) => x.id !== d.id));
+  const ok = await viaHost(host, "decide", [d.id, optionId]).then(() => true, () => false);
+  if (!ok && mirror.hosts[host] && !mirror.hosts[host].decisions?.some((x) => x.id === d.id)) setMirror("hosts", host, "decisions", (l) => [...(l ?? []), d]);
 }
 
 /** what this Mac wants from that one: the jobs of its projects added here */
@@ -185,6 +221,9 @@ export function onPeer(ev: Record<string, unknown>) {
     }
     case "patch":
       apply(host, (d.tasks as Patch[]) ?? [], (d.gone as string[]) ?? [], !!d.all);
+      break;
+    case "decisions":
+      applyDecisions(host, Array.isArray(d.list) ? (d.list as Decision[]) : []);
       break;
     case "ret": {
       const p = pending.get(Number(d.seq));
@@ -269,10 +308,11 @@ export function addHostProject(host: string, p: { id: string; name: string; fold
 }
 
 /** a folder on that Mac made a project there, then added here */
-export async function addHostFolder(host: string, folder: string) {
-  const id = await viaHost<string>(host, "addProject", [folder]);
+export async function addHostFolder(host: string, folder: string, space: SpaceId = state.space) {
+  // made in that Mac's workspace of this one's name (a Mac too old for it: the one open there)
+  const id = await viaHost<string>(host, "addProject", [folder, state.spaces.find((s) => s.id === space)?.label]);
   const p = { id, name: folder.replace(/\/+$/, "").split("/").pop() || folder, folder };
-  addHostProject(host, p);
+  addHostProject(host, p, space);
   return remoteProjectId(host, id);
 }
 

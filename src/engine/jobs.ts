@@ -8,7 +8,7 @@
 //                a new job that carries on a finished one
 // A caller only sees its own space (and the spaces the user opened to that job); a job reads
 // another job's messages only where tasks.ts lets it read that job's logs (jobsAllowed).
-import { projectById, state, taskById } from "../state/store";
+import { allDecisions, allTasks, decisionFor, projectById, state, taskById } from "../state/store";
 import type { Decision, Entry, Evidence, SpaceId, Task } from "../state/types";
 import { tokens } from "./memory";
 import { SECRET_WORDS } from "./proof";
@@ -35,7 +35,8 @@ export function callerOf(worker: string | undefined): Caller | undefined {
 /** the jobs a caller may look up: its space's (and the spaces the user opened to it), never quick answers */
 export function visibleJobs(c: Caller): Task[] {
   const spaces = new Set<string>([c.space, ...(c.task?.reach ?? [])]);
-  return state.tasks.filter((t) => spaces.has(t.space) && !t.answer);
+  // main sees the other Macs' jobs it shows too (it starts and follows them); a job only this Mac's
+  return (c.task ? state.tasks : allTasks()).filter((t) => spaces.has(t.space) && !t.answer);
 }
 
 /** the caller may act on it (message it): its own space only */
@@ -83,7 +84,7 @@ const trimmed = (s: string | undefined, n: number) => {
 };
 
 /** what it is on (running), what it asks (waiting), what it did (done), why it stopped (failed) */
-export function lastSaid(t: Task, decisions: Pick<Decision, "taskId" | "question">[] = state.decisions): { tag: "asks" | "did" | "failed" | "now"; text: string } {
+export function lastSaid(t: Task, decisions: Pick<Decision, "taskId" | "question">[] = allDecisions()): { tag: "asks" | "did" | "failed" | "now"; text: string } {
   const q = decisions.find((d) => d.taskId === t.id)?.question;
   if (t.status === "waiting" && q) return { tag: "asks", text: q };
   if (t.status === "done" && t.summary) return { tag: "did", text: t.summary };
@@ -251,7 +252,7 @@ function evidenceOf(t: Task): { items: Evidence[]; unverified: string[] } {
 
 /** what it is waiting on, if anything: the user's answer, jobs before it, its subagents */
 function waitingOn(t: Task): string | undefined {
-  const d = state.decisions.find((x) => x.taskId === t.id);
+  const d = decisionFor(t.id);
   if (t.status === "waiting" && d) return `the user's answer to "${flat(d.question, 200)}"${d.options.length ? ` (options: ${d.options.map((o) => o.label).join(" / ")})` : ""}`;
   const before = (t.after ?? []).map((id) => taskById(id)).filter((x): x is Task => !!x && !(x.status === "done" || x.status === "failed"));
   if (before.length) return `jobs before it: ${before.map((x) => `${x.id} "${flat(x.title, 40)}" (${x.status})`).join(", ")}`;

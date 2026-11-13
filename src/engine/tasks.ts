@@ -1,8 +1,8 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
-import { far, startFar } from "./hosts";
-import { splitProjectId } from "../state/mirror";
+import { far, farDecide, markFarRead, startFar } from "./hosts";
+import { hostOfTask, mirroredDecision, splitProjectId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
@@ -2118,7 +2118,16 @@ export function createTask(f: {
   const far_ = splitProjectId(f.project);
   const farHost = far_?.host ?? f.host;
   if (farHost) {
-    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, { id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, spaceLabel: state.spaces.find((x) => x.id === f.space)?.label, account: f.hostAccount, model: f.model, thinking: f.thinking, display: f.display });
+    // the rest of what it was asked with goes too: the ids it follows or waits for are that Mac's own
+    // (a job of it shows here under its id there); a Mac too old to know a field leaves it out
+    startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, {
+      id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, spaceLabel: state.spaces.find((x) => x.id === f.space)?.label,
+      account: f.hostAccount, model: f.model, thinking: f.thinking, display: f.display,
+      branch: f.branch, priority: task.priority, weight: task.weight, origin: f.origin, isolate: f.isolate, after: task.after,
+      // the other workspaces it may reach, by name (that Mac's workspaces of the same names)
+      reach: task.reach?.map((x) => state.spaces.find((s) => s.id === x)?.label).filter((x): x is string => !!x), follows: task.follows, issue: f.issue, by: f.by,
+      permission: task.permission,
+    });
     return id;
   }
   setState("tasks", (list) => [...list, task]);
@@ -2191,6 +2200,7 @@ function takeBranch(id: string, prevId: string) {
  * context on its result and branch.
  */
 export function handOn(prevId: string, nextId: string) {
+  { const r = far(prevId, "handOn", [prevId, nextId]); if (r) return r as never; }
   const prev = taskById(prevId);
   if (!prev || finished(prev)) return;
   updateTask(prevId, (x) => {
@@ -2514,7 +2524,12 @@ function requeue(t: Task) {
 
 export async function decide(decisionId: string, optionId: string) {
   const d = state.decisions.find((x) => x.id === decisionId);
-  if (!d) return;
+  if (!d) {
+    // a question of another Mac's job: answered there, as if the user had answered it on that Mac
+    const m = mirroredDecision(decisionId);
+    if (m) await farDecide(m, optionId);
+    return;
+  }
   track("decision_answered", { waited_s: Math.max(0, Math.round((Date.now() - d.at) / 1000)) });
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
   // main asked it: the answer goes back to main as the user's message
@@ -2607,6 +2622,7 @@ export function lastReport(t: Task): string | undefined {
 export const meansStop = (text: string) => /멈춰|멈추|멈춤|그만|중지|중단|보류|\bstop\b|\bpause\b|\bhold\b/i.test(text) && !/말고|않|안 ?멈|계속 (진행|해)|don'?t stop|keep going|continue/i.test(text);
 
 export function pauseTask(id: string) {
+  { const r = far(id, "pauseTask", [id]); if (r) return r as never; }
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
@@ -2658,6 +2674,7 @@ export function resumeTask(id: string) {
   resumeKids(id);
 }
 export const finishTask = (id: string) => {
+  { const r = far(id, "finishTask", [id]); if (r) return r as never; }
   updateTask(id, (t) => (t.endedBy = "user"));
   finish(id, "직접 완료 처리");
 };
@@ -2731,8 +2748,16 @@ export async function setTaskModel(id: string, model: string, thinking: string) 
   }
 }
 
-export const setPriority = (id: string, p: Priority) => updateTask(id, (t) => (t.priority = p));
-export const setWeight = (id: string, w: Weight) => updateTask(id, (t) => (t.weight = w));
+export const setPriority = (id: string, p: Priority) => void (far(id, "setPriority", [id, p]) ?? updateTask(id, (t) => (t.priority = p)));
+export const setWeight = (id: string, w: Weight) => void (far(id, "setWeight", [id, w]) ?? updateTask(id, (t) => (t.weight = w)));
+/** The account a job runs on (작업 정보): it runs on that account's own model from then on. */
+export function setTaskAccount(id: string, accountId: string) {
+  { const r = far(id, "setTaskAccount", [id, accountId]); if (r) return r as never; }
+  // one of its own workspace's accounts only (another Mac names one this Mac showed it)
+  const t = taskById(id);
+  if (!t || t.accountId === accountId || accountById(accountId)?.space !== t.space) return;
+  updateTask(id, (x) => ((x.accountId = accountId), (x.model = undefined)));
+}
 
 // ─────────────────────────────── scheduler
 
@@ -2922,7 +2947,13 @@ export async function editTurn(id: string, entryId: string, text: string) {
 
 // ─────────────────────────────── list housekeeping
 
-export const togglePin = (id: string) => updateTask(id, (t) => (t.pinned = !t.pinned));
+export const togglePin = (id: string) => void (far(id, "togglePin", [id]) ?? updateTask(id, (t) => (t.pinned = !t.pinned)));
+/** Seen: its unread dot goes. Another Mac's job keeps its dot there (that Mac's user may not have
+ *  seen it); here it stays gone until the job says more. */
+export function markRead(id: string) {
+  if (hostOfTask(id)) return markFarRead(id);
+  updateTask(id, (x) => (x.unread = false));
+}
 export function archiveTask(id: string, on = true) {
   { const r = far(id, "archiveTask", [id, on]); if (r) return r as never; }
   updateTask(id, (t) => {
@@ -2936,12 +2967,14 @@ export function renameTask(id: string, title: string) {
   const v = title.trim().slice(0, 80);
   if (v) updateTask(id, (t) => (t.title = v));
 }
-/** Same request again as a new job (same folder, model and permission). */
-export function duplicateTask(id: string): string | undefined {
-  { const r = far(id, "duplicateTask", [id]); if (r) return undefined; }
+/** Same request again as a new job (same folder, model and permission). Another Mac's job runs
+ *  again there: the new one's id comes back once that Mac made it. */
+export function duplicateTask(id: string): string | undefined | Promise<string | undefined> {
+  { const r = far(id, "duplicateTask", [id]); if (r) return r.then((n) => (typeof n === "string" ? n : undefined)); }
   const t = taskById(id);
   if (!t) return;
-  const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId });
+  // one another Mac asked for stays its: that Mac keeps a copy of it as of the first one
+  const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId, ...(t.from ? { from: t.from } : {}) });
   updateTask(n, (x) => {
     x.model = t.model;
     x.thinking = t.thinking;

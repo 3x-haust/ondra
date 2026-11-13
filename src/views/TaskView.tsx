@@ -3,7 +3,7 @@
 import { feedbackCommands } from "../ui/Feedback";
 import { Fold } from "../ui/Fold";
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
-import { decisionFor, homeDir, projectById, taskById, updateTask } from "../state/store";
+import { decisionFor, homeDir, projectById, taskById } from "../state/store";
 import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
@@ -15,7 +15,7 @@ import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { fsFiles } from "../lib/native";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
-import { rawStats, prOf, renameTask, finishTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
+import { rawStats, prOf, renameTask, finishTask, markRead, stopTask, resumeTask, startTask, setTaskAccount, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -307,7 +307,7 @@ export function TaskView(props: { id: string }) {
       {(task) => {
         const decision = () => decisionFor(task().id);
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
-        createEffect(on(() => task().unread, (u) => u && updateTask(task().id, (x) => (x.unread = false))));
+        createEffect(on(() => task().unread, (u) => u && markRead(task().id)));
         const ready = () => task().worktree?.state === "open" && (task().status === "done" || task().status === "paused" || task().status === "failed");
         const diff = () => taskDiff(task());
         const openPanel = (tab: PanelTab) => showTool(tab);
@@ -509,7 +509,7 @@ export function TaskView(props: { id: string }) {
                   accountId={task().accountId}
                   space={task().space}
                   running={task().status === "running"}
-                  onAccount={(id) => id !== task().accountId && updateTask(task().id, (t) => (t.accountId = id, t.model = ""))}
+                  onAccount={(id) => setTaskAccount(task().id, id)}
                   agent={`t:${task().id}`}
                   shells={task().shells.filter((s) => !s.endedAt).length}
                   branch={task().worktree?.state === "open" ? task().worktree!.branch : undefined}
@@ -531,7 +531,7 @@ export function TaskView(props: { id: string }) {
                     ...(task().status === "failed" ? [{ name: "retry", desc: tr("다시 시도"), icon: "play", run: () => resumeTask(task().id) }] : []),
                     ...(task().status === "queued" ? [{ name: "start", desc: tr("지금 시작"), icon: "play", run: () => void startTask(task().id) }] : []),
                     ...(task().status !== "done" ? [{ name: "done", desc: tr("완료로 표시"), icon: "flag", run: () => finishTask(task().id) }] : []),
-                    { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && updateTask(task().id, (x) => (x.title = a.trim())) },
+                    { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && renameTask(task().id, a) },
                     { ...drawCommand(() => task().id), desc: tr("작업 흐름 그림") },
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
                     { name: "edits", desc: tr("권한: {name}", { name: tr("편집 허용") }), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },

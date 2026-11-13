@@ -5,13 +5,15 @@ import { nowText } from "../engine/describe";
 import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
+import { accountById, homeDir, projectById, projectsIn, state, taskById } from "../state/store";
+import { hostAccount } from "../ui/ComputerPicker";
+import { mirror } from "../state/mirror";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { useBrowserStream } from "../ui/browserStream";
 import { openLink } from "../ui/links";
 import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
-import { gitEnv, prOf, setPriority, setWeight } from "../engine/tasks";
+import { gitEnv, prOf, setPriority, setTaskAccount, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
@@ -170,6 +172,15 @@ const folderName = (t: Task) => {
   return parent ? `${name} · ${parent}` : name;
 };
 
+/** the accounts a job may move to: its workspace's here, or (another Mac's job) that workspace's there */
+function accountChoices(t: Task): { id: string; name: string }[] {
+  if (!t.host) return state.accounts.filter((a) => a.space === t.space || a.id === t.accountId).map((a) => ({ id: a.id, name: accountName(a) }));
+  const all = mirror.hosts[t.host]?.info?.accounts ?? [];
+  const own = all.find((a) => a.id === t.accountId);
+  const list = all.filter((a) => !own || a.space === own.space);
+  return own || !t.accountId ? list : [...list, { id: t.accountId, name: t.accountId }];
+}
+
 function Overview(props: { t: Task }) {
   const t = () => props.t;
   return (
@@ -261,10 +272,10 @@ function Overview(props: { t: Task }) {
           </Show>
           <dt>{tr("계정|one")}</dt>
           <dd>
-            <select class="select" value={t().accountId} onChange={(e) => updateTask(t().id, (x) => (x.accountId = e.currentTarget.value))}>
-              <For each={state.accounts.filter((a) => a.space === t().space || a.id === t().accountId)}>{(a) => <option value={a.id}>{accountName(a)}</option>}</For>
+            <select class="select" value={t().accountId} onChange={(e) => setTaskAccount(t().id, e.currentTarget.value)}>
+              <For each={accountChoices(t())}>{(a) => <option value={a.id}>{a.name}</option>}</For>
             </select>
-            <span class="muted nowrap">{prettyModel(t().model || accountById(t().accountId)?.model || "") || tr("자동")}</span>
+            <span class="muted nowrap">{prettyModel(t().model || (t().host ? hostAccount({ host: t().host! }, t().space, t().accountId)?.model : accountById(t().accountId)?.model) || "") || tr("자동")}</span>
           </dd>
           {/* the header's time, in its precision; a task not started yet, or waiting its turn again, has none */}
           <Show when={t().startedAt && t().status !== "queued"}>
@@ -541,7 +552,7 @@ const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.
 setTabFits((place, kind) => {
   if (kind === "preview") return previewPlace() === place ? "use" : "drop";
   if (isMainPlace(place) || place === "results") return jobOnly(kind) ? "keep" : "use";
-  const t = state.tasks.find((x) => x.id === place);
+  const t = taskById(place);
   if (!t) return "use";
   // the shared browser you opened yourself goes along; a task's own page doesn't
   if (kind === "browser") return hasPage(t) || panelShared() ? "use" : "drop";

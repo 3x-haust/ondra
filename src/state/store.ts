@@ -1,6 +1,6 @@
 // The one app store, saved to disk (debounced). Live-only data (streaming
 // text, which panel is open) lives in `ui.ts`, not here.
-import { linkedProjects, mirroredTasks } from "./mirror";
+import { linkedProjects, mirroredDecisions, mirroredTasks } from "./mirror";
 import { flushLog } from "../lib/log";
 import { createEffect, createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "solid-js/store";
@@ -8,7 +8,7 @@ import { bindingSource } from "../lib/shortcuts";
 import { inTauri, onEvent, stateFlushed, stateLoad, stateSaveParts } from "../lib/native";
 import { fixture } from "./fixture";
 import { debounce, Saver, unpackTask } from "./persist";
-import type { Account, AppState, SpaceId, Task } from "./types";
+import type { Account, AppState, Decision, SpaceId, Task } from "./types";
 
 /**
  * ↑ history per space. It used to be one list for every space: each old line goes
@@ -219,6 +219,13 @@ const remoteProjects = createRoot(() => createMemo(() => linkedProjects(state.se
 export const projectsShown = (space: SpaceId) => [...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)];
 /** this Mac's jobs and the other Macs' jobs shown here */
 export const tasksShown = (space: SpaceId) => [...tasksIn(space), ...mirroredTasks().filter((t) => t.space === space)];
+/** every job shown here, any space: this Mac's and the other Macs' */
+export const allTasks = (): Task[] => [...state.tasks, ...mirroredTasks()];
+/** the jobs in line on the Mac this one runs on, next first (another Mac's: those of its shown here) */
+export const queueWith = (t: Task): Task[] =>
+  (t.host ? mirroredTasks().filter((x) => x.host === t.host) : state.tasks).filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+/** every question waiting on the user: this Mac's and those of the other Macs' jobs */
+export const allDecisions = (): Decision[] => [...state.decisions, ...mirroredDecisions()];
 /** compare folders in "~/…" form (macOS home) */
 const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */
@@ -235,6 +242,8 @@ export function projectFor(space: SpaceId, cwd?: string): string | undefined {
  * project holding its folder. None of these: no project (기타).
  */
 export function taskProject(t: Task): string | undefined {
+  // another Mac's job: that Mac filed it (its folders aren't this Mac's)
+  if (t.host) return t.project;
   const known = (id?: string) => (id && projectsIn(t.space).some((p) => p.id === id) ? id : undefined);
   return (t.worktree?.repo ? projectFor(t.space, homeDir(t)) : undefined) ?? known(t.project) ?? projectFor(t.space, t.cwd);
 }
@@ -301,8 +310,8 @@ export function lineHead(t: Task): Task {
 }
 export const accountById = (id: string) => state.accounts.find((a) => a.id === id);
 export const accountsIn = (space: SpaceId) => state.accounts.filter((a) => a.space === space);
-export const decisionsIn = (space: SpaceId) => state.decisions.filter((d) => taskById(d.taskId)?.space === space);
-export const decisionFor = (taskId: string) => state.decisions.find((d) => d.taskId === taskId);
+export const decisionsIn = (space: SpaceId) => allDecisions().filter((d) => taskById(d.taskId)?.space === space);
+export const decisionFor = (taskId: string) => state.decisions.find((d) => d.taskId === taskId) ?? mirroredDecisions().find((d) => d.taskId === taskId);
 
 const rank = (t: Task) => ({ waiting: 0, running: 1, failed: 2, paused: 3, queued: 4, done: 5 })[t.status];
 

@@ -63,10 +63,8 @@ export function taskMenuItems(id: string): MenuEntry[] {
         id: "rerun",
         label: t("다시 실행"),
         icon: "refresh",
-        run: () => {
-          const n = duplicateTask(id);
-          if (n) openTask(n);
-        },
+        // another Mac's job: its new id comes back from there
+        run: () => void Promise.resolve(duplicateTask(id)).then((n) => n && openTask(n)),
       }]),
       {
         id: "copy",
