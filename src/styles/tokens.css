@@ -185,8 +185,9 @@
   --ask: rgba(165, 180, 252, 0.9);
   --ok: rgba(110, 231, 183, 0.9);
   --ok-ink: #34d399;
-  --warn: rgba(252, 211, 77, 0.9);
-  --warn-ink: #fbbf24;
+  /* amber, the light theme's orange in the dark: plain yellow shouted over every other tone */
+  --warn: rgba(246, 173, 60, 0.92);
+  --warn-ink: #f6b04a;
   --bad: rgba(252, 165, 165, 0.9);
   --bad-ink: #f87171;
   --ok-soft: rgba(16, 185, 129, 0.14);
@@ -239,8 +240,8 @@
     --ask: rgba(165, 180, 252, 0.9);
     --ok: rgba(110, 231, 183, 0.9);
     --ok-ink: #34d399;
-    --warn: rgba(252, 211, 77, 0.9);
-    --warn-ink: #fbbf24;
+    --warn: rgba(246, 173, 60, 0.92);
+    --warn-ink: #f6b04a;
     --bad: rgba(252, 165, 165, 0.9);
     --bad-ink: #f87171;
     --ok-soft: rgba(16, 185, 129, 0.14);

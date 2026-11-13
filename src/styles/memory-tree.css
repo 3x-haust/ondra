@@ -653,7 +653,7 @@
   min-width: 0;
 }
 .md-title {
-  font-size: 17px;
+  font-size: var(--fs-lg);
   font-weight: var(--fw-strong);
   letter-spacing: var(--tracking-tight);
   line-height: var(--lh-tight);
@@ -736,7 +736,7 @@
   background: linear-gradient(var(--hover), var(--hover)), var(--card);
 }
 .mst-c b {
-  font-size: 18px;
+  font-size: var(--fs-lg);
   font-weight: var(--fw-strong);
   line-height: 1.15;
   color: var(--ink);

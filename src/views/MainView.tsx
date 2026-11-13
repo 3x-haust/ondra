@@ -43,7 +43,7 @@ const hostPick = (p: Place) => {
 };
 import { noModifiers, shortcutHint, withHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
-import { Glyph, GlyphMark, SidebarToggle, stateMeta } from "./Sidebar";
+import { Glyph, GlyphMark, SidebarToggle, stateMeta, type GlyphKind } from "./Sidebar";
 import { openAddAccount } from "./Settings";
 import { t, t as tr } from "../i18n";
 import { PaneControls } from "./PaneControls";
@@ -1233,7 +1233,10 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
               {([st, n, word], i) => (
                 <>
                   <Show when={i()}><span class="req-sep">·</span></Show>
-                  <span class={`req-tag ${st}`}>{word} {n}</span>
+                  <span class={`req-tag ${st}`}>
+                    <GlyphMark g={(st === "merged" ? "done" : st) as GlyphKind} class="req-g" />
+                    {word} <b>{n}</b>
+                  </span>
                 </>
               )}
             </For>

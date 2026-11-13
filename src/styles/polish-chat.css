@@ -433,6 +433,25 @@
 .req-head .req-sep {
   color: var(--ink-4);
 }
+/* each state as on the canvas header: its glyph in its tone, the word quiet, the count a step up */
+.main-view .req-head .req-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  color: var(--ink-2);
+  font-weight: var(--fw-regular);
+}
+.main-view .req-head .req-tag b {
+  margin-left: calc(var(--s-2) * -1);
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+}
+.main-view .req-head .req-sum {
+  gap: var(--s-12);
+}
+.main-view .req-head .req-sep {
+  display: none;
+}
 
 /* ═════════════ fork cards: rows in one group card ═════════════ */
 .thread-inner .sub-group {
@@ -558,7 +577,10 @@
   height: 20px;
   margin-top: 0;
   border-radius: var(--r-xs);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  box-shadow: none;
   font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
 }
 .decision .decision-label {
   font-weight: var(--fw-regular);
@@ -855,9 +877,26 @@
   width: 320px;
 }
 
-/* side chat, empty: one line on what it is for */
+/* side chat, empty: a quiet icon and one line on what it is for, a little above the middle (§9.12) */
 .side-chat .side-empty {
-  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-8);
+  max-width: 280px;
+  margin: auto;
+  translate: 0 -6vh;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-md, 22px);
+}
+.side-chat .side-empty .icon {
+  color: var(--ink-4);
+}
+/* the side chat's input has the composer's corners */
+.side-chat .side-input {
+  border-radius: var(--r-2xl);
 }
 .main-view .req-board::after {
   content: "";
