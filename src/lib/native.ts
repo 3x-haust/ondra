@@ -599,6 +599,23 @@ export const onUpdateProgress = (f: (p: { version: string; percent: number }) =>
 /** Save bytes as a file in ~/Downloads (a free name); returns the path. */
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
-export const secretList = () => call<string[]>("secret_list", undefined, []);
-export const secretSet = (name: string, value: string) => call<string[]>("secret_set", { name, value }, [name]);
-export const secretDelete = (name: string) => call<string[]>("secret_delete", { name }, []);
+export interface SavedSecrets {
+  global: string[];
+  /** project id → names */
+  projects: Record<string, string[]>;
+}
+export const secretList = () => call<SavedSecrets>("secret_list", undefined, { global: [], projects: {} });
+/** For a project: `writeDotenv` also writes it into the project's .env; `addIgnore` first adds .env to .gitignore. */
+export const secretSet = (o: { name: string; value: string; project?: string; folder?: string; writeDotenv?: boolean; addIgnore?: boolean }) =>
+  call<SavedSecrets>("secret_set", o, { global: [], projects: {} });
+export const secretDelete = (o: { name: string; project?: string; folder?: string }) => call<SavedSecrets>("secret_delete", o, { global: [], projects: {} });
+export interface FoundSecret {
+  name: string;
+  file: string;
+  secret: boolean;
+  valid: boolean;
+}
+/** The keys a project's .env files set (names only, no values). */
+export const secretScan = (folder: string) => call<FoundSecret[]>("secret_scan", { folder }, []);
+/** Copies the chosen keys' values from the project's .env files into the keychain (native side only). */
+export const secretImport = (project: string, folder: string, names: string[]) => call<SavedSecrets>("secret_import", { project, folder, names }, { global: [], projects: {} });

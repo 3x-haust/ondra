@@ -11,7 +11,7 @@ import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
-import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, uid, updateAccount, updateTask } from "../state/store";
+import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, taskProject, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx, setCtx, setReuse } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
@@ -1015,6 +1015,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const t = t0;
     const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ["ONDRA_SPACE", t0.space] as [string, string], ["ONDRA_GITHUB_WRITE", state.settings.githubWrite === false ? "0" : "1"] as [string, string], ["ONDRA_DEVICES_ALLOWED", allowedDevices(t0.space, id).join(",")] as [string, string], ...dataEnv(t0)];
     env.push(["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t0.space))]);
+    // the project's secrets on top of the global ones (Settings › 시크릿; native side reads them)
+    const secretProject = taskProject(t0);
+    if (secretProject) env.push(["ONDRA_SECRETS", `p:${secretProject}`]);
     const model = t.model || modelFor(account.id);
     // a model without tool calling (marked on its connection) runs talk-only instead of failing on its first request
     const talkOnly = !canUseTools(account.id, model);

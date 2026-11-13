@@ -1437,3 +1437,24 @@
   flex: 1;
   min-width: 0;
 }
+.settings-inner .sec-scope {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  margin: 0 0 var(--s-16);
+}
+.settings-inner .sec-env {
+  gap: var(--s-8);
+  flex-wrap: wrap;
+}
+.settings-inner .sec-warn {
+  gap: var(--s-8);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.settings-inner .sec-found {
+  gap: var(--s-8);
+}
+.settings-inner .sec-found code {
+  font-size: var(--fs-sm);
+}
