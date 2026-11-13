@@ -1530,7 +1530,13 @@ func settle(pid: pid_t) -> Double {
 
 func appURL(_ name: String) -> URL? {
     let ws = NSWorkspace.shared
-    if name.contains("/") || name.hasSuffix(".app") { return URL(fileURLWithPath: name) }
+    // a bundle by its path (a test build in a scratch folder): only if it is there
+    if name.contains("/") || name.hasSuffix(".app") {
+        let url = URL(fileURLWithPath: (name as NSString).expandingTildeInPath).standardizedFileURL
+        if name.contains("/") || FileManager.default.fileExists(atPath: url.path) {
+            return FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path) ? url : nil
+        }
+    }
     if let u = ws.urlForApplication(withBundleIdentifier: name) { return u }
     // an app already open, wherever it was opened from (Downloads, a build folder)
     if let u = runningAppByName(name) { return u }
@@ -1565,7 +1571,7 @@ func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, Str
 }
 
 /// The frontmost app's focused window and where it is.
-struct HeldFrame { let window: AXUIElement; let origin: CGPoint; let size: CGSize }
+struct HeldFrame { let window: AXUIElement; let origin: CGPoint; let size: CGSize; let id: CGWindowID }
 
 func axPoint(_ el: AXUIElement, _ attr: String) -> CGPoint? {
     var v: CFTypeRef?
@@ -1580,27 +1586,47 @@ func axSize(_ el: AXUIElement) -> CGSize? {
     return AXValueGetValue(val as! AXValue, .cgSize, &s) ? s : nil
 }
 
+/// The on-screen bounds the window server shows for a window: under Stage Manager a window
+/// in the side strip shows as a small thumbnail there, while AX still reports its real frame.
+func cgBounds(_ id: CGWindowID) -> CGRect? {
+    guard let info = (CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]])?.first,
+          let b = info[kCGWindowBounds as String] as? NSDictionary else { return nil }
+    return CGRect(dictionaryRepresentation: b)
+}
+
+/// The front app's focused window, held only while it is on stage at its real size (its window
+/// server bounds match its AX frame): a frame read off a Stage Manager thumbnail is never held.
 func frontWindowFrame() -> HeldFrame? {
     guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
     let app = AXUIElementCreateApplication(front.processIdentifier)
     var w: CFTypeRef?
     guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &w) == .success, let win = w, CFGetTypeID(win) == AXUIElementGetTypeID() else { return nil }
     let el = win as! AXUIElement
-    guard let o = axPoint(el, kAXPositionAttribute), let s = axSize(el) else { return nil }
-    return HeldFrame(window: el, origin: o, size: s)
+    guard let o = axPoint(el, kAXPositionAttribute), let s = axSize(el),
+          let id = cgWindowID(pid: front.processIdentifier, frame: CGRect(origin: o, size: s), title: nil) else { return nil }
+    return HeldFrame(window: el, origin: o, size: s, id: id)
 }
 
 /// Watch the held window for a moment after a launch; if it was moved or resized, put it back.
+/// If Stage Manager took it into the strip (its window server bounds are a thumbnail now), its
+/// AX frame is not touched: resizing a window in the strip fights Stage Manager and leaves it
+/// half out. That is a stage switch, and restoreUserStage brings the user's stage back.
 func keepFrame(_ h: HeldFrame) {
     let moved = { () -> Bool in
         guard let o = axPoint(h.window, kAXPositionAttribute), let s = axSize(h.window) else { return false }
         return abs(o.x - h.origin.x) > 1 || abs(o.y - h.origin.y) > 1 || abs(s.width - h.size.width) > 1 || abs(s.height - h.size.height) > 1
     }
+    let staged = { () -> Bool in
+        guard let b = cgBounds(h.id) else { return true }
+        return b.width < h.size.width * 0.6 && b.height < h.size.height * 0.6
+    }
     for _ in 0..<15 {
         usleep(100_000)
+        if staged() { return }
         if moved() {
             // let the arrangement finish, then restore size first (a smaller window can always move)
             usleep(250_000)
+            if staged() { return }
             var size = h.size, origin = h.origin
             if let sv = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(h.window, kAXSizeAttribute as CFString, sv) }
             if let pv = AXValueCreate(.cgPoint, &origin) { AXUIElementSetAttributeValue(h.window, kAXPositionAttribute as CFString, pv) }
@@ -1861,8 +1887,11 @@ func guardDylibPath() -> String? {
 
 struct Copy { let url: URL; let exe: String; let plist: String; let origPlist: String }
 
+/// Where background copies live. ONDRA_CU_CACHE_DIR moves it (tests, so their orphan sweep
+/// never meets a real job's copies).
 func cacheAppsDir() -> URL {
-    let base = URL(fileURLWithPath: NSHomeDirectory())
+    let override = ProcessInfo.processInfo.environment["ONDRA_CU_CACHE_DIR"].flatMap { $0.hasPrefix("/") ? $0 : nil }
+    let base = override.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Caches/dev.3xhaust.ondra/Applications", isDirectory: true)
     try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
     return base
@@ -1955,9 +1984,12 @@ func bgApp(_ pid: pid_t) -> BgApp? { bgLock.lock(); defer { bgLock.unlock() }; r
 func launchBackground(real: URL, copy: Copy, kind: AppKind, guardDylib: String?) -> BgApp? {
     let bd = Backdrop.shared
     guard bd.ensure() else { return nil }
+    // a copy an earlier helper left running (it crashed, or an old bug) goes first
+    reapOrphanCopies()
     var env = ["HOME=\(NSHomeDirectory())", "USER=\(NSUserName())", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR=\(NSTemporaryDirectory())"]
     let guarded = guardDylib != nil
-    if let g = guardDylib { env.append("DYLD_INSERT_LIBRARIES=\(g)") }
+    // the guard keeps every window of the app (floating panels too) on this display
+    if let g = guardDylib { env.append("DYLD_INSERT_LIBRARIES=\(g)"); env.append("ONDRA_CU_BACKDROP=\(bd.displayID)") }
 
     let disclaim = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim").map {
         unsafeBitCast($0, to: (@convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32).self)
@@ -2112,25 +2144,105 @@ func teardownCopy(_ copy: URL) {
     try? FileManager.default.removeItem(at: copy)
 }
 
+/// How long a background copy gets to quit on its own before it is killed. Some apps ignore
+/// SIGTERM and refuse to quit (an unsaved-changes prompt); the copy is the job's, so it goes.
+let quitGraceMs = 1200.0
+
+/// End processes: ask each to quit (a quit Apple event and SIGTERM), all at once; after the
+/// grace, SIGKILL whatever is left and wait for it to go. `alive` says whether a pid is still
+/// the process meant (and reaps it when it is a child of ours), so a pid reused by another
+/// process is never signalled.
+func endProcesses(_ pids: [pid_t], alive: (pid_t) -> Bool) {
+    var left = pids.filter(alive)
+    guard !left.isEmpty else { return }
+    for p in left { NSRunningApplication(processIdentifier: p)?.terminate(); kill(p, SIGTERM) }
+    let t0 = nowMs()
+    while !left.isEmpty, nowMs() - t0 < quitGraceMs { usleep(50_000); left = left.filter(alive) }
+    guard !left.isEmpty else { return }
+    dbgLog("end: \(left) did not quit in \(Int(quitGraceMs))ms, killing")
+    for p in left { kill(p, SIGKILL) }
+    let t1 = nowMs()
+    while !left.isEmpty, nowMs() - t1 < 2000 { usleep(20_000); left = left.filter(alive) }
+}
+
+/// A process this helper spawned is still running (a zombie is reaped here, and counts as gone;
+/// one already reaped elsewhere is no longer ours).
+func childAlive(_ pid: pid_t) -> Bool {
+    var st: Int32 = 0
+    return waitpid(pid, &st, WNOHANG) == 0
+}
+
 /// Terminate a background app the job opened, and clean up its copy.
-func releaseBackground(_ pid: pid_t) {
-    bgLock.lock(); let app = bgApps.removeValue(forKey: pid); bgLock.unlock()
-    guard let app = app else { return }
-    if app.cdpIn >= 0 { close(app.cdpIn) }; if app.cdpOut >= 0 { close(app.cdpOut) }
-    if kill(pid, 0) == 0 {
-        kill(pid, SIGTERM)
-        var st: Int32 = 0
-        for _ in 0..<30 { if waitpid(pid, &st, WNOHANG) == pid || kill(pid, 0) != 0 { break }; usleep(100_000) }
-        if kill(pid, 0) == 0 { kill(pid, SIGKILL); waitpid(pid, &st, 0) }  // reap so no zombie lingers
+func releaseBackground(_ pid: pid_t) { releaseBackgrounds([pid]) }
+
+/// Several at once. Each stays in bgApps until it is really gone, so if the helper is told to
+/// stop while one is still being waited for, its exit path (releaseAllBackground) still sees
+/// it and kills it, instead of exiting and leaving it running on the user's screen.
+func releaseBackgrounds(_ pids: [pid_t]) {
+    bgLock.lock()
+    let apps = pids.compactMap { bgApps[$0] }
+    var fds: [Int32] = []
+    for app in apps {
+        fds += [app.cdpIn, app.cdpOut].filter { $0 >= 0 }
+        app.cdpIn = -1; app.cdpOut = -1
     }
-    teardownCopy(app.copyURL)
+    bgLock.unlock()
+    guard !apps.isEmpty else { return }
+    for fd in fds { close(fd) }
+    let t0 = nowMs()
+    endProcesses(apps.map(\.pid), alive: childAlive)
+    bgLock.lock(); let gone = apps.filter { bgApps.removeValue(forKey: $0.pid) != nil }; bgLock.unlock()
+    dbgLog("release: \(apps.map(\.pid)) ended after \(Int(nowMs() - t0))ms")
+    for app in gone { teardownCopy(app.copyURL) }
+    if !gone.isEmpty { dbgLog("release: copies cleaned up after \(Int(nowMs() - t0))ms") }
 }
 
 func releaseAllBackground() {
     bgLock.lock(); let pids = Array(bgApps.keys); let real = Array(launchedApps.union(offscreenApps)); bgLock.unlock()
-    for pid in pids { releaseBackground(pid) }
+    releaseBackgrounds(pids)
     // a real app the job opened is quit before the display goes away
-    for pid in real { releaseReal(pid) }
+    DispatchQueue.concurrentPerform(iterations: real.count) { releaseReal(real[$0]) }
+}
+
+// ───────────────────────── orphaned copies ─────────────────────────
+// A copy runs as this helper's child, so when a helper is gone (it crashed, was killed, or an
+// older build exited while a copy was still quitting) its copies are reparented to launchd and
+// nobody will ever stop them: they stay on the user's screen once the off-screen display goes.
+// Found by the program they run (a path inside the copies folder, never a name) and their
+// parent (launchd), so a copy another live helper is driving, and the user's real apps, are
+// never touched.
+
+/// The path the process was started with (exec path from KERN_PROCARGS2). For a copy this is
+/// the path inside the copies folder even when its executable is a symlink to the real app's.
+func execPath(_ pid: pid_t) -> String? {
+    var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+    var size = 0
+    guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
+    var buf = [UInt8](repeating: 0, count: size)
+    guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return nil }
+    var i = 4
+    while i < size, buf[i] != 0 { i += 1 }
+    return i > 4 ? String(decoding: buf[4..<i], as: UTF8.self) : nil
+}
+
+func isOrphanCopy(_ pid: pid_t, under dirs: [String]) -> Bool {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size,
+          info.pbi_ppid == 1, info.pbi_uid == getuid(), let exe = execPath(pid) else { return false }
+    return dirs.contains { exe.hasPrefix($0) }
+}
+
+/// Kill every orphaned copy. Returns how many there were.
+@discardableResult func reapOrphanCopies() -> Int {
+    let dir = cacheAppsDir()
+    let dirs = Array(Set([dir.path, dir.resolvingSymlinksInPath().path].map { $0.hasSuffix("/") ? $0 : $0 + "/" }))
+    let me = getpid()
+    let orphans = allPids().filter { $0 != me && $0 > 1 && isOrphanCopy($0, under: dirs) }
+    guard !orphans.isEmpty else { return 0 }
+    dbgLog("orphans: \(orphans)")
+    endProcesses(orphans) { isOrphanCopy($0, under: dirs) }
+    return orphans.count
 }
 
 /// A real app the job opened: quit it, so its Dock tile stops showing it running. If the user
@@ -2280,6 +2392,9 @@ func rescueStrayWindows() {
     for w in infos {
         guard (w[kCGWindowLayer as String] as? Int) == 0,
               let owner = w[kCGWindowOwnerPID as String] as? pid_t, !seen.contains(owner),
+              // never the helper's own pointer window: setting its frame over AX from this thread
+              // is AppKit off the main thread, and the helper crashes (leaving its copies behind)
+              owner != getpid(),
               bgApp(owner) == nil, !isOffscreenApp(owner),
               let b = w[kCGWindowBounds as String] as? [String: CGFloat],
               let x = b["X"], let y = b["Y"], let wd = b["Width"], let ht = b["Height"] else { continue }
@@ -2342,7 +2457,8 @@ let map = AXMap()
 func handle(_ req: [String: Any]) -> [String: Any] {
     let id = req["id"]
     guard let op = req["op"] as? String else { return fail(id, "BAD_REQUEST", "missing op") }
-    let before = environment()
+    // release answers without it: reading the user's app over AX can be slow when it is busy
+    let before: [String: Any] = op == "release" ? ["frontmostPid": NSWorkspace.shared.frontmostApplication.map { Int($0.processIdentifier) } ?? -1] : environment()
 
     switch op {
     case "frontmost":
@@ -2415,15 +2531,21 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if let p = pid {
             askForWebAccessibility(p)
             _ = keepUserWindowOnTop(p, aboveAtLaunch)
+            // a panel the copy put up on the user's display at launch goes off-screen with the rest
+            if bgApp(p) != nil { keepOffUserScreen(p) }
         }
         // an app the user opened themselves may have come up off-screen (apps remember their
         // frame): put any such window back where the user can see it
         rescueStrayWindows()
+        // the app it started coming to the front (a stage switch under Stage Manager) is undone:
+        // the user's app and its stage come back to the front
+        let stageRestored = restoreUserStage(before["frontmostPid"] as? Int, since: t0)
         let after = environment()
         if let pid = pid {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
             var result: [String: Any] = ["pid": Int(pid), "path": target.path, "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            if let r = stageRestored { result["stageRestored"] = r }
             let menus = menuBarTitles(pid)
             if !menus.isEmpty { result["menus"] = menus }
             if mode == "hidden", let e = launchErr { result["backgroundError"] = e }
@@ -2477,6 +2599,8 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             info["raisedOverUser"] = true; info["orderRestored"] = r
             raisesOnPointer.insert(pid_t(pidN))
         }
+        // a panel the action made the copy show (a drop panel during a drag) goes off-screen
+        if bgApp(pid_t(pidN)) != nil, keepOffUserScreen(pid_t(pidN)) > 0 { info["panelKeptOffScreen"] = true }
 
         let actMs = nowMs() - t0
         let tree = observeTree(pid: pid_t(pidN), map: map)
@@ -2490,6 +2614,10 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             extra["selfActivated"] = true
             extra["restored"] = giveFrontBack(to: pid_t(was), from: pid_t(pidN))
             after = environment()
+        } else if let r = restoreUserStage(before["frontmostPid"] as? Int, since: t0) {
+            // another app came forward (a Stage Manager switch): the user's stage comes back
+            extra["stageRestored"] = r
+            after = environment()
         }
         // The user's own mouse or keys during the action are theirs, not a broken contract.
         if !backgroundPreserved(before, after), userInputSince(seconds: (nowMs() - t0) / 1000) { extra["userInput"] = true }
@@ -2501,13 +2629,14 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, result)
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
+        let t0 = nowMs()
         // a background copy the job opened is terminated and cleaned up; a real app it opened is
         // quit; the user's own app is hidden again if it was shown
         if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) }
         else if isLaunchedReal(pid_t(pidN)) { releaseReal(pid_t(pidN)) }
         else { hideAgain(pid_t(pidN)) }
         rescueStrayWindows()
-        return ok(id, ["released": true, "env": environment()])
+        return ok(id, ["released": true, "releaseMs": nowMs() - t0])
     case "selfcheck":
         let pidN = req["pid"] as? Int
         var result: [String: Any] = ["env": before, "axTrusted": AXIsProcessTrusted(),
@@ -2534,6 +2663,72 @@ func countNodes(_ node: [String: Any]) -> Int {
     var n = 1
     if let kids = node["children"] as? [[String: Any]] { for k in kids { n += countNodes(k) } }
     return n
+}
+
+/// A background copy's window that came up on the user's screen — a floating panel the app put
+/// on the main display or at the pointer (orderFrontRegardless at a floating or status level,
+/// which no raise of the user's window can cover), a tooltip, a window an unguarded app moved —
+/// goes onto the off-screen display with the rest of the app, at the same place relative to its
+/// display, so it stays drawn, capturable and reachable by AX. The guard does this inside the app
+/// before the window is ever shown; this is the backstop for apps without it. Menu bar items are
+/// left alone. Returns how many windows were moved.
+@discardableResult func keepOffUserScreen(_ pid: pid_t) -> Int {
+    let bd = Backdrop.shared
+    guard bd.displayID != 0 else { return 0 }
+    let infos = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let stray = infos.contains { w in
+        guard (w[kCGWindowOwnerPID as String] as? Int32) == pid, ((w[kCGWindowAlpha as String] as? Double) ?? 1) > 0,
+              let b = w[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b),
+              r.width > 1, r.height > 1, !bd.contains(r) else { return false }
+        let layer = (w[kCGWindowLayer as String] as? Int) ?? 0
+        let menuBar = (layer == Int(CGWindowLevelForKey(.mainMenuWindow)) || layer == Int(CGWindowLevelForKey(.statusWindow))) && r.height <= 50
+        return !menuBar
+    }
+    guard stray else { return 0 }
+    let target = CGDisplayBounds(bd.displayID)
+    var winsRef: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &winsRef) == .success,
+          let wins = winsRef as? [AXUIElement] else { return 0 }
+    var moved = 0
+    for win in wins {
+        guard let f = axFrame(win), f.width > 1, f.height > 1, !bd.contains(f) else { continue }
+        let center = CGPoint(x: f.midX, y: f.midY)
+        let from = onlineDisplays().map { CGDisplayBounds($0) }.first { $0.contains(center) } ?? CGDisplayBounds(CGMainDisplayID())
+        var origin = CGPoint(x: target.minX + (f.minX - from.minX), y: target.minY + (f.minY - from.minY))
+        origin.x = max(target.minX, min(origin.x, target.maxX - min(f.width, target.width)))
+        origin.y = max(target.minY, min(origin.y, target.maxY - min(f.height, target.height)))
+        if let pv = AXValueCreate(.cgPoint, &origin), AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, pv) == .success { moved += 1 }
+    }
+    if moved > 0 { dbgLog("kept \(moved) window(s) of \(pid) off the user's screen") }
+    return moved
+}
+
+/// Watches the background copies while the helper runs: a copy can put a panel up at any time
+/// (a global drag monitor, a timer), not only during an action.
+func startWindowKeeper() {
+    Thread.detachNewThread {
+        while true {
+            usleep(250_000)
+            bgLock.lock(); let pids = Array(bgApps.keys); bgLock.unlock()
+            for p in pids { keepOffUserScreen(p) }
+        }
+    }
+}
+
+/// Stage Manager: an app the job runs coming to the front (the app starting, a window of it
+/// ordering itself in) switches stages, and the user's windows shrink into the side strip. If an
+/// app of this helper's took the front and the user's own mouse or keys did not do it, the user's
+/// app is brought back to the front, and with it their stage. Only then: a front change to any
+/// other app can't be told from the user's or another program's doing (other tools activate their
+/// own windows too), so it is left alone. nil: nothing to restore; else whether it came back.
+func restoreUserStage(_ wasFront: Int?, since t0: Double) -> Bool? {
+    guard let was = wasFront, was > 0,
+          let now = NSWorkspace.shared.frontmostApplication?.processIdentifier, Int(now) != was,
+          bgApp(now) != nil || isLaunchedReal(now),
+          !userInputSince(seconds: (nowMs() - t0) / 1000),
+          let prev = NSRunningApplication(processIdentifier: pid_t(was)), !prev.isTerminated else { return nil }
+    dbgLog("stage: front went \(was) → \(now), giving it back")
+    return giveFrontBack(to: pid_t(was), from: now)
 }
 
 /// Apps with a normal window in front of the front app's front window, front to back.
@@ -2770,6 +2965,20 @@ if CommandLine.arguments.contains("--displays") {
     exit(0)
 }
 
+/// The helper's last act, once, whichever way it is stopped: end every app the job opened (all
+/// at once, each killed if it won't quit) before the off-screen display goes with the process.
+/// A window still on that display would land on the user's screen, and under Stage Manager that
+/// switches the user's stage. A second stop while this runs waits on the lock until exit(0).
+let shutdownLock = NSLock()
+func shutdown() -> Never {
+    shutdownLock.lock()
+    let t0 = nowMs()
+    releaseAllBackground()
+    hideAllAgain()
+    dbgLog("shutdown: apps ended after \(Int(nowMs() - t0))ms")
+    exit(0)
+}
+
 setbuf(stdout, nil)
 // Bound every AX call, so a hung target app cannot hang the helper (global timeout).
 AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
@@ -2784,17 +2993,22 @@ let worker = Thread {
         }
         emit(handle(obj))
     }
-    releaseAllBackground()
-    hideAllAgain()
-    exit(0)
+    shutdown()
 }
 worker.stackSize = 8 << 20
 worker.start()
-// Stopped: an app shown for a capture or events goes back out of sight first.
-signal(SIGTERM, SIG_IGN)
-let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-onTerm.setEventHandler { releaseAllBackground(); hideAllAgain(); exit(0) }
-onTerm.resume()
+// a copy an earlier helper left running (it crashed or was killed) goes now, not at the next launch
+DispatchQueue.global(qos: .utility).async { reapOrphanCopies() }
+startWindowKeeper()
+// Stopped (stdin closed, or SIGTERM/SIGHUP/SIGINT): everything the job opened goes first.
+var signalSources: [DispatchSourceSignal] = []
+for sig in [SIGTERM, SIGHUP, SIGINT] {
+    signal(sig, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: sig, queue: .global(qos: .userInitiated))
+    source.setEventHandler { shutdown() }
+    source.resume()
+    signalSources.append(source)
+}
 // No Dock icon, no menu bar, never activated: windows only for the pointer overlay.
 NSApplication.shared.setActivationPolicy(.accessory)
 NSApplication.shared.run()
