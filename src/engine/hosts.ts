@@ -53,6 +53,30 @@ export function viaHost<T = unknown>(host: string, fn: string, args: unknown[]):
   });
 }
 
+// ───────── files, folders and terminals of that Mac (engine/far.ts; its side is engine/farHost.ts)
+
+/** Ask that Mac quietly (a panel reading a file says what went wrong itself, no toast), and give up
+ *  after a while: a Mac whose Ondra is older doesn't know the newer calls and says so, but one
+ *  that went quiet must not hold a panel forever. */
+export function askHost<T = unknown>(host: string, fn: string, args: unknown[], wait = 30_000): Promise<T> {
+  if (mirror.hosts[host]?.status !== "ok") return Promise.reject(new Error(t("{name}에 연결되지 않았어요", { name: hostName(host) })));
+  const n = ++seq;
+  return new Promise<T>((ok, no) => {
+    const timer = setTimeout(() => pending.delete(n) && no(new Error(t("{name}이(가) 답하지 않아요", { name: hostName(host) }))), wait);
+    const done = <A,>(f: (a: A) => void) => (a: A) => (clearTimeout(timer), f(a));
+    pending.set(n, { host, ok: done(ok as (v: unknown) => void), no: done(no) });
+    void sendTo(host, { t: "call", seq: n, fn, args }).catch((e) => (pending.delete(n), clearTimeout(timer), no(e)));
+  });
+}
+
+/** a message to that Mac that wants no answer (keys typed in its terminal) */
+export const tellHost = (host: string, data: Record<string, unknown>) => void sendTo(host, data).catch(() => {});
+
+/** what that Mac sends of its own accord beyond the jobs (a terminal's output): by its "t";
+ *  "@closed" hears the connection go */
+const peerKinds = new Map<string, (host: string, d: Record<string, unknown>) => void>();
+export const onPeerKind = (kind: string, f: (host: string, d: Record<string, unknown>) => void) => void peerKinds.set(kind, f);
+
 /** an action on a job: when the job is another Mac's, it goes there (and this says so) */
 export function far(id: string, fn: string, args: unknown[]): Promise<unknown> | undefined {
   for (const [host, h] of Object.entries(mirror.hosts)) if (h.tasks.some((x) => x.id === id)) return viaHost(host, fn, args).catch(() => undefined);
@@ -158,6 +182,7 @@ export function onPeer(ev: Record<string, unknown>) {
       if (ev.reason === "off") again(host);
     } else if (s === "closed") {
       for (const [n, p] of pending) if (p.host === host) (pending.delete(n), p.no(new Error(t("{name} 연결이 끊겼어요", { name: hostName(host) }))));
+      peerKinds.get("@closed")?.(host, {});
       if (mirror.hosts[host]?.status !== "denied") {
         status(host, "lost", String(ev.reason ?? ""));
         again(host);
@@ -194,6 +219,8 @@ export function onPeer(ev: Record<string, unknown>) {
       else p.ok(d.value);
       break;
     }
+    default:
+      peerKinds.get(String(d.t))?.(host, d);
   }
 }
 

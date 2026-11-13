@@ -5,6 +5,7 @@
 //
 //   them → here  {t:"projects"} {t:"watch",projects} {t:"call",seq,fn,args}
 //   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
+// Files, folders and terminals of those jobs ("far.*" calls, {t:"pty…"}) are engine/farHost.ts.
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
 // fields when they did, and the entries from the first one that differs.
@@ -21,6 +22,7 @@ import { connectionOf, connModelLabel, effortLevels } from "./connections";
 import { effortFor } from "./models";
 import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts } from "./hosts";
+import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 
 export interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 export interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -199,9 +201,15 @@ const CALLS: Record<string, (...a: never[]) => unknown> = {
   setTaskPermission: jobs.setTaskPermission,
 };
 
+// ───────── files, folders and terminals of the jobs it sees (engine/farHost.ts checks each path and job)
+
+/** the Mac on that connection, as farHost.ts asks about it */
+const peerOf = (conn: number, c: Conn): FarPeer => ({ conn, device: c.device, watch: c.watch, sees: (t) => !t.host && wanted(c, t), send: (data) => void send(conn, data) });
+
 async function handle(conn: number, msg: Record<string, unknown>) {
   const c = conns.get(conn);
   if (!c) return;
+  if (msg.t === "pty-in" || msg.t === "pty-size") return farMsg(peerOf(conn, c), msg);
   switch (msg.t) {
     case "projects":
       await sendProjects(conn);
@@ -216,7 +224,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       soon();
       break;
     case "call": {
-      const fn = msg.fn === "create" ? (f: Parameters<typeof create>[1]) => create(c, f) : CALLS[String(msg.fn)];
+      const fn = msg.fn === "create" ? (f: Parameters<typeof create>[1]) => create(c, f) : (CALLS[String(msg.fn)] ?? farCall(peerOf(conn, c), String(msg.fn)));
       const seq = msg.seq;
       try {
         if (!fn) throw new Error(`unknown: ${String(msg.fn)}`);
@@ -296,6 +304,7 @@ export function initRemote() {
       case "close": {
         const conn = Number(ev.conn);
         conns.delete(conn);
+        farClosed(conn);
         setRemote((r) => {
           const live = { ...r.live };
           delete live[conn];
@@ -312,6 +321,7 @@ export function initRemote() {
         break;
       case "stopped":
         helperGone();
+        for (const conn of conns.keys()) farClosed(conn);
         conns.clear();
         setRemote((r) => ({ ...r, id: undefined, live: {}, asks: [] }));
         // it went away on its own while still wanted: bring it back

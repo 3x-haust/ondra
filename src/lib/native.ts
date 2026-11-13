@@ -619,3 +619,16 @@ export interface SecretGroup {
 }
 /** Every saved secret, those with the same value as one (compared natively, values never sent). */
 export const secretOverview = () => call<SecretGroup[]>("secret_overview", undefined, []);
+
+// ───────────────────────── files carried between Macs (Settings › 연결; src-tauri/src/farfs.rs)
+export interface FarStat { size: number; modified: number; dir: boolean }
+export const farStat = (path: string) => call<FarStat | null>("far_stat", { path }, null);
+/** a piece of a file, base64 (at most 1 MB) */
+export const farPiece = (path: string, offset: number, len: number) =>
+  call<{ data: string; size: number; modified: number }>("far_piece", { path, offset, len }, { data: "", size: 0, modified: 0 });
+/** where each path really is, links followed (null: not there) */
+export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", { paths }, paths);
+/** a piece put into this app's own folder: "cache" (another Mac's files shown here) or "upload" (attachments sent here) */
+export const farPut = (kind: "cache" | "upload", name: string, offset: number, data: string) =>
+  call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
+export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);

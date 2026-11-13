@@ -16,9 +16,19 @@ After that the Macs find each other again on their own, with no new link needed.
 - **The side doing the work** is `src/engine/remote.ts`. It sends the jobs of the projects the other Mac added: first each whole job, then only what changed (a job's fields, and its entries from the first one that differs). It does what the other Mac asks with the same functions the window uses: create, tell, stop, merge, queue edits and so on.
 - **The side looking on** is `src/engine/hosts.ts` and `src/state/mirror.ts`. Those jobs are held in memory and never written to this Mac's state.json. `taskById`, `projectById`, `projectsShown` and `tasksShown` include them, so the sidebar and the job view work unchanged. The engine's own loops (scheduler, PR watching and so on) read `state.tasks`, which doesn't include them. An action on another Mac's job is sent there; see `far()` at the top of each action in `tasks.ts`.
 
+## Files, terminals and memory of those jobs
+
+Everything a job's panels read comes from the Mac it runs on: the changes and their diff, the files and find in files, its results, screenshots and pictures in its replies, PRs, issues and git (commit, push, PR), the binary-analysis trace, the skills in the `/` menu and `/remember`. The client asks with `far.*` calls (`src/engine/far.ts`); the host answers in `src/engine/farHost.ts`.
+
+- **What the other Mac may reach.** Only paths inside the folders of the projects it added and of the jobs it sees (folder, worktree, results folder) and its own attachments folder, after following links. A file one of those jobs named itself (a screenshot in a reply) can be read on its own, but not listed around. A folder as wide as the home folder never counts, so a job started in `~` shows no files. Jobs and projects in a call must be ones the Mac sees. The rules are in `src/engine/farPaths.ts`.
+- **Sizes.** A diff or a trace comes in one answer of at most 3 MB (the changes bar says 일부만 when cut); a file to read is at most 2 MB, as here. Pictures, videos and pages are fetched in 512 KB pieces into `<data dir>/remote/cache` (by path and version, dropped after a week unused), up to 48 MB each. Attachments go the other way the same way, into `<data dir>/attachments/remote` there, up to 100 MB each; the message then names the paths there.
+- **Terminal.** A job's terminal tab opens a shell there in the app (`far.ptyOpen`). Keys go as `{t:"pty-in"}` and size changes as `{t:"pty-size"}`, with no answer. The output comes back as `{t:"pty",id,data}` every 40 ms at most, then `{t:"pty",id,exit}`. A Mac may keep six open, and they close when it goes.
+- **On that Mac's screen.** 편집기 / Finder for those jobs open on that Mac (`far.editor`, `far.reveal`).
+- **Memory.** The Memory page lists the other Macs' projects under 다른 Mac; their pieces are read, added, edited and forgotten there (`far.mem*`).
+- **Older Ondra.** A Mac whose Ondra doesn't know a `far.*` call answers `unknown: …`, and the panel says to update it. The new message kinds are ignored by older versions, and the helper carries them as any other line.
+
 ## Not there yet
 
-- Panels that read files (changes, files, pictures) still read this Mac's disk.
 - The model picker lists this Mac's models.
 
 ## Building
