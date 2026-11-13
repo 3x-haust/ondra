@@ -1,12 +1,13 @@
 ---
 name: web-design
 description: >
-  Designing a site, app screen, landing page or portfolio that should look made
+  Designing a site, web app screen, landing page or portfolio that should look made
   by a good designer, not by AI. Use for concepts, design directions, mockups and
   building or refining the chosen design. Covers real references, live concept
   prototypes, design-system notes in DESIGN.md, design tokens, visual hierarchy,
   responsive layouts, UI states and accessibility checks. Use for 웹 디자인,
-  디자인 시스템, 디자인 토큰, 디자인 규칙, 랜딩 페이지 and 포트폴리오.
+  디자인 시스템, 디자인 토큰, 디자인 규칙, 랜딩 페이지 and 포트폴리오. Not for
+  a quick opinion.
 ---
 
 # Web design
@@ -43,8 +44,9 @@ design direction and carrying an approved direction into later work.
 - Use brand names and style catalogs as search leads, not authoritative rules.
   Inspect the current site or official guidelines before describing its design.
   Extract useful principles rather than copying branding or a whole page.
-- Save screenshots and notes in the project's existing reference location
-  (`docs/refs/` if none). Record source URLs and what each reference informs.
+- Save screenshots and notes in the project's existing reference location, or
+  in `$APP_ARTIFACTS_DIR/refs/` when it has none. Record source URLs and what
+  each reference informs.
   Show the most telling ones as `shot` blocks so the user sees what you saw.
 
 ## 2. Concepts as live prototypes, not boards
@@ -93,6 +95,8 @@ rules. Resolve a conflict with the approved direction before changing its look.
   the user's direction words ("차분한", "인터랙티브") printed as copy.
 - Explanatory captions inside the design ("사례 전시 도판 · 실제 제품 화면 아님",
   "왜 추천하나요?", "작은 화면" panels). The page is the product, not a pitch.
+  In an app, the same goes for standing text that explains how it works inside;
+  a needed warning sits briefly next to its action.
 - Beige/cream + serif numerals + one orange accent by default; purple gradients;
   glassmorphism cards; emoji icons.
 - Everything centered in equal boxes; three identical cards in a row; every
@@ -115,6 +119,9 @@ for comparable data. Keep meaning and readability ahead of novelty.
 
 - Use the approved design notes and existing tokens/components. Keep spacing,
   radii, icons, color roles and typography consistent across sections and states.
+- Adding to an existing screen: render it first and keep its layout, changing
+  only what the feature needs. Reused tokens and components alone don't keep a
+  design; say it is kept only after comparing with that first shot side by side.
 - Make the primary action and reading order clear. Use whitespace, alignment,
   scale and grouping deliberately; don't wrap every item in a card. Keep labels
   for the same action consistent without changing the user's supplied wording.
@@ -138,7 +145,8 @@ for comparable data. Keep meaning and readability ahead of novelty.
 ## 6. Check the rendered result
 
 `browser-use` covers driving the browser. Reuse the project's existing checks and
-capture the real page, not just source or a successful build.
+capture the real page, not just source or a successful build. For a native app,
+run the real app (`computer-use`) at its window sizes instead of a phone width.
 
 - Compare the approved direction and implementation side by side at desktop and
   a phone width (around 390px), plus requested widths. Inspect hierarchy, alignment,
