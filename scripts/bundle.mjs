@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
 import { pack, plan, previousManifest, treeHash } from "./components.mjs";
+import { engineNotices, writeAppNotices } from "./notices.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,6 +70,14 @@ for (const item of ["README.md", "docs", "examples"]) {
   const src = join(dirname(engineDist), item);
   if (existsSync(src)) cpSync(src, join(engineRes, item), { recursive: true, filter: (f) => !/node_modules|\.git/.test(f) });
 }
+// its license (pi coding agent, MIT) and the notices of what is compiled into it travel with it
+const engineRepo = join(engineDist, "..", "..", "..");
+if (!existsSync(join(engineRepo, "LICENSE"))) {
+  console.error(`bundle: the engine's LICENSE is missing at ${engineRepo}`);
+  process.exit(1);
+}
+copyFileSync(join(engineRepo, "LICENSE"), join(engineRes, "LICENSE"));
+writeFileSync(join(engineRes, "THIRD_PARTY_NOTICES.txt"), engineNotices(dirname(engineDist)));
 log("engine assets");
 
 // ── Chrome for Testing (headless shell), cached so it downloads once ──
@@ -108,6 +117,10 @@ if (existsSync(stamp) && readFileSync(stamp, "utf8") === want) {
   writeFileSync(stamp, want);
   log(`chrome → resources/chrome (${want})`);
 }
+
+// ── the app's third-party notices (shipped as THIRD_PARTY_NOTICES.txt; Settings › 정보) ──
+writeAppNotices();
+log("third-party notices");
 
 // ── components.json: what a release build of the app fetches, and from where ──
 const manifestFile = join(resDir, "components.json");

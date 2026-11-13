@@ -22,6 +22,7 @@ import {
   accountProviders,
   accountRemove,
   inTauri,
+  openNotices,
   pickFolder,
   toolStatus,
   spaceGhLogin,
@@ -264,6 +265,9 @@ function General() {
       <div class="set-group">
         <UpdateRow />
         <Components />
+        <Row title={t("오픈소스 라이선스")} desc={t("Ondra는 MIT 라이선스예요. 함께 쓰는 오픈소스의 라이선스를 봐요")}>
+          <button class="btn ghost sm" onClick={() => void openNotices().catch((e) => toast(String(e), "bad"))}>{t("보기")}</button>
+        </Row>
         {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
         <Show when={canTrack}>
           <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>

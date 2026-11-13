@@ -567,4 +567,7 @@ export default {
   "목|day": "Thu",
   "금|day": "Fri",
   "토|day": "Sat",
+  "오픈소스 라이선스": "Open-source licenses",
+  "Ondra는 MIT 라이선스예요. 함께 쓰는 오픈소스의 라이선스를 봐요": "Ondra is MIT-licensed. See the licenses of the open-source software it includes",
+  "라이선스 파일이 없어요": "The license file is missing",
 } satisfies Record<string, string>;

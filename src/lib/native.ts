@@ -93,6 +93,8 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 /** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
 export const openExternal = (url: string) => call<void>("open_url", { url });
+/** the licenses of the open-source software in the app, in the default text app */
+export const openNotices = () => call<void>("open_notices", {});
 /** The app's log: append lines to a day's file (files before `keepFrom` are removed). */
 export const logAppend = (day: string, lines: string[], keepFrom?: string) => call<void>("log_append", { day, lines, keepFrom: keepFrom ?? null });
 /** The newest part of the app's log, up to `maxBytes`. */

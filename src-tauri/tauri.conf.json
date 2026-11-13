@@ -79,6 +79,8 @@
       "binaries/ondra-bgguard.dylib": "ondra-bgguard.dylib",
       "dmg/background.tiff": "dmg-background.tiff",
       "resources/components.json": "components.json",
+      "resources/notices/THIRD_PARTY_NOTICES.txt": "THIRD_PARTY_NOTICES.txt",
+      "../LICENSE": "LICENSE",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"
     }

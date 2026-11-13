@@ -427,6 +427,7 @@ pub fn run() {
             store::pick_folder,
             store::reveal_path,
             store::open_url,
+            store::open_notices,
             store::open_in_editor,
             store::open_in_terminal,
             store::account_dir_path,

@@ -500,6 +500,20 @@ pub fn open_url(url: String) {
     }
 }
 
+/// Opens the licenses of the open-source software in the app (Settings › 정보) in the default text app.
+#[tauri::command]
+pub fn open_notices(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    // a development build reads it where scripts/bundle.mjs wrote it
+    let file = [dir.join("THIRD_PARTY_NOTICES.txt"), dir.join("resources").join("notices").join("THIRD_PARTY_NOTICES.txt")]
+        .into_iter()
+        .find(|p| p.is_file())
+        .ok_or("라이선스 파일이 없어요")?;
+    Command::new("/usr/bin/open").arg("-t").arg(file).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn which(name: &str) -> Option<PathBuf> {
     user_path().split(':').map(|d| Path::new(d).join(name)).find(|p| p.is_file())
 }
