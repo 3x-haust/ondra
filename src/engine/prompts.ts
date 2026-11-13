@@ -22,18 +22,15 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - research with sources, a survey or comparison → deep-research
 - a chart, a diagram or a page shown in the chat → visual-report; a Word,
   Excel, PowerPoint, PDF or HWPX file, or a document to hand over → office-docs
-- an architecture/stack/infra diagram with official logos (아키텍처·스택
-  다이어그램, 시스템 구성도) as an HTML/PNG file → stack-diagram
+- a stack diagram with logos (아키텍처 그림) → stack-diagram
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
   → motion-graphics
-- a logo, brand mark, wordmark, favicon or brand kit (로고, 브랜드 마크)
-  → logo-design
+- a logo or brand kit (로고) → logo-design
 - writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
-- a project's own check-<app> skill (driving its app to prove a change) →
-  that skill; making one → app-check; keeping one current → app-check-upkeep
+- proving a change in the app → check-<app>, none → app-check, update → app-check-upkeep
 Read only the skills you pick, once per session; resolve their reference
 files relative to the returned baseDir. If read is not loaded, find it with
 tool_search.`;
