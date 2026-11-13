@@ -1,0 +1,533 @@
+/* ═════════════ onboarding: one thing per screen ═════════════
+   A thin progress line on top, one column, a big line and a short one, then the action.
+   Screens slide in sideways in the direction you went; the first one plays a short,
+   one-time picture of what Ondra does. Nothing loops; reduced motion shows the end state. */
+.onb {
+  --onb-in: calc(var(--dur-drawer) * 1.5);
+  --onb-gap: calc(var(--dur-fast) / 3);
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-pop);
+  display: grid;
+  grid-template-rows: var(--head-h) 1fr;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: auto;
+  outline: none;
+}
+
+/* ── top: back, progress ── */
+.onb-top {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.onb-back {
+  position: absolute;
+  top: 50%;
+  left: var(--traffic-w);
+  transform: translateY(-50%);
+}
+.onb-progress {
+  display: flex;
+  gap: var(--s-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.onb-progress li {
+  width: var(--s-16);
+  height: var(--s-4);
+  border-radius: var(--r-bar);
+  background: var(--active);
+  transition: width var(--dur-drawer) var(--ease-drawer), background var(--dur-drawer) var(--ease);
+}
+.onb-progress li.on {
+  background: var(--accent);
+}
+.onb-progress li.now {
+  width: var(--s-32);
+}
+
+/* ── the column ── */
+/* every screen's title sits on the same line, so only what changes moves */
+.onb-stage {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: calc(22vh - var(--head-h)) var(--s-24) var(--s-48);
+}
+.onb-pane {
+  width: min(calc(var(--s-80) * 6), 100%);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.onb-pane h1 {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--fw-strong);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+  text-wrap: balance;
+}
+.onb-sub {
+  margin: var(--s-8) 0 0;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: var(--tracking);
+  color: var(--ink-3);
+  text-wrap: pretty;
+}
+
+/* ── actions: the one main button (Enter) and a quiet way past ── */
+.onb-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  margin-top: var(--s-32);
+}
+.onb-actions:empty {
+  display: none;
+}
+.onb-go,
+.onb-later {
+  height: var(--h-xl);
+  font-size: var(--fs-md);
+}
+.onb-go {
+  gap: var(--s-10);
+  padding: 0 var(--s-10) 0 var(--s-16);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.onb-go:hover:not(:disabled),
+.onb-later:hover:not(:disabled) {
+  border-color: transparent;
+}
+.onb-go:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.onb-later {
+  padding: 0 var(--s-14);
+  color: var(--ink-3);
+}
+/* alone, its words line up with the column */
+.onb-later:first-child {
+  margin-left: calc(var(--s-14) * -1);
+}
+.onb-kbd {
+  background: color-mix(in srgb, var(--accent-ink) 18%, transparent);
+  color: var(--accent-ink);
+  opacity: 0.85;
+}
+
+/* ── rows: account, permissions ── */
+.onb-group {
+  margin-top: var(--s-28);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  overflow: hidden;
+}
+.onb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  min-height: calc(var(--h-2xl) + var(--s-12));
+  padding: var(--s-10) var(--s-16);
+}
+.onb-pick {
+  width: 100%;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease);
+}
+.onb-pick:hover:not(:disabled) {
+  background: var(--hover);
+}
+.onb-pick:focus-visible {
+  outline-offset: -2px;
+}
+.onb-chev {
+  display: grid;
+  color: var(--ink-4);
+  transition: transform var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.onb-pick:hover:not(:disabled) .onb-chev {
+  color: var(--ink-3);
+  transform: translateX(var(--s-2));
+}
+.onb-row + .onb-row {
+  border-top: 1px solid var(--line-soft);
+}
+.onb-row-icon {
+  display: grid;
+  place-items: center;
+  width: var(--icon-md);
+  color: var(--ink-3);
+  flex: none;
+}
+.onb-row-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.onb-row-main b {
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+  font-weight: var(--fw-medium);
+}
+.onb-row-main span {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--ink-3);
+}
+.onb-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  flex: none;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.onb-state.ok {
+  color: var(--ink-2);
+}
+.onb-state.ok .st-icon,
+.onb-note.ok .st-icon {
+  animation: onb-check var(--dur-drawer) var(--ease-drawer) both;
+}
+
+/* ── import: what was found, three numbers ── */
+.onb-counts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: var(--s-28);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+}
+.onb-count {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-16) var(--s-20);
+}
+.onb-count + .onb-count {
+  border-left: 1px solid var(--line-soft);
+}
+.onb-count b {
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--fw-strong);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+.onb-count span {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+.onb-counts.ok b {
+  color: var(--ink-2);
+}
+.onb-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  margin: var(--s-12) 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+.onb-note.ok {
+  color: var(--ink-2);
+}
+
+/* ── the first request ── */
+.onb-composer {
+  margin-top: var(--s-28);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2xl);
+  background: var(--card);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.onb-composer:focus-within {
+  border-color: var(--input);
+}
+.onb-composer textarea {
+  display: block;
+  width: 100%;
+  padding: var(--s-14) var(--s-16) 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  min-height: calc(var(--lh-lg) * 3 + var(--s-14));
+  max-height: 40vh;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  color: var(--ink);
+}
+.onb-composer textarea::placeholder {
+  color: var(--ink-4);
+}
+.onb-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--s-8) var(--s-10) var(--s-10) var(--s-16);
+}
+.onb-send {
+  display: grid;
+  place-items: center;
+  width: var(--h-sm);
+  height: var(--h-sm);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.onb-send:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.onb-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.onb-send:disabled {
+  opacity: 1;
+  background: var(--active);
+  color: var(--ink-4);
+}
+
+/* ── the picture on the first screen: a small Ondra window ── */
+.onb-demo {
+  display: grid;
+  grid-template-columns: minmax(calc(var(--s-40) * 3), 34%) 1fr;
+  height: calc(var(--s-80) * 2 + var(--s-48));
+  margin-top: var(--s-32);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--sidebar);
+  overflow: hidden;
+}
+.od-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-12) var(--s-8);
+}
+.od-lights {
+  display: flex;
+  gap: var(--s-6);
+  padding: 0 var(--s-6) var(--s-16);
+}
+.od-lights i {
+  width: var(--s-8);
+  height: var(--s-8);
+  border-radius: 50%;
+  background: var(--active);
+}
+.od-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+  height: var(--h-sm);
+  padding: 0 var(--s-8);
+  border-radius: var(--r-sm);
+}
+.od-r3 {
+  background: var(--row-selected);
+  box-shadow: var(--row-selected-shadow);
+}
+.od-bar {
+  display: block;
+  height: var(--s-6);
+  border-radius: var(--r-pill);
+  background: var(--active);
+}
+.od-row .od-bar {
+  flex: none;
+}
+.od-swap {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+}
+.od-swap > * {
+  grid-area: 1 / 1;
+}
+.od-was {
+  opacity: 0;
+}
+.od-main {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s-16) var(--s-16) var(--s-12);
+  border-left: 1px solid var(--line-soft);
+  background: var(--card);
+}
+.od-me {
+  align-self: flex-end;
+  width: 46%;
+  padding: var(--s-10) var(--s-12);
+  border-radius: var(--r-xl);
+  background: var(--bubble);
+}
+.od-me .od-bar {
+  background: var(--input);
+}
+.od-reply {
+  display: grid;
+  gap: var(--s-8);
+  margin-top: var(--s-14);
+  width: 82%;
+}
+.od-composer {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: var(--h-xl);
+  margin-top: auto;
+  padding: 0 var(--s-8) 0 var(--s-14);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+}
+.od-typed {
+  display: block;
+  width: 0;
+  height: var(--s-6);
+  border-radius: var(--r-pill);
+  background: var(--input);
+}
+.od-send {
+  display: grid;
+  place-items: center;
+  width: var(--h-xs);
+  height: var(--h-xs);
+  margin-left: auto;
+  border-radius: var(--r-pill);
+  background: var(--active);
+  color: var(--ink-4);
+}
+
+/* ── motion (plays once; the resting styles above are the end state) ── */
+@media (prefers-reduced-motion: no-preference) {
+  .onb-pane > * {
+    animation: onb-in var(--onb-in) var(--ease-drawer) both;
+  }
+  .onb-pane > :nth-child(2) {
+    animation-delay: var(--onb-gap);
+  }
+  .onb-pane > :nth-child(3) {
+    animation-delay: calc(var(--onb-gap) * 2);
+  }
+  .onb-pane > :nth-child(4) {
+    animation-delay: calc(var(--onb-gap) * 3);
+  }
+  .onb-pane > :nth-child(n + 5) {
+    animation-delay: calc(var(--onb-gap) * 4);
+  }
+  .onb-pane.out {
+    opacity: 0;
+    transform: translateX(calc(var(--s-8) * -1));
+  }
+  .onb-pane.out.back {
+    transform: translateX(var(--s-8));
+  }
+
+  /* the picture: typed → sent → a task joins the list → the one before it finishes */
+  .od-typed {
+    animation: od-type 1.1s var(--ease) 0.6s both;
+  }
+  .od-send {
+    animation: od-send 1.1s linear 0.6s both;
+  }
+  .od-me {
+    animation: od-pop var(--dur-drawer) var(--ease-drawer) 1.6s both;
+  }
+  .od-r3 {
+    animation: od-pop var(--dur-drawer) var(--ease-drawer) 1.9s both;
+  }
+  .od-reply {
+    animation: od-pop var(--dur-drawer) var(--ease-drawer) 2.2s both;
+  }
+  .od-was {
+    animation: od-gone var(--dur) var(--ease) 2.9s both;
+  }
+  .od-now {
+    animation: onb-check var(--dur-drawer) var(--ease-drawer) 2.9s both;
+  }
+}
+
+@keyframes onb-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--s-16));
+  }
+}
+.onb-pane.back > * {
+  animation-name: onb-in-back;
+}
+@keyframes onb-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--s-16) * -1));
+  }
+}
+@keyframes onb-check {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes od-type {
+  0% {
+    width: 0;
+  }
+  55%,
+  86% {
+    width: 52%;
+    opacity: 1;
+  }
+  100% {
+    width: 52%;
+    opacity: 0;
+  }
+}
+@keyframes od-send {
+  0%,
+  40% {
+    background: var(--active);
+    color: var(--ink-4);
+    transform: none;
+  }
+  50%,
+  78% {
+    background: var(--accent);
+    color: var(--accent-ink);
+    transform: none;
+  }
+  84% {
+    background: var(--accent);
+    color: var(--accent-ink);
+    transform: scale(0.86);
+  }
+  100% {
+    background: var(--active);
+    color: var(--ink-4);
+    transform: none;
+  }
+}
+@keyframes od-pop {
+  from {
+    opacity: 0;
+    transform: translateY(var(--s-6));
+  }
+}
+@keyframes od-gone {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
