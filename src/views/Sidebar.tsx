@@ -85,6 +85,8 @@ function followUps(t: Task): Task[] {
   }
   return out.sort((a, b) => a.createdAt - b.createdAt);
 }
+/** still going: working, waiting on you, queued or paused */
+const going = (t: Task) => t.status === "running" || t.status === "waiting" || t.status === "queued" || t.status === "paused";
 /** a job and its follow-ups: the line sorts, folds away and counts as one */
 const lineOf = (t: Task) => [t, ...followUps(t)];
 
@@ -154,6 +156,10 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
       (ups().length > 0 && openRoot() === t().id) ||
       kids().some((k) => k.status === "waiting" || k.status === "failed") ||
       ups().some((f) => !ended(f) || needsYou(f)));
+  // folded, a line whose newest follow-up is still going stands for that one: its state shows on
+  // the row and a click goes there (opened, each row is its own job again)
+  const liveUp = () => [...ups()].reverse().find(going);
+  const face = () => (!showKids() && !going(t()) && liveUp()) || t();
   const foldTip = () => {
     if (showKids()) return tr("접기");
     if (!ups().length) return tr("서브에이전트 {n}개", { n: kids().length });
@@ -161,22 +167,23 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
     return `${tr("이어진 작업 {n}개", { n: ups().length })} · ${tr("서브에이전트 {n}개", { n: kids().length })}`;
   };
   const b = () => bucket(t());
-  const tone = () => stateMeta(t(), props.kid).tone;
-  const meta = () => stateMeta(t(), props.kid).text;
+  const tone = () => stateMeta(face(), props.kid).tone;
+  const meta = () => stateMeta(face(), props.kid).text;
   // a task in review says so; its size is in the tooltip
   const tip = () => {
     const d = changes(t());
+    if (face() !== t()) return `${t().title} → ${face().title}`;
     return b() === "review" && (d.add || d.del) ? `${t().title} · +${d.add} −${d.del}` : t().title;
   };
   return (
     <>
       <button
         class="sb-row"
-        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id, kid: props.kid, follow: props.follow, shut: ups().length > 0 && !showKids(), hot: hoverTask() === t().id, past: ended(t()) }}
+        classList={{ [`tone-${tone()}`]: true, menu: ctxFor() === `task:${t().id}`, on: openId() === t().id || openId() === face().id, kid: props.kid, follow: props.follow, shut: ups().length > 0 && !showKids(), hot: hoverTask() === t().id, past: ended(t()) }}
         style={{ "--i": props.index }}
         data-task={t().id}
         // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
-        onClick={(e) => (e.altKey || e.metaKey ? void openInSplit(t().id) : openTask(t().id))}
+        onClick={(e) => (e.altKey || e.metaKey ? void openInSplit(face().id) : openTask(face().id))}
         onPointerDown={(e) => startTaskDrag(e, t().id)}
         onMouseEnter={() => setHoverTask(props.kid ? t().parentId! : t().id)}
         onMouseLeave={() => setHoverTask(null)}
@@ -186,7 +193,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         }}
         title={tip()}
       >
-        <Glyph t={t()} />
+        <Glyph t={face()} />
         <span class="sb-title">{taskTitle(t())}</span>
         <Show when={!props.kid && nested()}>
           <span
