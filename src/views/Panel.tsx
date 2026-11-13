@@ -498,7 +498,7 @@ function ArtifactsPane(props: { t: Task }) {
 
 const TOOLS: { kind: PanelTab; label: string; icon: string; keys?: ShortcutId; job?: boolean }[] = [
   { kind: "flow", label: "작업 흐름", icon: "branch", keys: "flow" },
-  { kind: "side", label: "옆 대화", icon: "message", keys: "side" },
+  { kind: "side", label: "사이드 채팅", icon: "message", keys: "side" },
   { kind: "artifacts", label: "결과물", icon: "inbox", keys: "artifacts", job: true },
   { kind: "changes", label: "변경 사항", icon: "diff", keys: "changes", job: true },
   { kind: "pr", label: "PR", icon: "pr", keys: "pr", job: true },

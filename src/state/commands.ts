@@ -84,7 +84,7 @@ export function appCommands(): ShortcutCommand[] {
     // the panel and every tab it can show, in one section
     command("panel", "패널 열기·닫기", "패널", "panel", togglePanel, panelAvailable, true),
     command("flow", "작업 흐름", "패널", "branch", () => openPanel("flow"), panelAvailable, true),
-    command("side", "옆 대화", "패널", "message", () => {
+    command("side", "사이드 채팅", "패널", "message", () => {
       if (panelOpen() && panelTab() === "side") void closePanel();
       else {
         openPanel("side");

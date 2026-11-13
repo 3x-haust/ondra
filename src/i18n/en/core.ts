@@ -56,6 +56,6 @@ export default {
   "사용|uml": "uses",
   "터미널 보기": "Show terminal",
   "터미널 {n}": "{n} terminal|{n} terminals",
-  "옆 대화가 끝났어요": "Side chat ended",
+  "사이드 채팅이 끝났어요": "Side chat ended",
   "바이너리 분석 기록 없음": "No reverse engineering yet",
 } satisfies Record<string, string>;

@@ -801,7 +801,7 @@ export function MainView() {
       commands={[
         btwCommand(() => `main:${key()}`),
         ...feedbackCommands(),
-        { name: "side", desc: t("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
+        { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
         { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
         { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
         { name: "edits", desc: t("권한: {name}", { name: t("편집 허용") }), icon: "pencil", run: () => setState("settings", "permission", "edits") },

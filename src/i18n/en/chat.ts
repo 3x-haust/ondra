@@ -57,7 +57,7 @@ export default {
   "제목 없음": "Untitled",
 
   // slash commands
-  "옆 대화 열기": "Open side chat",
+  "사이드 채팅 열기": "Open side chat",
   "작업 흐름 열기": "Open flow",
   "메모리 열기": "Open memory",
   "설정 열기": "Open settings",
@@ -83,9 +83,10 @@ export default {
 
   // quick question and side chat
   "짧은 질문": "Quick question",
-  "옆 대화": "Side chat",
-  "옆 대화로 이어가기": "Continue in side chat",
-  "옆 대화에 묻기": "Ask on the side",
+  "사이드 채팅": "Side chat",
+  "사이드 채팅으로 이어가기": "Continue in side chat",
+  "답 복사": "Copy answer",
+  "사이드 채팅에 묻기": "Ask on the side",
   "작업과 상관없이 따로 묻는 대화예요": "Ask on the side. Your tasks aren't affected.",
 
   // composer
