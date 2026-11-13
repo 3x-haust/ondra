@@ -640,3 +640,21 @@ export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", 
 export const farPut = (kind: "cache" | "upload" | "site", name: string, offset: number, data: string) =>
   call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
 export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);
+
+// ───────────────────────── logos for diagrams (src-tauri/src/logos.rs)
+/** A brand's own mark as data: URLs (an SVG already cleaned of anything active). */
+export interface OfficialLogo {
+  /** the mark, for a light background when the source has two */
+  light: string;
+  /** the source's variant for a dark background */
+  dark?: string | null;
+  /** the whole mark is this dark or light: turn its lightness over on a background of the same tone */
+  tone?: "dark" | "light" | null;
+  /** svgl · devicon · gilbarbara */
+  source: string;
+}
+/**
+ * The official logo for a brand name: svgl, then devicon, then gilbarbara/logos, kept on disk
+ * (a miss for a day). Only a brand name goes here, never a box's own text (ui/brandLogo.ts).
+ */
+export const logoFetch = (name: string) => call<OfficialLogo | null>("logo_fetch", { name }, null);

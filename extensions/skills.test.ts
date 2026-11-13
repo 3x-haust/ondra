@@ -37,7 +37,7 @@ const top = (query: string) => searchSkills(bundled, query, 3).map((s) => s.name
 
 describe("skill matching", () => {
   it("reads every bundled skill", () => {
-    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa"]));
+    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa", "stack-diagram"]));
   });
 
   it("maps a question about how another tool works to reverse engineering", () => {
@@ -55,6 +55,8 @@ describe("skill matching", () => {
     ["랜딩 페이지 디자인", "web-design"],
     ["포트폴리오 디자인", "web-design"],
     ["매출 차트 보고서 만들어줘", "visual-report"],
+    ["우리 스택 아키텍처 다이어그램 그려줘", "stack-diagram"],
+    ["draw our system architecture diagram with logos", "stack-diagram"],
     ["모션그래픽 만들어줘", "motion-graphics"],
     ["제품 홍보 영상 만들어줘", "motion-graphics"],
     ["인스타 릴스용 키네틱 타이포 영상", "motion-graphics"],

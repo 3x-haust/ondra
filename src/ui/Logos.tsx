@@ -1,6 +1,8 @@
 // Official logos for services and tools (simple-icons, CC0; marks belong to their
-// owners). Only the ones below are bundled. Names are matched loosely: "Postgres",
-// "pg", "postgresql" all find the same logo; nothing found → no logo.
+// owners). Only the ones below are bundled, for Settings, sign-in and pickers. Names
+// are matched loosely: "Postgres", "pg", "postgresql" all find the same logo; nothing
+// found → no logo. Diagrams look further (all of simple-icons, then the brand's own
+// mark from the internet): see brandLogo.ts.
 import { Show } from "solid-js";
 import {
   siAndroid, siAnthropic, siApachekafka, siApple, siAmazondynamodb, siAmazons3, siAmazonsqs, siBun, siClaude, siCloudflare, siDeno, siDiscord, siDjango,
@@ -33,6 +35,9 @@ const ALIAS: Record<string, string> = {
   chatgpt: "openai", codex: "openai", "openai-codex": "openai", gpt: "openai",
   elastic: "elasticsearch", es: "elasticsearch", rabbit: "rabbitmq", mongo: "mongodb", gh: "github", actions: "githubactions",
 };
+
+/** the simple-icons slug another name stands for ("postgres" → postgresql), if any */
+export const aliasOf = (name: string): string | undefined => ALIAS[key(name)];
 
 const key = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9-]+/g, "").trim();
 
@@ -79,8 +84,11 @@ export function Logo(props: { name?: string; icon?: SimpleIcon; size?: number; m
   );
 }
 
+/** a glyph's colour in a diagram: its brand colour, or the text colour for a dark one */
+export const glyphColor = (hex: string) => (dark(hex) ? "var(--ink)" : `#${hex}`);
+
 /** in SVG diagrams: the path and colour only (placed by the caller) */
 export function logoPath(name?: string): { d: string; color: string } | undefined {
   const i = logoFor(name);
-  return i ? { d: i.path, color: dark(i.hex) ? "var(--ink)" : `#${i.hex}` } : undefined;
+  return i ? { d: i.path, color: glyphColor(i.hex) } : undefined;
 }

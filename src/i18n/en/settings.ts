@@ -320,6 +320,7 @@ export default {
   "테스트와 CI를 만들어요": "Writes tests and sets up CI",
   "진행과 결과를 차트와 블록으로 보여 줘요": "Shows progress and results as charts and blocks",
   "사이트와 화면을 디자인해요": "Designs sites and screens",
+  "공식 로고로 아키텍처·스택 다이어그램을 그려요": "Draws architecture and stack diagrams with official logos",
 
   // pdf viewer
   "문서 탐색": "Document navigation",

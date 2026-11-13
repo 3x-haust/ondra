@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import process from "node:process";
+import { simpleIconsAll } from "./scripts/simple-icons-all.mjs";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -18,7 +19,7 @@ const reloadOnCore = {
 };
 
 export default defineConfig(() => ({
-  plugins: [solid(), reloadOnCore],
+  plugins: [solid(), reloadOnCore, simpleIconsAll()],
   build: {
     rollupOptions: {
       input: { main: "index.html", pdf: "pdf.html" },

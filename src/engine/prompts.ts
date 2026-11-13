@@ -22,6 +22,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - research with sources, a survey or comparison → deep-research
 - a chart, a diagram or a page shown in the chat → visual-report; a Word,
   Excel, PowerPoint, PDF or HWPX file, or a document to hand over → office-docs
+- an architecture/stack/infra diagram with official logos (아키텍처·스택
+  다이어그램, 시스템 구성도) as an HTML/PNG file → stack-diagram
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
@@ -718,7 +720,7 @@ ONE diagram. Pick by the question:
 - logic that branches or retries → {"type":"flow","nodes":[{id,label,kind:"start"|"end"|"step"|"decision"|"io",note}],"edges":[{from,to,label:"예"|"아니오"|verb}]}
 - a status / lifecycle / reducer → {"type":"states","initial":"idle","states":[{id,label,note,final}],"transitions":[{from,to,event,guard}]}
 - database tables and relations → {"type":"er","tables":[{name,columns:[{name,type,pk,fk,null}]}],"relations":[{from,to,card:"1-n"|"1-1"|"n-n",label}]}
-- running systems: services, DBs, queues, who talks to whom → {"type":"arch","zones":[{id,label}],"nodes":[{id,label,zone,kind:"user"|"gateway"|"service"|"function"|"db"|"cache"|"queue"|"storage"|"external",note,logo:"postgresql"}],"edges":[{from,to,label:"주문 저장",async}]} (real product names get their logo)
+- running systems: services, DBs, queues, who talks to whom → {"type":"arch","zones":[{id,label}],"nodes":[{id,label,zone,kind:"user"|"gateway"|"service"|"function"|"db"|"cache"|"queue"|"storage"|"external",note,logo:"postgresql"}],"edges":[{from,to,label:"주문 저장",async}]} (real products get a logo: any brand slug or name, e.g. "postgresql", "neon", "clerk", "github-actions"; the official mark is drawn when it can be found)
 - which module uses which, cycles → {"type":"deps","nodes":[{id,label:"src/a.ts",group,ref}],"edges":[{from,to,kind:"call"|"import"}]}
 - types and how they relate → {"type":"classes","classes":[{name,kind,fields:["id: string"],methods:["pay(): void"]}],"relations":[{from,to,kind:"extends"|"implements"|"owns"|"has"|"uses",card:["1","*"]}]}
 - where the time goes in a request → {"type":"trace","unit":"ms","spans":[{id,label,start,dur,parent,service,error}]}

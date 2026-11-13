@@ -17,6 +17,7 @@ The app passes them to every pi worker with `--skill`.
 | `deep-research` | Research with sources (리서치, 조사해서 정리, 논문 찾아): plan sub-questions, search and read primary sources in rounds with findings on disk, check every claim, then a visual HTML report shown in the chat and printed to PDF (`pdf.sh`). |
 | `office-docs` | Word, Excel, PowerPoint, PDF and HWPX files: read them with `office.py` (no install), pick the library for a change, keep an existing file's look, and check the result as page pictures. |
 | `computer-use` | Mac app automation in the background through the `computer` tool and its `ondra-cuhost` helper: one target app at a time, the user's focus and cursor untouched, screenshots as proof. |
+| `stack-diagram` | Architecture, stack and infra diagrams with official logos (아키텍처·스택 다이어그램, 시스템 구성도) as one self-contained HTML and light/dark PNGs. Vendored from [caru-ini/stack-diagram](https://github.com/caru-ini/stack-diagram) at `9175bde` (MIT, `LICENSE`; fonts SIL OFL); Ondra's only changes are the PNG fallback to its bundled headless Chrome in `render_png.py` and a few notes in `SKILL.md`. |
 | `secrets` | API keys, tokens and .env files: use Ondra's secrets as `$NAME` without seeing values, find and save what each one is for in memory, and what to do when one is missing or pasted into the chat. |
 
 ## When a skill is offered
