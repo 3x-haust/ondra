@@ -565,6 +565,40 @@ export interface ProjectNow {
   title: string;
 }
 
+/** A lesson a skill proposal comes from: a job that used the skill and went badly. */
+export interface SkillLesson {
+  taskId: string;
+  title?: string;
+  at: number;
+  /** what went wrong, short (실패했어요 · 사용자가 바로잡았어요) */
+  problem: string;
+}
+/** One exact replacement in a SKILL.md; an empty `find` adds `replace` at the end. */
+export interface SkillEdit {
+  find: string;
+  replace: string;
+}
+/** A change proposed to a skill, waiting for the user (적용 / 무시). */
+export interface SkillProposal {
+  id: string;
+  skill: string;
+  /** its SKILL.md */
+  path: string;
+  /** Ondra's own (changed as the user's copy), already the user's copy, or made here */
+  kind: "bundled" | "changed" | "mine";
+  at: number;
+  lessons: SkillLesson[];
+  /** what went wrong and what in the skill led there */
+  diagnosis: string;
+  /** what the change makes the next job do */
+  why: string;
+  edits: SkillEdit[];
+  /** the SKILL.md the edits were made against (for the diff); emptied once decided */
+  base: string;
+  status?: "applied" | "dismissed";
+  decidedAt?: number;
+}
+
 export interface Skill {
   name: string;
   path: string;
@@ -590,6 +624,8 @@ export interface Settings {
   instructions: string;
   /** Captain may save memories on its own when it notices repeats. */
   learn: boolean;
+  /** Read jobs that used a skill and went badly, and propose a change to the skill (off unless turned on: it uses the workspace account). */
+  skillReflect?: boolean;
   /** Give each task in a git repo its own worktree. */
   isolate: boolean;
   /** Send apps a job starts back behind the user's window when they come forward. */
@@ -655,6 +691,10 @@ export interface AppState {
   memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number; /** conflicts with the user's own pieces it asked about */ held?: number };
   /** 확인 필요: learned pieces that contradict the user's own, waiting for the user */
   memoryConflicts?: MemoryConflict[];
+  /** skill refinement: changes proposed to skills from jobs that went badly (newest last, capped) */
+  skillProposals?: SkillProposal[];
+  /** skill refinement: when it last read jobs, and the jobs already read */
+  skillReflect?: { at: number; tasks: string[] };
   /** 일 기록, newest last (capped) */
   journal?: JournalEntry[];
   /** 지금, by project folder */

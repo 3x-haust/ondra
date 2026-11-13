@@ -234,6 +234,9 @@ function General() {
         <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
+        <Row title={t("스킬 다듬기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
+          <Switch_ label={t("스킬 다듬기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
+        </Row>
         <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
           <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
         </Row>

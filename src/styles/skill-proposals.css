@@ -1,0 +1,105 @@
+/* Settings › 스킬 › 다듬기 제안: a change proposed to a skill, waiting for 적용 / 무시 */
+.sp-list {
+  display: grid;
+  gap: var(--s-10);
+  margin-bottom: var(--s-24);
+}
+.sp-card {
+  display: grid;
+  gap: var(--s-10);
+  padding: var(--s-14) var(--s-16) var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--card);
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  font-size: var(--fs-md);
+}
+.sp-when {
+  margin-left: auto;
+  color: var(--ink-4);
+  font-size: var(--fs-xs);
+}
+.sp-diag {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.sp-jobs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-6);
+}
+.sp-job {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  max-width: 100%;
+  height: 26px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+  background: var(--hover);
+  font-size: var(--fs-xs);
+}
+.sp-job:hover {
+  background: var(--active);
+}
+.sp-job-title {
+  overflow: hidden;
+  max-width: 220px;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-job-why {
+  flex: none;
+  color: var(--bad-ink, var(--bad));
+}
+.sp-diff {
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--s-6) 0;
+  border-radius: var(--r-md);
+  background: var(--code-bg, var(--hover));
+  /* a skill is prose: read in the text font, not code */
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+.sp-diff .diff-line.h {
+  line-height: 1.2;
+  background: none;
+}
+.sp-diff .diff-line {
+  padding: 0 var(--s-12);
+}
+.sp-why {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-6);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.sp-why .icon,
+.sp-why svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.sp-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding-top: var(--s-2);
+}
+.sp-note {
+  overflow: hidden;
+  color: var(--ink-4);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -13,6 +13,7 @@ import { Markdown } from "../ui/Markdown";
 import { t } from "../i18n";
 import { EmptyState, GroupTitle, PageHead } from "./Settings";
 import { skillLine } from "../engine/agentTools";
+import { SkillProposals } from "./SkillProposals";
 
 // the slash list and others read the same line
 export { skillLine };
@@ -267,6 +268,7 @@ export function SkillsTab() {
   return (
     <>
       <PageHead tab="skills" />
+      <SkillProposals />
       <GroupTitle title={t("기본")} />
       <div class="set-group">
         <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중…") : t("스킬 없음")}</div>}>
