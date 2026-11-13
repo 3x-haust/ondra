@@ -8,7 +8,7 @@ import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
-import { decisionFor, projectsIn, setState, spaceById, kidsOf, state, taskById } from "../state/store";
+import { decisionFor, projectsShown, queueWith, setState, spaceById, kidsOf, state, taskById, tasksShown } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
 import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, resumeTask, startTask, tell } from "../engine/tasks";
@@ -98,7 +98,7 @@ const [ranks, setRanks] = createSignal<Record<string, number>>({});
 const rankOf = (t: Task) => ranks()[t.id] ?? RANK[tone(t)];
 const snapRanks = (space: string) => {
   for (const k in laneCol) delete laneCol[k];
-  setRanks(Object.fromEntries(state.tasks.filter((t) => t.space === space && !t.parentId).map((t) => [t.id, RANK[tone(t)]])));
+  setRanks(Object.fromEntries(tasksShown(space as Task["space"]).filter((t) => !t.parentId).map((t) => [t.id, RANK[tone(t)]])));
 };
 /** which of two columns each lane went to (kept like the ranks, so lanes don't swap columns as work moves on) */
 const laneCol: Record<string, number> = {};
@@ -121,8 +121,8 @@ const [twoCols, setTwoCols] = createSignal(false);
  * project sit at the top of what they lead to, so a lane that grows only grows downward.
  */
 function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
-  const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
-  const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
+  const roots = tasksShown(space as Task["space"]).filter((t) => !t.parentId && !t.answer && !t.archived);
+  const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsShown(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "프로젝트 없음", folder: spaceById(space as Task["space"]).folder });
   const jobsOf = (p: { id: string }) =>
     roots
@@ -705,7 +705,7 @@ function SubCard(props: { n: Node }) {
 
 function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
-  const jobs = createMemo(() => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id)));
+  const jobs = createMemo(() => tasksShown(props.space as Task["space"]).filter((x) => !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id)));
   const counts = createMemo(() => {
     const n: Record<string, number> = {};
     for (const x of jobs()) {
@@ -859,7 +859,7 @@ function Drawer(props: { t: Task; onClose: () => void }) {
   const request = () => (queued() ? "" : asked());
   /** its place in the queue: next, or how many tasks are ahead of it */
   const ahead = () => {
-    const q = state.tasks.filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+    const q = queueWith(job());
     const i = q.findIndex((x) => x.id === job().id);
     return i < 0 ? "" : i === 0 ? t("다음 차례") : t("앞에 작업 {n}개", { n: i });
   };
@@ -1681,7 +1681,7 @@ export function Canvas() {
     onCleanup(() => ro.disconnect());
   });
   /** nothing in this workspace yet: a quiet empty state instead of a lone Main card */
-  const empty = () => !state.tasks.some((x) => x.space === space() && !x.parentId && !x.answer && !x.archived);
+  const empty = () => !tasksShown(space() as Task["space"]).some((x) => !x.parentId && !x.answer && !x.archived);
 
   return (
     <div class="view canvas-view">
