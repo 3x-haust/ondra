@@ -17,6 +17,25 @@
   --focus: rgba(31, 111, 216, 0.4);
   --warn: #b45309;
   --shot-edge: rgba(9, 9, 11, 0.12);
+  /* app tokens used by the recreated UI (src/styles/tokens.css) */
+  --sidebar: #fafafa;
+  --bubble: #f4f4f5;
+  --input: #d4d4d8;
+  --code-bg: #f4f4f5;
+  --live: #0ea5e9;
+  --amber: #f59e0b;
+  --ok: #10b981;
+  --ok-ink: #047857;
+  --bad: #dc2626;
+  --bad-ink: #b91c1c;
+  --ok-soft: rgba(16, 185, 129, 0.08);
+  --warn-soft: rgba(245, 158, 11, 0.08);
+  --bad-soft: rgba(239, 68, 68, 0.06);
+  --diff-add: #10b981;
+  --diff-del: #ef4444;
+  --shadow-pop: 0 3px 12px rgba(0, 0, 0, 0.09), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   --wrap: 1120px;
@@ -38,8 +57,22 @@
     --accent-ink: #04111f;
     --accent-soft: rgba(77, 156, 240, 0.13);
     --focus: rgba(77, 156, 240, 0.5);
-    --warn: #fbbf24;
+    --warn: #f6b04a;
     --shot-edge: rgba(255, 255, 255, 0.1);
+    --sidebar: #0d0d0d;
+    --bubble: #18181a;
+    --input: rgba(255, 255, 255, 0.15);
+    --code-bg: #111113;
+    --live: rgba(125, 211, 252, 0.8);
+    --amber: rgba(246, 173, 60, 0.92);
+    --ok: rgba(110, 231, 183, 0.9);
+    --ok-ink: #34d399;
+    --bad: rgba(252, 165, 165, 0.9);
+    --bad-ink: #f87171;
+    --ok-soft: rgba(16, 185, 129, 0.14);
+    --warn-soft: rgba(245, 158, 11, 0.14);
+    --bad-soft: rgba(239, 68, 68, 0.1);
+    --shadow-pop: 0 7px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 }
 
