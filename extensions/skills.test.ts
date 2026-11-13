@@ -9,7 +9,10 @@ import { freshState, setState } from "../src/state/store";
 import type { Task } from "../src/state/types";
 import { CAPTAIN_SYSTEM, handoffPrompt, SUB_SYSTEM, TASK_SYSTEM, taskPrompt } from "../src/engine/prompts";
 import { skillLine } from "../src/engine/agentTools";
-import { messageHint, searchSkills, SkillRouter, skillHint, taskQuery, toolHint, triggersOf, type Triggers } from "./skills";
+import { CROSSCHECK, PLAN_REVIEW, REVIEW_FIX } from "../src/engine/crosscheck";
+import { runMessage } from "../src/engine/routines";
+import { fromJob } from "../src/engine/jobs";
+import { messageHint, searchSkills, SkillRouter, skillHint, taskQuery, toolHint, triggersOf, userWords, type Triggers } from "./skills";
 
 // The bundled skills as the engine reads them: name and (folded) description from the frontmatter.
 const root = resolve("skills");
@@ -199,5 +202,30 @@ describe("qa skill", () => {
     expect(body).toMatch(/Report-only\*\* \(default\)/);
     expect(body).toContain("Never** use real customers' accounts");
     expect(body).toContain("Never type, paste or print a password");
+  });
+});
+
+describe("userWords", () => {
+  it("keeps only the user's message from main's turn", () => {
+    const turn = "# This chat\n테스트와 타입 검사를 돌려요. plan 먼저\n\n# Projects in this space (name: folder)\n- app: ~/app\n\n# Message\n빌드 왜 실패했어?";
+    expect(userWords(turn)).toBe("빌드 왜 실패했어?");
+    expect(userWords("# A fork you started has ended (not a user message)\n테스트 다 통과\n\nsay what it did")).toBe("");
+  });
+  it("drops the notes the app sends by itself", () => {
+    expect(userWords("(Ondra가 다시 시작됐어요. 돌던 명령이 끊겼으면 그 로그부터 확인하세요. 하던 일을 이어서 하세요. 이미 보낸 plan은 다시 보내지 마세요.)")).toBe("");
+    expect(userWords("(Ondra) Your to-do list hasn't moved for a while.")).toBe("");
+    expect(userWords("끝내기 전에 빠진 게 있어요.\n- done에 evidence가 없어요.")).toBe("");
+    expect(userWords(`${CROSSCHECK} 결과가 왔어요 (설계 · 코드):\n\n${REVIEW_FIX}`)).toBe("");
+    expect(userWords(`${PLAN_REVIEW}가 둘 다 실패했어요.`)).toBe("");
+    expect(userWords(`리뷰 결과가 왔어요 ("코드 리뷰"):\n\nP2 하나\n\n${REVIEW_FIX}`)).toBe("");
+    expect(userWords(`서브에이전트 "테스트 짜기" 완료: 테스트 12개 추가`)).toBe("");
+  });
+  it("keeps what a routine asks and what another job says", () => {
+    const run = runMessage({ title: "아침 정리", when: { kind: "daily", at: "09:00" }, runs: 0, prompt: "어제 PR 리뷰해 줘" } as never, 0);
+    expect(userWords(run)).toBe("어제 PR 리뷰해 줘");
+    expect(userWords(fromJob({ title: "A", id: "t1" } as Task, "테스트 깨졌어요"))).toBe("테스트 깨졌어요");
+  });
+  it("leaves the user's own words as they are", () => {
+    expect(userWords("\"어떻게 할까요?\" → 로그인 화면만")).toBe("\"어떻게 할까요?\" → 로그인 화면만");
   });
 });
