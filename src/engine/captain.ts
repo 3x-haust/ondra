@@ -11,7 +11,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { accountById, addProject, allDecisions, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -26,6 +26,7 @@ import { engine, expand, explain, isAlive, isModelError, listen, markAlive, mark
 import { canUseTools, isDirect } from "./connections";
 import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
+import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
@@ -35,10 +36,18 @@ const base = (key: string) => key.replace(/^sim\d*:/, "");
 const isSim = (key: string) => /^sim\d*:/.test(key);
 const sp = (key: string) => base(key).split("~")[0] as SpaceId;
 const pj = (key: string) => base(key).split("~")[1] as string | undefined;
-const projectOf = (key: string) => (pj(key) ? (worlds.get(key)?.projects ?? state.projects ?? []).find((p) => p.id === pj(key) && p.space === sp(key)) : undefined);
+// a project added from another Mac has its own chat here too (its jobs run there)
+const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
+  pj(key) ? (worlds.get(key)?.projects ?? projectsShown(sp(key))).find((p) => p.id === pj(key) && p.space === sp(key)) : undefined;
+/** the folder main runs in: a project's, unless it is another Mac's (or made up): then the space's */
+const localFolder = (key: string) => {
+  const p = projectOf(key);
+  return isSim(key) || p?.host ? undefined : p?.folder;
+};
 /** this message belongs to this chat */
 export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) && (m.project ?? undefined) === pj(key);
-const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace("~", "-").replace(":", "-")}`;
+// (another Mac's project is "r:<host>:<id>": every colon goes, not just the first)
+const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace(/[~:]/g, "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
 const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
 /** what main is told about when no user spoke: a fork it started ended, or a project it handed work to finished */
@@ -323,7 +332,7 @@ export function reportUp(space: string) {
     const jobs = [...q.jobs].map((id) => taskById(id)).filter((t): t is Task => !!t);
     if (jobs.some((t) => t.status !== "done" && t.status !== "failed")) continue;
     // a question waiting on the user stays in the project; it goes up once answered
-    if (state.decisions.some((d) => (q === latest && d.taskId === `main:${space}`) || jobs.some((t) => t.id === d.taskId))) continue;
+    if (allDecisions().some((d) => (q === latest && d.taskId === `main:${space}`) || jobs.some((t) => t.id === d.taskId))) continue;
     setState("captain", (m) => m.id === last.id, "reported", true);
     const answers = q.msgs.flatMap((m) => (m.routes ?? []).flatMap((r) => (r.kind === "answer" && r.text.trim() ? [r.text.trim()] : []))).slice(-2).join("\n\n").slice(-3000);
     // what each job itself reported (its words and its result blocks), so main can tell the details itself
@@ -475,7 +484,7 @@ async function instructionSig(dir: string): Promise<string> {
   );
   return parts.filter(Boolean).join("\n");
 }
-const folderOf = (space: string) => expand(projectOf(space)?.folder || spaceById(sp(space)).folder || "~");
+const folderOf = (space: string) => expand(localFolder(space) || spaceById(sp(space)).folder || "~");
 
 /** Restart an idle main engine whose instruction files changed since it started. */
 /** What the chat was started with: its instruction files and its tools. */
@@ -693,7 +702,6 @@ async function ensureCaptain(space: string) {
     },
   });
   const space0 = spaceById(sp(space));
-  const proj = projectOf(space);
   const model = mainModel(acc.id);
   // A reload or restart soon after the last reply keeps the session: its prefix
   // is still in the provider cache. After a quiet spell it would be cold anyway,
@@ -720,8 +728,8 @@ async function ensureCaptain(space: string) {
     ...[CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
-  // a simulated project's folder is made up: main runs in the space's folder then
-  const cwd = expand((isSim(space) ? "" : proj?.folder) || space0.folder || "~");
+  // a simulated project's folder is made up, another Mac's isn't on this one: main runs in the space's folder then
+  const cwd = expand(localFolder(space) || space0.folder || "~");
   const signature = await startSig(cwd, skills.signature, space);
   // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
   const door = isSim(space) ? [] : [...(await bridgeEnv()), ["APP_WORKER_ID", agent] as [string, string]];
@@ -871,7 +879,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       ? tasks
           .map((t) => {
             // what it is on (running), what it asks (waiting), what it did (done), why it stopped (failed)
-            const l = lastSaid(t, w?.decisions ?? state.decisions);
+            const l = lastSaid(t, w?.decisions ?? allDecisions());
             const said = l.tag === "now" ? l.text : `${l.tag}: ${l.text}`;
             return `- ${t.id} | ${t.status} | ${t.topic} | ${t.title} | ${placeOf(t)} | ${String(said ?? "").replace(/\s+/g, " ").slice(0, 200)}`;
           })
@@ -881,7 +889,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   ].join("\n");
   const space0 = spaceById(sp(space));
   const proj = projectOf(space);
-  const rules = [spaceRules(space0), proj ? projectRules(proj) : ""].filter(Boolean).join("\n\n");
+  const far = proj?.host ? `Its folder is on ${proj.hostName ?? "another Mac"}, another Mac: its jobs run there, and you can't read its files from here (a job there can).` : "";
+  const rules = [spaceRules(space0), proj ? [projectRules(proj), far].filter(Boolean).join("\n") : ""].filter(Boolean).join("\n\n");
   // projects added from other Macs (Settings › 연결) are listed too: a job there runs on that Mac
   const projs = w ? w.projects : projectsShown(sp(space));
   const projects = projs.map((p) => `- ${p.name}: ${p.folder}${"hostName" in p && p.hostName ? ` (on ${p.hostName}, another Mac: its jobs run there)` : ""}`).join("\n") || "(none)";
@@ -1266,6 +1275,8 @@ export async function stopMain(space: string) {
 }
 
 onJobEnded(jobEnded);
+// a job main started on another Mac: its end comes over with that Mac's copy of it
+onFarEnded(jobEnded);
 
 // ───────────────────────────── simulation (evals/main-sim.mjs)
 

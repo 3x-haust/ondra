@@ -8,7 +8,7 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, finishTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
@@ -134,7 +134,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
           if (!props.live) return "";
           const t = x();
           if (t.status === "failed") return oneLine(t.error).slice(0, 200);
-          if (t.status === "waiting") return oneLine(state.decisions.find((d) => d.taskId === t.id)?.question ?? nowText(t.now));
+          if (t.status === "waiting") return oneLine(decisionFor(t.id)?.question ?? nowText(t.now));
           if (t.status === "done") return discarded(t) ? "" : oneLine(t.summary);
           if (t.status === "running") return oneLine(doingNow(t));
           return "";
@@ -576,7 +576,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
       <Show when={open()}>
         <div class="pop proj-pop" role="menu">
           <div class="pop-label">{t("프로젝트")}</div>
-          <For each={projectsIn(state.space)}>
+          <For each={projectsShown(state.space)}>
             {(p) => (
               <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(p.id), setOpen(false))}>
                 <ProjectBadge name={p.name} />
@@ -713,9 +713,15 @@ export function MainView() {
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   // where it runs (the run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
+  // another Mac's project has its own chat here, as this Mac's do: main (here) routes, follows up and
+  // asks, and the jobs it starts go to that Mac. What's typed goes there as a job as it was typed only
+  // for work picked for another Mac outside a project, or when main has no account here to run on
+  // (a workspace only that Mac has).
+  const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
+  const raw = () => (project() && mainHere() ? undefined : computer());
   const sendMain = (text: string) => {
     const p = project();
-    const at = computer();
+    const at = raw();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
     if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
     return throwThought(text, state.space, { project: p?.id });
@@ -734,7 +740,7 @@ export function MainView() {
     if (ask?.text) void editMain(ask.id, ask.text);
   };
   const asks = () =>
-    state.decisions.filter((d) => {
+    allDecisions().filter((d) => {
       if (d.taskId.startsWith("main:")) return d.taskId === `main:${key()}`;
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
@@ -744,7 +750,7 @@ export function MainView() {
   const answered = createMemo(() => {
     const out: Answered[] = [];
     if (project()) return out;
-    for (const t of state.tasks) {
+    for (const t of tasksShown(state.space)) {
       if (t.space !== state.space || (project() && t.project !== project()!.id)) continue;
       for (const e of t.entries) {
         if (e.kind !== "user") continue;
@@ -819,10 +825,11 @@ export function MainView() {
       top={<BtwCard scope={`main:${key()}`} />}
       status={
         <Show
-          when={computer()}
-          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+          when={raw()}
+          // main's own account (here); a project of another Mac names that Mac
+          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} value={computer()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
         >
-          <HostStatus place={computer()!} fixed={!!project()} />
+          <HostStatus place={raw()!} fixed={!!project()} />
         </Show>
       }
       plus={plusFor({ main: true })}
@@ -830,7 +837,7 @@ export function MainView() {
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<Show when={computer()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
+      right={<Show when={raw()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
     />
   );
 
@@ -980,7 +987,7 @@ const TONE_ORDER = ["bad", "ask", "review", "live", "idle", "done"] as const;
 const toneRank = (x: Task) => (discarded(x) ? TONE_ORDER.length : TONE_ORDER.indexOf(stateMeta(x).tone));
 /** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. */
 const projectTasks = (project: string) =>
-  state.tasks
+  tasksShown(state.space)
     .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 
@@ -1129,7 +1136,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const carried = (t: Task, seen = new Set<string>()): Task[] => {
       if (seen.has(t.id)) return [];
       seen.add(t.id);
-      return [t, ...state.tasks.filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
+      return [t, ...allTasks().filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
     };
     for (const m of props.msgs) {
       if (m.from === "me") {
