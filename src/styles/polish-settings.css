@@ -1056,3 +1056,369 @@
 .settings-inner .set-sticky .tl-search {
   margin: 0;
 }
+
+/* ───────── a workspace's model sources: one list (plan logins, API keys, local models) and + 연결 */
+.settings-inner .prov-list {
+  padding: 0;
+}
+.settings-inner .prov-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  min-height: 60px;
+  padding: var(--s-8) var(--s-10) var(--s-8) var(--s-16);
+  border-bottom: 1px solid var(--line-soft);
+}
+.settings-inner .prov-logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--ink-2);
+}
+.settings-inner .prov-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.settings-inner .prov-text .acc-name-wrap {
+  margin-left: calc(-1 * var(--s-6));
+}
+.settings-inner .prov-text .acc-name {
+  height: 24px;
+}
+.settings-inner .prov-title {
+  color: var(--ink);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+.settings-inner .prov-sub {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-inner .prov-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.settings-inner .prov-more {
+  color: var(--ink-3);
+}
+.settings-inner .prov-row.ctx .prov-more,
+.settings-inner .prov-more:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.settings-inner .prov-add {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  width: 100%;
+  min-height: 48px;
+  padding: 0 var(--s-16) 0 calc(var(--s-16) + 4px);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+}
+.settings-inner .prov-add .icon {
+  margin-right: 5px;
+}
+.settings-inner .prov-add:hover:not(:disabled),
+.settings-inner .prov-add.ctx {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* ═════════════ Settings, round 3: page heads, two-line rows, search, empty states, theme picker */
+
+/* the tab's head: icon tile · title · one line on what it is for · its one action */
+.settings-inner .set-page-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-14);
+  margin: var(--s-8) 0 var(--s-28);
+}
+.settings-inner .set-page-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-xl);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.settings-inner .set-page-text {
+  flex: 1;
+  min-width: 0;
+}
+.settings-inner .set-page-text h2 {
+  margin: 0;
+}
+.settings-inner .set-page-text p {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+.settings-inner .set-page-act {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  flex-shrink: 0;
+}
+
+/* group titles sit a little in, quieter than the rows */
+.settings-inner .set-group-title {
+  padding: 0 var(--s-4);
+  color: var(--ink-2);
+}
+
+/* rows: a touch airier; a row with a line under its name grows to fit it */
+.settings-inner .set-row {
+  min-height: 48px;
+  padding: var(--s-8) var(--s-16);
+}
+.settings-inner .set-row.two {
+  min-height: 58px;
+}
+.settings-inner .set-label .set-sub {
+  display: block;
+  margin-top: var(--s-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+/* a row the search found: lit for a moment */
+.settings-inner .found {
+  animation: set-found 1.8s var(--ease);
+}
+@keyframes set-found {
+  0%,
+  40% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* 테마: three small windows */
+.settings-inner .theme-pick {
+  display: flex;
+  gap: var(--s-10);
+}
+.settings-inner .theme-opt {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-6);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.settings-inner .theme-opt.on {
+  color: var(--ink);
+  font-weight: 500;
+}
+.settings-inner .theme-win {
+  position: relative;
+  width: 64px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow var(--dur-fast) var(--ease);
+  --w-bg: #ffffff;
+  --w-side: #f1f1f3;
+  --w-ink: #d6d6db;
+}
+.settings-inner .theme-win.dark {
+  --w-bg: #26262b;
+  --w-side: #1b1b1f;
+  --w-ink: #4a4a52;
+}
+.settings-inner .theme-win.light,
+.settings-inner .theme-win.dark {
+  background: var(--w-bg);
+}
+.settings-inner .theme-win.system {
+  background: linear-gradient(135deg, #ffffff 50%, #26262b 50%);
+}
+.settings-inner .theme-win .tw-side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--w-side);
+}
+.settings-inner .theme-win.system .tw-side {
+  background: #f1f1f3;
+}
+.settings-inner .theme-win .tw-line {
+  position: absolute;
+  top: 10px;
+  left: 40%;
+  width: 46%;
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--w-ink);
+}
+.settings-inner .theme-win .tw-line.short {
+  top: 20px;
+  width: 28%;
+}
+.settings-inner .theme-win.system .tw-line {
+  background: #8e8e96;
+  opacity: 0.55;
+}
+.settings-inner .theme-opt:hover .theme-win {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.settings-inner .theme-opt.on .theme-win {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.settings-inner .theme-opt:focus-visible {
+  outline: none;
+}
+.settings-inner .theme-opt:focus-visible .theme-win {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* 정보: the app with its icon */
+.settings-inner .about-row {
+  min-height: 68px;
+}
+.settings-inner .about-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--r-lg);
+}
+.settings-inner .about-row .set-label b {
+  font-weight: 600;
+}
+
+/* nothing here yet: icon · what · one line · the one thing to do */
+.settings-inner .set-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-6);
+  padding: var(--s-28) var(--s-20);
+  text-align: center;
+}
+.settings-inner .set-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.settings-inner .set-empty b {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings-inner .set-empty p {
+  max-width: 380px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+.settings-inner .set-empty-act {
+  display: flex;
+  gap: var(--s-8);
+  margin-top: var(--s-8);
+}
+
+/* ───────── nav: search, groups, icon tiles */
+.settings-side .set-find {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 30px;
+  margin: 0 0 var(--s-12);
+  padding: 0 var(--s-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink-3);
+  cursor: text;
+}
+.settings-side .set-find:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.settings-side .set-find input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.settings-side .set-find kbd {
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.settings-side .set-nav-group {
+  padding: var(--s-16) var(--s-8) var(--s-4);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.settings-side .set-nav-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.settings-side .sb-row.on .set-nav-icon {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.settings-side .set-hit {
+  height: auto;
+  min-height: 36px;
+  padding-top: var(--s-4);
+  padding-bottom: var(--s-4);
+}
+.settings-side .set-hit.first {
+  background: var(--hover);
+}
+.settings-side .set-hit-text {
+  display: grid;
+  min-width: 0;
+  text-align: left;
+}
+.settings-side .set-hit-tab {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.settings-side .set-nav-none {
+  padding: var(--s-8);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}

@@ -85,8 +85,9 @@ export function ComputerPicker(props: { value?: Place; fixed?: boolean; space?: 
     "sep",
     { id: "manage", label: t("연결 관리"), icon: "gear", run: () => setView({ name: "settings", tab: "remote" }) },
   ];
+  // with another Mac added the Mac bar at the sidebar's foot picks it: no chip here
   return (
-    <Show when={macsHere(mine()).length || props.value}>
+    <Show when={!(state.settings.hosts ?? []).length && (macsHere(mine()).length || props.value)}>
       <button
         type="button"
         class="st-acc st-comp"

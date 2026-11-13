@@ -8,7 +8,7 @@ import {
   Monitor, MoreHorizontal, PanelLeft,
   PanelRight, Pause, Play, Plus, RefreshCw, Route, Search, Settings, Shield,
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
-  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, Minus, Maximize, LayoutGrid, Binary, CircleDot,
+  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, SmilePlus, Palette, Minus, Maximize, LayoutGrid, Binary, CircleDot,
   Flag, Undo2, Hand, CircleArrowUp, FolderPlus, Keyboard, Languages, SunMoon, Columns2, Rows2, Maximize2, Equal, ChevronUp, WrapText,
   ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote,
 } from "lucide-solid";
@@ -27,7 +27,7 @@ const map: Record<string, Component<any>> = {
   done: CircleCheck, merge: GitMerge, clip: Paperclip, open: FolderOpen, copy: Copy, pencil: Pencil, lock: Lock, unlock: LockOpen,
   pin: Pin, archive: Archive, push: ArrowUpFromLine, commit: GitCommitHorizontal, compact: Minimize2, bell: Bell, duplicate: CopyPlus, slash: Slash, at: AtSign, binary: Binary, issue: CircleDot,
   flag: Flag, undo: Undo2, hand: Hand, update: CircleArrowUp, folderPlus: FolderPlus,
-  keyboard: Keyboard, language: Languages, theme: SunMoon,
+  keyboard: Keyboard, language: Languages, theme: SunMoon, smilePlus: SmilePlus, palette: Palette,
   splitRight: Columns2, splitDown: Rows2, zoom: Maximize2, equal: Equal, up: ChevronUp, wrap: WrapText,
   arrowUp: ArrowUp, arrowDown: ArrowDown, goto: FileInput, listTree: ListTree, listFlat: List, collapseAll: ChevronsDownUp, fold: FoldVertical, image: ImageIcon,
 };

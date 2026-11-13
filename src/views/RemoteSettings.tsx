@@ -2,15 +2,15 @@
 // show in the sidebar, their jobs run there), and other Macs allowed to work on this one.
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { setState, state } from "../state/store";
-import { mirror, remoteProjectId } from "../state/mirror";
-import { addHost, addHostFolder, addHostProject, reconnect, removeHost, removeHostProject } from "../engine/hosts";
+import { mirror } from "../state/mirror";
+import { addHost, reconnect, removeHost } from "../engine/hosts";
 import { answerPair, connectLink, keepAwake, remote, revokeDevice, setRemoteOn } from "../engine/remote";
 import { hostState } from "../ui/ComputerPicker";
 import { toast } from "../state/ui";
 import { ago } from "../ui/bits";
 import { Icon } from "../ui/Icon";
-import { ProjectBadge } from "../ui/ProjectBadge";
-import { Row, Switch_ } from "./Settings";
+import { openMenuAt } from "../ui/taskMenu";
+import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
 import { t } from "../i18n";
 
 const [mine] = createResource(() => import("@tauri-apps/api/app").then((m) => m.getVersion()).catch(() => ""));
@@ -27,15 +27,7 @@ function HostRow(props: { id: string; name: string }) {
   };
   const theirs = () => h()?.info?.version;
   const off = () => !!theirs() && !!mine() && theirs() !== mine();
-  const [picking, setPicking] = createSignal(false);
-  const [folder, setFolder] = createSignal("");
   const linked = () => (state.settings.hostProjects ?? []).filter((l) => l.host === props.id);
-  const unlinked = () => (h()?.projects ?? []).filter((p) => !linked().some((l) => l.id === p.id));
-  const addFolder = async () => {
-    const f = folder().trim();
-    if (!f) return;
-    await addHostFolder(props.id, f).then(() => (setFolder(""), setPicking(false))).catch(() => {});
-  };
   return (
     <>
       <div class="set-row cn-host">
@@ -60,6 +52,9 @@ function HostRow(props: { id: string; name: string }) {
             />
           </Show>
           <span class="muted">{hostState(props.id)}</span>
+          <Show when={linked().length}>
+            <span class="muted cn-count">· {t("프로젝트 {n}개", { n: linked().length })}</span>
+          </Show>
           <Show when={off()}>
             <span class="cn-ver" title={t("두 Mac의 Ondra 버전이 달라요: 이 Mac {a}, 그 Mac {b}", { a: mine()!, b: theirs()! })}>{t("버전 다름")}</span>
           </Show>
@@ -71,53 +66,23 @@ function HostRow(props: { id: string; name: string }) {
               {t("다시 연결")}
             </button>
           </Show>
-          <button class="btn sm" disabled={h()?.status !== "ok"} onClick={() => setPicking(!picking())} aria-expanded={picking()}>
-            <Icon name="plus" size={13} />
-            {t("프로젝트 추가")}
+          <button
+            class="icon-btn sm"
+            title={t("더 보기")}
+            aria-label={t("더 보기")}
+            onClick={(e) =>
+              openMenuAt(`host:${props.id}`, () => [
+                { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: () => setNaming(true) },
+                { id: "reconnect", label: t("다시 연결"), icon: "refresh", run: () => reconnect(props.id) },
+                "sep",
+                { id: "remove", label: t("연결 해제"), icon: "trash", danger: true, run: () => removeHost(props.id) },
+              ], e.currentTarget.getBoundingClientRect())
+            }
+          >
+            <Icon name="more" size={16} />
           </button>
-          <button class="btn sm ghost" onClick={() => removeHost(props.id)}>{t("빼기")}</button>
         </div>
       </div>
-      <Show when={picking()}>
-        <div class="set-row col cn-pick">
-          <Show when={unlinked().length} fallback={<span class="muted">{t("{name}의 프로젝트를 다 추가했어요", { name: props.name })}</span>}>
-            <div class="cn-pick-list">
-              <For each={unlinked()}>
-                {(p) => (
-                  <button class="cn-pick-item" onClick={() => (addHostProject(props.id, p), setPicking(false))} title={p.folder}>
-                    <ProjectBadge name={p.name} />
-                    <span class="cn-pick-name">{p.name}</span>
-                    <span class="muted cn-folder-path">{p.folder}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-          <form class="cn-form" onSubmit={(e) => (e.preventDefault(), void addFolder())}>
-            <input class="input" placeholder={t("{name}의 폴더 경로 (~/Projects/app)", { name: props.name })} aria-label={t("폴더 경로")} value={folder()} onInput={(e) => setFolder(e.currentTarget.value)} />
-            <button class="btn sm" type="submit" disabled={!folder().trim()}>{t("추가")}</button>
-          </form>
-        </div>
-      </Show>
-      <For each={linked()}>
-        {(l) => {
-          const p = () => h()?.projects.find((x) => x.id === l.id);
-          const jobs = () => (h()?.tasks ?? []).filter((x) => x.project === remoteProjectId(props.id, l.id) && !x.parentId).length;
-          return (
-            <div class="set-row cn-proj">
-              <div class="set-label">
-                <ProjectBadge name={p()?.name ?? l.name ?? ""} />
-                <b>{p()?.name ?? l.name}</b>
-                <span class="muted cn-folder-path">{p()?.folder ?? l.folder}</span>
-              </div>
-              <div class="set-value">
-                <Show when={jobs()}><span class="muted">{t("작업 {n}개", { n: jobs() })}</span></Show>
-                <button class="btn sm ghost" onClick={() => removeHostProject(props.id, l.id)}>{t("빼기")}</button>
-              </div>
-            </div>
-          );
-        }}
-      </For>
     </>
   );
 }
@@ -171,7 +136,7 @@ function ThisMac() {
   const live = (id: string) => Object.values(remote().live).some((d) => d.id === id);
   return (
     <div class="set-group">
-      <Row title={t("다른 Mac에서 이 Mac 쓰기")}>
+      <Row title={t("다른 Mac에서 이 Mac 쓰기")} desc={t("켜 두면 내 다른 Mac이 이 Mac의 프로젝트로 작업을 시킬 수 있어요")}>
         <Switch_ on={!!state.settings.remote} set={(v) => void setRemoteOn(v)} label={t("다른 Mac에서 이 Mac 쓰기")} />
       </Row>
       <Show when={state.settings.remote}>
@@ -213,14 +178,13 @@ function ThisMac() {
 export function RemoteSettings() {
   return (
     <>
-      <h2>{t("연결")}</h2>
-      <p class="lead">{t("다른 Mac의 프로젝트를 여기서 써요. 작업은 그 Mac에서 돌고, 화면은 이 앱에 그대로 보여요. 오가는 내용은 끝까지 암호화돼요.")}</p>
-      <div class="set-group-title">{t("다른 Mac")}</div>
+      <PageHead tab="remote" />
+      <GroupTitle title={t("다른 Mac")} />
       <div class="set-group">
         <For each={state.settings.hosts ?? []}>{(h) => <HostRow id={h.id} name={h.name} />}</For>
         <AddHost />
       </div>
-      <div class="set-group-title">{t("이 Mac")}</div>
+      <GroupTitle title={t("이 Mac")} />
       <ThisMac />
     </>
   );

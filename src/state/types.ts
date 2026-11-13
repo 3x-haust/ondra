@@ -608,7 +608,9 @@ export interface Settings {
   /** while others may work on this Mac, it doesn't sleep (on power) */
   remoteAwake?: boolean;
   /** other Macs this one works on, and the projects of theirs added here */
-  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number }[];
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number }[];
+  /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 Mac", its letters, a tint from the name) */
+  thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
   /** where new work goes from each workspace here (the run location): another Mac, its workspace
    *  and account there (account empty = that workspace's own choice); missing = this Mac */

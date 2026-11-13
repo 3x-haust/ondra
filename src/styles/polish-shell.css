@@ -1919,3 +1919,653 @@
   line-height: 18px;
   color: var(--ink-3);
 }
+
+/* ───────────── Mac bar: this Mac and the added ones at the foot of the sidebar (⌃1…⌃9) ─────────────
+   Quiet until used: each Mac is a small grey dot (or its emoji or icon); the one new work runs on
+   opens into a pill in its own color with its name. Not connected: a hollow ring.
+   --mh / --mc (hue, chroma) are set per Mac inline. */
+.mbar-mac,
+.ml-pop,
+.ml-swatches button {
+  --tint: oklch(0.72 var(--mc, 0.13) var(--mh, 250));
+}
+:root[data-theme="light"] :is(.mbar-mac, .ml-pop, .ml-swatches button) {
+  --tint: oklch(0.56 var(--mc, 0.13) var(--mh, 250));
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) :is(.mbar-mac, .ml-pop, .ml-swatches button) {
+    --tint: oklch(0.56 var(--mc, 0.13) var(--mh, 250));
+  }
+}
+
+/* the window, washed in the Mac in use's color when asked (Settings: 창에 색 입히기) */
+.app {
+  background: var(--mac-wash, linear-gradient(transparent, transparent)), var(--canvas);
+  transition: background 0.4s var(--ease);
+}
+
+/* the work area takes the Mac's colors too, blended over it so text and pictures keep theirs */
+.app > .main {
+  position: relative;
+}
+.app > .main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  border-radius: inherit;
+  background: var(--mac-work, none);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+:root[data-theme="dark"] .app > .main::after {
+  mix-blend-mode: screen;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app > .main::after {
+    mix-blend-mode: screen;
+  }
+}
+
+.app .sidebar .mbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  /* the first mark sits under the settings row's icon */
+  padding: 0 var(--s-8) var(--s-8) 12px;
+}
+.app .sidebar .mbar-mac {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--ink-3);
+  transition:
+    background-color 0.18s var(--ease),
+    color 0.18s var(--ease),
+    padding 0.18s var(--ease);
+}
+.app .sidebar .mbar-mac:hover,
+.app .sidebar .mbar-mac.ctx {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.app .sidebar .mbar-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+  transition: width 0.18s var(--ease), height 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+.app .sidebar .mbar-mac:hover .mbar-dot {
+  opacity: 1;
+}
+.app .sidebar .mbar-ic {
+  flex: none;
+}
+.app .sidebar .mbar-emoji {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
+  transition: filter 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+.app .sidebar .mbar-mac:hover .mbar-emoji {
+  opacity: 0.9;
+}
+.app .sidebar .mbar-mac .mbar-name {
+  display: none;
+  max-width: 120px;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the Mac new work runs on: a pill in its color, with its name */
+.app .sidebar .mbar-mac.on {
+  padding: 0 11px 0 9px;
+  background: color-mix(in oklab, var(--tint) 16%, transparent);
+  color: var(--tint);
+}
+.app .sidebar .mbar-mac.on .mbar-name {
+  display: block;
+}
+.app .sidebar .mbar-mac.on .mbar-dot {
+  width: 7px;
+  height: 7px;
+  opacity: 1;
+}
+.app .sidebar .mbar-mac.on .mbar-emoji {
+  filter: none;
+  opacity: 1;
+}
+.app .sidebar .mbar-mac.away .mbar-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.app .sidebar .mbar-mac.away :is(.mbar-ic, .mbar-emoji) {
+  opacity: 0.4;
+}
+.app .sidebar .mbar-mac.off:not(.on) {
+  opacity: 0.45;
+}
+
+/* ── the cards that change one Mac: name, emoji or icon, color ── */
+.ml-pop {
+  position: fixed;
+  padding: var(--s-10);
+  border-radius: 14px;
+}
+.ml-pop .ml-preview {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--tint) 16%, transparent);
+  color: var(--tint);
+}
+.ml-pop :is(.ml-preview, .ml-stage-pill) .mbar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ml-pop .mbar-emoji {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* name */
+.ml-name-pop {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  width: 280px;
+}
+.ml-pop .ml-name {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--fs-md);
+}
+.ml-pop .ml-name:focus {
+  border-color: var(--accent-line);
+  outline: none;
+}
+
+/* emoji or icon */
+.ml-icon-pop {
+  width: 344px;
+  display: grid;
+  gap: var(--s-8);
+}
+.ml-pop .ml-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.ml-pop .ml-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+}
+.ml-pop .ml-seg button {
+  height: 26px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.ml-pop .ml-seg button.on {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 0 0 0.5px var(--line);
+}
+.ml-pop .ml-clear {
+  position: absolute;
+  right: 0;
+  color: var(--ink-3);
+}
+.ml-pop .ml-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.ml-pop .ml-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 9px;
+  color: var(--ink-2);
+  transition: background-color 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
+}
+.ml-pop .ml-cell.emoji {
+  font-size: 19px;
+  line-height: 1;
+}
+.ml-pop .ml-cell:hover {
+  background: var(--hover);
+  color: var(--ink);
+  transform: scale(1.06);
+}
+.ml-pop .ml-cell.on {
+  background: color-mix(in oklab, var(--tint) 18%, transparent);
+  color: var(--tint);
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--tint) 55%, transparent);
+}
+
+/* color: a dotted field to drag up to three dots over (direction = hue, distance from the middle =
+   how much color), the window's mode on it; presets; then a wave for how strongly the window takes
+   the color and a dial for its grain */
+.ml-color-pop {
+  width: 312px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-12);
+}
+.ml-pop .ml-field {
+  --fl: 0.74;
+  --field: color-mix(in oklab, var(--ink) 6%, var(--card));
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle, color-mix(in oklab, var(--ink) 22%, transparent) 0.8px, transparent 1.1px) 3px 3px / 7px 7px,
+    radial-gradient(closest-side, var(--field) 18%, color-mix(in oklab, var(--field) 55%, transparent) 100%),
+    conic-gradient(from 90deg,
+      oklch(var(--fl) 0.13 0), oklch(var(--fl) 0.13 45), oklch(var(--fl) 0.13 90), oklch(var(--fl) 0.13 135), oklch(var(--fl) 0.13 180),
+      oklch(var(--fl) 0.13 225), oklch(var(--fl) 0.13 270), oklch(var(--fl) 0.13 315), oklch(var(--fl) 0.13 360)),
+    var(--field);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  cursor: crosshair;
+  touch-action: none;
+}
+:root[data-theme="dark"] .ml-pop .ml-field {
+  --fl: 0.55;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ml-pop .ml-field {
+    --fl: 0.55;
+  }
+}
+/* where the dots go: anywhere on the field, a dot's width in from its edge */
+.ml-pop .ml-area {
+  position: absolute;
+  inset: 21px;
+  pointer-events: none;
+}
+.ml-pop .ml-knob {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: oklch(var(--fl) var(--kc) var(--kh));
+  box-shadow: 0 0 0 4px #fff, 0 3px 10px rgb(0 0 0 / 0.28);
+  cursor: grab;
+  transition: transform 0.12s var(--ease), width 0.12s var(--ease);
+}
+.ml-pop .ml-knob:not(.on):not(:only-of-type) {
+  transform: scale(0.72);
+}
+.ml-pop .ml-field:active .ml-knob.on,
+.ml-pop .ml-knob:only-of-type:active {
+  cursor: grabbing;
+}
+.ml-pop .ml-knob:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--accent-line), 0 3px 10px rgb(0 0 0 / 0.28);
+}
+.ml-pop .ml-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: calc(var(--s-4) * -1);
+}
+.ml-pop .ml-modes {
+  display: flex;
+  gap: 4px;
+}
+.ml-pop .ml-modes button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  border-radius: 9px;
+  color: color-mix(in oklab, var(--ink) 55%, transparent);
+  transition: background-color 0.12s var(--ease), color 0.12s var(--ease);
+}
+.ml-pop .ml-modes button:hover {
+  color: var(--ink);
+}
+.ml-pop .ml-modes button.on {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.ml-pop .ml-count {
+  display: flex;
+  gap: 2px;
+}
+.ml-pop .ml-count button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  border-radius: 8px;
+  color: color-mix(in oklab, var(--ink) 55%, transparent);
+}
+.ml-pop .ml-count button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.ml-pop .ml-count button:disabled {
+  opacity: 0.3;
+}
+.ml-pop .ml-presets {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ml-pop .ml-page {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 30px;
+  border-radius: 6px;
+  color: var(--ink-3);
+}
+.ml-pop .ml-page:hover {
+  color: var(--ink);
+}
+.ml-pop .ml-swatches {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  padding: 5px 4px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.ml-pop .ml-swatches::-webkit-scrollbar {
+  display: none;
+}
+.ml-pop .ml-swatches button {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: oklch(0.74 var(--mc) var(--mh));
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.35), 0 1px 2px rgb(0 0 0 / 0.12);
+  scroll-snap-align: start;
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.ml-pop .ml-swatches button:hover {
+  transform: scale(1.1);
+}
+.ml-pop .ml-swatches button.on {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px oklch(0.74 var(--mc) var(--mh));
+}
+.ml-pop .ml-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-16);
+  padding: 2px 4px 2px 2px;
+}
+.ml-pop .ml-reset {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+.ml-pop .ml-reset:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ml-pop .ml-reset:disabled {
+  opacity: 0.35;
+}
+/* the wave: drawn up to the knob, the rest a plain track */
+.ml-pop .ml-wave {
+  --x: calc(10px + var(--v) * (100% - 20px));
+  position: relative;
+  flex: 1;
+  height: 52px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.ml-pop .ml-wave-track {
+  position: absolute;
+  inset: 21px 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 9%, transparent);
+}
+.ml-pop .ml-wave-line {
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  width: calc(100% - 8px);
+  height: 40px;
+  clip-path: inset(0 calc(100% - var(--x) + 4px) 0 0);
+  fill: none;
+  stroke: color-mix(in oklab, var(--tint) 70%, var(--ink-3));
+  stroke-linecap: round;
+  stroke-width: 3.5;
+}
+.ml-pop .ml-wave-knob {
+  position: absolute;
+  top: 6px;
+  left: var(--x);
+  width: 20px;
+  height: 40px;
+  margin-left: -10px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3), 0 0 0 0.5px rgb(0 0 0 / 0.08);
+}
+.ml-pop .ml-wave:focus-visible .ml-wave-knob,
+.ml-pop .ml-dial:focus-visible .ml-dial-face {
+  box-shadow: 0 0 0 2px var(--accent-line), 0 1px 4px rgb(0 0 0 / 0.3);
+}
+/* the dial: dots around, a notch where it is turned to */
+.ml-pop .ml-dial {
+  position: relative;
+  flex: none;
+  width: 60px;
+  height: 60px;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.ml-pop .ml-dial > i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--ink) 20%, transparent);
+}
+.ml-pop .ml-dial > i.lit {
+  background: color-mix(in oklab, var(--ink) 55%, transparent);
+}
+.ml-pop .ml-dial-face {
+  position: absolute;
+  inset: 13px;
+  border-radius: 50%;
+  background-color: var(--card);
+  background-size: 90px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 25%, transparent);
+}
+.ml-pop .ml-dial-notch {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 16px;
+  margin: -8px 0 0 -4px;
+  border-radius: 999px;
+  background: var(--ink);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+}
+
+
+/* every emoji, with search and categories */
+.ep {
+  display: grid;
+  gap: var(--s-6);
+}
+.ep-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: 34px;
+  padding: 0 var(--s-6) 0 var(--s-10);
+  border-radius: var(--r-md);
+  background: var(--hover);
+  color: var(--ink-3);
+}
+.ep-search:focus-within {
+  box-shadow: 0 0 0 1px var(--accent-line), 0 0 0 3px var(--accent-soft);
+}
+.ep-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.ep-x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink-4, var(--line));
+  color: var(--card);
+}
+.ep-list {
+  height: 268px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.ep-h {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 4px 4px;
+  background: var(--card);
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.ep-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 1px;
+}
+.ep-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  transition: background-color 0.1s var(--ease), transform 0.1s var(--ease);
+}
+.ep-cell:hover {
+  background: var(--hover);
+  transform: scale(1.12);
+}
+.ep-cell.on {
+  background: color-mix(in oklab, var(--tint, var(--accent)) 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--tint, var(--accent)) 55%, transparent);
+}
+.ep-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.ep-foot {
+  height: 34px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--s-4);
+}
+.ep-cats {
+  display: flex;
+  justify-content: space-between;
+}
+.ep-cat {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 16px;
+  filter: grayscale(1);
+  opacity: 0.7;
+  transition: filter 0.12s var(--ease), opacity 0.12s var(--ease), background-color 0.12s var(--ease);
+}
+.ep-cat:hover {
+  background: var(--hover);
+  filter: none;
+  opacity: 1;
+}
+.ep-peek {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  height: 30px;
+  padding: 0 4px;
+}
+.ep-peek-e {
+  font-size: 20px;
+}
+.ep-peek-l {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

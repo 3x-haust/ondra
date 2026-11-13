@@ -5,7 +5,7 @@
 // engine/remote.ts; the network is the ondra-remote helper.
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
-import { mirror, remoteProjectId, setMirror, type HostInfo, type HostStatus } from "../state/mirror";
+import { mirror, remoteProjectId, setMirror, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
 import { accountsIn, projectsIn, setState, state, tasksIn, uid } from "../state/store";
 import { switchSpace } from "../state/workspace";
 import type { Entry, SpaceId, Task } from "../state/types";
@@ -147,7 +147,7 @@ export function onPeer(ev: Record<string, unknown>) {
       retry.set(host, { n: 0 });
       status(host, "ok");
       // the code did its job: from now on this Mac is known there
-      if (state.settings.hosts?.find((x) => x.id === host)?.pair) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { id: x.id, name: x.name } : x)));
+      if (state.settings.hosts?.find((x) => x.id === host)?.pair) setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { id: x.id, name: x.name, icon: x.icon, emoji: x.emoji, hue: x.hue, colors: x.colors, grain: x.grain, theme: x.theme } : x)));
       void sendTo(host, { t: "projects" }).catch(() => {});
       watch(host);
     } else if (s === "waiting") status(host, "waiting");
@@ -169,7 +169,8 @@ export function onPeer(ev: Record<string, unknown>) {
   if (!d) return;
   switch (d.t) {
     case "projects":
-      setMirror("hosts", host, "projects", (d.list as { id: string; name: string; folder: string }[]) ?? []);
+      setMirror("hosts", host, "projects", (d.list as HostMirror["projects"]) ?? []);
+      linkAll(host);
       break;
     case "info": {
       const info = d.info as HostInfo;
@@ -179,6 +180,7 @@ export function onPeer(ev: Record<string, unknown>) {
         setState("settings", "hosts", (l) => (l ?? []).map((x) => (x.id === host ? { ...x, spaces: labels } : x)));
         syncSpaces();
       }
+      linkAll(host);
       break;
     }
     case "patch":
@@ -240,6 +242,23 @@ export function removeHost(id: string) {
   void remoteCmd({ cmd: "hangup", peer: id }).catch(() => {});
   setMirror("hosts", produce((h) => void delete h[id]));
   syncSpaces();
+}
+
+/**
+ * Every project of that Mac shows here by itself, as it would there: in the tab of its workspace's
+ * name (made by syncSpaces when only that Mac has it). One gone there goes here too.
+ */
+function linkAll(host: string) {
+  const list = mirror.hosts[host]?.projects ?? [];
+  const mine = (state.settings.hostProjects ?? []).filter((l) => l.host === host);
+  const gone = mine.filter((l) => !list.some((p) => p.id === l.id));
+  // a Mac too old to say the workspace: its projects go to the first tab
+  const spaceFor = (label?: string) => (label ? state.spaces.find((s) => s.label === label)?.id : state.spaces[0]?.id);
+  const add = list.filter((p) => !mine.some((l) => l.id === p.id) && spaceFor(p.space));
+  if (!gone.length && !add.length) return;
+  const rest = (state.settings.hostProjects ?? []).filter((l) => !(l.host === host && gone.some((g) => g.id === l.id)));
+  setState("settings", "hostProjects", [...rest, ...add.map((p) => ({ host, id: p.id, space: spaceFor(p.space)!, name: p.name, folder: p.folder }))]);
+  watch(host);
 }
 
 /** add one of that Mac's projects to this space's sidebar */

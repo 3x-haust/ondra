@@ -5,6 +5,7 @@ import { hooksLoad, hooksSave } from "../lib/native";
 import { state, uid } from "../state/store";
 import { toast } from "../state/ui";
 import { Fold } from "../ui/Fold";
+import { EmptyState, PageHead } from "./Settings";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 
@@ -59,12 +60,19 @@ export function HooksTab() {
 
   return (
     <>
-      <div class="set-head">
-        <h2>{t("훅")}</h2>
-        <button class="btn ghost sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>
-      </div>
+      <PageHead tab="hooks">
+        <Show when={list().length}>
+          <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>
+        </Show>
+      </PageHead>
       <div class="set-group">
-        <For each={list()} fallback={<div class="empty-line">{loaded() ? t("훅 없음") : t("불러오는 중…")}</div>}>
+        <For each={list()} fallback={
+          <Show when={loaded()} fallback={<div class="empty-line">{t("불러오는 중…")}</div>}>
+            <EmptyState icon="bolt" title={t("훅 없음")} desc={t("도구를 쓰기 전후나 작업이 끝날 때 내 명령을 돌려요. 예: 수정 뒤 포맷터 실행")}>
+              <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("훅 만들기")}</button>
+            </EmptyState>
+          </Show>
+        }>
           {(h) => (
             <div class="hk-row" classList={{ off: !h.enabled && !!h.command.trim() }}>
               <div class="hk-line">
