@@ -28,6 +28,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
   → motion-graphics
 - writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
+- a project's own check-<app> skill (driving its app to prove a change) →
+  that skill; making one → app-check; keeping one current → app-check-upkeep
 Read only the skills you pick, once per session; resolve their reference
 files relative to the returned baseDir. If read is not loaded, find it with
 tool_search.`;
@@ -787,6 +789,30 @@ Do what the message asks and no more. A question ("뭐 해야 해?", "어떻게
 됐어?", "왜 그래?") gets an answer only: no new work, no extra checks, no
 follow-ups nobody asked for. Simple things stay simple: one line, not a list.`;
 
+/**
+ * Settings › 작업 끝나면 앱에서 직접 확인 (on unless turned off): a change to an app is proved in
+ * the app, through the project's check skill, made once with app-check when there is none.
+ */
+export function appCheckRules(): string {
+  if (state.settings.appCheck === false) return "";
+  return `# Checking in the app
+When the job changes what a user of an app sees or does (a web app, a CLI, a
+service's API, a desktop or mobile app), done includes using the change in the
+real app, the way its user would, with proof (a screenshot, a terminal
+transcript, a response). The project's own check skill is how: a skill named
+check-<app> in the repo's .agents/, .claude/ or .cursor/skills (it is in your
+skill list when there is one). Load it, launch and drive with it, and drive
+the changed feature from its feature map; when what a user sees changed,
+update the map in the same change.
+No check skill yet: for a web app, a CLI or a service, make one first with the
+app-check skill (once per project; say so in the report). For a desktop or
+mobile app, ask first with a decision ("앱 확인 스킬을 만들까요?"): it needs the
+app built and running. A sub-task leaves this to its fork.
+Not for work no user sees (docs, CI, a refactor its tests cover), read-only
+work, or when the user says to skip it. A check that could not run goes into
+"unverified" with the reason, never into evidence.`;
+}
+
 export function instructions(): string {
   const t = state.settings.instructions.trim();
   return t ? `# User instructions\n${t}` : "";
@@ -1014,5 +1040,5 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
+  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
 }

@@ -35,7 +35,10 @@ Showing it as a `scope` block and a `checklist` helps the user correct you early
 Every requirement gets a runnable, objective check (a script or test; the
 project's own test tools when there are any). Checks that use the feature the
 way the user will (the flow, the command, the screen) catch more than checks
-of internals:
+of internals. When the project has a check skill (`check-<app>` in its
+`.agents/`, `.claude/` or `.cursor/skills/`), drive the app through it: its
+launch, doctor and drive steps, and the area files of its feature map for what
+to cover.
 
 | requirement is about | a good check |
 |---|---|

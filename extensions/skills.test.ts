@@ -71,6 +71,8 @@ describe("skill matching", () => {
     ["이 엑셀 파일 정리해줘", "office-docs"],
     ["워드 문서로 만들어줘", "office-docs"],
     ["PPT 만들어줘", "office-docs"],
+    ["이 프로젝트 앱 확인 스킬 만들어줘", "app-check"],
+    ["앱 확인 스킬 점검해줘", "app-check-upkeep"],
     ["merge these PDF files", "office-docs"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
@@ -227,5 +229,43 @@ describe("userWords", () => {
   });
   it("leaves the user's own words as they are", () => {
     expect(userWords("\"어떻게 할까요?\" → 로그인 화면만")).toBe("\"어떻게 할까요?\" → 로그인 화면만");
+  });
+});
+
+describe("a project's own skills", () => {
+  it("are found in its folder and up to the repo root, never at home", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { projectSkillDirs } = await import("./skills");
+    const home = mkdtempSync(join(tmpdir(), "home-"));
+    const repo = join(home, "code", "app");
+    mkdirSync(join(repo, ".agents", "skills", "check-app"), { recursive: true });
+    mkdirSync(join(repo, "web", ".claude", "skills"), { recursive: true });
+    mkdirSync(join(home, ".claude", "skills"), { recursive: true });
+    mkdirSync(join(home, "code", ".cursor", "skills"), { recursive: true });
+    writeFileSync(join(repo, ".git"), "gitdir: elsewhere");
+    expect(projectSkillDirs(join(repo, "web"), home)).toEqual([join(repo, "web", ".claude", "skills"), join(repo, ".agents", "skills")]);
+    // a folder that isn't a repo: up to home, not home itself
+    expect(projectSkillDirs(join(home, "code"), home)).toEqual([join(home, "code", ".cursor", "skills")]);
+    expect(projectSkillDirs(home, home)).toEqual([]);
+  });
+});
+
+describe("checking in the app", () => {
+  it("is in a job's rules unless turned off, and names the skills", async () => {
+    const { appCheckRules } = await import("../src/engine/prompts");
+    setState("settings", "appCheck", undefined);
+    expect(appCheckRules()).toContain("app-check");
+    expect(appCheckRules()).toContain("check-<app>");
+    setState("settings", "appCheck", false);
+    expect(appCheckRules()).toBe("");
+    setState("settings", "appCheck", undefined);
+  });
+  it("ships both skills with frontmatter that loads", () => {
+    for (const name of ["app-check", "app-check-upkeep"]) {
+      const text = readFileSync(join(__dirname, "..", "skills", name, "SKILL.md"), "utf8");
+      expect(text).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
+      expect(text).toContain("MIT, Lauren Tan");
+    }
   });
 });
