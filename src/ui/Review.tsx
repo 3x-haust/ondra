@@ -7,8 +7,8 @@ import type { Task } from "../state/types";
 import { openChanges, panelFile, previewFile, previewPath, previewPlace, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { pageSrc, pdfSrc, type GitChanges } from "../lib/native";
-import { changesIn, editorOn, farError, grepFiles, HostCtx, listFiles, localCopy, readText, revealOn, srcOf, tooBig, writeText, type Cut, type Where } from "../engine/far";
+import { pdfSrc, type GitChanges } from "../lib/native";
+import { changesIn, editorOn, farError, grepFiles, HostCtx, listFiles, localCopy, pageSrcOf, pageTooBig, readText, revealOn, srcOf, tooBig, writeText, type Cut, type Where } from "../engine/far";
 import { taskById } from "../state/store";
 import { splitProjectId } from "../state/mirror";
 import { Fold } from "./Fold";
@@ -369,8 +369,9 @@ export function PreviewPane() {
     return /\.(html?|pdf)$/.test(p) ? "page" : IMG.test(p) ? "image" : /\.(mp4|mov|webm)$/.test(p) ? "video" : /\.(md|markdown)$/.test(p) ? "md" : "code";
   };
   const [md] = createResource(() => (kind() === "md" ? ([full(), host()] as const) : false), ([p, h]) => readText(h, p).then((r) => r.text ?? "").catch(() => ""));
-  // a page or PDF of another Mac: the copy fetched here
+  // a PDF of another Mac: the copy fetched here; a page: copied with the files it uses
   const here = () => (host() ? localCopy(full(), host()) : full());
+  const pdf = () => /\.pdf$/i.test(full());
   const dir = () => full().split("/").slice(0, -1).join("/");
   const name = () => full().split("/").pop() ?? "";
   return (
@@ -389,10 +390,14 @@ export function PreviewPane() {
         </Show>
         <div class="pv-body">
           <Switch>
-            <Match when={kind() !== "code" && kind() !== "md" && tooBig(full(), host())}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
+            <Match when={kind() !== "code" && kind() !== "md" && (tooBig(full(), host()) || (kind() === "page" && pageTooBig(full(), host())))}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
             <Match when={kind() === "page"}>
-              <Show when={here()} fallback={<div class="pane-empty" />}>
-                <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={pageSrc(here())} />}>
+              <Show when={pdf()} fallback={
+                <Show when={pageSrcOf(full(), host())} fallback={<div class="pane-empty" />}>
+                  {(src) => <iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={src()} />}
+                </Show>
+              }>
+                <Show when={here()} fallback={<div class="pane-empty" />}>
                   <iframe class="aframe" src={pdfSrc(here())} title={name()} />
                 </Show>
               </Show>

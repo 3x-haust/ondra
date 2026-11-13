@@ -8,6 +8,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
+    sync::atomic::{AtomicU64, Ordering},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -19,6 +20,8 @@ const MAX_PIECE: u64 = 1 << 20;
 const MAX_PUT: u64 = 256 << 20;
 /// cached files of another Mac are dropped after a week unused
 const CACHE_DAYS: u64 = 7;
+/// when the page copies were last looked over (seconds)
+static SITES_PRUNED: AtomicU64 = AtomicU64::new(0);
 
 fn ms(t: std::io::Result<SystemTime>) -> u64 {
     t.ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64)
@@ -71,19 +74,42 @@ fn dir_for(data: &Path, kind: &str) -> Result<PathBuf, String> {
     match kind {
         "cache" => Ok(data.join("remote").join("cache")),
         "upload" => Ok(data.join("attachments").join("remote")),
+        // a page of another Mac with the files it uses, laid out as there (so its relative links work)
+        "site" => Ok(data.join("remote").join("sites")),
         _ => Err("unknown".into()),
     }
 }
 
+/// A path under a folder, as given ("a/b/c.png"): every part a real name (never "." or ".."),
+/// so it stays inside that folder.
+fn safe_rel(name: &str) -> Option<PathBuf> {
+    let parts: Vec<&str> = name.split('/').filter(|p| !p.is_empty()).collect();
+    if parts.is_empty() || parts.len() > 64 || name.contains('\0') || name.contains('\\') {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for p in parts {
+        if p == "." || p == ".." || p.len() > 255 {
+            return None;
+        }
+        out.push(p);
+    }
+    Some(out)
+}
+
 /// Put a piece into `dir/name` at `offset`: 0 starts the file over, the rest must follow on.
+/// A site's name is a path under its folder; any other's a plain file name.
 fn put(dir: &Path, name: &str, offset: u64, data: &str) -> Result<String, String> {
-    let name = safe_name(name).ok_or("이름이 잘못됐어요")?;
+    put_at(dir, &PathBuf::from(safe_name(name).ok_or("이름이 잘못됐어요")?), offset, data)
+}
+
+fn put_at(dir: &Path, name: &Path, offset: u64, data: &str) -> Result<String, String> {
     let bytes = STANDARD.decode(data).map_err(|e| e.to_string())?;
     if bytes.len() as u64 > MAX_PIECE || offset + bytes.len() as u64 > MAX_PUT {
         return Err("파일이 너무 커요".into());
     }
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let path = dir.join(&name);
+    let path = dir.join(name);
+    std::fs::create_dir_all(path.parent().unwrap_or(dir)).map_err(|e| e.to_string())?;
     let mut f = if offset == 0 {
         std::fs::File::create(&path).map_err(|e| e.to_string())?
     } else {
@@ -98,12 +124,18 @@ fn put(dir: &Path, name: &str, offset: u64, data: &str) -> Result<String, String
     Ok(path.display().to_string())
 }
 
-/// Cached files not used for a week go (looked at when a new one starts).
+/// Cached files not used for a week go (looked at when a new one starts), in the folders under it too.
 fn prune(dir: &Path) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     let old = SystemTime::now() - Duration::from_secs(CACHE_DAYS * 86_400);
     for e in rd.flatten() {
-        let used = e.metadata().and_then(|m| m.accessed().or_else(|_| m.modified())).unwrap_or(SystemTime::now());
+        let Ok(m) = std::fs::symlink_metadata(e.path()) else { continue };
+        if m.is_dir() {
+            prune(&e.path());
+            let _ = std::fs::remove_dir(e.path());
+            continue;
+        }
+        let used = m.accessed().or_else(|_| m.modified()).unwrap_or(SystemTime::now());
         if used < old {
             let _ = std::fs::remove_file(e.path());
         }
@@ -130,6 +162,19 @@ pub fn far_real(paths: Vec<String>) -> Vec<Option<String>> {
 pub async fn far_put(app: tauri::AppHandle, kind: String, name: String, offset: u64, data: String) -> Result<String, String> {
     let dir = dir_for(&crate::engine::data_dir(&app), &kind)?;
     tauri::async_runtime::spawn_blocking(move || {
+        if kind == "site" {
+            let rel = safe_rel(&name).ok_or("이름이 잘못됐어요")?;
+            if offset == 0 && rel.components().count() <= 1 {
+                return Err("이름이 잘못됐어요".into());
+            }
+            // a whole tree: looked over at most once an hour
+            let now = ms(Ok(SystemTime::now())) / 1000;
+            if offset == 0 && now.saturating_sub(SITES_PRUNED.load(Ordering::Relaxed)) > 3600 {
+                SITES_PRUNED.store(now, Ordering::Relaxed);
+                prune(&dir);
+            }
+            return put_at(&dir, &rel, offset, &data);
+        }
         if offset == 0 && kind == "cache" {
             prune(&dir);
         }
@@ -180,5 +225,9 @@ mod tests {
         assert_eq!(safe_name("..").as_deref(), None);
         assert_eq!(safe_name("ok-1_a.png").as_deref(), Some("ok-1_a.png"));
         assert!(dir_for(Path::new("/d"), "elsewhere").is_err());
+        assert_eq!(safe_rel("h1/Users/a/site/img/x.png"), Some(PathBuf::from("h1/Users/a/site/img/x.png")));
+        assert!(safe_rel("h1/../../etc/passwd").is_none());
+        assert!(safe_rel("h1/./x").is_none());
+        assert!(safe_rel("").is_none());
     }
 }

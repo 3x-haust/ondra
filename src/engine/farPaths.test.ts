@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedPath, asHostPath, cacheName, capText, cleanRoots, mentions, normPath, repoPath, tooWide, under, uploadName } from "./farPaths";
+import { allowedPath, asHostPath, cacheName, capText, cleanRoots, mentions, normPath, pageRefs, repoPath, resolveRef, scanKind, siteName, tooWide, under, uploadName } from "./farPaths";
 
 const HOME = "/Users/me";
 
@@ -91,5 +91,23 @@ describe("text sent in one answer", () => {
     const r = capText("가나다라", 7);
     expect(r.cut).toBe(true);
     expect(r.text).toBe("가나");
+  });
+});
+
+describe("a page's links", () => {
+  it("only the relative ones, from tags, styles and scripts", () => {
+    expect(pageRefs(`<img src="a.png"><a href="#top"></a><img src='//cdn/x.png'><img src=b.png><use xlink:href="s.svg#i"/><img src="{{x}}">`, "html").sort()).toEqual(["a.png", "b.png", "s.svg#i"]);
+    expect(pageRefs(`a{background:url( "x/y.png" )} @import 'z.css';`, "css").sort()).toEqual(["x/y.png", "z.css"]);
+    expect(pageRefs(`import a from "./a.js"; export * from '../b.mjs'; import("./c.js"); import "./d.css"; new Worker("w.js")`, "js").sort()).toEqual(["../b.mjs", "./a.js", "./c.js", "./d.css", "w.js"]);
+  });
+  it("resolve against the file's folder, never above the root", () => {
+    expect(resolveRef("/Users/o/p/out", "../img/a%20b.png?v=2#x")).toBe("/Users/o/p/img/a b.png");
+    expect(resolveRef("~/p", "./a/./b.css")).toBe("~/p/a/b.css");
+    expect(resolveRef("/a", "../../../etc")).toBeUndefined();
+    expect(resolveRef("/a", "%E0%A4%A")).toBeUndefined();
+  });
+  it("are read in pages, styles and scripts only", () => {
+    expect([scanKind("a.HTML"), scanKind("b.svg"), scanKind("c.css"), scanKind("d.mjs"), scanKind("e.png")]).toEqual(["html", "html", "css", "js", undefined]);
+    expect(siteName("H", "/Users/o/x.html")).toMatch(/^[0-9a-z]+\/Users\/o\/x\.html$/);
   });
 });
