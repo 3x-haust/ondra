@@ -3,7 +3,7 @@
 // change to a task without opening it, so several can be steered one after another.
 import { nowText } from "../engine/describe";
 import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
-import { decisionFor, projectsIn, kidsOf, state } from "../state/store";
+import { decisionFor, projectsShown, kidsOf, state, tasksShown } from "../state/store";
 import type { Task } from "../state/types";
 import { openTask, setView } from "../state/ui";
 import { stopTask, resumeTask, startTask, tell } from "../engine/tasks";
@@ -70,7 +70,7 @@ const ORDER = ["you", "failed", "review", "running", "paused", "queued", "done"]
 /** a card's state in words (the column's word when grouped by state) */
 const STATE_WORD: Record<string, string> = Object.fromEntries(STATES.map((s) => [s.id, s.label]));
 /** the project a task is filed under, by the same name the sidebar shows (none: 프로젝트 없음) */
-const projectOf = (task: Task) => projectsIn(task.space).find((p) => p.id === task.project);
+const projectOf = (task: Task) => projectsShown(task.space).find((p) => p.id === task.project);
 /** a column's mark: the glyph the sidebar draws for a task in that state */
 const GLYPH: Record<string, ReturnType<typeof glyphOf>> = { you: "waiting", failed: "failed", running: "running", paused: "paused", queued: "queued", review: "inreview", done: "done" };
 
@@ -140,7 +140,7 @@ export function NewTask(props: { project?: () => string | undefined }) {
   /** the project it is preset to, named in the tooltip */
   const name = () => {
     const id = props.project?.();
-    return id ? projectsIn(state.space).find((p) => p.id === id)?.name : undefined;
+    return id ? projectsShown(state.space).find((p) => p.id === id)?.name : undefined;
   };
   return (
     <button class="btn sm new-task-btn" title={name() ? t("{name}에 새 작업", { name: name()! }) : undefined} onClick={() => void import("./MainView").then((m) => m.startNewTask(props.project?.()))}>
@@ -152,7 +152,7 @@ export function NewTask(props: { project?: () => string | undefined }) {
 
 export function Board(props: { embedded?: boolean } = {}) {
   const roots = createMemo(() =>
-    state.tasks
+    tasksShown(state.space)
       .filter((x) => !x.parentId && !x.answer && !x.archived && x.space === state.space)
       .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
   );
@@ -174,12 +174,12 @@ export function Board(props: { embedded?: boolean } = {}) {
       const id = projectOf(x)?.id ?? "";
       by.set(id, [...(by.get(id) ?? []), x]);
     }
-    const order = projectsIn(state.space).map((p) => p.id);
+    const order = projectsShown(state.space).map((p) => p.id);
     return [...by]
       .sort((a, b) => (a[0] ? order.indexOf(a[0]) : order.length) - (b[0] ? order.indexOf(b[0]) : order.length))
       .map(([id, list]) => ({
         id,
-        label: id ? (projectsIn(state.space).find((p) => p.id === id)?.name ?? "") : "",
+        label: id ? (projectsShown(state.space).find((p) => p.id === id)?.name ?? "") : "",
         tone: list.some((x) => stateOf(x) === "you") ? "ask" : list.some((x) => stateOf(x) === "failed") ? "failed" : list.some((x) => stateOf(x) === "running") ? "live" : "idle",
         tasks: list.sort((a, b) => ORDER.indexOf(stateOf(a)) - ORDER.indexOf(stateOf(b))),
       }));

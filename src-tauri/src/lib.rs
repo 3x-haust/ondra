@@ -30,6 +30,7 @@ mod tools;
 mod remote;
 mod worktree;
 mod fs;
+mod farfs;
 #[cfg(debug_assertions)]
 mod devbridge;
 mod bridge;
@@ -453,6 +454,11 @@ pub fn run() {
             fs::save_download,
             fs::ensure_dir,
             fs::space_logs,
+            farfs::far_stat,
+            farfs::far_piece,
+            farfs::far_real,
+            farfs::far_put,
+            farfs::far_cached,
             worktree::worktree_merge,
             worktree::worktree_remove,
             worktree::worktree_landed,
@@ -473,6 +479,8 @@ pub fn run() {
             remote::remote_cmd,
             remote::remote_host_name,
             remote::remote_awake,
+            remote::remote_devices,
+            remote::remote_forget,
             tools::worker_env,
             secrets::secret_list,
             secrets::secret_set,
@@ -500,6 +508,7 @@ pub fn run() {
             git::gh_pr_state,
             git::gh_pr_view,
             git::gh_issues,
+            git::gh_watch,
             git::gh_issue,
             git::git_revert_file,
             tools::browser_stream_port,

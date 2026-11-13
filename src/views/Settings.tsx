@@ -7,7 +7,8 @@ import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, modifierHo
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { setState, state, uid, updateAccount } from "../state/store";
+import { projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
+import { mirror, setMirror } from "../state/mirror";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
 import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
@@ -39,6 +40,7 @@ import { presetOf } from "../engine/connections";
 import { keyText, SHORTCUT_EXTRAS } from "./ShortcutSheet";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
+import { RoutinesSettings } from "./Routines";
 import { SecretsSettings } from "./SecretsSettings";
 import { HooksTab } from "./Hooks";
 import { Logo, logoFor } from "../ui/Logos";
@@ -479,12 +481,15 @@ function SpaceSheet(props: { id: SpaceId | "new"; onClose: () => void }) {
 /** Removing a space keeps its work: jobs, projects, accounts and memory move to 개인. */
 function SpaceDelete(props: { id: SpaceId; onDone?: () => void }) {
   const [sure, setSure] = createSignal(false);
-  const n = () => state.tasks.filter((x) => x.space === props.id).length + (state.projects ?? []).filter((p) => p.space === props.id).length;
+  const n = () => tasksShown(props.id).length + projectsShown(props.id).length;
   const home = () => t(state.spaces.find((s) => s.id === "home")?.label ?? "개인");
   const remove = () => {
     const to = "home";
     setState("tasks", (x) => x.space === props.id, "space", to);
     setState("projects", (p) => p.space === props.id, "space", to);
+    // another Mac's projects added here move too, and their jobs with them
+    setState("settings", "hostProjects", (l) => (l ?? []).map((p) => (p.space === props.id ? { ...p, space: to } : p)));
+    for (const h of Object.keys(mirror.hosts)) setMirror("hosts", h, "tasks", (x) => x.space === props.id, "space", to);
     setState("accounts", (a) => a.space === props.id, "space", to);
     setState("memory", (m) => m.space === props.id, "space", to);
     setState("captain", (m) => m.space === props.id, "space", to);
@@ -699,7 +704,7 @@ function Accounts() {
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
-              <button class="btn ghost sm" onClick={() => setEditing(s.id)} title={`${folderName(s.folder)} · ${t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}`}>
+              <button class="btn ghost sm" onClick={() => setEditing(s.id)} title={`${folderName(s.folder)} · ${t("작업 {n}개", { n: tasksShown(s.id).filter((x) => !x.parentId && !x.answer && !x.archived).length })}`}>
                 <Icon name="gear" size={14} />
                 {t("워크스페이스 설정")}
               </button>
@@ -1079,6 +1084,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
   { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
+  { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간이나 GitHub에서 일이 생기면 작업을 시작해요", group: "에이전트|group" },
   { id: "secrets", label: "시크릿", icon: "lock", desc: "API 키와 비밀번호를 작업이 쓰되, 에이전트는 값을 보지 못하게 해요", group: "에이전트|group" },
   { id: "tools", label: "macOS 권한", icon: "shield", desc: "작업이 화면을 보고 앱을 다루려면 필요해요", group: "이 Mac" },
   { id: "import", label: "가져오기", icon: "download", desc: "다른 AI 도구에서 쓰던 지침·스킬·세션을 가져와요", group: "이 Mac" },
@@ -1240,6 +1246,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>
             <Match when={settingsTab() === "secrets"}><SecretsSettings /></Match>
+            <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "skills"}><SkillsTab /></Match>
             <Match when={settingsTab() === "hooks"}><HooksTab /></Match>
             <Match when={settingsTab() === "tools"}><Permissions /></Match>

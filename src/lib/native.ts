@@ -326,6 +326,10 @@ export const remoteStop = () => call<void>("remote_stop");
 export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
 export const remoteHostName = () => call<string>("remote_host_name", undefined, "Mac");
 export const remoteAwake = (on: boolean) => call<void>("remote_awake", { on });
+/** the Macs allowed in (read from disk: there even while the helper isn't running) */
+export const remoteDevices = () => call<{ id: string; name: string; addedAt: number; lastSeen: number }[]>("remote_devices", undefined, []);
+/** forget a Mac allowed in; the new list when it was changed without the helper */
+export const remoteForget = (id: string) => call<{ id: string; name: string; addedAt: number; lastSeen: number }[] | null>("remote_forget", { id });
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });
@@ -619,3 +623,18 @@ export interface SecretGroup {
 }
 /** Every saved secret, those with the same value as one (compared natively, values never sent). */
 export const secretOverview = () => call<SecretGroup[]>("secret_overview", undefined, []);
+/** What a routine watches on the folder's GitHub repo, as gh prints it (routineEvents.ts reads it). */
+export const ghWatch = (cwd: string, event: string, search: string, env: Env = []) => call<string>("gh_watch", { cwd, event, search, env }, "[]");
+
+// ───────────────────────── files carried between Macs (Settings › 연결; src-tauri/src/farfs.rs)
+export interface FarStat { size: number; modified: number; dir: boolean }
+export const farStat = (path: string) => call<FarStat | null>("far_stat", { path }, null);
+/** a piece of a file, base64 (at most 1 MB) */
+export const farPiece = (path: string, offset: number, len: number) =>
+  call<{ data: string; size: number; modified: number }>("far_piece", { path, offset, len }, { data: "", size: 0, modified: 0 });
+/** where each path really is, links followed (null: not there) */
+export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", { paths }, paths);
+/** a piece put into this app's own folder: "cache" (another Mac's files shown here) or "upload" (attachments sent here) */
+export const farPut = (kind: "cache" | "upload", name: string, offset: number, data: string) =>
+  call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
+export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);

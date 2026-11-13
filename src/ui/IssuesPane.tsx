@@ -6,6 +6,8 @@ import { projectById, projectsIn, spaceById, state } from "../state/store";
 import { createTask } from "../engine/tasks";
 import { expand } from "../engine/rpc";
 import { ghIssue, ghIssues, spaceEnv } from "../lib/native";
+import { onMac, there, farError } from "../engine/far";
+import { mirroredTasks } from "../state/mirror";
 import { linkMenu, openLink } from "./links";
 import { openTask, toast, view } from "../state/ui";
 import { ago } from "./bits";
@@ -35,12 +37,13 @@ const FILTERS = [
   { id: "recent", label: "최근", icon: "clock", q: "sort:updated-desc" },
 ] as const;
 
-/** the folder whose repo we show: the open job's, else the project in view, else the space's first */
-function folderOf(t?: Task): { dir: string; space: Task["space"]; project?: string } | undefined {
-  if (t) return { dir: expand(t.cwd), space: t.space, project: t.project };
+/** the folder whose repo we show: the open job's, else the project in view, else the space's first
+ *  (`host`: it is on another Mac, and gh runs there) */
+function folderOf(t?: Task): { dir: string; space: Task["space"]; project?: string; host?: string } | undefined {
+  if (t) return { dir: expand(t.cwd), space: t.space, project: t.project, host: t.host };
   const v = view();
   const p = (v.name === "main" && v.project ? projectById(v.project, state.space) : undefined) ?? projectsIn(state.space)[0];
-  if (p) return { dir: expand(p.folder), space: p.space, project: p.id };
+  if (p) return { dir: expand(p.folder), space: p.space, project: p.id, host: p.host };
   const sp = spaceById(state.space);
   return sp?.folder ? { dir: expand(sp.folder), space: sp.id } : undefined;
 }
@@ -48,7 +51,7 @@ function folderOf(t?: Task): { dir: string; space: Task["space"]; project?: stri
 /** jobs started from an issue, by issue url */
 const jobsByIssue = createMemo(() => {
   const m = new Map<string, Task>();
-  for (const t of state.tasks) if (t.issue && !t.archived) m.set(t.issue.url, t);
+  for (const t of [...state.tasks, ...mirroredTasks()]) if (t.issue && !t.archived) m.set(t.issue.url, t);
   return m;
 });
 
@@ -62,8 +65,12 @@ export function IssuesPane(props: { t?: Task }) {
   const [list, { refetch }] = createResource(
     () => (where() ? { ...where()!, q: search() } : false),
     async (w) => {
-      const env = await spaceEnv(spaceById(w.space)).catch(() => []);
-      return JSON.parse(await ghIssues(w.dir, w.q, env)) as Issue[];
+      const raw = await onMac(w.host, "far.ghIssues", [there(w.dir), w.q], async () => ghIssues(w.dir, w.q, await spaceEnv(spaceById(w.space)).catch(() => []))).catch((e) => {
+        if (!w.host) throw e;
+        toast(farError(e), "bad");
+        return "[]";
+      });
+      return JSON.parse(raw) as Issue[];
     },
   );
   const shown = () => {
@@ -149,21 +156,21 @@ export function IssuesPane(props: { t?: Task }) {
   );
 }
 
+/** one issue as gh gives it: on the Mac the folder is on */
+const issueText = (w: NonNullable<ReturnType<typeof folderOf>>, n: number) =>
+  onMac(w.host, "far.ghIssue", [there(w.dir), n], async () => ghIssue(w.dir, n, await spaceEnv(spaceById(w.space)).catch(() => [])));
+
 function Row(props: { i: Issue; where: NonNullable<ReturnType<typeof folderOf>>; open: boolean; toggle: () => void }) {
   const job = () => jobsByIssue().get(props.i.url);
   const [full] = createResource(
     () => (props.open ? props.i.number : false),
-    async (n) => {
-      const env = await spaceEnv(spaceById(props.where.space)).catch(() => []);
-      return JSON.parse(await ghIssue(props.where.dir, n, env)) as Full;
-    },
+    async (n) => JSON.parse(await issueText(props.where, n)) as Full,
   );
   const hand = async () => {
     const i = props.i;
     let body = full()?.body;
     if (body === undefined) {
-      const env = await spaceEnv(spaceById(props.where.space)).catch(() => []);
-      body = await ghIssue(props.where.dir, i.number, env).then((x) => (JSON.parse(x) as Full).body ?? "").catch(() => "");
+      body = await issueText(props.where, i.number).then((x) => (JSON.parse(x) as Full).body ?? "").catch(() => "");
     }
     const ask = [`GitHub 이슈 #${i.number} 해결: ${i.title}`, i.url, "", body?.trim() || "(본문 없음)"].join("\n");
     const id = createTask({

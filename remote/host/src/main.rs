@@ -9,13 +9,19 @@
 //!
 //! The app drives it over stdin/stdout, one JSON object per line:
 //!   in:  {"cmd":"host","on"} {"cmd":"pair","code","ttl"} {"cmd":"unpair"} {"cmd":"approve","conn","ok"}
-//!        {"cmd":"send","conn","data"} {"cmd":"revoke","id"} {"cmd":"devices"}
-//!        {"cmd":"dial","peer","name","pair"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
+//!        {"cmd":"send","conn","data"} {"cmd":"revoke","id"} {"cmd":"drop","id"} {"cmd":"devices"}
+//!        {"cmd":"dial","peer","name","pair"?,"bye"?} {"cmd":"peer-send","peer","data"} {"cmd":"hangup","peer"}
 //!   out: {"ev":"ready","id"} {"ev":"devices","list"} {"ev":"pair","conn","device"}
-//!        {"ev":"open","conn","device"} {"ev":"msg","conn","data"} {"ev":"close","conn"}
-//!        {"ev":"peer","peer","state":"connecting|waiting|ok|denied|closed","reason"?}
+//!        {"ev":"open","conn","device"} {"ev":"msg","conn","data"} {"ev":"close","conn"} {"ev":"bye","device"}
+//!        {"ev":"peer","peer","state":"connecting|waiting|ok|denied|closed|bye","reason"?,"bye"?}
 //!        {"ev":"peer-msg","peer","data"}
 //! It exits when stdin closes (the app quit).
+//!
+//! Between Macs, the first lines: the one dialing says {"t":"hello","name","pair"?,"bye"?}; the host
+//! answers {"t":"waiting"} {"t":"ok"} {"t":"denied","reason":"off|unknown|refused"} or, to a bye,
+//! {"t":"bye"} (it forgot that Mac). A host ends a live connection with a reason the other side
+//! reads: "revoked" (removed there), "dropped" (cut for now) or "off" (hosting turned off).
+//! A field or answer a peer doesn't know is ignored, so an older Mac keeps working.
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -28,7 +34,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use iroh::{
-    endpoint::{presets, Connection},
+    endpoint::{presets, Connection, ConnectionError},
     protocol::{AcceptError, ProtocolHandler, Router},
     Endpoint, SecretKey,
 };
@@ -40,6 +46,10 @@ use tokio::{
 };
 
 const ALPN: &[u8] = b"ondra/remote/1";
+/// why a host ended a connection (the QUIC close reason the other side reads)
+const REVOKED: &[u8] = b"revoked";
+const DROPPED: &[u8] = b"dropped";
+const OFF: &[u8] = b"off";
 /// one line, at most (a long job's record fits; a flood doesn't)
 const MAX_LINE: usize = 64 << 20;
 
@@ -123,27 +133,86 @@ impl ProtocolHandler for Remote {
     }
 }
 
+/// What a Mac says first when it dials in.
+#[derive(Debug, PartialEq)]
+struct Hello {
+    name: String,
+    pair: String,
+    /// it removed this Mac on its side: forget it here too
+    bye: bool,
+}
+
+fn parse_hello(v: &Value) -> Hello {
+    Hello {
+        name: v.get("name").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect(),
+        pair: v.get("pair").and_then(Value::as_str).unwrap_or("").to_string(),
+        bye: v.get("bye").and_then(Value::as_bool).unwrap_or(false),
+    }
+}
+
+/// The word the app hears for a host's close reason (anything else is a plain "closed").
+fn close_word(reason: &[u8]) -> Option<&'static str> {
+    match reason {
+        REVOKED => Some("revoked"),
+        DROPPED => Some("dropped"),
+        OFF => Some("off"),
+        _ => None,
+    }
+}
+
+/// The device list without that Mac; None when it wasn't in it.
+fn without(list: &[Device], id: &str) -> Option<Vec<Device>> {
+    list.iter().any(|d| d.id == id).then(|| list.iter().filter(|d| d.id != id).cloned().collect())
+}
+
 async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
     let peer = conn.remote_id().to_string();
     let (mut send, recv) = conn.accept_bi().await?;
+    let mut lines = BufReader::new(recv);
+    let mut buf = Vec::new();
+    // the first line says who it is: {"t":"hello","name":"iPhone","pair":"<code>"}
+    let hello = match read_line(&mut lines, &mut buf).await? {
+        Some(v) => parse_hello(&v),
+        None => return Ok(()),
+    };
+    // a Mac saying goodbye is forgotten even while hosting is off: leaving is always allowed
+    if hello.bye {
+        let gone = {
+            let mut list = s.devices.lock().await;
+            let gone = list.iter().find(|d| d.id == peer).cloned();
+            if let Some(rest) = without(&list, &peer) {
+                *list = rest;
+            }
+            gone
+        };
+        let reply: &[u8] = if let Some(d) = gone {
+            s.save_devices().await;
+            for (_, (p, _, c)) in s.conns.lock().await.iter() {
+                if *p == peer {
+                    c.close(1u32.into(), REVOKED);
+                }
+            }
+            s.emit(json!({ "ev": "bye", "device": { "id": d.id, "name": d.name } }));
+            b"{\"t\":\"bye\"}\n"
+        } else {
+            b"{\"t\":\"denied\",\"reason\":\"unknown\"}\n"
+        };
+        send.write_all(reply).await?;
+        send.finish()?;
+        let _ = tokio::time::timeout(Duration::from_secs(10), conn.closed()).await;
+        return Ok(());
+    }
     if !s.hosting.load(Ordering::Relaxed) {
         send.write_all(b"{\"t\":\"denied\",\"reason\":\"off\"}\n").await?;
         send.finish()?;
         conn.closed().await;
         return Ok(());
     }
-    let mut lines = BufReader::new(recv);
-    let mut buf = Vec::new();
-    // the first line says who it is: {"t":"hello","name":"iPhone","pair":"<code>"}
-    let hello: Value = match read_line(&mut lines, &mut buf).await? {
-        Some(v) => v,
-        None => return Ok(()),
-    };
-    let name = hello.get("name").and_then(Value::as_str).unwrap_or("Mac").chars().take(60).collect::<String>();
+    let name = hello.name;
     let id = s.next.fetch_add(1, Ordering::Relaxed);
     let known = s.devices.lock().await.iter().any(|d| d.id == peer);
     if !known {
-        let code = hello.get("pair").and_then(Value::as_str).unwrap_or("");
+        let code = hello.pair.as_str();
         let valid = {
             let p = s.pairing.lock().await;
             matches!(&*p, Some((c, until)) if !code.is_empty() && c == code && Instant::now() < *until)
@@ -204,13 +273,28 @@ async fn serve(s: Arc<Shared>, conn: Connection) -> Result<()> {
     Ok(())
 }
 
-/// Connect to a host Mac and carry lines both ways until either side ends.
+/// A "peer" event; one from a dial that only says goodbye says so (`"bye": true`), so the app
+/// can't take it for an older dial's.
+fn peer_ev(peer: &str, state: &str, reason: Option<Value>, bye: bool) -> Value {
+    let mut v = json!({ "ev": "peer", "peer": peer, "state": state });
+    if let Some(r) = reason {
+        v["reason"] = r;
+    }
+    if bye {
+        v["bye"] = json!(true);
+    }
+    v
+}
+
+/// Connect to a host Mac and carry lines both ways until either side ends. A goodbye dial
+/// (`"bye": true` in the hello) ends after the host's answer.
 async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Result<()> {
     let id: iroh::EndpointId = peer.parse().map_err(|e| anyhow!("{e}"))?;
+    let bye = hello.get("bye").and_then(Value::as_bool).unwrap_or(false);
     if let Some((_, old)) = s.peers.lock().await.remove(&peer) {
         old.close(0u32.into(), b"again");
     }
-    s.emit(json!({ "ev": "peer", "peer": peer, "state": "connecting" }));
+    s.emit(peer_ev(&peer, "connecting", None, bye));
     let conn = ep.connect(id, ALPN).await?;
     let (mut send, recv) = conn.open_bi().await?;
     send.write_all(format!("{hello}\n").as_bytes()).await?;
@@ -220,10 +304,22 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Resul
     loop {
         let Some(v) = read_line(&mut lines, &mut buf).await? else { return Err(anyhow!("closed")) };
         match v.get("t").and_then(Value::as_str) {
-            Some("waiting") => s.emit(json!({ "ev": "peer", "peer": peer, "state": "waiting" })),
+            Some("waiting") => s.emit(peer_ev(&peer, "waiting", None, bye)),
+            // an older host let a goodbye in as a visit: say so and leave
+            Some("ok") if bye => {
+                s.emit(peer_ev(&peer, "ok", None, bye));
+                conn.close(0u32.into(), b"bye");
+                return Ok(());
+            }
             Some("ok") => break,
+            // it forgot this Mac, as asked
+            Some("bye") => {
+                s.emit(peer_ev(&peer, "bye", None, bye));
+                conn.close(0u32.into(), b"bye");
+                return Ok(());
+            }
             Some("denied") => {
-                s.emit(json!({ "ev": "peer", "peer": peer, "state": "denied", "reason": v.get("reason").cloned().unwrap_or(Value::Null) }));
+                s.emit(peer_ev(&peer, "denied", Some(v.get("reason").cloned().unwrap_or(Value::Null)), bye));
                 conn.close(0u32.into(), b"denied");
                 return Ok(());
             }
@@ -252,7 +348,16 @@ async fn dial(s: Arc<Shared>, ep: Endpoint, peer: String, hello: Value) -> Resul
     let mine = s.peers.lock().await.get(&peer).map(|(_, c)| c.stable_id() == conn.stable_id()).unwrap_or(false);
     if mine {
         s.peers.lock().await.remove(&peer);
-        s.emit(json!({ "ev": "peer", "peer": peer, "state": "closed", "reason": reason }));
+        // the host said why it ended it: removed there or turned off is a "no"; cut for now is a close
+        let why = match conn.close_reason() {
+            Some(ConnectionError::ApplicationClosed(c)) => close_word(&c.reason),
+            _ => None,
+        };
+        match why {
+            Some(w @ ("revoked" | "off")) => s.emit(peer_ev(&peer, "denied", Some(json!(w)), false)),
+            Some(w) => s.emit(peer_ev(&peer, "closed", Some(json!(w)), false)),
+            None => s.emit(peer_ev(&peer, "closed", Some(json!(reason)), false)),
+        }
     }
     Ok(())
 }
@@ -333,7 +438,7 @@ async fn main() -> Result<()> {
                 if !on {
                     *s.pairing.lock().await = None;
                     for (_, (_, _, c)) in s.conns.lock().await.iter() {
-                        c.close(2u32.into(), b"off");
+                        c.close(2u32.into(), OFF);
                     }
                 }
             }
@@ -355,18 +460,31 @@ async fn main() -> Result<()> {
                 s.save_devices().await;
                 for (_, (peer, _, c)) in s.conns.lock().await.iter() {
                     if *peer == id {
-                        c.close(1u32.into(), b"revoked");
+                        c.close(1u32.into(), REVOKED);
+                    }
+                }
+            }
+            // cut that Mac off for now: it stays allowed and may come back
+            "drop" => {
+                let id = cmd.get("id").and_then(Value::as_str).unwrap_or("");
+                for (_, (peer, _, c)) in s.conns.lock().await.iter() {
+                    if peer == id {
+                        c.close(3u32.into(), DROPPED);
                     }
                 }
             }
             "devices" => s.emit(json!({ "ev": "devices", "list": s.devices.lock().await.clone() })),
             "dial" => {
                 let peer = cmd.get("peer").and_then(Value::as_str).unwrap_or("").trim().to_string();
-                let hello = json!({ "t": "hello", "name": cmd.get("name").cloned().unwrap_or(json!("Mac")), "pair": cmd.get("pair").cloned().unwrap_or(Value::Null) });
+                let bye = cmd.get("bye").and_then(Value::as_bool).unwrap_or(false);
+                let mut hello = json!({ "t": "hello", "name": cmd.get("name").cloned().unwrap_or(json!("Mac")), "pair": cmd.get("pair").cloned().unwrap_or(Value::Null) });
+                if bye {
+                    hello["bye"] = json!(true);
+                }
                 let (s, ep) = (s.clone(), router.endpoint().clone());
                 tokio::spawn(async move {
                     if let Err(e) = dial(s.clone(), ep, peer.clone(), hello).await {
-                        s.emit(json!({ "ev": "peer", "peer": peer, "state": "closed", "reason": format!("{e:#}") }));
+                        s.emit(peer_ev(&peer, "closed", Some(json!(format!("{e:#}"))), bye));
                     }
                 });
             }
@@ -387,4 +505,46 @@ async fn main() -> Result<()> {
     }
     router.shutdown().await.ok();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dev(id: &str) -> Device {
+        Device { id: id.into(), name: id.into(), added_at: 1, last_seen: 1 }
+    }
+
+    #[test]
+    fn hello_reads_bye_and_defaults() {
+        let h = parse_hello(&json!({ "t": "hello", "name": "Air", "pair": null, "bye": true }));
+        assert_eq!(h, Hello { name: "Air".into(), pair: "".into(), bye: true });
+        // an older Mac's hello: no bye
+        let h = parse_hello(&json!({ "t": "hello", "pair": "abc" }));
+        assert_eq!(h, Hello { name: "Mac".into(), pair: "abc".into(), bye: false });
+        assert_eq!(parse_hello(&json!({ "name": "x".repeat(200) })).name.chars().count(), 60);
+    }
+
+    #[test]
+    fn close_reasons() {
+        assert_eq!(close_word(b"revoked"), Some("revoked"));
+        assert_eq!(close_word(b"dropped"), Some("dropped"));
+        assert_eq!(close_word(b"off"), Some("off"));
+        assert_eq!(close_word(b"again"), None);
+        assert_eq!(close_word(b""), None);
+    }
+
+    #[test]
+    fn goodbye_dial_events_say_so() {
+        assert_eq!(peer_ev("p", "ok", None, false), json!({ "ev": "peer", "peer": "p", "state": "ok" }));
+        assert_eq!(peer_ev("p", "denied", Some(json!("off")), true), json!({ "ev": "peer", "peer": "p", "state": "denied", "reason": "off", "bye": true }));
+    }
+
+    #[test]
+    fn forgetting_a_device() {
+        let list = vec![dev("a"), dev("b")];
+        let rest = without(&list, "a").unwrap();
+        assert_eq!(rest.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["b"]);
+        assert!(without(&list, "c").is_none());
+    }
 }

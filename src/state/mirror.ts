@@ -3,8 +3,9 @@
 // Held in memory only: it is the other Mac's, never written to this Mac's state.json.
 import { createStore } from "solid-js/store";
 import type { Limit } from "../lib/native";
-import type { Project, SpaceId, Task } from "./types";
+import type { Decision, Project, SpaceId, Task } from "./types";
 
+/** "off": disconnected here for now (연결 끊기) */
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
 
 export interface HostMirror {
@@ -19,6 +20,8 @@ export interface HostMirror {
   tasks: Task[];
   /** its workspaces, accounts and their plan use (sent by that Mac, refreshed as they change) */
   info?: HostInfo;
+  /** the questions those jobs wait on, as that Mac has them (a Mac too old to send them: none) */
+  decisions?: Decision[];
 }
 
 export interface HostInfo {
@@ -44,6 +47,34 @@ export interface HostInfo {
   pick: Record<string, string>;
 }
 
+/** a new job asked of another Mac (its "create" call). Past the first fields, what a Mac too old to
+ *  know them leaves out: ids it follows or waits on are that Mac's (the ids shown here), `reach` names
+ *  workspaces by label. */
+export interface FarAsk {
+  id: string;
+  title: string;
+  ask: string;
+  project?: string;
+  space: string;
+  hostSpace?: string;
+  spaceLabel?: string;
+  account?: string;
+  model?: string;
+  thinking?: string;
+  display?: string;
+  branch?: string;
+  priority?: Task["priority"];
+  weight?: Task["weight"];
+  origin?: Task["origin"];
+  isolate?: boolean;
+  after?: string[];
+  reach?: string[];
+  follows?: string;
+  issue?: Task["issue"];
+  by?: string;
+  permission?: Task["permission"];
+}
+
 export const [mirror, setMirror] = createStore<{ hosts: Record<string, HostMirror> }>({ hosts: {} });
 
 /** a project of another Mac, as this app names it: r:<host>:<its id> */
@@ -59,6 +90,21 @@ export function mirroredTasks(): Task[] {
   for (const h of Object.values(mirror.hosts)) out.push(...h.tasks);
   return out;
 }
+
+/** every question another Mac's jobs wait on */
+export function mirroredDecisions(): Decision[] {
+  const out: Decision[] = [];
+  for (const h of Object.values(mirror.hosts)) out.push(...(h.decisions ?? []));
+  return out;
+}
+export const mirroredDecision = (id: string) => mirroredDecisions().find((d) => d.id === id);
+
+/**
+ * Read here: a mirrored job's unread is that Mac's, sent on every change. Opening it here notes how
+ * many entries it had then, and it reads as unread again only once it has more.
+ */
+export const readAt = new Map<string, number>();
+export const seenHere = (t: Task) => (readAt.get(t.id) ?? -1) >= t.entries.length;
 
 /** the Mac a job runs on, when it is another Mac's */
 export function hostOfTask(id: string): string | undefined {
@@ -79,8 +125,10 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
 export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: string, v?: Record<string, string | number>) => string = (k) => k, ago: (at?: number) => string = () => ""): string {
   const s = h?.status ?? "connecting";
   if (s === "denied" && h?.reason === "off") return t("그 Mac에서 연결을 꺼 뒀어요");
-  if (s === "denied" && h?.reason === "unknown") return t("그 Mac에서 이 Mac을 뺐어요");
+  if (s === "denied" && (h?.reason === "unknown" || h?.reason === "revoked")) return t("그 Mac에서 이 Mac을 제거했어요");
   if (s === "denied") return t("거절됨");
+  if (s === "off") return t("연결 끊음");
+  if (s === "lost" && h?.reason === "dropped") return t("그 Mac에서 연결을 끊었어요");
   if (s === "waiting") return t("그 Mac에서 허용을 기다려요");
   if (s === "ok") return t("연결됨");
   const at = h?.since ?? seen;

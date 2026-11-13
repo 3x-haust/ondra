@@ -4,7 +4,7 @@
 import { createStore, reconcile } from "solid-js/store";
 import type { Block, PlanStep, Task } from "./types";
 import { expand, tilde } from "../engine/rpc";
-import { gitChanges } from "../lib/native";
+import { changesIn } from "../engine/far";
 
 export interface FileDiff {
   path: string;
@@ -36,7 +36,8 @@ function ask(t: Task, key: string) {
   const id = `${t.id}:${key}`;
   if (asking.has(id)) return;
   asking.add(id);
-  void gitChanges(expand(t.cwd), t.worktree!.base)
+  // a job of another Mac: asked there (its folder is there)
+  void changesIn(t.host, expand(t.cwd), t.worktree!.base, true)
     .then((c) => c?.isRepo && setGit(t.id, reconcile({ key, files: c.files.map((f) => ({ path: f.path, add: f.add, del: f.del })) })))
     .catch(() => {})
     .finally(() => asking.delete(id));

@@ -4,7 +4,7 @@
 import { splitQuotes } from "./quote";
 import { skillAsk } from "./Aside";
 import { createSignal, For, onMount, Show } from "solid-js";
-import { fileSrc } from "../lib/native";
+import { srcOf, useHost } from "../engine/far";
 import { isImage } from "./Composer";
 import { openImage } from "./Lightbox";
 import { editing, previewFile, setEditing } from "../state/ui";
@@ -58,6 +58,8 @@ export function MsgActions(props: { text: string; at?: number; mine?: boolean; o
 /** A user message: grey bubble on the right, time / copy / edit on hover. */
 export function UserMsg(props: { text: string; at?: number; from?: string; id?: string; onEdit?: (text: string) => void }) {
   const open = () => !!props.id && editing() === props.id;
+  // a job of another Mac: what was attached was sent there, and is shown from there
+  const host = useHost();
   /** "…\n\n첨부한 파일:\n- a\n- b" → text and files */
   const split = () => {
     // files alone ("첨부한 파일:\n- a") or after the text ("…\n\n첨부한 파일:\n- a")
@@ -94,7 +96,7 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
                         </button>
                       }
                     >
-                      <img class="msg-img" src={fileSrc(f)} alt="" title={f.split("/").pop()} onClick={() => openImage(f, split().files.filter(isImage))} />
+                      <img class="msg-img" src={srcOf(f, host())} alt="" title={f.split("/").pop()} onClick={() => openImage(f, split().files.filter(isImage), host())} />
                     </Show>
                   )}
                 </For>

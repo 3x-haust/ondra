@@ -345,6 +345,12 @@
 .xterm-host .xterm-viewport {
   background: transparent !important;
 }
+/* another Mac's shell in a job's terminal tab: it takes the room, the job's commands stay below */
+.term-pane .xterm-host + .shells {
+  flex: 0 0 auto;
+  max-height: 32%;
+  border-top: 1px solid var(--line);
+}
 
 /* browser pane */
 .screen {

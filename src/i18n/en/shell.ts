@@ -60,8 +60,6 @@ export default {
   "아이콘 바꾸기": "Change icon",
   "색 바꾸기": "Change color",
   "연결 설정": "Connection settings",
-  "연결 해제": "Disconnect",
-  "{name} 연결 해제": "Disconnect {name}",
   "Mac 연결": "Connect a Mac",
   "{mac}에는 {space} 워크스페이스가 없어요": "{mac} has no {space} workspace",
   "{space} · 새 작업은 {mac}에서 해요": "{space} · new work runs on {mac}",

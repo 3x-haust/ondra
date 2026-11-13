@@ -8,9 +8,9 @@ import {
   Monitor, MoreHorizontal, PanelLeft,
   PanelRight, Pause, Play, Plus, RefreshCw, Route, Search, Settings, Shield,
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
-  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Grip, SmilePlus, Palette, Minus, Maximize, LayoutGrid, Binary, CircleDot,
+  GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Repeat, Grip, SmilePlus, Palette, Minus, Maximize, LayoutGrid, Binary, CircleDot,
   Flag, Undo2, Hand, CircleArrowUp, FolderPlus, Keyboard, Languages, SunMoon, Columns2, Rows2, Maximize2, Equal, ChevronUp, WrapText,
-  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote,
+  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote, Eye, EyeOff, Unplug,
 } from "lucide-solid";
 
 const map: Record<string, Component<any>> = {
@@ -19,14 +19,14 @@ const map: Record<string, Component<any>> = {
   down: ChevronDown, chevron: ChevronRight, dot: Circle, clock: Clock, handoff: CornerDownRight,
   download: Download, external: ExternalLink, diff: FileDiff, edit: FilePen, write: FilePlus, file: FileText,
   test: FlaskConical, folder: Folder, branch: GitBranch, pr: GitPullRequest, globe: Globe, history: History,
-  home: Home, inbox: Inbox, box: Package, key: KeyRound, list: LayoutList, link: Link, board: Columns3, canvas: Workflow, dots: Grip, minus: Minus, fit: Maximize, tidy: LayoutGrid, message: MessageSquare,
+  home: Home, inbox: Inbox, box: Package, key: KeyRound, list: LayoutList, link: Link, board: Columns3, canvas: Workflow, repeat: Repeat, dots: Grip, minus: Minus, fit: Maximize, tidy: LayoutGrid, message: MessageSquare,
   monitor: Monitor, more: MoreHorizontal, panel: PanelRight, panelLeft: PanelLeft, pause: Pause, play: Play, plus: Plus,
   refresh: RefreshCw, route: Route, search: Search, gear: Settings, shield: Shield, phone: Smartphone,
   spark: Sparkles, stop: Square, terminal: SquareTerminal, shell: Terminal, trash: Trash2, video: Video,
   tools: Wrench, x: X, bolt: Zap, skill: Puzzle, memory: Bookmark, compose: SquarePen, back: ArrowLeft,
   done: CircleCheck, merge: GitMerge, clip: Paperclip, open: FolderOpen, copy: Copy, pencil: Pencil, lock: Lock, unlock: LockOpen,
   pin: Pin, archive: Archive, push: ArrowUpFromLine, commit: GitCommitHorizontal, compact: Minimize2, bell: Bell, duplicate: CopyPlus, slash: Slash, at: AtSign, binary: Binary, issue: CircleDot,
-  flag: Flag, undo: Undo2, hand: Hand, update: CircleArrowUp, folderPlus: FolderPlus,
+  flag: Flag, undo: Undo2, hand: Hand, update: CircleArrowUp, folderPlus: FolderPlus, eye: Eye, eyeOff: EyeOff, unplug: Unplug,
   keyboard: Keyboard, language: Languages, theme: SunMoon, smilePlus: SmilePlus, palette: Palette,
   splitRight: Columns2, splitDown: Rows2, zoom: Maximize2, equal: Equal, up: ChevronUp, wrap: WrapText,
   arrowUp: ArrowUp, arrowDown: ArrowDown, goto: FileInput, listTree: ListTree, listFlat: List, collapseAll: ChevronsDownUp, fold: FoldVertical, image: ImageIcon,

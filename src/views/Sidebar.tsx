@@ -1,5 +1,6 @@
 // The left side: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
+import { routineOf } from "../engine/routines";
 import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
@@ -12,10 +13,12 @@ import { addProject, decisionsIn, projectsShown, removeProject, renameProject, k
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
+import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, view } from "../state/ui";
+import { hideHostProject, showHostProject } from "../engine/hosts";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
 import { openInSplit, startTaskDrag } from "./PaneControls";
@@ -194,6 +197,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         title={tip()}
       >
         <Glyph t={face()} />
+        <Show when={!props.kid && routineOf(t())}><Icon name="repeat" size={12} class="sb-rt" /></Show>
         <span class="sb-title">{taskTitle(t())}</span>
         <Show when={!props.kid && nested()}>
           <span
@@ -249,11 +253,24 @@ function projectMenu(id: string): MenuEntry[] {
   if (!p) return [];
   const n = tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.answer).length;
   const far = splitProjectId(p.id);
-  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there)
+  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there);
+  // it can be kept off the list here (Settings › 연결 brings it back)
   if (far)
     return [
       { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
       { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
+      "sep",
+      {
+        id: "hide",
+        label: tr("목록에서 숨기기"),
+        icon: "eyeOff",
+        run: () => {
+          hideHostProject(far.host, far.id);
+          toast(tr("{name} 프로젝트를 숨겼어요", { name: p.name }), "info", { label: tr("다시 보이기"), run: () => showHostProject(far.host, far.id) });
+        },
+      },
+      // its folder is there: Finder opens on that Mac's screen
+      { id: "finder", label: tr("그 Mac의 Finder에서 보기"), icon: "folder", run: () => void revealOn(far.host, p.folder) },
     ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },

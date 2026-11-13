@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/native", () => ({ artifactsList: async () => [] }));
-vi.mock("./store", () => ({ state: { tasks: [{ id: "pdf", entries: [
-  { kind: "tool", at: 1, tool: { kind: "write", detail: "/docs/report.pdf", ok: true } },
-] }] } }));
+vi.mock("./store", () => {
+  const tasks = [{ id: "pdf", entries: [{ kind: "tool", at: 1, tool: { kind: "write", detail: "/docs/report.pdf", ok: true } }] }];
+  return { state: { tasks }, taskById: (id: string) => tasks.find((t) => t.id === id) };
+});
 
 import { artifacts, kindOf, loadArtifacts } from "./artifacts";
 

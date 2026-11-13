@@ -9,7 +9,8 @@ import { openTask, setPaneView, shownIn, toast } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { discarded } from "../state/progress";
 import { expand } from "../engine/rpc";
-import { gitFileAt, gitMerged, openInEditor, revealPath, type FileAt } from "../lib/native";
+import type { FileAt } from "../lib/native";
+import { editorOn, fileAtRev, mergedIn, revealOn } from "../engine/far";
 import { ignoredKey, matchesShortcut, withHint } from "../lib/shortcuts";
 import { useChanges } from "../ui/Review";
 import {
@@ -134,8 +135,9 @@ function Body(props: { t: Task }) {
   const [live, refetch] = useChanges(() => props.t, () => !gone() && !merged());
   // merged: what the merge brought in, from the repo
   const [mergedData] = createResource(
-    () => (merged() && w() ? ([w()!.repo, w()!.branch, w()!.into, w()!.base] as const) : false),
-    ([repo, branch, into, base]) => gitMerged(repo, branch, into, base).catch(() => null),
+    () => (merged() && w() ? ([w()!.repo, w()!.branch, w()!.into, w()!.base, props.t.host] as const) : false),
+    // a job of another Mac: from its repo there
+    ([repo, branch, into, base, host]) => mergedIn(host, repo, branch, into, base).catch(() => null),
   );
   const source = createMemo<Source | null | undefined>(() => {
     if (gone()) return null;
@@ -273,8 +275,8 @@ function Body(props: { t: Task }) {
       const key = tabKey(x);
       if (f.binary) return { key, path: f.path, binary: true };
       const [a, b] = await Promise.all([
-        f.status === "A" || f.status === "U" ? MISSING : gitFileAt(s.cwd, s.from, f.old ?? f.path).catch(() => MISSING),
-        f.status === "D" ? MISSING : gitFileAt(s.cwd, s.to, f.path).catch(() => MISSING),
+        f.status === "A" || f.status === "U" ? MISSING : fileAtRev(props.t.host, s.cwd, s.from, f.old ?? f.path).catch(() => MISSING),
+        f.status === "D" ? MISSING : fileAtRev(props.t.host, s.cwd, s.to, f.path).catch(() => MISSING),
       ]);
       if (a.binary || b.binary) return { key, path: f.path, binary: true };
       const ca = capText(a.text ?? "", MAX_LINES, a.cut);
@@ -414,8 +416,9 @@ function Body(props: { t: Task }) {
       ? []
       : [
           "sep" as const,
-          { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealPath(full(f.path)) },
-          { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void openInEditor(full(f.path)) },
+          // a job of another Mac: they open on that Mac's screen
+          { id: "finder", label: props.t.host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기"), icon: "folder", run: () => void revealOn(props.t.host, full(f.path)) },
+          { id: "editor", label: props.t.host ? t("그 Mac의 편집기에서 열기") : t("편집기에서 열기"), icon: "external", run: () => void editorOn(props.t.host, full(f.path)) },
         ]),
   ];
   const moreItems = (): MenuEntry[] => {

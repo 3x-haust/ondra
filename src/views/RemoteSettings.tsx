@@ -3,13 +3,15 @@
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { setState, state } from "../state/store";
 import { mirror } from "../state/mirror";
-import { addHost, reconnect, removeHost } from "../engine/hosts";
-import { answerPair, connectLink, keepAwake, remote, revokeDevice, setRemoteOn } from "../engine/remote";
+import { addHost, hiddenProjects, reconnect, showHostProject } from "../engine/hosts";
+import { answerPair, askStopJobs, connectLink, dropDevice, keepAwake, remote, setDeviceSpaces, setRemoteOn } from "../engine/remote";
+import { jobsFrom } from "../engine/remoteRules";
 import { hostState } from "../ui/ComputerPicker";
+import { askForgetDevice, askRemoveHost, hostConnectItem } from "../ui/macActions";
 import { toast } from "../state/ui";
 import { ago } from "../ui/bits";
 import { Icon } from "../ui/Icon";
-import { openMenuAt } from "../ui/taskMenu";
+import { openMenuAt, type MenuEntry, type MenuItem } from "../ui/taskMenu";
 import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
 import { t } from "../i18n";
 
@@ -28,11 +30,12 @@ function HostRow(props: { id: string; name: string }) {
   const theirs = () => h()?.info?.version;
   const off = () => !!theirs() && !!mine() && theirs() !== mine();
   const linked = () => (state.settings.hostProjects ?? []).filter((l) => l.host === props.id);
+  const paused = () => !!state.settings.hosts?.find((x) => x.id === props.id)?.off;
   return (
     <>
       <div class="set-row cn-host">
         <div class="set-label">
-          <span class={`cn-dot is-${h()?.status ?? "connecting"}`} aria-hidden="true" />
+          <span class={`cn-dot is-${h()?.status ?? (paused() ? "off" : "connecting")}`} aria-hidden="true" />
           <Icon name="monitor" size={16} class="muted" />
           <Show
             when={naming()}
@@ -73,9 +76,9 @@ function HostRow(props: { id: string; name: string }) {
             onClick={(e) =>
               openMenuAt(`host:${props.id}`, () => [
                 { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: () => setNaming(true) },
-                { id: "reconnect", label: t("다시 연결"), icon: "refresh", run: () => reconnect(props.id) },
+                hostConnectItem(props.id),
                 "sep",
-                { id: "remove", label: t("연결 해제"), icon: "trash", danger: true, run: () => removeHost(props.id) },
+                { id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askRemoveHost(props.id) },
               ], e.currentTarget.getBoundingClientRect())
             }
           >
@@ -83,7 +86,35 @@ function HostRow(props: { id: string; name: string }) {
           </button>
         </div>
       </div>
+      {/* its projects hidden here (목록에서 숨기기 in the sidebar): each can come back */}
+      <For each={hiddenProjects(props.id)}>
+        {(p) => (
+          <div class="set-row cn-proj">
+            <div class="set-label">
+              <Icon name="eyeOff" size={14} class="muted" />
+              <span class="muted">{p.name}</span>
+            </div>
+            <div class="set-value">
+              <button class="btn sm ghost" onClick={() => showHostProject(props.id, p.id)}>{t("다시 보이기")}</button>
+            </div>
+          </div>
+        )}
+      </For>
     </>
+  );
+}
+
+/** a Mac removed here that hasn't heard it yet: it will when it can be reached */
+function LeavingRow(props: { name: string }) {
+  return (
+    <div class="set-row cn-host">
+      <div class="set-label">
+        <span class="cn-dot is-off" aria-hidden="true" />
+        <Icon name="monitor" size={16} class="muted" />
+        <span class="muted">{props.name}</span>
+        <span class="muted">{t("연결되면 그 Mac에서도 이 Mac을 제거해요")}</span>
+      </div>
+    </div>
   );
 }
 
@@ -155,24 +186,53 @@ function ThisMac() {
             </button>
           </div>
         </div>
-        <For each={remote().devices}>
-          {(d) => (
-            <div class="set-row cn-host">
-              <div class="set-label">
-                <span class={`cn-dot ${live(d.id) ? "is-ok" : "is-lost"}`} aria-hidden="true" />
-                <Icon name="monitor" size={16} class="muted" />
-                <b>{d.name}</b>
-                <span class="muted">{live(d.id) ? t("연결됨") : t("{ago} 접속", { ago: ago(d.lastSeen) })}</span>
-              </div>
-              <div class="set-value">
-                <button class="btn sm ghost" onClick={() => revokeDevice(d.id)}>{t("연결 끊기")}</button>
-              </div>
-            </div>
-          )}
-        </For>
       </Show>
+      {/* the Macs allowed in: listed (and removable) even while it's off */}
+      <For each={remote().devices}>
+        {(d) => (
+          <div class="set-row cn-host">
+            <div class="set-label">
+              <span class={`cn-dot ${live(d.id) ? "is-ok" : "is-lost"}`} aria-hidden="true" />
+              <Icon name="monitor" size={16} class="muted" />
+              <b>{d.name}</b>
+              <span class="muted">{live(d.id) ? t("연결됨") : t("{ago} 접속", { ago: ago(d.lastSeen) })}</span>
+              <Show when={!allSpaces(d.id)}>
+                <span class="muted cn-count">· {t("워크스페이스 {n}개", { n: state.settings.deviceSpaces?.[d.id]?.length ?? 0 })}</span>
+              </Show>
+            </div>
+            <div class="set-value">
+              <Show when={live(d.id)}>
+                <button class="btn sm ghost" onClick={() => dropDevice(d.id)}>{t("연결 끊기")}</button>
+              </Show>
+              <button class="icon-btn sm" title={t("더 보기")} aria-label={t("더 보기")} onClick={(e) => openMenuAt(`device:${d.id}`, () => deviceMenu(d.id, d.name), e.currentTarget.getBoundingClientRect())}>
+                <Icon name="more" size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+      </For>
     </div>
   );
+}
+
+/** may that Mac use every workspace here (none picked out) */
+const allSpaces = (id: string) => !state.settings.deviceSpaces?.[id];
+
+/** one Mac allowed in: the workspaces it may use, its jobs here, 제거 */
+function deviceMenu(id: string, name: string): MenuEntry[] {
+  const may = state.settings.deviceSpaces?.[id] ?? state.spaces.map((s) => s.id);
+  const toggle = (space: string) => {
+    const next = may.includes(space) ? may.filter((x) => x !== space) : [...may, space];
+    // every one of them again: back to "all" (a workspace made later is included too)
+    setDeviceSpaces(id, state.spaces.every((s) => next.includes(s.id)) ? undefined : next);
+  };
+  const n = jobsFrom(state.tasks, id).length;
+  const groups: MenuItem[][] = [
+    state.spaces.length > 1 ? state.spaces.map((s) => ({ id: `space:${s.id}`, label: s.label, icon: "folder", checked: may.includes(s.id), run: () => toggle(s.id) })) : [],
+    n ? [{ id: "jobs", label: t("그 Mac에서 시킨 작업 {n}개 정리", { n }), icon: "archive", run: () => askStopJobs(id, name) }] : [],
+    [{ id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askForgetDevice(id) }],
+  ];
+  return groups.filter((g) => g.length).flatMap((g, i): MenuEntry[] => (i ? ["sep", ...g] : g));
 }
 
 export function RemoteSettings() {
@@ -182,6 +242,7 @@ export function RemoteSettings() {
       <GroupTitle title={t("다른 Mac")} />
       <div class="set-group">
         <For each={state.settings.hosts ?? []}>{(h) => <HostRow id={h.id} name={h.name} />}</For>
+        <For each={state.settings.leaving ?? []}>{(l) => <LeavingRow name={l.name} />}</For>
         <AddHost />
       </div>
       <GroupTitle title={t("이 Mac")} />

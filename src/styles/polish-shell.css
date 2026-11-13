@@ -2503,3 +2503,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* a routine's run: a small repeat mark before its name */
+.app .sidebar .sb-rt {
+  flex: none;
+  color: var(--ink-4);
+  margin-right: calc(-1 * var(--s-2, 2px));
+}

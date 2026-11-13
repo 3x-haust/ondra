@@ -2,14 +2,14 @@
 import { noteText } from "../engine/describe";
 import { holdScroll, keepBottom, toBottomSent } from "./stick";
 import { openImage } from "./Lightbox";
-import { fileSrc } from "../lib/native";
+import { srcOf, useHost } from "../engine/far";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
 import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
-import { kidsOf, state, taskById } from "../state/store";
+import { kidsOf, queueWith, taskById } from "../state/store";
 import { editTurn, startTask } from "../engine/tasks";
 import { describeBrowser, describeCommand, describeComputer, mainCommand } from "../engine/describe";
 import { ForkCard } from "./ForkCard";
@@ -455,6 +455,8 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
   const [open, setOpen] = createSignal(false);
+  // a job of another Mac: the pictures it looked at are there
+  const host = useHost();
   const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
   const shown = () => props.tools.filter((t) => t.tool.ok !== false && t.tool.image);
   const n = () => props.tools.length;
@@ -472,8 +474,8 @@ function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
         <div class="pic-thumbs">
           <For each={shown()}>
             {(e) => (
-              <button class="pic-thumb" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(e.tool.image!)}>
-                <img src={fileSrc(e.tool.image!)} alt="" loading="lazy" />
+              <button class="pic-thumb" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(e.tool.image!, [e.tool.image!], host())}>
+                <img src={srcOf(e.tool.image!, host())} alt="" loading="lazy" />
               </button>
             )}
           </For>
@@ -911,7 +913,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   // (not deferred: a deferred `on` never learns the first value, so the very first send would go unnoticed)
   createEffect(on(sent, (n, was) => was !== undefined && n > was && queueMicrotask(() => toBottomSent(scroller))));
   const queuePos = () => {
-    const q = state.tasks.filter((t) => t.status === "queued" && !t.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+    const q = queueWith(props.task);
     const i = q.findIndex((t) => t.id === props.task.id);
     return i >= 0 ? i + 1 : 0;
   };

@@ -237,6 +237,8 @@ export interface Task {
   after?: string[];
   /** The finished job this one carries on: a new job (fresh context) on that job's branch, given its result. */
   follows?: string;
+  /** started by this routine (one run) */
+  routine?: string;
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */
@@ -402,7 +404,9 @@ export type Route =
   | { kind: "stop"; taskId: string }
   | { kind: "ask"; decisionId: string; question?: string }
   | { kind: "new"; taskId: string }
-  | { kind: "remember"; memoryId: string };
+  | { kind: "remember"; memoryId: string }
+  /** main proposed a routine: a card to save (or change) it */
+  | { kind: "routine"; routineId: string };
 
 export interface CaptainMessage {
   id: string;
@@ -643,8 +647,13 @@ export interface Settings {
   remote?: boolean;
   /** while others may work on this Mac, it doesn't sleep (on power) */
   remoteAwake?: boolean;
-  /** other Macs this one works on, and the projects of theirs added here */
-  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number }[];
+  /** other Macs this one works on, and the projects of theirs added here. `hidden`: its projects
+   *  taken off the list here (kept off when it sends them again); `off`: disconnected for now */
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean }[];
+  /** Macs removed here that haven't heard it yet: told the next time they're reachable */
+  leaving?: { id: string; name: string; at: number }[];
+  /** the workspaces (ids) each Mac allowed in may use here; missing = all of them */
+  deviceSpaces?: Record<string, string[]>;
   /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 Mac", its letters, a tint from the name) */
   thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];
@@ -709,6 +718,60 @@ export interface AppState {
   prWatch?: Record<string, PrWatch>;
   /** finished jobs' results (as the jobs reported them; older ones as main did), newest last (capped) */
   results?: ResultEntry[];
+  /** 루틴: work that starts by itself on a schedule or when something happens on GitHub */
+  routines?: Routine[];
+}
+
+/** What starts a routine. Times are this Mac's local time. */
+export type RoutineWhen =
+  /** every day at "HH:MM", or only on these weekdays (0 = Sunday) */
+  | { kind: "daily"; time: string; days?: number[] }
+  /** every n minutes (at least 15) */
+  | { kind: "every"; minutes: number }
+  /** once, at this time */
+  | { kind: "once"; at: number }
+  /** something on the project's GitHub repo, checked every few minutes */
+  | { kind: "event"; event: RoutineEvent; filter?: string };
+
+/** issue: a new issue · pr: a new pull request · review: a review asked of me · comment: a comment or
+ *  review on my open pull requests · ci: a failed run on the default branch · release: a new release */
+export type RoutineEvent = "issue" | "pr" | "review" | "comment" | "ci" | "release";
+
+export interface Routine {
+  id: string;
+  space: SpaceId;
+  title: string;
+  /** what to do each time, in the user's words */
+  prompt: string;
+  /** the project it works in (an event routine needs one with a GitHub repo) */
+  project?: string;
+  when: RoutineWhen;
+  /** continue: each run goes on in the last run's conversation · fresh: each run is a new job on the same line */
+  mode: "continue" | "fresh";
+  enabled: boolean;
+  /** proposed in the chat, not saved by the user yet */
+  draft?: boolean;
+  /** a run with nothing to report is put away without a notice */
+  quiet: boolean;
+  /** run it on another Mac (Settings › 연결) */
+  host?: string;
+  hostSpace?: string;
+  model?: string;
+  accountId?: string;
+  createdAt: number;
+  updatedAt: number;
+  /** when it runs next (none: an event routine, or a finished "once") */
+  nextAt?: number;
+  lastAt?: number;
+  lastTask?: string;
+  lastStatus?: "running" | "done" | "nothing" | "failed" | "skipped";
+  lastError?: string;
+  runs: number;
+  /** events: what was already handed over (issue/PR/comment/run ids), and since when to look */
+  seen?: string[];
+  since?: number;
+  /** from the chat message that proposed it */
+  from?: string;
 }
 
 export interface PrWatch {

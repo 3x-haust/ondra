@@ -1,4 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
+import { RoutineCard } from "./Routines";
 import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
@@ -8,11 +9,13 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, finishTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
-import { accountById, accountsIn, addProject, projectById, projectsIn, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
+import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
-import { fileSrc, fsFiles, pickFolder } from "../lib/native";
+import { fsFiles, pickFolder } from "../lib/native";
+import { listFiles, sendFiles, srcOf } from "../engine/far";
+import { splitProjectId } from "../state/mirror";
 import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
@@ -88,7 +91,7 @@ function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
 }
 /** something of this reply shows in the chat (main reacting to a job's end may add nothing: the job's row says it) */
 const shows = (m: CaptainMessage) =>
-  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
+  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || r.kind === "routine" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
 
 /** What a job is on while it runs: what it last said it is doing, else its to-do step, else its status line. */
 function doingNow(x: Task): string {
@@ -134,7 +137,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
           if (!props.live) return "";
           const t = x();
           if (t.status === "failed") return oneLine(t.error).slice(0, 200);
-          if (t.status === "waiting") return oneLine(state.decisions.find((d) => d.taskId === t.id)?.question ?? nowText(t.now));
+          if (t.status === "waiting") return oneLine(decisionFor(t.id)?.question ?? nowText(t.now));
           if (t.status === "done") return discarded(t) ? "" : oneLine(t.summary);
           if (t.status === "running") return oneLine(doingNow(t));
           return "";
@@ -167,7 +170,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
             <Show when={props.live && word()}>
               <span class="job-word">{word()}</span>
             </Show>
-            <Show when={shot()}>{(p) => <img class="job-shot" src={fileSrc(p())} alt="" loading="lazy" />}</Show>
+            <Show when={shot()}>{(p) => <img class="job-shot" src={srcOf(p(), x().host)} alt="" loading="lazy" />}</Show>
           </button>
         );
         const closing = createMemo(() => (props.full && props.live && over() ? closingOf(x()) : undefined));
@@ -361,6 +364,9 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                         <span>{withName("{task} 멈춤", taskById(a().taskId)?.title ?? t("작업"))}</span>
                       </button>
                     )}
+                  </Match>
+                  <Match when={r.kind === "routine" && r}>
+                    {(a) => <RoutineCard id={a().routineId} />}
                   </Match>
                   <Match when={r.kind === "remember" && r}>
                     {(a) => (
@@ -576,7 +582,7 @@ function ProjectPick(props: { value?: string; onChange: (id?: string) => void })
       <Show when={open()}>
         <div class="pop proj-pop" role="menu">
           <div class="pop-label">{t("프로젝트")}</div>
-          <For each={projectsIn(state.space)}>
+          <For each={projectsShown(state.space)}>
             {(p) => (
               <button type="button" class="pop-item" role="menuitem" onClick={() => (props.onChange(p.id), setOpen(false))}>
                 <ProjectBadge name={p.name} />
@@ -646,7 +652,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           popDown
           autofocus
           placeholder={t("작업 내용")}
-          files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
+          files={() => (computer() ? (p() ? listFiles(computer()!.host, p()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~")))}
+          // a job of another Mac reads attachments there: they are sent over first
+          upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
           onSend={send}
           status={
             <Show
@@ -713,9 +721,15 @@ export function MainView() {
     (m.routes ?? []).flatMap((r) => (r.kind === "new" ? [taskById(r.taskId)].filter((t): t is Task => !!t) : []));
   // where it runs (the run location): a project's own Mac, else the one picked under the composer
   const computer = () => (project() ? (project()!.host ? { host: project()!.host! } : undefined) : chosenComputer());
+  // another Mac's project has its own chat here, as this Mac's do: main (here) routes, follows up and
+  // asks, and the jobs it starts go to that Mac. What's typed goes there as a job as it was typed only
+  // for work picked for another Mac outside a project, or when main has no account here to run on
+  // (a workspace only that Mac has).
+  const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
+  const raw = () => (project() && mainHere() ? undefined : computer());
   const sendMain = (text: string) => {
     const p = project();
-    const at = computer();
+    const at = raw();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
     if (at) return void openTask(createTask({ space: state.space, title: titleOf(text), topic: p?.name ?? "", ask: text, cwd: p?.folder, project: p?.id, accountId: account(), host: at.host, hostSpace: at.space, hostAccount: hostAccount(at, state.space)?.id, ...hostPick(at) }));
     return throwThought(text, state.space, { project: p?.id });
@@ -734,7 +748,7 @@ export function MainView() {
     if (ask?.text) void editMain(ask.id, ask.text);
   };
   const asks = () =>
-    state.decisions.filter((d) => {
+    allDecisions().filter((d) => {
       if (d.taskId.startsWith("main:")) return d.taskId === `main:${key()}`;
       const t = taskById(d.taskId);
       return !!t && t.space === state.space && (project() ? t.project === project()!.id : true);
@@ -744,7 +758,7 @@ export function MainView() {
   const answered = createMemo(() => {
     const out: Answered[] = [];
     if (project()) return out;
-    for (const t of state.tasks) {
+    for (const t of tasksShown(state.space)) {
       if (t.space !== state.space || (project() && t.project !== project()!.id)) continue;
       for (const e of t.entries) {
         if (e.kind !== "user") continue;
@@ -797,7 +811,9 @@ export function MainView() {
       draftKey={`main:${key()}`}
       big={big}
       autofocus
-      files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
+      // on another Mac: its project's files, and attachments sent over first
+      files={() => (computer() ? (project() ? listFiles(computer()!.host, project()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(spaceById(state.space).folder || "~")))}
+      upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
       commands={[
         btwCommand(() => `main:${key()}`),
         ...feedbackCommands(),
@@ -811,7 +827,10 @@ export function MainView() {
         { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
         // the chat only: jobs, results and memory stay
         { name: "clear", desc: t("이 대화 비우기 · 작업과 결과는 그대로"), icon: "refresh", run: () => void resetMain(state.space, project()?.id).then(() => toast(t("대화를 비웠어요"))) },
-        ...skillCommands(() => ({ space: state.space, project: project()?.id })),
+        ...(computer()
+          ? // on another Mac: that Mac's skills, and a skill asked for is a job there that uses it
+            skillCommands(() => ({ space: state.space }), { host: computer()!.host, project: splitProjectId(project()?.id)?.id }).map((c) => ({ ...c, run: (a: string) => sendMain(`/${c.name} ${a}`.trim()) }))
+          : skillCommands(() => ({ space: state.space, project: project()?.id }))),
       ]}
       placeholder={t("메시지 보내기|input")}
       onSend={sendMain}
@@ -819,10 +838,11 @@ export function MainView() {
       top={<BtwCard scope={`main:${key()}`} />}
       status={
         <Show
-          when={computer()}
-          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
+          when={raw()}
+          // main's own account (here); a project of another Mac names that Mac
+          fallback={<StatusLine lead={<ComputerPicker fixed={!!project()} value={computer()} />} accountId={account()} space={state.space} agent={`captain:${key()}`} />}
         >
-          <HostStatus place={computer()!} fixed={!!project()} />
+          <HostStatus place={raw()!} fixed={!!project()} />
         </Show>
       }
       plus={plusFor({ main: true })}
@@ -830,7 +850,7 @@ export function MainView() {
       onStop={() => void stopMain(key())}
       stopKind="stop"
       left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
-      right={<Show when={computer()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
+      right={<Show when={raw()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
     />
   );
 
@@ -978,7 +998,7 @@ const TONE_ORDER = ["bad", "ask", "review", "live", "idle", "done"] as const;
 const toneRank = (x: Task) => (discarded(x) ? TONE_ORDER.length : TONE_ORDER.indexOf(stateMeta(x).tone));
 /** A project's tasks: pinned on top, then what needs you, what runs, what waits, what is over; newest first in each. */
 const projectTasks = (project: string) =>
-  state.tasks
+  tasksShown(state.space)
     .filter((x) => x.project === project && x.space === state.space && !x.parentId && !x.answer && !x.archived)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || toneRank(a) - toneRank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
 
@@ -1127,7 +1147,7 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
     const carried = (t: Task, seen = new Set<string>()): Task[] => {
       if (seen.has(t.id)) return [];
       seen.add(t.id);
-      return [t, ...state.tasks.filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
+      return [t, ...allTasks().filter((x) => x.follows === t.id && !own.has(x.id)).flatMap((x) => carried(x, seen))];
     };
     for (const m of props.msgs) {
       if (m.from === "me") {

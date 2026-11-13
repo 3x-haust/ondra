@@ -1817,3 +1817,22 @@ button.mc-row:hover {
   align-content: flex-start;
   padding: 4px 0;
 }
+
+/* another Mac's project (RemoteMemory.tsx): each piece edited where it is, then forgotten from there */
+.ms-piece.far {
+  align-items: flex-start;
+}
+.ms-piece.far .md-text {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  font-size: var(--fs-sm);
+  border-radius: var(--r-md);
+}
+.ms-piece.far > .muted {
+  padding-top: 7px;
+  font-size: var(--fs-xs);
+}
+.md-in .mt-add {
+  margin: 0 0 var(--s-8);
+}

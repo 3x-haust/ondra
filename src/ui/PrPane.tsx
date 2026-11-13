@@ -7,6 +7,7 @@ import type { Task } from "../state/types";
 import { gitEnv, passPrNote, prOf } from "../engine/tasks";
 import { noteOf, parsePrView, githubBody, type PrCheck, type PrItem, type PrThread, type PrView } from "../engine/prView";
 import { ghPrView } from "../lib/native";
+import { farError, onMac } from "../engine/far";
 import { linkMenu, openLink } from "./links";
 import { toast } from "../state/ui";
 import { ago, now } from "./bits";
@@ -37,10 +38,11 @@ export function PrPane(props: { t: Task }) {
     setErr("");
     setFetchedAt(Date.now());
     try {
-      const raw = await ghPrView(u, await gitEnv(props.t));
+      // a job of another Mac: read there, with gh signed in as that Mac is
+      const raw = await onMac(props.t.host, "far.prView", [props.t.id], async () => ghPrView(u, await gitEnv(props.t)));
       return raw ? parsePrView(raw) : undefined;
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(farError(e));
       return undefined;
     }
   });

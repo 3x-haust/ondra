@@ -1,7 +1,7 @@
 // The Mac bar at the foot of the sidebar, once another Mac is added (Settings › 연결): this Mac
 // and each added one as a mark. Picking one (or ⌃1…⌃9) makes it where the current workspace's new
 // work runs. Right-click: rename, an emoji or icon, a color (that can tint the whole window, so
-// it's plain which Mac is in use), connection settings, disconnect. The workspace tabs at the top
+// it's plain which Mac is in use), connection settings, disconnect or remove. The workspace tabs at the top
 // stay as they are.
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type Component, type JSX } from "solid-js";
 import { Dynamic, Portal } from "solid-js/web";
@@ -15,7 +15,7 @@ import {
 import { setState, state } from "../state/store";
 import { mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
-import { removeHost } from "../engine/hosts";
+import { askRemoveHost, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { chosenComputer, hostState, localHere, setComputer } from "./ComputerPicker";
 import { projectHue } from "./ProjectBadge";
@@ -466,22 +466,8 @@ function macMenu(m: Mac, at: DOMRect): MenuEntry[] {
     { id: "icon", label: t("아이콘 바꾸기"), icon: "smilePlus", run: pick("icon") },
     { id: "color", label: t("색 바꾸기"), icon: "palette", run: pick("color") },
     { id: "settings", label: t("연결 설정"), icon: "gear", run: () => setView({ name: "settings", tab: "remote" }) },
-    ...(m.local
-      ? []
-      : (["sep", {
-          id: "remove",
-          label: t("연결 해제"),
-          icon: "trash",
-          danger: true,
-          // asks first
-          run: () =>
-            requestAnimationFrame(() =>
-              openMenuAt(`mac:${m.id}`, () => [
-                { id: "sure", label: t("{name} 연결 해제", { name: m.name }), icon: "trash", danger: true, run: () => removeHost(m.id) },
-                { id: "keep", label: t("취소"), icon: "x", run: () => {} },
-              ], at),
-            ),
-        }] as MenuEntry[])),
+    // the same two as in Settings › 연결: for now, or for good (asks first)
+    ...(m.local ? [] : (["sep", hostConnectItem(m.id), "sep", { id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askRemoveHost(m.id) }] as MenuEntry[])),
   ];
 }
 

@@ -3,7 +3,7 @@ import { checkUpdate } from "../engine/update";
 import { resultsIn, resultText } from "../engine/results";
 import { switchSpace } from "../state/workspace";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
-import { setState, spaceById, state, taskById } from "../state/store";
+import { setState, spaceById, state, taskById, tasksShown } from "../state/store";
 import { Glyph, stateMeta } from "./Sidebar";
 import { discarded } from "../state/progress";
 import type { Task } from "../state/types";
@@ -64,7 +64,7 @@ export function Palette(props: { commands: ShortcutCommand[] }) {
     const text = q().replace(/^>/, "").trim();
     const needle = text.toLowerCase();
     // each space is its own workspace: only this one's jobs
-    const tasks: Item[] = [...state.tasks.filter((t) => t.space === state.space)]
+    const tasks: Item[] = [...tasksShown(state.space)]
       .sort((a, b) => rank(a) - rank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt))
       .filter((t) => !t.answer && (!t.parentId || needle))
       .map((t) => ({

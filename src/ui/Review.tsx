@@ -4,10 +4,13 @@
 // opens in a numbered viewer and can flip to its diff.
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, lazy, Match, on, Show, Suspense, Switch } from "solid-js";
 import type { Task } from "../state/types";
-import { openChanges, panelFile, previewFile, previewPath, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
+import { openChanges, panelFile, previewFile, previewPath, previewPlace, setPanelFile, setPanelTab, setPreviewPath, toast } from "../state/ui";
 import { Markdown } from "./Markdown";
 import { expand } from "../engine/rpc";
-import { fileSrc, fsFiles, fsGrep, fsRead, fsWrite, gitChanges, openInEditor, pageSrc, pdfSrc, revealPath, type GitChanges } from "../lib/native";
+import { pageSrc, pdfSrc, type GitChanges } from "../lib/native";
+import { changesIn, editorOn, farError, grepFiles, HostCtx, listFiles, localCopy, readText, revealOn, srcOf, tooBig, writeText, type Cut, type Where } from "../engine/far";
+import { taskById } from "../state/store";
+import { splitProjectId } from "../state/mirror";
 import { Fold } from "./Fold";
 import { openImage } from "./Lightbox";
 import { Icon } from "./Icon";
@@ -29,9 +32,14 @@ const STATUS: Record<DiffFile["status"], string> = { A: "새 파일", M: "수정
 
 /** Changes of a task, refreshed when its tools finish (only while `enabled` says so). */
 export function useChanges(t: () => Task, enabled: () => boolean = () => true) {
+  // a job of another Mac: its diff comes from there (one that can't be read reads as no repo: its own edits show)
   const [data, { refetch }] = createResource(
-    () => enabled() && ([expand(t().cwd), t().worktree?.state === "open" ? t().worktree!.base : undefined] as const),
-    ([cwd, base]) => gitChanges(cwd, base),
+    () => enabled() && ([expand(t().cwd), t().worktree?.state === "open" ? t().worktree!.base : undefined, t().host] as const),
+    ([cwd, base, host]): Promise<GitChanges & Cut> =>
+      changesIn(host, cwd, base).catch((e) => {
+        if (!host) throw e;
+        return { isRepo: false, branch: null, files: [], patch: "", error: farError(e) };
+      }),
   );
   createEffect(on(() => t().entries.filter((e) => e.kind === "tool" && e.tool.endedAt).length, () => refetch(), { defer: true }));
   // what's shown here is what the sidebar, canvas and review bar count
@@ -274,6 +282,7 @@ export function ChangesPane(props: { t: Task; top?: any }) {
           <Show when={d().isRepo} fallback={<WrittenFiles t={props.t} />}>
             <div class="rv-bar">
               <span class="rv-count">{tr("파일 {n}개", { n: d().files.length })}</span>
+              <Show when={d().cut}><span class="rv-cut muted" title={tr("변경이 커서 앞부분만 받아 왔어요")}>{tr("일부만")}</span></Show>
               <span class="add">+{totals()[0]}</span>
               <span class="del">−{totals()[1]}</span>
               <span class="spacer" />
@@ -344,14 +353,24 @@ function WrittenFiles(props: { t: Task }) {
 }
 
 /** Any file inside the app: pages and PDFs run, pictures show, markdown renders, code is highlighted. */
+/** the Mac a previewed file is on: that of the job (or project chat) it was opened from */
+function previewHost(): Where {
+  if (!previewPath()) return undefined;
+  const at = previewPlace() ?? "";
+  return at.startsWith("main~") ? splitProjectId(at.slice(5))?.host : taskById(at)?.host;
+}
+
 export function PreviewPane() {
   const path = () => previewPath();
+  const host = () => previewHost();
   const full = () => expand(path() ?? "");
   const kind = () => {
     const p = full().toLowerCase();
     return /\.(html?|pdf)$/.test(p) ? "page" : IMG.test(p) ? "image" : /\.(mp4|mov|webm)$/.test(p) ? "video" : /\.(md|markdown)$/.test(p) ? "md" : "code";
   };
-  const [md] = createResource(() => (kind() === "md" ? full() : false), (p) => fsRead(p).then((r) => r.text ?? "").catch(() => ""));
+  const [md] = createResource(() => (kind() === "md" ? ([full(), host()] as const) : false), ([p, h]) => readText(h, p).then((r) => r.text ?? "").catch(() => ""));
+  // a page or PDF of another Mac: the copy fetched here
+  const here = () => (host() ? localCopy(full(), host()) : full());
   const dir = () => full().split("/").slice(0, -1).join("/");
   const name = () => full().split("/").pop() ?? "";
   return (
@@ -362,23 +381,26 @@ export function PreviewPane() {
             <span class="dv-path" title={full()}><span class="dv-dir">{dir().replace(/^\/Users\/[^/]+/, "~")}/</span><span class="dv-name">{name()}</span></span>
             <span class="spacer" />
             <Show when={kind() === "image"}>
-              <button class="icon-btn sm" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(full())}><Icon name="zoom" size={14} /></button>
+              <button class="icon-btn sm" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(full(), [full()], host())}><Icon name="zoom" size={14} /></button>
             </Show>
-            <button class="btn sm ghost" title={tr("편집기에서 열기")} onClick={() => openInEditor(full())}><Icon name="external" size={14} />{tr("편집기")}</button>
-            <button class="btn sm ghost" title={tr("Finder에서 보기")} onClick={() => revealPath(full())}><Icon name="folder" size={14} />Finder</button>
+            <button class="btn sm ghost" title={host() ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(host(), full())}><Icon name="external" size={14} />{tr("편집기")}</button>
+            <button class="btn sm ghost" title={host() ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(host(), full())}><Icon name="folder" size={14} />Finder</button>
           </div>
         </Show>
         <div class="pv-body">
           <Switch>
+            <Match when={kind() !== "code" && kind() !== "md" && tooBig(full(), host())}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
             <Match when={kind() === "page"}>
-              <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={pageSrc(full())} />}>
-                <iframe class="aframe" src={pdfSrc(full())} title={name()} />
+              <Show when={here()} fallback={<div class="pane-empty" />}>
+                <Show when={/\.pdf$/i.test(full())} fallback={<iframe class="aframe" sandbox="allow-scripts allow-popups allow-forms" src={pageSrc(here())} />}>
+                  <iframe class="aframe" src={pdfSrc(here())} title={name()} />
+                </Show>
               </Show>
             </Match>
-            <Match when={kind() === "image"}><div class="fv-img"><img src={fileSrc(full())} alt={name()} title={tr("크게 보기")} onClick={() => openImage(full())} /></div></Match>
-            <Match when={kind() === "video"}><video class="pv-video" src={fileSrc(full())} controls /></Match>
-            <Match when={kind() === "md"}><div class="pv-md"><Markdown text={md() ?? ""} /></div></Match>
-            <Match when={kind() === "code"}><Viewer root={dir()} path={name()} startDiff={false} back={() => setPreviewPath(null)} /></Match>
+            <Match when={kind() === "image"}><div class="fv-img"><img src={srcOf(full(), host())} alt={name()} title={tr("크게 보기")} onClick={() => openImage(full(), [full()], host())} /></div></Match>
+            <Match when={kind() === "video"}><video class="pv-video" src={srcOf(full(), host())} controls /></Match>
+            <Match when={kind() === "md"}><div class="pv-md"><HostCtx.Provider value={host}><Markdown text={md() ?? ""} /></HostCtx.Provider></div></Match>
+            <Match when={kind() === "code"}><Viewer root={dir()} path={name()} host={host()} startDiff={false} back={() => setPreviewPath(null)} /></Match>
           </Switch>
         </div>
       </div>
@@ -414,7 +436,7 @@ function tree(paths: string[]): Node {
 const IMG = /\.(png|jpe?g|gif|webp|svg|avif|ico)$/i;
 const Editor = lazy(() => import("./Editor").then((m) => ({ default: m.Editor })));
 
-function Viewer(props: { root: string; path: string; changed?: DiffFile; startDiff: boolean; back: () => void; line?: number }) {
+function Viewer(props: { root: string; path: string; host?: Where; changed?: DiffFile; startDiff: boolean; back: () => void; line?: number }) {
   const full = () => `${props.root}/${props.path}`;
   const [mode, setMode] = createSignal<"file" | "diff" | "edit">(props.startDiff && props.changed ? "diff" : "file");
   const [dirty, setDirty] = createSignal(false);
@@ -423,9 +445,9 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
     () => (IMG.test(props.path) ? null : full()),
     async (p) => {
       try {
-        return await fsRead(p);
+        return await readText(props.host, p);
       } catch (e) {
-        return { text: null, size: 0, binary: false, error: String(e) };
+        return { text: null, size: 0, binary: false, error: props.host ? farError(e) : String(e) };
       }
     },
   );
@@ -443,7 +465,7 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
   });
   const write = async (body: string, force = false): Promise<boolean> => {
     try {
-      seen = await fsWrite(full(), body, force ? undefined : seen);
+      seen = await writeText(props.host, full(), body, force ? undefined : seen);
       toast(tr("저장했어요"));
       return true;
     } catch (e) {
@@ -488,8 +510,8 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
           <button class="btn sm primary" disabled={!dirty()} title="⌘S" onClick={() => editor?.save()}>{tr("저장")}</button>
           <button class="btn sm ghost" onClick={leave}>{tr("닫기")}</button>
         </Show>
-        <button class="icon-btn sm" title={tr("편집기에서 열기")} onClick={() => openInEditor(full())}><Icon name="external" size={14} /></button>
-        <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => revealPath(full())}><Icon name="folder" size={14} /></button>
+        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>
+        <button class="icon-btn sm" title={props.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.host, full())}><Icon name="folder" size={14} /></button>
       </div>
       <div class="fv-body" classList={{ editing: mode() === "edit" }}>
         <Show when={mode() !== "edit"} fallback={
@@ -501,12 +523,12 @@ function Viewer(props: { root: string; path: string; changed?: DiffFile; startDi
           when={mode() === "file"}
           fallback={<DiffCard f={props.changed!} root={props.root} open toggle={() => setMode("file")} />}
         >
-          <Show when={!IMG.test(props.path)} fallback={<div class="fv-img"><img src={fileSrc(full())} alt={name} title={tr("크게 보기")} onClick={() => openImage(full())} /></div>}>
+          <Show when={!IMG.test(props.path)} fallback={<div class="fv-img"><img src={srcOf(full(), props.host)} alt={name} title={tr("크게 보기")} onClick={() => openImage(full(), [full()], props.host)} /></div>}>
             <Show when={text()} fallback={<div class="pane-empty" />}>
               {(t) => (
                 <Show
                   when={t().text !== null}
-                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? tr("바이너리 파일") : tr("파일이 너무 커요"))}</div>}
+                  fallback={<div class="pane-empty">{(t() as any).error ?? (t().binary ? tr("바이너리 파일") : props.host ? tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요") : tr("파일이 너무 커요"))}</div>}
                 >
                   <div class="code" ref={(el) => props.line && queueMicrotask(() => el.querySelector(".code-row.hit")?.scrollIntoView({ block: "center" }))}>
                     <For each={lines()}>
@@ -545,7 +567,12 @@ function mark(text: string, needle: string): JSX.Element {
 
 export function FilesPane(props: { t: Task }) {
   const root = () => expand(props.t.cwd);
-  const [list, { refetch }] = createResource(root, (r) => fsFiles(r));
+  const host = () => props.t.host;
+  const [err, setErr] = createSignal("");
+  const [list, { refetch }] = createResource(
+    () => [root(), host()] as const,
+    ([r, h]) => (setErr(""), listFiles(h, r).catch((e) => (setErr(farError(e)), [] as string[]))),
+  );
   const [changes] = useChanges(() => props.t);
   const changed = createMemo(() => new Map(parsePatch(changes()?.patch ?? "").map((f) => [f.path, f])));
   const [q, setQ] = createSignal("");
@@ -556,8 +583,8 @@ export function FilesPane(props: { t: Task }) {
   const [needle, setNeedle] = createSignal("");
   let wait: ReturnType<typeof setTimeout> | undefined;
   const [found] = createResource(
-    () => (inside() && needle().trim().length >= 2 ? [root(), needle().trim()] as const : false),
-    ([r, n]) => fsGrep(r, n),
+    () => (inside() && needle().trim().length >= 2 ? ([root(), needle().trim(), host()] as const) : false),
+    ([r, n, h]) => grepFiles(h, r, n).catch(() => []),
   );
   const foundByFile = createMemo(() => {
     const m = new Map<string, { line: number; text: string }[]>();
@@ -680,7 +707,7 @@ export function FilesPane(props: { t: Task }) {
                 <Show
                   when={q().trim()}
                   fallback={
-                    <Show when={t().kids.length} fallback={<div class="pane-empty">{tr("파일 없음")}</div>}>
+                    <Show when={t().kids.length} fallback={<div class="pane-empty">{err() || tr("파일 없음")}</div>}>
                       <For each={t().kids}>{(k) => <Row n={k} depth={0} />}</For>
                     </Show>
                   }
@@ -706,7 +733,7 @@ export function FilesPane(props: { t: Task }) {
           </>
         }
       >
-        {(s) => <Viewer root={root()} path={s.path} changed={changed().get(s.path)} startDiff={s.diff} line={s.line} back={() => setSel(null)} />}
+        {(s) => <Viewer root={root()} path={s.path} host={host()} changed={changed().get(s.path)} startDiff={s.diff} line={s.line} back={() => setSel(null)} />}
       </Show>
     </div>
   );
