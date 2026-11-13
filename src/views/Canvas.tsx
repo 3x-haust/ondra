@@ -14,7 +14,8 @@ import { goMain, live, openPanel, openTask, setView } from "../state/ui";
 import { decide, resumeTask, startTask, tell } from "../engine/tasks";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, soon, statusLabel, taskTitle, tokens } from "../ui/bits";
-import { browserStreamPort, fileSrc } from "../lib/native";
+import { browserStreamPort } from "../lib/native";
+import { srcOf } from "../engine/far";
 import { Icon } from "../ui/Icon";
 import { DotGrid } from "../ui/DotGrid";
 import { Markdown } from "../ui/Markdown";
@@ -397,7 +398,7 @@ function BrowserThumb(props: { t: Task }) {
     clearTimeout(timer);
     ws?.close();
   });
-  const src = () => frame() ?? (props.t.shot ? fileSrc(props.t.shot) : null);
+  const src = () => frame() ?? (props.t.shot ? srcOf(props.t.shot, props.t.host) || null : null);
   return (
     <Show when={src()} fallback={<div class="cv-live-empty">{t("브라우저 여는 중")}</div>}>
       {(s) => <img class="cv-shot" src={s()} alt="" draggable={false} />}

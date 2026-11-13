@@ -8,12 +8,12 @@ import type { Shell, Task } from "../state/types";
 import { addMemory } from "../engine/memory";
 import { artifacts, loadArtifacts } from "../state/artifacts";
 import { BtwCard, btwCommand, drawCommand, plusFor, skillCommands } from "../ui/Aside";
-import { goMain, hadTab, inPane, openChanges, openPanel as showTool, openTask, panelOpen, panelTab, setView, togglePanel, type PanelTab } from "../state/ui";
+import { goMain, hadTab, inPane, openChanges, openPanel as showTool, openTask, panelOpen, panelTab, setView, toast, togglePanel, type PanelTab } from "../state/ui";
 import { sendSide } from "../engine/aside";
 import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
-import { fsFiles } from "../lib/native";
+import { farError, farMemAdd, HostCtx, listFiles, sendFiles } from "../engine/far";
 import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
 import { rawStats, prOf, renameTask, finishTask, stopTask, resumeTask, startTask, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
@@ -295,6 +295,15 @@ function useCrumbFit(deps: () => unknown) {
   return [level, ref] as const;
 }
 
+/** /remember in a job: its project's memory, on the Mac the job runs on (that Mac's jobs read that one) */
+function remember(t: Task, text: string) {
+  if (!t.host) return void addMemory(text, "project", { project: homeDir(t) });
+  void farMemAdd(t.host, { task: t.id, text }).then(
+    (id) => id && toast(tr("그 Mac의 메모리에 저장 · {text}", { text: text.trim().slice(0, 200) })),
+    (e) => toast(farError(e), "bad"),
+  );
+}
+
 export function TaskView(props: { id: string }) {
   const t = () => taskById(props.id);
   // the panel shows the focused pane's tools: for a pane beside it, it isn't open
@@ -514,7 +523,9 @@ export function TaskView(props: { id: string }) {
                   shells={task().shells.filter((s) => !s.endedAt).length}
                   branch={task().worktree?.state === "open" ? task().worktree!.branch : undefined}
                 />}
-                  files={() => fsFiles(expand(task().cwd))}
+                  files={() => listFiles(task().host, expand(task().cwd)).catch(() => [])}
+                  // another Mac's job reads attachments there: they are sent over first
+                  upload={task().host ? (f) => sendFiles(task().host!, f) : undefined}
                   commands={[
                     // the same names as Main's list: verbs for what opens, then this task's own actions
                     btwCommand(() => `task:${task().id}`),
@@ -536,10 +547,10 @@ export function TaskView(props: { id: string }) {
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
                     { name: "edits", desc: tr("권한: {name}", { name: tr("편집 허용") }), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
                     { name: "full", desc: tr("권한: {name}", { name: tr("전체 권한") }), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
-                    { name: "remember", desc: task().project && projectById(task().project!, task().space) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "project", { project: homeDir(task()) }) },
+                    { name: "remember", desc: task().project && projectById(task().project!, task().space) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && remember(task(), a) },
                     { name: "memory", desc: tr("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
                     { name: "settings", desc: tr("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
-                    ...skillCommands(() => ({ task: task().id, space: task().space })),
+                    ...skillCommands(() => ({ task: task().id, space: task().space }), task().host ? { host: task().host!, task: task().id } : undefined),
                   ]}
                   placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
@@ -565,10 +576,13 @@ export function TaskView(props: { id: string }) {
           </>
         );
         return (
-          <div class="view task-view">
-            {head}
-            {chat}
-          </div>
+          // a job of another Mac: the pictures in its thread come from there
+          <HostCtx.Provider value={() => task().host}>
+            <div class="view task-view">
+              {head}
+              {chat}
+            </div>
+          </HostCtx.Provider>
         );
       }}
     </Show>

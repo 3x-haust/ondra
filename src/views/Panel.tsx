@@ -5,7 +5,7 @@ import { nowText } from "../engine/describe";
 import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { accountById, homeDir, projectById, projectsIn, state, updateTask } from "../state/store";
+import { accountById, homeDir, kidsOf, projectById, projectsIn, state, taskById, updateTask } from "../state/store";
 import type { Priority, Shell, Task } from "../state/types";
 import { BrowserView } from "./Browser";
 import { useBrowserStream } from "../ui/browserStream";
@@ -13,7 +13,9 @@ import { openLink } from "../ui/links";
 import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, prOf, setPriority, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { fileSrc, fsRead, gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealPath } from "../lib/native";
+import { gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc } from "../lib/native";
+import { farError, farShell, farTerm, HostCtx, localCopy, onMac, readText, revealOn, setFarShell, srcOf, tooBig } from "../engine/far";
+import { Xterm } from "../ui/Xterm";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
@@ -68,7 +70,8 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
 
 /** Open a pull request from the job's branch and show it. */
 async function makePr(t: Task) {
-  const url = await gitPr(expand(t.cwd), t.title, `${t.ask}\n\n— Ondra`, await gitEnv(t));
+  // a job of another Mac: its branch, and gh signed in, are there
+  const url = await onMac(t.host, "far.pr", [t.id], async () => gitPr(expand(t.cwd), t.title, `${t.ask}\n\n— Ondra`, await gitEnv(t)));
   if (url.startsWith("http")) openLink(url);
   return url;
 }
@@ -118,7 +121,7 @@ function ShipMenu(props: { t: Task }) {
       const r = await f();
       toast(done(String(r ?? "")));
     } catch (e) {
-      toast(e instanceof Error ? e.message : String(e), "bad");
+      toast(farError(e), "bad");
     } finally {
       setBusy(null);
     }
@@ -135,10 +138,10 @@ function ShipMenu(props: { t: Task }) {
       </button>
       <Show when={open()}>
         <div class="menu ship-menu">
-          <button onClick={() => void run(tr("커밋 중"), async () => gitCommit(cwd(), props.t.title, await gitEnv(props.t)), (h) => tr("커밋했어요 · {hash}", { hash: h }))}>
+          <button onClick={() => void run(tr("커밋 중"), () => onMac(props.t.host, "far.commit", [props.t.id], async () => gitCommit(cwd(), props.t.title, await gitEnv(props.t))), (h) => tr("커밋했어요 · {hash}", { hash: h }))}>
             <Icon name="commit" size={14} class="muted" /><span class="row-title">{tr("커밋")}</span><span class="row-hint">{tr("변경 전체")}</span>
           </button>
-          <button onClick={() => void run(tr("푸시 중"), async () => gitPush(cwd(), await gitEnv(props.t)), (b) => tr("{branch} 푸시했어요", { branch: b }))}>
+          <button onClick={() => void run(tr("푸시 중"), () => onMac(props.t.host, "far.push", [props.t.id], async () => gitPush(cwd(), await gitEnv(props.t))), (b) => tr("{branch} 푸시했어요", { branch: b }))}>
             <Icon name="push" size={14} class="muted" /><span class="row-title">{tr("푸시")}</span><span class="row-hint">origin</span>
           </button>
           <button onClick={() => void run(tr("PR 만드는 중"), () => makePr(props.t), prDone)}>
@@ -240,7 +243,7 @@ function Overview(props: { t: Task }) {
         <dl class="kv">
           <dt>{tr("폴더")}</dt>
           <dd>
-            <button class="kv-folder" onClick={() => revealPath(expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(t())}</button>
+            <button class="kv-folder" onClick={() => void revealOn(t().host, expand(homeDir(t())))} title={tilde(expand(homeDir(t())))}>{folderName(t())}</button>
           </dd>
           <Show when={t().status !== "done"}>
           <dt>{tr("우선순위")}</dt>
@@ -303,8 +306,21 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
   );
 }
 
-/** What the job's commands are doing now: the running ones with their live output; finished ones folded. */
+/** A shell in the folder of a job of another Mac, running there; this one shows it and types into it. */
+function FarShell(props: { t: Task }) {
+  const id = `${props.t.id}-${Math.random().toString(36).slice(2, 8)}`;
+  const io = farTerm(props.t.host!, props.t.id, id);
+  return <Xterm id={id} io={io} open={(cols, rows) => io.open(cols, rows)} />;
+}
+
+/** What the job's commands are doing now: the running ones with their live output; finished ones folded.
+ *  A job of another Mac gets a shell there in the app (that Mac's own Terminal isn't on this screen). */
 function TerminalPane(props: { t: Task }) {
+  const [shell, setShell] = createSignal(false);
+  // 터미널 열기 from the job's menu opens the shell at once
+  createEffect(() => {
+    if (props.t.host && farShell() === props.t.id) (setShell(true), setFarShell(null));
+  });
   const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
   const [past, setPast] = createSignal(false);
   const running = () => [...props.t.shells].reverse().filter((s) => !s.endedAt);
@@ -315,11 +331,24 @@ function TerminalPane(props: { t: Task }) {
     <div class="term-pane">
       <div class="term-sub">
         <span class="term-count">{running().length ? tr("실행 중 {n}", { n: running().length }) : tr("실행 중인 명령 없음")}</span>
-        <button class="btn sm ghost" onClick={() => void gitEnv(props.t).then((env) => openInTerminal(expand(props.t.cwd), env))} title={props.t.cwd}>
-          <Icon name="shell" size={14} />
-          {tr("터미널에서 열기")}
-        </button>
+        <Show
+          when={props.t.host}
+          fallback={
+            <button class="btn sm ghost" onClick={() => void gitEnv(props.t).then((env) => openInTerminal(expand(props.t.cwd), env))} title={props.t.cwd}>
+              <Icon name="shell" size={14} />
+              {tr("터미널에서 열기")}
+            </button>
+          }
+        >
+          <button class="btn sm ghost" classList={{ on: shell() }} onClick={() => setShell(!shell())} title={props.t.cwd}>
+            <Icon name="shell" size={14} />
+            {shell() ? tr("터미널 닫기") : tr("그 Mac의 터미널")}
+          </button>
+        </Show>
       </div>
+      <Show when={props.t.host && shell()}>
+        <FarShell t={props.t} />
+      </Show>
       <div class="shells">
         <For each={running()}>{card}</For>
         <Show when={ended().length}>
@@ -375,7 +404,7 @@ function BrowserPane(props: { t: Task }) {
           when={frame()}
           fallback={
             <Show when={props.t.shot} fallback={<div class="bempty">{!props.t.browser ? tr("브라우저 없음") : props.t.status === "running" ? tr("연결 중") : tr("브라우저 닫힘")}</div>}>
-              {(p) => <img src={fileSrc(p())} alt={tr("마지막 스크린샷")} />}
+              {(p) => <img src={srcOf(p(), props.t.host)} alt={tr("마지막 스크린샷")} />}
             </Show>
           }
         >
@@ -406,7 +435,7 @@ function ArtifactsPane(props: { t: Task }) {
   createEffect(() => {
     const a = cur();
     setText(null);
-    if (a && kindOf(a.name) === "text") void fsRead(a.path).then((r) => setText(r.text ?? ""));
+    if (a && kindOf(a.name) === "text") void readText(props.t.host, a.path).then((r) => setText(r.text ?? ""), (e) => setText(props.t.host ? farError(e) : ""));
   });
   const onKey = (e: KeyboardEvent) => {
     if (!cur() || !viewKey(e) || !noModifiers(e)) return;
@@ -427,7 +456,7 @@ function ArtifactsPane(props: { t: Task }) {
             <>
               <div class="abar">
                 <span class="acount">{tr("{n}개", { n: list().length })}</span>
-                <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealPath(list()[0].path.replace(/\/[^/]*$/, ""))}>
+                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, list()[0].path.replace(/\/[^/]*$/, ""))}>
                   <Icon name="open" size={14} />
                 </button>
               </div>
@@ -437,13 +466,14 @@ function ArtifactsPane(props: { t: Task }) {
                     <button
                       class="acell"
                       // a picture opens full size at once; other files open in the panel
-                      onClick={() => (kindOf(a.name) === "image" ? openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path)) : setPick(a.path))}
+                      onClick={() => (kindOf(a.name) === "image" ? openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path), props.t.host) : setPick(a.path))}
                       title={a.name}
                     >
                       <span class="athumb">
                         <Switch fallback={<Icon name={icon(a.name)} size={20} />}>
-                          <Match when={kindOf(a.name) === "image"}><img src={fileSrc(a.path)} alt="" loading="lazy" /></Match>
-                          <Match when={kindOf(a.name) === "video"}><video src={`${fileSrc(a.path)}#t=0.1`} preload="metadata" muted /></Match>
+                          <Match when={kindOf(a.name) === "image"}><img src={srcOf(a.path, props.t.host)} alt="" loading="lazy" /></Match>
+                          {/* another Mac's video: only its icon in the grid (fetched once opened) */}
+                          <Match when={kindOf(a.name) === "video" && !props.t.host}><video src={`${srcOf(a.path, undefined)}#t=0.1`} preload="metadata" muted /></Match>
                         </Switch>
                       </span>
                       <span class="aname">{a.name}</span>
@@ -464,20 +494,26 @@ function ArtifactsPane(props: { t: Task }) {
                   <button class="icon-btn sm" title={`${tr("이전")} (←)`} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                   <button class="icon-btn sm" title={`${tr("다음")} (→)`} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
                 </Show>
-                <button class="icon-btn sm" title={tr("Finder에서 보기")} onClick={() => void revealPath(a.path)}><Icon name="open" size={14} /></button>
+                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, a.path)}><Icon name="open" size={14} /></button>
               </div>
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
+                  <Match when={kindOf(a.name) !== "text" && tooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
                   <Match when={kindOf(a.name) === "page"}>
-                    <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${pageSrc(a.path)}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
-                      <iframe class="aframe" src={pdfSrc(a.path, a.modified)} title={a.name} />
+                    {/* another Mac's page: the copy fetched here */}
+                    <Show when={props.t.host ? localCopy(a.path, props.t.host) : a.path} fallback={<div class="pane-empty" />}>
+                      {(at) => (
+                        <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${pageSrc(at())}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
+                          <iframe class="aframe" src={pdfSrc(at(), a.modified)} title={a.name} />
+                        </Show>
+                      )}
                     </Show>
                   </Match>
                   <Match when={kindOf(a.name) === "image"}>
-                    <div class="aimg"><img src={fileSrc(a.path)} alt="" onClick={() => openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path))} /></div>
+                    <div class="aimg"><img src={srcOf(a.path, props.t.host)} alt="" onClick={() => openImage(a.path, list().filter((x) => kindOf(x.name) === "image").map((x) => x.path), props.t.host)} /></div>
                   </Match>
                   <Match when={kindOf(a.name) === "video"}>
-                    <div class="aimg"><video src={fileSrc(a.path)} controls /></div>
+                    <div class="aimg"><video src={srcOf(a.path, props.t.host)} controls /></div>
                   </Match>
                   <Match when={kindOf(a.name) === "text"}>
                     <div class="atext">
@@ -541,11 +577,12 @@ const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.
 setTabFits((place, kind) => {
   if (kind === "preview") return previewPlace() === place ? "use" : "drop";
   if (isMainPlace(place) || place === "results") return jobOnly(kind) ? "keep" : "use";
-  const t = state.tasks.find((x) => x.id === place);
+  // a job of another Mac counts as well (taskById holds those)
+  const t = taskById(place);
   if (!t) return "use";
   // the shared browser you opened yourself goes along; a task's own page doesn't
   if (kind === "browser") return hasPage(t) || panelShared() ? "use" : "drop";
-  if (kind === "reverse") return usesReverse(t, state.tasks) ? "use" : "drop";
+  if (kind === "reverse") return usesReverse(t, kidsOf(t.id)) ? "use" : "drop";
   if (kind === "pr") return t.worktree || prOf(t) ? "use" : "drop";
   return "use";
 });
@@ -690,6 +727,8 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     <>
     {/* in the gutter beside the card, which clips what pokes out of it */}
     <div class="panel-resize" title={tr("끌어서 폭 바꾸기 · 두 번 눌러 넓게 보기")} onPointerDown={drag} onDblClick={() => setPanelWide(!panelWide())} />
+    {/* a job of another Mac: pictures in the panel come from there */}
+    <HostCtx.Provider value={() => props.t?.host}>
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-bar" data-tauri-drag-region>
         <div class="ptabs" ref={bar} role="tablist" data-tauri-drag-region>
@@ -831,6 +870,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
         </Switch>
       </div>
     </aside>
+    </HostCtx.Provider>
     </>
   );
 }

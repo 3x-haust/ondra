@@ -5,7 +5,7 @@
 // line to instruction. Nothing moves unless the analysis does.
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { arrows, calls, cellDepths, depth, emptyTrace, fnAt, hex, readTrace, shortName, span, type RBinary, type ROp, type RStep, type RTrace } from "../engine/reverse";
-import { reverseTrace } from "../lib/native";
+import { traceOf } from "../engine/far";
 import { kidsOf } from "../state/store";
 import type { Task } from "../state/types";
 import { tokenize, type Tok } from "../ui/highlight";
@@ -58,7 +58,8 @@ function useTrace(t: () => Task) {
     try {
       let text = "";
       for (const id of ids()) {
-        const r = await reverseTrace(id, offsets.get(id) ?? 0);
+        // a job of another Mac: its trace is there
+        const r = await traceOf(t().host, id, offsets.get(id) ?? 0).catch(() => ({ text: "", end: offsets.get(id) ?? 0 }));
         if (r.end < (offsets.get(id) ?? 0)) setTrace(emptyTrace()), offsets.clear();
         offsets.set(id, r.end);
         text += r.text;

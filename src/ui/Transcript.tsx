@@ -2,7 +2,7 @@
 import { noteText } from "../engine/describe";
 import { holdScroll, keepBottom, toBottomSent } from "./stick";
 import { openImage } from "./Lightbox";
-import { fileSrc } from "../lib/native";
+import { srcOf, useHost } from "../engine/far";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
@@ -455,6 +455,8 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
   const [open, setOpen] = createSignal(false);
+  // a job of another Mac: the pictures it looked at are there
+  const host = useHost();
   const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
   const shown = () => props.tools.filter((t) => t.tool.ok !== false && t.tool.image);
   const n = () => props.tools.length;
@@ -472,8 +474,8 @@ function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
         <div class="pic-thumbs">
           <For each={shown()}>
             {(e) => (
-              <button class="pic-thumb" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(e.tool.image!)}>
-                <img src={fileSrc(e.tool.image!)} alt="" loading="lazy" />
+              <button class="pic-thumb" title={tr("크게 보기")} aria-label={tr("크게 보기")} onClick={() => openImage(e.tool.image!, [e.tool.image!], host())}>
+                <img src={srcOf(e.tool.image!, host())} alt="" loading="lazy" />
               </button>
             )}
           </For>

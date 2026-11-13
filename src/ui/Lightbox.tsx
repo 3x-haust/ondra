@@ -1,12 +1,12 @@
 // A picture, big. ← → moves between the pictures it was opened with, Esc closes.
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { fileSrc, revealPath } from "../lib/native";
+import { revealOn, srcOf, type Where } from "../engine/far";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 import { BoardView } from "./board/view";
 import { t } from "../i18n";
 
-const [shown, setShown] = createSignal<{ list: string[]; i: number } | null>(null);
+const [shown, setShown] = createSignal<{ list: string[]; i: number; host?: Where } | null>(null);
 
 // a drawn picture (cleaned SVG markup from an answer), shown big on its own
 const [drawn, setDrawn] = createSignal<string | null>(null);
@@ -27,9 +27,10 @@ function BigBoard(props: { src: string; ask?: (text: string) => void }) {
   return <div class="lb-board" ref={host} onClick={(e) => e.stopPropagation()} />;
 }
 
-export function openImage(path: string, list: string[] = [path]) {
+/** `host`: the pictures are another Mac's (a job running there) */
+export function openImage(path: string, list: string[] = [path], host?: Where) {
   const l = list.includes(path) ? list : [path, ...list];
-  setShown({ list: l, i: l.indexOf(path) });
+  setShown({ list: l, i: l.indexOf(path), host });
 }
 
 export function Lightbox() {
@@ -71,7 +72,7 @@ export function Lightbox() {
         const path = () => s().list[s().i];
         return (
           <div class="lightbox" onClick={() => setShown(null)}>
-            <img src={fileSrc(path())} alt="" onClick={(e) => e.stopPropagation()} />
+            <img src={srcOf(path(), s().host)} alt="" onClick={(e) => e.stopPropagation()} />
             <div class="lb-bar" onClick={(e) => e.stopPropagation()}>
               <span class="lb-name">{path().split("/").pop()}</span>
               <Show when={s().list.length > 1}>
@@ -79,7 +80,7 @@ export function Lightbox() {
                 <button class="icon-btn sm" title={`${t("이전")} ←`} aria-label={t("이전")} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                 <button class="icon-btn sm" title={`${t("다음")} →`} aria-label={t("다음")} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
               </Show>
-              <button class="icon-btn sm" title={t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealPath(path())}><Icon name="open" size={14} /></button>
+              <button class="icon-btn sm" title={s().host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => void revealOn(s().host, path())}><Icon name="open" size={14} /></button>
               <button class="icon-btn sm" title={`${t("닫기")} esc`} aria-label={t("닫기")} onClick={() => setShown(null)}><Icon name="x" size={14} /></button>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { addProject, decisionsIn, projectsShown, removeProject, renameProject, k
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
+import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
@@ -254,6 +255,9 @@ function projectMenu(id: string): MenuEntry[] {
     return [
       { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
       { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
+      "sep",
+      // its folder is there: Finder opens on that Mac's screen
+      { id: "finder", label: tr("그 Mac의 Finder에서 보기"), icon: "folder", run: () => void revealOn(far.host, p.folder) },
     ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },

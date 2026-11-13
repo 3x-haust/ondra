@@ -9,7 +9,7 @@ import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
 import { clipboardFiles, fileSrc, fsRead, inTauri, pickFiles, savePaste } from "../lib/native";
 import { setState, state } from "../state/store";
-import { focusId, previewFile } from "../state/ui";
+import { focusId, previewFile, toast } from "../state/ui";
 import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
@@ -126,6 +126,8 @@ export function Composer(props: {
   commands?: Command[];
   /** "@" menu: files you can point at (relative paths) */
   files?: () => Promise<string[]>;
+  /** the message goes to another Mac: the attached files are sent there first (their paths there go in the message) */
+  upload?: (files: string[]) => Promise<string[]>;
   /** quiet info inside the bar: account, plan windows, context */
   status?: JSX.Element;
   /** more entries for the + menu (after "파일 및 폴더") */
@@ -367,7 +369,8 @@ export function Composer(props: {
   };
 
   // a picture or file alone is enough to send
-  const ready = () => (!!text().trim() || files().length > 0 || quotes().length > 0) && !props.disabled;
+  const [sending, setSending] = createSignal(false);
+  const ready = () => (!!text().trim() || files().length > 0 || quotes().length > 0) && !props.disabled && !sending();
   const send = (queue = false) => {
     if (!ready()) return;
     // skills named anywhere ("이거 /skill:deep-research 로 조사해줘"): the first runs, with the rest of the text
@@ -399,6 +402,7 @@ export function Composer(props: {
     }
     const f = files();
     const v = withQuotes(quotes(), text());
+    const text0 = text();
     keep(text());
     setQuotes([]);
     setEngaged(false);
@@ -409,8 +413,25 @@ export function Composer(props: {
     el.value = "";
     const key = props.draftKey;
     if (key !== undefined) drafts.delete(key);
-    (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, f));
+    const hand = (paths: string[]) => (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, paths));
     queueMicrotask(grow);
+    if (!f.length || !props.upload) return hand(f);
+    // to another Mac: its copies of the files go in the message; when they can't be sent, nothing is, and it all comes back
+    const typed = text0;
+    setSending(true);
+    const slow = setTimeout(() => toast(t("첨부한 파일을 그 Mac에 보내는 중…")), 800);
+    props
+      .upload(f)
+      .then(hand, (e) => {
+        toast(e instanceof Error ? e.message : String(e), "bad");
+        if (!el.value) {
+          setText(typed);
+          el.value = typed;
+          grow();
+        }
+        setFiles((l) => [...f, ...l.filter((x) => !f.includes(x))]);
+      })
+      .finally(() => (clearTimeout(slow), setSending(false)));
   };
 
   // Thin until used: one row with +, model and send. Pressing or
