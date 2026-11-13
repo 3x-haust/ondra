@@ -7,7 +7,7 @@
 //  • side chat: a second, separate conversation per space. It can read files but
 //    never change them, and knows nothing of the main conversation unless told.
 //    Its messages are kept as text; the engine session under it is disposable.
-import { createSignal } from "solid-js";
+import { createStore } from "solid-js/store";
 import { projectById, setState, spaceById, state, taskById, uid } from "../state/store";
 import { inChat } from "./captain";
 import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
@@ -31,20 +31,25 @@ export function spaceOfScope(scope: string): SpaceId {
   return (id.split("~")[0] || state.space) as SpaceId;
 }
 
-/** which btw the card shows (by id), or none; each space has its own btws */
-const [btwId, setBtwId] = createSignal<string | null>(null);
-export const btwList = () => (state.btws ?? []).filter((b) => spaceOfScope(b.scope) === state.space);
-export const btwIndex = () => {
-  const i = btwList().findIndex((b) => b.id === btwId());
+/**
+ * Each place keeps its own btws: main (per project) and every job ("main:<space>[~project]",
+ * "task:<id>"). Which one each place's card shows (by id), or none; two panes side by side each
+ * have theirs.
+ */
+const [shown, setShown] = createStore<Record<string, string | null>>({});
+export const btwList = (scope: string) => (state.btws ?? []).filter((b) => b.scope === scope);
+export const btwIndex = (scope: string) => {
+  const i = btwList(scope).findIndex((b) => b.id === shown[scope]);
   return i < 0 ? null : i;
 };
-export const btw = () => btwList().find((b) => b.id === btwId()) ?? null;
-const setBtwAt = (i: number) => setBtwId(btwList()[i]?.id ?? null);
-export const closeBtw = () => setBtwId(null);
-/** "/btw" with nothing after it: the latest one */
-export function showBtw(i = btwList().length - 1) {
-  if (!btwList().length) return false;
-  setBtwAt(Math.max(0, Math.min(btwList().length - 1, i)));
+export const btw = (scope: string) => btwList(scope).find((b) => b.id === shown[scope]) ?? null;
+const setBtwAt = (scope: string, i: number) => setShown(scope, btwList(scope)[i]?.id ?? null);
+export const closeBtw = (scope: string) => setShown(scope, null);
+/** "/btw" with nothing after it: the latest one here */
+export function showBtw(scope: string, i = btwList(scope).length - 1) {
+  const n = btwList(scope).length;
+  if (!n) return false;
+  setBtwAt(scope, Math.max(0, Math.min(n - 1, i)));
   return true;
 }
 const patch = (id: string, v: Partial<BtwEntry>) => setState("btws", (b) => b.id === id, v);
@@ -199,13 +204,13 @@ export async function askBtw(scope: string, question: string, files: string[] = 
   const cant = !engine.checked || !engine.ready ? tr("에이전트를 실행할 수 없어요") : !spaceAccount(space) ? tr(NO_ACCOUNT) : "";
   if (cant) {
     setState("btws", (l) => [...(l ?? []), { id: uid("q"), at: Date.now(), scope, question: q, ...att, answer: "", pending: false, error: cant }]);
-    return void setBtwAt(btwList().length - 1);
+    return void setBtwAt(scope, btwList(scope).length - 1);
   }
   const acc = accountFor(space);
   const agent = `btw:${uid("b")}`;
   const id = uid("q");
   setState("btws", (l) => [...(l ?? []).slice(-49), { id, at: Date.now(), scope, question: q, ...att, answer: "", pending: true }]);
-  setBtwAt(btwList().length - 1);
+  setBtwAt(scope, btwList(scope).length - 1);
   let text = "";
   let err = "";
   const done = new Promise<void>((resolve) =>
