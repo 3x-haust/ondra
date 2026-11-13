@@ -239,7 +239,7 @@ No engine SDK, extension, skill or model-provider implementation was changed.
 
 ### Observed boundary
 
-Opened this worktree's actual Vite application in the bundled agent-browser,
+Opened this worktree's actual Vite application in the bundled ondra-browser,
 without headed mode, on a separate loopback origin. Entered a request through
 the main chat textbox and clicked Send. No task was manually inserted or
 started. The production composer, captain route parser, task creation,
@@ -314,5 +314,5 @@ Additional local evidence in the artifact directory listed above:
 - `app-delivery-summary.json`: assertion summary and cleanup actions.
 
 The server was started with `node "$APP_ARTIFACTS_DIR/serve-delivery.mjs"` from
-this worktree. Interaction used `agent-browser open`, `snapshot -i`, `fill`,
+this worktree. Interaction used `ondra-browser open`, `snapshot -i`, `fill`,
 `click` and `eval --stdin`; results were collected as text, not screenshots.

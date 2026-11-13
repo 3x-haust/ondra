@@ -50,7 +50,7 @@ const TEST_SCRIPT = /^(?:(?:bash|sh|zsh|node|python3?|bun|deno|tsx)\s+)?(?:\S*\/
 /** A command that runs tests (`pnpm test`, `bunx vitest run src/a.test.ts`, `cargo test`), not one that reads a test file. */
 export const isTestRun = (cmd: string) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && (TEST.test(noPaths(p)) || TEST_SCRIPT.test(p)));
 
-/** A command that runs `program` itself, not one that reads or searches for its name (`rg agent-browser`). */
+/** A command that runs `program` itself, not one that reads or searches for its name (`rg ondra-browser`). */
 export const runsProgram = (cmd: string, program: RegExp) => steps(unwrap(cmd)).some((p) => !onlyReads(p) && program.test(p));
 
 export function commandKind(cmd: string): "poll" | "check" | "other" {

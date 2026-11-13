@@ -5,7 +5,7 @@
     web.py fetch <url> [--dir "$R"] [--find "<phrase>"] [--max 12000] [--json]
                        [--no-reader] [--no-browser] [--only <step>]
 
-search  drives a search engine page in your agent-browser tab (the app's
+search  drives a search engine page in your ondra-browser tab (the app's
         bundled browser) and prints title, url, date, snippet. An engine that
         shows a captcha or no results is skipped for the next one.
 fetch   walks a fallback chain and stops at the first step whose page passes
@@ -16,7 +16,7 @@ fetch   walks a fallback chain and stops at the first step whose page passes
           jsonld   the article text the page embeds as JSON-LD
           mobile   iPhone headers, then the m. host
           reader   r.jina.ai renders it (public pages only; --no-reader to skip)
-          browser  your agent-browser tab, waiting out JS challenges
+          browser  your ondra-browser tab, waiting out JS challenges
           archive  the latest Wayback Machine copy (tagged, dated)
         The full text goes to <dir>/sources/<key>.txt with one line in
         <dir>/sources/index.jsonl (url, via, title, published, sha256); a page
@@ -395,13 +395,13 @@ SETTLED = ("(() => { const t = (document.title + ' ' + (document.body ? document
 
 
 def ab(*args, stdin=None, timeout=60):
-    """Run agent-browser; retry once when another job holds the browser this moment."""
+    """Run ondra-browser; retry once when the browser session was just restarting."""
     for attempt in range(2):
         try:
-            p = subprocess.run(["agent-browser", *args], input=stdin, capture_output=True, text=True, timeout=timeout)
+            p = subprocess.run(["ondra-browser", *args], input=stdin, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return 1, "", "timeout"
-        busy = "temporarily unavailable" in (p.stderr + p.stdout).lower()
+        busy = "no response came back" in (p.stderr + p.stdout).lower()
         if not busy or attempt:
             return p.returncode, p.stdout, p.stderr
         time.sleep(4)
@@ -413,9 +413,9 @@ def unjson(out):
 
 
 def via_browser(url):
-    if not shutil.which("agent-browser"):
-        return {"verdict": "blocked", "status": 0, "text": "", "meta": {}, "note": "agent-browser not on PATH"}
-    # not the load event: ad-heavy pages never fire it (agent-browser then times out at 25 s)
+    if not shutil.which("ondra-browser"):
+        return {"verdict": "blocked", "status": 0, "text": "", "meta": {}, "note": "ondra-browser not on PATH"}
+    # not the load event: ad-heavy pages never fire it (ondra-browser then times out at 25 s)
     code, out, err = ab("open", url, "--wait-until", "domcontentloaded", timeout=90)
     if code:
         return {"verdict": "blocked", "status": 0, "text": "", "meta": {}, "note": (err or out).strip()[-300:]}
@@ -614,8 +614,8 @@ def bench(engine, minutes=30):
 
 
 def search(q, engines, n):
-    if not shutil.which("agent-browser"):
-        sys.exit("agent-browser is not on PATH (it ships with the app; this only works inside an Ondra job)")
+    if not shutil.which("ondra-browser"):
+        sys.exit("ondra-browser is not on PATH (it ships with the app; this only works inside an Ondra job)")
     hangul = bool(re.search(r"[가-힣]", q))
     order = engines or (["naver", "google", "bing", "yahoo"] if hangul else ["google", "bing", "naver", "yahoo"])
     tried, benched = [], load_bench()

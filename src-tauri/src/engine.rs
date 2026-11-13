@@ -210,7 +210,7 @@ pub fn engine_env(app: &AppHandle) -> Vec<(String, String)> {
     env
 }
 
-/// PATH with the bundled tools (agent-browser, agent-desktop) first.
+/// PATH with the bundled tools (ondra-browser, ondra-cuhost) first.
 pub fn with_sidecars(path: &str) -> String {
     match crate::tools::sidecar_dir() {
         Some(dir) => format!("{}:{path}", dir.display()),

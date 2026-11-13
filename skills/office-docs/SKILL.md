@@ -123,12 +123,12 @@ python3 -m venv "$APP_SCRATCH_DIR/office" && "$APP_SCRATCH_DIR/office/bin/pip" i
 - When the user only needs to present or share (not edit), HTML slides printed
   to PDF are often quicker and look better: one `section` per page with
   `@page { size: 1920px 1080px; margin: 0 }`, printed with deep-research's
-  `pdf.sh` or `agent-browser pdf <file>` from your tab.
+  `pdf.sh` or `ondra-browser pdf <file>` from your tab.
 
 ### PDF
 
 - **Making one**: write HTML and print it (`pdf.sh` in the deep-research skill,
-  or `agent-browser pdf` from your tab). `@page { size: A4; margin: 18mm }` and
+  or `ondra-browser pdf` from your tab). `@page { size: A4; margin: 18mm }` and
   `break-before: page` control the pages; Korean fonts come out right.
 - **Merge, split, rotate, extract pages**: `pypdf` (`qpdf` if it is installed).
 - **Forms**: list the fields first (`PdfReader(f).get_fields()`) and use each

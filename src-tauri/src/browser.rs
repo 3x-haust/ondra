@@ -4,8 +4,8 @@
 //! bundled headless shell) on its own persistent profile,
 //! `<data dir>/browser/<space>/profile`: a login made in one space never reaches
 //! the other. Every job attaches to its space's browser
-//! over CDP with its own agent-browser session pinned to its own tab
-//! (`AGENT_BROWSER_CDP` + `AGENT_BROWSER_PIN_TAB`): a fresh pinned session
+//! over CDP with its own ondra-browser session pinned to its own tab
+//! (`ONDRA_BROWSER_CDP` + `ONDRA_BROWSER_PIN_TAB`): a fresh pinned session
 //! opens a new tab instead of taking one that is already there, so jobs never
 //! drive each other's pages, while cookies and storage are the profile's and
 //! are shared. A login made once (by a job or by the user in the Browser view)
@@ -14,7 +14,7 @@
 //! Only one Chrome may own a profile, so there is one process per space: it is
 //! started on first use and stopped when Ondra quits. One an earlier run left
 //! running is replaced (it can't open tabs any more), and one that stops
-//! responding to agent-browser is restarted.
+//! responding to ondra-browser is restarted.
 
 use std::{
     collections::HashMap,
@@ -27,8 +27,6 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-/// Plugin name jobs pass to `auth login --credential-provider`.
-pub const KEYCHAIN_PLUGIN: &str = "keychain";
 /// A job's session daemon goes away after this long without a command; its tab stays.
 const IDLE_MS: &str = "900000";
 
@@ -137,8 +135,8 @@ pub fn port(app: &AppHandle, space: &str) -> Option<u16> {
     Some(p)
 }
 
-/// agent-browser can drive it. A Chrome that has run for hours can still answer
-/// /json/version while every agent-browser command hangs (seen after a heavy
+/// ondra-browser can drive it. A Chrome that has run for hours can still answer
+/// /json/version while every browser command hangs (seen after a heavy
 /// WebGL page); checked at most once a minute.
 fn works(app: &AppHandle, port: u16, force: bool) -> bool {
     static LAST_OK: Mutex<Option<(u16, Instant)>> = Mutex::new(None);
@@ -150,10 +148,10 @@ fn works(app: &AppHandle, port: u16, force: bool) -> bool {
     // a new session every time: an already-connected one keeps answering while
     // every new connection (each job's first command) hangs on a stuck tab
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
-    let Some(mut cmd) = crate::tools::agent_browser(app) else { return true };
-    cmd.env("AGENT_BROWSER_CDP", port.to_string())
-        .env("AGENT_BROWSER_SESSION", format!("ondra-health-{port}-{stamp}"))
-        .env("AGENT_BROWSER_IDLE_TIMEOUT_MS", "5000")
+    let Some(mut cmd) = crate::tools::browser_command(app) else { return true };
+    cmd.env("ONDRA_BROWSER_CDP", port.to_string())
+        .env("ONDRA_BROWSER_SESSION", format!("ondra-health-{port}-{stamp}"))
+        .env("ONDRA_BROWSER_IDLE_TIMEOUT_MS", "5000")
         .args(["get", "url"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -315,7 +313,7 @@ pub fn stop(app: &AppHandle) {
     }
 }
 
-/// A job's agent-browser session. It carries the browser's port so a session
+/// A job's ondra-browser session. It carries the browser's port so a session
 /// bound to a tab of an earlier browser is never reused after a restart.
 pub fn session_for(worker_id: &str, port: Option<u16>) -> String {
     match port {
@@ -326,7 +324,7 @@ pub fn session_for(worker_id: &str, port: Option<u16>) -> String {
 
 /// The session's daemon is up (`session list` starts nothing).
 pub fn session_running(app: &AppHandle, session: &str) -> bool {
-    let Some(mut cmd) = crate::tools::agent_browser(app) else { return false };
+    let Some(mut cmd) = crate::tools::browser_command(app) else { return false };
     let Ok(out) = cmd.args(["session", "list", "--json"]).stdin(Stdio::null()).stderr(Stdio::null()).output() else { return false };
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
     v.pointer("/data/sessions")
@@ -334,26 +332,19 @@ pub fn session_running(app: &AppHandle, session: &str) -> bool {
         .is_some_and(|list| list.iter().any(|s| s.as_str() == Some(session)))
 }
 
-/// The registry entry that makes `--credential-provider keychain` work: this
-/// same binary in plugin mode (see `keychain.rs`).
-pub fn plugins_env() -> Option<String> {
-    let exe = std::env::current_exe().ok()?;
-    let plugins = serde_json::json!([{
-        "name": KEYCHAIN_PLUGIN,
-        "command": exe.display().to_string(),
-        "args": [crate::keychain::FLAG],
-        "capabilities": ["credential.read"],
-    }]);
-    Some(plugins.to_string())
+/// The helper that makes `auth login --credential-provider keychain` work: this
+/// same binary in credential mode (see `keychain.rs`).
+pub fn keychain_helper() -> Option<String> {
+    std::env::current_exe().ok().map(|exe| exe.display().to_string())
 }
 
-/// What makes an agent-browser command use the shared browser in its own tab.
+/// What makes an ondra-browser command use the shared browser in its own tab.
 pub fn attach_env(port: u16, session: &str) -> Vec<(String, String)> {
     vec![
-        ("AGENT_BROWSER_CDP".into(), port.to_string()),
-        ("AGENT_BROWSER_PIN_TAB".into(), "1".into()),
-        ("AGENT_BROWSER_IDLE_TIMEOUT_MS".into(), IDLE_MS.into()),
-        ("AGENT_BROWSER_SESSION".into(), session.into()),
+        ("ONDRA_BROWSER_CDP".into(), port.to_string()),
+        ("ONDRA_BROWSER_PIN_TAB".into(), "1".into()),
+        ("ONDRA_BROWSER_IDLE_TIMEOUT_MS".into(), IDLE_MS.into()),
+        ("ONDRA_BROWSER_SESSION".into(), session.into()),
     ]
 }
 
@@ -364,7 +355,7 @@ fn view_session(port: u16) -> String {
 }
 
 fn view_command(app: &AppHandle, port: u16) -> Option<Command> {
-    let mut cmd = crate::tools::agent_browser(app)?;
+    let mut cmd = crate::tools::browser_command(app)?;
     for (k, v) in attach_env(port, &view_session(port)) {
         cmd.env(k, v);
     }
@@ -388,7 +379,7 @@ pub async fn shared_browser_open(app: AppHandle, space: Option<String>) -> Resul
     let space = space.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         let port = ensure(&app, &space)?;
-        let cmd = || view_command(&app, port).ok_or_else(|| "agent-browser를 찾을 수 없어요".to_string());
+        let cmd = || view_command(&app, port).ok_or_else(|| "브라우저 도구를 찾을 수 없어요".to_string());
         // the view's tab can be closed under it (a job closing tabs): then the stream
         // stays up with nothing to show, so bind a new tab first
         let has_tab = cmd()?.args(["get", "url"]).stdout(Stdio::null()).status().is_ok_and(|s| s.success());
@@ -412,7 +403,7 @@ pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<Strin
     let space = space.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         let port = ensure(&app, &space)?;
-        let mut cmd = view_command(&app, port).ok_or("agent-browser를 찾을 수 없어요")?;
+        let mut cmd = view_command(&app, port).ok_or("브라우저 도구를 찾을 수 없어요")?;
         match action.as_str() {
             "open" => {
                 let url = url.filter(|u| u.starts_with("http://") || u.starts_with("https://")).ok_or("주소가 올바르지 않아요")?;
@@ -440,7 +431,7 @@ pub async fn browser_release(app: AppHandle, worker_id: String, space: Option<St
         let session = session_for(&worker_id, Some(port));
         // even when its daemon timed out, the pinned session rebinds to the job's own tab
         for args in [&["tab", "close"][..], &["close"][..]] {
-            let Some(mut cmd) = crate::tools::agent_browser(&app) else { return };
+            let Some(mut cmd) = crate::tools::browser_command(&app) else { return };
             for (k, v) in attach_env(port, &session) {
                 cmd.env(k, v);
             }

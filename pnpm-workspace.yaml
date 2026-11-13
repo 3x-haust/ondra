@@ -1,3 +1,0 @@
-allowBuilds:
-  agent-browser: set this to true or false
-  agent-desktop: set this to true or false

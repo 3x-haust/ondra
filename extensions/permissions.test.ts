@@ -9,12 +9,8 @@ afterEach(() => vi.unstubAllEnvs());
 // Exercise the engine hook without dispatching shell commands or GUI input.
 describe("host computer-use boundary", () => {
   it.each([
-    "agent-desktop launch Calculator",
-    "agent-desktop press cmd+n --app Calculator",
-    "agent-desktop click @s1:e2",
-    `agent-desktop batch '[{"command":"launch","args":{"app":"Calculator","activate":true}}]'`,
-    `sh -c 'agent-desktop launch Calculator --activate'`,
-    '"/Applications/Ondra.app/Contents/MacOS/agent-desktop" click @s1:e2',
+    `sh -c 'osascript -e "return 1"'`,
+    `"/usr/bin/osascript" -e 'tell application "Calculator" to activate'`,
     "open -g -a TextEdit document.txt",
     "open -gj -a Calculator",
     "open -a Calculator",
@@ -51,10 +47,10 @@ describe.each(["full", "ask"])("shell execution contexts in %s mode", (mode) => 
     `env FOO=bar open -g -a Calculator`,
     `bash <<'EOF'\nopen -g -a Calculator\nEOF`,
     `sh <<EOF\nopen -g -a Calculator\nEOF`,
-    `bash -lc 'agent-desktop launch Calculator'`,
-    `printf "%s" "$(agent-desktop launch Calculator)"`,
+    `bash -lc 'osascript -e "return 1"'`,
+    `printf "%s" "$(osascript -e 'return 1')"`,
     `env FOO=bar osascript -e 'return 1'`,
-    `sh <<'EOF'\nagent-desktop launch Calculator\nEOF`,
+    `sh <<'EOF'\nosascript -e 'return 1'\nEOF`,
     `cat <<EOF\n$(open -g -a Calculator)\nEOF`,
     'printf "%s" "`open -g -a Calculator`"',
     `printf "%s" "$(printf '%s' "$(open -g -a Calculator)")"`,
@@ -65,14 +61,14 @@ describe.each(["full", "ask"])("shell execution contexts in %s mode", (mode) => 
   });
 
   it.each([
-    `rg -n "agent-desktop" skills`,
+    `rg -n "osascript" skills`,
     `git log --oneline --grep=osascript`,
     `rg -n 'osascript.*activate' skills`,
     `rg -n 'osascript keystroke' skills`,
-    `rg -n agent-desktop skills -- --activate`,
+    `rg -n osascript skills -- --activate`,
     `printf '%s' '$(open -g -a Calculator)'`,
-    `bash -lc 'rg -n "agent-desktop" skills'`,
-    `cat <<'EOF'\nagent-desktop launch Calculator\n$(open -g -a Calculator)\nEOF`,
+    `bash -lc 'rg -n "osascript" skills'`,
+    `cat <<'EOF'\nosascript -e 'tell application "Calculator" to activate'\n$(open -g -a Calculator)\nEOF`,
     `python3 notes.py <<'EOF'\n{"title":"open source driver"}\nEOF`,
   ])("allows search terms and document data: %s", async (command) => {
     const { result, select } = await decision(command);
@@ -119,20 +115,11 @@ describe("focusSteal", () => {
     expect(focusSteal(`osascript -e 'tell application "TextEdit" to activate'`)?.what).toMatch(/AppleScript/);
     expect(focusSteal("open -a TextEdit note.txt")).toBeDefined();
     expect(focusSteal("cd x && open https://example.com")).toBeDefined();
-    expect(focusSteal("agent-desktop launch Calculator --activate")).toBeDefined();
-    expect(focusSteal("agent-desktop focus-window --app Notes")).toBeDefined();
-    expect(focusSteal("agent-desktop mouse-click --xy 10,10")).toBeDefined();
-    expect(focusSteal('agent-desktop click @s1:e2 --headed --session "$SID"')).toBeDefined();
-    expect(focusSteal('agent-desktop press cmd+k --session "$SID"')?.what).toMatch(/press/);
   });
   it("only detects explicit foreground requests, not isolation", () => {
     expect(focusSteal("open -g -a TextEdit note.txt")).toBeUndefined();
     expect(focusSteal("open -gj -a Calculator")).toBeUndefined();
     expect(focusSteal(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
-    expect(focusSteal('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
-    expect(focusSteal('agent-desktop --session "$SID" snapshot --app Pebble -i')).toBeUndefined();
-    expect(focusSteal('agent-desktop click @s1:e2 --session "$SID"')).toBeUndefined();
-    expect(focusSteal("agent-desktop launch Calculator")).toBeUndefined();
     expect(focusSteal("git log --oneline | head")).toBeUndefined();
     expect(focusSteal("pnpm openapi:gen")).toBeUndefined();
   });
@@ -161,7 +148,7 @@ describe("systemInput", () => {
   });
   it("leaves ordinary commands to the other permission checks", () => {
     expect(systemInput(`tail -20 ${dir}/notes.log`)).toBeUndefined();
-    expect(systemInput('agent-desktop press cmd+k --app Electron --session "$SID"')).toBeUndefined();
+    expect(systemInput("ondra-browser press Enter")).toBeUndefined();
     expect(systemInput("swift test && git status")).toBeUndefined();
     expect(systemInput(`osascript -e 'tell application "System Events" to get name of first process whose frontmost is true'`)).toBeUndefined();
   });

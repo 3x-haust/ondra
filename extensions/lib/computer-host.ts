@@ -217,6 +217,17 @@ export class HostObservation {
     return parts.length ? parts.join(" · ").slice(0, 80) : undefined;
   }
 
+  /** Whether the element is a button ([12] or helper id). */
+  isButton(ref: string): boolean { return this.find(ref)?.role === "AXButton"; }
+
+  /** Whether a button with this name is on the current screen. */
+  hasButton(name: string): boolean {
+    const walk = (n: HostNode): boolean =>
+      (n.role === "AXButton" && [n.title, n.desc].some((v) => typeof v === "string" && v.replace(/\s+/g, " ").trim() === name)) ||
+      (n.children ?? []).some(walk);
+    return !!this.tree && walk(this.tree);
+  }
+
   /** Refs can't be trusted until the next observation, which is shown whole. */
   invalidate(): void { this.ids = new Set(); this.shown = undefined; }
   reset(): void {
@@ -290,6 +301,9 @@ export class ComputerHostSession {
   private started = false;
   private stopped = false;
   private busy = false;
+  // A button whose press took the screen away (a prompt, a dialog, a new page); if the same
+  // button comes back once something else was pressed, the prompt may have swallowed the press.
+  private pressedAway?: string;
 
   constructor(private readonly helper: ComputerHostHelper) {}
 
@@ -308,7 +322,8 @@ export class ComputerHostSession {
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
     this.pid = pid;
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
-    return { pid, ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}),
+    const menus = Array.isArray(launched.menus) ? launched.menus.filter((m): m is string => typeof m === "string").slice(0, 14) : [];
+    return { pid, ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}), ...(menus.length ? { menus } : {}),
       ...("kind" in (observed as object) ? { observation: observed } : observed) };
   }
 
@@ -370,6 +385,7 @@ export class ComputerHostSession {
     const translated = this.translate(action);
     const ref = action.ref ?? (isRecord(action.from) ? action.from.ref : undefined);
     const label = ref !== undefined ? this.obs.label(String(ref)) : undefined;
+    const button = action.kind === "click" && ref !== undefined && this.obs.isButton(String(ref)) ? label : undefined;
     const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
     // the user's own mouse or keys moved things: theirs, not the action's
     if (r.backgroundPreserved === false && r.userInput !== true) {
@@ -379,13 +395,24 @@ export class ComputerHostSession {
         : "Action changed the foreground or cursor; this cannot be done in the background");
     }
     const seen = r.tree !== undefined ? this.obs.accept(r.tree, { show }) : undefined;
+    let pressAgain: string | undefined;
+    if (seen) {
+      if (this.pressedAway && this.pressedAway !== button && this.obs.hasButton(this.pressedAway)) {
+        pressAgain = this.pressedAway;
+        this.pressedAway = undefined;
+      }
+      if (button && seen.changed && !this.obs.hasButton(button)) this.pressedAway = button;
+    }
     // Delivery is not success: an unchanged tree after the action means it probably did nothing.
     const effect = seen ? (seen.changed ? "changed" : "no_change") : "unknown";
     const observation = seen && show ? (({ changed: _, ...snap }) => snap)(seen) : undefined;
     return {
       kind: action.kind, ...(ref !== undefined ? { ref: String(ref).replace(/^\[|\]$/g, "") } : {}),
       action: { ok: true, effect, ...(typeof r.via === "string" ? { via: r.via } : {}),
-        ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}) },
+        ...(r.selfActivated ? { selfActivated: true, restored: r.restored === true } : {}),
+        ...(r.dropInApp === false ? { dropOutside: true } : {}),
+        ...(r.raisedOverUser === true ? { raisedOverUser: true, orderRestored: r.orderRestored === true } : {}),
+        ...(pressAgain ? { pressAgain } : {}) },
       ...(typeof r.dragMs === "number" ? { dragMs: r.dragMs } : {}), ...(label ? { label } : {}),
       ...(observation ? { observation } : seen ? {} : { observationError: "NO_WINDOW" }),
     };
@@ -407,6 +434,11 @@ export class ComputerHostSession {
         return { kind: "press-action", ref: ref(), action: name.startsWith("AX") ? name : `AX${name}` };
       }
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
+      case "menu": {
+        const path = Array.isArray(action.path) ? action.path.map((p) => String(p).trim()).filter(Boolean) : [];
+        if (!path.length || path.length > 6) throw new Error("menu needs path: 1–6 titles from the menu bar down");
+        return { kind: "menu", path };
+      }
       case "type": return action.ref !== undefined ? { kind: "type", ref: ref(), text: String(action.text ?? "") } : { kind: "type", text: String(action.text ?? "") };
       case "press": return { kind: "press", key: String(action.key), modifiers: action.modifiers ?? [] };
       // Coordinates are pixels of the latest look of this window; the helper refuses

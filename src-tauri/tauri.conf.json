@@ -59,9 +59,7 @@
     "targets": ["app"],
     "category": "DeveloperTool",
     "externalBin": [
-      "binaries/agent-browser",
-      "binaries/agent-desktop",
-      "binaries/agent-desktop-macos-helper",
+      "binaries/ondra-browser",
       "binaries/ondra-binary",
       "binaries/ondra-simhelper",
       "binaries/ondra-cuhost",
@@ -80,7 +78,6 @@
     "resources": {
       "binaries/ondra-bgguard.dylib": "ondra-bgguard.dylib",
       "dmg/background.tiff": "dmg-background.tiff",
-      "resources/agent-browser-skills/": "agent-browser-skills/",
       "resources/components.json": "components.json",
       "../skills/": "app-skills/",
       "../extensions/": "app-extensions/"

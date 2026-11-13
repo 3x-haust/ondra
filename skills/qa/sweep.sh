@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open pages one after another in your agent-browser tab and print one line per
+# Open pages one after another in your ondra-browser tab and print one line per
 # page: load time, page errors, console errors, failed requests (4xx/5xx) and
 # the screen's first heading (BLANK when it shows almost nothing, hscroll when
 # it scrolls sideways).
@@ -13,7 +13,7 @@
 # tab). The base URL is opened once before the first such step.
 #
 # Uses the tab and settings you already have (viewport, dark mode, login): set
-# those first with `agent-browser set ...`. QA_SLOW_MS (default 3000) marks a
+# those first with `ondra-browser set ...`. QA_SLOW_MS (default 3000) marks a
 # slow load; QA_IGNORE is a regex of request URLs to leave out (noise you have
 # already explained, e.g. a missing favicon). Exit status 1 if any page failed.
 set -uo pipefail
@@ -24,7 +24,7 @@ slow=${QA_SLOW_MS:-3000}
 ignore=${QA_IGNORE:-'^$'}
 command -v jq >/dev/null || { echo "sweep.sh needs jq" >&2; exit 2; }
 
-ab() { agent-browser "$@" 2>/dev/null; }
+ab() { ondra-browser "$@" 2>/dev/null; }
 paths=("$@")
 if [ ${#paths[@]} -eq 0 ]; then
   while IFS= read -r p; do [[ -z "$p" || "$p" == \#* ]] || paths+=("$p"); done

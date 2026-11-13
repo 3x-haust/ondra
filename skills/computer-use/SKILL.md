@@ -8,7 +8,7 @@ description: >
   app ignores an action.
 metadata:
   ondra-tools: 'computer'
-  ondra-commands: '\bagent-desktop\b'
+  ondra-commands: '\bshot-check\.sh\b'
 ---
 
 # Computer use
@@ -44,8 +44,8 @@ and their front app stay as they are.
   frame) is moved back onto the main display automatically.
 - The user's own mouse and keys during an action are theirs, not a failure.
 
-Do not drive the host yourself. Do not use `agent-desktop`, AppleScript or System
-Events UI scripting, `cliclick`, `open` with activation, or raw CGEvent/AX/PID
+Do not drive the host yourself. Do not use AppleScript or System Events UI
+scripting, `cliclick`, `open` with activation, or raw CGEvent/AX/PID
 input from the shell: they are blocked and would take the user's focus. Running
 the helper binary directly from the shell is also not the sanctioned path — use
 the `computer` tool, which keeps the background checks and the observation state.

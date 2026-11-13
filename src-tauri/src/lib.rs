@@ -2,7 +2,7 @@
 //! item, and the modules that own processes and files:
 //!   engine  — agent processes (bundled 3xhaustPi engine, RPC over stdio)
 //!   pty     — in-app terminals (and account login)
-//!   tools   — bundled agent-browser + Chrome, agent-desktop, permissions
+//!   tools   — bundled ondra-browser + Chrome, ondra-cuhost, permissions
 //!   components — the engine, Chrome and the analyzer, kept outside the app (fetched once per version)
 //!   browser — the one shared browser every job uses (own tab, shared logins)
 //!   keychain — sign-in from the macOS keychain without the agent seeing it
@@ -201,7 +201,7 @@ fn kill_children(app: &AppHandle) {
     browser::stop(app);
 }
 
-/// `ondra --keychain-credential`: agent-browser's credential plugin (see keychain.rs).
+/// `ondra --keychain-credential`: ondra-browser's keychain helper (see keychain.rs).
 /// Returns the exit code when the binary was started as a plugin.
 pub fn plugin_mode() -> Option<i32> {
     let args: Vec<String> = std::env::args().skip(1).collect();

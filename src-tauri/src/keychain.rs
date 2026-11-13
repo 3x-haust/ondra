@@ -1,12 +1,12 @@
-//! A credential provider for agent-browser's `auth login --credential-provider
+//! The credential helper for ondra-browser's `auth login --credential-provider
 //! keychain`, so a job can sign in without ever seeing the password.
 //!
-//! agent-browser runs this binary as a plugin (`ondra --keychain-credential`)
-//! over the `agent-browser.plugin.v1` stdio protocol: one JSON request on
-//! stdin, one JSON reply on stdout. The password goes macOS keychain →
-//! this process → agent-browser (memory) → the page's password field. It is
-//! never printed anywhere else, logged, or written to disk, and agent-browser
-//! itself keeps plugin credentials out of its output.
+//! ondra-browser runs this binary as its helper (`ondra --keychain-credential`)
+//! over the `ondra.keychain.v1` stdio protocol: one JSON request on stdin,
+//! one JSON reply on stdout. The password goes macOS keychain → this process →
+//! ondra-browser (memory) → the page's password field. It is never printed
+//! anywhere else, logged, or written to disk, and ondra-browser keeps it out
+//! of every output.
 //!
 //! Lookup: the login keychain (the user's default search list) by the host
 //! of the login URL, then by its parent domains (`accounts.example.com` →
@@ -19,15 +19,15 @@ use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 pub const FLAG: &str = "--keychain-credential";
-const PROTOCOL: &str = "agent-browser.plugin.v1";
+const PROTOCOL: &str = "ondra.keychain.v1";
 const SECURITY: &str = "/usr/bin/security";
 
 /// Entry point for plugin mode. `args` are what follows the flag: an optional
 /// keychain file to search instead of the default list (used by tests).
 pub fn plugin_main(args: &[String]) -> i32 {
-    // Only the bundled agent-browser gets an answer: run by hand (or by an
+    // Only the bundled ondra-browser gets an answer: run by hand (or by an
     // agent's shell) this would print the secret.
-    if !called_by_agent_browser() {
+    if !called_by_browser() {
         return reply_error("not allowed");
     }
     let keychain = args.first().filter(|a| !a.is_empty()).cloned();
@@ -79,11 +79,11 @@ fn exe_of(_pid: u32) -> Option<std::path::PathBuf> {
     None
 }
 
-/// The parent process is the agent-browser that ships next to this binary.
-fn called_by_agent_browser() -> bool {
+/// The parent process is the ondra-browser that ships next to this binary.
+fn called_by_browser() -> bool {
     let Some(parent) = exe_of(std::os::unix::process::parent_id()).and_then(|p| p.canonicalize().ok()) else { return false };
     let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) else { return false };
-    let bundled = ["agent-browser", "agent-browser-aarch64-apple-darwin", "agent-browser-x86_64-apple-darwin"];
+    let bundled = ["ondra-browser", "ondra-browser-aarch64-apple-darwin", "ondra-browser-x86_64-apple-darwin"];
     bundled.iter().any(|name| dir.join(name).canonicalize().is_ok_and(|p| p == parent))
 }
 

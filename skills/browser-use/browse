@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""browse: drive this job's browser tab in few, small, fast steps (agent-browser underneath).
+"""browse: drive this job's browser tab in few, small, fast steps (ondra-browser underneath).
 
   browse open <url>              load light, wait for it to settle, then `look`        (one call)
   browse look [-s css] [--all] [--urls]
@@ -9,7 +9,7 @@
                                  the main content as markdown (no menus, ads, footers);
                                  with a url, opens it first (light), all in one call
   browse do "<cmd>" ["<cmd>" ...] [--read [read options]]
-                                 agent-browser commands in one batch (stops at the first
+                                 ondra-browser commands in one batch (stops at the first
                                  failure), wait for the page to settle, then `look` (on the
                                  same page only what changed), or `read` with --read
   browse visuals on|off          on: images, fonts, media, ads and animations come back
@@ -19,7 +19,7 @@
 
 Light is the default: images, media, fonts and ad/tracker requests are blocked and
 motion is reduced in this tab only (other jobs and the app's browser panel are not
-touched). Uses AGENT_BROWSER_* from the environment, like plain agent-browser.
+touched). Uses ONDRA_BROWSER_* from the environment, like plain ondra-browser.
 """
 
 import difflib
@@ -30,8 +30,8 @@ import subprocess
 import sys
 import time
 
-AB = os.environ.get("BROWSE_AGENT_BROWSER", "agent-browser")
-SESSION = os.environ.get("AGENT_BROWSER_SESSION", "default")
+AB = os.environ.get("BROWSE_BIN", "ondra-browser")
+SESSION = os.environ.get("ONDRA_BROWSER_SESSION", "default")
 STATE_DIR = os.path.join(os.environ.get("APP_SCRATCH_DIR") or os.environ.get("TMPDIR") or "/tmp", ".browse")
 STATE = os.path.join(STATE_DIR, re.sub(r"[^\w.-]", "_", SESSION) + ".json")
 
@@ -91,7 +91,7 @@ def save_state(st):
 
 
 def batch(cmds, bail=True):
-    """Run commands in one agent-browser call: [(command, ok, result | error)]."""
+    """Run commands in one ondra-browser call: [(command, ok, result | error)]."""
     args = [AB, "batch", "--json"] + (["--bail"] if bail else [])
     t = time.time()
     p = subprocess.run(args, input=json.dumps(cmds), capture_output=True, text=True)
@@ -100,7 +100,7 @@ def batch(cmds, bail=True):
     try:
         rows = json.loads(p.stdout)
     except ValueError:
-        sys.stderr.write((p.stderr or p.stdout or "agent-browser gave no answer").strip() + "\n")
+        sys.stderr.write((p.stderr or p.stdout or "ondra-browser gave no answer").strip() + "\n")
         sys.exit(p.returncode or 1)
     return [(r.get("command") or [], bool(r.get("success", r.get("error") is None)), r.get("result") if r.get("error") is None else r.get("error")) for r in rows]
 
@@ -122,10 +122,10 @@ def setup(st, url=None):
     daemon): light mode's routes and reduced motion. Returns (commands to run first,
     the open command for `url`)."""
     pid = daemon_pid()
-    if not pid and "AGENT_BROWSER_INIT_SCRIPTS" not in os.environ:
+    if not pid and "ONDRA_BROWSER_INIT_SCRIPTS" not in os.environ:
         # the app sets this for every job; without it, a daemon this call starts gets net.js
         # (only one starting now: given to a running daemon, it would drop that tab's routes)
-        os.environ["AGENT_BROWSER_INIT_SCRIPTS"] = NET_JS
+        os.environ["ONDRA_BROWSER_INIT_SCRIPTS"] = NET_JS
     cmds = []
     if not st.get("visual") and not (pid and st.get("light_pid") == pid):
         st["pending"] = True
@@ -528,7 +528,7 @@ def cmd_look(argv):
 
 def cmd_do(argv):
     if not argv:
-        sys.exit('usage: browse do "<agent-browser command>" ...')
+        sys.exit('usage: browse do "<ondra-browser command>" ...')
     st = load_state()
     cmds, read = [], None
     if "--read" in argv:
@@ -647,7 +647,7 @@ def main():
     fn = {"open": cmd_open, "goto": cmd_open, "look": cmd_look, "snapshot": cmd_look, "do": cmd_do, "read": cmd_read,
           "visuals": cmd_visuals, "shot": cmd_shot, "screenshot": cmd_shot}.get(cmd)
     if not fn:
-        sys.exit(f"browse: unknown command {cmd!r} (open, look, read, do, visuals, shot); anything else: agent-browser {cmd} ...")
+        sys.exit(f"browse: unknown command {cmd!r} (open, look, read, do, visuals, shot); anything else: ondra-browser {cmd} ...")
     fn(rest)
 
 

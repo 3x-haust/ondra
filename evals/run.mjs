@@ -63,7 +63,7 @@ const devices = () => {
 };
 
 // commands that would take the user's focus or draw on their screen
-const FOCUS = [/--activate\b/, /\bfocus-window\b/, /agent-desktop\s+focus\b/, /--headed\b/, /--cursor\b/, /cursor-overlay/, /\bmouse-(move|click|down|up|wheel)\b/, /(^|\s)open\s+(?!.*-g)(-[a-zA-Z]+\s+)*-a\b/];
+const FOCUS = [/--activate\b/, /\bfocus-window\b/, /--headed\b/, /--cursor\b/, /cursor-overlay/, /\bmouse-(move|click|down|up|wheel)\b/, /(^|\s)open\s+(?!.*-g)(-[a-zA-Z]+\s+)*-a\b/];
 
 /** The failed tool calls with their output, from the job's engine session. */
 function failedOutputs(taskId) {

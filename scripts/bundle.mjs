@@ -1,6 +1,6 @@
 // Puts everything Ondra needs in place, so installing the app is the only step a user takes:
-//   • agent-browser, agent-desktop (+ macOS helper)   → src-tauri/binaries/<name>-<triple>
-//   • agent-browser built-in skills                    → src-tauri/resources/agent-browser-skills
+//   • the Swift helpers (ondra-browser, ondra-cuhost, ondra-simhelper) and ondra-remote,
+//     built from source by src-tauri/helpers/build.sh → src-tauri/binaries/<name>-<triple>
 // and the components, which live outside the app's update package (scripts/components.mjs):
 //   • the agent engine (3xhaustPi coding agent, one binary, and its support files) → src-tauri/resources/engine
 //   • Chrome for Testing (headless shell)              → src-tauri/resources/chrome
@@ -9,7 +9,7 @@
 // version once and writes src-tauri/resources/components.json, which the app reads to fetch them.
 // Idempotent: anything already up to date is left alone.
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,45 +33,11 @@ const log = (msg) => console.log(`bundle: ${msg}`);
 mkdirSync(binDir, { recursive: true });
 mkdirSync(resDir, { recursive: true });
 
-// the iOS simulator helper (live screen + touches) is built from source here
+// our own helpers (browser tool, computer use, iOS simulator, remote) are built from source here
 execFileSync("sh", [join(tauri, "helpers", "build.sh")], { stdio: "inherit" });
-
-function same(src, dest) {
-  if (!existsSync(dest)) return false;
-  const a = statSync(src);
-  const b = statSync(dest);
-  return a.size === b.size && b.mtimeMs >= a.mtimeMs;
-}
-
-function copyBin(name, src) {
-  if (!existsSync(src)) {
-    console.error(`bundle: missing ${src}`);
-    process.exit(1);
-  }
-  const dest = join(binDir, `${name}-${triple}`);
-  const fresh = same(src, dest);
-  if (!fresh) copyFileSync(src, dest);
-  chmodSync(dest, 0o755);
-  log(`${name}${fresh ? " (up to date)" : ""}`);
-}
 
 // ── native static binary analysis (engine, decompiler, libraries and source) ──
 await bundleBinaryAnalysis();
-
-// ── agent-browser / agent-desktop ──
-copyBin("agent-browser", join(root, `node_modules/agent-browser/bin/agent-browser-darwin-${nodeArch}`));
-// agent-desktop 1.1.0 refuses to work while macOS lists an app with pid -1
-// (Xcode's Device Hub on macOS 27). Until upstream fixes it we ship a build with
-// scripts/patches/agent-desktop-1.1.0-pid-minus-one.patch, kept at
-// ~/.cache/ondra/agent-desktop-patched (build: checkout v1.1.0, apply, cargo build --release -p agent-desktop).
-const patchedDesktop = join(process.env.HOME ?? "", ".cache/ondra/agent-desktop-patched");
-copyBin("agent-desktop", existsSync(patchedDesktop) ? patchedDesktop : join(root, `node_modules/agent-desktop/bin/agent-desktop-darwin-${nodeArch}`));
-copyBin("agent-desktop-macos-helper", join(root, `node_modules/agent-desktop/bin/agent-desktop-macos-helper-darwin-${nodeArch}`));
-
-const skillsDest = join(resDir, "agent-browser-skills");
-rmSync(skillsDest, { recursive: true, force: true });
-cpSync(join(root, "node_modules/agent-browser/skill-data"), skillsDest, { recursive: true });
-log("agent-browser skills");
 
 // ── engine: 3xhaustPi coding agent compiled with bun ──
 // the engine build worktree tracks main (the main checkout may be on a feature branch)

@@ -148,6 +148,8 @@ pnpm release notes.md          # release build (see scripts/release.mjs)
 - The engine, Chrome and binary analyzer are components downloaded once per version. Updates use the app and any changed components; the DMG's app includes these components.
 - Static binary analysis includes radare2, r2ghidra, native libraries and processor data, with no separate analysis engine to install. See [build and package checks](tools/binary-analysis/README.md).
 
+- The browser tool (`ondra-browser`) and the computer-use helper (`ondra-cuhost`) are ours, written in Swift with no third-party code: `src-tauri/helpers/browser/` and `src-tauri/helpers/cuhost.swift`, built by `src-tauri/helpers/build.sh` (Xcode command line tools).
+
 </details>
 
 <details>

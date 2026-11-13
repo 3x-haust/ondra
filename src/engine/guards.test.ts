@@ -72,10 +72,10 @@ describe("isTestRun", () => {
       expect(isTestRun(c), c).toBe(false);
   });
   it("a program named in what is read or searched is not run", () => {
-    expect(runsProgram("open http://localhost:3217/ >/dev/null 2>&1; agent-browser eval \"document.cookie\"", /\bagent-browser\b/)).toBe(true);
-    expect(runsProgram("echo \"== $p $(agent-browser get url)\"", /\bagent-browser\b/)).toBe(true);
-    expect(runsProgram("rg -n agent-browser skills/ | head", /\bagent-browser\b/)).toBe(false);
-    expect(runsProgram("sed -n 1,80p skills/agent-browser/SKILL.md", /\bagent-browser\b/)).toBe(false);
+    expect(runsProgram("open http://localhost:3217/ >/dev/null 2>&1; ondra-browser eval \"document.cookie\"", /\bondra-browser\b/)).toBe(true);
+    expect(runsProgram("echo \"== $p $(ondra-browser get url)\"", /\bondra-browser\b/)).toBe(true);
+    expect(runsProgram("rg -n ondra-browser skills/ | head", /\bondra-browser\b/)).toBe(false);
+    expect(runsProgram("sed -n 1,80p skills/ondra-browser/SKILL.md", /\bondra-browser\b/)).toBe(false);
   });
 });
 

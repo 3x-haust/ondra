@@ -59,7 +59,7 @@ done
 URL=$(gh pr view "$PR" --json url -q .url)
 echo "PR: $URL / ${#ABS[@]} file(s)"
 
-ab() { agent-browser "$@"; }
+ab() { ondra-browser "$@"; }
 # eval prints its result as JSON: a string comes back as plain text, anything else as JSON
 # a failed eval prints nothing instead of ending the script
 js() { local o; o=$(ab eval "$1" 2>/dev/null) || o=""; printf '%s\n' "$o" | tail -1 | python3 -c 'import json,sys

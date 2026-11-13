@@ -160,10 +160,10 @@ What tends to look native rather than generated:
   network and match the app.
 
 Before you send it, look at it. In your browser tab: `browse open
-"file://<page>.html"`, then `agent-browser set viewport 830 900` and
+"file://<page>.html"`, then `ondra-browser set viewport 830 900` and
 `browse shot`, then again at 420 wide (a blank or half-drawn shot usually
 means a script failed). Set `height` to the page's real height
-(`agent-browser eval "Math.ceil(document.body.getBoundingClientRect().bottom)"`)
+(`ondra-browser eval "Math.ceil(document.body.getBoundingClientRect().bottom)"`)
 so it neither scrolls inside nor leaves a gap.
 
 ## Drafts before they go out

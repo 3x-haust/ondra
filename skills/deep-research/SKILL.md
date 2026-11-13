@@ -35,7 +35,7 @@ How strong research agents work, and what the papers found:
 | `notes.jsonl` | one fact per line: `{"q":1,"id":"q1-…","claim":"…","url":"…","title":"…","published":"2026-04-21","quote":"≤ 2 lines, verbatim","source":"primary\|secondary"}` (+ `risk`, `counter`: `checking.md`) |
 | `sources/`, `claims.json` | page copies `web.py` saved; each claim's status, from `check-research.py` |
 | `report.html` | the report, from `report.html` in this skill's folder |
-| `<보고서 이름>.pdf` | printed with `pdf.sh` in this skill's folder, named for what it is about (e.g. `CUA와 agent-desktop 비교.pdf`) so the user can tell reports apart |
+| `<보고서 이름>.pdf` | printed with `pdf.sh` in this skill's folder, named for what it is about (e.g. `CUA와 브라우저 에이전트 비교.pdf`), never `report.pdf` |
 | `summary.html` | the chat card: a one-screen summary of the PDF, from `summary.html` in this skill's folder |
 
 Anything else (a script that checks an example or a calculation, scratch files) goes in `$APP_SCRATCH_DIR`, never the working folder: research changes nothing in the user's repo.
@@ -153,7 +153,7 @@ Then print it:
 "<this skill's folder>/pdf.sh" "$R/report.html" "$R/<보고서 이름>.pdf"
 ```
 
-The report's name is a short noun phrase for what it covers ("CUA와 agent-desktop 비교"), not the answer sentence. Fill the template's `@page` footer with it and the topic in a few words; the page number is already there.
+The report's name is a short noun phrase for what it covers ("CUA와 브라우저 에이전트 비교"), not the answer sentence. Fill the template's `@page` footer with it and the topic in a few words: the name and topic sit on the left of every page, the page number ("3 / 13") on the right. Keep the rest of the rule as it is.
 
 Check the PDF once (first page, size, page count): not blank, not cut off.
 

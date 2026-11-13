@@ -1,5 +1,6 @@
-//! The tools that ship with the app: agent-browser (+ a Chrome for Testing
-//! headless shell, a component: see components.rs), agent-desktop (+ its macOS helper). Nothing is
+//! The tools that ship with the app: ondra-browser (our browser tool, built from
+//! helpers/browser, + a Chrome for Testing headless shell, a component: see
+//! components.rs) and ondra-cuhost (background Mac app control). Nothing is
 //! installed by hand; the only steps macOS insists on are the Accessibility
 //! and Screen Recording grants, which belong to this app because it spawns
 //! the tools.
@@ -165,7 +166,7 @@ pub fn guard_dylib(app: &AppHandle) -> Option<PathBuf> {
     [bundled, Some(dev)].into_iter().flatten().find(|p| p.is_file())
 }
 
-/// The Chrome agent-browser drives: the browser component (see components.rs), the
+/// The Chrome ondra-browser drives: the browser component (see components.rs), the
 /// one an older app kept in its Resources, else a system Chrome.
 pub fn chrome_path(app: &AppHandle) -> Option<PathBuf> {
     if let Some(bin) = crate::components::path(app, "chrome").or_else(|| resource(app, "chrome")).and_then(|d| chrome_in(&d)) {
@@ -190,23 +191,11 @@ pub fn chrome_in(dir: &Path) -> Option<PathBuf> {
     None
 }
 
-/// A Command for agent-browser that finds its skills and its Chrome.
-pub fn agent_browser(app: &AppHandle) -> Option<Command> {
-    let mut cmd = Command::new(sidecar("agent-browser")?);
-    if let Some(dir) = resource(app, "agent-browser-skills") {
-        cmd.env("AGENT_BROWSER_SKILLS_DIR", dir);
-    }
+/// A Command for ondra-browser that finds its Chrome.
+pub fn browser_command(app: &AppHandle) -> Option<Command> {
+    let mut cmd = Command::new(sidecar("ondra-browser")?);
     if let Some(chrome) = chrome_path(app) {
-        cmd.env("AGENT_BROWSER_EXECUTABLE_PATH", chrome);
-    }
-    Some(cmd)
-}
-
-/// A Command for agent-desktop with its macOS helper wired up.
-pub fn agent_desktop() -> Option<Command> {
-    let mut cmd = Command::new(sidecar("agent-desktop")?);
-    if let Some(helper) = sidecar("agent-desktop-macos-helper") {
-        cmd.env("AGENT_DESKTOP_MACOS_HELPER_PATH", helper);
+        cmd.env("ONDRA_BROWSER_EXECUTABLE_PATH", chrome);
     }
     Some(cmd)
 }
@@ -230,16 +219,11 @@ pub struct ToolStatus {
 /// Async so the checks (a few child processes) run off the main thread.
 #[tauri::command]
 pub async fn tool_status(app: AppHandle) -> ToolStatus {
-    let desktop_version = first_line(agent_desktop(), &["version"]).map(|line| {
-        // `agent-desktop version` prints a JSON envelope; keep just the number.
-        serde_json::from_str::<serde_json::Value>(&line)
-            .ok()
-            .and_then(|v| v.pointer("/data/version").and_then(|s| s.as_str()).map(str::to_string))
-            .unwrap_or(line)
-    });
+    // `ondra-cuhost --version` / `ondra-browser --version` print "<name> <version>"
+    let version = |name: &str| first_line(sidecar(name).map(Command::new), &["--version"]).map(|s| s.trim_start_matches(name).trim().to_string());
+    let desktop_version = version("ondra-cuhost");
     ToolStatus {
-        browser_version: first_line(sidecar("agent-browser").map(Command::new), &["--version"])
-            .map(|s| s.trim_start_matches("agent-browser").trim().to_string()),
+        browser_version: version("ondra-browser"),
         chrome_ready: chrome_path(&app).is_some(),
         desktop_version,
         accessibility: accessibility_granted(),
@@ -270,21 +254,15 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         // engine.rs appends the user's own PATH after this.
         env.push(("PATH".into(), dir.display().to_string()));
     }
-    // `browse`, the browser-use skill's lean loop over agent-browser
+    // `browse`, the browser-use skill's lean loop over ondra-browser
     // and its net.js on every page of the job's tab, so `browse` can tell when a page is done
     // loading data (it must be there when the session's daemon starts)
     if let Some(dir) = bundled_skills_root(&app).map(|r| r.join("browser-use")).filter(|d| d.join("browse").is_file()) {
-        env.push(("AGENT_BROWSER_INIT_SCRIPTS".into(), dir.join("net.js").display().to_string()));
+        env.push(("ONDRA_BROWSER_INIT_SCRIPTS".into(), dir.join("net.js").display().to_string()));
         env.push(("PATH".into(), dir.display().to_string()));
     }
-    if let Some(dir) = resource(&app, "agent-browser-skills") {
-        env.push(("AGENT_BROWSER_SKILLS_DIR".into(), dir.display().to_string()));
-    }
     if let Some(chrome) = chrome_path(&app) {
-        env.push(("AGENT_BROWSER_EXECUTABLE_PATH".into(), chrome.display().to_string()));
-    }
-    if let Some(helper) = sidecar("agent-desktop-macos-helper") {
-        env.push(("AGENT_DESKTOP_MACOS_HELPER_PATH".into(), helper.display().to_string()));
+        env.push(("ONDRA_BROWSER_EXECUTABLE_PATH".into(), chrome.display().to_string()));
     }
     // `ondra-binary` runs the analyzer component; while it is still coming, the folder it will be
     // in (the launcher waits for it there)
@@ -307,10 +285,10 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     match shared {
         Some(port) => env.extend(crate::browser::attach_env(port, &session)),
         // the shared browser would not start: the job gets a browser of its own
-        None => env.push(("AGENT_BROWSER_SESSION".into(), session)),
+        None => env.push(("ONDRA_BROWSER_SESSION".into(), session)),
     }
-    if let Some(plugins) = crate::browser::plugins_env() {
-        env.push(("AGENT_BROWSER_PLUGINS".into(), plugins));
+    if let Some(helper) = crate::browser::keychain_helper() {
+        env.push(("ONDRA_BROWSER_KEYCHAIN".into(), helper));
     }
     if let Some(sdk) = crate::devices::job_sdk(&crate::engine::data_dir(&app)) {
         let sdk = sdk.display().to_string();
@@ -349,7 +327,7 @@ fn output_within(mut cmd: Command, limit: std::time::Duration) -> Option<Vec<u8>
 #[tauri::command]
 pub async fn browser_stream_port(app: AppHandle, worker_id: String, space: Option<String>) -> Option<u16> {
     let shared = crate::browser::port(&app, &space.unwrap_or_default());
-    let mut cmd = agent_browser(&app)?;
+    let mut cmd = browser_command(&app)?;
     let session = crate::browser::session_for(&worker_id, shared);
     // asking a session that is not running would start it (and open a tab)
     if !crate::browser::session_running(&app, &session) {

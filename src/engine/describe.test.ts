@@ -72,7 +72,7 @@ describe("describeBrowser", () => {
     expect(b("wait --url https://acme.dev/done").target).toBe("acme.dev/done");
     expect(b("wait 1000")).toMatchObject({ label: "기다림", target: undefined });
     // a chain: the step that does something, not the look around it
-    expect(b("open https://acme.dev && agent-browser --session s wait 1000 && agent-browser snapshot -i")).toMatchObject({ label: "열었음", target: "acme.dev" });
+    expect(b("open https://acme.dev && ondra-browser --session s wait 1000 && ondra-browser snapshot -i")).toMatchObject({ label: "열었음", target: "acme.dev" });
     expect(b("cookies clear")).toMatchObject({ label: "브라우저 씀", action: "other" });
     // browse, the skill's lean loop: its own verbs, and the step inside a `do` batch
     expect(b("browse open https://acme.dev/pricing")).toMatchObject({ label: "열었음", target: "acme.dev/pricing" });

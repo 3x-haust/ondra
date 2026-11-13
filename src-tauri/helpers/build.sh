@@ -6,6 +6,8 @@
 #                      ScreenCaptureKit window capture + an off-screen display to hold
 #                      background windows), signed with cuhost.entitlements. If a
 #                      per-source header (cuhost.h) exists it is imported.
+#   - ondra-browser:   the browser tool jobs and the app drive Chrome with (browser/,
+#                      one Swift module: CDP client, session daemon, snapshot, stream).
 #   - ondra-bgguard.dylib: injected into an app cuhost starts in the background so the
 #                      app cannot turn itself into a Dock app or come to the front.
 #                      A plain resource (not externalBin); universal, team-signed.
@@ -31,6 +33,16 @@ build() {
   fi
   chmod 755 "$out"
   echo "$name: built $out"
+}
+
+# ondra-browser: every .swift file in browser/ is one program.
+build_browser() {
+  out="$here/../binaries/ondra-browser-$triple"
+  newest=$(find "$here/browser" -name '*.swift' -newer "$out" 2>/dev/null | head -1)
+  if [ -f "$out" ] && [ -z "$newest" ]; then echo "ondra-browser: up to date"; return 0; fi
+  xcrun swiftc -swift-version 5 -O -target "$arch-apple-macos13.0" "$here"/browser/*.swift -o "$out"
+  chmod 755 "$out"
+  echo "ondra-browser: built $out"
 }
 
 # The guard is one universal dylib (both arches), named without a triple so cuhost can
@@ -72,5 +84,6 @@ build_remote() {
 
 build ondra-simhelper simhelper.swift ""
 build ondra-cuhost cuhost.swift cuhost.entitlements
+build_browser
 build_guard
 build_remote

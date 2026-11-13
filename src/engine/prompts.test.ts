@@ -164,7 +164,7 @@ describe("background host computer-use instructions", () => {
     expect(prompt).toContain("background");
     // never teaches the raw host-GUI escape hatches as a fallback
     expect(prompt).toContain("blocked");
-    expect(prompt).toMatch(/AppleScript\/System Events|agent-desktop/);
+    expect(prompt).toMatch(/AppleScript\/System Events/);
     // there is no VM mode to fall back to
     expect(prompt).not.toMatch(/guest|isolated/i);
     expect(prompt).not.toContain("No host fallback");
@@ -176,7 +176,7 @@ describe("background host computer-use instructions", () => {
     expect(skill).toContain("never take the user's focus");
     expect(skill).not.toMatch(/guest|isolated/i);
     // and raw host GUI automation is still refused, not demonstrated
-    expect(skill).not.toMatch(/agent-desktop (launch|press|click|batch)|open -g -a/);
+    expect(skill).not.toMatch(/open -g -a/);
     expect(skill).toMatch(/cliclick|AppleScript or System Events/);
   });
 });

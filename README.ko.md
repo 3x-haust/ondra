@@ -148,6 +148,8 @@ pnpm release notes.md          # 릴리스 빌드 (scripts/release.mjs 참고)
 - 엔진, Chrome, 바이너리 분석기는 버전별로 한 번 받는 컴포넌트예요. 업데이트에는 앱과 변경된 컴포넌트를 사용하고, DMG의 앱에는 이 구성 요소가 포함돼요.
 - 정적 바이너리 분석에는 radare2와 r2ghidra, 네이티브 라이브러리와 프로세서 데이터가 포함돼요. 별도 분석 엔진 설치는 필요 없어요. [빌드와 패키지 검사](tools/binary-analysis/README.md)를 참고해요.
 
+- 브라우저 도구(`ondra-browser`)와 컴퓨터 유즈 도우미(`ondra-cuhost`)는 우리가 Swift로 직접 만든 거예요. 외부 코드 없이 `src-tauri/helpers/browser/`와 `src-tauri/helpers/cuhost.swift`에 있고, `src-tauri/helpers/build.sh`가 빌드해요(Xcode 명령줄 도구).
+
 </details>
 
 <details>

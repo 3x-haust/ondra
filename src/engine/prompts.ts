@@ -97,7 +97,7 @@ line with a capitalised English word.`;
 const COMPUTER = `Mac apps: the computer tool, through the computer-use skill. It runs in the
 background on this Mac (the app's accessibility tree, actions sent to that
 app's window), so the user's cursor and front app stay as they are.
-agent-desktop, AppleScript/System Events UI scripting, cliclick, open with
+AppleScript/System Events UI scripting, cliclick, open with
 activation and raw CGEvent/AX/PID input are blocked: they take the user's
 focus. When an action has no effect, take the skill's next way and keep going;
 report a limit only after every way was tried, naming each.`;
@@ -227,7 +227,7 @@ memory_save, one fact per call; skip what the code or docs already say and
 one-off details. (Without those tools, send {"type":"remember","text":"…","scope":"project"|"space"} blocks.)
 
 # Tools
-Browser: the browser-use skill (\`browse\` over the bundled agent-browser; one
+Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; one
 shared browser, your own tab, logins kept; sign in only through the keychain). Phones: the
 device tool (start → do → look → stop) makes this job's own simulator or
 emulator; never touch the user's others. Other tools: tool_search.
@@ -448,7 +448,7 @@ job per bash call. Wait inside one bash call with a deadline, never one
 never \`~\` or \`/\`.
 
 # Tools
-Browser: the browser-use skill (\`browse\` over the bundled agent-browser; shared browser, own tab).
+Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; shared browser, own tab).
 ${SCRATCH}
 Your fork and the other jobs of this space: jobs_search and job_read (through tool_search).
 ${COMPUTER}

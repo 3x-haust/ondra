@@ -126,8 +126,8 @@ const router = () => new SkillRouter(bundled, triggers);
 describe("skill router", () => {
   it("offers a skill when a tool steps into its domain, once", () => {
     const r = router();
-    expect(r.forTool("bash", { command: "agent-browser open https://example.com" })?.skill.name).toBe("browser-use");
-    expect(r.forTool("bash", { command: "agent-browser snapshot" })).toBeUndefined();
+    expect(r.forTool("bash", { command: "ondra-browser open https://example.com" })?.skill.name).toBe("browser-use");
+    expect(r.forTool("bash", { command: "ondra-browser snapshot" })).toBeUndefined();
     expect(r.forTool("bash", { command: "otool -L /Applications/Foo.app/Contents/MacOS/Foo" })?.skill.name).toBe("reverse-engineering");
     expect(r.forTool("write", { path: ".github/workflows/ci.yml" })?.skill.name).toBe("test-ci");
     expect(r.forTool("computer", {})?.skill.name).toBe("computer-use");
@@ -156,8 +156,8 @@ describe("skill router", () => {
     const browser = bundled.find((s) => s.name === "browser-use")!;
     r.forTool("read", { path: browser.filePath });
     expect(r.loaded.has("browser-use")).toBe(true);
-    expect(r.forTool("bash", { command: "agent-browser open x" })).toBeUndefined();
-    expect(r.forMessage("agent-browser로 사이트 열어서 브라우저로 확인해줘").map((s) => s.name)).not.toContain("browser-use");
+    expect(r.forTool("bash", { command: "ondra-browser open x" })).toBeUndefined();
+    expect(r.forMessage("ondra-browser로 사이트 열어서 브라우저로 확인해줘").map((s) => s.name)).not.toContain("browser-use");
   });
 
   it("reads every message, not only the first, and a link in it", () => {
