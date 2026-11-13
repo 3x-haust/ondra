@@ -1417,13 +1417,7 @@
   color: var(--ink-3);
 }
 
-/* 시크릿: one line of what it does, then the add row (name · value · save) */
-.settings-inner .sec-intro {
-  margin: 0 0 var(--s-16);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-  color: var(--ink-3);
-}
+/* 시크릿: the add row (name · value · save), the .env option, the closing note */
 .settings-inner .sec-add {
   display: flex;
   gap: var(--s-8);
@@ -1437,12 +1431,6 @@
   flex: 1;
   min-width: 0;
 }
-.settings-inner .sec-scope {
-  display: flex;
-  align-items: center;
-  gap: var(--s-8);
-  margin: 0 0 var(--s-16);
-}
 .settings-inner .sec-env {
   gap: var(--s-8);
   flex-wrap: wrap;
@@ -1452,9 +1440,15 @@
   color: var(--ink-2);
   font-size: var(--fs-sm);
 }
-.settings-inner .sec-found {
-  gap: var(--s-8);
+.settings-inner .sec-env {
+  align-items: flex-start;
 }
-.settings-inner .sec-found code {
-  font-size: var(--fs-sm);
+.settings-inner .sec-env input {
+  margin-top: 3px;
+}
+.settings-inner .sec-foot {
+  margin: var(--s-12) var(--s-4) 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
 }

@@ -33,6 +33,9 @@ pub struct Saved {
     pub global: Vec<String>,
     #[serde(default)]
     pub projects: BTreeMap<String, Vec<String>>,
+    /// per project: keys of its .env the user deleted here, so the automatic import leaves them
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub skipped: BTreeMap<String, Vec<String>>,
 }
 
 fn names_file(app: &AppHandle) -> PathBuf {
@@ -64,10 +67,12 @@ fn parse(text: &str) -> Saved {
         .or_else(|_| serde_json::from_str::<Vec<String>>(text).map(|global| Saved { global, ..Default::default() }))
         .unwrap_or_default();
     s.global.retain(|n| valid_name(n).is_ok());
-    s.projects.retain(|id, names| {
-        names.retain(|n| valid_name(n).is_ok());
-        valid_project(id) && !names.is_empty()
-    });
+    for map in [&mut s.projects, &mut s.skipped] {
+        map.retain(|id, names| {
+            names.retain(|n| valid_name(n).is_ok());
+            valid_project(id) && !names.is_empty()
+        });
+    }
     s
 }
 
@@ -272,18 +277,6 @@ pub fn looks_secret(key: &str, value: &str) -> bool {
     words.iter().any(|w| k.contains(w)) || url_with_password
 }
 
-#[derive(Serialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Found {
-    pub name: String,
-    /// the file its value comes from (the last one that sets it)
-    pub file: String,
-    /// looks like a key, token or password
-    pub secret: bool,
-    /// can be saved under this name (uppercase, not reserved)
-    pub valid: bool,
-}
-
 /// Each key the project's .env files set, with its last value (never sent to the page).
 fn found_in(folder: &Path) -> BTreeMap<String, (String, String)> {
     let mut out = BTreeMap::new();
@@ -298,40 +291,50 @@ fn found_in(folder: &Path) -> BTreeMap<String, (String, String)> {
     out
 }
 
-/// What the project's .env files hold: names, where from, whether they look secret. No values.
-#[tauri::command]
-pub fn secret_scan(folder: String) -> Vec<Found> {
-    found_in(Path::new(&folder))
-        .into_iter()
-        .filter(|(_, (_, v))| !v.is_empty())
-        .map(|(name, (file, v))| Found { secret: looks_secret(&name, &v), valid: valid_name(&name).is_ok(), name, file })
+/// The keys of a project's .env that the automatic import takes: secret-looking, usable as a
+/// name, not saved for it yet and not deleted here before.
+pub fn to_take(saved: &Saved, project: &str, found: &BTreeMap<String, (String, String)>) -> Vec<String> {
+    let has = |map: &BTreeMap<String, Vec<String>>, n: &String| map.get(project).is_some_and(|l| l.contains(n));
+    found
+        .iter()
+        .filter(|(n, (_, v))| !v.is_empty() && v.len() <= MAX_VALUE && looks_secret(n, v) && valid_name(n).is_ok())
+        .map(|(n, _)| n.clone())
+        .filter(|n| !has(&saved.projects, n) && !has(&saved.skipped, n))
         .collect()
 }
 
-/// Copies the chosen keys from the project's .env files into the keychain as that project's
-/// secrets (.env itself stays as it is). Returns the saved lists and how many were taken.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Synced {
+    pub saved: Saved,
+    /// "project id/NAME" for each key taken this time
+    pub added: Vec<String>,
+}
+
+/// Takes the keys, tokens and passwords this Mac's projects already keep in their .env files
+/// into the keychain as each project's secrets (the files stay as they are). Runs when Settings ›
+/// 시크릿 opens; values never leave this process.
 #[tauri::command]
-pub fn secret_import(app: AppHandle, project: String, folder: String, names: Vec<String>) -> Result<Saved, String> {
-    if !valid_project(&project) {
-        return Err("프로젝트를 알 수 없어요".into());
-    }
-    let found = found_in(Path::new(&folder));
+pub fn secret_sync(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synced, String> {
     let mut saved = read_saved(&app);
-    let list = saved.projects.entry(project.clone()).or_default();
-    for name in names {
-        let Some((_, value)) = found.get(&name).filter(|(_, v)| !v.is_empty() && v.len() <= MAX_VALUE) else { continue };
-        if valid_name(&name).is_err() {
+    let mut added = Vec::new();
+    for (id, folder) in projects {
+        if !valid_project(&id) || !Path::new(&folder).is_dir() {
             continue;
         }
-        store::set(&account(Some(&project), &name), value)?;
-        if !list.contains(&name) {
-            list.push(name);
+        let found = found_in(Path::new(&folder));
+        for name in to_take(&saved, &id, &found) {
+            store::set(&account(Some(&id), &name), &found[&name].1)?;
+            let list = saved.projects.entry(id.clone()).or_default();
+            list.push(name.clone());
+            list.sort();
+            added.push(format!("{id}/{name}"));
         }
     }
-    list.sort();
-    saved.projects.retain(|_, l| !l.is_empty());
-    write_saved(&app, &saved)?;
-    Ok(saved)
+    if !added.is_empty() {
+        write_saved(&app, &saved)?;
+    }
+    Ok(Synced { saved, added })
 }
 
 // ───────────────── commands
@@ -374,6 +377,12 @@ pub fn secret_set(
     }
     store::set(&account(project.as_deref(), &name), &value)?;
     let mut saved = read_saved(&app);
+    if let Some(p) = &project {
+        if let Some(l) = saved.skipped.get_mut(p) {
+            l.retain(|n| n != &name);
+        }
+        saved.skipped.retain(|_, l| !l.is_empty());
+    }
     let list = match &project {
         Some(p) => saved.projects.entry(p.clone()).or_default(),
         None => &mut saved.global,
@@ -407,6 +416,13 @@ pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, fold
                 list.retain(|n| n != &name);
             }
             saved.projects.retain(|_, l| !l.is_empty());
+            // still in its .env (a line changed by hand): the automatic import must not bring it back
+            if folder.as_deref().is_some_and(|f| found_in(Path::new(f)).contains_key(&name)) {
+                let l = saved.skipped.entry(p.clone()).or_default();
+                if !l.contains(&name) {
+                    l.push(name.clone());
+                }
+            }
         }
         None => saved.global.retain(|n| n != &name),
     }
@@ -481,6 +497,19 @@ mod tests {
         assert!(looks_secret("DATABASE_URL", "postgres://u:p@h/db"));
         assert!(!looks_secret("DATABASE_URL", "postgres://h/db"));
         assert!(!looks_secret("PORT", "3000"));
+    }
+
+    #[test]
+    fn takes_only_new_secret_keys() {
+        let mut saved = parse(r#"{"projects":{"p1":["OLD_KEY"]},"skipped":{"p1":["GONE_TOKEN"]}}"#);
+        let found: BTreeMap<String, (String, String)> = [("OLD_KEY", "a"), ("NEW_KEY", "b"), ("GONE_TOKEN", "c"), ("PORT", "3000"), ("lower_key", "d"), ("EMPTY_KEY", "")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), (".env".to_string(), v.to_string())))
+            .collect();
+        assert_eq!(to_take(&saved, "p1", &found), vec!["NEW_KEY"]);
+        assert_eq!(to_take(&saved, "p2", &found), vec!["GONE_TOKEN", "NEW_KEY", "OLD_KEY"]);
+        saved.skipped.clear();
+        assert_eq!(to_take(&saved, "p1", &found), vec!["GONE_TOKEN", "NEW_KEY"]);
     }
 
     #[test]
