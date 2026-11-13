@@ -527,7 +527,7 @@ const codeLike = (label) => !!label && (/[_`]|::|\w:\w|\(\)|=>|[a-z][A-Z]/.test(
  * added), and only the main ones: every box keeps its busiest line, then the busiest of the
  * rest up to a cap. `overview: true|false` on a relation forces it in or out.
  */
-function overviewEdges(map, standFor, boxes) {
+function overviewEdges(map, standFor, boxes, all_ = false) {
   const pairs = new Map();
   const order = new Map(boxes.map((id, i) => [id, i]));
   for (const e of lifted(map, standFor)) {
@@ -542,7 +542,8 @@ function overviewEdges(map, standFor, boxes) {
     const label = [main.labels[0], back.labels[0] ?? back.label].filter(Boolean).join(" ⇄ ") || undefined;
     pairs.set(k, { ...main, label, weight: p.weight + e.count, async: main.async && back.async, overview: p.overview || e.overview ? true : p.overview === false && e.overview === false ? false : undefined });
   }
-  const all = [...pairs.values()].filter((e) => e.overview !== false).sort((a, b) => b.weight - a.weight);
+  const all = [...pairs.values()].filter((e) => all_ || e.overview !== false).sort((a, b) => b.weight - a.weight);
+  if (all_) return all.map((e) => ({ from: e.from, to: e.to, label: e.label, async: e.async || undefined }));
   const keep = new Set(all.filter((e) => e.overview === true));
   for (const id of boxes) {
     const best = all.find((e) => e.from === id || e.to === id);
@@ -594,8 +595,14 @@ function blocks() {
     const inside = new Set(mine.map((c) => c.id));
     // a component of this container stands for itself; anything else for its container (or itself)
     const standFor = (id) => (inside.has(id) ? id : containerOf(id));
-    const edges = lifted(map, standFor).filter((e) => inside.has(e.from) || inside.has(e.to));
-    const outsideIds = [...new Set(edges.flatMap((e) => [e.from, e.to]).filter((id) => !inside.has(id)))];
+    const touching = lifted(map, standFor).filter((e) => inside.has(e.from) || inside.has(e.to));
+    const outsideIds = [...new Set(touching.flatMap((e) => [e.from, e.to]).filter((id) => !inside.has(id)))];
+    // one line per pair here too, every pair shown (outside to outside never was)
+    const near = (id) => {
+      const x = standFor(id);
+      return inside.has(x) || outsideIds.includes(x) ? x : undefined;
+    };
+    const edges = overviewEdges(map, near, [...inside, ...outsideIds], true).filter((e) => inside.has(e.from) || inside.has(e.to));
     // the same picture as the system one, one level down: this container as the zone, its neighbours around it
     const nodes = [
       ...mine.map((c) => ({ id: c.id, label: c.label, zone: cId, kind: kindOf(c, "service"), note: c.note, logo: c.logo, ref: abs(c.entry ?? (c.paths?.[0] && !/[*?]/.test(c.paths[0]) && extname(c.paths[0]) ? c.paths[0] : undefined)) })),
@@ -604,7 +611,7 @@ function blocks() {
         return { id, label: x?.label ?? id, kind: kindOf(x, "app"), note: x?.tech ?? x?.note, logo: x?.logo };
       }),
     ];
-    out.push(clean({ type: "arch", label: `${cont.label} 안`, zones: [{ id: cId, label: cont.label }], nodes, edges: edges.map((e) => ({ from: e.from, to: e.to, label: e.labels[0], async: e.async || undefined })), say: cont.note }));
+    out.push(clean({ type: "arch", label: `${cont.label} 안`, zones: [{ id: cId, label: cont.label }], nodes, edges, say: cont.note }));
   } else if (typeof compId === "string") {
     const c = byId.get(compId);
     if (!c || c.level !== "component") throw new Error(`no component "${compId}"`);
