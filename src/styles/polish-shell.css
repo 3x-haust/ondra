@@ -1712,34 +1712,55 @@
   transition: opacity var(--dur-fast) var(--ease);
 }
 
-/* a job's browser floating in a corner (picture-in-picture): the page, small; on hover a bar
-   with the job, the site, 크게 보기 and ×. Drag to another corner. */
+/* a job's browser floating in a corner (picture-in-picture): the live page, small, with a
+   frosted tag naming the job; on hover the site joins the tag and two round controls appear.
+   Placed by one transform (BrowserPip.tsx moves it), so drags and throws are one motion. */
 .pip {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: var(--z-pop);
-  width: 300px;
-  border-radius: var(--r-xl);
+  width: 320px;
+  border-radius: 14px;
   overflow: hidden;
   background: var(--card);
-  box-shadow: var(--shadow-pop);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 12px 32px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   user-select: none;
   touch-action: none;
-  animation: pip-in var(--dur-slow) var(--ease-drawer);
-  transition: top var(--dur-drawer) var(--ease-drawer), bottom var(--dur-drawer) var(--ease-drawer), left var(--dur-drawer) var(--ease-drawer), right var(--dur-drawer) var(--ease-drawer);
+  will-change: transform;
+  transform-origin: center;
+  transition: box-shadow var(--dur-fast) var(--ease);
 }
-/* clear of the title bar above and the composer below */
-.pip.at-tl { top: 64px; left: var(--s-20); }
-.pip.at-tr { top: 64px; right: var(--s-20); }
-.pip.at-bl { bottom: 112px; left: var(--s-20); }
-.pip.at-br { bottom: 112px; right: var(--s-20); }
+.pip:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.08),
+    0 18px 44px rgba(0, 0, 0, 0.16);
+}
 .pip.dragging {
   cursor: grabbing;
-  transition: none;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 8px 16px rgba(0, 0, 0, 0.1),
+    0 28px 60px rgba(0, 0, 0, 0.22);
 }
+.pip.leaving { pointer-events: none; }
 .pip:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
+}
+/* a hairline inside the rim so a white page doesn't melt into a white app */
+.pip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent);
+  pointer-events: none;
 }
 .pip-screen {
   position: relative;
@@ -1754,6 +1775,7 @@
   object-position: top;
   pointer-events: none;
 }
+.pip-screen > img:first-child { animation: pip-fade var(--dur-slow) var(--ease); }
 .pip-wait {
   position: absolute;
   inset: 0;
@@ -1762,82 +1784,116 @@
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
-.pip-bar {
+/* the job's name, always there: a frosted tag at the bottom left */
+.pip-label {
   position: absolute;
-  inset: auto 0 0;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
   display: flex;
   align-items: center;
-  gap: var(--s-8);
-  padding: var(--s-6) var(--s-6) var(--s-6) var(--s-10);
-  background: var(--card);
-  border-top: 1px solid var(--line);
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
-}
-.pip:hover .pip-bar,
-.pip:focus-within .pip-bar {
-  opacity: 1;
-  transform: none;
-}
-.pip-live {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--bad);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 18%, transparent);
-}
-.pip-what {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent), 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  color: var(--ink);
 }
 .pip-title,
 .pip-site {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pip-title {
-  font-size: var(--fs-xs);
-  color: var(--ink);
-}
+.pip-title { font-weight: 550; flex: 0 1 auto; }
+/* the site slides into the tag on hover */
 .pip-site {
-  font-size: var(--fs-2xs);
+  flex: 0 1 auto;
+  max-width: 0;
+  opacity: 0;
   color: var(--ink-3);
+  transition: max-width var(--dur-slow) var(--ease), opacity var(--dur-slow) var(--ease);
 }
+.pip:hover .pip-site,
+.pip:focus-within .pip-site {
+  max-width: 160px;
+  opacity: 1;
+}
+/* live: a calm accent dot that breathes, not a recording-red light */
+.pip-live {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.pip-live::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  animation: pip-breathe 2.4s var(--ease) infinite;
+}
+/* the controls: two round frosted buttons, top right, on hover */
+.pip-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-2px) scale(0.96);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.pip:hover .pip-tools,
+.pip:focus-within .pip-tools {
+  opacity: 1;
+  transform: none;
+}
+.pip.dragging .pip-tools { opacity: 0; }
 .pip-btn {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--ink-3);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent), 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: var(--ink-2, var(--ink));
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.pip-btn:hover {
-  background: var(--muted);
-  color: var(--ink);
+.pip-btn:hover { background: var(--card); color: var(--ink); }
+.pip-btn:active { transform: scale(0.92); }
+@keyframes pip-fade {
+  from { opacity: 0; }
 }
-@keyframes pip-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
+@keyframes pip-breathe {
+  0% { opacity: 0.35; transform: scale(0.6); }
+  70%, 100% { opacity: 0; transform: scale(1.6); }
 }
 @media (prefers-reduced-motion: reduce) {
   .pip,
-  .pip-bar {
+  .pip-tools,
+  .pip-site,
+  .pip-screen > img:first-child {
     animation: none;
     transition: none;
   }
+  .pip-live::after { animation: none; }
 }
 
 /* Ondra is in beta until 1.0: a quiet mark beside the app's name, 설정 and each version */

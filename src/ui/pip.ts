@@ -28,5 +28,25 @@ export function nearestCorner(x: number, y: number, w: number, h: number): Corne
   return `${y < h / 2 ? "t" : "b"}${x < w / 2 ? "l" : "r"}` as Corner;
 }
 
+/** the preview's width (its height follows the page, 16:10) */
+export const PIP_W = 320;
+/** room left clear: the title bar above, the composer below, the window's sides */
+const EDGE = { top: 60, bottom: 104, side: 16 };
+
+/** where its top-left sits in a corner of a w×h window */
+export function cornerSpot(c: Corner, w: number, h: number, pw: number, ph: number): { x: number; y: number } {
+  return {
+    x: c.endsWith("l") ? EDGE.side : Math.max(EDGE.side, w - EDGE.side - pw),
+    y: c.startsWith("t") ? EDGE.top : Math.max(EDGE.top, h - EDGE.bottom - ph),
+  };
+}
+
+/** Where a thrown preview would come to rest: its centre carried on by its speed (px/ms) as if
+ *  slowing down at a steady rate, so a flick crosses the window and a slow let-go stays near. */
+export function projectRelease(at: { x: number; y: number }, v: { x: number; y: number }): { x: number; y: number } {
+  const carry = 180; // ms of travel a release is worth
+  return { x: at.x + v.x * carry, y: at.y + v.y * carry };
+}
+
 /** a stored corner, or the default (bottom right, where macOS puts its own picture-in-picture) */
 export const cornerOf = (v: unknown): Corner => (CORNERS.includes(v as Corner) ? (v as Corner) : "br");
