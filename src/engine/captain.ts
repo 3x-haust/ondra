@@ -4,6 +4,9 @@ import { createSignal } from "solid-js";
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { addRoutine, routineById } from "./routines";
+import { parseWhen } from "./routineTime";
+import { t as tr } from "../i18n";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
@@ -919,7 +922,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
       // a job's end main added nothing to still shows: its row said it
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : r.kind === "routine" ? `[routine proposed: ${routineById(r.routineId)?.title ?? ""}${routineById(r.routineId)?.draft === false ? " (saved)" : ""}]` : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   // which model this is, said when it changes: asked "너 무슨 모델이야?", main answers from this, not a guess
@@ -1146,7 +1149,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const sent = relay(target, message, {
         by: "main",
         now: true,
-        display: raw.filter((x) => x?.kind !== "remember").length === 1 && fromUser ? original : undefined,
+        display: raw.filter((x) => x?.kind !== "remember" && x?.kind !== "routine").length === 1 && fromUser ? original : undefined,
         isolate: isolateOf.get(space),
       });
       out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
@@ -1213,6 +1216,27 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         replaces: piece(r.replaces),
       });
       if (id) out.push({ kind: "remember", memoryId: id });
+    } else if (r?.kind === "routine" && (r.task || r.prompt)) {
+      // a routine is only proposed here: the card in the chat saves it (or the user changes it first)
+      const when = parseWhen(r.when);
+      if (!when) {
+        out.push({ kind: "answer", text: tr("루틴을 만들려면 언제 실행할지가 필요해요. 예: 매일 9시, 평일 18시, 2시간마다, 새 이슈가 오면."), blocks: [] });
+        continue;
+      }
+      const named = typeof r.project === "string" ? projectsShown(sp(space)).find((p) => p.name.toLowerCase() === String(r.project).toLowerCase()) : undefined;
+      const project = named ?? projectOf(space);
+      const id = addRoutine({
+        space: sp(space),
+        title: String(r.title ?? r.task ?? r.prompt).slice(0, 80),
+        prompt: String(r.task ?? r.prompt),
+        when,
+        mode: r.mode === "fresh" ? "fresh" : "continue",
+        quiet: r.quiet !== false,
+        project: project?.id,
+        draft: true,
+        from: "chat",
+      });
+      out.push({ kind: "routine", routineId: id });
     }
   }
   for (const [projectId, ids] of handed) handDown(sp(space), projectId, original, ids);

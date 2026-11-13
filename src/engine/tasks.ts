@@ -2071,6 +2071,8 @@ export function createTask(f: {
   thinking?: string;
   /** another Mac asked for it */
   from?: Task["from"];
+  /** a run of this routine */
+  routine?: string;
 }): string {
   const id = f.id && !taskById(f.id) ? f.id : uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
@@ -2113,6 +2115,7 @@ export function createTask(f: {
     thinking: f.thinking || undefined,
     permission: state.settings.permission ?? "edits",
     ...(f.from ? { from: f.from } : {}),
+    ...(f.routine ? { routine: f.routine } : {}),
   };
   // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
   const far_ = splitProjectId(f.project);
@@ -2923,13 +2926,13 @@ export async function editTurn(id: string, entryId: string, text: string) {
 // ─────────────────────────────── list housekeeping
 
 export const togglePin = (id: string) => updateTask(id, (t) => (t.pinned = !t.pinned));
-export function archiveTask(id: string, on = true) {
+export function archiveTask(id: string, on = true, o: { quiet?: boolean } = {}) {
   { const r = far(id, "archiveTask", [id, on]); if (r) return r as never; }
   updateTask(id, (t) => {
     t.archived = on;
     if (on) t.pinned = false;
   });
-  if (on) toast(tr("보관했어요"), "info", { label: tr("되돌리기"), run: () => archiveTask(id, false) });
+  if (on && !o.quiet) toast(tr("보관했어요"), "info", { label: tr("되돌리기"), run: () => archiveTask(id, false) });
 }
 export function renameTask(id: string, title: string) {
   { const r = far(id, "renameTask", [id, title]); if (r) return r as never; }

@@ -635,6 +635,23 @@ message, then route each item:
   fixing until every check passes. Its "task" quotes the user's words exactly
   and lists the rules and preferences from memory that apply.
   A QA request is one fork using the qa skill; it splits by area itself.
+- "routine": work the user wants done again and again or later by itself
+  ("매일 아침 9시에 …", "평일 6시마다", "2시간마다", "내일 3시에", "새 이슈 오면
+  …", "PR에 리뷰 달리면 …", "CI 깨지면 고쳐줘"). Give "title" (a few words),
+  "task" (what each run does, in the user's words, complete on its own: a run
+  starts without this chat), "when" and, if not this chat's project,
+  "project": "<project name>". "when" is one of {"kind":"daily","time":"HH:MM",
+  "days":[1,2,3,4,5]} (days 0=Sun…6=Sat, omit for every day), {"kind":"every",
+  "minutes":N} (15 or more), {"kind":"once","at":"YYYY-MM-DDTHH:MM"} (local
+  time), {"kind":"event","event":"issue"|"pr"|"review"|"comment"|"ci"|"release",
+  "filter":"…"} (GitHub on the project's repo: a new issue, a new PR, a review
+  asked of the user, a comment or review on the user's open PRs, a failed run on
+  the default branch, a new release; filter = GitHub search words for
+  issue/pr/review, else words the title must hold). "mode": "continue" (default:
+  each run goes on in the last run's conversation, so "since last time" works)
+  or "fresh" (a clean start each run). "quiet": false only when the user wants
+  to hear even when nothing happened. It is shown to the user as a card they
+  save; don't also start a job for it unless they asked for a run now too.
 - "remember": a lasting preference or fact to keep. Give "text" and "scope"
   ("global", "space" or "project" with "project": absolute folder), and "type"
   ("rule", "preference", "decision", "fact", "procedure" or "lesson"). One

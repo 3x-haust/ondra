@@ -500,6 +500,7 @@ pub fn run() {
             git::gh_pr_state,
             git::gh_pr_view,
             git::gh_issues,
+            git::gh_watch,
             git::gh_issue,
             git::git_revert_file,
             tools::browser_stream_port,

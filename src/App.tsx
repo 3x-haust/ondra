@@ -1,4 +1,5 @@
 import { PairAskDialog } from "./views/RemoteSettings";
+import { quietRun, startRoutines } from "./engine/routines";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
@@ -99,6 +100,7 @@ export default function App() {
     // jobs still running in the engine from before a reload: hear them again
     if (!location.search.includes("fixture")) await import("./engine/tasks").then((m) => m.reattachJobs().then(() => m.sweepWorktrees(true))).catch(() => {});
     startScheduler();
+    startRoutines();
     if (!location.search.includes("fixture")) void import("./engine/remote").then((m) => m.initRemote());
     void import("./state/limits").then((m) => m.watchLimits(() => state.accounts.map((a) => a.id)));
     if (!location.search.includes("fixture")) void import("./engine/captain").then((m) => m.startRelaySweep());
@@ -205,6 +207,8 @@ export default function App() {
       if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
       countLanded(t);
       if (!was || was === t.status || document.hasFocus()) continue;
+      // a routine's run with nothing to report ends without a notice
+      if (quietRun(t)) continue;
       // which space it is in, so a company job never reads as a personal one
       const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;
       if (t.status === "waiting") void notify(title, tr("응답이 필요해요"));

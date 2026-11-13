@@ -10,8 +10,8 @@
 // fields when they did, and the entries from the first one that differs.
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
-import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
+import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop, spaceEnv } from "../lib/native";
+import { addProject, onWrite, projectById, setState, spaceById, state, taskById } from "../state/store";
 import type { Task } from "../state/types";
 import type { HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
@@ -198,6 +198,14 @@ const CALLS: Record<string, (...a: never[]) => unknown> = {
   setTaskModel: jobs.setTaskModel,
   setTaskPermission: jobs.setTaskPermission,
 };
+
+// 루틴 on another Mac: a routine there that watches one of this Mac's projects looks at its GitHub
+// repo here, as this Mac's GitHub login (only a project this Mac has, never a path)
+CALLS.ghWatch = (async (project: string, event: string, search: string) => {
+  const p = projectById(project);
+  if (!p || p.host) throw new Error("그 프로젝트가 이 Mac에 없어요");
+  return ghWatch(p.folder, event, search, await spaceEnv(spaceById(p.space)));
+}) as never;
 
 async function handle(conn: number, msg: Record<string, unknown>) {
   const c = conns.get(conn);

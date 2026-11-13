@@ -794,3 +794,168 @@ dl.hk-doc dd {
   flex-wrap: wrap;
   gap: var(--s-6);
 }
+
+/* ───────── Settings › 루틴, and its card in the chat */
+.rt-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+  padding: var(--s-10) var(--s-14);
+  border-bottom: 1px solid var(--line);
+  transition: opacity var(--dur) var(--ease);
+}
+.rt-row:last-child {
+  border-bottom: 0;
+}
+.rt-row.off {
+  opacity: 0.6;
+}
+.rt-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.rt-main b {
+  font-weight: var(--fw-strong);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-sub {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  padding: var(--s-12) var(--s-14);
+  border-bottom: 1px solid var(--line);
+  background: var(--hover);
+}
+.rt-edit:last-child {
+  border-bottom: 0;
+}
+.rt-prompt {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  padding: var(--s-8) var(--s-10);
+  border: 1px solid var(--input);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  outline: none;
+}
+.rt-prompt:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.rt-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-8);
+}
+.rt-line .select {
+  width: auto;
+}
+.rt-time {
+  width: 110px;
+}
+.rt-at {
+  width: 210px;
+}
+.rt-filter {
+  flex: 1;
+  min-width: 160px;
+}
+.rt-days {
+  display: inline-flex;
+  gap: 2px;
+}
+.rt-day {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.rt-day.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.rt-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.rt-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+}
+.rt-problem {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.rt-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  margin: var(--s-6) 0;
+  padding: var(--s-10) var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+}
+.rt-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+  color: var(--ink-2);
+}
+.rt-card-head b {
+  color: var(--ink);
+  font-weight: var(--fw-strong);
+  white-space: nowrap;
+}
+.rt-card-prompt {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rt-card-acts {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+}
