@@ -317,13 +317,13 @@ export class ComputerHostSession {
     this.started = true;
     const launched = await this.helper.request("launch", { app }, signal);
     // the user moving the mouse or typing while it started is theirs, not the launch's
-    if (launched.backgroundPreserved === false && launched.userInput !== true) throw new Error("Launch changed the foreground; refusing to continue in background");
+    if (launched.backgroundPreserved === false && launched.userInput !== true) throw new Error("Launch changed the foreground: the app came to the front as it started, so it cannot be used in the background. Start it once more at most; if it does this again, report it as not verifiable here");
     const pid = launched.pid;
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
     this.pid = pid;
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
     const menus = Array.isArray(launched.menus) ? launched.menus.filter((m): m is string => typeof m === "string").slice(0, 14) : [];
-    return { pid, ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}), ...(menus.length ? { menus } : {}),
+    return { pid, ...(typeof launched.path === "string" ? { path: launched.path } : {}), ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}), ...(menus.length ? { menus } : {}),
       ...("kind" in (observed as object) ? { observation: observed } : observed) };
   }
 
