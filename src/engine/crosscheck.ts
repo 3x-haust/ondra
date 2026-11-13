@@ -107,7 +107,7 @@ export function disagreements(design: string, code: string): string[] {
 
 /** What the job does with a review's findings. */
 export const REVIEW_FIX =
-  "P1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.";
+  "P1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)와 아직 통과 못 한 목표 검사를 이어서 해. 리뷰를 반영했다고 일이 끝난 건 아니야: 맡은 일이 다 됐을 때 끝내고, 못 한 건 unverified에 적어. 고칠 게 없으면 바로 남은 단계로 넘어가.";
 
 /**
  * The one message the job gets when both lenses are over: each lens's findings,
