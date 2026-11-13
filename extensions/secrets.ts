@@ -67,6 +67,15 @@ export function envSecrets(env: NodeJS.ProcessEnv): Secret[] {
   });
 }
 
+/** Values Ondra passed only to be hidden (a deeper folder's key of a name already set): "VAR=label" pairs. */
+export function maskSecrets(env: NodeJS.ProcessEnv): Secret[] {
+  return (env.ONDRA_SECRET_MASKS ?? "").split(",").flatMap((pair) => {
+    const [variable, label] = pair.split("=");
+    const value = variable ? env[variable.trim()] : undefined;
+    return value && label && value.length >= MIN_LEN ? [{ name: label.trim(), value }] : [];
+  });
+}
+
 /** Which of the names a shell command refers to ($NAME, ${NAME}, ${NAME:-…}). */
 export function namesUsed(command: string, names: string[]): string[] {
   return names.filter((n) => new RegExp(`\\$\\{?${n}(?![A-Za-z0-9_])`).test(command));
@@ -83,23 +92,50 @@ export function promptNote(names: string[]): string {
 }
 
 const ENV_FILE = /^\.env(\..+)?$/;
-const EXAMPLE = /(example|sample|template|dist)$/i;
+const EXAMPLE = /(example|sample|template|dist|defaults)$/i;
+/** Folders not worth looking into for .env files (the same list as src-tauri/src/secrets.rs). */
+const SKIP_DIRS = new Set(["node_modules", "target", "dist", "build", "out", "vendor", "venv", "__pycache__", "Pods", "DerivedData", "coverage", "bower_components", "jspm_packages", "site-packages"]);
+const MAX_DEPTH = 6;
+const MAX_DIRS = 4000;
+
+/** Every .env file in `root` and the folders under it, as paths from `root`. */
+export function envFilesUnder(root: string): string[] {
+  const out: string[] = [];
+  const queue: [string, number][] = [["", 0]];
+  let seen = 0;
+  while (queue.length) {
+    const [rel, depth] = queue.pop()!;
+    let entries: import("node:fs").Dirent[] = [];
+    try {
+      entries = readdirSync(join(root, rel), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const path = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isFile() && ENV_FILE.test(e.name) && !EXAMPLE.test(e.name)) out.push(path);
+      else if (e.isDirectory() && !e.isSymbolicLink() && !e.name.startsWith(".") && !SKIP_DIRS.has(e.name) && depth + 1 < MAX_DEPTH && seen < MAX_DIRS) {
+        seen++;
+        queue.push([path, depth + 1]);
+      }
+    }
+  }
+  return out.sort();
+}
 
 export default function (pi: ExtensionAPI) {
-  const own = envSecrets(process.env);
-  const names = own.map((s) => s.name);
+  const named = envSecrets(process.env);
+  const names = named.map((s) => s.name);
+  const own = [...named, ...maskSecrets(process.env)];
   const audit = (process.env.ONDRA_DATA_DIR ?? "").replace(/\/$/, "");
   const job = process.env.ONDRA_TASK_ID ?? process.env.ONDRA_JOB_ID ?? "";
 
-  // .env files in the job's folder, read again when one changes
+  // .env files anywhere in the job's folder: found again at most every 15 s, read again when one changes
   let cache = { key: "", secrets: [] as Secret[] };
+  let walked = { cwd: "", at: 0, files: [] as string[] };
   const folderSecrets = (cwd: string): Secret[] => {
-    let files: string[] = [];
-    try {
-      files = readdirSync(cwd).filter((f) => ENV_FILE.test(f) && !EXAMPLE.test(f));
-    } catch {
-      return [];
-    }
+    if (walked.cwd !== cwd || Date.now() - walked.at > 15_000) walked = { cwd, at: Date.now(), files: envFilesUnder(cwd) };
+    const files = walked.files;
     const stamps = files.map((f) => {
       try {
         return `${f}@${statSync(join(cwd, f)).mtimeMs}`;

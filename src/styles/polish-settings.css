@@ -1417,14 +1417,20 @@
   color: var(--ink-3);
 }
 
-/* 시크릿: the add row (name · value · save), the .env option, the closing note */
+/* 시크릿: one row per key (name · its folder · delete), then the add row */
+.settings-inner .sec-row {
+  gap: var(--s-8);
+}
+.settings-inner .sec-key {
+  font-size: var(--fs-sm);
+}
 .settings-inner .sec-add {
   display: flex;
   gap: var(--s-8);
   align-items: center;
 }
 .settings-inner .sec-add .sec-name {
-  flex: 0 0 200px;
+  flex: 0 0 180px;
   font-family: var(--mono, ui-monospace, monospace);
 }
 .settings-inner .sec-add .sec-value {
@@ -1432,23 +1438,13 @@
   min-width: 0;
 }
 .settings-inner .sec-env {
-  gap: var(--s-8);
-  flex-wrap: wrap;
+  flex: none;
+  gap: var(--s-4);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
 }
 .settings-inner .sec-warn {
   gap: var(--s-8);
   color: var(--ink-2);
   font-size: var(--fs-sm);
-}
-.settings-inner .sec-env {
-  align-items: flex-start;
-}
-.settings-inner .sec-env input {
-  margin-top: 3px;
-}
-.settings-inner .sec-foot {
-  margin: var(--s-12) var(--s-4) 0;
-  font-size: var(--fs-xs);
-  line-height: var(--lh-sm);
-  color: var(--ink-3);
 }

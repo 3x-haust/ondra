@@ -61,6 +61,23 @@ fn valid_project(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// A project secret is "NAME" (typed here, or from the project's own .env) or "dir/sub:NAME"
+/// (from the .env of that folder inside the project): (folder, name).
+pub fn split_item(item: &str) -> (&str, &str) {
+    item.rsplit_once(':').unwrap_or(("", item))
+}
+
+fn item_of(dir: &str, name: &str) -> String {
+    if dir.is_empty() { name.to_string() } else { format!("{dir}:{name}") }
+}
+
+pub fn valid_item(item: &str) -> bool {
+    let (dir, name) = split_item(item);
+    let dir_ok = dir.is_empty()
+        || (!dir.starts_with('/') && !dir.contains(':') && !dir.contains(',') && !dir.contains('=') && dir.split('/').all(|p| !p.is_empty() && p != "." && p != ".."));
+    dir_ok && valid_name(name).is_ok()
+}
+
 /// Reads secrets.json; the first version kept a plain list of global names.
 fn parse(text: &str) -> Saved {
     let mut s = serde_json::from_str::<Saved>(text)
@@ -69,7 +86,7 @@ fn parse(text: &str) -> Saved {
     s.global.retain(|n| valid_name(n).is_ok());
     for map in [&mut s.projects, &mut s.skipped] {
         map.retain(|id, names| {
-            names.retain(|n| valid_name(n).is_ok());
+            names.retain(|n| valid_item(n));
             valid_project(id) && !names.is_empty()
         });
     }
@@ -249,6 +266,42 @@ fn env_files(folder: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// Folders not worth looking into for a project's own .env files.
+const SKIP_DIRS: &[&str] = &["node_modules", "target", "dist", "build", "out", "vendor", "venv", "__pycache__", "Pods", "DerivedData", "coverage", "bower_components", "jspm_packages", "site-packages"];
+const MAX_DEPTH: usize = 6;
+const MAX_DIRS: usize = 4000;
+
+/// The project folder and every folder under it that may hold a .env of its own, as (path from
+/// the project, absolute path). Hidden folders (.git, .next, …) and build output are skipped.
+pub fn env_dirs(root: &Path) -> Vec<(String, PathBuf)> {
+    let mut out = vec![(String::new(), root.to_path_buf())];
+    let mut queue = vec![(String::new(), root.to_path_buf(), 0usize)];
+    let mut seen = 0;
+    while let Some((rel, dir, depth)) = queue.pop() {
+        if depth >= MAX_DEPTH || seen >= MAX_DIRS {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let Ok(kind) = e.file_type() else { continue };
+            // a link could lead out of the project or around in a circle
+            if !kind.is_dir() || kind.is_symlink() {
+                continue;
+            }
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            seen += 1;
+            let r = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+            out.push((r.clone(), e.path()));
+            queue.push((r, e.path(), depth + 1));
+        }
+    }
+    out.sort();
+    out
+}
+
 /// KEY=value pairs of a .env text, in order.
 pub fn dotenv_pairs(text: &str) -> Vec<(String, String)> {
     text.lines()
@@ -278,13 +331,17 @@ pub fn looks_secret(key: &str, value: &str) -> bool {
 }
 
 /// Each key the project's .env files set, with its last value (never sent to the page).
+/// Keyed by item ("NAME", "dir/sub:NAME"): the file it comes from and its value.
 fn found_in(folder: &Path) -> BTreeMap<String, (String, String)> {
     let mut out = BTreeMap::new();
-    for path in env_files(folder) {
-        let file = path.file_name().and_then(|n| n.to_str()).unwrap_or(".env").to_string();
-        if let Ok(text) = std::fs::read_to_string(&path) {
-            for (k, v) in dotenv_pairs(&text) {
-                out.insert(k, (file.clone(), v));
+    for (rel, dir) in env_dirs(folder) {
+        for path in env_files(&dir) {
+            let file = path.file_name().and_then(|n| n.to_str()).unwrap_or(".env").to_string();
+            let file = if rel.is_empty() { file } else { format!("{rel}/{file}") };
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                for (k, v) in dotenv_pairs(&text) {
+                    out.insert(item_of(&rel, &k), (file.clone(), v));
+                }
             }
         }
     }
@@ -297,7 +354,7 @@ pub fn to_take(saved: &Saved, project: &str, found: &BTreeMap<String, (String, S
     let has = |map: &BTreeMap<String, Vec<String>>, n: &String| map.get(project).is_some_and(|l| l.contains(n));
     found
         .iter()
-        .filter(|(n, (_, v))| !v.is_empty() && v.len() <= MAX_VALUE && looks_secret(n, v) && valid_name(n).is_ok())
+        .filter(|(n, (_, v))| !v.is_empty() && v.len() <= MAX_VALUE && looks_secret(split_item(n).1, v) && valid_item(n))
         .map(|(n, _)| n.clone())
         .filter(|n| !has(&saved.projects, n) && !has(&saved.skipped, n))
         .collect()
@@ -401,10 +458,13 @@ pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, fold
     let project = project.filter(|p| !p.is_empty());
     let acct = account(project.as_deref(), &name);
     if let (Some(_), Some(folder)) = (&project, folder.as_deref().filter(|f| !f.is_empty())) {
-        let path = Path::new(folder).join(".env");
-        if let (Some(value), Ok(text)) = (store::get(&acct), std::fs::read_to_string(&path)) {
-            if let Some(next) = dotenv_remove(&text, &name, &value) {
-                std::fs::write(&path, next).map_err(|e| format!(".env를 고치지 못했어요: {e}"))?;
+        let (dir, key) = split_item(&name);
+        if let Some(value) = store::get(&acct).filter(|_| valid_item(&name)) {
+            for path in env_files(&Path::new(folder).join(dir)) {
+                let Ok(text) = std::fs::read_to_string(&path) else { continue };
+                if let Some(next) = dotenv_remove(&text, key, &value) {
+                    std::fs::write(&path, next).map_err(|e| format!(".env를 고치지 못했어요: {e}"))?;
+                }
             }
         }
     }
@@ -430,34 +490,73 @@ pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, fold
     Ok(saved)
 }
 
-/// Which secrets a job gets: the global ones, then its project's over them.
-pub fn chosen(saved: &Saved, project: Option<&str>) -> Vec<(String, Option<String>)> {
-    let mut out: BTreeMap<String, Option<String>> = saved.global.iter().map(|n| (n.clone(), None)).collect();
-    if let Some(p) = project {
-        for n in saved.projects.get(p).into_iter().flatten() {
-            out.insert(n.clone(), Some(p.to_string()));
-        }
-    }
-    out.into_iter().collect()
+/// Which secrets a job gets, as (variable name, keychain account): the global ones, then its
+/// project's over them; of a project's items with the same name, the one nearest the project's
+/// top (its own .env, or typed here) wins. The rest are only hidden from output: `masked`.
+pub struct Chosen {
+    pub set: Vec<(String, String)>,
+    pub masked: Vec<(String, String)>,
 }
 
+pub fn chosen(saved: &Saved, project: Option<&str>) -> Chosen {
+    let mut set: BTreeMap<String, (usize, String)> = saved.global.iter().map(|n| (n.clone(), (usize::MAX, n.clone()))).collect();
+    let mut masked = Vec::new();
+    if let Some(p) = project {
+        let mut items: Vec<&String> = saved.projects.get(p).into_iter().flatten().collect();
+        // nearest first: no folder, then fewer levels, then by path
+        items.sort_by_key(|i| {
+            let d = split_item(i).0;
+            (if d.is_empty() { 0 } else { d.matches('/').count() + 1 }, d.to_string())
+        });
+        let mut taken = std::collections::BTreeSet::new();
+        for item in items {
+            let name = split_item(item).1.to_string();
+            let acct = account(Some(p), item);
+            if taken.insert(name.clone()) {
+                if let Some((rank, old)) = set.insert(name, (0, acct)) {
+                    if rank == usize::MAX {
+                        masked.push((old.clone(), old));
+                    }
+                }
+            } else {
+                masked.push((item.clone(), acct));
+            }
+        }
+    }
+    Chosen { set: set.into_iter().map(|(n, (_, a))| (n, a)).collect(), masked }
+}
+
+/// What the engine is told about values it holds only to hide them: `VAR=label` pairs.
+pub const MASKS: &str = "ONDRA_SECRET_MASKS";
+
 /// For a job's engine (the env carries MARKER): adds each secret it gets that the keychain still
-/// has, plus the list of their names. Without the marker nothing changes.
+/// has, plus the list of their names; the values it doesn't get as a variable (a deeper folder's
+/// key of the same name) go in as ONDRA_SECRET_MASK_n so they are hidden from output too.
 pub fn inject(app: &AppHandle, cmd: &mut Command, env: &[(String, String)]) {
     let Some(marker) = env.iter().rev().find(|(k, _)| k == MARKER).map(|(_, v)| v.as_str()) else { return };
     let project = marker.strip_prefix("p:").filter(|p| valid_project(p));
+    let picked = chosen(&read_saved(app), project);
     let mut held = Vec::new();
-    for (name, from) in chosen(&read_saved(app), project) {
+    for (name, acct) in picked.set {
         // a space's own env (set by the user for that space) wins over a secret of the same name
         if env.iter().any(|(k, _)| k == &name) {
             continue;
         }
-        if let Some(value) = store::get(&account(from.as_deref(), &name)) {
+        if let Some(value) = store::get(&acct) {
             cmd.env(&name, value);
             held.push(name);
         }
     }
+    let mut masks = Vec::new();
+    for (i, (label, acct)) in picked.masked.into_iter().enumerate() {
+        if let Some(value) = store::get(&acct) {
+            let var = format!("ONDRA_SECRET_MASK_{i}");
+            cmd.env(&var, value);
+            masks.push(format!("{var}={label}"));
+        }
+    }
     cmd.env(NAMES, held.join(","));
+    cmd.env(MASKS, masks.join(","));
 }
 
 #[cfg(test)]
@@ -479,14 +578,23 @@ mod tests {
         let s = parse(r#"{"global":["G"],"projects":{"p1":["P"],"p2":[],"../x":["Q"]}}"#);
         assert_eq!(s.global, vec!["G"]);
         assert_eq!(s.projects.keys().collect::<Vec<_>>(), vec!["p1"]);
+        assert!(valid_item("Deploy/Front:API_KEY") && valid_item("API_KEY"));
+        assert!(!valid_item("../x:API_KEY") && !valid_item("/abs:API_KEY") && !valid_item("a//b:K") && !valid_item("Deploy:lower"));
         assert_eq!(parse("not json"), Saved::default());
     }
 
     #[test]
     fn project_wins_over_global() {
         let s = parse(r#"{"global":["A","B"],"projects":{"p1":["B","C"]}}"#);
-        assert_eq!(chosen(&s, Some("p1")), vec![("A".into(), None), ("B".into(), Some("p1".into())), ("C".into(), Some("p1".into()))]);
-        assert_eq!(chosen(&s, None), vec![("A".into(), None), ("B".into(), None)]);
+        let c = chosen(&s, Some("p1"));
+        assert_eq!(c.set, vec![("A".into(), "A".into()), ("B".into(), "p1/B".into()), ("C".into(), "p1/C".into())]);
+        assert_eq!(c.masked, vec![("B".into(), "B".into())]);
+        assert_eq!(chosen(&s, None).set, vec![("A".into(), "A".into()), ("B".into(), "B".into())]);
+        // the project's own .env first, a deeper folder's key of the same name only hidden
+        let s = parse(r#"{"projects":{"p1":["Deploy/Front:API_KEY","API_KEY","Deploy:API_KEY","Deploy/Front:WEB_TOKEN"]}}"#);
+        let c = chosen(&s, Some("p1"));
+        assert_eq!(c.set, vec![("API_KEY".into(), "p1/API_KEY".into()), ("WEB_TOKEN".into(), "p1/Deploy/Front:WEB_TOKEN".into())]);
+        assert_eq!(c.masked, vec![("Deploy:API_KEY".into(), "p1/Deploy:API_KEY".into()), ("Deploy/Front:API_KEY".into(), "p1/Deploy/Front:API_KEY".into())]);
     }
 
     #[test]
@@ -519,9 +627,15 @@ mod tests {
         for (f, t) in [(".env.local", "A_KEY=local\n"), (".env", "A_KEY=base\nB_TOKEN=b\n"), (".env.example", "C_KEY=ex\n")] {
             std::fs::write(dir.join(f), t).unwrap();
         }
+        for (d, t) in [("Deploy/Front", "A_KEY=front\n"), ("node_modules/pkg", "N_KEY=n\n"), (".hidden", "H_KEY=h\n")] {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+            std::fs::write(dir.join(d).join(".env"), t).unwrap();
+        }
         let found = found_in(&dir);
         assert_eq!(found.get("A_KEY"), Some(&(".env.local".to_string(), "local".to_string())));
+        assert_eq!(found.get("Deploy/Front:A_KEY"), Some(&("Deploy/Front/.env".to_string(), "front".to_string())));
         assert!(found.contains_key("B_TOKEN") && !found.contains_key("C_KEY"));
+        assert!(!found.keys().any(|k| k.contains("N_KEY") || k.contains("H_KEY")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

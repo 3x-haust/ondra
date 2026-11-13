@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import secrets, { dotenvSecrets, envSecrets, namesUsed, promptNote, redact, variants } from "./secrets";
+import secrets, { dotenvSecrets, envFilesUnder, envSecrets, maskSecrets, namesUsed, promptNote, redact, variants } from "./secrets";
 
 const KEY = "sk_live_51Habc123XYZ";
 
@@ -47,6 +47,20 @@ describe("secrets", () => {
     expect(envSecrets({})).toEqual([]);
   });
 
+  it("reads the values passed only to be hidden", () => {
+    expect(maskSecrets({ ONDRA_SECRET_MASKS: "ONDRA_SECRET_MASK_0=Deploy/Front:API_KEY,BAD", ONDRA_SECRET_MASK_0: "front-value-1" })).toEqual([{ name: "Deploy/Front:API_KEY", value: "front-value-1" }]);
+    expect(maskSecrets({})).toEqual([]);
+  });
+
+  it("finds .env files in every folder but build output and hidden ones", () => {
+    const dir = mkdtempSync(join(tmpdir(), "secw-"));
+    for (const [d, f] of [["", ".env"], ["", ".env.example"], ["Deploy/Front", ".env.local"], ["node_modules/x", ".env"], [".git", ".env"], ["a/b/c/d/e/f/g", ".env"]]) {
+      mkdirSync(join(dir, d), { recursive: true });
+      writeFileSync(join(dir, d, f), "K=v\n");
+    }
+    expect(envFilesUnder(dir)).toEqual([".env", "Deploy/Front/.env.local"]);
+  });
+
   it("sees which names a command uses", () => {
     expect(namesUsed('curl -H "Authorization: Bearer $STRIPE_KEY" ${DB_URL:-x} $STRIPE_KEYS', ["STRIPE_KEY", "DB_URL", "OTHER"])).toEqual(["STRIPE_KEY", "DB_URL"]);
   });
@@ -61,6 +75,8 @@ describe("secrets", () => {
     const dir = mkdtempSync(join(tmpdir(), "sec-"));
     writeFileSync(join(dir, ".env"), "OPENAI_API_KEY=sk-proj-folderValue9\nDEBUG=verbose-mode\n");
     writeFileSync(join(dir, ".env.example"), "OPENAI_API_KEY=sk-example-value\n");
+    mkdirSync(join(dir, "Deploy", "Front"), { recursive: true });
+    writeFileSync(join(dir, "Deploy", "Front", ".env"), "WEB_TOKEN=deep-token-777\n");
     const handlers: Record<string, (e: any, ctx: any) => any> = {};
     const pi = { on: (name: string, fn: (e: any, ctx: any) => any) => (handlers[name] = fn) };
     const saved = { ...process.env };
@@ -73,10 +89,10 @@ describe("secrets", () => {
       expect(prompt.systemPrompt).toContain("`STRIPE_KEY`");
       expect(prompt.systemPrompt).not.toContain(KEY);
       const out = handlers.tool_result(
-        { toolName: "bash", content: [{ type: "text", text: `${KEY} sk-proj-folderValue9 verbose-mode sk-example-value` }, { type: "image", data: "x" }] },
+        { toolName: "bash", content: [{ type: "text", text: `${KEY} sk-proj-folderValue9 verbose-mode sk-example-value deep-token-777` }, { type: "image", data: "x" }] },
         { cwd: dir },
       );
-      expect(out.content[0].text).toBe("[secret:STRIPE_KEY] [secret:.env:OPENAI_API_KEY] verbose-mode sk-example-value");
+      expect(out.content[0].text).toBe("[secret:STRIPE_KEY] [secret:.env:OPENAI_API_KEY] verbose-mode sk-example-value [secret:Deploy/Front/.env:WEB_TOKEN]");
       expect(out.content[1]).toEqual({ type: "image", data: "x" });
       expect(handlers.tool_result({ toolName: "bash", content: [{ type: "text", text: "clean" }] }, { cwd: dir })).toBeUndefined();
       handlers.tool_call({ toolName: "bash", input: { command: "echo $STRIPE_KEY" } }, {});
