@@ -7,11 +7,13 @@ import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, modifierHo
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { cacheShare, setState, state, uid, updateAccount } from "../state/store";
+import { setState, state, uid, updateAccount } from "../state/store";
 import type { Account, SpaceId } from "../state/types";
-import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
 import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
+import { macs } from "../ui/MacBar";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine, tilde } from "../engine/rpc";
 import { componentNote, componentOf } from "../engine/components";
@@ -27,12 +29,13 @@ import {
 } from "../lib/native";
 import { RemoteSettings } from "./RemoteSettings";
 import { askPermission } from "../lib/permissions";
-import { ago, agoIn, now, tokens } from "../ui/bits";
+import { ago, agoIn, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { canTrack, track } from "../lib/telemetry";
 import { LoginSheet } from "./Login";
 import { ConnectionSheet } from "./Connection";
+import { presetOf } from "../engine/connections";
 import { keyText, SHORTCUT_EXTRAS } from "./ShortcutSheet";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
@@ -46,6 +49,7 @@ import { setNotesFor } from "../engine/releaseNotes";
 import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";
 import { LogIn } from "lucide-solid";
+import appIcon from "../../src-tauri/icons/128x128@2x.png";
 
 /** a workspace folder as shown: "~" is the home folder */
 const folderName = (f: string | undefined) => (!f || f === "~" ? t("홈 폴더") : f);
@@ -65,13 +69,63 @@ export function Switch_(props: { on: boolean; set: (on: boolean) => void; label?
   return <button class="switch" classList={{ on: props.on }} role="switch" aria-checked={props.on} aria-label={props.label} onClick={() => props.set(!props.on)}><i /></button>;
 }
 
+/** One setting: its name, one plain line on what it does under it, its control at the right. */
 export function Row(props: { title: string; desc?: string; children?: any }) {
   return (
-    <div class="set-row" title={props.desc}>
+    <div class="set-row" classList={{ two: !!props.desc }} data-set={props.title}>
       <div class="set-label">
         <b>{props.title}</b>
+        <Show when={props.desc}><span class="set-sub">{props.desc}</span></Show>
       </div>
       <div class="set-value">{props.children}</div>
+    </div>
+  );
+}
+
+/** A tab's head: its icon on a soft tile, its name, one line on what it is for, and its one action. */
+export function PageHead(props: { tab: SettingsTab; children?: any }) {
+  const tab = () => SETTINGS_TABS.find((x) => x.id === props.tab)!;
+  return (
+    <header class="set-page-head">
+      <span class="set-page-icon"><Icon name={tab().icon} size={20} /></span>
+      <div class="set-page-text">
+        <h2>{t(tab().label)}</h2>
+        <p>{t(tab().desc)}</p>
+      </div>
+      <Show when={props.children}><div class="set-page-act">{props.children}</div></Show>
+    </header>
+  );
+}
+
+/** Nothing here yet: what would be here, and the one thing to do about it. */
+export function EmptyState(props: { icon: string; title: string; desc?: string; children?: any }) {
+  return (
+    <div class="set-empty">
+      <span class="set-empty-icon"><Icon name={props.icon} size={18} /></span>
+      <b>{props.title}</b>
+      <Show when={props.desc}><p>{props.desc}</p></Show>
+      <Show when={props.children}><div class="set-empty-act">{props.children}</div></Show>
+    </div>
+  );
+}
+
+/** 테마 as three small windows to pick from */
+function ThemePick() {
+  const cur = () => state.settings.theme ?? "system";
+  return (
+    <div class="theme-pick" role="radiogroup" aria-label={t("테마")}>
+      <For each={[["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as const}>
+        {([v, l]) => (
+          <button class="theme-opt" classList={{ on: cur() === v }} role="radio" aria-checked={cur() === v} onClick={() => setState("settings", "theme", v)}>
+            <span class={`theme-win ${v}`} aria-hidden="true">
+              <i class="tw-side" />
+              <i class="tw-line" />
+              <i class="tw-line short" />
+            </span>
+            <span class="theme-name">{t(l)}</span>
+          </button>
+        )}
+      </For>
     </div>
   );
 }
@@ -106,14 +160,11 @@ function General() {
   };
   return (
     <>
-      <h2>{t("일반")}</h2>
+      <PageHead tab="general" />
+      <GroupTitle title={t("화면")} />
       <div class="set-group">
         <Row title={t("테마")}>
-          <div class="seg">
-            <For each={[["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as const}>
-              {([v, l]) => <button classList={{ on: state.settings.theme === v }} onClick={() => setState("settings", "theme", v)}>{t(l)}</button>}
-            </For>
-          </div>
+          <ThemePick />
         </Row>
         <Row title={t("화면 크기")} desc={t("{a} 크게 · {b} 작게", { a: shortcutHint("zoomIn"), b: shortcutHint("zoomOut") })}>
           <div class="seg">
@@ -136,16 +187,10 @@ function General() {
             <button classList={{ on: state.settings.links === "outside" }} onClick={() => setState("settings", "links", "outside")}>{t("기본 브라우저")}</button>
           </div>
         </Row>
-        {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
-        <Show when={canTrack}>
-          <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>
-            <Switch_ label={t("익명 사용 통계 보내기")} on={state.settings.telemetry !== false} set={(v) => (v || track("telemetry_off", {}), setState("settings", "telemetry", v))} />
-          </Row>
-        </Show>
       </div>
 
       {/* what every new task starts with: the same model and permission the composer shows (one store) */}
-      <GroupTitle title={t("에이전트|group")} />
+      <GroupTitle title={t("새 작업")} />
       <div class="set-group">
         <For each={modelAccounts()}>
           {(a) => (
@@ -160,33 +205,34 @@ function General() {
             </Row>
           )}
         </For>
-        <Row title={t("기본 권한")}>
+        <Row title={t("기본 권한")} desc={t(PERMISSIONS.find((p) => p.id === (state.settings.permission ?? "edits"))?.desc ?? "")}>
           <div class="seg">
             <For each={PERMISSIONS}>
               {(p) => <button classList={{ on: (state.settings.permission ?? "edits") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
             </For>
           </div>
         </Row>
-        <Row title={t("동시 작업 수")}>
+        <Row title={t("동시 작업 수")} desc={t("한 번에 같이 도는 작업 수예요")}>
           <Stepper value={state.settings.slots.light} min={1} max={10} onChange={(n) => setState("settings", "slots", "light", n)} />
         </Row>
         <Row title={t("빌드·시뮬레이터 작업 동시 수")} desc={t("빌드, 시뮬레이터, 앱 조작")}>
           <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
-        <Row title={t("작업마다 새 워크트리")}>
+      </div>
+
+      <GroupTitle title={t("작업 방식")} />
+      <div class="set-group">
+        <Row title={t("작업마다 새 워크트리")} desc={t("작업끼리 파일이 섞이지 않게 따로 폴더를 만들어요")}>
           <Switch_ label={t("작업마다 새 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
         </Row>
-        <Row title={t("PR 리뷰 자동 대응")}>
+        <Row title={t("PR 리뷰 자동 대응")} desc={t("PR에 리뷰가 달리면 작업이 이어서 고쳐요")}>
           <Switch_ label={t("PR 리뷰 자동 대응")} on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
         </Row>
         <Row title={t("GitHub 푸시·PR 허용")} desc={t("끄면 읽기만 해요")}>
           <Switch_ label={t("GitHub 푸시·PR 허용")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
         </Row>
-        <Row title={t("메모리 자동 저장")}>
+        <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
-        </Row>
-        <Row title={t("내 창 앞에 두기")} desc={t("작업이 연 앱이 앞으로 나오지 않아요")}>
-          <Switch_ label={t("내 창 앞에 두기")} on={state.settings.focusGuard} set={(v) => setState("settings", "focusGuard", v)} />
         </Row>
         <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
           <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
@@ -197,7 +243,7 @@ function General() {
         <span class="set-saved" classList={{ on: saved() }} aria-hidden={!saved()}>{t("저장됨")}</span>
       </GroupTitle>
       <div class="set-group">
-        <div class="set-row col">
+        <div class="set-row col" data-set={t("공통 지침")}>
           <textarea
             class="textarea plain"
             rows={6}
@@ -213,6 +259,12 @@ function General() {
       <div class="set-group">
         <UpdateRow />
         <Components />
+        {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
+        <Show when={canTrack}>
+          <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>
+            <Switch_ label={t("익명 사용 통계 보내기")} on={state.settings.telemetry !== false} set={(v) => (v || track("telemetry_off", {}), setState("settings", "telemetry", v))} />
+          </Row>
+        </Show>
       </div>
     </>
   );
@@ -269,8 +321,13 @@ function UpdateRow() {
   };
   const busy = () => updateStatus() === "installing";
   return (
-    <Row title={`Ondra ${version() ?? appVersion}${isBeta(version() ?? appVersion) ? ` ${t("베타")}` : ""}`}>
-      <span class="set-note" title={checkedAt() ? ago(checkedAt()) : undefined}>{note()}</span>
+    <div class="set-row two about-row" data-set={t("업데이트 확인")}>
+      <img class="about-icon" src={appIcon} alt="" />
+      <div class="set-label">
+        <b>{`${appName()} ${version() ?? appVersion}${isBeta(version() ?? appVersion) ? ` ${t("베타")}` : ""}`}</b>
+        <span class="set-sub" title={checkedAt() ? ago(checkedAt()) : undefined}>{note() || t("새 버전은 알아서 받아요")}</span>
+      </div>
+      <div class="set-value">
       <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>{t("릴리스 노트")}</button>
       <Show when={!busy()}>
         <Show
@@ -288,7 +345,8 @@ function UpdateRow() {
           </Show>
         </Show>
       </Show>
-    </Row>
+      </div>
+    </div>
   );
 }
 
@@ -470,33 +528,64 @@ const resetIn = (ms: number) => {
  *  its sheet carries the same title */
 const loginWord = (a: Account) => (signedIn(a) ? "서비스 추가" : "로그인");
 
+/** what kind of model source a row is: a plan login, an API key, or a model on this Mac */
+const kindOf = (a: Account) => (!a.connection ? t("구독") : presetOf(a.connection.preset).local || /localhost|127\.0\.0\.1|0\.0\.0\.0|\.local\b/.test(a.connection.baseUrl) ? t("로컬") : t("API"));
+
+/**
+ * One model source in a workspace's list: its logo, its name with its kind and who it is under,
+ * plan use on the right, and the rest (sign in again, edit, move, delete) in its ⋯ menu.
+ */
 function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void }) {
   const a = () => state.accounts.find((x) => x.id === props.id)!;
-  const [confirm, setConfirm] = createSignal(false);
   const [typed, setTyped] = createSignal<string>();
-  const used = () => a().stats.input + a().stats.cacheRead + a().stats.cacheWrite + a().stats.output;
-  const cache = () => Math.round((cacheShare(a()) ?? 0) * 100);
-  // the plan windows the composer shows (5시간 / 주간), only while signed in
-  // a direct connection has no plan windows
+  let nameEl!: HTMLInputElement;
+  // the plan windows the composer shows (5시간 / 주간), only while signed in; a direct connection has none
   onMount(() => signedIn(a()) && !a().connection && void refreshLimits(props.id));
   const windows = () => (signedIn(a()) && !a().connection ? usageOf(props.id, now()) : []);
   const credits = () => (signedIn(a()) && !a().connection ? creditsOf(props.id) : undefined);
   // provider + email until the person names it; clearing the name goes back to that
   const made = () => state.spaces.find((s) => s.id === a().space)?.label ?? "계정";
-  const auto = () => accountName({ ...a(), label: made() });
-  const rename = (v: string) =>
-    updateAccount(props.id, (x) => (x.label = v.trim() && v.trim() !== auto() ? v.trim() : made()));
+  const auto = () => servicesOf(a()).join(" · ") || (a().connection ? t(presetOf(a().connection!.preset).name) : "") || accountName({ ...a(), label: made() });
+  const rename = (v: string) => updateAccount(props.id, (x) => (x.label = v.trim() && v.trim() !== auto() ? v.trim() : made()));
+  // the kind, then who it is (the email, unless the name already shows it) or how many models
+  const sub = () => {
+    const shown = ownLabel(a()) || auto();
+    const who = a().connection ? t("모델 {n}개", { n: a().connection!.models.length }) : emails[props.id] && !shown.includes(emails[props.id]) ? emails[props.id] : !signedIn(a()) ? t("로그인 필요") : "";
+    return [kindOf(a()), who].filter(Boolean).join(" · ");
+  };
+  const logo = () => (a().connection ? (logoFor(a().connection!.preset) ? a().connection!.preset : "") : (servicesOf(a())[0] ?? ""));
+  const menu = (): MenuEntry[] => [
+    a().connection
+      ? { id: "edit", label: t("편집"), icon: "pencil", run: props.onEdit }
+      : { id: "login", label: t(loginWord(a())), icon: "key", run: props.onLogin },
+    { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: () => requestAnimationFrame(() => (nameEl.focus(), nameEl.select())) },
+    ...(state.spaces.length > 1
+      ? (["sep", ...state.spaces.filter((s) => s.id !== a().space).map((s) => ({ id: `to-${s.id}`, label: t("{name}(으)로 옮기기", { name: t(s.label) }), icon: "arrow", run: () => updateAccount(props.id, (x) => (x.space = s.id)) }))] as MenuEntry[])
+      : []),
+    ...(props.id === "default"
+      ? []
+      : (["sep", {
+          id: "delete",
+          label: a().connection ? t("연결 삭제") : t("계정 삭제"),
+          icon: "trash",
+          danger: true,
+          run: () => {
+            accountRemove(props.id);
+            setState("accounts", (l) => l.filter((x) => x.id !== props.id));
+          },
+        }] as MenuEntry[])),
+  ];
   return (
-    <div class="acc-row">
-      <div class="acc-line">
-        <For each={servicesOf(a())}>
-          {(p) => <span class="acc-logo" title={props.id === "default" ? t("{p} · 이 Mac의 기본 로그인", { p }) : p}><Logo name={p === "Claude" ? "claude" : p} size={14} /></span>}
-        </For>
-        <Show when={a().connection}>
-          {(c) => <span class="acc-logo" title={`${t("직접 연결|provider")} · ${c().baseUrl}`}><Show when={logoFor(c().preset)} fallback={<Icon name="link" size={14} />}><Logo name={c().preset} size={14} /></Show></span>}
+    <div class="prov-row" classList={{ ctx: ctxFor() === `acc:${props.id}` }}>
+      <span class="prov-logo" title={a().connection?.baseUrl}>
+        <Show when={logo()} fallback={<Icon name={a().connection ? "link" : "key"} size={16} />}>
+          <Logo name={logo() === "Claude" ? "claude" : logo()} size={18} />
         </Show>
+      </span>
+      <div class="prov-text">
         <span class="acc-name-wrap" data-v={typed() ?? (ownLabel(a()) || auto())}>
           <input
+            ref={nameEl}
             class="acc-name"
             size={1}
             aria-label={t("계정 이름")}
@@ -508,60 +597,32 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           />
         </span>
-        <Show when={!signedIn(a())}><span class="pill warn">{t("로그인 필요")}</span></Show>
-        <span class="spacer" />
-        <span class="acc-usage">
-          <For each={windows()}>
-            {(l) => (
-              <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={l.resetsAt ? t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) }) : undefined}>
-                {t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })}
-              </span>
-            )}
-          </For>
-          <Show when={credits()}>
-            {(c) => <span class="acc-stat" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
-          </Show>
-          <Show when={!used() && !windows().length}><span class="acc-stat">{t("사용 기록 없음")}</span></Show>
-        </span>
+        <span class="prov-sub">{sub()}</span>
       </div>
-      <div class="acc-line acc-fields">
-        <label class="acc-field">
-          <span>{t("워크스페이스|one")}</span>
-          <select class="select" value={a().space} onChange={(e) => updateAccount(props.id, (x) => (x.space = e.currentTarget.value as SpaceId))}>
-            <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
-          </select>
-        </label>
-        <span class="spacer" />
-        <Show when={used()}>
-          <span class="acc-stat acc-cache" title={t("{k} 토큰", { n: used(), k: tokens(used()) })}>{t("캐시 적중 {p}%", { p: cache() })}</span>
-        </Show>
-        <Show when={a().connection} fallback={<button class="btn sm" classList={{ primary: !signedIn(a()) }} onClick={props.onLogin}>{t(loginWord(a()))}</button>}>
-          {(c) => (
-            <>
-              <span class="acc-stat acc-conn" title={c().baseUrl}>{t("모델 {n}개", { n: c().models.length })}</span>
-              <button class="btn sm" onClick={props.onEdit}>{t("편집")}</button>
-            </>
+      <span class="spacer" />
+      <span class="prov-usage">
+        <For each={windows()}>
+          {(l) => (
+            <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={l.resetsAt ? t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) }) : undefined}>
+              {t("{w} {n}%", { w: windowLabel(l.window), n: Math.round(l.used) })}
+            </span>
           )}
+        </For>
+        <Show when={credits()}>
+          {(c) => <span class="acc-stat" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
         </Show>
-        <Show when={props.id !== "default"}>
-          <Show
-            when={confirm()}
-            fallback={<button class="icon-btn sm" title={t("삭제")} aria-label={t("삭제")} onClick={() => setConfirm(true)}><Icon name="trash" size={14} /></button>}
-          >
-            <button
-              class="btn sm danger"
-              ref={(el) => requestAnimationFrame(() => el.focus())}
-              onBlur={() => setConfirm(false)}
-              onClick={() => {
-                accountRemove(props.id);
-                setState("accounts", (l) => l.filter((x) => x.id !== props.id));
-              }}
-            >
-              {a().connection ? t("연결 삭제") : t("계정 삭제")}
-            </button>
-          </Show>
-        </Show>
-      </div>
+      </span>
+      <Show when={!signedIn(a())}>
+        <button class="btn sm primary" onClick={props.onLogin}>{t("로그인")}</button>
+      </Show>
+      <button
+        class="icon-btn sm prov-more"
+        title={t("더 보기")}
+        aria-label={t("더 보기")}
+        onClick={(e) => openMenuAt(`acc:${props.id}`, menu, e.currentTarget.getBoundingClientRect())}
+      >
+        <Icon name="more" size={16} />
+      </button>
     </div>
   );
 }
@@ -628,39 +689,43 @@ function Accounts() {
   const [conn, setConn] = createSignal<{ space: SpaceId; accountId?: string } | null>(null);
   return (
     <>
-      <div class="set-h2-row">
-        <h2>{t("계정과 워크스페이스")}</h2>
-        <span class="spacer" />
-        <button class="btn ghost sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} />{t("워크스페이스 추가")}</button>
-      </div>
+      <PageHead tab="accounts">
+        <button class="btn sm" onClick={() => setEditing("new")}><Icon name="plus" size={14} />{t("워크스페이스 추가")}</button>
+      </PageHead>
       <For each={state.spaces}>
         {(s) => (
           <>
             <GroupTitle title={t(s.label)}>
-              <Show when={state.space === s.id}><span class="sp-now">{t("현재")}</span></Show>
-              <button class="btn ghost sm" onClick={() => setConn({ space: s.id })}><Icon name="link" size={14} />{t("직접 연결|provider")}</button>
-              <button class="btn ghost sm" disabled={!!pending()} onClick={() => add(s.id)}><Icon name="plus" size={14} />{t("계정 추가")}</button>
-            </GroupTitle>
-            <div class="set-group">
-              <button class="sp-row" onClick={() => setEditing(s.id)} title={t("워크스페이스 설정")}>
-                <Icon name="folder" size={14} class="sp-ic" />
-                <span class="sp-folder" classList={{ word: !s.folder || s.folder === "~" }} title={s.folder}>{folderName(s.folder)}</span>
-                <span class="sp-n">{t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}</span>
-                <span class="sp-edit">{t("워크스페이스 설정")}</span>
-                <Icon name="chevron" size={14} class="sp-go" />
+              <button class="btn ghost sm" onClick={() => setEditing(s.id)} title={`${folderName(s.folder)} · ${t("작업 {n}개", { n: state.tasks.filter((x) => x.space === s.id && !x.parentId && !x.answer && !x.archived).length })}`}>
+                <Icon name="gear" size={14} />
+                {t("워크스페이스 설정")}
               </button>
-              <For each={state.accounts.filter((a) => a.space === s.id)} fallback={<Show when={pending()?.space !== s.id}><div class="empty-line">{t("계정 없음")}</div></Show>}>
+            </GroupTitle>
+            {/* every model source of this workspace in one list: plan logins, API keys and local models alike */}
+            <div class="set-group prov-list">
+              <For each={state.accounts.filter((a) => a.space === s.id)}>
                 {(a) => <AccountRow id={a.id} onLogin={() => setLogin({ id: a.id, title: loginWord(a) })} onEdit={() => setConn({ space: a.space, accountId: a.id })} />}
               </For>
               <Show when={pending()?.space === s.id}>
-                <div class="acc-row acc-pending">
-                  <div class="acc-line">
-                    <span class="acc-pending-name">{t("새 계정")}</span>
-                    <span class="spacer" />
-                    <span class="acc-usage"><span class="spin sm" />{t("로그인 중")}</span>
-                  </div>
+                <div class="prov-row">
+                  <span class="prov-logo"><span class="spin sm" /></span>
+                  <div class="prov-text"><span class="prov-title">{t("새 계정")}</span><span class="prov-sub">{t("로그인 중")}</span></div>
                 </div>
               </Show>
+              <button
+                class="prov-add"
+                classList={{ ctx: ctxFor() === `add:${s.id}` }}
+                disabled={!!pending()}
+                onClick={(e) =>
+                  openMenuAt(`add:${s.id}`, () => [
+                    { id: "plan", label: t("구독 계정으로 로그인"), icon: "key", run: () => add(s.id) },
+                    { id: "api", label: t("API 키 · 로컬 모델 연결"), icon: "link", run: () => setConn({ space: s.id }) },
+                  ], e.currentTarget.getBoundingClientRect())
+                }
+              >
+                <Icon name="plus" size={15} />
+                {t("연결")}
+              </button>
             </div>
           </>
         )}
@@ -709,16 +774,14 @@ function Import() {
   };
   return (
     <>
-      <h2>{t("가져오기")}</h2>
+      <PageHead tab="import" />
       <Show
         when={found().length}
         fallback={
           <div class="set-group">
-            <div class="empty-line imp-empty">
-              <span>{scanning() ? t("찾는 중") : t("Claude Code, Codex 세션을 찾지 못했어요")}</span>
-              <span class="spacer" />
+            <EmptyState icon="download" title={scanning() ? t("찾는 중") : t("가져올 게 아직 없어요")} desc={t("다른 AI 도구에서 쓰던 지침·스킬·세션을 찾으면 여기에 보여요")}>
               <button class="btn sm" onClick={scan} disabled={scanning()}><Icon name="refresh" size={14} />{t("다시 찾기")}</button>
-            </div>
+            </EmptyState>
           </div>
         }
       >
@@ -758,7 +821,7 @@ function Import() {
             <input placeholder={t("세션 검색")} value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
           </label>
         </Show>
-        <For each={sessions()} fallback={<div class="empty-line">{t("세션 없음")}</div>}>
+        <For each={sessions()} fallback={<EmptyState icon="message" title={query() ? t("결과 없음") : t("세션 없음")} />}>
           {(s) => (
             <div class="item-row">
               <div class="item-main">
@@ -789,12 +852,12 @@ function Permissions() {
   );
   return (
     <>
-      <h2>{t("macOS 권한")}</h2>
+      <PageHead tab="tools" />
       <div class="set-group">
-        <Row title={t("손쉬운 사용")} desc={t("다른 앱 조작에 필요")}>
+        <Row title={t("손쉬운 사용")} desc={t("작업이 다른 앱을 누르고 입력하려면 필요해요")}>
           {perm(status()?.accessibility, () => void askPermission("accessibility"))}
         </Row>
-        <Row title={t("화면 기록")} desc={t("앱 화면 캡처에 필요")}>
+        <Row title={t("화면 기록")} desc={t("작업이 앱 화면을 보려면 필요해요")}>
           {perm(status()?.screenRecording, () => void askPermission("screen"))}
         </Row>
       </div>
@@ -816,8 +879,18 @@ function keyRows(): KeyRow[] {
     const space = state.spaces[i];
     return { id: `ws${i + 1}` as ShortcutId, label: t("워크스페이스 {n}", { n: i + 1 }), section: t("워크스페이스"), note: space && t(space.label) };
   });
+  const macRows = () => Array.from({ length: 9 }, (_, i): KeyRow => {
+    const m = macs()[i];
+    return { id: `mac${i + 1}` as ShortcutId, label: t("Mac {n}", { n: i + 1 }), section: t("Mac"), note: m?.name };
+  });
   let placed = false;
+  let macsPlaced = false;
   for (const c of commands) {
+    if (c.id.startsWith("mac-")) {
+      if (!macsPlaced) rows.push(...macRows());
+      macsPlaced = true;
+      continue;
+    }
     // a workspace's command is bound by its place: the nine rows stand for them
     if (c.id.startsWith("sp-")) {
       if (!placed) rows.push(...places());
@@ -825,6 +898,7 @@ function keyRows(): KeyRow[] {
     } else if (isShortcutId(c.id)) rows.push({ id: c.id, label: c.label, section: c.section });
   }
   if (!placed) rows.push(...places());
+  if (!macsPlaced) rows.push(...macRows());
   // an id the table has but no row lists yet still gets one
   for (const id of Object.keys(shortcuts) as ShortcutId[]) if (!rows.some((r) => r.id === id)) rows.push({ id, label: id, section: t("기타") });
   return rows;
@@ -921,10 +995,9 @@ function Shortcuts() {
   return (
     <>
       <div class="set-sticky">
-      <div class="set-head">
-        <h2>{t("단축키")}</h2>
+      <PageHead tab="shortcuts">
         <button class="btn sm" disabled={!anyChanged()} onClick={() => (stop(), setNote(null), writeBindings({}), toast(t("기본값으로 되돌렸어요")))}>{t("모두 기본값으로")}</button>
-      </div>
+      </PageHead>
       <label class="tl-search">
         <Icon name="search" size={14} />
         <input placeholder={t("검색")} aria-label={t("단축키 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
@@ -938,7 +1011,7 @@ function Shortcuts() {
               <For each={list}>
                 {(r) => (
                   <>
-                    <div class="set-row kb-row" classList={{ rec: rec() === r.id }}>
+                    <div class="set-row kb-row" classList={{ rec: rec() === r.id }} data-set={r.label}>
                       <div class="set-label">
                         <b>{r.label}</b>
                         <Show when={r.note}><span class="kb-for">{r.note}</span></Show>
@@ -996,25 +1069,67 @@ function Shortcuts() {
   );
 }
 
-export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string }[] = [
-  { id: "general", label: "일반", icon: "gear" },
-  { id: "accounts", label: "계정과 워크스페이스", icon: "key" },
-  { id: "tools", label: "macOS 권한", icon: "shield" },
-  { id: "remote", label: "연결", icon: "monitor" },
-  { id: "agent-tools", label: "도구", icon: "tools" },
-  { id: "skills", label: "스킬", icon: "skill" },
-  { id: "hooks", label: "훅", icon: "bolt" },
-  { id: "import", label: "가져오기", icon: "download" },
-  { id: "shortcuts", label: "단축키", icon: "list" },
+export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: string; group: string }[] = [
+  { id: "general", label: "일반", icon: "gear", desc: "화면, 새 작업, 작업 방식을 정해요", group: "" },
+  { id: "accounts", label: "계정과 워크스페이스", icon: "key", desc: "워크스페이스마다 쓸 AI 계정과 모델을 연결해요", group: "" },
+  { id: "remote", label: "연결", icon: "monitor", desc: "다른 Mac의 프로젝트를 여기서 써요. 오가는 내용은 끝까지 암호화돼요.", group: "" },
+  { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
+  { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
+  { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
+  { id: "tools", label: "macOS 권한", icon: "shield", desc: "작업이 화면을 보고 앱을 다루려면 필요해요", group: "이 Mac" },
+  { id: "import", label: "가져오기", icon: "download", desc: "다른 AI 도구에서 쓰던 지침·스킬·세션을 가져와요", group: "이 Mac" },
+  { id: "shortcuts", label: "단축키", icon: "keyboard", desc: "키를 눌러 바로 바꿔요", group: "이 Mac" },
 ];
+
+/** Settings the search finds without the tab open: the tab, and the row's name as its Row shows it. */
+const FINDABLE: [SettingsTab, string][] = [
+  ["general", "테마"], ["general", "화면 크기"], ["general", "언어"], ["general", "링크 열기"],
+  ["general", "기본 모델"], ["general", "기본 권한"], ["general", "동시 작업 수"], ["general", "빌드·시뮬레이터 작업 동시 수"],
+  ["general", "작업마다 새 워크트리"], ["general", "PR 리뷰 자동 대응"], ["general", "GitHub 푸시·PR 허용"], ["general", "메모리 자동 저장"],
+  ["general", "작업 브라우저 미리보기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
+  ["general", "익명 사용 통계 보내기"],
+  ["tools", "손쉬운 사용"], ["tools", "화면 기록"],
+  ["remote", "다른 Mac에서 이 Mac 쓰기"], ["remote", "잠자기 방지"], ["remote", "연결 링크"],
+];
+
+/** a row asked for from the search: the tab opens, then the row is brought into view and lit */
+const [jump, setJump] = createSignal<string | null>(null);
 
 const settingsTab = () => {
   const v = view();
   return (v.name === "settings" && v.tab) || "general";
 };
 
-/** Settings take the whole window. The sidebar becomes the list of sections. */
+/** Settings take the whole window. The sidebar becomes the list of sections, with a search on top. */
 export function SettingsNav(props: { onBack: () => void }) {
+  const [q, setQ] = createSignal("");
+  let input!: HTMLInputElement;
+  const tabOf = (id: SettingsTab) => SETTINGS_TABS.find((x) => x.id === id)!;
+  type Hit = { tab: SettingsTab; label: string; row?: string };
+  const hits = createMemo((): Hit[] => {
+    const query = q().trim().toLowerCase();
+    if (!query) return [];
+    const has = (...s: string[]) => s.some((x) => x.toLowerCase().includes(query));
+    const out: Hit[] = SETTINGS_TABS.filter((x) => has(t(x.label), t(x.desc))).map((x) => ({ tab: x.id, label: t(x.label) }));
+    for (const [tab, k] of FINDABLE) if (has(t(k))) out.push({ tab, label: t(k), row: t(k) });
+    for (const r of keyRows()) if (has(r.label)) out.push({ tab: "shortcuts", label: r.label, row: r.label });
+    return out.slice(0, 30);
+  });
+  const go = (h: Hit) => {
+    setView({ name: "settings", tab: h.tab });
+    setJump(h.row ?? null);
+  };
+  // ⌘F finds in Settings
+  const key = (e: KeyboardEvent) => {
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "KeyF") {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  };
+  onMount(() => window.addEventListener("keydown", key));
+  onCleanup(() => window.removeEventListener("keydown", key));
+  const groups = () => [...new Set(SETTINGS_TABS.map((x) => x.group))];
   return (
     <aside class="sidebar settings-side">
       <div class="sb-top" data-tauri-drag-region />
@@ -1023,16 +1138,61 @@ export function SettingsNav(props: { onBack: () => void }) {
           <Icon name="back" size={16} />
           <span class="sb-title">{t("앱으로 돌아가기")}</span>
         </button>
-        <div class="settings-side-list">
-          <For each={SETTINGS_TABS}>
-            {(tab) => (
-              <button class="sb-row sb-main" classList={{ on: settingsTab() === tab.id }} onClick={() => setView({ name: "settings", tab: tab.id })}>
-                <Icon name={tab.icon} size={16} />
-                <span class="sb-title">{t(tab.label)}</span>
-              </button>
-            )}
-          </For>
-        </div>
+        <label class="set-find">
+          <Icon name="search" size={14} />
+          <input
+            ref={input}
+            placeholder={t("설정 검색")}
+            aria-label={t("설정 검색")}
+            value={q()}
+            data-shortcuts="local"
+            onInput={(e) => setQ(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                q() ? setQ("") : input.blur();
+              } else if (e.key === "Enter" && hits()[0]) go(hits()[0]);
+            }}
+          />
+          <Show when={!q()}><kbd>⌘F</kbd></Show>
+        </label>
+        <Show
+          when={q().trim()}
+          fallback={
+            <div class="settings-side-list">
+              <For each={groups()}>
+                {(g) => (
+                  <>
+                    <Show when={g}><div class="set-nav-group">{t(g)}</div></Show>
+                    <For each={SETTINGS_TABS.filter((x) => x.group === g)}>
+                      {(tab) => (
+                        <button class="sb-row sb-main set-nav" classList={{ on: settingsTab() === tab.id }} onClick={() => setView({ name: "settings", tab: tab.id })}>
+                          <span class="set-nav-icon"><Icon name={tab.icon} size={14} /></span>
+                          <span class="sb-title">{t(tab.label)}</span>
+                        </button>
+                      )}
+                    </For>
+                  </>
+                )}
+              </For>
+            </div>
+          }
+        >
+          <div class="settings-side-list set-hits">
+            <For each={hits()} fallback={<div class="set-nav-none">{t("찾는 설정이 없어요")}</div>}>
+              {(h, i) => (
+                <button class="sb-row sb-main set-hit" classList={{ first: i() === 0 }} onClick={() => go(h)}>
+                  <span class="set-nav-icon"><Icon name={tabOf(h.tab).icon} size={14} /></span>
+                  <span class="set-hit-text">
+                    <span class="sb-title">{h.label}</span>
+                    <Show when={h.row}><span class="set-hit-tab">{t(tabOf(h.tab).label)}</span></Show>
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
       </div>
     </aside>
   );
@@ -1049,6 +1209,20 @@ export function SettingsPage(props: { onBack: () => void }) {
   let body!: HTMLDivElement;
   // each tab opens at its top
   createEffect(on(settingsTab, () => body && (body.scrollTop = 0), { defer: true }));
+  // a row found by the search: once its tab is drawn, bring it into view and light it for a moment
+  createEffect(on(jump, (row) => {
+    if (!row) return;
+    setTimeout(() => {
+      setJump(null);
+      const el = [...body.querySelectorAll<HTMLElement>("[data-set]")].find((x) => x.dataset.set!.startsWith(row));
+      if (!el) return;
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.classList.remove("found");
+      void el.offsetWidth;
+      el.classList.add("found");
+      setTimeout(() => el.classList.remove("found"), 1800);
+    }, 120);
+  }));
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />

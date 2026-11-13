@@ -3,6 +3,7 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import { setState, state } from "../state/store";
 import { tokens } from "../ui/bits";
+import { PageHead } from "./Settings";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 import { loadWorkerTools, type EngineContext } from "./contextData";
@@ -95,15 +96,14 @@ export function ToolsTab() {
   };
   return (
     <>
-      <div class="set-head">
-        <h2>{t("도구")}</h2>
+      <PageHead tab="agent-tools">
         <Show when={data()}>
           {(c) => <span class="tl-total" title={t("켜진 도구가 요청마다 쓰는 토큰")}>{t("켜진 도구 {n}개 · {tok} 토큰", { n: enabledTools(c()).length, tok: tokens(enabledToolTokens(c())) })}</span>}
         </Show>
         <button class="btn sm" disabled={data.loading} onClick={() => setForce((n) => n + 1)}>
           <Icon name="refresh" size={14} />{t("새로고침")}
         </button>
-      </div>
+      </PageHead>
       <label class="tl-search">
         <Icon name="search" size={14} />
         <input placeholder={t("검색")} aria-label={t("도구 검색")} value={q()} onInput={(e) => setQ(e.currentTarget.value)} />

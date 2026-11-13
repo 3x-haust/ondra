@@ -11,7 +11,7 @@ import { Icon } from "../ui/Icon";
 import { Sheet } from "../ui/Sheet";
 import { Markdown } from "../ui/Markdown";
 import { t } from "../i18n";
-import { GroupTitle } from "./Settings";
+import { EmptyState, GroupTitle, PageHead } from "./Settings";
 import { skillLine } from "../engine/agentTools";
 
 // the slash list and others read the same line
@@ -266,7 +266,7 @@ export function SkillsTab() {
   );
   return (
     <>
-      <h2>{t("스킬")}</h2>
+      <PageHead tab="skills" />
       <GroupTitle title={t("기본")} />
       <div class="set-group">
         <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중…") : t("스킬 없음")}</div>}>
@@ -274,10 +274,16 @@ export function SkillsTab() {
         </For>
       </div>
       <GroupTitle title={t("내 스킬")}>
-        <button class="btn ghost sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />{t("추가")}</button>
+        <Show when={mine().length}>
+          <button class="btn ghost sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />{t("추가")}</button>
+        </Show>
       </GroupTitle>
       <div class="set-group">
-        <For each={mine()} fallback={<div class="empty-line">{t("내 스킬 없음")}</div>}>
+        <For each={mine()} fallback={
+          <EmptyState icon="skill" title={t("내 스킬 없음")} desc={t("자주 시키는 방법을 스킬로 적어 두면 작업이 알아서 꺼내 써요")}>
+            <button class="btn sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />{t("스킬 만들기")}</button>
+          </EmptyState>
+        }>
           {(e) => <Row e={e} />}
         </For>
       </div>

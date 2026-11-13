@@ -77,6 +77,9 @@ export const shortcuts = {
   // ⌘1–9: the workspace in that place in the sidebar
   ws1: cmd("Digit1"), ws2: cmd("Digit2"), ws3: cmd("Digit3"), ws4: cmd("Digit4"), ws5: cmd("Digit5"),
   ws6: cmd("Digit6"), ws7: cmd("Digit7"), ws8: cmd("Digit8"), ws9: cmd("Digit9"),
+  // ⌃1–9: the Mac in that place in the Mac bar (this Mac first)
+  mac1: ctrl("Digit1"), mac2: ctrl("Digit2"), mac3: ctrl("Digit3"), mac4: ctrl("Digit4"), mac5: ctrl("Digit5"),
+  mac6: ctrl("Digit6"), mac7: ctrl("Digit7"), mac8: ctrl("Digit8"), mac9: ctrl("Digit9"),
   // the `?` sheet
   keys: { code: "Slash", shift: true },
   // held, not pressed: modifiers alone show every button's key (shortcutHold.ts)

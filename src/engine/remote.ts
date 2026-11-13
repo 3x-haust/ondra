@@ -158,7 +158,8 @@ function sendInfo(conn: number, c: Conn) {
 }
 
 async function sendProjects(conn: number) {
-  const list = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, folder: p.folder }));
+  // each with its workspace's name, so the other Mac shows it in the tab of that name
+  const list = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, folder: p.folder, space: state.spaces.find((s) => s.id === p.space)?.label }));
   await send(conn, { t: "projects", list });
 }
 

@@ -14,7 +14,7 @@ export interface HostMirror {
   /** connected once and then not: since when */
   since?: number;
   /** every project on that Mac (to pick from) */
-  projects: { id: string; name: string; folder: string }[];
+  projects: { id: string; name: string; folder: string; space?: string }[];
   /** the jobs of the projects added here, as that Mac has them (ids as there) */
   tasks: Task[];
   /** its workspaces, accounts and their plan use (sent by that Mac, refreshed as they change) */

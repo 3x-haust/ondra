@@ -4,6 +4,7 @@ import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
+import { MacBar } from "../ui/MacBar";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
@@ -241,22 +242,11 @@ function projectMenu(id: string): MenuEntry[] {
   if (!p) return [];
   const n = tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.answer).length;
   const far = splitProjectId(p.id);
-  // another Mac's project: it stays there; here it can only be taken off the list
+  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there)
   if (far)
     return [
       { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
       { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
-      "sep",
-      {
-        id: "remove",
-        label: tr("목록에서 제거"),
-        icon: "trash",
-        run: () => {
-          const v = view();
-          if (v.name === "main" && v.project === p.id) goMain();
-          void import("../engine/hosts").then((m) => m.removeHostProject(far.host, far.id));
-        },
-      },
     ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
@@ -724,6 +714,8 @@ export function Sidebar() {
         </button>
         <UpdateButton />
       </div>
+      {/* once another Mac is added: which Mac the current workspace's new work runs on (⌃1…) */}
+      <MacBar />
     </aside>
   );
 }
