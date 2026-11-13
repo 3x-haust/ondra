@@ -6,7 +6,8 @@
 //
 // Paths go there in that Mac's terms: this Mac's home turned back into "~" (it has its own).
 // Its files are cached here by path and version (src-tauri/src/farfs.rs) so a picture or a
-// page shows like a local one; anything bigger than MAX_MEDIA isn't fetched.
+// page shows like a local one (a page with the files it links to, laid out as there); anything
+// bigger than MAX_MEDIA isn't fetched.
 import { createContext, createSignal, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
 import {
@@ -16,6 +17,7 @@ import {
   farPut,
   farStat,
   fileSrc,
+  pageSrc,
   fsFiles,
   fsGrep,
   fsRead,
@@ -33,7 +35,7 @@ import {
   type GitChanges,
   type Merged,
 } from "../lib/native";
-import { asHostPath, cacheName, uploadName } from "./farPaths";
+import { asHostPath, cacheName, pageRefs, resolveRef, scanKind, siteName, uploadName } from "./farPaths";
 import { askHost, onPeerKind, tellHost } from "./hosts";
 import { engine } from "./rpc";
 import { t } from "../i18n";
@@ -92,11 +94,11 @@ const looked = new Map<string, { at: number; seen: number; wait: number; busy?: 
 let ticking: ReturnType<typeof setInterval> | undefined;
 
 /** Fetch a file of that Mac into the cache here (in pieces, one at a time). */
-async function fetchTo(host: string, path: string, name: string, size: number): Promise<string> {
+async function fetchTo(host: string, path: string, name: string, size: number, kind: "cache" | "site" = "cache"): Promise<string> {
   let out = "";
   for (let off = 0; off < size || off === 0; ) {
     const p = await askHost<{ data: string; size: number }>(host, "far.piece", [there(path), off, PIECE]);
-    out = await farPut("cache", name, off, p.data);
+    out = await farPut(kind, name, off, p.data);
     const n = Math.floor((p.data.length * 3) / 4) - (p.data.endsWith("==") ? 2 : p.data.endsWith("=") ? 1 : 0);
     if (!n) break;
     off += n;
@@ -153,6 +155,122 @@ export function srcOf(path: string, host: Where): string {
   const p = localCopy(path, host);
   return p ? fileSrc(p) : "";
 }
+
+// ───────── a page of that Mac, with what it uses
+
+/** a page brings at most this many files with it, and this much in all */
+export const SITE_FILES = 400;
+export const SITE_BYTES = 200 << 20;
+/** a file read for more links: no bigger than this */
+const SCAN_MAX = 4 << 20;
+
+interface Site {
+  /** the page's copy here, and the folder the copies are laid out in */
+  path?: string;
+  root?: string;
+  /** each file copied: its version there ("modified:size") */
+  got: Map<string, string>;
+  /** the page's version when last copied */
+  page?: number;
+  busy?: boolean;
+  at: number;
+  seen: number;
+  wait: number;
+}
+const [sites, setSites] = createStore<Record<string, { path?: string; v: number; big?: boolean }>>({});
+const siteState = new Map<string, Site>();
+let siteTick: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * Copy a page of that Mac here with every file it links to (its pictures, styles, scripts,
+ * fonts, other pages, followed through those too), laid out as there so the page's relative
+ * links find them. Files that Mac doesn't let this one read, or that are gone, are left out.
+ */
+async function syncSite(host: string, page: string, s: Site): Promise<boolean> {
+  let changed = false;
+  let bytes = 0;
+  const seen = new Set<string>([page]);
+  const queue = [page];
+  const one = async (path: string) => {
+    const st = await askHost<FarStat | null>(host, "far.stat", [there(path)]).catch(() => null);
+    if (!st || st.dir || st.size > MAX_MEDIA || bytes + st.size > SITE_BYTES) return;
+    bytes += st.size;
+    const mark = `${st.modified}:${st.size}`;
+    const name = siteName(host, path);
+    // the same version as last time, still here: kept
+    let file = s.root && s.got.get(path) === mark ? `${s.root}${name}` : undefined;
+    if (file && (await farStat(file))?.size !== st.size) file = undefined;
+    if (!file) {
+      file = await fetchTo(host, path, name, st.size, "site").catch(() => undefined);
+      if (!file) return;
+      s.got.set(path, mark);
+      s.root ??= file.slice(0, file.length - name.length);
+      changed = true;
+    }
+    if (path === page) s.path = file;
+    const kind = scanKind(path);
+    if (!kind || st.size > SCAN_MAX) return;
+    const text = (await fsRead(file).catch(() => null))?.text;
+    if (!text) return;
+    const dir = path.slice(0, path.lastIndexOf("/"));
+    for (const r of pageRefs(text, kind)) {
+      const next = resolveRef(dir, r);
+      if (next && !seen.has(next) && seen.size < SITE_FILES) (seen.add(next), queue.push(next));
+    }
+  };
+  // the page first (its folder is known from it), then the rest a few at a time
+  await one(queue.shift()!);
+  if (!s.path) return false;
+  const work = async () => {
+    for (let x = queue.shift(); x !== undefined; x = queue.shift()) await one(x);
+  };
+  await Promise.all([work(), work(), work(), work()]);
+  return changed;
+}
+
+async function lookSite(host: string, page: string, key: string) {
+  const s = siteState.get(key)!;
+  s.busy = true;
+  s.at = Date.now();
+  try {
+    const st = await askHost<FarStat | null>(host, "far.stat", [there(page)]);
+    if (!st || st.dir) return;
+    if (st.size > MAX_MEDIA) return void setSites(key, { v: 0, big: true });
+    // the page itself changed (or was never copied): copy again what it uses
+    if (s.page === st.modified && s.path) return void (s.wait = Math.min(s.wait * 2, 60_000));
+    s.wait = 4000;
+    const changed = await syncSite(host, page, s);
+    s.page = st.modified;
+    if (s.path && (changed || sites[key]?.path !== s.path)) setSites(key, { path: s.path, v: Date.now() });
+  } catch {
+    // not there, not allowed, or an older Ondra: nothing to show
+  } finally {
+    s.busy = false;
+  }
+}
+
+/** An <iframe> src for a page here or on that Mac (reactive; "" until it is copied here). A page of
+ *  that Mac comes with the files it uses, and shows again when it changes there. */
+export function pageSrcOf(path: string, host: Where): string {
+  if (!host || !path) return pageSrc(path);
+  const key = `${host}|${path}`;
+  const s: Site = siteState.get(key) ?? { got: new Map(), at: 0, seen: 0, wait: 4000 };
+  s.seen = Date.now();
+  siteState.set(key, s);
+  if (!s.busy && Date.now() - s.at > s.wait) void lookSite(host, path, key);
+  // looked at again while on screen: the page there is rewritten as the job works
+  siteTick ??= setInterval(() => {
+    for (const [k, x] of siteState) {
+      if (Date.now() - x.seen > 30_000) continue;
+      const i = k.indexOf("|");
+      if (!x.busy && Date.now() - x.at > x.wait) void lookSite(k.slice(0, i), k.slice(i + 1), k);
+    }
+  }, 4000);
+  const x = sites[key];
+  return x?.path ? `${pageSrc(x.path)}?v=${x.v}` : "";
+}
+/** too big to copy from that Mac */
+export const pageTooBig = (path: string, host: Where) => !!host && !!sites[`${host}|${path}`]?.big;
 
 // ───────── attachments: sent to that Mac, its paths given back
 

@@ -16,7 +16,7 @@ import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, 
 import { gitEnv, prOf, setPriority, setTaskAccount, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
 import { gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc } from "../lib/native";
-import { farError, farShell, farTerm, HostCtx, localCopy, onMac, readText, revealOn, setFarShell, srcOf, tooBig } from "../engine/far";
+import { farError, farShell, farTerm, HostCtx, localCopy, onMac, pageSrcOf, pageTooBig, readText, revealOn, setFarShell, srcOf, tooBig } from "../engine/far";
 import { Xterm } from "../ui/Xterm";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
@@ -510,14 +510,17 @@ function ArtifactsPane(props: { t: Task }) {
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
                   <Match when={kindOf(a.name) !== "text" && tooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
+                  <Match when={kindOf(a.name) === "page" && pageTooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
                   <Match when={kindOf(a.name) === "page"}>
-                    {/* another Mac's page: the copy fetched here */}
-                    <Show when={props.t.host ? localCopy(a.path, props.t.host) : a.path} fallback={<div class="pane-empty" />}>
-                      {(at) => (
-                        <Show when={/\.pdf$/i.test(a.path)} fallback={<iframe class="aframe" src={`${pageSrc(at())}?v=${a.modified}`} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}>
-                          <iframe class="aframe" src={pdfSrc(at(), a.modified)} title={a.name} />
-                        </Show>
-                      )}
+                    {/* another Mac's page: copied here, with the files it uses */}
+                    <Show when={/\.pdf$/i.test(a.path)} fallback={
+                      <Show when={props.t.host ? pageSrcOf(a.path, props.t.host) : `${pageSrc(a.path)}?v=${a.modified}`} fallback={<div class="pane-empty" />}>
+                        {(src) => <iframe class="aframe" src={src()} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}
+                      </Show>
+                    }>
+                      <Show when={props.t.host ? localCopy(a.path, props.t.host) : a.path} fallback={<div class="pane-empty" />}>
+                        {(at) => <iframe class="aframe" src={pdfSrc(at(), a.modified)} title={a.name} />}
+                      </Show>
                     </Show>
                   </Match>
                   <Match when={kindOf(a.name) === "image"}>

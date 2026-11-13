@@ -635,6 +635,6 @@ export const farPiece = (path: string, offset: number, len: number) =>
 /** where each path really is, links followed (null: not there) */
 export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", { paths }, paths);
 /** a piece put into this app's own folder: "cache" (another Mac's files shown here) or "upload" (attachments sent here) */
-export const farPut = (kind: "cache" | "upload", name: string, offset: number, data: string) =>
+export const farPut = (kind: "cache" | "upload" | "site", name: string, offset: number, data: string) =>
   call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
 export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);

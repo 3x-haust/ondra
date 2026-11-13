@@ -4,8 +4,7 @@ import type { Block, Evidence, Task } from "../state/types";
 import { homeDir } from "../state/store";
 import { expand, tilde } from "../engine/rpc";
 import { mainCommand } from "../engine/describe";
-import { pageSrc } from "../lib/native";
-import { localCopy, srcOf, useHost } from "../engine/far";
+import { pageSrcOf, srcOf, useHost } from "../engine/far";
 import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
 import { Icon } from "./Icon";
@@ -445,7 +444,7 @@ function BlockBody(props: { block: Block; task?: Task }) {
               <span class="spacer" />
               <button class="link-btn" onClick={() => previewFile(p().path)}>{t("크게 보기")}</button>
             </div>
-            <iframe class="blk-page-frame" sandbox="allow-scripts" src={pageSrc(host() ? localCopy(p().path, host()) : p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
+            <iframe class="blk-page-frame" sandbox="allow-scripts" src={pageSrcOf(p().path, host())} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
           </div>
         )}
       </Match>

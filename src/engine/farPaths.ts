@@ -105,3 +105,69 @@ export function capText(text: string, max: number): { text: string; cut: boolean
   const nl = s.lastIndexOf("\n");
   return { text: nl > 0 ? s.slice(0, nl + 1) : s, cut: true };
 }
+
+// ───────── a page of another Mac, with what it uses
+
+/** the files a page may use that are read for more of them (a page, its styles, its scripts, a drawing) */
+export const scanKind = (path: string): "html" | "css" | "js" | undefined => {
+  const ext = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase();
+  return ext === "html" || ext === "htm" || ext === "svg" || ext === "xhtml" ? "html" : ext === "css" ? "css" : ext === "js" || ext === "mjs" ? "js" : undefined;
+};
+
+const CSS_REFS = [/url\(\s*["']?([^"')\s]+)["']?\s*\)/g, /@import\s+["']([^"']+)["']/g];
+const JS_REFS = [
+  /\b(?:import|export)\s[^"'`;]*?\bfrom\s*["']([^"']+)["']/g,
+  /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+  /\bimport\s+["']([^"']+)["']/g,
+  /\bfetch\(\s*["']([^"']+)["']/g,
+  /\bnew\s+(?:URL|Worker)\(\s*["']([^"']+)["']/g,
+];
+const HTML_REFS = [/\b(?:src|href|poster|data|xlink:href)\s*=\s*["']([^"']+)["']/gi, /\b(?:src|href|poster)\s*=\s*([^\s"'>]+)/gi];
+
+/** The relative links in a page, a style sheet or a script (anything with a scheme, an anchor or a
+ *  template left out): what it needs next to it to show as it does there. */
+export function pageRefs(text: string, kind: "html" | "css" | "js"): string[] {
+  const out: string[] = [];
+  const take = (res: RegExp[], s: string) => {
+    for (const re of res) for (const m of s.matchAll(re)) out.push(m[1]);
+  };
+  if (kind === "css") take(CSS_REFS, text);
+  else if (kind === "js") take(JS_REFS, text);
+  else {
+    take(HTML_REFS, text);
+    for (const m of text.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi)) for (const part of m[1].split(",")) out.push(part.trim().split(/\s+/)[0] ?? "");
+    // inline styles and module scripts
+    take(CSS_REFS, text);
+    for (const m of text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) take(JS_REFS, m[1]);
+  }
+  const keep = (r: string) => !!r && !/^[a-z][a-z0-9+.-]*:/i.test(r) && !r.startsWith("//") && !r.startsWith("#") && !r.startsWith("/") && !/[{}$<>`]/.test(r);
+  return [...new Set(out.map((r) => r.trim()).filter(keep))];
+}
+
+/** `ref` (relative, as written in a file in `dir`) as a path on that Mac; undefined when it isn't one */
+export function resolveRef(dir: string, ref: string): string | undefined {
+  let r = ref.replace(/[?#].*$/, "");
+  try {
+    r = decodeURIComponent(r);
+  } catch {
+    return undefined;
+  }
+  if (!r || r.includes("\0")) return undefined;
+  const parts = dir.split("/");
+  for (const seg of r.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (parts.length <= 1) return undefined;
+      parts.pop();
+    } else parts.push(seg);
+  }
+  const p = parts.join("/");
+  return p.startsWith("/") || p.startsWith("~") ? p : undefined;
+}
+
+/** where a file of that Mac goes in the page copies here: the same layout, under that Mac's own folder */
+export function siteName(host: string, path: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < host.length; i++) h = Math.imul(h ^ host.charCodeAt(i), 16777619);
+  return `${(h >>> 0).toString(36)}/${path.replace(/^[/~]+/, "")}`;
+}
