@@ -292,6 +292,10 @@ export class ComputerHostHelper {
   stop(): void { this.closed = true; try { this.child?.stdin.end(); } catch { /* closing */ } this.child?.kill(); this.child = undefined; }
 }
 
+/** How long stop waits for the helper's release: its worst case is a quit grace (1.2 s), a kill
+ *  (≤2 s) and the copy's cleanup. */
+export const RELEASE_WAIT_MS = 8000;
+
 /** One app in one background host session. */
 export type HostAction = { kind: string; ref?: unknown; epoch?: string } & Record<string, unknown>;
 
@@ -469,8 +473,18 @@ export class ComputerHostSession {
     if (this.stopped) return { stopped: true };
     this.stopped = true;
     this.obs.reset();
-    // its windows were kept out of the user's sight while the job worked: put them back
-    if (this.pid !== undefined) await Promise.race([this.helper.request("release", { pid: this.pid }).catch(() => undefined), new Promise((r) => setTimeout(r, 2000))]);
+    // A copy the job opened is quit (killed after a short grace if it ignores that), a real app
+    // it opened is quit, the user's own app is hidden again. The wait outlasts the helper's own
+    // worst case, so it is not cut off midway; even if it were, the helper's exit path ends
+    // whatever it still holds.
+    if (this.pid !== undefined) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        this.helper.request("release", { pid: this.pid }).catch(() => undefined),
+        new Promise((r) => { timer = setTimeout(r, RELEASE_WAIT_MS); }),
+      ]);
+      clearTimeout(timer);
+    }
     this.helper.stop();
     return { stopped: true };
   }

@@ -37,7 +37,7 @@ const top = (query: string) => searchSkills(bundled, query, 3).map((s) => s.name
 
 describe("skill matching", () => {
   it("reads every bundled skill", () => {
-    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa"]));
+    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa", "stack-diagram"]));
   });
 
   it("maps a question about how another tool works to reverse engineering", () => {
@@ -55,10 +55,16 @@ describe("skill matching", () => {
     ["랜딩 페이지 디자인", "web-design"],
     ["포트폴리오 디자인", "web-design"],
     ["매출 차트 보고서 만들어줘", "visual-report"],
+    ["우리 스택 아키텍처 다이어그램 그려줘", "stack-diagram"],
+    ["draw our system architecture diagram with logos", "stack-diagram"],
     ["모션그래픽 만들어줘", "motion-graphics"],
     ["제품 홍보 영상 만들어줘", "motion-graphics"],
     ["인스타 릴스용 키네틱 타이포 영상", "motion-graphics"],
     ["make a launch film for the app", "motion-graphics"],
+    ["로고 만들어줘", "logo-design"],
+    ["우리 카페 로고 디자인해줘", "logo-design"],
+    ["브랜드 키트랑 파비콘 만들어줘", "logo-design"],
+    ["design a logo for my startup", "logo-design"],
     ["메모 앱에서 버튼 눌러줘 컴퓨터유즈로", "computer-use"],
     ["이 웹앱 QA 해줘", "qa"],
     ["앱 화면 다 눌러봐", "qa"],
@@ -71,6 +77,8 @@ describe("skill matching", () => {
     ["이 엑셀 파일 정리해줘", "office-docs"],
     ["워드 문서로 만들어줘", "office-docs"],
     ["PPT 만들어줘", "office-docs"],
+    ["이 프로젝트 앱 확인 스킬 만들어줘", "app-check"],
+    ["앱 확인 스킬 점검해줘", "app-check-upkeep"],
     ["merge these PDF files", "office-docs"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
@@ -227,5 +235,67 @@ describe("userWords", () => {
   });
   it("leaves the user's own words as they are", () => {
     expect(userWords("\"어떻게 할까요?\" → 로그인 화면만")).toBe("\"어떻게 할까요?\" → 로그인 화면만");
+  });
+});
+
+describe("a project's own skills", () => {
+  it("are found in its folder and up to the repo root, never at home", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { projectSkillDirs } = await import("./skills");
+    const home = mkdtempSync(join(tmpdir(), "home-"));
+    const repo = join(home, "code", "app");
+    mkdirSync(join(repo, ".agents", "skills", "check-app"), { recursive: true });
+    mkdirSync(join(repo, "web", ".claude", "skills"), { recursive: true });
+    mkdirSync(join(home, ".claude", "skills"), { recursive: true });
+    mkdirSync(join(home, "code", ".cursor", "skills"), { recursive: true });
+    writeFileSync(join(repo, ".git"), "gitdir: elsewhere");
+    expect(projectSkillDirs(join(repo, "web"), home)).toEqual([join(repo, "web", ".claude", "skills"), join(repo, ".agents", "skills")]);
+    // a folder that isn't a repo: up to home, not home itself
+    expect(projectSkillDirs(join(home, "code"), home)).toEqual([join(home, "code", ".cursor", "skills")]);
+    expect(projectSkillDirs(home, home)).toEqual([]);
+  });
+});
+
+describe("checking in the app", () => {
+  it("is in a job's rules unless turned off, and names the skills", async () => {
+    const { appCheckRules } = await import("../src/engine/prompts");
+    setState("settings", "appCheck", undefined);
+    expect(appCheckRules()).toContain("app-check");
+    expect(appCheckRules()).toContain("check-<app>");
+    setState("settings", "appCheck", false);
+    expect(appCheckRules()).toBe("");
+    setState("settings", "appCheck", undefined);
+  });
+  it("ships both skills with frontmatter that loads", () => {
+    for (const name of ["app-check", "app-check-upkeep"]) {
+      const text = readFileSync(join(__dirname, "..", "skills", name, "SKILL.md"), "utf8");
+      expect(text).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
+      expect(text).toContain("MIT, Lauren Tan");
+    }
+  });
+});
+
+describe("logo-design skill", () => {
+  const logo = bundled.find((s) => s.name === "logo-design")!;
+  const body = readFileSync(logo.filePath, "utf8");
+
+  it("is named for logo requests in every role's skill list", () => {
+    for (const prompt of [CAPTAIN_SYSTEM, TASK_SYSTEM, SUB_SYSTEM]) expect(prompt).toMatch(/로고[^\n]*\n?[^\n]*→ logo-design/);
+    expect(skillLine(logo)).toBe("로고와 브랜드 키트를 만들어요");
+  });
+
+  it("ships its scripts executable and shows how to call each one", () => {
+    for (const script of ["contact.mjs", "measure.mjs", "sheet.mjs", "render.mjs", "kit.mjs", "outline.py", "union.py"]) {
+      expect(statSync(join(logo.baseDir, "scripts", script)).mode & 0o111).not.toBe(0);
+      expect(body).toContain(script);
+    }
+    for (const ref of ["craft.md", "kit.md", "fonts.md"]) expect(statSync(join(logo.baseDir, "references", ref)).isFile()).toBe(true);
+  });
+
+  it("is offered when the work runs its scripts or writes a favicon", () => {
+    expect(router().forTool("bash", { command: "node skills/logo-design/scripts/sheet.mjs concepts/ review/" })?.skill.name).toBe("logo-design");
+    expect(router().forTool("write", { path: "public/favicon.svg" })?.skill.name).toBe("logo-design");
+    expect(router().forTool("write", { path: "src/components/Logo.tsx" })).toBeUndefined();
   });
 });

@@ -14,6 +14,7 @@
 mod update;
 mod applog;
 mod components;
+mod logos;
 mod browser;
 mod inbrowser;
 mod devices;
@@ -36,6 +37,7 @@ mod devbridge;
 mod bridge;
 mod embed;
 mod keys;
+mod winsize;
 
 use tauri::{
     AppHandle, Emitter, Manager, RunEvent, WindowEvent,
@@ -380,6 +382,8 @@ pub fn run() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // Mission Control / Stage Manager narrowing the window it puts back on stage is undone
+            ("main", WindowEvent::Resized(_) | WindowEvent::Moved(_)) => winsize::on_change(window.app_handle()),
             // The quick input behaves like Spotlight: it goes away when focus leaves.
             ("capture", WindowEvent::Focused(false)) => {
                 let _ = window.hide();
@@ -427,6 +431,7 @@ pub fn run() {
             store::pick_folder,
             store::reveal_path,
             store::open_url,
+            store::open_notices,
             store::open_in_editor,
             store::open_in_terminal,
             store::account_dir_path,
@@ -459,6 +464,7 @@ pub fn run() {
             farfs::far_real,
             farfs::far_put,
             farfs::far_cached,
+            logos::logo_fetch,
             worktree::worktree_merge,
             worktree::worktree_remove,
             worktree::worktree_landed,

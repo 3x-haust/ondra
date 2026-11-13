@@ -28,7 +28,31 @@ using only **public** APIs:
   then resumed, so its first window opens off-screen — no flash, no Dock tile
   (it runs from an `LSBackgroundOnly` copy), no focus taken. Capture and pointer/key
   events address the window by id wherever it sits, so nothing is ever shown on the
-  user's screen. On `stop` the copy is quit and cleaned up (`lsregister -u`, delete).
+  user's screen. On `stop` the copy is quit and cleaned up (`lsregister -u`, delete):
+  a quit Apple event and SIGTERM, then SIGKILL after 1.2 s (a harness app may ignore
+  both), all copies at once. A copy stays tracked until it is really gone, so a helper
+  told to exit mid-release (SIGTERM/SIGHUP/SIGINT or stdin closed) still ends it before
+  its display goes. A copy whose helper died anyway (crash, SIGKILL) is
+  reparented to launchd; the next helper ends every such orphan at start and before
+  each launch — matched by the exec path inside the copies folder and parent launchd,
+  never by name, so another live helper's copy and the user's real apps are safe.
+  Left alone, an orphan's windows land on the user's screen once its display goes,
+  and under Stage Manager that switches the user's stage.
+- **Panels stay off-screen**: a window the copy places itself — a floating NSPanel
+  ordered with `orderFrontRegardless` on the main display or at the pointer, a
+  tooltip — would sit above the user's windows, where no raise of theirs covers it.
+  The guard moves every frame the app sets / window it orders in onto the off-screen
+  display (`ONDRA_CU_BACKDROP`), before it shows; for an app without the guard the
+  helper checks every 250 ms and after each action and moves any stray window over
+  by AX. Menu bar items are left alone.
+- **Stage Manager**: the user's stage switches when a window lands on their display
+  (the orphans above, a stray panel) or an app comes to the front. Both are kept from
+  happening; if the app the job started still comes to the front during a launch or
+  an action without the user's own input, the user's app (and with it their stage) is
+  brought back (`selfActivated`/`stageRestored`). A front change to any other app is
+  left alone: it can't be told from the user's or another program's doing. The
+  launch's hold on the user's window frame never resizes a window Stage Manager has
+  put in the strip.
 - **Keychain-safe copy**: the background copy is shaped per app kind so the app's
   login keychain keeps working (a modified `Info.plist` in place during a keychain
   read is rejected by securityd). `native` — `Info.plist` is a copy, everything else

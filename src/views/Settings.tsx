@@ -22,6 +22,7 @@ import {
   accountProviders,
   accountRemove,
   inTauri,
+  openNotices,
   pickFolder,
   toolStatus,
   spaceGhLogin,
@@ -236,6 +237,9 @@ function General() {
         <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
+        <Row title={t("작업 끝나면 앱에서 직접 확인")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
+          <Switch_ label={t("작업 끝나면 앱에서 직접 확인")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
+        </Row>
         <Row title={t("스킬 다듬기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
           <Switch_ label={t("스킬 다듬기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
         </Row>
@@ -264,6 +268,9 @@ function General() {
       <div class="set-group">
         <UpdateRow />
         <Components />
+        <Row title={t("오픈소스 라이선스")} desc={t("Ondra는 MIT 라이선스예요. 함께 쓰는 오픈소스의 라이선스를 봐요")}>
+          <button class="btn ghost sm" onClick={() => void openNotices().catch((e) => toast(String(e), "bad"))}>{t("보기")}</button>
+        </Row>
         {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
         <Show when={canTrack}>
           <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>

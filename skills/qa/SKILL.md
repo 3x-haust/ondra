@@ -34,6 +34,10 @@ tests → `test-ci`, the fix loop → `goal-loop`, blocks → `visual-report`.
   publish, pay, invite): skip them, or `ask` first (`browser-use` rule 8).
 - Never type, paste or print a password: keychain sign-in or the user signs in
   (`browser-use` rule 4). Never screenshot a visible password or token.
+- **Your own instance.** Run the app you test yourself, on its own port and
+  its own profile or data folder, and stop it at the end. Never drive, restart
+  or rebuild the copy the user is working in (it fights their session and their
+  login) unless they asked you to test that one.
 
 ## 1. Scope
 
@@ -56,6 +60,17 @@ Work out what to cover from the request, without asking:
   sidebar/tab/menu components, view switches in the root component, dialogs,
   settings tabs, keyboard shortcuts. Add the sitemap and the nav links.
   Dynamic routes: one representative id per template, not every id.
+
+- **The project's check skill, when it has one.** A `check-<app>` skill in
+  the repo (`.agents/`, `.claude/` or `.cursor/skills/`; older ones are named
+  `verify-*`) already knows how to launch, health-check, drive and clean up
+  this app, and its `features/` map lists what the app does. Use its launch
+  and drive steps instead of working them out, and match the change to its
+  feature files; each one is the coverage set (its entry points, modes and
+  gotchas). A whole-app sweep walks the map's index in its order and ends with
+  the journeys that cross features. No check skill, and the app is QA'd again
+  and again → say in the report that app-check would make one. In fix mode,
+  an area whose map turned out wrong gets fixed in the same change as the UI.
 
 A `scope` block (in / out) and a `tree` of screens (changed ones marked
 `state: "changed"`) let the user see and correct the coverage early.
@@ -120,6 +135,25 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   (many items), `set offline on`, `set media dark`, `set device "iPhone 15"`.
   `ondra-browser a11y` checks a page against WCAG rules; `vitals` gives load numbers.
   Save shots to absolute paths (`$APP_ARTIFACTS_DIR/...`).
+- **Drive it like a careful user.**
+  - Reuse the repo's own harness first (its Playwright or e2e setup, Storybook,
+    an Electron or webview launcher, a debug script); a desktop app built on a
+    web view can often be checked through its web layer in the browser, with
+    native calls stubbed the way its own tests do. Don't add a test framework
+    to the project just to look at something.
+  - One step at a time: read the screen (snapshot or shot), do exactly one
+    thing (click, type, key, scroll, resize, navigate), read it again, check
+    that what should have changed did. Element references from before a
+    navigation or a re-render are stale; read again.
+  - Find things by role, label, `data-*` or text, not by coordinates. A
+    coordinate click only right after a fresh screenshot.
+  - Prefer the app's own keyboard shortcut to a click when the feature has one.
+  - Wait for a state you can see (the reply finished, the row appeared, the
+    spinner gone), never a fixed sleep: streaming and animation make timing
+    lie.
+  - Several windows or tabs of the same app: pick the one by a marker of the
+    screen under test, not by order; none matches → list them instead of
+    guessing.
 - **Screenshots mostly for problems** and before/after proof: reading
   structure (`snapshot -i --delta`, `eval`) is faster for checking; look at
   pixels for layout, overflow and theme.
@@ -164,6 +198,33 @@ rather than at the end means the notes survive an interruption or a handoff.
 Good: "P2 · 장바구니 · 수량에 0 입력 → 저장되고 합계 0원 (기대: 1 이상만) ·
 `src/cart/Qty.tsx:41`". Not: "장바구니에 문제가 있을 수 있어요".
 
+## 4b. What counts as proof
+
+When you say something works (a fixed bug, a new feature, "QA passed"), the
+proof is what a sceptical reviewer would accept, not "it opens":
+
+- **A fresh build.** First make sure the running app contains the change
+  (built after the last edit: its build time, version or commit marker, a
+  string you just changed). A recording of a stale build proves nothing.
+- **The real path.** Get there the way a user does: visible UI, menus,
+  shortcuts, the normal backend. `eval` and debug hooks are for reading state
+  *after* the user path ran, never for calling the handler as the proof.
+- **Every way in, every outcome.** Each entry point the feature has (button,
+  menu, shortcut, deep link) and each outcome the change can touch: success,
+  cancel, error, empty, and what is kept after a reload or switching away and
+  back.
+- **The result, not just pixels.** Check the side effect too: the saved file
+  or record, the request that went out, the clipboard, the DOM attribute, the
+  state after a reload.
+- **Trigger and end state together**: one shot pair or recording shows the
+  action and the settled result.
+- **Mocks** count only at the boundary a real outage would hit (an external
+  API). A mock that skips the screen, the app's own service, storage or the
+  code under test proves nothing.
+- **Can't reach it?** Name the path, say what blocks it (an account, the OS, a
+  permission, a native dialog the driver can't use), and cover the nearest
+  real path that remains.
+
 ## 5. Report-only: finish
 
 Go straight to §7. Don't fix, even small things; the issue list is the result.
@@ -177,8 +238,8 @@ the test passes, the exact repro works (after shot, same viewport) and console
 and requests are clean. Re-run the plan lines that touch the changed files;
 something that passed now fails → undo and try another fix. P3s: fix
 them when the user asked for "완벽하게" and the fix is local; else list them.
-When no P1/P2 remain: a fresh production build and a final sweep of the main
-flows on phone and desktop. Don't commit, push or open a PR unless the task says so.
+Each fix is shown working by the bar in §4b. When no P1/P2 remain: a fresh
+production build and a final sweep of the main flows on phone and desktop. Don't commit, push or open a PR unless the task says so.
 
 ## 7. Report
 

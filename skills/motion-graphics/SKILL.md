@@ -2,7 +2,7 @@
 name: motion-graphics
 description: >
   Making a motion graphic film: a product promo, launch film, teaser, reel or
-  kinetic type video (모션그래픽, 홍보 영상, 프로모 영상, 런칭 영상, 소개 영상, 릴스,
+  kinetic type video (모션그래픽, 홍보 영상, 영상 만들어줘, 프로모 영상, 런칭 영상, 소개 영상, 릴스,
   키네틱 타이포, 티저, promo video, launch film, product film). Strong product
   films as references, storylines and a numeric spec, a beat-timed storyboard,
   scenes built as deterministic HTML rendered frame by frame to MP4 with motion

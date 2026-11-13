@@ -50,17 +50,21 @@ const KO_MORE: Record<string, string> = {
 
 /** One plain line for the bundled skills (their own descriptions are written for the model). */
 const SKILL_LINE: Record<string, string> = {
+  "app-check": "프로젝트에 앱을 실행하고 써 보는 확인 스킬을 만들어요",
+  "app-check-upkeep": "앱 확인 스킬과 기능 지도를 앱에 맞게 고쳐요",
   "browser-use": "브라우저로 사이트를 열고 다뤄요",
   "code-review": "끝내기 전에 바뀐 코드를 설계와 코드 두 관점으로 검토해요",
   "computer-use": "Mac 앱을 뒤에서 조작해요",
   "deep-research": "여러 출처를 읽고 조사해요",
   "device-use": "시뮬레이터와 에뮬레이터에서 앱을 다뤄요",
   "goal-loop": "목표를 이룰 때까지 고치고 확인해요",
+  "logo-design": "로고와 브랜드 키트를 만들어요",
   mimikyu: "Figma 디자인을 코드로 옮기고 맞춰 봐요",
   "modern-web-guidance": "웹 화면 코드를 요즘 방식으로 짜요",
   "motion-graphics": "홍보 영상과 모션그래픽을 만들어요",
   "office-docs": "워드·엑셀·PPT·PDF 파일을 읽고 만들어요",
   secrets: "API 키와 .env를 값을 보지 않고 다뤄요",
+  "stack-diagram": "공식 로고로 아키텍처·스택 다이어그램을 그려요",
   qa: "앱을 직접 써 보며 버그를 찾아요",
   "reverse-engineering": "바이너리와 앱을 분석해요",
   "test-ci": "테스트와 CI를 만들어요",

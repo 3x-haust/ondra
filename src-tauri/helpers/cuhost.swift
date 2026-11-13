@@ -911,23 +911,25 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let forcePointer = (action["pointer"] as? Bool) ?? false
         if right || name == kAXShowMenuAction || opensMenu(el) { try refuseMenuInBackground(pid) }
         let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
+        // the arrow gets there first, so the press lands where the user sees it point
+        VirtualCursor.shared.lead(spot)
         // an item of an open menu: the menu closes and applies the choice after the press
         // returns, so wait for that before the next step reads or acts on the result
         let menuOwner = axString(el, kAXRoleAttribute) == kAXMenuItemRole ? axParent(el).flatMap(axParent) : nil
         if count == 1 && !right && !forcePointer && AXUIElementPerformAction(el, name as CFString) == .success {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             if let owner = menuOwner { _ = waitForMenuClosed(owner) }
             return ["via": "ax"]
         }
         if count == 1 && right && !forcePointer && axActions(el).contains(kAXShowMenuAction),
            AXUIElementPerformAction(el, kAXShowMenuAction as CFString) == .success {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             return ["via": "ax-menu"]
         }
         // A row's text or cell has no press: select its row the accessibility way (no events,
         // so the window is never lifted the way a pointer click lifts it)
         if count == 1 && !right && !forcePointer, let row = selectableRow(el), selectRow(row) {
-            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            VirtualCursor.shared.press()
             return ["via": "ax-select"]
         }
         // The view ignores accessibility actions (custom rows, profile cards, …): click it
@@ -938,7 +940,7 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         if userActive(in: pid) { throw ActError.message("USER_ACTIVE", "the user is working in this app; nothing was sent") }
         try refusePointerIfItRaises(pid)
         guard let (p, w) = spot else { throw ActError.message("NO_BOUNDS", "this element has no visible bounds to click") }
-        VirtualCursor.shared.show(at: p, window: w, click: true)
+        VirtualCursor.shared.press()
         postClick(pid: pid, at: p, button: right ? .right : .left, count: count, window: w)
         return ["via": "pointer"]
     case "set-value":
@@ -994,6 +996,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
             if !focusIsOn(el, pid: pid), !(background && axSettable(el, kAXValueAttribute)),
                let (p, w) = spot, (try? refusePointerIfItRaises(pid)) != nil {
                 // some fields only take focus from a click: one addressed to the window, cursor untouched
+                VirtualCursor.shared.lead((p, w))
+                VirtualCursor.shared.press()
                 postClick(pid: pid, at: p, button: .left, count: 1, window: w)
                 usleep(80_000)
             }
@@ -1031,7 +1035,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let (p, w) = try resolvePoint(action, pid: pid, map: map)
         let button: CGMouseButton = (action["button"] as? String) == "right" ? .right : .left
         let count = (action["count"] as? Int) ?? 1
-        VirtualCursor.shared.show(at: p, window: w, click: true)
+        VirtualCursor.shared.lead((p, w))
+        VirtualCursor.shared.press()
         postClick(pid: pid, at: p, button: button, count: count, window: w)
     case "scroll":
         // Scroll wheel events posted to a background app carry no window and are
@@ -1056,10 +1061,13 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         }
         let (a, w) = try resolvePoint(fromSpec, pid: pid, map: map)
         let (b, _) = try resolvePoint(toSpec, pid: pid, map: map)
-        VirtualCursor.shared.show(at: a, window: w, click: false)
+        VirtualCursor.shared.lead((a, w))
+        VirtualCursor.shared.press()
         let t0 = nowMs()
+        // the arrow carries the drag across while the events go to the app
+        VirtualCursor.shared.show(at: b, window: w, click: false)
         let steps = postDrag(pid: pid, from: a, to: b, window: w)
-        VirtualCursor.shared.show(at: b, window: w, click: true)
+        VirtualCursor.shared.press()
         // a drop lands only in an app that carries ondra-bgguard.dylib, which runs the drag inside the app
         return ["dragSteps": steps, "dragMs": nowMs() - t0, "dropInApp": bgApp(pid)?.guarded == true]
     default:
@@ -1196,68 +1204,152 @@ func giveFrontBack(to pid: pid_t, from target: pid_t) -> Bool {
 }
 
 // ───────────────────────── virtual cursor ─────────────────────────
-// Shows where the agent points without touching the real cursor: a small pointer of
-// its own, drawn just above the target window (so the user's front windows still
-// cover it), gliding between points and pulsing once on a click. Click-through,
-// never key, never activates; it goes away a moment after the last action.
+// Shows where the agent points without touching the real cursor: Ondra's own pointer, drawn
+// on a click-through overlay ordered just above the target window, so the user's windows in
+// front still cover it and the user's cursor and focus stay where they are. It glides to
+// each point along a slight arc, arrives before the action lands, presses on a click, and
+// fades a few seconds after the last action. Never key, never activates.
 
-final class PointerView: NSView {
-    let ring = CAShapeLayer()
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        ring.fillColor = NSColor.clear.cgColor
-        ring.strokeColor = NSColor.controlAccentColor.cgColor
-        ring.lineWidth = 2
-        ring.opacity = 0
-        let r: CGFloat = 12
-        ring.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
-        ring.position = CGPoint(x: 14, y: frame.height - 14)
-        layer?.addSublayer(ring)
+/// Ondra's pointer: a rounded arrowhead in Ondra's blue, a white rim, a soft shadow.
+final class PointerLayer: CALayer {
+    static let box = CGSize(width: 32, height: 32)
+    /// the tip, in the box's bottom-left coordinates
+    static let tip = CGPoint(x: 6, y: 26)
+    private let body = CAGradientLayer()
+    private let rim = CAShapeLayer()
+    private let ripple = CAShapeLayer()
+
+    override init() {
+        super.init()
+        bounds = CGRect(origin: .zero, size: Self.box)
+        anchorPoint = CGPoint(x: Self.tip.x / Self.box.width, y: Self.tip.y / Self.box.height)
+        contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        let path = Self.arrow()
+        // the press: a soft ring that opens under the tip
+        let r: CGFloat = 15
+        ripple.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r), transform: nil)
+        ripple.position = Self.tip
+        ripple.fillColor = NSColor(srgbRed: 0.30, green: 0.61, blue: 0.94, alpha: 0.20).cgColor
+        ripple.strokeColor = NSColor(srgbRed: 0.30, green: 0.61, blue: 0.94, alpha: 0.55).cgColor
+        ripple.lineWidth = 1.25
+        ripple.opacity = 0
+        addSublayer(ripple)
+        shadowPath = path
+        shadowColor = NSColor.black.cgColor
+        shadowOpacity = 0.32
+        shadowRadius = 3.5
+        shadowOffset = CGSize(width: 0, height: -1.5)
+        // Ondra's accent (#1f6fd8), a touch lighter at the top so it reads on dark and light
+        body.frame = bounds
+        body.colors = [NSColor(srgbRed: 0.42, green: 0.71, blue: 0.97, alpha: 1).cgColor, NSColor(srgbRed: 0.12, green: 0.44, blue: 0.85, alpha: 1).cgColor]
+        body.startPoint = CGPoint(x: 0.3, y: 1)
+        body.endPoint = CGPoint(x: 0.6, y: 0)
+        let mask = CAShapeLayer()
+        mask.path = path
+        body.mask = mask
+        addSublayer(body)
+        rim.path = path
+        rim.fillColor = nil
+        rim.strokeColor = NSColor.white.cgColor
+        rim.lineWidth = 1.5
+        rim.lineJoin = .round
+        addSublayer(rim)
+        for l in [body, rim, ripple, mask] as [CALayer] { l.contentsScale = contentsScale }
     }
+    override init(layer: Any) { super.init(layer: layer) }
     required init?(coder: NSCoder) { nil }
-    override func draw(_ dirty: NSRect) {
-        // the tip sits at (14, h-14) so the click ring can centre on it
-        let tip = NSPoint(x: 14, y: bounds.height - 14)
-        let p = NSBezierPath()
-        p.move(to: tip)
-        p.line(to: NSPoint(x: tip.x, y: tip.y - 17))
-        p.line(to: NSPoint(x: tip.x + 4.2, y: tip.y - 13))
-        p.line(to: NSPoint(x: tip.x + 7.2, y: tip.y - 19.5))
-        p.line(to: NSPoint(x: tip.x + 9.8, y: tip.y - 18.3))
-        p.line(to: NSPoint(x: tip.x + 6.9, y: tip.y - 11.9))
-        p.line(to: NSPoint(x: tip.x + 12.2, y: tip.y - 11.9))
-        p.close()
-        p.lineJoinStyle = .round
-        NSColor.controlAccentColor.setFill()
-        p.fill()
-        NSColor.white.setStroke()
-        p.lineWidth = 1.5
-        p.stroke()
+
+    /// A navigation arrow pointing up-left: tip, a right wing, a notch, a lower wing; corners rounded.
+    static func arrow() -> CGPath {
+        let t = tip
+        let pts: [(CGPoint, CGFloat)] = [
+            (t, 1.8),
+            (CGPoint(x: t.x + 23, y: t.y - 8), 2.5),
+            (CGPoint(x: t.x + 10.4, y: t.y - 10.4), 1.4),
+            (CGPoint(x: t.x + 8, y: t.y - 23), 2.5),
+        ]
+        let p = CGMutablePath()
+        let n = pts.count
+        let start = CGPoint(x: (pts[n - 1].0.x + pts[0].0.x) / 2, y: (pts[n - 1].0.y + pts[0].0.y) / 2)
+        p.move(to: start)
+        for i in 0..<n { p.addArc(tangent1End: pts[i].0, tangent2End: pts[(i + 1) % n].0, radius: pts[i].1) }
+        p.closeSubpath()
+        return p
     }
-    func pulse() {
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = 0.4; scale.toValue = 1.0
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0.9; fade.toValue = 0
+
+    /// The press: the arrow dips and springs back while the ring opens and fades.
+    func press(after delay: CFTimeInterval = 0) {
+        let at = convertTime(CACurrentMediaTime(), from: nil) + delay
+        let dip = CAKeyframeAnimation(keyPath: "transform.scale")
+        dip.values = [1, 0.84, 1.05, 1]
+        dip.keyTimes = [0, 0.35, 0.72, 1]
+        dip.duration = 0.28
+        dip.beginTime = at
+        dip.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut), CAMediaTimingFunction(name: .easeOut)]
+        add(dip, forKey: "press")
+        let grow = CABasicAnimation(keyPath: "transform.scale")
+        grow.fromValue = 0.3; grow.toValue = 1.0
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.values = [0, 1, 0]; fade.keyTimes = [0, 0.2, 1]
         let g = CAAnimationGroup()
-        g.animations = [scale, fade]
-        g.duration = 0.35
+        g.animations = [grow, fade]
+        g.duration = 0.45
+        g.beginTime = ripple.convertTime(CACurrentMediaTime(), from: nil) + delay + 0.06
         g.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        ring.add(g, forKey: "pulse")
+        ripple.add(g, forKey: "ripple")
     }
 }
 
 final class VirtualCursor {
     static let shared = VirtualCursor()
+    /// room around the window so the arrow and its ring can sit at the window's edge
+    private let margin: CGFloat = 40
     private var panel: NSPanel?
-    private var view: PointerView?
+    private var pointer: PointerLayer?
     private var hide: DispatchWorkItem?
-    private let size = NSSize(width: 44, height: 44)
+    /// where the tip is headed (global top-left coordinates) and over which window; read from
+    /// the action thread to time the glide, written on main
+    private let lock = NSLock()
+    private var lastAt: CGPoint?
+    private var lastWindow: CGWindowID?
+    private var lastFrame: CGRect = .zero
+    private var shown = false
 
-    func show(at point: CGPoint, window: EventWindow?, click: Bool) {
-        guard let w = window, shownAsIs(w), visible(w.id, at: point) else { return }
-        DispatchQueue.main.async { self.place(point, above: w.id, click: click) }
+    /// Glide to `point` over `window`, pressing on arrival when `click`. Returns the glide's
+    /// length in seconds (0 when nothing is drawn: the window is hidden, minimized or covered).
+    @discardableResult
+    func show(at point: CGPoint, window: EventWindow?, click: Bool) -> TimeInterval {
+        guard let w = window, shownAsIs(w), visible(w.id, at: point) else { return 0 }
+        lock.lock()
+        let from = shown && lastWindow == w.id ? lastAt : nil
+        lastAt = point
+        lastWindow = w.id
+        shown = true
+        lock.unlock()
+        let travel = from.map { Self.travel(from: $0, to: point) } ?? 0
+        DispatchQueue.main.async { self.place(point, over: w, from: from, travel: travel, click: click) }
+        return travel
+    }
+
+    /// Glide there first and wait (briefly) until the arrow arrives, so the action lands
+    /// where the user sees it point. Used right before a click or a press.
+    func lead(_ spot: (CGPoint, EventWindow?)?) {
+        guard let (p, w) = spot else { return }
+        let t = show(at: p, window: w, click: false)
+        if t > 0 { usleep(UInt32(min(t, 0.32) * 1_000_000)) }
+    }
+
+    /// The press where the arrow is now.
+    func press() {
+        lock.lock(); let on = shown; lock.unlock()
+        guard on else { return }
+        DispatchQueue.main.async { self.pointer?.press(); self.keepAlive() }
+    }
+
+    /// Longer moves take a little longer, like a hand (Fitts): about 0.15 s to 0.5 s.
+    static func travel(from a: CGPoint, to b: CGPoint) -> TimeInterval {
+        let d = hypot(b.x - a.x, b.y - a.y)
+        return d < 2 ? 0 : min(0.5, 0.14 + 0.075 * log2(1 + d / 24))
     }
 
     /// On screen at its real size: not hidden, minimized or a Stage Manager thumbnail.
@@ -1282,7 +1374,7 @@ final class VirtualCursor {
     }
 
     private func make() -> NSPanel {
-        let p = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
+        let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
@@ -1291,38 +1383,103 @@ final class VirtualCursor {
         p.isReleasedWhenClosed = false
         p.hidesOnDeactivate = false
         p.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
-        let v = PointerView(frame: NSRect(origin: .zero, size: size))
+        let v = NSView(frame: p.contentLayoutRect)
+        v.wantsLayer = true
+        v.autoresizingMask = [.width, .height]
         p.contentView = v
-        view = v
+        let ptr = PointerLayer()
+        ptr.opacity = 0
+        v.layer?.addSublayer(ptr)
+        pointer = ptr
         return p
     }
 
-    private func place(_ point: CGPoint, above id: CGWindowID, click: Bool) {
+    /// AppKit frame of the overlay for a window (global top-left coordinates in).
+    private func overlayFrame(_ r: CGRect) -> NSRect {
+        let primary = NSScreen.screens.first?.frame.height ?? CGDisplayBounds(CGMainDisplayID()).height
+        return NSRect(x: r.minX - margin, y: primary - r.maxY - margin, width: r.width + 2 * margin, height: r.height + 2 * margin)
+    }
+
+    /// A global top-left point in the overlay's layer (bottom-left) coordinates.
+    private func local(_ g: CGPoint, in r: CGRect) -> CGPoint {
+        CGPoint(x: g.x - r.minX + margin, y: r.maxY + margin - g.y)
+    }
+
+    private func place(_ point: CGPoint, over w: EventWindow, from: CGPoint?, travel: TimeInterval, click: Bool) {
         let p = panel ?? make()
         panel = p
-        // global top-left coordinates → AppKit's bottom-left, tip at the point
-        let primary = NSScreen.screens.first?.frame.height ?? CGDisplayBounds(CGMainDisplayID()).height
-        let origin = NSPoint(x: point.x - 14, y: primary - point.y - (size.height - 14))
-        if p.isVisible && p.alphaValue > 0 {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.18
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                p.animator().setFrameOrigin(origin)
-            }
-        } else {
-            p.setFrameOrigin(origin)
-            p.alphaValue = 1
+        guard let ptr = pointer else { return }
+        if lastFrame != w.frame || !p.isVisible {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            p.setFrame(overlayFrame(w.frame), display: false)
+            if let f = from { ptr.position = local(f, in: w.frame) }
+            CATransaction.commit()
+            lastFrame = w.frame
         }
-        p.order(.above, relativeTo: Int(id))
-        if click { view?.pulse() }
+        p.order(.above, relativeTo: Int(w.id))
+        let to = local(point, in: w.frame)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if ptr.opacity < 0.5 || from == nil {
+            // appear: drift in from a little below-right of the point and settle
+            ptr.removeAllAnimations()
+            ptr.position = to
+            ptr.opacity = 1
+            let drift = CABasicAnimation(keyPath: "position")
+            drift.fromValue = NSValue(point: CGPoint(x: to.x + 14, y: to.y - 14))
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            let grow = CABasicAnimation(keyPath: "transform.scale")
+            grow.fromValue = 0.7
+            let g = CAAnimationGroup()
+            g.animations = [drift, fade, grow]
+            g.duration = 0.22
+            g.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.3, 1)
+            ptr.add(g, forKey: "appear")
+            ptr.transform = CATransform3DIdentity
+            CATransaction.commit()
+            if click { ptr.press(after: 0.2) }
+            keepAlive()
+            return
+        }
+        // glide along a slight arc (a hand never moves in a ruler-straight line)
+        let start = (ptr.presentation() ?? ptr).position
+        ptr.position = to
+        ptr.removeAnimation(forKey: "appear")
+        if travel > 0 {
+            let dx = to.x - start.x, dy = to.y - start.y
+            let d = max(1, hypot(dx, dy))
+            let bend = min(48, d * 0.12)
+            let control = CGPoint(x: (start.x + to.x) / 2 - dy / d * bend, y: (start.y + to.y) / 2 + dx / d * bend)
+            let path = CGMutablePath()
+            path.move(to: start)
+            path.addQuadCurve(to: to, control: control)
+            let glide = CAKeyframeAnimation(keyPath: "position")
+            glide.path = path
+            glide.duration = travel
+            glide.calculationMode = .paced
+            glide.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0, 0.18, 1)
+            ptr.add(glide, forKey: "glide")
+        }
+        CATransaction.commit()
+        if click { ptr.press(after: travel) }
+        keepAlive()
+    }
+
+    /// Fade out a few seconds after the last action.
+    private func keepAlive() {
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let p = self?.panel else { return }
-            NSAnimationContext.runAnimationGroup({ ctx in ctx.duration = 0.25; p.animator().alphaValue = 0 },
-                                                 completionHandler: { if p.alphaValue == 0 { p.orderOut(nil) } })
+            guard let self, let p = self.panel, let ptr = self.pointer else { return }
+            self.lock.lock(); self.shown = false; self.lock.unlock()
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.3)
+            CATransaction.setCompletionBlock { if ptr.opacity == 0 { p.orderOut(nil) } }
+            ptr.opacity = 0
+            ptr.transform = CATransform3DMakeScale(0.85, 0.85, 1)
+            CATransaction.commit()
         }
         hide = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
     }
 }
 
@@ -1373,7 +1530,13 @@ func settle(pid: pid_t) -> Double {
 
 func appURL(_ name: String) -> URL? {
     let ws = NSWorkspace.shared
-    if name.contains("/") || name.hasSuffix(".app") { return URL(fileURLWithPath: name) }
+    // a bundle by its path (a test build in a scratch folder): only if it is there
+    if name.contains("/") || name.hasSuffix(".app") {
+        let url = URL(fileURLWithPath: (name as NSString).expandingTildeInPath).standardizedFileURL
+        if name.contains("/") || FileManager.default.fileExists(atPath: url.path) {
+            return FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path) ? url : nil
+        }
+    }
     if let u = ws.urlForApplication(withBundleIdentifier: name) { return u }
     // an app already open, wherever it was opened from (Downloads, a build folder)
     if let u = runningAppByName(name) { return u }
@@ -1408,7 +1571,7 @@ func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, Str
 }
 
 /// The frontmost app's focused window and where it is.
-struct HeldFrame { let window: AXUIElement; let origin: CGPoint; let size: CGSize }
+struct HeldFrame { let window: AXUIElement; let origin: CGPoint; let size: CGSize; let id: CGWindowID }
 
 func axPoint(_ el: AXUIElement, _ attr: String) -> CGPoint? {
     var v: CFTypeRef?
@@ -1423,27 +1586,47 @@ func axSize(_ el: AXUIElement) -> CGSize? {
     return AXValueGetValue(val as! AXValue, .cgSize, &s) ? s : nil
 }
 
+/// The on-screen bounds the window server shows for a window: under Stage Manager a window
+/// in the side strip shows as a small thumbnail there, while AX still reports its real frame.
+func cgBounds(_ id: CGWindowID) -> CGRect? {
+    guard let info = (CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]])?.first,
+          let b = info[kCGWindowBounds as String] as? NSDictionary else { return nil }
+    return CGRect(dictionaryRepresentation: b)
+}
+
+/// The front app's focused window, held only while it is on stage at its real size (its window
+/// server bounds match its AX frame): a frame read off a Stage Manager thumbnail is never held.
 func frontWindowFrame() -> HeldFrame? {
     guard let front = NSWorkspace.shared.frontmostApplication else { return nil }
     let app = AXUIElementCreateApplication(front.processIdentifier)
     var w: CFTypeRef?
     guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &w) == .success, let win = w, CFGetTypeID(win) == AXUIElementGetTypeID() else { return nil }
     let el = win as! AXUIElement
-    guard let o = axPoint(el, kAXPositionAttribute), let s = axSize(el) else { return nil }
-    return HeldFrame(window: el, origin: o, size: s)
+    guard let o = axPoint(el, kAXPositionAttribute), let s = axSize(el),
+          let id = cgWindowID(pid: front.processIdentifier, frame: CGRect(origin: o, size: s), title: nil) else { return nil }
+    return HeldFrame(window: el, origin: o, size: s, id: id)
 }
 
 /// Watch the held window for a moment after a launch; if it was moved or resized, put it back.
+/// If Stage Manager took it into the strip (its window server bounds are a thumbnail now), its
+/// AX frame is not touched: resizing a window in the strip fights Stage Manager and leaves it
+/// half out. That is a stage switch, and restoreUserStage brings the user's stage back.
 func keepFrame(_ h: HeldFrame) {
     let moved = { () -> Bool in
         guard let o = axPoint(h.window, kAXPositionAttribute), let s = axSize(h.window) else { return false }
         return abs(o.x - h.origin.x) > 1 || abs(o.y - h.origin.y) > 1 || abs(s.width - h.size.width) > 1 || abs(s.height - h.size.height) > 1
     }
+    let staged = { () -> Bool in
+        guard let b = cgBounds(h.id) else { return true }
+        return b.width < h.size.width * 0.6 && b.height < h.size.height * 0.6
+    }
     for _ in 0..<15 {
         usleep(100_000)
+        if staged() { return }
         if moved() {
             // let the arrangement finish, then restore size first (a smaller window can always move)
             usleep(250_000)
+            if staged() { return }
             var size = h.size, origin = h.origin
             if let sv = AXValueCreate(.cgSize, &size) { AXUIElementSetAttributeValue(h.window, kAXSizeAttribute as CFString, sv) }
             if let pv = AXValueCreate(.cgPoint, &origin) { AXUIElementSetAttributeValue(h.window, kAXPositionAttribute as CFString, pv) }
@@ -1704,8 +1887,11 @@ func guardDylibPath() -> String? {
 
 struct Copy { let url: URL; let exe: String; let plist: String; let origPlist: String }
 
+/// Where background copies live. ONDRA_CU_CACHE_DIR moves it (tests, so their orphan sweep
+/// never meets a real job's copies).
 func cacheAppsDir() -> URL {
-    let base = URL(fileURLWithPath: NSHomeDirectory())
+    let override = ProcessInfo.processInfo.environment["ONDRA_CU_CACHE_DIR"].flatMap { $0.hasPrefix("/") ? $0 : nil }
+    let base = override.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Caches/dev.3xhaust.ondra/Applications", isDirectory: true)
     try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
     return base
@@ -1798,9 +1984,12 @@ func bgApp(_ pid: pid_t) -> BgApp? { bgLock.lock(); defer { bgLock.unlock() }; r
 func launchBackground(real: URL, copy: Copy, kind: AppKind, guardDylib: String?) -> BgApp? {
     let bd = Backdrop.shared
     guard bd.ensure() else { return nil }
+    // a copy an earlier helper left running (it crashed, or an old bug) goes first
+    reapOrphanCopies()
     var env = ["HOME=\(NSHomeDirectory())", "USER=\(NSUserName())", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR=\(NSTemporaryDirectory())"]
     let guarded = guardDylib != nil
-    if let g = guardDylib { env.append("DYLD_INSERT_LIBRARIES=\(g)") }
+    // the guard keeps every window of the app (floating panels too) on this display
+    if let g = guardDylib { env.append("DYLD_INSERT_LIBRARIES=\(g)"); env.append("ONDRA_CU_BACKDROP=\(bd.displayID)") }
 
     let disclaim = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim").map {
         unsafeBitCast($0, to: (@convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32).self)
@@ -1955,25 +2144,105 @@ func teardownCopy(_ copy: URL) {
     try? FileManager.default.removeItem(at: copy)
 }
 
+/// How long a background copy gets to quit on its own before it is killed. Some apps ignore
+/// SIGTERM and refuse to quit (an unsaved-changes prompt); the copy is the job's, so it goes.
+let quitGraceMs = 1200.0
+
+/// End processes: ask each to quit (a quit Apple event and SIGTERM), all at once; after the
+/// grace, SIGKILL whatever is left and wait for it to go. `alive` says whether a pid is still
+/// the process meant (and reaps it when it is a child of ours), so a pid reused by another
+/// process is never signalled.
+func endProcesses(_ pids: [pid_t], alive: (pid_t) -> Bool) {
+    var left = pids.filter(alive)
+    guard !left.isEmpty else { return }
+    for p in left { NSRunningApplication(processIdentifier: p)?.terminate(); kill(p, SIGTERM) }
+    let t0 = nowMs()
+    while !left.isEmpty, nowMs() - t0 < quitGraceMs { usleep(50_000); left = left.filter(alive) }
+    guard !left.isEmpty else { return }
+    dbgLog("end: \(left) did not quit in \(Int(quitGraceMs))ms, killing")
+    for p in left { kill(p, SIGKILL) }
+    let t1 = nowMs()
+    while !left.isEmpty, nowMs() - t1 < 2000 { usleep(20_000); left = left.filter(alive) }
+}
+
+/// A process this helper spawned is still running (a zombie is reaped here, and counts as gone;
+/// one already reaped elsewhere is no longer ours).
+func childAlive(_ pid: pid_t) -> Bool {
+    var st: Int32 = 0
+    return waitpid(pid, &st, WNOHANG) == 0
+}
+
 /// Terminate a background app the job opened, and clean up its copy.
-func releaseBackground(_ pid: pid_t) {
-    bgLock.lock(); let app = bgApps.removeValue(forKey: pid); bgLock.unlock()
-    guard let app = app else { return }
-    if app.cdpIn >= 0 { close(app.cdpIn) }; if app.cdpOut >= 0 { close(app.cdpOut) }
-    if kill(pid, 0) == 0 {
-        kill(pid, SIGTERM)
-        var st: Int32 = 0
-        for _ in 0..<30 { if waitpid(pid, &st, WNOHANG) == pid || kill(pid, 0) != 0 { break }; usleep(100_000) }
-        if kill(pid, 0) == 0 { kill(pid, SIGKILL); waitpid(pid, &st, 0) }  // reap so no zombie lingers
+func releaseBackground(_ pid: pid_t) { releaseBackgrounds([pid]) }
+
+/// Several at once. Each stays in bgApps until it is really gone, so if the helper is told to
+/// stop while one is still being waited for, its exit path (releaseAllBackground) still sees
+/// it and kills it, instead of exiting and leaving it running on the user's screen.
+func releaseBackgrounds(_ pids: [pid_t]) {
+    bgLock.lock()
+    let apps = pids.compactMap { bgApps[$0] }
+    var fds: [Int32] = []
+    for app in apps {
+        fds += [app.cdpIn, app.cdpOut].filter { $0 >= 0 }
+        app.cdpIn = -1; app.cdpOut = -1
     }
-    teardownCopy(app.copyURL)
+    bgLock.unlock()
+    guard !apps.isEmpty else { return }
+    for fd in fds { close(fd) }
+    let t0 = nowMs()
+    endProcesses(apps.map(\.pid), alive: childAlive)
+    bgLock.lock(); let gone = apps.filter { bgApps.removeValue(forKey: $0.pid) != nil }; bgLock.unlock()
+    dbgLog("release: \(apps.map(\.pid)) ended after \(Int(nowMs() - t0))ms")
+    for app in gone { teardownCopy(app.copyURL) }
+    if !gone.isEmpty { dbgLog("release: copies cleaned up after \(Int(nowMs() - t0))ms") }
 }
 
 func releaseAllBackground() {
     bgLock.lock(); let pids = Array(bgApps.keys); let real = Array(launchedApps.union(offscreenApps)); bgLock.unlock()
-    for pid in pids { releaseBackground(pid) }
+    releaseBackgrounds(pids)
     // a real app the job opened is quit before the display goes away
-    for pid in real { releaseReal(pid) }
+    DispatchQueue.concurrentPerform(iterations: real.count) { releaseReal(real[$0]) }
+}
+
+// ───────────────────────── orphaned copies ─────────────────────────
+// A copy runs as this helper's child, so when a helper is gone (it crashed, was killed, or an
+// older build exited while a copy was still quitting) its copies are reparented to launchd and
+// nobody will ever stop them: they stay on the user's screen once the off-screen display goes.
+// Found by the program they run (a path inside the copies folder, never a name) and their
+// parent (launchd), so a copy another live helper is driving, and the user's real apps, are
+// never touched.
+
+/// The path the process was started with (exec path from KERN_PROCARGS2). For a copy this is
+/// the path inside the copies folder even when its executable is a symlink to the real app's.
+func execPath(_ pid: pid_t) -> String? {
+    var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+    var size = 0
+    guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
+    var buf = [UInt8](repeating: 0, count: size)
+    guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return nil }
+    var i = 4
+    while i < size, buf[i] != 0 { i += 1 }
+    return i > 4 ? String(decoding: buf[4..<i], as: UTF8.self) : nil
+}
+
+func isOrphanCopy(_ pid: pid_t, under dirs: [String]) -> Bool {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size,
+          info.pbi_ppid == 1, info.pbi_uid == getuid(), let exe = execPath(pid) else { return false }
+    return dirs.contains { exe.hasPrefix($0) }
+}
+
+/// Kill every orphaned copy. Returns how many there were.
+@discardableResult func reapOrphanCopies() -> Int {
+    let dir = cacheAppsDir()
+    let dirs = Array(Set([dir.path, dir.resolvingSymlinksInPath().path].map { $0.hasSuffix("/") ? $0 : $0 + "/" }))
+    let me = getpid()
+    let orphans = allPids().filter { $0 != me && $0 > 1 && isOrphanCopy($0, under: dirs) }
+    guard !orphans.isEmpty else { return 0 }
+    dbgLog("orphans: \(orphans)")
+    endProcesses(orphans) { isOrphanCopy($0, under: dirs) }
+    return orphans.count
 }
 
 /// A real app the job opened: quit it, so its Dock tile stops showing it running. If the user
@@ -2123,6 +2392,9 @@ func rescueStrayWindows() {
     for w in infos {
         guard (w[kCGWindowLayer as String] as? Int) == 0,
               let owner = w[kCGWindowOwnerPID as String] as? pid_t, !seen.contains(owner),
+              // never the helper's own pointer window: setting its frame over AX from this thread
+              // is AppKit off the main thread, and the helper crashes (leaving its copies behind)
+              owner != getpid(),
               bgApp(owner) == nil, !isOffscreenApp(owner),
               let b = w[kCGWindowBounds as String] as? [String: CGFloat],
               let x = b["X"], let y = b["Y"], let wd = b["Width"], let ht = b["Height"] else { continue }
@@ -2185,7 +2457,8 @@ let map = AXMap()
 func handle(_ req: [String: Any]) -> [String: Any] {
     let id = req["id"]
     guard let op = req["op"] as? String else { return fail(id, "BAD_REQUEST", "missing op") }
-    let before = environment()
+    // release answers without it: reading the user's app over AX can be slow when it is busy
+    let before: [String: Any] = op == "release" ? ["frontmostPid": NSWorkspace.shared.frontmostApplication.map { Int($0.processIdentifier) } ?? -1] : environment()
 
     switch op {
     case "frontmost":
@@ -2258,15 +2531,21 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if let p = pid {
             askForWebAccessibility(p)
             _ = keepUserWindowOnTop(p, aboveAtLaunch)
+            // a panel the copy put up on the user's display at launch goes off-screen with the rest
+            if bgApp(p) != nil { keepOffUserScreen(p) }
         }
         // an app the user opened themselves may have come up off-screen (apps remember their
         // frame): put any such window back where the user can see it
         rescueStrayWindows()
+        // the app it started coming to the front (a stage switch under Stage Manager) is undone:
+        // the user's app and its stage come back to the front
+        let stageRestored = restoreUserStage(before["frontmostPid"] as? Int, since: t0)
         let after = environment()
         if let pid = pid {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
             var result: [String: Any] = ["pid": Int(pid), "path": target.path, "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            if let r = stageRestored { result["stageRestored"] = r }
             let menus = menuBarTitles(pid)
             if !menus.isEmpty { result["menus"] = menus }
             if mode == "hidden", let e = launchErr { result["backgroundError"] = e }
@@ -2320,6 +2599,8 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             info["raisedOverUser"] = true; info["orderRestored"] = r
             raisesOnPointer.insert(pid_t(pidN))
         }
+        // a panel the action made the copy show (a drop panel during a drag) goes off-screen
+        if bgApp(pid_t(pidN)) != nil, keepOffUserScreen(pid_t(pidN)) > 0 { info["panelKeptOffScreen"] = true }
 
         let actMs = nowMs() - t0
         let tree = observeTree(pid: pid_t(pidN), map: map)
@@ -2333,6 +2614,10 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             extra["selfActivated"] = true
             extra["restored"] = giveFrontBack(to: pid_t(was), from: pid_t(pidN))
             after = environment()
+        } else if let r = restoreUserStage(before["frontmostPid"] as? Int, since: t0) {
+            // another app came forward (a Stage Manager switch): the user's stage comes back
+            extra["stageRestored"] = r
+            after = environment()
         }
         // The user's own mouse or keys during the action are theirs, not a broken contract.
         if !backgroundPreserved(before, after), userInputSince(seconds: (nowMs() - t0) / 1000) { extra["userInput"] = true }
@@ -2344,13 +2629,14 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, result)
     case "release":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
+        let t0 = nowMs()
         // a background copy the job opened is terminated and cleaned up; a real app it opened is
         // quit; the user's own app is hidden again if it was shown
         if bgApp(pid_t(pidN)) != nil { releaseBackground(pid_t(pidN)) }
         else if isLaunchedReal(pid_t(pidN)) { releaseReal(pid_t(pidN)) }
         else { hideAgain(pid_t(pidN)) }
         rescueStrayWindows()
-        return ok(id, ["released": true, "env": environment()])
+        return ok(id, ["released": true, "releaseMs": nowMs() - t0])
     case "selfcheck":
         let pidN = req["pid"] as? Int
         var result: [String: Any] = ["env": before, "axTrusted": AXIsProcessTrusted(),
@@ -2377,6 +2663,72 @@ func countNodes(_ node: [String: Any]) -> Int {
     var n = 1
     if let kids = node["children"] as? [[String: Any]] { for k in kids { n += countNodes(k) } }
     return n
+}
+
+/// A background copy's window that came up on the user's screen — a floating panel the app put
+/// on the main display or at the pointer (orderFrontRegardless at a floating or status level,
+/// which no raise of the user's window can cover), a tooltip, a window an unguarded app moved —
+/// goes onto the off-screen display with the rest of the app, at the same place relative to its
+/// display, so it stays drawn, capturable and reachable by AX. The guard does this inside the app
+/// before the window is ever shown; this is the backstop for apps without it. Menu bar items are
+/// left alone. Returns how many windows were moved.
+@discardableResult func keepOffUserScreen(_ pid: pid_t) -> Int {
+    let bd = Backdrop.shared
+    guard bd.displayID != 0 else { return 0 }
+    let infos = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let stray = infos.contains { w in
+        guard (w[kCGWindowOwnerPID as String] as? Int32) == pid, ((w[kCGWindowAlpha as String] as? Double) ?? 1) > 0,
+              let b = w[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b),
+              r.width > 1, r.height > 1, !bd.contains(r) else { return false }
+        let layer = (w[kCGWindowLayer as String] as? Int) ?? 0
+        let menuBar = (layer == Int(CGWindowLevelForKey(.mainMenuWindow)) || layer == Int(CGWindowLevelForKey(.statusWindow))) && r.height <= 50
+        return !menuBar
+    }
+    guard stray else { return 0 }
+    let target = CGDisplayBounds(bd.displayID)
+    var winsRef: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &winsRef) == .success,
+          let wins = winsRef as? [AXUIElement] else { return 0 }
+    var moved = 0
+    for win in wins {
+        guard let f = axFrame(win), f.width > 1, f.height > 1, !bd.contains(f) else { continue }
+        let center = CGPoint(x: f.midX, y: f.midY)
+        let from = onlineDisplays().map { CGDisplayBounds($0) }.first { $0.contains(center) } ?? CGDisplayBounds(CGMainDisplayID())
+        var origin = CGPoint(x: target.minX + (f.minX - from.minX), y: target.minY + (f.minY - from.minY))
+        origin.x = max(target.minX, min(origin.x, target.maxX - min(f.width, target.width)))
+        origin.y = max(target.minY, min(origin.y, target.maxY - min(f.height, target.height)))
+        if let pv = AXValueCreate(.cgPoint, &origin), AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, pv) == .success { moved += 1 }
+    }
+    if moved > 0 { dbgLog("kept \(moved) window(s) of \(pid) off the user's screen") }
+    return moved
+}
+
+/// Watches the background copies while the helper runs: a copy can put a panel up at any time
+/// (a global drag monitor, a timer), not only during an action.
+func startWindowKeeper() {
+    Thread.detachNewThread {
+        while true {
+            usleep(250_000)
+            bgLock.lock(); let pids = Array(bgApps.keys); bgLock.unlock()
+            for p in pids { keepOffUserScreen(p) }
+        }
+    }
+}
+
+/// Stage Manager: an app the job runs coming to the front (the app starting, a window of it
+/// ordering itself in) switches stages, and the user's windows shrink into the side strip. If an
+/// app of this helper's took the front and the user's own mouse or keys did not do it, the user's
+/// app is brought back to the front, and with it their stage. Only then: a front change to any
+/// other app can't be told from the user's or another program's doing (other tools activate their
+/// own windows too), so it is left alone. nil: nothing to restore; else whether it came back.
+func restoreUserStage(_ wasFront: Int?, since t0: Double) -> Bool? {
+    guard let was = wasFront, was > 0,
+          let now = NSWorkspace.shared.frontmostApplication?.processIdentifier, Int(now) != was,
+          bgApp(now) != nil || isLaunchedReal(now),
+          !userInputSince(seconds: (nowMs() - t0) / 1000),
+          let prev = NSRunningApplication(processIdentifier: pid_t(was)), !prev.isTerminated else { return nil }
+    dbgLog("stage: front went \(was) → \(now), giving it back")
+    return giveFrontBack(to: pid_t(was), from: now)
 }
 
 /// Apps with a normal window in front of the front app's front window, front to back.
@@ -2613,6 +2965,20 @@ if CommandLine.arguments.contains("--displays") {
     exit(0)
 }
 
+/// The helper's last act, once, whichever way it is stopped: end every app the job opened (all
+/// at once, each killed if it won't quit) before the off-screen display goes with the process.
+/// A window still on that display would land on the user's screen, and under Stage Manager that
+/// switches the user's stage. A second stop while this runs waits on the lock until exit(0).
+let shutdownLock = NSLock()
+func shutdown() -> Never {
+    shutdownLock.lock()
+    let t0 = nowMs()
+    releaseAllBackground()
+    hideAllAgain()
+    dbgLog("shutdown: apps ended after \(Int(nowMs() - t0))ms")
+    exit(0)
+}
+
 setbuf(stdout, nil)
 // Bound every AX call, so a hung target app cannot hang the helper (global timeout).
 AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
@@ -2627,17 +2993,22 @@ let worker = Thread {
         }
         emit(handle(obj))
     }
-    releaseAllBackground()
-    hideAllAgain()
-    exit(0)
+    shutdown()
 }
 worker.stackSize = 8 << 20
 worker.start()
-// Stopped: an app shown for a capture or events goes back out of sight first.
-signal(SIGTERM, SIG_IGN)
-let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-onTerm.setEventHandler { releaseAllBackground(); hideAllAgain(); exit(0) }
-onTerm.resume()
+// a copy an earlier helper left running (it crashed or was killed) goes now, not at the next launch
+DispatchQueue.global(qos: .utility).async { reapOrphanCopies() }
+startWindowKeeper()
+// Stopped (stdin closed, or SIGTERM/SIGHUP/SIGINT): everything the job opened goes first.
+var signalSources: [DispatchSourceSignal] = []
+for sig in [SIGTERM, SIGHUP, SIGINT] {
+    signal(sig, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: sig, queue: .global(qos: .userInitiated))
+    source.setEventHandler { shutdown() }
+    source.resume()
+    signalSources.append(source)
+}
 // No Dock icon, no menu bar, never activated: windows only for the pointer overlay.
 NSApplication.shared.setActivationPolicy(.accessory)
 NSApplication.shared.run()

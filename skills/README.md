@@ -10,6 +10,7 @@ The app passes them to every pi worker with `--skill`.
 | `web-design` | Designing pages that look made by a designer: real references first, concepts as live prototypes, the user picks, and the tells of AI-made pages to avoid. |
 | `mimikyu` | Implementing supplied designs (Figma links, 피그마 그대로, 디자인 그대로): save the design contract, build, measure pixels and DOM, then fix until the gates pass. Available to every job without a personal skill install; Figma access and project measurement dependencies are checked when used. |
 | `motion-graphics` | Promo and launch films, reels and kinetic type (모션그래픽, 홍보 영상): strong product films as references, a beat-timed structure, scenes as deterministic HTML rendered to MP4 with motion blur, synthesized sound, and measured flicker and loudness checks. |
+| `logo-design` | Logos, brand marks and wordmarks (로고, 브랜드 키트): a brief, real references, a few distinct concepts as hand-built SVG with their construction, measured checks (16px, one colour, light/dark contrast, likeness to known marks), a comparison page the user picks from, then a brand kit (lockups, favicon set, palette, type, OG image, usage guide). |
 | `modern-web-guidance` | Current HTML, CSS and client-side JS practice from the Chrome team, offline: 209 short guides (dialogs, popovers, forms, accessibility, performance…) found through `guides/INDEX.md`, read when UI code is written. |
 | `goal-loop` | A goal to finish completely ("루프", "될 때까지", "100%"): the user's intent written as checks, then fix → re-check until all pass. |
 | `qa` | QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검"): scope from a diff or the screen map, a risk-ordered plan, fast sweeps (`sweep.sh`), confirmed issues with evidence, report-only or fix until no P1/P2 remain. |
@@ -17,6 +18,7 @@ The app passes them to every pi worker with `--skill`.
 | `deep-research` | Research with sources (리서치, 조사해서 정리, 논문 찾아): plan sub-questions, search and read primary sources in rounds with findings on disk, check every claim, then a visual HTML report shown in the chat and printed to PDF (`pdf.sh`). |
 | `office-docs` | Word, Excel, PowerPoint, PDF and HWPX files: read them with `office.py` (no install), pick the library for a change, keep an existing file's look, and check the result as page pictures. |
 | `computer-use` | Mac app automation in the background through the `computer` tool and its `ondra-cuhost` helper: one target app at a time, the user's focus and cursor untouched, screenshots as proof. |
+| `stack-diagram` | Architecture, stack and infra diagrams with official logos (아키텍처·스택 다이어그램, 시스템 구성도) as one self-contained HTML and light/dark PNGs. Vendored from [caru-ini/stack-diagram](https://github.com/caru-ini/stack-diagram) at `9175bde` (MIT, `LICENSE`; fonts SIL OFL); Ondra's only changes are the PNG fallback to its bundled headless Chrome in `render_png.py` and a few notes in `SKILL.md`. |
 | `secrets` | API keys, tokens and .env files: use Ondra's secrets as `$NAME` without seeing values, find and save what each one is for in memory, and what to do when one is missing or pasted into the chat. |
 
 ## When a skill is offered

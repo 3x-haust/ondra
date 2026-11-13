@@ -6825,6 +6825,40 @@ body.resizing .mem-resize:active {
 .ch-node .ch-logo path {
   fill-opacity: 1;
 }
+/* a brand's own mark (brandLogo.ts): the source's variant for each theme, or a mark of one
+   tone turned over (hue kept) where it would vanish. visibility and filter go into an exported picture. */
+.ch-logo-img.for-dark {
+  visibility: hidden;
+}
+.ch-logo-img.tone-light {
+  filter: invert(1) hue-rotate(180deg);
+}
+:root[data-theme="dark"] .ch-logo-img.for-dark {
+  visibility: visible;
+}
+:root[data-theme="dark"] .ch-logo-img.for-light {
+  visibility: hidden;
+}
+:root[data-theme="dark"] .ch-logo-img.tone-dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+:root[data-theme="dark"] .ch-logo-img.tone-light {
+  filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ch-logo-img.for-dark {
+    visibility: visible;
+  }
+  :root:not([data-theme="light"]) .ch-logo-img.for-light {
+    visibility: hidden;
+  }
+  :root:not([data-theme="light"]) .ch-logo-img.tone-dark {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  :root:not([data-theme="light"]) .ch-logo-img.tone-light {
+    filter: none;
+  }
+}
 
 .wk-diff,
 .wk-tests,

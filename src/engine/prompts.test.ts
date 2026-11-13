@@ -4,7 +4,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
+import { appCheckRules, CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
 import { REVIEW_FIX } from "./crosscheck";
@@ -108,7 +108,7 @@ describe("coding defaults", () => {
   it("keeps the always-on worker prompts small", () => {
     // ~4 chars a token: 8.1k tokens before, 5.4k after; the catalog of pictures lives in the visual-report skill
     expect(TASK_SYSTEM.length).toBeLessThan(23_000);
-    expect(SUB_SYSTEM.length).toBeLessThan(8_000);
+    expect(SUB_SYSTEM.length).toBeLessThan(8_100); // + stack-diagram, logo-design, app-check routes
     for (const type of ["arch", "er", "deps", "classes", "trace", "states"]) {
       expect(TASK_SYSTEM).not.toContain(`{"type":"${type}"`);
       expect(bundledSkills["../../skills/visual-report/SKILL.md"]).toContain(`| \`${type}\` |`);
@@ -149,7 +149,7 @@ describe("coding defaults", () => {
 
   it("keeps optional user instructions out when empty", () => {
     setState("settings", "instructions", "  ");
-    const parts = taskSystem(task());
+    const parts = taskSystem(task()).filter((p) => p !== appCheckRules());
     expect(parts).toHaveLength(2);
     expect(parts[0]).toBe(TASK_SYSTEM);
     expect(parts.join("\n")).not.toContain("# User instructions");
@@ -250,7 +250,10 @@ describe("worker prompt delivery", () => {
       expect(args).not.toContain("--skill");
       expect(args).toContain("--no-skills");
       expect(env.filter(([key]) => key === "ONDRA_SKILL_PATHS")).toEqual([["ONDRA_SKILL_PATHS", "[]"]]);
-      const prompts = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
+      const all = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
+      // a sub-task leaves checking in the app to its fork
+      expect(all.includes(appCheckRules())).toBe(role !== "subagent");
+      const prompts = all.filter((p) => p !== appCheckRules());
       expect(prompts).toHaveLength(3);
       expect(prompts[0]).toBe(role === "subagent" ? SUB_SYSTEM : TASK_SYSTEM);
       expect(prompts[1]).toBe("# User instructions\nKeep changes local.");

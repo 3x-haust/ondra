@@ -312,12 +312,16 @@ export default {
   "여러 출처를 읽고 조사해요": "Researches a topic across many sources",
   "시뮬레이터와 에뮬레이터에서 앱을 다뤄요": "Runs apps on simulators and emulators",
   "목표를 이룰 때까지 고치고 확인해요": "Fixes and checks until a goal is met",
+  "프로젝트에 앱을 실행하고 써 보는 확인 스킬을 만들어요": "Makes a project skill that runs the app and uses it to check changes",
+  "앱 확인 스킬과 기능 지도를 앱에 맞게 고쳐요": "Keeps the app check skill and its feature map in step with the app",
+  "로고와 브랜드 키트를 만들어요": "Designs logos and brand kits",
   "Figma 디자인을 코드로 옮기고 맞춰 봐요": "Turns a Figma design into matching code",
   "앱을 직접 써 보며 버그를 찾아요": "Uses the app like its users to find bugs",
   "바이너리와 앱을 분석해요": "Analyzes binaries and apps",
   "테스트와 CI를 만들어요": "Writes tests and sets up CI",
   "진행과 결과를 차트와 블록으로 보여 줘요": "Shows progress and results as charts and blocks",
   "사이트와 화면을 디자인해요": "Designs sites and screens",
+  "공식 로고로 아키텍처·스택 다이어그램을 그려요": "Draws architecture and stack diagrams with official logos",
 
   // pdf viewer
   "문서 탐색": "Document navigation",
@@ -567,4 +571,9 @@ export default {
   "목|day": "Thu",
   "금|day": "Fri",
   "토|day": "Sat",
+  "오픈소스 라이선스": "Open-source licenses",
+  "Ondra는 MIT 라이선스예요. 함께 쓰는 오픈소스의 라이선스를 봐요": "Ondra is MIT-licensed. See the licenses of the open-source software it includes",
+  "라이선스 파일이 없어요": "The license file is missing",
+  "작업 끝나면 앱에서 직접 확인": "Check in the app before done",
+  "앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요": "A job that changes an app runs it and uses the change before it finishes",
 } satisfies Record<string, string>;

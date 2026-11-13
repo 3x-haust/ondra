@@ -35,8 +35,16 @@ and their front app stay as they are.
   on the off-screen display as it starts (`mode: offscreen`): still never on the
   user's screen, full-size looks, but its Dock tile shows it running. If that
   doesn't take, it stays hidden (`mode: hidden`). On `stop` a background copy is
-  quit and cleaned up, and a real app the session opened is quit (its Dock dot goes
-  away); one the user brought to the front meanwhile is left alone. An app the user already had open is used as-is, never copied.
+  quit and cleaned up (one that ignores the quit is ended after a moment), and a
+  real app the session opened is quit (its Dock dot goes away); one the user
+  brought to the front meanwhile is left alone. An app the user already had open is used as-is, never copied.
+- An app you built yourself (a test harness in a scratch folder): `start` it by the
+  absolute path of its `.app`. Don't link or copy it into Applications first, and
+  don't launch it from the shell (`open`, its binary): only an app `start` opened is
+  kept off the user's screen and quit at `stop`.
+- Panels the app puts up on its own (a floating drop panel, a tooltip) are kept on
+  the off-screen display too; if the app comes to the front anyway, the user's app
+  (and its Stage Manager stage) is put back.
 - Some apps try to make themselves a Dock app and come to the front. The injected
   guard holds most of them back; one it can't (a hardened app without the dyld
   exception) is handed the front straight back, reported as `selfActivated` /

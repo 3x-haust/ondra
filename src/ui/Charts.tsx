@@ -13,7 +13,7 @@
 //   · too wide for the column → the other direction, never a shrunken picture
 import { Icon } from "./Icon";
 import { copyVisual, saveVisual, viewVisual } from "./exportVisual";
-import { logoPath } from "./Logos";
+import { brandMark } from "./brandLogo";
 import { graphlib, layout } from "@dagrejs/dagre";
 import { createMemo, For, type JSX, Show } from "solid-js";
 import { previewFile } from "../state/ui";
@@ -778,8 +778,11 @@ export function Er(props: { label?: string; tables: ErTable[]; relations?: { fro
 
 // ───────────── architecture topology
 export type ArchNode = { id: string; label: string; zone?: string; kind?: "user" | "app" | "service" | "function" | "db" | "cache" | "queue" | "storage" | "external" | "gateway"; note?: string; state?: State; ref?: string; logo?: string; em?: boolean };
-/** a node's logo: named, or found from its label / note ("Postgres", "Redis", "Node · 3 pods") */
-const archLogo = (n: ArchNode) => logoPath(n.logo) ?? logoPath(n.label) ?? logoPath(n.note);
+/**
+ * a node's logo: named (any simple-icons slug or brand title), or found from its label / note
+ * ("Postgres", "Redis", "Node · 3 pods"). The glyph first, the brand's own mark when it comes.
+ */
+const archLogo = (n: ArchNode) => brandMark(n);
 const KIND_TAG: Record<string, string> = { user: "사용자", app: "앱", service: "서비스", function: "함수", db: "DB", cache: "캐시", queue: "큐", storage: "저장소", external: "외부", gateway: "게이트웨이" };
 export function Arch(props: { label?: string; zones?: { id: string; label: string }[]; nodes: ArchNode[]; edges?: { from: string; to: string; label?: string; async?: boolean; em?: boolean }[]; dir?: "TB" | "LR" }) {
   const laid = createMemo(() => {
@@ -829,7 +832,18 @@ export function Arch(props: { label?: string; zones?: { id: string; label: strin
                 const x0 = cx - (lw + 22) / 2;
                 return (
                   <>
-                    <svg x={x0} y={ty + 24} width={16} height={16} viewBox="0 0 24 24" class="ch-logo"><path d={lg().d} style={{ fill: lg().color }} /></svg>
+                    <Show
+                      when={lg().official}
+                      fallback={<Show when={lg().glyph}>{(g) => <svg x={x0} y={ty + 24} width={16} height={16} viewBox="0 0 24 24" class="ch-logo"><path d={g().d} style={{ fill: g().color }} /></svg>}</Show>}
+                    >
+                      {(o) => (
+                        <>
+                          {/* a mark for each theme when the source has two; a mark of one tone turns over on that tone */}
+                          <image href={o().light} x={x0 - 1} y={ty + 23} width={18} height={18} preserveAspectRatio="xMidYMid meet" class={`ch-logo-img ${o().dark ? "for-light" : o().tone ? `tone-${o().tone}` : ""}`} />
+                          <Show when={o().dark}>{(d) => <image href={d()} x={x0 - 1} y={ty + 23} width={18} height={18} preserveAspectRatio="xMidYMid meet" class="ch-logo-img for-dark" />}</Show>
+                        </>
+                      )}
+                    </Show>
                     <text x={x0 + 22} y={ty + 37} class="ch-t strong">{cut(n.label, 26)}</text>
                   </>
                 );

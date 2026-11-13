@@ -1,5 +1,7 @@
 // Skill metadata stays in this process; only search matches reach the model.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { loadSkills, parseFrontmatter, stripFrontmatter, type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -219,10 +221,34 @@ export function messageHint(fit: Skill[], first: boolean): string {
 export const toolHint = (s: Skill, why: string) =>
   `\n[skill] This step ${why}, which is ${s.name}'s domain: ${s.description.replace(/\s+/g, " ").slice(0, 160)}\nRead ${s.filePath} and follow it before going on, unless you already have.`;
 
+/** where a project keeps skills of its own, for any agent */
+export const PROJECT_SKILL_DIRS = [".agents/skills", ".claude/skills", ".cursor/skills"];
+
+/**
+ * The skill folders of the project a job works in: in its folder and each folder above it up to
+ * the repo root (a worktree's too), never at or above the home folder (those are the user's own,
+ * for every project, and come from Settings).
+ */
+export function projectSkillDirs(cwd: string, home = homedir()): string[] {
+  const out: string[] = [];
+  const top = resolve(home);
+  for (let d = resolve(cwd), i = 0; i < 12; i++) {
+    if (d === top || d === "/") break;
+    for (const s of PROJECT_SKILL_DIRS) if (existsSync(join(d, s))) out.push(join(d, s));
+    if (existsSync(join(d, ".git"))) break;
+    const up = dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return out;
+}
+
 export default function (pi: ExtensionAPI) {
   if (!process.env.ONDRA_SKILL_PATHS) return;
-  const skillPaths: unknown = JSON.parse(process.env.ONDRA_SKILL_PATHS);
-  if (!Array.isArray(skillPaths) || !skillPaths.every((p) => typeof p === "string")) throw new Error("Invalid ONDRA_SKILL_PATHS");
+  const given: unknown = JSON.parse(process.env.ONDRA_SKILL_PATHS);
+  if (!Array.isArray(given) || !given.every((p) => typeof p === "string")) throw new Error("Invalid ONDRA_SKILL_PATHS");
+  // the project's own skills after the app's (a name the app has keeps the app's)
+  const skillPaths = [...given, ...projectSkillDirs(process.cwd()).filter((d) => !given.includes(d))];
   // Keep Pi's parsing, duplicate precedence and relative-path handling without
   // giving its ResourceLoader a catalog to put into the system prompt.
   const { skills, diagnostics } = loadSkills({ cwd: process.cwd(), agentDir: process.cwd(), skillPaths, includeDefaults: false });
