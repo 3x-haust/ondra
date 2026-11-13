@@ -47,7 +47,8 @@ right it is. Write for them, then take the AI out of it.
 
 ## Take the AI out (after the draft)
 
-Run the checker for a second pair of eyes:
+Run the checker for a second pair of eyes (it sits in the deep-research
+folder, one level above this file):
 
 ```bash
 python3 "<this skill's folder>/check-writing.py" "$R/report.html"

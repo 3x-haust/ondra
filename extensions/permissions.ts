@@ -53,7 +53,9 @@ export function foreignData(text: string, data: string, allowed: string[], space
   for (const dir of ["sessions", "worktrees", "artifacts", "spaces", "browser"]) {
     const head = `${data}/${dir}/`;
     for (let at = text.indexOf(head); at >= 0; at = text.indexOf(head, at + 1)) {
-      const name = text.slice(at + head.length).split(/[/\s'"\\]/)[0];
+      // the folder's name ends where a name's characters do: a path quoted in prose or markdown
+      // ("…/artifacts/t1`.", "…/artifacts/t1였어요") is still that folder
+      const name = (text.slice(at + head.length).match(/^[\w.-]*/)?.[0] ?? "").replace(/\.+$/, "");
       // a space's own folders (its browser, its recipes, its log view)
       if (dir === "browser" || dir === "spaces") {
         if (space && name === space) continue;

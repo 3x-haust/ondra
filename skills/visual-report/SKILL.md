@@ -1,6 +1,6 @@
 ---
 name: visual-report
-description: Pictures, charts and report documents inside Ondra — diagrams of code and systems, charts, graphs and visual reports (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화). The task prompt already covers plan, now, done and the everyday result blocks; read this for any other picture type. Its More charts catalog lists every figure type.
+description: Pictures and charts drawn in Ondra's chat — diagrams of code and systems, charts, graphs and visual reports (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화). Its More charts catalog lists every figure type. Everyday progress blocks need none of this; it draws only in the chat.
 ---
 
 # Visual report
@@ -101,6 +101,9 @@ or cause (Tversky); long LLM answers are easier to grasp as diagrams
 | types and how they relate | `classes` | `classes: {name, kind, fields: string[], methods: string[]}[]`, `relations: {from, to, kind: extends\|implements\|owns\|has\|uses, card?: [a, b]}[]` |
 | where the time goes in a request | `trace` | `unit`, `spans: {id, label, start, dur, parent?, service?, error?}[]` |
 | branches, commits, merges | `git` | `commits: {id, branch, msg, parents: string[], tag?}[]` (oldest first) |
+
+One to three `diff` blocks a message, for the code that matters; the rest
+goes in `files`.
 
 Every box is something you read or changed: `state` new / changed / gone for
 what the work touched, `ref` = absolute path:line for code, `by`: user / agent

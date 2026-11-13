@@ -73,6 +73,29 @@ export function skillHint(skills: Skill[], query: string, limit = 3): string {
   ].join("\n");
 }
 
+/**
+ * The user's own words in a message, for matching skills: without the context
+ * main's turn carries above "# Message", and empty for a note the app sends by
+ * itself (a restart, a check before done, a review's findings, a fork that ended),
+ * whose stock words ("plan", "test", "review") would offer skills the work never asked for.
+ */
+export function userWords(prompt: string): string {
+  const message = prompt.lastIndexOf("\n# Message\n");
+  if (message >= 0) return prompt.slice(message + "\n# Message\n".length);
+  if (/^# .*\(not a user message\)$/m.test(prompt)) return "";
+  // a routine's run: what to do is under "## 할 일" (src/engine/routines.ts runMessage)
+  if (prompt.startsWith("(Ondra) 루틴")) {
+    const todo = prompt.indexOf("## 할 일\n");
+    return todo >= 0 ? prompt.slice(todo + "## 할 일\n".length) : "";
+  }
+  // another job's message: its words after the note (src/engine/jobs.ts fromJob)
+  if (prompt.startsWith("(Ondra) A message from another job")) return prompt.slice(prompt.indexOf("\n\n") + 2 || prompt.length);
+  // the app's own notes: "(Ondra…" (tasks.ts, captain.ts, handoff.ts), the check before done (tasks.ts),
+  // review and subagent results (crosscheck.ts CROSSCHECK, PLAN_REVIEW; tasks.ts resultHead)
+  if (/^(\(Ondra|끝내기 전에 빠진 게 있어요|교차 검토|계획 검토|리뷰 결과가 왔어요|서브에이전트 ")/.test(prompt)) return "";
+  return prompt;
+}
+
 // ───────────── the router: offer a skill when the work enters its domain
 //
 // Besides the words of each user message, a skill can name what the work looks
@@ -239,7 +262,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", (event) => {
     if (event.messageType !== "user" || typeof event.prompt !== "string") return;
     const task = taskQuery(event.prompt);
-    const hint = messageHint(router.forMessage((task ?? event.prompt).slice(0, 4000)), !!task);
+    const asked = (task ?? userWords(event.prompt)).slice(0, 4000);
+    if (!asked.trim()) return;
+    const hint = messageHint(router.forMessage(asked), !!task);
     if (hint) return { message: { customType: "ondra-skills", content: hint, display: false } };
   });
 

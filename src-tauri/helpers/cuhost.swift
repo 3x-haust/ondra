@@ -421,6 +421,13 @@ func cgWindowID(pid: pid_t, frame: CGRect, title: String?) -> CGWindowID? {
     return nil
 }
 
+/// A window's current bounds by its number (public CGWindowList; no Screen Recording needed).
+func cgWindowBounds(_ wid: CGWindowID) -> CGRect? {
+    guard let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], wid) as? [[String: Any]],
+          let b = info.first?[kCGWindowBounds as String] as? NSDictionary else { return nil }
+    return CGRect(dictionaryRepresentation: b)
+}
+
 // ───────────────────────── input (background, pid-targeted) ─────────────────────────
 // We never post to the global session and never move the cursor. CGEventPostToPid
 // delivers directly to the target process's event queue. Mouse events also carry
@@ -866,7 +873,13 @@ func resolvePoint(_ spec: [String: Any], pid: pid_t, map: AXMap) throws -> (CGPo
         throw ActError.message("BAD_ACTION", "missing coordinates")
     }
     guard let look = lastLook[pid] else { throw ActError.message("NEEDS_LOOK", "coordinates are pixels of a look; look first") }
-    guard let now = keyWindowElement(forPid: pid).flatMap(axFrame), nearlySame(now, look.frame) else {
+    // The pixels still line up while the captured window itself is where the look found it.
+    // AX can name another window as key, or none (a hidden app), while that one has not moved;
+    // checking AX alone refused clicks right after a look, again and again.
+    let axNow = keyWindowElement(forPid: pid).flatMap(axFrame)
+    let cgNow = cgWindowBounds(look.windowID)
+    guard axNow.map({ nearlySame($0, look.frame) }) == true || cgNow.map({ nearlySame($0, look.frame) }) == true else {
+        if axNow == nil && cgNow == nil { throw ActError.message("NO_WINDOW", "the window of the last look is gone; observe") }
         throw ActError.message("WINDOW_MOVED", "the window moved or resized since the last look; look again")
     }
     guard x >= 0, y >= 0, x < Double(look.width), y < Double(look.height) else {
@@ -2253,7 +2266,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if let pid = pid {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
-            var result: [String: Any] = ["pid": Int(pid), "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            var result: [String: Any] = ["pid": Int(pid), "path": target.path, "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
             let menus = menuBarTitles(pid)
             if !menus.isEmpty { result["menus"] = menus }
             if mode == "hidden", let e = launchErr { result["backgroundError"] = e }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { ComputerHostHelper, ComputerHostSession, type HostImage } from "./lib/computer-host";
 
@@ -65,13 +65,19 @@ const parameters = {
   type: "object", additionalProperties: false, required: ["action"],
   properties: {
     action: { type: "string", enum: ["start", "observe", "look", "act", "stop"] },
-    app: { type: "string", description: "start: app name or bundle ID" },
+    app: { type: "string", description: "start: app name, bundle ID, or the absolute path of a .app (a build of your own)" },
     full: { type: "boolean", description: "observe: the whole screen instead of what changed · look: resend an unchanged image" },
     query: { type: "string", description: "observe: show only lines matching this phrase (or its words), with their parents" },
     input: { ...step, description: "act: one action" },
     steps: { type: "array", items: step, minItems: 1, maxItems: 20, description: "act: several actions run in order; the first failure stops the rest" },
   },
 };
+
+/** A path start may take: an absolute path to an app bundle that exists (a job's own build, opened as a background copy). */
+export function appBundlePath(app: string): boolean {
+  const path = app.replace(/\/+$/, "");
+  return isAbsolute(path) && !path.split("/").includes("..") && path.endsWith(".app") && existsSync(join(path, "Contents", "Info.plist"));
+}
 
 function validate(input: ComputerInput): void {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Expected a computer action");
@@ -82,7 +88,8 @@ function validate(input: ComputerInput): void {
     : input.action === "stop" ? ["action"] : [];
   if (!fields.length || Object.keys(input).some(key => !fields.includes(key))) throw new Error("Invalid computer action fields");
   if (input.action === "start" && (typeof input.app !== "string" || !input.app.trim() || input.app.length > 512 ||
-      input.app !== input.app.trim() || /^[\s-]/.test(input.app) || /[\x00-\x1f\x7f/]/.test(input.app))) throw new Error("Invalid app");
+      input.app !== input.app.trim() || /^[\s-]/.test(input.app) || /[\x00-\x1f\x7f]/.test(input.app) ||
+      (input.app.includes("/") && !appBundlePath(input.app)))) throw new Error("Invalid app: a name, a bundle ID, or the absolute path of an existing .app");
   if (input.full !== undefined && typeof input.full !== "boolean") throw new Error("full must be boolean");
   if (input.query !== undefined && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 200)) throw new Error("query must be a short phrase");
   if (input.action === "act") {
@@ -242,7 +249,7 @@ export default function (pi: any) {
     }
     if (input.action === "start") {
       if (evaluationError) throw new Error("Invalid computer evaluation configuration");
-      if (hostSession) throw new Error("A computer session already exists; observe or stop it before starting another");
+      if (hostSession) throw new Error("A computer session is already open: stop it, then start again (one app at a time; to keep using the open one, observe it instead)");
       if (!available) throw new Error("Computer use unavailable: the ondra-cuhost helper is not bundled with this app");
       if (!artifacts) throw new Error("Computer use unavailable: no job artifacts directory");
       const helper = new ComputerHostHelper(hostBin);
@@ -255,7 +262,11 @@ export default function (pi: any) {
         const how = typeof r.mode === "string" ? ` (${r.mode})` : "";
         const menus = Array.isArray(r.menus) && r.menus.length
           ? `\nIts menu bar: ${(r.menus as string[]).join(", ")}. A menu command (act menu, path from the menu bar down; [\"${(r.menus as string[])[0]}\"] lists that menu) works in the background and does what many controls do.` : "";
-        return result(`Opened ${input.app} in the background${how}.${menus}\n${screenBlock(r)}`);
+        // the pid lets the job check which copy of the app it got (an installed one, or its build)
+        const pid = typeof r.pid === "number" ? `, pid ${r.pid}` : "";
+        // which copy it opened: a name or bundle ID can open the installed app, not the job's build
+        const from = typeof r.path === "string" && r.path !== input.app.replace(/\/+$/, "") ? `, from ${r.path}` : "";
+        return result(`Opened ${input.app} in the background${how}${pid}${from}.${menus}\n${screenBlock(r)}`);
       }
       catch (error) { try { await stopHost(); } catch { /* already gone */ } throw error; }
     }
