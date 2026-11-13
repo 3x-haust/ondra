@@ -6,14 +6,17 @@
 // A run with nothing to report says so (NOTHING) and, for a quiet routine, is put away without a
 // notice. Ondra keeps running in the tray when its window is closed; a run the Mac slept through
 // starts once when it wakes, never once per missed time.
+// 알람 is a routine with no job: at its time its words are shown as they are (a system notice with
+// a sound, and a line in the chat it was set in), with no model call. One missed while Ondra was
+// closed or the Mac slept rings once when it can, marked late.
 import { createEffect, createRoot, on } from "solid-js";
-import { ghWatch, spaceEnv } from "../lib/native";
+import { ghWatch, notify, spaceEnv } from "../lib/native";
 import { projectById, setState, spaceById, state, taskById, uid } from "../state/store";
-import type { Routine, RoutineWhen, SpaceId, Task } from "../state/types";
+import type { CaptainMessage, Routine, RoutineWhen, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
 import { eventText, newEvents, parseEvents, searchFilter } from "./routineEvents";
-import { describeWhen, LATE_OK, nextRun } from "./routineTime";
+import { dayTime, describeWhen, LATE_OK, nextRun } from "./routineTime";
 import { archiveTask, createTask, finished } from "./tasks";
 import { relay } from "./jobs";
 import { splitProjectId } from "../state/mirror";
@@ -31,7 +34,7 @@ export function patchRoutine(id: string, patch: Partial<Routine>) {
   setState("routines", (list) => (list ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
 }
 
-export type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled">>;
+export type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled" | "alarm">>;
 
 /** A new routine (a draft from the chat waits for the user to save it). Returns its id. */
 export function addRoutine(d: RoutineDraft, now = Date.now()): string {
@@ -47,6 +50,7 @@ export function addRoutine(d: RoutineDraft, now = Date.now()): string {
     quiet: d.quiet ?? true,
     enabled: d.enabled ?? !d.draft,
     draft: d.draft,
+    ...(d.alarm ? { alarm: true } : {}),
     host: d.host,
     hostSpace: d.hostSpace,
     model: d.model,
@@ -73,6 +77,8 @@ export function saveRoutine(id: string, patch: Partial<Omit<Routine, "id" | "cre
     updatedAt: now,
     ...(retime ? { nextAt: nextRun(when, now) } : {}),
     ...(eventChanged ? { seen: undefined, since: undefined } : {}),
+    // switched off: a snoozed alarm doesn't ring either
+    ...(patch.enabled === false ? { snoozeAt: undefined } : {}),
     ...(patch.draft === false ? { enabled: patch.enabled ?? true } : {}),
   });
 }
@@ -113,6 +119,8 @@ export function runRoutine(id: string, o: { now?: number; happened?: string; man
   const r = routineById(id);
   if (!r || (r.draft && !o.manual)) return undefined;
   const now = o.now ?? Date.now();
+  // an alarm starts no job: it rings
+  if (r.alarm) return void ringAlarm(id, now);
   const p = r.project ? projectById(r.project) : undefined;
   if (r.project && !p) {
     patchRoutine(id, { lastAt: now, lastStatus: "failed", lastError: t("프로젝트가 없어요"), nextAt: nextRun(r.when, now) });
@@ -159,8 +167,62 @@ export function runRoutine(id: string, o: { now?: number; happened?: string; man
   return taskId;
 }
 
-/** Is a timed routine due? A time missed long ago (asleep, closed) still runs, once. */
-export const due = (r: Routine, now: number) => r.enabled && !r.draft && r.when.kind !== "event" && r.nextAt !== undefined && r.nextAt <= now;
+/** Is a timed routine due? A time missed long ago (asleep, closed) still runs, once. A snoozed alarm is due at its snooze. */
+export const due = (r: Routine, now: number) =>
+  !r.draft && r.when.kind !== "event" && ((r.enabled && r.nextAt !== undefined && r.nextAt <= now) || (!!r.alarm && r.snoozeAt !== undefined && r.snoozeAt <= now));
+
+/** an alarm that rings later than this after its time says it is late */
+export const ALARM_LATE = 3 * 60_000;
+/** "10분 뒤 다시" */
+export const SNOOZE_MIN = 10;
+const hhmm = (at: number) => {
+  const d = new Date(at);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/**
+ * Rings an alarm now: a line in its chat and a system notice with a sound (a click opens that line).
+ * No job, no model call. Returns the chat line's id.
+ */
+export function ringAlarm(id: string, now = Date.now()): string | undefined {
+  const r = routineById(id);
+  if (!r?.alarm) return undefined;
+  const own = r.enabled && r.nextAt !== undefined && r.nextAt <= now;
+  const snoozed = r.snoozeAt !== undefined && r.snoozeAt <= now;
+  const dueAt = own ? r.nextAt! : snoozed ? r.snoozeAt! : now;
+  const late = now - dueAt > ALARM_LATE;
+  // the chat it was set in (main's when that project is gone)
+  const project = r.project && projectById(r.project) ? r.project : undefined;
+  const m: CaptainMessage = {
+    id: uid("c"),
+    at: now,
+    space: r.space,
+    project,
+    from: "captain",
+    relay: true,
+    routes: [{ kind: "alarm", routineId: r.id, text: r.prompt, due: dueAt, ...(late ? { late: true } : {}) }],
+  };
+  setState("captain", (list) => [...list.slice(-300), m]);
+  const once = r.when.kind === "once";
+  patchRoutine(r.id, {
+    lastAt: now,
+    lastStatus: "done",
+    lastError: undefined,
+    runs: r.runs + 1,
+    snoozeAt: undefined,
+    // a snooze ringing (or a try from the list) leaves the alarm's own time alone
+    ...(own ? { nextAt: once ? undefined : nextRun(r.when, now), ...(once ? { enabled: false } : {}) } : {}),
+  });
+  const at = late ? t("{time} 알람 · 늦게 울렸어요", { time: dayTime(dueAt, now) }) : t("{time} 알람", { time: hhmm(dueAt) });
+  void notify(r.prompt, at, { sound: true, tag: m.id }).catch(() => {});
+  toast(t("알람 · {text}", { text: r.prompt }));
+  return m.id;
+}
+
+/** Rings the alarm again in SNOOZE_MIN minutes (its own time stays as it is). */
+export function snoozeAlarm(id: string, now = Date.now()) {
+  if (routineById(id)?.alarm) patchRoutine(id, { snoozeAt: now + SNOOZE_MIN * 60_000, updatedAt: now });
+}
 
 /** A run missed by a lot: say so in the run, so it can look back over the gap. */
 const lateNote = (r: Routine, now: number) =>
@@ -191,14 +253,13 @@ export async function pollRoutine(r: Routine, now = Date.now()): Promise<void> {
 /** Called every minute: timed routines that are due start, event routines are looked at in turn. */
 let polling = false;
 let lastPoll = new Map<string, number>();
-export async function tickRoutines(now = Date.now()) {
+export async function tickRoutines(now = Date.now(), o: { alarmsOnly?: boolean } = {}) {
   for (const r of state.routines ?? []) {
-    if (due(r, now)) {
-      const late = lateNote(r, now);
-      runRoutine(r.id, { now, happened: late });
-    }
+    if (!due(r, now)) continue;
+    if (r.alarm) ringAlarm(r.id, now);
+    else if (!o.alarmsOnly) runRoutine(r.id, { now, happened: lateNote(r, now) });
   }
-  if (polling) return;
+  if (polling || o.alarmsOnly) return;
   polling = true;
   try {
     for (const r of state.routines ?? []) {
@@ -235,9 +296,19 @@ let started = false;
 export function startRoutines() {
   if (started) return;
   started = true;
-  // the first look waits for the app to settle; then once a minute
+  // the first look waits for the app to settle; then once a minute. Alarms missed while Ondra was
+  // closed ring right away, and each alarm rings on its time, not up to a minute after it.
+  setTimeout(() => void tickRoutines(Date.now(), { alarmsOnly: true }), 2_000);
   setTimeout(() => void tickRoutines(), 30_000);
   setInterval(() => void tickRoutines(), 60_000);
+  createRoot(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    createEffect(() => {
+      const next = Math.min(...nextAlarms());
+      clearTimeout(timer);
+      if (Number.isFinite(next)) timer = setTimeout(() => void tickRoutines(Date.now(), { alarmsOnly: true }), Math.min(Math.max(0, next - Date.now()) + 50, 2 ** 31 - 1));
+    });
+  });
   // each routine's last run, here or on another Mac: when it ends, the routine hears
   createRoot(() => {
     const ended = new Map<string, string>();
@@ -258,16 +329,23 @@ export function startRoutines() {
   });
 }
 
+/** when each alarm rings next (its time, or a snooze) */
+const nextAlarms = () =>
+  (state.routines ?? []).flatMap((r) => (r.alarm && !r.draft ? [r.enabled ? r.nextAt : undefined, r.snoozeAt].filter((x): x is number => x !== undefined) : []));
+
 /** A short line for a routine's state: next time, or what its last run did. */
 export function routineLine(r: Routine, now = Date.now()): string {
   if (r.draft) return t("아직 저장 안 함");
+  if (r.alarm && r.snoozeAt && r.snoozeAt > now) return t("{time}에 다시 알려요", { time: dayTime(r.snoozeAt, now) });
+  if (r.alarm && !r.enabled && r.when.kind === "once" && r.runs > 0) return t("울렸어요");
   if (!r.enabled) return t("꺼짐");
   if (r.lastStatus === "running") return t("실행 중");
   if (r.when.kind === "event") return r.lastError ? t("확인 못 함: {why}", { why: r.lastError.slice(0, 60) }) : t("{n}분마다 확인해요", { n: EVENT_EVERY / 60_000 });
   if (r.nextAt) {
     const d = new Date(r.nextAt);
     const today = new Date(now).toDateString() === d.toDateString();
-    return t("다음 실행 {when}", { when: today ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}` });
+    const when = today ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return r.alarm ? t("다음 알림 {when}", { when }) : t("다음 실행 {when}", { when });
   }
   return t("끝났어요");
 }

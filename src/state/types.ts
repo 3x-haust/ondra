@@ -405,8 +405,10 @@ export type Route =
   | { kind: "ask"; decisionId: string; question?: string }
   | { kind: "new"; taskId: string }
   | { kind: "remember"; memoryId: string }
-  /** main proposed a routine: a card to save (or change) it */
-  | { kind: "routine"; routineId: string };
+  /** main proposed a routine (or set an alarm): a card to save, change or drop it */
+  | { kind: "routine"; routineId: string; alarm?: boolean }
+  /** an alarm rang: its words as the user set them, when it was due, and whether it rang late (Ondra was closed or the Mac asleep) */
+  | { kind: "alarm"; routineId: string; text: string; due: number; late?: boolean };
 
 export interface CaptainMessage {
   id: string;
@@ -753,6 +755,11 @@ export interface Routine {
   enabled: boolean;
   /** proposed in the chat, not saved by the user yet */
   draft?: boolean;
+  /** 알람: no job runs; at its time the prompt is shown as it is (a system notice with a sound and a
+   *  line in the chat of `project`, or main's chat), with no model call */
+  alarm?: boolean;
+  /** an alarm put off ("10분 뒤 다시"): it rings again then, whatever its own time */
+  snoozeAt?: number;
   /** a run with nothing to report is put away without a notice */
   quiet: boolean;
   /** run it on another Mac (Settings › 연결) */

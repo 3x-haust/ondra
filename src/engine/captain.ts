@@ -872,6 +872,13 @@ export const PROJECT_ENDED = [
   "Don't redo it. Route a next step only if what the user asked still needs one.",
 ].join("\n");
 
+/** "2026-11-13 Fri 14:05" in this Mac's time */
+export function nowLine(now = Date.now()): string {
+  const d = new Date(now);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
@@ -932,7 +939,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
       // a job's end main added nothing to still shows: its row said it
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : r.kind === "routine" ? `[routine proposed: ${routineById(r.routineId)?.title ?? ""}${routineById(r.routineId)?.draft === false ? " (saved)" : ""}]` : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : r.kind === "routine" ? (routineById(r.routineId)?.alarm ? `[alarm set: ${routineById(r.routineId)?.title ?? ""}]` : `[routine proposed: ${routineById(r.routineId)?.title ?? ""}${routineById(r.routineId)?.draft === false ? " (saved)" : ""}]`) : r.kind === "alarm" ? `[alarm rang: ${r.text}]` : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   // which model this is, said when it changes: asked "너 무슨 모델이야?", main answers from this, not a guess
@@ -949,7 +956,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
-  else out.push("", "# Message", text);
+  // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
+  else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
@@ -1159,7 +1167,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const sent = relay(target, message, {
         by: "main",
         now: true,
-        display: raw.filter((x) => x?.kind !== "remember" && x?.kind !== "routine").length === 1 && fromUser ? original : undefined,
+        display: raw.filter((x) => x?.kind !== "remember" && x?.kind !== "routine" && x?.kind !== "alarm").length === 1 && fromUser ? original : undefined,
         isolate: isolateOf.get(space),
       });
       out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
@@ -1247,6 +1255,16 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         from: "chat",
       });
       out.push({ kind: "routine", routineId: id });
+    } else if (r?.kind === "alarm" && (r.text || r.task)) {
+      // an alarm is set at once (its card can change or drop it): no job; its words show at its time
+      const when = parseWhen(r.when);
+      if (!when || when.kind === "event") {
+        out.push({ kind: "answer", text: tr("언제 알려 드릴지 알려 주세요. 예: 3시에, 10분 뒤에, 매일 18시에."), blocks: [] });
+        continue;
+      }
+      const text = String(r.text ?? r.task).trim().slice(0, 300);
+      const id = addRoutine({ space: sp(space), title: text.slice(0, 80), prompt: text, when, mode: "fresh", quiet: false, project: projectOf(space)?.id, alarm: true, from: "chat" });
+      out.push({ kind: "routine", routineId: id, alarm: true });
     }
   }
   for (const [projectId, ids] of handed) handDown(sp(space), projectId, original, ids);

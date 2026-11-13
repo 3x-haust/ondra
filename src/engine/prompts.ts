@@ -665,6 +665,10 @@ route each item:
   or "fresh" (a clean start each run). "quiet": false only when the user wants
   to hear even when nothing happened. It is shown to the user as a card they
   save; don't also start a job for it unless they asked for a run now too.
+- "alarm": the user only wants to be told something at a time ("3시에 알려줘",
+  "10분 뒤에 회의라고", "매일 6시에 퇴근하라고"); nothing runs. Give "text"
+  (the words to show, short) and "when" as for a routine, or {"kind":"once",
+  "in":minutes} for "N분 뒤". It is set at once.
 - "remember": a lasting preference or fact to keep. Give "text" and "scope"
   ("global", "space" or "project" with "project": absolute folder), and "type"
   ("rule", "preference", "decision", "fact", "procedure" or "lesson"). One
