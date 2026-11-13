@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
@@ -80,6 +80,11 @@ describe("skill matching", () => {
     ["이 프로젝트 앱 확인 스킬 만들어줘", "app-check"],
     ["앱 확인 스킬 점검해줘", "app-check-upkeep"],
     ["merge these PDF files", "office-docs"],
+    ["코드 설명해줘", "code-map"],
+    ["이 레포 어떻게 돼 있어", "code-map"],
+    ["구조 설명해줘", "code-map"],
+    ["아키텍처 지도 그려줘", "code-map"],
+    ["explain this codebase", "code-map"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
     expect(skillHint(bundled, query)).toContain(`- ${skill}:`);
@@ -298,4 +303,132 @@ describe("logo-design skill", () => {
     expect(router().forTool("write", { path: "public/favicon.svg" })?.skill.name).toBe("logo-design");
     expect(router().forTool("write", { path: "src/components/Logo.tsx" })).toBeUndefined();
   });
+});
+
+describe("code-map skill", () => {
+  const map = bundled.find((s) => s.name === "code-map")!;
+  const body = readFileSync(map.filePath, "utf8");
+  const script = join(map.baseDir, "scripts", "codemap.mjs");
+
+  it("ships its script executable, shows each command, and credits Groma", () => {
+    expect(statSync(script).mode & 0o111).not.toBe(0);
+    for (const cmd of ["where", "survey", "check --stamp", "owner", "blocks --container", "from-groma"]) expect(body).toContain(`codemap ${cmd}`);
+    expect(readFileSync(join(map.baseDir, "NOTICE.md"), "utf8")).toContain("Copyright (c) 2026 Alex Gavrilescu");
+    expect(readFileSync(join(map.baseDir, "references", "format.md"), "utf8")).toContain("## Fields");
+    expect(skillLine(map)).toBe("코드 구조를 지도로 그려 설명하고 최신으로 지켜요");
+  });
+
+  it("is offered when a job reads the map or runs the script, not for ordinary reads", () => {
+    expect(router().forTool("read", { path: "/r/.git/ondra/code-map/map.json" })?.skill.name).toBe("code-map");
+    expect(router().forTool("bash", { command: "node ~/x/code-map/scripts/codemap.mjs owner src/a.ts" })?.skill.name).toBe("code-map");
+    expect(router().forTool("read", { path: "src/map.ts" })).toBeUndefined();
+  });
+
+  it("checks a map against a real repo, names a file's owner and draws the map as blocks", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const repo = mkdtempSync(join(tmpdir(), "codemap-"));
+    const sh = (cmd: string, ...args: string[]) => execFileSync(cmd, args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", HOME: repo } });
+    const run = (...args: string[]) => {
+      try {
+        return { code: 0, out: sh(process.execPath, script, ...args) };
+      } catch (e) {
+        const err = e as { status: number; stdout: string };
+        return { code: err.status, out: err.stdout };
+      }
+    };
+    mkdirSync(join(repo, "web"), { recursive: true });
+    mkdirSync(join(repo, "api", "orders"), { recursive: true });
+    writeFileSync(join(repo, "web", "checkout.ts"), 'import { create } from "../api/orders/create";\nexport const buy = () => create();\n');
+    writeFileSync(join(repo, "api", "orders", "create.ts"), "export const create = () => 1;\n");
+    writeFileSync(join(repo, "api", "server.ts"), "export const serve = 1;\n");
+    sh("git", "init", "-q");
+    sh("git", "-c", "user.name=t", "-c", "user.email=t@t", "add", ".");
+    sh("git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+
+    // the map lives in the shared git folder, never in the working tree
+    const where = run("where").out.trim();
+    expect(where).toBe(join(realpathSync(repo), ".git", "ondra", "code-map", "map.json"));
+    expect(run("check").code).toBe(2);
+    expect(run("survey").out).toContain("web → api/orders (1)");
+
+    mkdirSync(join(where, ".."), { recursive: true });
+    writeFileSync(where, JSON.stringify({
+      version: 1, system: { label: "Shop" }, summary: "웹과 API",
+      externals: [{ id: "stripe", label: "Stripe" }],
+      containers: [{ id: "web", label: "웹", kind: "app", note: "화면" }, { id: "api", label: "API", note: "주문" }],
+      components: [
+        { id: "checkout", container: "web", label: "결제 화면", paths: ["web/**"], note: "결제" },
+        { id: "orders", container: "api", label: "주문", paths: ["api/**", "api/orders/create.ts"], note: "주문 생성" },
+        { id: "ghost", container: "api", label: "없는 것", paths: ["api/gone/**"], note: "x" },
+      ],
+      relations: [{ from: "checkout", to: "orders", label: "주문 생성" }, { from: "orders", to: "stripe", label: "청구" }],
+    }));
+    // a glob that matches nothing is an error, and nothing is stamped
+    const bad = run("check", "--stamp");
+    expect(bad.code).toBe(1);
+    expect(bad.out).toContain('ghost: path "api/gone/**" matches no file');
+    expect(bad.out).toContain("Not stamped");
+    const fixed = JSON.parse(readFileSync(where, "utf8"));
+    fixed.components = fixed.components.filter((c: { id: string }) => c.id !== "ghost");
+    writeFileSync(where, JSON.stringify(fixed));
+    const ok = run("check", "--stamp");
+    expect(ok.code).toBe(0);
+    expect(ok.out).toContain("3/3 (100%)");
+    expect(JSON.parse(readFileSync(where, "utf8")).built.commit).toMatch(/^[0-9a-f]{40}$/);
+
+    // after a change: the parts whose files changed, and a new file no part owns
+    writeFileSync(join(repo, "api", "orders", "create.ts"), "export const create = () => 2;\n");
+    mkdirSync(join(repo, "jobs"));
+    writeFileSync(join(repo, "jobs", "mail.ts"), "export const mail = 1;\n");
+    const drift = run("check").out;
+    expect(drift).toContain("orders: api/orders/create.ts");
+    expect(drift).toContain("New files no component owns: jobs/mail.ts");
+
+    expect(run("owner", "web/checkout.ts").out).toContain("결제 화면 (checkout) in 웹");
+    expect(run("owner", "web/checkout.ts").out).toContain("→ 주문: 주문 생성");
+
+    const blocks = (args: string[]) => run("blocks", ...args).out.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+    // the system: containers, with relations lifted from their components
+    const [sys] = blocks([]);
+    expect(sys.type).toBe("arch");
+    expect(sys.nodes.map((n: { id: string }) => n.id)).toEqual(["web", "api", "stripe"]);
+    expect(sys.edges).toEqual([{ from: "web", to: "api", label: "주문 생성" }, { from: "api", to: "stripe", label: "청구" }]);
+    // one container: its components in its zone, its neighbours around it
+    const [api] = blocks(["--container", "api"]);
+    expect(api.zones).toEqual([{ id: "api", label: "API" }]);
+    expect(api.nodes.find((n: { id: string }) => n.id === "orders").zone).toBe("api");
+    expect(api.nodes.find((n: { id: string }) => n.id === "web")).toMatchObject({ kind: "app" });
+    expect(api.edges).toContainEqual({ from: "web", to: "orders", label: "주문 생성" });
+  }, 30_000);
+
+  it("reads an existing Groma map into a draft", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { execFileSync } = await import("node:child_process");
+    const repo = mkdtempSync(join(tmpdir(), "codemap-groma-"));
+    const g = join(repo, "groma");
+    const comp = join(g, "systems", "shop", "containers", "api", "components");
+    mkdirSync(comp, { recursive: true });
+    mkdirSync(join(g, "actors"));
+    mkdirSync(join(repo, "src"));
+    writeFileSync(join(repo, "src", "orders.ts"), "export {};\n");
+    writeFileSync(join(repo, "src", "pay.ts"), "export {};\n");
+    writeFileSync(join(g, "project.md"), "---\ntype: Groma Project\ntitle: Shop\ngroma:\n  profile: architecture\n---\n\nThe shop takes orders.\n");
+    writeFileSync(join(g, "systems", "shop", "system.md"), "---\ntype: C4 System\ntitle: Shop\nstatus: stable\ngroma:\n  id: shop\n---\n");
+    writeFileSync(join(g, "systems", "shop", "containers", "api", "container.md"), "---\ntype: C4 Container\ntitle: API\nstatus: stable\ngroma:\n  id: api\n  parent: shop\n  technology: Hono\n---\n");
+    writeFileSync(join(comp, "ordering.md"), "---\ntype: C4 Component\ntitle: Ordering\ndescription: Records orders\nstatus: stable\ngroma:\n  id: ordering\n  parent: api\n  code:\n    - scanner: typescript\n      file: src/orders.ts\n---\n\n## Relationships\n\n| Source | Target | Description | Technology |\n| --- | --- | --- | --- |\n| [orders](../../../../../../src/orders.ts) | [pay](../../../../../../src/pay.ts) | Authorizes payment | call |\n");
+    writeFileSync(join(comp, "payments.md"), "---\ntype: C4 Component\ntitle: Payments\nstatus: stable\ngroma:\n  id: payments\n  parent: api\n  code:\n    - scanner: typescript\n      file: src/pay.ts\n---\n");
+    writeFileSync(join(g, "actors", "customer.md"), "---\ntype: C4 Actor\ntitle: Customer\nstatus: stable\ngroma:\n  id: customer\n---\n\n## Relationships\n\n| Source | Target | Description | Technology |\n| --- | --- | --- | --- |\n| [Customer](customer.md) | [Ordering][o] | Places an order | HTTPS |\n\n[o]: ../systems/shop/containers/api/components/ordering.md\n");
+    const out = execFileSync(process.execPath, [script, "from-groma", "--repo", repo], { encoding: "utf8", env: { ...process.env, CODEMAP_DIR: join(repo, "out") } });
+    expect(out).toContain("1 containers, 2 components, 2 relations");
+    const m = JSON.parse(readFileSync(join(repo, "out", "map.json"), "utf8"));
+    expect(m.system.label).toBe("Shop");
+    expect(m.components.find((c: { id: string }) => c.id === "ordering")).toMatchObject({ container: "api", note: "Records orders", paths: ["src/orders.ts"] });
+    expect(m.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: "ordering", to: "payments", label: "Authorizes payment" }),
+      expect.objectContaining({ from: "customer", to: "ordering", label: "Places an order", tech: "HTTPS" }),
+    ]));
+  }, 30_000);
 });

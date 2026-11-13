@@ -53,6 +53,7 @@ const SKILL_LINE: Record<string, string> = {
   "app-check": "프로젝트에 앱을 실행하고 써 보는 확인 스킬을 만들어요",
   "app-check-upkeep": "앱 확인 스킬과 기능 지도를 앱에 맞게 고쳐요",
   "browser-use": "브라우저로 사이트를 열고 다뤄요",
+  "code-map": "코드 구조를 지도로 그려 설명하고 최신으로 지켜요",
   "code-review": "끝내기 전에 바뀐 코드를 설계와 코드 두 관점으로 검토해요",
   "computer-use": "Mac 앱을 뒤에서 조작해요",
   "deep-research": "여러 출처를 읽고 조사해요",
