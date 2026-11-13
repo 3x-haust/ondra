@@ -3,7 +3,7 @@
 export function lint(step, c, real = false) {
   const out = [];
   const routes = step.routes ?? [];
-  const ids = new Set([...(c.tasks ?? []).map((t) => t.id), ...Array.from({ length: 20 }, (_, i) => `sim-t${i + 1}`)]);
+  const ids = new Set([...(c.tasks ?? []).map((t) => t.id), ...Array.from({ length: 20 }, (_, i) => `job-${i + 1}`)]);
   const spaces = ["work", "home"];
   if (step.error) return out;
   // a job's end that needs nothing from the user may add nothing (its row in the chat says it)

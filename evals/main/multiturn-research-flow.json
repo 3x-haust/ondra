@@ -4,4 +4,4 @@
     "아 해외 사례도 꼭 넣어",
     "그리고 그걸로 사업계획서 초안도 써줘"
   ],
-  "expect": [{ "new": 1 }, { "appendAny": ["sim-t1"], "new": 0 }, { "new": { "min": 1 }, "append": false }] }
+  "expect": [{ "new": 1 }, { "appendAny": ["job-1"], "new": 0 }, { "new": { "min": 1 }, "append": false }] }

@@ -1416,6 +1416,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
         const r = await route(key, text, undefined, event);
         steps.push({ text, reply: r.reply, routes: r.routes, context: ctx, ms: Date.now() - t0 });
         // what main started becomes part of the world for the next message
+        // (a plain id: nothing main sees should say the world is made up)
         for (const x of r.routes as any[]) {
           if (x?.kind === "new") {
             let proj = typeof x.project === "string" ? w.projects.find((p) => p.name === x.project)?.id : undefined;
@@ -1423,7 +1424,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
               proj = pid(String(x.project.name));
               if (!w.projects.some((p) => p.id === proj)) w.projects.push({ id: proj, space: c.space, name: String(x.project.name), folder: String(x.project.folder ?? "") });
             }
-            w.tasks.push({ id: `sim-t${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
+            w.tasks.push({ id: `job-${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
           }
         }
         if (!event) w.chat.push({ id: `c-me-${steps.length}`, at: Date.now(), space: c.space, project: projectId, from: "me", text } as unknown as CaptainMessage);
