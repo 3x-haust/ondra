@@ -10,6 +10,13 @@ const PRICING = svg(`<rect width="640" height="360" fill="#fff"/><rect width="64
 export function fixture(base: AppState): AppState {
   const t = Date.now();
   const m = (min: number) => t - min * 60_000;
+  /** today (or `days` later) at this wall time; a past time today moves to tomorrow */
+  const at = (h: number, min: number, days = 0) => {
+    const d = new Date(t);
+    d.setDate(d.getDate() + days);
+    d.setHours(h, min, 0, 0);
+    return !days && d.getTime() <= t ? d.getTime() + 86_400_000 : d.getTime();
+  };
   return {
     ...base,
     onboarded: true,
@@ -243,6 +250,11 @@ export function fixture(base: AppState): AppState {
       { id: "c6r", at: m(2), space: "work", from: "captain", reply: "", steps: ["작업 찾음 · 요금제 점검"], routes: [{ kind: "append", taskId: "t5", message: "모바일 화면에서도 결제 버튼을 확인해 주세요." }] },
       { id: "c3", at: m(1), space: "work", from: "me", text: "다음 주 배포 일정 정리해 줘" },
       { id: "c4", at: m(1), space: "work", from: "captain", reply: "", routes: [{ kind: "answer", text: "다음 주는 **화요일 오전**에 스테이징, **목요일 오후**에 운영 배포예요. 로그인 수정이 합쳐져야 목요일에 같이 나가요.", blocks: [] }] },
+      // alarms: one set from the chat, one that rang late (Ondra was closed), one that just rang
+      { id: "ca0", at: m(0.95), space: "work", from: "captain", relay: true, routes: [{ kind: "alarm", routineId: "ra-stand", text: "스탠드업 메모 올리기", due: m(95), late: true }] },
+      { id: "ca1", at: m(0.9), space: "work", from: "me", text: "매일 6시에 퇴근하라고 알려줘" },
+      { id: "ca1r", at: m(0.9), space: "work", from: "captain", reply: "매일 18:00에 알려 드릴게요.", routes: [{ kind: "routine", routineId: "ra-home", alarm: true }] },
+      { id: "ca2", at: m(0.2), space: "work", from: "captain", relay: true, routes: [{ kind: "alarm", routineId: "ra-meet", text: "회의 있어요 · 3층 큰 회의실", due: m(0.2) }] },
     ],
     results: [
       { id: "res-t8", taskId: "t8", space: "work", project: "ondra", title: "대시보드 문구 다듬기", reply: "인사말과 카드 이름을 짧게 바꿨어요", answers: [{ text: "인사말을 한 줄로 줄이고 카드 이름을 두 글자씩 맞췄어요. 개발 서버에서 대시보드를 열어 확인했어요.", blocks: [{ type: "shot", path: LOGIN, caption: "바뀐 대시보드" }] }], at: m(48) },
@@ -250,6 +262,13 @@ export function fixture(base: AppState): AppState {
       { id: "r_readme", taskId: "t3", space: "work", project: "ondra", title: "README 정리", reply: "README에서 오래된 설치 안내를 빼고 지금 쓰는 방법만 남겼어요.", answers: [{ text: "- 설치: DMG 하나로 끝나요\n- 빠진 것: 예전 CLI 설치, 베타 신청 링크\n- 새로 쓴 것: 업데이트 방법", blocks: [{ type: "files", files: [{ path: "README.md", add: 12, del: 10 }] }] }], at: m(190) },
       { id: "r_re", taskId: "t_re", space: "work", project: "ondra", title: "보안 입력 판별 분석", reply: "", answers: [{ text: "ondra-cuhost는 접근성 요소의 **role**과 **subrole**을 문자열로 비교해서 비밀번호 칸을 알아봐요. `AXSecureTextField`면 입력을 막아요.", blocks: [{ type: "metric", label: "읽은 함수", value: "549" }] }], at: m(34) },
       { id: "r_price", taskId: "t1a", space: "work", project: "acme", title: "요금제 표 문구 점검", reply: "요금제 표에서 틀린 가격 두 곳을 찾았어요.", answers: [{ text: "프로 요금제 연간 가격이 표와 결제 화면에서 달라요. 표를 결제 화면 값으로 맞추면 돼요.", blocks: [] }], at: m(1500), pinned: true },
+    ],
+    routines: [
+      { id: "ra-home", space: "work", title: "퇴근하세요", prompt: "퇴근하세요", when: { kind: "daily", time: "18:00" }, mode: "fresh", enabled: true, alarm: true, quiet: false, createdAt: m(0.9), updatedAt: m(0.9), nextAt: at(18, 0), runs: 0, from: "chat" },
+      { id: "ra-meet", space: "work", title: "회의 있어요 · 3층 큰 회의실", prompt: "회의 있어요 · 3층 큰 회의실", when: { kind: "once", at: m(0.2) }, mode: "fresh", enabled: false, alarm: true, quiet: false, createdAt: m(10.2), updatedAt: m(0.2), lastAt: m(0.2), lastStatus: "done", runs: 1, from: "chat" },
+      { id: "ra-pr", space: "work", title: "PR 리뷰하기", prompt: "PR 리뷰하기", when: { kind: "once", at: at(9, 0, 1) }, mode: "fresh", enabled: true, alarm: true, quiet: false, createdAt: m(30), updatedAt: m(30), nextAt: at(9, 0, 1), runs: 0, from: "chat" },
+      { id: "ra-stand", space: "work", title: "스탠드업 메모 올리기", prompt: "스탠드업 메모 올리기", when: { kind: "daily", time: "09:30", days: [1, 2, 3, 4, 5] }, mode: "fresh", enabled: true, alarm: true, quiet: false, createdAt: m(4000), updatedAt: m(4000), nextAt: at(9, 30, 1), lastAt: m(0.95), lastStatus: "done", runs: 12 },
+      { id: "rr-pr", space: "work", title: "아침 PR 정리", prompt: "어제 머지된 PR을 요약해 줘", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, mode: "continue", enabled: true, quiet: true, createdAt: m(5000), updatedAt: m(5000), nextAt: at(9, 0, 1), runs: 8, lastStatus: "done" },
     ],
     memory: [{ id: "m1", text: "블로그 글은 반말로 쓴다", scope: "space", space: "work", source: "ondra", createdAt: m(15), uses: 2 }],
   };

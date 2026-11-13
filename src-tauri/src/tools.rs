@@ -534,9 +534,18 @@ pub fn hooks_save(app: AppHandle, json: String) -> Result<(), String> {
 /// A macOS notification (job finished, a job needs you) while the window is in the background.
 /// Sent as Ondra (its bundle id), so it shows the Ondra icon; osascript would
 /// show Script Editor's. Falls back to osascript if the id can't be used.
+/// An alarm (`sound`) rings with a sound; with a `tag`, a click on it brings Ondra up and tells
+/// the page ("notify:click" with the tag), which opens the line it is about. macOS shows no
+/// banner for the app in front, so an alarm while Ondra is in front only plays the sound.
 #[tauri::command]
-pub async fn notify(app: AppHandle, title: String, body: String) {
-    let _ = tauri::async_runtime::spawn_blocking(move || {
+pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<bool>, tag: Option<String>) {
+    let sound = sound.unwrap_or(false);
+    if sound && app.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(false) {
+        play_alarm();
+        return;
+    }
+    let waits = tag.is_some();
+    let send = move || {
         #[cfg(target_os = "macos")]
         {
             static AS_ONDRA: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -546,15 +555,59 @@ pub async fn notify(app: AppHandle, title: String, body: String) {
                 dev_bundle(&app, &id);
                 mac_notification_sys::set_application(&id).is_ok()
             });
-            if ok && mac_notification_sys::Notification::new().title(&title).message(&body).send().is_ok() {
-                return;
+            if ok {
+                let mut n = mac_notification_sys::Notification::new();
+                n.title(&title).message(&body);
+                if sound {
+                    n.sound(ALARM_SOUND);
+                }
+                // waits (on its own thread) until it is clicked or cleared
+                n.wait_for_click(waits);
+                if let Ok(answer) = n.send() {
+                    if answer == mac_notification_sys::NotificationResponse::Click {
+                        if let Some(tag) = tag {
+                            clicked(&app, &tag);
+                        }
+                    }
+                    return;
+                }
             }
         }
         let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
-        let script = format!("display notification \"{}\" with title \"{}\"", esc(&body), esc(&title));
+        let tone = if sound { format!(" sound name \"{ALARM_SOUND}\"") } else { String::new() };
+        let script = format!("display notification \"{}\" with title \"{}\"{}", esc(&body), esc(&title), tone);
         let _ = std::process::Command::new("/usr/bin/osascript").args(["-e", &script]).output();
-    })
-    .await;
+    };
+    if waits {
+        // a click may come much later: a thread of its own, not one of the blocking pool's
+        std::thread::spawn(send);
+    } else {
+        let _ = tauri::async_runtime::spawn_blocking(send).await;
+    }
+}
+
+/** the system sound an alarm rings with (/System/Library/Sounds) */
+const ALARM_SOUND: &str = "Glass";
+
+fn play_alarm() {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/afplay")
+        .arg(format!("/System/Library/Sounds/{ALARM_SOUND}.aiff"))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
+/** a tagged notice was clicked: Ondra comes up and the page opens what it was about */
+#[cfg(target_os = "macos")]
+fn clicked(app: &AppHandle, tag: &str) {
+    use tauri::Emitter;
+    if let Some(w) = app.get_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit("notify:click", tag.to_string());
 }
 
 /// A dev build is a bare executable with no bundle, so macOS can't find the app

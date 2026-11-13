@@ -385,7 +385,8 @@ export const ghIssue = (cwd: string, number: number, env: Env = []) =>
 export const ghPrView = (url: string, env: Env = []) => call<string>("gh_pr_view", { url, env }, "");
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
-export const notify = (title: string, body: string) => call<void>("notify", { title, body });
+/** A system notice. An alarm rings (`sound`); with a `tag`, a click on it comes back as "notify:click" with the tag. */
+export const notify = (title: string, body: string, o: { sound?: boolean; tag?: string } = {}) => call<void>("notify", { title, body, sound: o.sound ?? null, tag: o.tag ?? null });
 export const workerExtensions = () => call<string[]>("worker_extensions", undefined, []);
 export interface SkillFile {
   name: string;

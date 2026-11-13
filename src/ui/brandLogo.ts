@@ -46,17 +46,26 @@ const bundled = (name?: string): Icon | undefined => {
 };
 
 /**
+ * Whether a box's own words may name its brand: only when they are all Latin. Comparing
+ * drops every other letter, so "파일·git" would read as "git" and "작업 (Go 서버)" as Go;
+ * a box like that names its brand with `logo`.
+ */
+export const guessable = (s?: string): s is string => !!s && !/[^\x00-\x7F·•–—]/.test(s);
+
+/**
  * What a box shows and what may be asked online for it. `full` is the whole set once it
  * has loaded (undefined before: `waiting` says the answer may still change).
  */
 export function resolve(n: Named, full?: Map<string, Entry>): { icon?: Icon; online?: string; waiting?: boolean } {
   const logo = n.logo?.trim() || undefined;
-  const fromLabel = () => bundled(n.label) ?? (full && findIn(full, n.label)) ?? bundled(n.note);
+  const label = guessable(n.label) ? n.label : undefined;
+  const note = guessable(n.note) ? n.note : undefined;
+  const fromLabel = () => bundled(label) ?? (full && findIn(full, label)) ?? bundled(note);
   if (logo) {
     const hit = bundled(logo) ?? (full && findIn(full, logo));
     if (hit) return { icon: hit, online: sendable(hit.title) ? hit.title : undefined };
     // not known yet: its title (the better name to ask for) may be in the full set
-    if (!full) return { icon: bundled(n.label) ?? bundled(n.note), waiting: true };
+    if (!full) return { icon: bundled(label) ?? bundled(note), waiting: true };
     // a brand simple-icons doesn't have: the label may still give a glyph, the logo goes online as given
     return { icon: fromLabel(), online: sendable(logo) ? logo.trim() : undefined };
   }

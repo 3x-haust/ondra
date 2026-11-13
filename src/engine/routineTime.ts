@@ -35,20 +35,29 @@ export function nextRun(when: RoutineWhen, from: number): number | undefined {
   return undefined;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+const dayKey = (at: number) => new Date(at).toDateString();
+/** "오늘 15:00", "내일 09:00", else "11/20 09:00" */
+export function dayTime(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return dayKey(at) === dayKey(now) ? t("오늘 {time}", { time: hm }) : dayKey(at) === dayKey(tomorrow.getTime()) ? t("내일 {time}", { time: hm }) : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+
 const DAY_NAMES = ["일|day", "월|day", "화|day", "수|day", "목|day", "금|day", "토|day"];
 const WEEKDAYS = [1, 2, 3, 4, 5];
 
 /** "매일 09:00", "평일 09:00", "월·수 18:30", "30분마다", "새 이슈가 오면" … */
-export function describeWhen(when: RoutineWhen): string {
+export function describeWhen(when: RoutineWhen, now = Date.now()): string {
   switch (when.kind) {
     case "every": {
       const m = Math.max(MIN_EVERY, Math.round(when.minutes));
       return m % 1440 === 0 ? t("{n}일마다", { n: m / 1440 }) : m % 60 === 0 ? t("{n}시간마다", { n: m / 60 }) : t("{n}분마다", { n: m });
     }
-    case "once": {
-      const d = new Date(when.at);
-      return t("{date} 한 번", { date: `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` });
-    }
+    case "once":
+      return t("{date} 한 번", { date: dayTime(when.at, now) });
     case "event":
       return EVENT_LABEL[when.event] ? t(EVENT_LABEL[when.event]) : when.event;
     case "daily": {
@@ -93,6 +102,9 @@ export function parseWhen(v: unknown, now = Date.now()): RoutineWhen | undefined
       return Number.isFinite(m) && m > 0 ? { kind: "every", minutes: Math.max(MIN_EVERY, Math.round(m)) } : undefined;
     }
     case "once": {
+      // "in": minutes from now ("10분 뒤"), so main never adds up clock times itself
+      const after = Number(w.in);
+      if (w.in !== undefined && Number.isFinite(after) && after > 0) return { kind: "once", at: now + Math.round(after * 60_000) };
       const at = typeof w.at === "number" ? w.at : typeof w.at === "string" ? Date.parse(w.at) : NaN;
       return Number.isFinite(at) && at > now - 60_000 ? { kind: "once", at } : undefined;
     }
