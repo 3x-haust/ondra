@@ -41,7 +41,7 @@ const COL = X.job + W.job + GAP.lanes - X.proj;
 const SUB_INDENT = 28;
 
 type Kind = "main" | "proj" | "job" | "sub" | "more";
-interface Node {
+export interface Node {
   id: string;
   kind: Kind;
   x: number;
@@ -120,7 +120,7 @@ const [twoCols, setTwoCols] = createSignal(false);
  * the shorter column (as they are folded, at the first view's zoom) and stays in it until the canvas is opened or tidied again. Main and each
  * project sit at the top of what they lead to, so a lane that grows only grows downward.
  */
-function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
+export function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
   const roots = state.tasks.filter((t) => t.space === space && !t.parentId && !t.answer && !t.archived);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsIn(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "프로젝트 없음", folder: spaceById(space as Task["space"]).folder });
@@ -675,7 +675,7 @@ function StatusRow(props: { t: Task; sheet?: boolean; aside?: string; label?: st
   );
 }
 
-function JobCard(props: { n: Node }) {
+export function JobCard(props: { n: Node }) {
   const job = () => props.n.task!;
   return (
     <>
@@ -703,7 +703,7 @@ function SubCard(props: { n: Node }) {
   );
 }
 
-function ProjCard(props: { n: Node; space: string }) {
+export function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
   const jobs = createMemo(() => state.tasks.filter((x) => x.space === props.space && !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id)));
   const counts = createMemo(() => {
@@ -761,7 +761,7 @@ function MoreCard(props: { n: Node }) {
   );
 }
 
-function MainCard() {
+export function MainCard() {
   const busy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   return (
     <>
