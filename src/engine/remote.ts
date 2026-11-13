@@ -8,19 +8,25 @@
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
 // fields when they did, and the entries from the first one that differs.
+//
+// A Mac allowed in sees and acts on only what it may reach (remoteRules.ts): the jobs of the
+// projects it keeps and the ones it asked for, in the workspaces it may use here.
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { inTauri, onRemote, remoteAwake, remoteCmd, remoteHostName, remoteStop } from "../lib/native";
-import { addProject, onWrite, projectById, setState, state, taskById } from "../state/store";
+import { inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop } from "../lib/native";
+import { addProject, onWrite, projectById, setState, state, taskById, updateTask } from "../state/store";
 import type { Task } from "../state/types";
 import type { HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
+import { toast } from "../state/ui";
+import { t } from "../i18n";
 import { accountName, service } from "../ui/AccountPicker";
 import { modelsNow, refreshModels } from "./modelList";
 import { connectionOf, connModelLabel, effortLevels } from "./connections";
 import { effortFor } from "./models";
 import * as jobs from "./tasks";
-import { connectHosts, helperGone, onPeer, startHosts } from "./hosts";
+import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hosts";
+import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 
 export interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 export interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -74,17 +80,14 @@ onWrite((args) => {
 let timer: ReturnType<typeof setTimeout> | undefined;
 const soon = () => (timer ??= setTimeout(flush, 300));
 
-/** a job's top job (a subagent's parent, up the line) */
-function rootOf(t: Task): Task {
-  let x: Task = t;
-  for (let i = 0; x.parentId && i < 20; i++) x = taskById(x.parentId) ?? x;
-  return x;
+/** the workspaces a Mac may use here (undefined: all) */
+function spacesOf(device: string): Set<string> | undefined {
+  const l = state.settings.deviceSpaces?.[device];
+  return l ? new Set(l) : undefined;
 }
-/** what that Mac keeps: the jobs of the projects it added, and the jobs it asked for */
-function wanted(c: Conn, t: Task): boolean {
-  const r = rootOf(t);
-  return (!!r.project && c.watch.has(r.project)) || (!!c.device && r.from?.device === c.device);
-}
+const reach = (c: Conn): Reach => ({ device: c.device, watch: c.watch, spaces: spacesOf(c.device) });
+/** what that Mac keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
+const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
 function flush() {
   timer = undefined;
@@ -132,12 +135,14 @@ function flush() {
 let version: string | undefined;
 void import("@tauri-apps/api/app").then((m) => m.getVersion()).then((v) => (version = v)).catch(() => {});
 
-function info(): HostInfo {
+function info(device: string): HostInfo {
+  const may = spacesOf(device);
+  const spaces = state.spaces.filter((s) => spaceAllowed(may, s.id));
   return {
     version,
-    spaces: state.spaces.map((s) => ({ id: s.id, label: s.label })),
+    spaces: spaces.map((s) => ({ id: s.id, label: s.label })),
     accounts: state.accounts
-      .filter((a) => a.providers.length)
+      .filter((a) => a.providers.length && spaceAllowed(may, a.space))
       .map((a) => {
         const models = modelsNow(a.id) ?? [];
         const direct = !!connectionOf(a.id);
@@ -145,12 +150,12 @@ function info(): HostInfo {
         const names = direct ? Object.fromEntries(models.flatMap((m) => { const n = connModelLabel(a.id, m); return n ? [[m, n]] : []; })) : undefined;
         return { id: a.id, space: a.space, name: accountName(a, true), email: emails[a.id] || undefined, services: [...new Set(a.providers.map(service))], limits: usageOf(a.id), credits: creditsOf(a.id), models, model: a.model || undefined, effort: effortFor(a.id), levels, names };
       }),
-    pick: Object.fromEntries(state.spaces.map((s) => [s.id, jobs.chooseAccount(s.id, "")])),
+    pick: Object.fromEntries(spaces.map((s) => [s.id, jobs.chooseAccount(s.id, "")])),
   };
 }
 
 function sendInfo(conn: number, c: Conn) {
-  const now = info();
+  const now = info(c.device);
   const json = JSON.stringify(now);
   if (json === c.info) return;
   c.info = json;
@@ -158,8 +163,9 @@ function sendInfo(conn: number, c: Conn) {
 }
 
 async function sendProjects(conn: number) {
+  const may = spacesOf(conns.get(conn)?.device ?? "");
   // each with its workspace's name, so the other Mac shows it in the tab of that name
-  const list = (state.projects ?? []).map((p) => ({ id: p.id, name: p.name, folder: p.folder, space: state.spaces.find((s) => s.id === p.space)?.label }));
+  const list = (state.projects ?? []).filter((p) => spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: p.folder, space: state.spaces.find((s) => s.id === p.space)?.label }));
   await send(conn, { t: "projects", list });
 }
 
@@ -168,17 +174,28 @@ async function sendProjects(conn: number) {
 /** a new job here, from another Mac (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that Mac picked; on the account it picked there, else that workspace's choice */
 function create(c: Conn, f: { id: string; title: string; ask: string; project?: string; space?: string; hostSpace?: string; spaceLabel?: string; account?: string; model?: string; thinking?: string; display?: string }) {
-  const p = f.project ? projectById(f.project) : undefined;
+  if (!f || typeof f !== "object" || typeof f.ask !== "string") throw new Error("bad request");
+  // this Mac's own project only (never one shown here from a third Mac)
+  const p = f.project && !f.project.startsWith("r:") ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 Mac에 없어요");
   const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
+  if (!spaceAllowed(spacesOf(c.device), space)) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const from = { device: c.device, space: f.space ?? "" };
   const account = f.account && state.accounts.some((a) => a.id === f.account && a.space === space) ? f.account : jobs.chooseAccount(space, p?.name ?? "");
   return jobs.createTask({ id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id, isolate: state.settings.isolate, accountId: account, from, model: f.model, thinking: f.thinking });
 }
 
-/** what another Mac may do here: the same the user does with a job, and add a project */
-const CALLS: Record<string, (...a: never[]) => unknown> = {
-  addProject: (folder: string) => addProject(state.space, folder),
+/** a folder there made a project here: in the workspace in use, else the first one that Mac may use */
+function addProjectFor(c: Conn, folder: unknown) {
+  if (typeof folder !== "string" || !folder.trim()) throw new Error("bad request");
+  const may = spacesOf(c.device);
+  const space = spaceAllowed(may, state.space) ? state.space : state.spaces.find((s) => spaceAllowed(may, s.id))?.id;
+  if (!space) throw new Error("그 워크스페이스는 쓸 수 없어요");
+  return addProject(space, folder);
+}
+
+/** what another Mac may do with a job here: the same the user does (checked by checkCall first) */
+const JOBS: Record<JobCall, (...a: never[]) => unknown> = {
   tell: jobs.tell,
   stopTask: jobs.stopTask,
   resumeTask: jobs.resumeTask,
@@ -216,11 +233,21 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       soon();
       break;
     case "call": {
-      const fn = msg.fn === "create" ? (f: Parameters<typeof create>[1]) => create(c, f) : CALLS[String(msg.fn)];
+      const fn = String(msg.fn);
+      const args: unknown[] = Array.isArray(msg.args) ? msg.args : [];
       const seq = msg.seq;
       try {
-        if (!fn) throw new Error(`unknown: ${String(msg.fn)}`);
-        const value = await (fn as (...a: unknown[]) => unknown)(...(Array.isArray(msg.args) ? msg.args : []));
+        let value: unknown;
+        if (fn === "create") value = create(c, args[0] as Parameters<typeof create>[1]);
+        else if (fn === "addProject") value = addProjectFor(c, args[0]);
+        else {
+          // only a job that Mac may reach, and only the calls a job has
+          const ok = checkCall(reach(c), fn, args, taskById);
+          value = await (JOBS[fn as JobCall] as (...a: unknown[]) => unknown)(...ok);
+          // the copy is that Mac's too: it sees it like the one it copied
+          const was = taskById(String(ok[0]));
+          if (fn === "duplicateTask" && typeof value === "string") updateTask(value, (x) => (x.from = { device: c.device, space: was?.from?.space ?? "" }));
+        }
         await send(conn, { t: "ret", seq, value: value ?? null });
       } catch (e) {
         await send(conn, { t: "ret", seq, error: e instanceof Error ? e.message : String(e) });
@@ -249,7 +276,74 @@ export function answerPair(conn: number, ok: boolean) {
   setRemote((r) => ({ ...r, asks: r.asks.filter((a) => a.conn !== conn), ...(ok ? { pair: undefined } : {}) }));
 }
 
-export const revokeDevice = (id: string) => void remoteCmd({ cmd: "revoke", id }).catch(() => {});
+const deviceName = (id: string) => remote().devices.find((d) => d.id === id)?.name ?? Object.values(remote().live).find((d) => d.id === id)?.name ?? "Mac";
+
+/** 연결 끊기 (this side): that Mac's connection ends now; it stays allowed and may come back */
+export function dropDevice(id: string) {
+  remoteCmd({ cmd: "drop", id }).catch((e) => toast(t("연결을 끊지 못했어요: {error}", { error: String(e) }), "bad"));
+}
+
+/** 제거 (this side): that Mac may no longer come in. Works with the helper running or not. */
+export async function forgetDevice(id: string) {
+  const name = deviceName(id);
+  try {
+    const list = await remoteForget(id);
+    if (list) setRemote((r) => ({ ...r, devices: list }));
+  } catch (e) {
+    toast(t("제거하지 못했어요: {error}", { error: String(e) }), "bad");
+    return;
+  }
+  forgotten(id, name, t("{name}을(를) 제거했어요", { name }));
+}
+
+/** a Mac is gone from the list (removed here, or it removed this one): its grants go, its jobs are named */
+function forgotten(id: string, name: string, said: string) {
+  if (state.settings.deviceSpaces?.[id]) setDeviceSpaces(id, undefined);
+  const left = jobsFrom(state.tasks, id);
+  if (!left.length) return void toast(said);
+  // they keep running: the user decides
+  toast(t("{name}에서 시킨 작업 {n}개는 계속 돌아요", { name, n: left.length }), "info", { label: t("정리|jobs"), run: () => askStopJobs(id, name) }, { stay: true });
+}
+
+/** stop and archive the jobs that Mac asked for here, after asking (named, so it's plain which) */
+export function askStopJobs(id: string, name: string) {
+  const left = jobsFrom(state.tasks, id);
+  if (!left.length) return;
+  const shown = left.slice(0, 3).map((x) => x.title);
+  if (left.length > 3) shown.push(t("외 {n}개", { n: left.length - 3 }));
+  void import("../ui/taskMenu").then((m) =>
+    m.confirmAsk({
+      title: t("{name}에서 시킨 작업 {n}개를 멈추고 보관할까요?", { name, n: left.length }),
+      body: shown.join(" · "),
+      action: t("멈추고 보관"),
+      run: () => {
+        for (const x of left) {
+          if (x.status === "running" || x.status === "waiting" || x.status === "queued") jobs.stopTask(x.id);
+          updateTask(x.id, (y) => ((y.archived = true), (y.pinned = false)));
+        }
+        toast(t("작업 {n}개를 보관했어요", { n: left.length }));
+      },
+    }),
+  );
+}
+
+/** the workspaces a Mac allowed in may use here (undefined: all); what it sees changes at once */
+export function setDeviceSpaces(id: string, spaces: string[] | undefined) {
+  const next = { ...(state.settings.deviceSpaces ?? {}) };
+  delete next[id];
+  if (spaces) next[id] = spaces;
+  // replaced whole: a store merges objects
+  setState("settings", "deviceSpaces", undefined);
+  setState("settings", "deviceSpaces", next);
+  for (const [conn, c] of conns) {
+    if (c.device !== id) continue;
+    c.all = true;
+    c.info = undefined;
+    void sendProjects(conn);
+    sendInfo(conn, c);
+  }
+  soon();
+}
 
 /** keep this Mac awake while others may work on it (and only then) */
 export function keepAwake() {
@@ -263,7 +357,7 @@ export async function setRemoteOn(on: boolean) {
   else {
     await remoteCmd({ cmd: "host", on: false }).catch(() => {});
     setRemote((r) => ({ ...r, live: {}, asks: [], pair: undefined }));
-    if (!state.settings.hosts?.length) {
+    if (!wantsHelper()) {
       await remoteStop();
       helperGone();
     }
@@ -306,6 +400,12 @@ export function initRemote() {
       case "msg":
         if (ev.data && typeof ev.data === "object") void handle(Number(ev.conn), ev.data as Record<string, unknown>);
         break;
+      case "bye": {
+        // that Mac removed this one on its side: it's gone from the list here too (the helper did it)
+        const d = ev.device as { id?: string; name?: string } | undefined;
+        if (d?.id) forgotten(d.id, d.name || "Mac", t("{name}에서 이 Mac 연결을 제거했어요", { name: d.name || "Mac" }));
+        break;
+      }
       case "peer":
       case "peer-msg":
         onPeer(ev);
@@ -315,7 +415,7 @@ export function initRemote() {
         conns.clear();
         setRemote((r) => ({ ...r, id: undefined, live: {}, asks: [] }));
         // it went away on its own while still wanted: bring it back
-        if (state.settings.remote || state.settings.hosts?.length) setTimeout(() => void startHosts().then(connectHosts), 2000);
+        if (state.settings.remote || wantsHelper()) setTimeout(() => void startHosts().then(connectHosts), 2000);
         break;
     }
   });
@@ -325,6 +425,8 @@ export function initRemote() {
   setInterval(() => {
     for (const [conn, c] of conns) sendInfo(conn, c);
   }, 20_000);
+  // the Macs allowed in show (and can be removed) even while the helper isn't running
+  void remoteDevices().then((list) => setRemote((r) => (r.devices.length ? r : { ...r, devices: list }))).catch(() => {});
   if (state.settings.remote) void startHosts();
   void connectHosts();
 }

@@ -15,7 +15,8 @@ import { pickFolder, revealPath } from "../lib/native";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, view } from "../state/ui";
+import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, view } from "../state/ui";
+import { hideHostProject, showHostProject } from "../engine/hosts";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
 import { openInSplit, startTaskDrag } from "./PaneControls";
@@ -249,11 +250,22 @@ function projectMenu(id: string): MenuEntry[] {
   if (!p) return [];
   const n = tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && !t.answer).length;
   const far = splitProjectId(p.id);
-  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there)
+  // another Mac's project: it is that Mac's, shown here as it is there (it goes when it goes there);
+  // it can be kept off the list here (Settings › 연결 brings it back)
   if (far)
     return [
       { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },
       { id: "new", label: tr("새 작업"), icon: "compose", run: () => void import("./MainView").then((m) => m.startNewTask(p.id)) },
+      "sep",
+      {
+        id: "hide",
+        label: tr("목록에서 숨기기"),
+        icon: "eyeOff",
+        run: () => {
+          hideHostProject(far.host, far.id);
+          toast(tr("{name} 프로젝트를 숨겼어요", { name: p.name }), "info", { label: tr("다시 보이기"), run: () => showHostProject(far.host, far.id) });
+        },
+      },
     ];
   return [
     { id: "open", label: tr("열기"), icon: "arrow", run: () => goMain(p.id) },

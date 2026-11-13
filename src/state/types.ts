@@ -643,8 +643,13 @@ export interface Settings {
   remote?: boolean;
   /** while others may work on this Mac, it doesn't sleep (on power) */
   remoteAwake?: boolean;
-  /** other Macs this one works on, and the projects of theirs added here */
-  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number }[];
+  /** other Macs this one works on, and the projects of theirs added here. `hidden`: its projects
+   *  taken off the list here (kept off when it sends them again); `off`: disconnected for now */
+  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean }[];
+  /** Macs removed here that haven't heard it yet: told the next time they're reachable */
+  leaving?: { id: string; name: string; at: number }[];
+  /** the workspaces (ids) each Mac allowed in may use here; missing = all of them */
+  deviceSpaces?: Record<string, string[]>;
   /** this Mac in the Mac bar: its own name, icon and tint (unset: "이 Mac", its letters, a tint from the name) */
   thisMac?: { name?: string; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number };
   hostProjects?: { host: string; id: string; space: SpaceId; name?: string; folder?: string }[];

@@ -326,6 +326,10 @@ export const remoteStop = () => call<void>("remote_stop");
 export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
 export const remoteHostName = () => call<string>("remote_host_name", undefined, "Mac");
 export const remoteAwake = (on: boolean) => call<void>("remote_awake", { on });
+/** the Macs allowed in (read from disk: there even while the helper isn't running) */
+export const remoteDevices = () => call<{ id: string; name: string; addedAt: number; lastSeen: number }[]>("remote_devices", undefined, []);
+/** forget a Mac allowed in; the new list when it was changed without the helper */
+export const remoteForget = (id: string) => call<{ id: string; name: string; addedAt: number; lastSeen: number }[] | null>("remote_forget", { id });
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
 export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });

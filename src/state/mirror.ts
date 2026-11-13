@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store";
 import type { Limit } from "../lib/native";
 import type { Project, SpaceId, Task } from "./types";
 
+/** "off": disconnected here for now (연결 끊기) */
 export type HostStatus = "off" | "connecting" | "waiting" | "ok" | "denied" | "lost";
 
 export interface HostMirror {
@@ -79,8 +80,10 @@ export function linkedProjects(links: { host: string; id: string; space: SpaceId
 export function hostStatusText(h: HostMirror | undefined, seen?: number, t: (k: string, v?: Record<string, string | number>) => string = (k) => k, ago: (at?: number) => string = () => ""): string {
   const s = h?.status ?? "connecting";
   if (s === "denied" && h?.reason === "off") return t("그 Mac에서 연결을 꺼 뒀어요");
-  if (s === "denied" && h?.reason === "unknown") return t("그 Mac에서 이 Mac을 뺐어요");
+  if (s === "denied" && (h?.reason === "unknown" || h?.reason === "revoked")) return t("그 Mac에서 이 Mac을 제거했어요");
   if (s === "denied") return t("거절됨");
+  if (s === "off") return t("연결 끊음");
+  if (s === "lost" && h?.reason === "dropped") return t("그 Mac에서 연결을 끊었어요");
   if (s === "waiting") return t("그 Mac에서 허용을 기다려요");
   if (s === "ok") return t("연결됨");
   const at = h?.since ?? seen;

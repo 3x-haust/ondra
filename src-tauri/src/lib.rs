@@ -473,6 +473,8 @@ pub fn run() {
             remote::remote_cmd,
             remote::remote_host_name,
             remote::remote_awake,
+            remote::remote_devices,
+            remote::remote_forget,
             tools::worker_env,
             secrets::secret_list,
             secrets::secret_set,
