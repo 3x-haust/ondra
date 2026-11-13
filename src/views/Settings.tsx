@@ -82,15 +82,14 @@ export function Row(props: { title: string; desc?: string; children?: any }) {
   );
 }
 
-/** A tab's head: its icon on a soft tile, its name, one line on what it is for, and its one action. */
+/** A tab's head: its icon on a soft tile, its name, and its one action (what the tab is for is left to search). */
 export function PageHead(props: { tab: SettingsTab; children?: any }) {
   const tab = () => SETTINGS_TABS.find((x) => x.id === props.tab)!;
   return (
     <header class="set-page-head">
-      <span class="set-page-icon"><Icon name={tab().icon} size={20} /></span>
+      <span class="set-page-icon"><Icon name={tab().icon} size={18} /></span>
       <div class="set-page-text">
         <h2>{t(tab().label)}</h2>
-        <p>{t(tab().desc)}</p>
       </div>
       <Show when={props.children}><div class="set-page-act">{props.children}</div></Show>
     </header>
