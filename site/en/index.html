@@ -147,6 +147,7 @@
       <p class="sub">When a task says it's finished, Ondra matches that claim against the commands it actually ran and the files it actually changed, and flags anything it couldn't verify.</p>
       <ul class="points">
         <li>Anything that doesn't line up goes back to the task with the reason, up to twice. Whatever still doesn't hold up is marked <b>Unverified</b>.</li>
+        <li>A task that changes an app runs its own copy of the app, uses it for real and keeps the screens and logs as proof. How to start it, drive it and what to check is written down once per project as a check skill, and every later task reuses it.</li>
         <li>Risky changes get two reviewers before they finish, one for the design and one for the code.</li>
         <li>You get diffs, before-and-after screenshots, videos and test results, not just a summary.</li>
       </ul>
@@ -346,16 +347,16 @@
 <section class="wrap" aria-labelledby="s-tools">
   <div class="rv">
     <p class="kicker">The code was fixed, but you still opened the app to check.</p>
-    <h2 id="s-tools">It works beyond the code, too.</h2>
+    <h2 id="s-tools">It uses the browser and your Mac apps. Your screen stays yours.</h2>
   </div>
   <div class="facts four rv">
     <div class="fact">
       <h3>Browser</h3>
-      <p>Each task browses in its own tab. Passwords are filled from the macOS Keychain, so the model never sees them.</p>
+      <p>Each task opens, clicks and types in its own browser tab, and you can watch it live in a small window in the corner. Passwords are filled from the macOS Keychain, so the model never sees them.</p>
     </div>
     <div class="fact">
       <h3>Mac apps</h3>
-      <p>With permission, it drives Mac apps and captures their windows to check the result.</p>
+      <p>With permission, it drives Mac apps in the background. It never takes your mouse cursor or focus, so you keep working; its own cursor shows where it is clicking.</p>
     </div>
     <div class="fact">
       <h3>Mobile</h3>
