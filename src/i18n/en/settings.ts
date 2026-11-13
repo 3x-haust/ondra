@@ -314,6 +314,7 @@ export default {
   "목표를 이룰 때까지 고치고 확인해요": "Fixes and checks until a goal is met",
   "프로젝트에 앱을 실행하고 써 보는 확인 스킬을 만들어요": "Makes a project skill that runs the app and uses it to check changes",
   "앱 확인 스킬과 기능 지도를 앱에 맞게 고쳐요": "Keeps the app check skill and its feature map in step with the app",
+  "로고와 브랜드 키트를 만들어요": "Designs logos and brand kits",
   "Figma 디자인을 코드로 옮기고 맞춰 봐요": "Turns a Figma design into matching code",
   "앱을 직접 써 보며 버그를 찾아요": "Uses the app like its users to find bugs",
   "바이너리와 앱을 분석해요": "Analyzes binaries and apps",

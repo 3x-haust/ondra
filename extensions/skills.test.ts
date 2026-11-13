@@ -61,6 +61,10 @@ describe("skill matching", () => {
     ["제품 홍보 영상 만들어줘", "motion-graphics"],
     ["인스타 릴스용 키네틱 타이포 영상", "motion-graphics"],
     ["make a launch film for the app", "motion-graphics"],
+    ["로고 만들어줘", "logo-design"],
+    ["우리 카페 로고 디자인해줘", "logo-design"],
+    ["브랜드 키트랑 파비콘 만들어줘", "logo-design"],
+    ["design a logo for my startup", "logo-design"],
     ["메모 앱에서 버튼 눌러줘 컴퓨터유즈로", "computer-use"],
     ["이 웹앱 QA 해줘", "qa"],
     ["앱 화면 다 눌러봐", "qa"],
@@ -269,5 +273,29 @@ describe("checking in the app", () => {
       expect(text).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
       expect(text).toContain("MIT, Lauren Tan");
     }
+  });
+});
+
+describe("logo-design skill", () => {
+  const logo = bundled.find((s) => s.name === "logo-design")!;
+  const body = readFileSync(logo.filePath, "utf8");
+
+  it("is named for logo requests in every role's skill list", () => {
+    for (const prompt of [CAPTAIN_SYSTEM, TASK_SYSTEM, SUB_SYSTEM]) expect(prompt).toMatch(/로고[^\n]*\n?[^\n]*→ logo-design/);
+    expect(skillLine(logo)).toBe("로고와 브랜드 키트를 만들어요");
+  });
+
+  it("ships its scripts executable and shows how to call each one", () => {
+    for (const script of ["contact.mjs", "measure.mjs", "sheet.mjs", "render.mjs", "kit.mjs", "outline.py", "union.py"]) {
+      expect(statSync(join(logo.baseDir, "scripts", script)).mode & 0o111).not.toBe(0);
+      expect(body).toContain(script);
+    }
+    for (const ref of ["craft.md", "kit.md", "fonts.md"]) expect(statSync(join(logo.baseDir, "references", ref)).isFile()).toBe(true);
+  });
+
+  it("is offered when the work runs its scripts or writes a favicon", () => {
+    expect(router().forTool("bash", { command: "node skills/logo-design/scripts/sheet.mjs concepts/ review/" })?.skill.name).toBe("logo-design");
+    expect(router().forTool("write", { path: "public/favicon.svg" })?.skill.name).toBe("logo-design");
+    expect(router().forTool("write", { path: "src/components/Logo.tsx" })).toBeUndefined();
   });
 });

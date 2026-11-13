@@ -28,6 +28,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
   → motion-graphics
+- a logo, brand mark, wordmark, favicon or brand kit (로고, 브랜드 마크)
+  → logo-design
 - writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
 - a project's own check-<app> skill (driving its app to prove a change) →
