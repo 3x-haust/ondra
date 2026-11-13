@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
-import { askBtw, btw, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
+import { askBtw, btw as btwOf, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { agoIn, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
 import { NO_ACCOUNT, tell } from "../engine/tasks";
@@ -31,11 +31,18 @@ function ErrLine(props: { text?: string }) {
 export function BtwCard(props: { scope: string }) {
   // Esc closes the card first, before it blurs the input or closes the panel
   // (an open "/" or "@" list in the input still closes before it)
+  // (with two panes open, the one being typed in)
+  let card: HTMLDivElement | undefined;
+  const btw = () => btwOf(props.scope);
+  const close = () => closeBtw(props.scope);
   const esc = (e: KeyboardEvent) => {
     if (e.key !== "Escape" || ignoredKey(e) || !noModifiers(e) || !btw() || shortcutOverlay()) return;
+    const pane = card?.closest(".pane");
+    const at = document.activeElement;
+    if (pane && at && at !== document.body && !pane.contains(at)) return;
     e.preventDefault();
     e.stopPropagation();
-    closeBtw();
+    close();
   };
   window.addEventListener("keydown", esc, true);
   onCleanup(() => window.removeEventListener("keydown", esc, true));
@@ -48,7 +55,7 @@ export function BtwCard(props: { scope: string }) {
       const [space, project] = props.scope.slice(5).split("~");
       throwThought(said, space as SpaceId, { project });
     }
-    closeBtw();
+    close();
   };
   // go on talking about it in the side chat, with the question and answer carried over
   const toSide = () => {
@@ -56,7 +63,7 @@ export function BtwCard(props: { scope: string }) {
     if (!x) return;
     const space = (x.scope.startsWith("task:") ? taskById(x.scope.slice(5))?.space : x.scope.slice(5).split("~")[0]) ?? state.space;
     continueInSide(space as SpaceId, withFiles(x.question, x.files ?? []), x.answer);
-    closeBtw();
+    close();
     openPanel("side");
     setTimeout(() => document.getElementById("side-input")?.focus(), 60);
   };
@@ -82,22 +89,22 @@ export function BtwCard(props: { scope: string }) {
   return (
     <Show when={btw()}>
       {(x) => (
-        <div class="btw-card" role="status">
+        <div class="btw-card" role="status" ref={card}>
           <div class="btw-head">
             <span class="btw-tag" title={t("짧은 질문")}>btw</span>
             <span class="btw-q" title={x().question}>{x().question}</span>
-            <Show when={btwList().length > 1}>
+            <Show when={btwList(props.scope).length > 1}>
               <span class="btw-nav">
-                <button class="icon-btn sm" title={t("이전")} disabled={btwIndex() === 0} onClick={() => showBtw((btwIndex() ?? 0) - 1)}>
+                <button class="icon-btn sm" title={t("이전")} disabled={btwIndex(props.scope) === 0} onClick={() => showBtw(props.scope, (btwIndex(props.scope) ?? 0) - 1)}>
                   <Icon name="back" size={13} />
                 </button>
-                <span class="btw-n">{(btwIndex() ?? 0) + 1}/{btwList().length}</span>
-                <button class="icon-btn sm" title={t("다음")} disabled={btwIndex() === btwList().length - 1} onClick={() => showBtw((btwIndex() ?? 0) + 1)}>
+                <span class="btw-n">{(btwIndex(props.scope) ?? 0) + 1}/{btwList(props.scope).length}</span>
+                <button class="icon-btn sm" title={t("다음")} disabled={btwIndex(props.scope) === btwList(props.scope).length - 1} onClick={() => showBtw(props.scope, (btwIndex(props.scope) ?? 0) + 1)}>
                   <Icon name="arrow" size={13} />
                 </button>
               </span>
             </Show>
-            <button class="icon-btn sm" title={`${t("닫기")} (esc)`} onClick={closeBtw}>
+            <button class="icon-btn sm" title={`${t("닫기")} (esc)`} onClick={close}>
               <Icon name="x" size={14} />
             </button>
           </div>
@@ -151,7 +158,7 @@ export const btwCommand = (scope: () => string) => ({
   files: true,
   run: (arg: string, _also?: string[], files: string[] = []) => {
     if (arg.trim() || files.length) void askBtw(scope(), arg, files);
-    else if (!showBtw()) toast(t("btw 없음 · /btw 뒤에 질문을 적어요"));
+    else if (!showBtw(scope())) toast(t("btw 없음 · /btw 뒤에 질문을 적어요"));
   },
 });
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { reconcile } from "solid-js/store";
 import { freshState, setState } from "../state/store";
 import type { Task } from "../state/types";
-import { btwPrompt } from "./aside";
+import { btw, btwIndex, btwList, btwPrompt, closeBtw, showBtw } from "./aside";
 
 const job = (id: string, title: string, extra: Partial<Task> = {}): Task => ({
   id, space: "home", topic: "Example", title, ask: `Do ${title}`, cwd: "/repo", status: "done",
@@ -31,5 +31,28 @@ describe("btw", () => {
     expect(prompt).toContain("summary: Rejected under 2.1(a)");
     expect(prompt).toContain("user: how is the release going?");
     expect(prompt).toContain("/data/sessions");
+  });
+});
+
+describe("btw places", () => {
+  it("keeps main's and each job's btws apart, each with its own open card", () => {
+    const q = (id: string, scope: string) => ({ id, at: 1, scope, question: id, answer: "a", pending: false });
+    setState("btws", [q("m1", "main:home"), q("a1", "task:a"), q("m2", "main:home"), q("b1", "task:b"), q("a2", "task:a")]);
+
+    expect(btwList("main:home").map((x) => x.id)).toEqual(["m1", "m2"]);
+    expect(btwList("task:a").map((x) => x.id)).toEqual(["a1", "a2"]);
+    expect(btwList("main:home~p1")).toEqual([]);
+
+    expect(showBtw("task:a")).toBe(true);
+    expect(btw("task:a")?.id).toBe("a2");
+    expect(btw("main:home")).toBeNull();
+    showBtw("main:home", 0);
+    expect(btw("main:home")?.id).toBe("m1");
+    expect(btwIndex("task:a")).toBe(1);
+
+    closeBtw("main:home");
+    expect(btw("main:home")).toBeNull();
+    expect(btw("task:a")?.id).toBe("a2");
+    expect(showBtw("task:c")).toBe(false);
   });
 });
