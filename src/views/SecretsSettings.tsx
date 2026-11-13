@@ -7,6 +7,7 @@
 import { createMemo, createResource, createSignal, For, onMount, Show } from "solid-js";
 import { secretDelete, secretList, secretOverview, secretSet, secretSync, type SavedSecrets, type SecretGroup } from "../lib/native";
 import { state } from "../state/store";
+import { forgetSecret, noteSecrets } from "../engine/secretMemory";
 import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { PageHead } from "./Settings";
@@ -23,7 +24,8 @@ export function SecretsSettings() {
   const [saved, { mutate: setSaved }] = createResource(secretList, { initialValue: { global: [], projects: {} } as SavedSecrets });
   // 전체: every secret, the ones with the same value (base64 of one key in two places …) as one row
   const [groups, { refetch: regroup }] = createResource(secretOverview, { initialValue: [] as SecretGroup[] });
-  const mutate = (s: SavedSecrets) => (setSaved(s), regroup());
+  // each secret also gets a memory piece (where it is, what it is for), so jobs find its use there
+  const mutate = (s: SavedSecrets) => (setSaved(s), regroup(), noteSecrets(s, state.projects ?? []));
   // this Mac's projects of the current workspace (a project on another Mac has its .env there)
   const projects = createMemo(() => (state.projects ?? []).filter((p) => p.space === state.space && !p.host));
   const [scope, setScope] = createSignal(GLOBAL);
@@ -79,6 +81,7 @@ export function SecretsSettings() {
     try {
       const p = project();
       mutate(await secretDelete({ name: item, project: p?.id, folder: p?.folder }));
+      forgetSecret(p?.id, item);
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), "bad");
     }
@@ -91,6 +94,7 @@ export function SecretsSettings() {
       for (const pl of g.places) {
         const p = pl.project ? (state.projects ?? []).find((x) => x.id === pl.project) : undefined;
         last = await secretDelete({ name: pl.item, project: pl.project ?? undefined, folder: p?.folder });
+        forgetSecret(pl.project ?? undefined, pl.item);
       }
       if (last) mutate(last);
     } catch (e) {

@@ -647,6 +647,14 @@ pub fn chosen(saved: &Saved, project: Option<&str>) -> Chosen {
 
 /// What the engine is told about values it holds only to hide them: `VAR=label` pairs.
 pub const MASKS: &str = "ONDRA_SECRET_MASKS";
+/// Where in the project a set name comes from, when not its top folder: `NAME=dir` pairs.
+pub const DIRS: &str = "ONDRA_SECRET_DIRS";
+
+/// The folder inside a project a keychain account's item is from ("p1/Deploy/Front:KEY" → "Deploy/Front").
+fn dir_of(acct: &str) -> Option<&str> {
+    let (_, item) = acct.split_once('/')?;
+    Some(split_item(item).0).filter(|d| !d.is_empty())
+}
 
 /// For a job's engine (the env carries MARKER): adds each secret it gets that the keychain still
 /// has, plus the list of their names; the values it doesn't get as a variable (a deeper folder's
@@ -656,6 +664,7 @@ pub fn inject(app: &AppHandle, cmd: &mut Command, env: &[(String, String)]) {
     let project = marker.strip_prefix("p:").filter(|p| valid_project(p));
     let picked = chosen(&read_saved(app), project);
     let mut held = Vec::new();
+    let mut dirs = Vec::new();
     for (name, acct) in picked.set {
         // a space's own env (set by the user for that space) wins over a secret of the same name
         if env.iter().any(|(k, _)| k == &name) {
@@ -663,6 +672,9 @@ pub fn inject(app: &AppHandle, cmd: &mut Command, env: &[(String, String)]) {
         }
         if let Some(value) = store::get(&acct) {
             cmd.env(&name, value);
+            if let Some(d) = dir_of(&acct) {
+                dirs.push(format!("{name}={d}"));
+            }
             held.push(name);
         }
     }
@@ -676,6 +688,7 @@ pub fn inject(app: &AppHandle, cmd: &mut Command, env: &[(String, String)]) {
     }
     cmd.env(NAMES, held.join(","));
     cmd.env(MASKS, masks.join(","));
+    cmd.env(DIRS, dirs.join(","));
 }
 
 #[cfg(test)]
@@ -729,6 +742,7 @@ mod tests {
         let s = parse(r#"{"projects":{"p1":["Deploy/Front:API_KEY","API_KEY","Deploy:API_KEY","Deploy/Front:WEB_TOKEN"]}}"#);
         let c = chosen(&s, Some("p1"));
         assert_eq!(c.set, vec![("API_KEY".into(), "p1/API_KEY".into()), ("WEB_TOKEN".into(), "p1/Deploy/Front:WEB_TOKEN".into())]);
+        assert_eq!((dir_of("p1/Deploy/Front:WEB_TOKEN"), dir_of("p1/API_KEY"), dir_of("API_KEY")), (Some("Deploy/Front"), None, None));
         assert_eq!(c.masked, vec![("Deploy:API_KEY".into(), "p1/Deploy:API_KEY".into()), ("Deploy/Front:API_KEY".into(), "p1/Deploy/Front:API_KEY".into())]);
     }
 

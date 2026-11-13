@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import secrets, { dotenvSecrets, envFilesUnder, envSecrets, maskSecrets, namesUsed, promptNote, redact, variants } from "./secrets";
+import secrets, { dotenvSecrets, envFilesUnder, envSecrets, maskSecrets, namesUsed, promptNote, redact, secretDirs, variants } from "./secrets";
 
 const KEY = "sk_live_51Habc123XYZ";
 
@@ -65,10 +65,12 @@ describe("secrets", () => {
     expect(namesUsed('curl -H "Authorization: Bearer $STRIPE_KEY" ${DB_URL:-x} $STRIPE_KEYS', ["STRIPE_KEY", "DB_URL", "OTHER"])).toEqual(["STRIPE_KEY", "DB_URL"]);
   });
 
-  it("tells the model the names, never values", () => {
-    const note = promptNote(["STRIPE_KEY"]);
-    expect(note).toContain("`STRIPE_KEY`");
+  it("tells the model the names and folders, where uses are kept, never values", () => {
+    const note = promptNote(["STRIPE_KEY", "WEB_TOKEN"], secretDirs({ ONDRA_SECRET_DIRS: "WEB_TOKEN=Deploy/Front" }));
+    expect(note).toContain("`STRIPE_KEY`, `WEB_TOKEN` (Deploy/Front/.env)");
     expect(note).toContain("[secret:NAME]");
+    expect(note).toContain("memory_search");
+    expect(note).toContain("Settings › 시크릿");
   });
 
   it("hides values in tool results, from Ondra and from the folder's .env", async () => {
@@ -96,10 +98,15 @@ describe("secrets", () => {
       expect(out.content[1]).toEqual({ type: "image", data: "x" });
       expect(handlers.tool_result({ toolName: "bash", content: [{ type: "text", text: "clean" }] }, { cwd: dir })).toBeUndefined();
       handlers.tool_call({ toolName: "bash", input: { command: "echo $STRIPE_KEY" } }, {});
+      // memory takes the name, never the value
+      expect(handlers.tool_call({ toolName: "memory_save", input: { text: `STRIPE_KEY는 ${KEY}` } }, { cwd: dir })).toMatchObject({ block: true });
+      expect(handlers.tool_call({ toolName: "memory_save", input: { text: "WEB_TOKEN deep-token-777" } }, { cwd: dir })).toMatchObject({ block: true });
+      expect(handlers.tool_call({ toolName: "memory_save", input: { text: "`STRIPE_KEY`: 테스트 결제 키" } }, { cwd: dir })).toBeUndefined();
       const { readFileSync } = await import("node:fs");
       const log = readFileSync(join(dir, "secrets-audit.jsonl"), "utf8");
       expect(log).toContain('"kind":"used"');
       expect(log).toContain('"kind":"hidden"');
+      expect(log).toContain('"kind":"refused"');
       expect(log).not.toContain(KEY);
     } finally {
       process.env = saved;

@@ -81,13 +81,26 @@ export function namesUsed(command: string, names: string[]): string[] {
   return names.filter((n) => new RegExp(`\\$\\{?${n}(?![A-Za-z0-9_])`).test(command));
 }
 
-/** What the model is told: the names, how to use them, and that values stay hidden. */
-export function promptNote(names: string[]): string {
+/** Where each name came from inside the project ("NAME=Deploy/Front" pairs; none for the project's own .env). */
+export function secretDirs(env: NodeJS.ProcessEnv): Map<string, string> {
+  return new Map(
+    (env.ONDRA_SECRET_DIRS ?? "")
+      .split(",")
+      .map((p) => p.split("=").map((x) => x.trim()))
+      .filter((p): p is [string, string] => !!p[0] && !!p[1]),
+  );
+}
+
+/** What the model is told: the names, where they are from, how to use them, and that values stay hidden. */
+export function promptNote(names: string[], dirs: Map<string, string> = new Map()): string {
+  const list = names.map((n) => (dirs.get(n) ? `\`${n}\` (${dirs.get(n)}/.env)` : `\`${n}\``)).join(", ");
   return [
     "## Secrets",
-    `These secrets are set as environment variables in your shell: ${names.map((n) => `\`${n}\``).join(", ")}.`,
-    "Use them by name in commands (`$NAME`, or `process.env.NAME` in code you run); never ask the user for their values and never write a value into a file, a commit or a message.",
+    `These secrets are set as environment variables in your shell: ${list}.`,
+    "Use them by name in commands (`$NAME`, or `process.env.NAME` in code you run); never ask the user for their values and never write a value into a file, a commit, memory or a message.",
     "Any value that shows up in a tool result is replaced by [secret:NAME]: that is expected, not an error, and the real value was still used.",
+    "What each one is for is kept in memory: `memory_search` its name before picking one. When you learn what a secret is for (the service, the command or script that uses it, test or live, what breaks without it), save that with `memory_save` (about: [\"시크릿\"], `replaces` the piece the search found): the name and its use, never the value.",
+    "A secret the work needs but isn't set: ask the user to add it in Settings › 시크릿 (never to paste it into the chat). Read the `secrets` skill for details.",
   ].join("\n");
 }
 
@@ -167,9 +180,18 @@ export default function (pi: ExtensionAPI) {
   };
 
   if (names.length)
-    pi.on("before_agent_start", (event) => ({ systemPrompt: `${event.systemPrompt}\n\n${promptNote(names)}` }));
+    pi.on("before_agent_start", (event) => ({ systemPrompt: `${event.systemPrompt}\n\n${promptNote(names, secretDirs(process.env))}` }));
 
-  pi.on("tool_call", (event) => {
+  pi.on("tool_call", (event, ctx) => {
+    // memory outlives the job and goes to other jobs: a value in it is refused, the name is fine
+    if (event.toolName === "memory_save") {
+      const r = redact(JSON.stringify(event.input ?? {}), [...own, ...folderSecrets(ctx?.cwd ?? process.cwd())]);
+      if (r.hits.length) {
+        log({ kind: "refused", tool: event.toolName, names: r.hits });
+        return { block: true, reason: `This holds the value of ${r.hits.join(", ")}. Memory keeps the name and what it is for, never the value: write \`NAME\` instead and save again.` };
+      }
+      return;
+    }
     if (event.toolName !== "bash" || !names.length) return;
     const used = namesUsed(String((event.input as { command?: unknown })?.command ?? ""), names);
     if (used.length) log({ kind: "used", tool: "bash", names: used });

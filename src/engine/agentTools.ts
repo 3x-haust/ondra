@@ -60,6 +60,7 @@ const SKILL_LINE: Record<string, string> = {
   "modern-web-guidance": "웹 화면 코드를 요즘 방식으로 짜요",
   "motion-graphics": "홍보 영상과 모션그래픽을 만들어요",
   "office-docs": "워드·엑셀·PPT·PDF 파일을 읽고 만들어요",
+  secrets: "API 키와 .env를 값을 보지 않고 다뤄요",
   qa: "앱을 직접 써 보며 버그를 찾아요",
   "reverse-engineering": "바이너리와 앱을 분석해요",
   "test-ci": "테스트와 CI를 만들어요",
