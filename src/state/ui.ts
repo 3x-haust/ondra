@@ -22,7 +22,7 @@ export type View =
   | { name: "changes"; id: string; path?: string }
   | { name: "settings"; tab?: SettingsTab };
 
-export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools" | "remote";
+export type SettingsTab = "general" | "shortcuts" | "accounts" | "import" | "skills" | "agent-tools" | "hooks" | "tools" | "remote" | "secrets";
 /** What a panel tab shows. "new" is the empty tab that lists the tools. */
 export type PanelTab = "new" | "flow" | "side" | "artifacts" | "changes" | "pr" | "files" | "terminal" | "browser" | "overview" | "preview" | "reverse" | "issues";
 

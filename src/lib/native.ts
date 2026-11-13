@@ -598,3 +598,7 @@ export const onUpdateProgress = (f: (p: { version: string; percent: number }) =>
   inTauri ? listen<{ version: string; percent: number }>("update:progress", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Save bytes as a file in ~/Downloads (a free name); returns the path. */
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
+/** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
+export const secretList = () => call<string[]>("secret_list", undefined, []);
+export const secretSet = (name: string, value: string) => call<string[]>("secret_set", { name, value }, [name]);
+export const secretDelete = (name: string) => call<string[]>("secret_delete", { name }, []);

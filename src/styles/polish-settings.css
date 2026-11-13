@@ -1416,3 +1416,24 @@
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }
+
+/* 시크릿: one line of what it does, then the add row (name · value · save) */
+.settings-inner .sec-intro {
+  margin: 0 0 var(--s-16);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.settings-inner .sec-add {
+  display: flex;
+  gap: var(--s-8);
+  align-items: center;
+}
+.settings-inner .sec-add .sec-name {
+  flex: 0 0 200px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.settings-inner .sec-add .sec-value {
+  flex: 1;
+  min-width: 0;
+}

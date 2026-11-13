@@ -20,6 +20,7 @@ mod devices;
 mod engine;
 pub mod focus;
 mod keychain;
+mod secrets;
 mod providers;
 mod git;
 mod import;
@@ -473,6 +474,9 @@ pub fn run() {
             remote::remote_host_name,
             remote::remote_awake,
             tools::worker_env,
+            secrets::secret_list,
+            secrets::secret_set,
+            secrets::secret_delete,
             tools::worker_skills,
             tools::global_skills,
             tools::space_env,

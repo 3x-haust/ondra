@@ -1,4 +1,15 @@
 export default {
+  // secrets
+  "시크릿": "Secrets",
+  "API 키와 비밀번호를 macOS 키체인에 두고, 작업의 명령에서 $이름으로 써요. 에이전트는 이름만 알고 값은 보지 못해요. 출력에 값이 나오면 [secret:이름]으로 가려져요.": "API keys and passwords live in the macOS keychain, and a job's commands use them as $NAME. The agent knows the names, never the values. A value that shows up in output is hidden as [secret:NAME].",
+  "새 시크릿": "New secret",
+  "저장된 시크릿": "Saved secrets",
+  "값": "Value",
+  "아직 없어요": "None yet",
+  "{name}을(를) 저장했어요": "Saved {name}",
+  "{name}을(를) 바꿨어요": "Replaced {name}",
+  "{name} 삭제": "Delete {name}",
+  "같은 이름으로 다시 저장하면 값이 바뀌어요. 작업 폴더의 .env에 있는 키·토큰·비밀번호 값도 출력에서 가려져요. 새 값은 다음에 시작하는 작업부터 쓰여요.": "Saving the same name again replaces the value. Keys, tokens and passwords in the job folder's .env are hidden from output too. A new value applies to jobs started after it.",
   // general
   "테마": "Theme",
   "화면 크기": "Zoom",
