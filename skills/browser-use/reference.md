@@ -5,7 +5,7 @@
 `browse --help` lists everything. What it does under the hood, so you can reason
 about it:
 
-- **open / read <url>**: one agent-browser batch: `open --wait-until
+- **open / read <url>**: one ondra-browser batch: `open --wait-until
   domcontentloaded` (never waits for the page's last ad or tracker), then a wait
   until the page settles (no DOM change for 300 ms and no fetch/XHR still open,
   at most 4 s; `net.js`, which the app loads into every page of your tab, counts
@@ -23,7 +23,7 @@ about it:
   headings, paragraphs, lists, tables, code. Menus, asides, footers, buttons,
   forms, cookie and share boxes are dropped. `--links` keeps link targets,
   `--max` raises the 12 000-character cut. Web components (shadow DOM) included.
-- **Refs**: agent-browser keeps refs across looks on the same page. When a page
+- **Refs**: ondra-browser keeps refs across looks on the same page. When a page
   re-renders an element, an old ref still finds the one element with the same
   role and name; if that's ambiguous the command fails, then `browse look`.
 - **Light mode**: per tab, once per session daemon: `network route` aborts
@@ -35,23 +35,23 @@ about it:
   loads the page again (a reload loses what was typed: turn visuals on before
   filling a form you'll capture); `browse shot` does that by itself. State lives
   in `$APP_SCRATCH_DIR/.browse/`.
-- Plain `agent-browser` commands still work in the same tab; `browse do` takes
+- Plain `ondra-browser` commands still work in the same tab; `browse do` takes
   any of them (`"wait --text Saved"`, `"find role button click --name 저장"`,
   `"upload @e7 a.png"`, `"eval ..."`), or a JSON array for awkward quoting.
 
 ## Looping in the page and the site's API
 
 - Lists, tables, pagination, checks: one `browse do "eval ..."` (or
-  `agent-browser eval --stdin` with a heredoc) instead of many clicks. No
+  `ondra-browser eval --stdin` with a heredoc) instead of many clicks. No
   top-level `await`: wrap it, `(async () => { ... })()`. Typing and clicking a
   page reacts to stay on `fill`/`click` (React ignores values set from a script).
-- Many items or pages: find the call the page makes (`agent-browser network
-  requests --type xhr,fetch --method GET`, then `agent-browser network request
+- Many items or pages: find the call the page makes (`ondra-browser network
+  requests --type xhr,fetch --method GET`, then `ondra-browser network request
   <id>`) and call it from the page, where the login already is: `eval` with
   `fetch(url, { credentials: "include" })`, several at once with `Promise.all`.
   GET only; anything that changes data goes through the page (and an `ask` when
   it leaves this machine). Never export cookies or tokens to a file for it (no
-  `derive-client`, no `cookies get`).
+  `cookies get`).
 
 ## Recipes
 
@@ -68,7 +68,7 @@ First reload or re-open the page: you may already be signed in. If a login form
 is in front of you, let the keychain fill it:
 
 ```bash
-agent-browser auth login <site> --credential-provider keychain --no-navigate --url "<login page URL>"
+ondra-browser auth login <site> --credential-provider keychain --no-navigate --url "<login page URL>"
 # several accounts for one site: add --item "<account>"
 # unusual fields: add --username-selector / --password-selector / --submit-selector
 ```
@@ -77,7 +77,7 @@ The password goes from the macOS keychain straight into the page; you never see
 it. macOS may show the user an approval prompt, so say so in `now` ("키체인 승인
 기다리는 중"). Never type, paste, read or print a password yourself: no
 `fill`/`type`/`keyboard` into a password field, no `get value` or `eval` on one,
-no `auth save`, `--password`, `set credentials`. If it fails (nothing saved, the
+no `set credentials`. If it fails (nothing saved, the
 user denied, 2FA, captcha), first `browse open` the login page in your tab (the
 card's "브라우저 열어 로그인" button opens the page your tab was last on), then
 send an `ask` block: question "<site> 로그인이 필요해요" (name the site and
@@ -89,8 +89,8 @@ session.
 
 - before/after: `browse shot "$APP_ARTIFACTS_DIR/before.png"`, then the same for
   `after.png`, then a `beforeAfter` block.
-- a flow: `browse visuals on`, `agent-browser record start
-  "$APP_ARTIFACTS_DIR/flow.webm"`, do the steps, `agent-browser record stop`, then
+- a flow: `browse visuals on`, `ondra-browser record start
+  "$APP_ARTIFACTS_DIR/flow.webm"`, do the steps, `ondra-browser record stop`, then
   a `link` block with `"kind":"video"`. Recording needs ffmpeg; if `record start`
   fails, fall back to one `browse shot` per step and say so with a `checklist`
   item `{"label":"녹화 대신 사진","done":true}`.
@@ -135,11 +135,10 @@ hitting the wrong spot. Work from a picture there, and only there:
 
 ```bash
 browse shot "$APP_SCRATCH_DIR/s.png"                  # see where things are
-agent-browser screenshot --annotate "$APP_SCRATCH_DIR/a.png"  # refs drawn on, when some exist
-agent-browser mouse move 420 315; agent-browser mouse down; agent-browser mouse up        # a click
-agent-browser mouse move 240 540; agent-browser mouse down
-agent-browser mouse move 410 540 --steps 12; agent-browser mouse up                      # a drag
-agent-browser mouse move 600 400; agent-browser mouse wheel 300                         # scroll that spot
+ondra-browser mouse move 420 315; ondra-browser mouse down; ondra-browser mouse up        # a click
+ondra-browser mouse move 240 540; ondra-browser mouse down
+ondra-browser mouse move 330 540; ondra-browser mouse move 410 540; ondra-browser mouse up # a drag
+ondra-browser mouse move 600 400; ondra-browser mouse wheel 300                         # scroll that spot
 ```
 
 - Coordinates are the page's CSS pixels. If the picture is wider than

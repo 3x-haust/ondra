@@ -1,4 +1,4 @@
-// A job's tab in the shared browser, live: JPEG frames over the stream agent-browser serves
+// A job's tab in the shared browser, live: JPEG frames over the stream ondra-browser serves
 // (CDP screencast), the page's address, and clicks sent back. The panel's browser and the
 // floating preview both watch a job this way.
 import { createEffect, createSignal, on, onCleanup } from "solid-js";

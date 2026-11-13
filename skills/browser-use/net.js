@@ -1,6 +1,6 @@
 // browse: counts the page's fetch/XHR requests still open, so `browse` can tell a
 // page that is waiting for data from one that is done. The app loads it into every
-// page of a job's tab (AGENT_BROWSER_INIT_SCRIPTS), before the page's own scripts.
+// page of a job's tab (ONDRA_BROWSER_INIT_SCRIPTS), before the page's own scripts.
 (() => {
   if (window.__browseNet) return;
   const s = (window.__browseNet = { open: 0 });

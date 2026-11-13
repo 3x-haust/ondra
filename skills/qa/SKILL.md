@@ -103,7 +103,7 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   them:
   ```bash
   for size in 390x844 1440x900; do for theme in light dark; do
-    agent-browser set viewport ${size%x*} ${size#*x}; agent-browser set media $theme
+    ondra-browser set viewport ${size%x*} ${size#*x}; ondra-browser set media $theme
     "<this skill's folder>/sweep.sh" http://localhost:4173 / /pricing /login /items/1 | grep -v '^ok'
   done; done
   ```
@@ -113,12 +113,12 @@ What makes QA slow is waiting on the app and taking turns, not the clicks.
   the `FAIL` lines. Noise you have explained (a missing
   favicon, a dev-only asset): `QA_IGNORE='favicon|/@fs/'`, said once in the report.
 - **Every page you touch**: read page errors, console and failed requests
-  (`agent-browser errors`, `console`, `network requests --status 400-599`),
+  (`ondra-browser errors`, `console`, `network requests --status 400-599`),
   not only the pixels. The sweep does this for loads; do it after actions too.
-- **Make states instead of waiting for them**: `agent-browser network route
+- **Make states instead of waiting for them**: `ondra-browser network route
   "**/api/items*" --body '[]'` (empty), `--abort` (error), a big fixture body
   (many items), `set offline on`, `set media dark`, `set device "iPhone 15"`.
-  `agent-browser a11y` runs axe on a page; `vitals` gives load numbers.
+  `ondra-browser a11y` checks a page against WCAG rules; `vitals` gives load numbers.
   Save shots to absolute paths (`$APP_ARTIFACTS_DIR/...`).
 - **Screenshots mostly for problems** and before/after proof: reading
   structure (`snapshot -i --delta`, `eval`) is faster for checking; look at

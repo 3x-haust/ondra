@@ -67,7 +67,7 @@ fn push_cookies(app: &AppHandle, space: &str, cookies: Vec<Cookie<'static>>) {
         if domain.is_empty() {
             continue;
         }
-        let Some(mut cmd) = crate::tools::agent_browser(app) else { return };
+        let Some(mut cmd) = crate::tools::browser_command(app) else { return };
         for (k, v) in crate::browser::attach_env(port, &format!("ondra-cookies-{port}")) {
             cmd.env(k, v);
         }

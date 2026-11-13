@@ -1,23 +1,23 @@
 ---
 name: browser-use
 description: >
-  Browser use: the app's bundled browser, driven with `browse` (agent-browser
-  underneath): light pages, lean looks, one call per step. Use when a worker
-  must open a site, check a web app, fill a
+  Browser use: the app's bundled browser, driven with `browse` (ondra-browser
+  underneath): light pages, lean looks, one call per step. Use when a
+  worker must open a site, check a web app, fill a
   form, read a page, take screenshots, or record proof of a change. Covers the
   shared browser (your own tab, shared logins), signing in from the macOS
   keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
   and canvas apps, Google Docs/Sheets and Gmail in the signed-in browser, and
   how to report with visual-report blocks.
 metadata:
-  ondra-commands: '\bagent-browser\b|(^|[\s/])browse\s'
+  ondra-commands: '\bondra-browser\b|(^|[\s/])browse\s'
 ---
 
 # Browser use
 
-The browser is the app's own: `browse` and `agent-browser` are on your `PATH`
-(else `<this skill's folder>/browse`) with their environment set. Never run
-`agent-browser install`, never use `npx`, never change any `AGENT_BROWSER_*`
+The browser is the app's own: `browse` and `ondra-browser` are on your `PATH`
+(else `<this skill's folder>/browse`) with their environment set. Never install
+another browser tool, never use `npx` for one, never change any `ONDRA_BROWSER_*`
 variable, and never ask the user to set anything up.
 
 ## The loop: one call per step
@@ -47,9 +47,9 @@ browse look [-s <css>] [--all]       # more than the folded look shows
 - **Also in `reference.md`**: canvas, maps and other pixel-only controls; bot
   checks and CAPTCHAs; Google Docs/Sheets, Gmail, Notion and Slack through the
   signed-in page; finding pictures you may use.
-- Anything else agent-browser does works in the same tab, plain
-  (`agent-browser <command> --help` for one command) or inside `browse do`. Don't
-  print its official skill (`skills get core`).
+- Anything else ondra-browser does works in the same tab, plain
+  (`ondra-browser --help` lists them, `ondra-browser <command> --help` for one)
+  or inside `browse do`.
 
 **Light by default.** In your tab, images, fonts, media and ad/tracker requests
 are blocked and motion is reduced; pages load in a fraction of the time. When the
@@ -70,23 +70,22 @@ looking for them.
 ## Rules here
 
 1. **Your own tab, nobody else's.** Start with `browse open <url>`; that opens
-   your tab. Never pass `--session`, `--cdp`, `--profile`, `--state`,
-   `--restore`, `--headed`, `--auto-connect` or `--provider`, never run
-   `close --all`, and never switch to a tab you did not open (`tab list` shows
-   other jobs' tabs too). A popup your page opens is yours: `agent-browser tab
-   <n>` to it, and back when done. If a command fails with `tab_gone`, run
-   `agent-browser tab new <url>` and carry on. If it fails with `Failed to read`
+   your tab. Never pass `--session` or `--cdp`, never run `close --all`, and
+   never switch to a tab you did not open (`tab list` shows other jobs' tabs
+   too). A popup your page opens is yours: `ondra-browser tab <tN>` to it, and
+   back when done. If a command fails with `tab_gone`, run
+   `ondra-browser tab new <url>` and carry on. If it fails with `Failed to read`
    / `no response came back`, the shared browser stopped answering and the app
    restarts it on the same port: wait 10 seconds, then `browse open <url>`
    again. Don't loop on `tab list` or `get url`, and don't pass a `timeout`
    under 60 to browser commands.
 2. **Leave the shared state alone.** Never sign out, never `cookies clear` or
-   `storage ... clear`, never `state save` / `cookies get` into files: that would
-   sign out, or copy the logins of, every job and the user.
+   `storage ... clear`, never `cookies get` into files: that would sign out, or
+   copy the logins of, every job and the user.
 3. **The user watches already.** Your tab streams to the app on its own; don't
    run any `stream` command. Keep the `now` line current.
 4. **Signing in.** Re-open the page first: you may already be signed in. A login
-   form: `agent-browser auth login <site> --credential-provider keychain
+   form: `ondra-browser auth login <site> --credential-provider keychain
    --no-navigate --url "<login page URL>"`; the keychain fills it, you never see
    the password. Never type, read or print a password yourself. Details and what
    to do when it fails: `reference.md`.
@@ -95,15 +94,11 @@ looking for them.
    screenshot a page while a password is visible in it.
 6. **Pictures and videos into a PR:** `"<this skill's folder>/pr-media.sh" <PR>
    files...`, never the comment box by hand: `reference.md`.
-7. **Close when the leg ends.** `agent-browser close` before your `handoff`. It
+7. **Close when the leg ends.** `ondra-browser close` before your `handoff`. It
    only ends your connection: your tab, and every login, stay for the next leg.
    The app closes your tab when the job ends.
 8. **Outward actions need a decision.** Submitting, purchasing, posting or
    sending anything visible to other people goes through an `ask` block first.
-
-When agent-browser answers "Resource temporarily unavailable" (os error 35),
-another job is using the browser this moment: wait a few seconds and retry
-once, then report that the browser is unavailable rather than retrying in a loop.
 
 ## Fast loop: fewer turns, smaller pages
 

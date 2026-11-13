@@ -166,6 +166,7 @@ process.stdin.on("data", c => {
         if (req.action.ref === "e3") result = { ...result, backgroundPreserved: false, userInput: true };
         if (req.action.ref === "e1") result = { ...result, backgroundPreserved: false, selfActivated: true, restored: false };
       }
+      if (req.action.kind === "menu") result = { ...result, via: "menu", raisedOverUser: true, orderRestored: true };
     }
     process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
   }
@@ -227,6 +228,54 @@ process.stdin.on("data", c => {
       ["press-action", "e3", 1, "right", true],
       ["press-action", "e1", 1, "left", true],
     ]);
+    await session.stop();
+  });
+
+  it("says a button is back after the prompt its press brought up, so the press may have been swallowed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cuhost-swallow-"));
+    const path = join(dir, "h.mjs");
+    writeFileSync(path, `
+const env = { frontmostApp: "a", frontmostPid: 1, frontmostWindowId: 5, mouse: { x: 1, y: 2 } };
+let stage = 0, buf = "";
+const kids = () => stage === 1 ? [{ id: "r", role: "AXButton", title: "Reject" }] : [{ id: "s", role: "AXButton", title: "Sign up" }, { id: "t", role: "AXStaticText", value: "form " + stage }];
+const tree = () => ({ id: "w", role: "AXWindow", children: kids() });
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", c => {
+  buf += c; let nl;
+  while ((nl = buf.indexOf("\\n")) >= 0) {
+    const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+    if (!line.trim()) continue;
+    const req = JSON.parse(line);
+    let result = { env };
+    if (req.op === "launch") result = { pid: 42, env, backgroundPreserved: true };
+    if (req.op === "observe") result = { tree: tree(), env };
+    if (req.op === "act") { stage += 1; result = { tree: tree(), env, envBefore: env, backgroundPreserved: true, via: "ax" }; }
+    process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
+  }
+});
+`);
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Test");
+    const signUp = await session.act({ kind: "click", ref: 2 }) as Record<string, any>;
+    expect(signUp.action.pressAgain).toBeUndefined();
+    const reject = await session.act({ kind: "click", ref: 4 }) as Record<string, any>;
+    expect(reject.action.pressAgain).toBe("Sign up");
+    await session.stop();
+  });
+
+  it("sends a trimmed menu path, refuses an empty or long one, and reports a window lifted over the user's", async () => {
+    const { path, log } = recordingHelper();
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Test");
+    const r = await session.act({ kind: "menu", path: [" Sheet ", "Navigate", "To Next Sheet"] }) as Record<string, any>;
+    expect(r.action).toMatchObject({ via: "menu", raisedOverUser: true, orderRestored: true });
+    await expect(session.act({ kind: "menu", path: [] })).rejects.toThrow("menu needs path");
+    await expect(session.act({ kind: "menu", path: ["a", "b", "c", "d", "e", "f", "g"] })).rejects.toThrow("menu needs path");
+    expect(acts(log)).toEqual([{ kind: "menu", path: ["Sheet", "Navigate", "To Next Sheet"] }]);
     await session.stop();
   });
 });

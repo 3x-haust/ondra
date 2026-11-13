@@ -78,7 +78,7 @@ export function skillHint(skills: Skill[], query: string, limit = 3): string {
 // Besides the words of each user message, a skill can name what the work looks
 // like in its domain, as frontmatter metadata (each value one regular expression):
 //   metadata:
-//     ondra-commands: '\bagent-browser\b'      a shell command it runs
+//     ondra-commands: '\bondra-browser\b'      a shell command it runs
 //     ondra-writes: '\.github/workflows/'        a file it edits or writes
 //     ondra-reads: '\.xcodeproj/'                a file it reads
 //     ondra-urls: 'figma\.com/(design|file)'     a link in a message or a fetch

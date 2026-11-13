@@ -86,10 +86,11 @@ Bach's HTSM, Whittaker's tours, W3C Easy Checks and common mobile QA lists.
 
 ## Accessibility, quick
 
-- `agent-browser a11y` on each main screen; report real violations (labels,
-  names, roles, contrast), not every "incomplete" result. One line each:
+- `ondra-browser a11y` on each main screen; report the violations that matter
+  to people (labels, names, contrast, focus), after a look at the element.
+  One line each:
   ```bash
-  agent-browser --json a11y | jq -r '.data.violations[] | "\(.impact) \(.id) ×\(.nodes|length) \(.nodes[0].target[0])"'
+  ondra-browser --json a11y | jq -r '.data.violations[] | "\(.impact) \(.id) ×\(.nodes|length) \(.nodes[0].target[0])"'
   ```
 - Keyboard only: Tab and Shift-Tab reach and leave every control in a sensible
   order, focus is visible, Enter/Space activate, Esc closes dialogs and focus

@@ -12,14 +12,13 @@ type Mode = "ask" | "edits" | "full";
 const MODES: Mode[] = ["ask", "edits", "full"];
 const ALLOW = "허용";
 const DENY = "막기";
-const HOST_POLICY = "Mac 앱 조작은 computer 도구(백그라운드 호스트 도우미)로만 하세요. 이 도우미는 앱을 앞으로 가져오거나 커서를 옮기거나 전역 이벤트를 보내지 않고, 매 동작 전후로 전경 앱·키 윈도·마우스가 그대로인지 확인해요. osascript·System Events UI 스크립팅, cliclick, 활성화되는 open, 호스트 agent-desktop, 직접 CGEvent 입력으로 우회하지 마세요. 배경으로 할 수 없는 동작이면 포기하지 말고 그대로 보고하세요.";
+const HOST_POLICY = "Mac 앱 조작은 computer 도구(백그라운드 호스트 도우미)로만 하세요. 이 도우미는 앱을 앞으로 가져오거나 커서를 옮기거나 전역 이벤트를 보내지 않고, 매 동작 전후로 전경 앱·키 윈도·마우스가 그대로인지 확인해요. osascript·System Events UI 스크립팅, cliclick, 활성화되는 open, 직접 CGEvent 입력으로 우회하지 마세요. 배경으로 할 수 없는 동작이면 포기하지 말고 그대로 보고하세요.";
 
 /** Conservative command checks, not a shell sandbox or an OS isolation boundary. */
 export function hostComputerUse(command: string): string | undefined {
   let hit: string | undefined;
   visitShellCommands(command, ([executable]) => {
     const name = basename(executable);
-    if (/^agent-desktop(?:-macos-helper)?$/.test(name)) hit ??= "호스트 데스크톱 도구";
     if (name === "osascript") hit ??= "호스트 AppleScript 실행";
     if (name === "open") hit ??= "호스트 앱·문서 열기";
   });
@@ -70,27 +69,19 @@ export function foreignData(text: string, data: string, allowed: string[], space
 /**
  * A command that would bring an app or window in front of the user, take the
  * keyboard or move the mouse: AppleScript activate / frontmost / System Events
- * keystrokes and clicks, `open` without -g, and agent-desktop's headed and
- * focus commands (or `press` without --app). Returns what it is and the
+ * keystrokes and clicks, and `open` without -g. Returns what it is and the
  * isolated execution requirement, or undefined.
  */
 export function focusSteal(command: string): { what: string; how: string } | undefined {
   let what: string | undefined;
   visitShellCommands(command, ([executable, ...args]) => {
     const name = basename(executable);
-    const c = [name, ...args].join(" ");
     if (name === "osascript" && /\bactivate\b|\bset\s+frontmost\b|\bfrontmost\b[^'"]*\bto\s+true\b|\breopen\b/i.test(args.join(" ")))
       what ??= "앱을 앞으로 가져오는 AppleScript";
     if (name === "open") {
       const flags = args.filter((w) => /^-[a-zA-Z]+$/.test(w)).join("");
       if (!/g/.test(flags) && !args.includes("--background")) what ??= "`open` (앱이 앞으로 와요)";
     }
-    if (name !== "agent-desktop") return;
-    const sub = c.match(/\bagent-desktop\s+(?:--?[\w-]+(?:\s+(?!-)\S+)?\s+)*?([\w-]+)/)?.[1] ?? "";
-    if (/^(focus|focus-window|maximize|hover|drag|cursor-overlay)$|^mouse-/.test(sub) || /--activate\b|--headed\b|--xy\b|--cursor\b/.test(c))
-      what ??= `agent-desktop ${sub || "앞으로 가져오는 옵션"}`;
-    if (sub === "press" && !args.includes("--app"))
-      what ??= "`agent-desktop press` (--app 없이 쓰면 사용자가 보는 앱에 키가 가요)";
   });
   return what ? { what, how: HOST_POLICY } : undefined;
 }

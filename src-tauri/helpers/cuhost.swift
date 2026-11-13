@@ -252,7 +252,7 @@ func elementNode(_ el: AXUIElement, key parentKey: String, map: AXMap, depth: In
     if secure {
         node["secure"] = true // never read or return a password value
     } else if let v = a.value {
-        if let s = v as? String { if !s.isEmpty { node["value"] = s.count > 2000 ? String(s.prefix(2000)) + "…[truncated]" : s } }
+        if let s = v as? String { if !s.isEmpty { node["value"] = s.count > 6000 ? String(s.prefix(6000)) : s } }
         else if let n = v as? NSNumber { node["value"] = n.stringValue }
     }
     if !secure, let sel = a.selection, !sel.isEmpty { node["selection"] = sel.count > 200 ? String(sel.prefix(200)) + "…" : sel }
@@ -301,13 +301,56 @@ func keyWindowElement(forPid pid: pid_t) -> AXUIElement? {
     return nil
 }
 
+/// Chromium and Electron build their web content's accessibility only once an assistive app
+/// asks for it; AXManualAccessibility is their own switch for that (no other effect). Once per pid.
+var webAXAsked = Set<pid_t>()
+func askForWebAccessibility(_ pid: pid_t) {
+    guard !webAXAsked.contains(pid) else { return }
+    webAXAsked.insert(pid)
+    guard let url = NSRunningApplication(processIdentifier: pid)?.bundleURL, hasRendererHelper(url) else { return }
+    let app = AXUIElementCreateApplication(pid)
+    // Electron's switch; Chrome-family browsers listen to the one screen readers set
+    let electron = AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
+    if !electron { _ = AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) }
+    usleep(200_000) // the first build of the tree
+}
+
 func observeTree(pid: pid_t, map: AXMap) -> [String: Any]? {
+    askForWebAccessibility(pid)
     guard let window = keyWindowElement(forPid: pid) else { return nil }
-    map.clear()
-    var count = 0
-    let a = readAttrs(window)
-    let clip = a.frame ?? CGRect(x: -1e6, y: -1e6, width: 2e6, height: 2e6)
-    return elementNode(window, key: "w", map: map, depth: 0, maxDepth: 60, clip: clip, count: &count, limit: 4000, pre: a)
+    func build() -> [String: Any]? {
+        map.clear()
+        var count = 0
+        let a = readAttrs(window)
+        let clip = a.frame ?? CGRect(x: -1e6, y: -1e6, width: 2e6, height: 2e6)
+        return elementNode(window, key: "w", map: map, depth: 0, maxDepth: 60, clip: clip, count: &count, limit: 4000, pre: a)
+    }
+    var tree = build()
+    // A web view (WebKit, Electron) fills in its page only after the first request reaches its
+    // content process: a large container with nothing in it is asked again, a few times at most.
+    // (a pane that stays empty, like a canvas, costs this wait only for the first few reads)
+    while emptyPaneWaits[pid, default: 0] < 8, tree.map({ hasEmptyPane($0, map) }) == true {
+        emptyPaneWaits[pid, default: 0] += 1
+        // still empty after a wait: WebKit builds a page's tree once an assistive app says it is
+        // there, which is what this attribute (set by screen readers) does
+        if emptyPaneWaits[pid] == 2 {
+            _ = AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        }
+        usleep(150_000)
+        tree = build()
+    }
+    return tree
+}
+
+var emptyPaneWaits: [pid_t: Int] = [:]
+
+/// A big group or scroll area with no children at all: a page that has not been read yet.
+func hasEmptyPane(_ node: [String: Any], _ map: AXMap) -> Bool {
+    let role = node["role"] as? String ?? ""
+    let kids = node["children"] as? [[String: Any]] ?? []
+    if kids.isEmpty, ["AXGroup", "AXScrollArea", "AXWebArea"].contains(role), node["offscreen"] == nil,
+       let id = node["id"] as? String, let el = map.element(id), let f = axFrame(el), f.width >= 200, f.height >= 150 { return true }
+    return kids.contains { hasEmptyPane($0, map) }
 }
 
 // ───────────────────────── window capture ─────────────────────────
@@ -401,6 +444,8 @@ func pressModifiersFlags(_ mods: [String]) -> CGEventFlags {
 let keyCodes: [String: CGKeyCode] = [
     "return": 36, "tab": 48, "space": 49, "delete": 51, "escape": 53,
     "left": 123, "right": 124, "down": 125, "up": 126,
+    "arrowleft": 123, "arrowright": 124, "arrowdown": 125, "arrowup": 126,
+    "leftarrow": 123, "rightarrow": 124, "downarrow": 125, "uparrow": 126,
     "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97, "f7": 98,
     "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
     "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
@@ -408,6 +453,9 @@ let keyCodes: [String: CGKeyCode] = [
     "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25,
     "7": 26, "8": 28, "0": 29, "o": 31, "u": 32, "i": 34, "p": 35, "l": 37,
     "j": 38, "k": 40, "n": 45, "m": 46,
+    "-": 27, "minus": 27, "[": 33, "]": 30, ";": 41, "'": 39, ",": 43, ".": 47, "/": 44, "`": 50, "\\": 42,
+    "plus": 24, "equal": 24, "home": 115, "end": 119, "pageup": 116, "pagedown": 121, "forwarddelete": 117,
+    "backspace": 51, "enter": 36, "esc": 53,
 ]
 
 func postKey(pid: pid_t, keyCode: CGKeyCode, flags: CGEventFlags) {
@@ -468,6 +516,8 @@ func mouseEvent(_ src: CGEventSource?, _ type: CGEventType, _ at: CGPoint, _ but
     }
     if e == nil { e = CGEvent(mouseEventSource: src, mouseType: type, mouseCursorPosition: at, mouseButton: button) }
     e?.setIntegerValueField(.mouseEventClickState, value: clickState)
+    // ondra-bgguard.dylib knows Ondra's events by this mark, to carry their drags out in the app
+    e?.setIntegerValueField(.eventSourceUserData, value: 0x4F4E4452)
     if let w = window {
         e?.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(w.id))
         e?.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(w.id))
@@ -686,6 +736,111 @@ func scrollByReveal(_ area: AXUIElement, direction: String, lines: Int) -> [Stri
     return ["scrolledBy": "reveal"]
 }
 
+/// Scroll the box that holds the target when no AX scroll area does: from the element at the
+/// target up through its ancestors, bring the element just past each one's edge into view;
+/// then a wheel event addressed to the window. Only a move of the content counts.
+func scrollInside(start: AXUIElement?, point: CGPoint, pid: pid_t, direction: String, lines: Int, window: EventWindow?) -> [String: Any]? {
+    var hit: AXUIElement?
+    if start == nil {
+        var el: AXUIElement?
+        if AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(point.x), Float(point.y), &el) == .success { hit = el }
+    }
+    let first = start ?? hit
+    var cur = first, lastFrame: CGRect?
+    for _ in 0..<14 {
+        guard let c = cur else { break }
+        let role = axString(c, kAXRoleAttribute) ?? ""
+        if role == kAXWindowRole || role == kAXApplicationRole { break }
+        // the same box again (a wrapper of the same size) would find the same nothing
+        if let f = axFrame(c), f != lastFrame {
+            lastFrame = f
+            if let moved = scrollByReveal(c, direction: direction, lines: lines) { return moved }
+        }
+        cur = axParent(c)
+    }
+    // the wheel, addressed to the window like our clicks (the real cursor stays)
+    guard let w = window else { return nil }
+    let probe = first.flatMap(axFrame)
+    let vertical = direction == "up" || direction == "down"
+    let n = Int32(max(1, min(50, lines))) * ((direction == "down" || direction == "right") ? -1 : 1)
+    guard let e = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2,
+                          wheel1: vertical ? n : 0, wheel2: vertical ? 0 : n, wheel3: 0) else { return nil }
+    e.location = point
+    e.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(w.id))
+    e.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(w.id))
+    e.setIntegerValueField(.eventSourceUserData, value: 0x4F4E4452)
+    e.postToPid(pid)
+    usleep(120_000)
+    if let before = probe, let el = first, let after = axFrame(el), abs(after.minY - before.minY) >= 1 || abs(after.minX - before.minX) >= 1 {
+        return ["scrolledBy": "wheel"]
+    }
+    return nil
+}
+
+/// The app's own menu bar titles (not the Apple menu or the app-name menu), for the caller to know
+/// what the menu action can reach.
+func menuBarTitles(_ pid: pid_t) -> [String] {
+    var bar: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXMenuBarAttribute as CFString, &bar) == .success,
+          let b = bar, CFGetTypeID(b) == AXUIElementGetTypeID() else { return [] }
+    let titles = axChildren(b as! AXUIElement).compactMap { axString($0, kAXTitleAttribute) }.filter { !$0.isEmpty }
+    return Array(titles.dropFirst(2).prefix(14))
+}
+
+/// A menu bar command by its titles ("Sheet", "Navigate", "To Next Sheet"), pressed with
+/// AXPress on the item itself: the menu never opens and the app is not activated. A path that
+/// stops at a menu, or names no item there, lists what that menu offers instead.
+func pressMenuPath(pid: pid_t, path: [String]) throws -> [String: Any] {
+    var bar: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXMenuBarAttribute as CFString, &bar) == .success,
+          let b = bar, CFGetTypeID(b) == AXUIElementGetTypeID() else { throw ActError.message("NO_MENU_BAR", "this app has no menu bar to use") }
+    func norm(_ t: String) -> String {
+        t.lowercased().replacingOccurrences(of: "…", with: "").replacingOccurrences(of: "...", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+    func items(_ el: AXUIElement) -> [AXUIElement] {
+        // a bar item or menu item holds one AXMenu whose children are the items
+        let kids = axChildren(el)
+        if let menu = kids.first(where: { axString($0, kAXRoleAttribute) == kAXMenuRole }) { return axChildren(menu) }
+        return kids
+    }
+    func offered(_ list: [AXUIElement]) -> String {
+        list.compactMap { e -> String? in
+            guard let t = axString(e, kAXTitleAttribute), !t.isEmpty else { return nil }
+            let sub = items(e).isEmpty ? "" : " ›"
+            return axBool(e, kAXEnabledAttribute) == false ? "\(t)\(sub) (disabled)" : "\(t)\(sub)"
+        }.joined(separator: ", ")
+    }
+    var level = axChildren(b as! AXUIElement)
+    var walked: [String] = []
+    for (i, name) in path.enumerated() {
+        let want = norm(name)
+        let titled = level.map { ($0, norm(axString($0, kAXTitleAttribute) ?? "")) }.filter { !$0.1.isEmpty }
+        guard let hit = titled.first(where: { $0.1 == want })?.0 ?? titled.first(where: { $0.1.hasPrefix(want) })?.0
+                ?? titled.first(where: { $0.1.contains(want) })?.0 else {
+            let at = walked.isEmpty ? "the menu bar" : walked.map { "“\($0)”" }.joined(separator: " › ")
+            throw ActError.message("NO_SUCH_ITEM", "\(at) has no “\(name)”; it offers: \(offered(level))")
+        }
+        walked.append(axString(hit, kAXTitleAttribute) ?? name)
+        let sub = items(hit)
+        if i == path.count - 1 {
+            if !sub.isEmpty || axString(hit, kAXRoleAttribute) == kAXMenuBarItemRole {
+                throw ActError.message("MENU_LEVEL", "\(walked.map { "“\($0)”" }.joined(separator: " › ")) is a menu; it offers: \(offered(sub)). Add one of them to the path")
+            }
+            // A background app has no key window, so it reports items that act on the window
+            // as disabled until asked: press anyway, and let the screen tell.
+            let r = AXUIElementPerformAction(hit, kAXPressAction as CFString)
+            guard r == .success else {
+                throw ActError.message(axBool(hit, kAXEnabledAttribute) == false ? "DISABLED" : "MENU_FAILED",
+                                       "the app did not accept “\(walked.last!)” (AX \(r.rawValue))")
+            }
+            return ["via": "menu", "picked": walked.joined(separator: " › ")]
+        }
+        level = sub
+    }
+    throw ActError.message("BAD_ACTION", "empty menu path")
+}
+
 func elementIsSecure(_ el: AXUIElement) -> Bool {
     isSecure(role: axString(el, kAXRoleAttribute) ?? "", subrole: axString(el, kAXSubroleAttribute))
 }
@@ -741,9 +896,14 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let count = max(1, min(2, (action["count"] as? Int) ?? 1))
         let right = (action["button"] as? String) == "right"
         let forcePointer = (action["pointer"] as? Bool) ?? false
+        if right || name == kAXShowMenuAction || opensMenu(el) { try refuseMenuInBackground(pid) }
         let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
+        // an item of an open menu: the menu closes and applies the choice after the press
+        // returns, so wait for that before the next step reads or acts on the result
+        let menuOwner = axString(el, kAXRoleAttribute) == kAXMenuItemRole ? axParent(el).flatMap(axParent) : nil
         if count == 1 && !right && !forcePointer && AXUIElementPerformAction(el, name as CFString) == .success {
             if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            if let owner = menuOwner { _ = waitForMenuClosed(owner) }
             return ["via": "ax"]
         }
         if count == 1 && right && !forcePointer && axActions(el).contains(kAXShowMenuAction),
@@ -751,12 +911,19 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
             if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
             return ["via": "ax-menu"]
         }
+        // A row's text or cell has no press: select its row the accessibility way (no events,
+        // so the window is never lifted the way a pointer click lifts it)
+        if count == 1 && !right && !forcePointer, let row = selectableRow(el), selectRow(row) {
+            if let (p, w) = spot { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            return ["via": "ax-select"]
+        }
         // The view ignores accessibility actions (custom rows, profile cards, …): click it
         // with pointer events addressed to its window, still without moving the real cursor.
         guard (action["fallbackClick"] as? Bool) ?? false else {
             throw ActError.message("AX_ACTION_FAILED", "AX action \(name) failed")
         }
         if userActive(in: pid) { throw ActError.message("USER_ACTIVE", "the user is working in this app; nothing was sent") }
+        try refusePointerIfItRaises(pid)
         guard let (p, w) = spot else { throw ActError.message("NO_BOUNDS", "this element has no visible bounds to click") }
         VirtualCursor.shared.show(at: p, window: w, click: true)
         postClick(pid: pid, at: p, button: right ? .right : .left, count: count, window: w)
@@ -765,7 +932,16 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let el = try elementFor()
         if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
         let value = (action["value"] as? String) ?? ""
-        if !axSettable(el, kAXValueAttribute) { throw ActError.message("NOT_SETTABLE", "value is not settable") }
+        if !axSettable(el, kAXValueAttribute) {
+            let role = axString(el, kAXRoleAttribute) ?? ""
+            guard [kAXPopUpButtonRole, kAXMenuButtonRole, kAXComboBoxRole].contains(role) else {
+                throw ActError.message("NOT_SETTABLE", "value is not settable")
+            }
+            try refuseMenuInBackground(pid)
+            let picked = try pickFromMenu(el, value)
+            if let (p, w) = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map) { VirtualCursor.shared.show(at: p, window: w, click: true) }
+            return ["via": "menu", "picked": picked]
+        }
         if AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, value as CFTypeRef) != .success {
             throw ActError.message("AX_SET_FAILED", "could not set value")
         }
@@ -773,6 +949,9 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
     case "focus": // make a field key without activating the app
         let el = try elementFor()
         _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    case "menu":
+        guard let path = action["path"] as? [String], !path.isEmpty else { throw ActError.message("BAD_ACTION", "menu needs a path") }
+        return try pressMenuPath(pid: pid, path: path)
     case "type":
         guard let text = action["text"] as? String else { throw ActError.message("BAD_ACTION", "missing text") }
         // A background Chromium app's page is never key, so AX focus can't be verified and its
@@ -796,7 +975,11 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
             if elementIsSecure(el) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
             _ = AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
             let spot = try? resolvePoint(["ref": action["ref"] ?? ""], pid: pid, map: map)
-            if !focusIsOn(el, pid: pid), let (p, w) = spot {
+            // In the background a pointer click lifts most apps' windows over the user's: a field
+            // that takes its value directly gets it that way (below) without any click.
+            let background = NSWorkspace.shared.frontmostApplication?.processIdentifier != pid
+            if !focusIsOn(el, pid: pid), !(background && axSettable(el, kAXValueAttribute)),
+               let (p, w) = spot, (try? refusePointerIfItRaises(pid)) != nil {
                 // some fields only take focus from a click: one addressed to the window, cursor untouched
                 postClick(pid: pid, at: p, button: .left, count: 1, window: w)
                 usleep(80_000)
@@ -813,8 +996,14 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
                 throw ActError.message("FOCUS_UNVERIFIED", "keyboard focus is not on the target; nothing was typed")
             }
         } else {
-            guard let f = focusedElement(pid: pid) else { throw ActError.message("NO_FOCUS", "no focused element; pass a ref") }
-            if elementIsSecure(f) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
+            // Some apps (LibreOffice, GTK apps) report no AX focus although they take keys, as
+            // press shows: type into wherever the app's own caret is, as press would
+            if let f = focusedElement(pid: pid) {
+                if elementIsSecure(f) { throw ActError.message("SECURE_FIELD", "password fields are left to the user") }
+            } else {
+                typeText(pid: pid, text: text)
+                return ["via": "keys", "focusUnknown": true]
+            }
         }
         typeText(pid: pid, text: text)
     case "press":
@@ -824,6 +1013,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let mods = (action["modifiers"] as? [String]) ?? []
         postKey(pid: pid, keyCode: code, flags: pressModifiersFlags(mods))
     case "click-at":
+        try refusePointerIfItRaises(pid)
+        if (action["button"] as? String) == "right" { try refuseMenuInBackground(pid) }
         let (p, w) = try resolvePoint(action, pid: pid, map: map)
         let button: CGMouseButton = (action["button"] as? String) == "right" ? .right : .left
         let count = (action["count"] as? Int) ?? 1
@@ -833,15 +1024,20 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         // Scroll wheel events posted to a background app carry no window and are
         // dropped by AppKit, so scroll through the scroll area's AX scroll bar (or its
         // page actions) instead: no events, nothing visible to the user.
-        let (p, _) = try resolvePoint(action, pid: pid, map: map)
+        let (p, w) = try resolvePoint(action, pid: pid, map: map)
         let start = (action["ref"] as? String).flatMap { map.element($0) }
-        guard let area = scrollArea(from: start, containing: p, pid: pid) else {
-            throw ActError.message("NO_SCROLL_AREA", "no scroll area at this target")
-        }
         let dir = (action["direction"] as? String) ?? "down"
         let amount = (action["amount"] as? Int) ?? 3
-        return try scrollAX(area, direction: dir, lines: amount)
+        var failure: Error = ActError.message("NO_SCROLL_AREA", "no scroll area at this target")
+        if let area = scrollArea(from: start, containing: p, pid: pid) {
+            do { return try scrollAX(area, direction: dir, lines: amount) } catch { failure = error }
+        }
+        // a page that scrolls inside one of its own boxes (a web app's message pane) has no AX
+        // scroll area for it: scroll whatever box holds the target, then try the wheel
+        if let moved = scrollInside(start: start, point: p, pid: pid, direction: dir, lines: amount, window: w) { return moved }
+        throw failure
     case "drag":
+        try refusePointerIfItRaises(pid)
         guard let fromSpec = action["from"] as? [String: Any], let toSpec = action["to"] as? [String: Any] else {
             throw ActError.message("BAD_ACTION", "drag needs from and to")
         }
@@ -851,11 +1047,118 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
         let t0 = nowMs()
         let steps = postDrag(pid: pid, from: a, to: b, window: w)
         VirtualCursor.shared.show(at: b, window: w, click: true)
-        return ["dragSteps": steps, "dragMs": nowMs() - t0]
+        // a drop lands only in an app that carries ondra-bgguard.dylib, which runs the drag inside the app
+        return ["dragSteps": steps, "dragMs": nowMs() - t0, "dropInApp": bgApp(pid)?.guarded == true]
     default:
         throw ActError.message("BAD_ACTION", "unsupported kind \(kind)")
     }
     return [:]
+}
+
+/// The open menu a pop-up, menu button or combo box shows as its child, if any.
+func openMenu(of el: AXUIElement) -> AXUIElement? {
+    axChildren(el).first { [kAXMenuRole, kAXListRole].contains(axString($0, kAXRoleAttribute) ?? "") }
+}
+
+/// Wait (up to a second) until `owner` no longer shows an open menu.
+func waitForMenuClosed(_ owner: AXUIElement) -> Bool {
+    for _ in 0..<40 {
+        if openMenu(of: owner) == nil { usleep(30_000); return true }
+        usleep(25_000)
+    }
+    return false
+}
+
+/// Choose `value` in a pop-up (or menu button, combo box) through its own menu, by
+/// accessibility actions only: open it, pick the item whose title matches (exactly, else
+/// by prefix, case aside), then wait until the menu closed and the control shows it.
+/// Returns the item's title. No match: the menu is closed and the error lists the items.
+/// The table or outline row an element sits in (itself or up to four parents), if it can be selected.
+func selectableRow(_ el: AXUIElement) -> AXUIElement? {
+    var cur: AXUIElement? = el
+    for _ in 0..<5 {
+        guard let c = cur else { return nil }
+        let role = axString(c, kAXRoleAttribute) ?? ""
+        if role == kAXRowRole { return axSettable(c, kAXSelectedAttribute) ? c : nil }
+        if role == kAXTableRole || role == kAXOutlineRole || role == kAXWindowRole { return nil }
+        cur = axParent(c)
+    }
+    return nil
+}
+
+/// Select a row as a click would: through its own AXSelected, else its table's AXSelectedRows.
+func selectRow(_ row: AXUIElement) -> Bool {
+    if axBool(row, kAXSelectedAttribute) == true { return true }
+    _ = AXUIElementSetAttributeValue(row, kAXSelectedAttribute as CFString, kCFBooleanTrue)
+    usleep(20_000)
+    if axBool(row, kAXSelectedAttribute) == true { return true }
+    if let table = axParent(row), axSettable(table, kAXSelectedRowsAttribute) {
+        _ = AXUIElementSetAttributeValue(table, kAXSelectedRowsAttribute as CFString, [row] as CFArray)
+        usleep(20_000)
+    }
+    return axBool(row, kAXSelectedAttribute) == true
+}
+
+/// A control whose press opens a menu: a pop-up, a menu button, a list-only combo box.
+func opensMenu(_ el: AXUIElement) -> Bool {
+    let role = axString(el, kAXRoleAttribute) ?? ""
+    if role == kAXPopUpButtonRole || role == kAXMenuButtonRole { return true }
+    return role == kAXComboBoxRole && !axSettable(el, kAXValueAttribute)
+}
+
+/// A menu that opens takes the keyboard from the user's front window (it resigns key) and
+/// orders its app's window over theirs, even when the app stays in the background. So while
+/// the target is not the front app, nothing that opens a menu is done.
+/// Apps seen lifting their window over the user's when a pointer click reached them (Chromium,
+/// Electron). Put back at once, but a lift is still a moment over the user's window: while the
+/// app is in the background, no more pointer events go to it.
+var raisesOnPointer = Set<pid_t>()
+func refusePointerIfItRaises(_ pid: pid_t) throws {
+    guard raisesOnPointer.contains(pid), NSWorkspace.shared.frontmostApplication?.processIdentifier != pid else { return }
+    throw ActError.message("POINTER_RAISES", "this app lifts its window over the user's when clicked with the pointer, so pointer clicks are not sent to it in the background. Use refs (click without pointer), keys, set-value or menu commands")
+}
+
+func refuseMenuInBackground(_ pid: pid_t) throws {
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier != pid else { return }
+    throw ActError.message("NEEDS_FOREGROUND", "this opens a menu, and an open menu takes the keyboard from the user's app, so it is not done in the background. Use the app's menu bar (menu action) or keys if they offer the same choice; otherwise finish the rest and tell the user which choice is left for them")
+}
+
+func pickFromMenu(_ control: AXUIElement, _ value: String) throws -> String {
+    let want = value.trimmingCharacters(in: .whitespaces).lowercased()
+    if (axString(control, kAXValueAttribute) ?? axString(control, kAXTitleAttribute) ?? "").lowercased() == want { return value }
+    var menu = openMenu(of: control)
+    if menu == nil {
+        let open = axActions(control).contains(kAXShowMenuAction) && axString(control, kAXRoleAttribute) != kAXPopUpButtonRole ? kAXShowMenuAction : kAXPressAction
+        guard AXUIElementPerformAction(control, open as CFString) == .success else {
+            throw ActError.message("AX_ACTION_FAILED", "could not open the pop-up's menu")
+        }
+        for _ in 0..<40 {
+            if let m = openMenu(of: control) { menu = m; break }
+            usleep(25_000)
+        }
+    }
+    guard let m = menu else { throw ActError.message("NO_MENU", "the pop-up did not show its menu") }
+    let items = axChildren(m).filter { [kAXMenuItemRole, kAXStaticTextRole, "AXRow"].contains(axString($0, kAXRoleAttribute) ?? "") }
+    let title = { (i: AXUIElement) -> String in axString(i, kAXTitleAttribute) ?? axString(i, kAXValueAttribute) ?? "" }
+    let titles = items.map(title)
+    guard let k = titles.firstIndex(where: { $0.lowercased() == want }) ?? titles.firstIndex(where: { $0.lowercased().hasPrefix(want) }),
+          axBool(items[k], kAXEnabledAttribute) != false else {
+        _ = AXUIElementPerformAction(m, kAXCancelAction as CFString)
+        _ = waitForMenuClosed(control)
+        throw ActError.message("NO_SUCH_ITEM", "no enabled item \"\(value)\"; it offers: " + titles.filter { !$0.isEmpty }.joined(separator: ", "))
+    }
+    let item = items[k]
+    if AXUIElementPerformAction(item, "AXPick" as CFString) != .success,
+       AXUIElementPerformAction(item, kAXPressAction as CFString) != .success {
+        _ = AXUIElementPerformAction(m, kAXCancelAction as CFString)
+        throw ActError.message("AX_ACTION_FAILED", "could not pick \"\(titles[k])\"")
+    }
+    _ = waitForMenuClosed(control)
+    for _ in 0..<20 {
+        if (axString(control, kAXValueAttribute) ?? axString(control, kAXTitleAttribute) ?? "").lowercased() == titles[k].lowercased() { break }
+        usleep(25_000)
+    }
+    return titles[k]
 }
 
 /// Hardware input (the user's own mouse or keys) within the last `seconds`.
@@ -940,7 +1243,7 @@ final class VirtualCursor {
     private let size = NSSize(width: 44, height: 44)
 
     func show(at point: CGPoint, window: EventWindow?, click: Bool) {
-        guard let w = window, shownAsIs(w) else { return }
+        guard let w = window, shownAsIs(w), visible(w.id, at: point) else { return }
         DispatchQueue.main.async { self.place(point, above: w.id, click: click) }
     }
 
@@ -950,6 +1253,19 @@ final class VirtualCursor {
               (d[kCGWindowIsOnscreen as String] as? Bool) == true,
               let b = d[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b) else { return false }
         return nearlySame(r, w.frame, 4)
+    }
+
+    /// The window is the one the user sees at the point: a window over it (the user's own,
+    /// while the app works behind) gets no pointer drawn on top.
+    private func visible(_ id: CGWindowID, at point: CGPoint) -> Bool {
+        let me = getpid()
+        let infos = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+        for d in infos where (d[kCGWindowLayer as String] as? Int) == 0 && (d[kCGWindowOwnerPID as String] as? Int32) != me {
+            guard let b = d[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b),
+                  r.contains(point) else { continue }
+            return (d[kCGWindowNumber as String] as? Int).map { CGWindowID($0) } == id
+        }
+        return false
     }
 
     private func make() -> NSPanel {
@@ -1046,8 +1362,21 @@ func appURL(_ name: String) -> URL? {
     let ws = NSWorkspace.shared
     if name.contains("/") || name.hasSuffix(".app") { return URL(fileURLWithPath: name) }
     if let u = ws.urlForApplication(withBundleIdentifier: name) { return u }
+    // an app already open, wherever it was opened from (Downloads, a build folder)
+    if let u = runningAppByName(name) { return u }
     // locate by name (never some other app: a name that matches nothing is "not found")
     return findAppByName(name)
+}
+
+/// A running app the name or bundle id names, any case: its bundle, for an app open from
+/// outside the usual app folders.
+func runningAppByName(_ name: String) -> URL? {
+    let want = name.lowercased().replacingOccurrences(of: ".app", with: "")
+    return NSWorkspace.shared.runningApplications.first { app in
+        guard app.activationPolicy == .regular, let url = app.bundleURL else { return false }
+        return [app.localizedName, app.bundleIdentifier, url.deletingPathExtension().lastPathComponent]
+            .contains { $0?.lowercased() == want }
+    }?.bundleURL
 }
 
 func launchHidden(_ name: String, hide: Bool, completion: @escaping (pid_t?, String?) -> Void) {
@@ -1859,6 +2188,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         // an app the user already has open is theirs; we never make a second background copy of it
         let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.standardizedFileURL })
         let alreadyOpen = running.contains(target.standardizedFileURL)
+        let aboveAtLaunch = pidsAboveFront()
         // Stage Manager makes room for a window that opens behind: the user's own front window
         // is pushed aside and shrunk. Its frame is noted now and put back once the launch settles.
         let held = frontWindowFrame()
@@ -1889,11 +2219,18 @@ func handle(_ req: [String: Any]) -> [String: Any] {
                 let web = (infoPlist(target)["LSTemplateApplication"] as? Bool) == true
                 catcher = LaunchCatcher(exe: exe, mentioning: web ? target.path : nil, space: Backdrop.shared.spaceID)
             }
-            let sem = DispatchSemaphore(value: 0)
-            var out: (pid_t?, String?) = (nil, nil)
-            launchHidden(name, hide: hide) { p, e in out = (p, e); sem.signal() }
-            sem.wait()
-            pid = out.0; launchErr = out.1 ?? launchErr
+            // an app already open is only attached to: opening it again would reopen it, and
+            // macOS brings its windows up over the user's
+            if alreadyOpen, let app = NSWorkspace.shared.runningApplications.first(where: {
+                $0.bundleURL?.standardizedFileURL == target.standardizedFileURL }) {
+                pid = app.processIdentifier
+            } else {
+                let sem = DispatchSemaphore(value: 0)
+                var out: (pid_t?, String?) = (nil, nil)
+                launchHidden(name, hide: hide) { p, e in out = (p, e); sem.signal() }
+                sem.wait()
+                pid = out.0; launchErr = out.1 ?? launchErr
+            }
             mode = alreadyOpen ? "attached" : "hidden"
             if let c = catcher {
                 for _ in 0..<40 where c.caught == 0 { usleep(25_000) }
@@ -1904,6 +2241,11 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             if !alreadyOpen, let p = pid { bgLock.lock(); launchedApps.insert(p); bgLock.unlock() }
         }
         if let held = held { keepFrame(held) }
+        // turning on an app's accessibility (Chromium) or showing its windows can order one up
+        if let p = pid {
+            askForWebAccessibility(p)
+            _ = keepUserWindowOnTop(p, aboveAtLaunch)
+        }
         // an app the user opened themselves may have come up off-screen (apps remember their
         // frame): put any such window back where the user can see it
         rescueStrayWindows()
@@ -1912,6 +2254,8 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             let preserved = backgroundPreserved(before, after)
             // the user's own mouse or keys while the app was starting are theirs, not the launch's
             var result: [String: Any] = ["pid": Int(pid), "mode": mode, "kind": kind.rawValue, "env": after, "envBefore": before, "backgroundPreserved": preserved]
+            let menus = menuBarTitles(pid)
+            if !menus.isEmpty { result["menus"] = menus }
             if mode == "hidden", let e = launchErr { result["backgroundError"] = e }
             if !preserved, userInputSince(seconds: (nowMs() - t0) / 1000) { result["userInput"] = true }
             return ok(id, result)
@@ -1951,11 +2295,18 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         CFRunLoopRunInMode(.defaultMode, 0, true)
         axNotifications = 0
         var info: [String: Any] = [:]
+        let aboveBefore = pidsAboveFront()
         do { info = try performAction(pid: pid_t(pidN), action: action, map: map) }
-        catch ActError.message(let code, let msg) { return fail(id, code, msg) }
+        catch ActError.message(let code, let msg) { _ = keepUserWindowOnTop(pid_t(pidN), aboveBefore); return fail(id, code, msg) }
         catch { return fail(id, "ACT_FAILED", "\(error)") }
+        var raised = keepUserWindowOnTop(pid_t(pidN), aboveBefore)
         // settle on the app's own notifications, then re-observe in the same round trip
         let settleMs = settle(pid: pid_t(pidN))
+        if let late = keepUserWindowOnTop(pid_t(pidN), aboveBefore) { raised = (raised ?? true) && late }
+        if let r = raised {
+            info["raisedOverUser"] = true; info["orderRestored"] = r
+            raisesOnPointer.insert(pid_t(pidN))
+        }
 
         let actMs = nowMs() - t0
         let tree = observeTree(pid: pid_t(pidN), map: map)
@@ -2013,6 +2364,40 @@ func countNodes(_ node: [String: Any]) -> Int {
     var n = 1
     if let kids = node["children"] as? [[String: Any]] { for k in kids { n += countNodes(k) } }
     return n
+}
+
+/// Apps with a normal window in front of the front app's front window, front to back.
+func pidsAboveFront() -> Set<Int32> {
+    guard let front = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [] }
+    var above = Set<Int32>()
+    for w in info {
+        guard (w[kCGWindowLayer as String] as? Int) == 0, let p = w[kCGWindowOwnerPID as String] as? Int32 else { continue }
+        if p == front { return above }
+        if ((w[kCGWindowAlpha as String] as? Double) ?? 1) > 0 { above.insert(p) }
+    }
+    return above
+}
+
+/// Some apps (Electron, LibreOffice) order their window to the top when a click reaches
+/// them, even in the background and without activating. When `target` newly sits in front
+/// of the user's front window, raise the user's window back over it (the front app stays
+/// active, so focus is untouched). nil: nothing was raised; else whether order came back.
+func keepUserWindowOnTop(_ target: pid_t, _ before: Set<Int32>) -> Bool? {
+    guard !before.contains(target), pidsAboveFront().contains(target),
+          let front = NSWorkspace.shared.frontmostApplication?.processIdentifier, front != target else { return nil }
+    let app = AXUIElementCreateApplication(front)
+    var w: CFTypeRef?
+    for attr in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] where w == nil {
+        if AXUIElementCopyAttributeValue(app, attr as CFString, &w) != .success { w = nil }
+    }
+    guard let win = w, CFGetTypeID(win) == AXUIElementGetTypeID() else { return false }
+    _ = AXUIElementPerformAction(win as! AXUIElement, kAXRaiseAction as CFString)
+    for _ in 0..<10 {
+        if !pidsAboveFront().contains(target) { return true }
+        usleep(10_000)
+    }
+    return false
 }
 
 func backgroundPreserved(_ a: [String: Any], _ b: [String: Any]) -> Bool {
@@ -2173,6 +2558,45 @@ if CommandLine.arguments.contains("--guide") { runGuide(CommandLine.arguments) }
 
 if CommandLine.arguments.contains("--version") {
     print("ondra-cuhost 0.4.6")
+    exit(0)
+}
+
+// One-shot queries for scripts (skills/computer-use/shot-check.sh), one JSON line each:
+//   --windows <App>  → {"windows":[{"title","bounds":{x,y,width,height},"accessible":true}]}
+//                      the app's windows as Accessibility sees them (real size, not a
+//                      Stage Manager thumbnail); empty when the app is not running
+//   --displays       → {"displays":[{"width","height","scale","main"}]} in points
+if let i = CommandLine.arguments.firstIndex(of: "--windows") {
+    let name = i + 1 < CommandLine.arguments.count ? CommandLine.arguments[i + 1].lowercased() : ""
+    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
+    var wins: [[String: Any]] = []
+    let apps = NSWorkspace.shared.runningApplications.filter {
+        ($0.localizedName ?? "").lowercased() == name || ($0.bundleIdentifier ?? "").lowercased() == name
+    }
+    for app in apps {
+        let ax = AXUIElementCreateApplication(app.processIdentifier)
+        var list: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(ax, kAXWindowsAttribute as CFString, &list) == .success, let ws = list as? [AXUIElement] else { continue }
+        for w in ws {
+            var pos = CGPoint.zero, size = CGSize.zero
+            var v: CFTypeRef?
+            if AXUIElementCopyAttributeValue(w, kAXPositionAttribute as CFString, &v) == .success, let v { AXValueGetValue(v as! AXValue, .cgPoint, &pos) }
+            if AXUIElementCopyAttributeValue(w, kAXSizeAttribute as CFString, &v) == .success, let v { AXValueGetValue(v as! AXValue, .cgSize, &size) }
+            var t: CFTypeRef?
+            let title = AXUIElementCopyAttributeValue(w, kAXTitleAttribute as CFString, &t) == .success ? (t as? String ?? "") : ""
+            wins.append(["title": title, "pid": Int(app.processIdentifier), "accessible": true,
+                         "bounds": ["x": Double(pos.x), "y": Double(pos.y), "width": Double(size.width), "height": Double(size.height)]])
+        }
+    }
+    print(jsonLine(["windows": wins]))
+    exit(0)
+}
+if CommandLine.arguments.contains("--displays") {
+    let main = NSScreen.main
+    let displays: [[String: Any]] = NSScreen.screens.map {
+        ["width": Double($0.frame.width), "height": Double($0.frame.height), "scale": Double($0.backingScaleFactor), "main": $0 == main]
+    }.sorted { ($0["main"] as? Bool ?? false) && !($1["main"] as? Bool ?? false) }
+    print(jsonLine(["displays": displays]))
     exit(0)
 }
 

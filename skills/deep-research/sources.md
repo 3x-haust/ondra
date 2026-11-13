@@ -26,7 +26,7 @@ round), each from a different angle, not the same one reworded:
 ## Searching when web_search can't
 
 `web_search` says the engine is busy, or finds nothing twice: search through
-your own agent-browser tab instead.
+your own ondra-browser tab instead.
 
 ```bash
 python3 "<this skill's folder>/web.py" search "<query>" --n 8
@@ -59,7 +59,7 @@ no engine answered; work on with what you have and search again later.
    | jsonld | the article text the page embeds as JSON-LD | empty app shells with SEO data |
    | mobile | iPhone headers, then the `m.` host | desktop-only walls |
    | reader | `r.jina.ai` renders the page (public URLs only) | JS pages, simple bot checks |
-   | browser | your agent-browser tab, waiting out JS challenges | JS-only pages, Cloudflare checks |
+   | browser | your ondra-browser tab, waiting out JS challenges | JS-only pages, Cloudflare checks |
    | archive | the newest Wayback Machine copy, dated | dead pages, hard walls |
 
    Every page it reads is saved to `$R/sources/` (index in

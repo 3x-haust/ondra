@@ -339,8 +339,7 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     case "bash": {
       const cmd: string = args?.command ?? "";
       // what the command runs, not what it reads: `sed -n 1,18p a.test.tsx` is no test run
-      if (runsProgram(cmd, /\bagent-browser\b|(?:^|\/)browse(?=\s|$)/)) return { name, kind: "browser", target: cmd.replace(/^.*?(?:agent-browser|(?:^|\/)browse)\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: describeBrowser(cmd).nowKo };
-      if (runsProgram(cmd, /\bagent-desktop\b/)) return { name, kind: "desktop", target: cmd.replace(/^.*?agent-desktop\s+/, ""), detail: cmd, now: "앱 조작 중" };
+      if (runsProgram(cmd, /\bondra-browser\b|(?:^|\/)browse(?=\s|$)/)) return { name, kind: "browser", target: cmd.replace(/^.*?(?:ondra-browser|(?:^|\/)browse)\s+(--\S+\s+\S+\s+)*/, ""), detail: cmd, now: describeBrowser(cmd).nowKo };
       if (isTestRun(cmd)) return { name, kind: "test", target: cmd, detail: cmd, now: "테스트 실행 중" };
       return { name, kind: "bash", target: cmd, detail: cmd, now: describeCommand(cmd).nowKo };
     }

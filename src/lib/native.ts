@@ -310,14 +310,14 @@ export const readTranscript = (source: SourceId, path: string) => call<Transcrip
 // ───────────────────────── bundled tools ─────────────────────────
 export interface ToolStatus {
   browserVersion: string | null;
-  /** The bundled Chrome agent-browser drives (or a system Chrome). */
+  /** The bundled Chrome ondra-browser drives (or a system Chrome). */
   chromeReady: boolean;
   desktopVersion: string | null;
   accessibility: boolean;
   screenRecording: boolean;
 }
 export const toolStatus = () =>
-  call<ToolStatus>("tool_status", undefined, { browserVersion: "0.41.1", chromeReady: true, desktopVersion: "1.1.0", accessibility: true, screenRecording: true });
+  call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.6", accessibility: true, screenRecording: true });
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
@@ -408,7 +408,7 @@ export const skillRemove = (name: string, changed: boolean) => call<void>("skill
 /** Hooks as JSON (an array), read by extensions/hooks.ts in every worker. */
 export const hooksLoad = () => call<string>("hooks_load", undefined, "[]");
 export const hooksSave = (json: string) => call<void>("hooks_save", { json });
-/** Port of the worker's live browser stream (agent-browser), null if closed. */
+/** Port of the worker's live browser stream (ondra-browser), null if closed. */
 export const browserStreamPort = (workerId: string, space?: string) => call<number | null>("browser_stream_port", { workerId, space: space ?? null }, null);
 /** A job ended: close its tab in the shared browser (logins stay). */
 export const browserRelease = (workerId: string, space?: string) => call<void>("browser_release", { workerId, space: space ?? null });

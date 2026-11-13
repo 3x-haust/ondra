@@ -16,13 +16,15 @@ png=$1 app=$2
 read -r pw ph < <(sips -g pixelWidth -g pixelHeight "$png" 2>/dev/null | awk '/pixelWidth/{w=$2} /pixelHeight/{h=$2} END{print w, h}')
 [[ -n ${pw:-} && -n ${ph:-} ]] || { echo "not a picture: $png" >&2; exit 2; }
 
-# the app's largest window by accessibility (its real size, not the strip's) and the display scale
+# the app's largest window by accessibility (its real size, not the strip's) and the display
+# scale, from the app's computer-use helper
+host=${ONDRA_COMPUTER_HOST_BIN:-$(command -v ondra-cuhost || true)}
 read -r ww wh scale < <(
-  { agent-desktop list-windows --app "$app"; echo; agent-desktop list-displays; } 2>/dev/null | python3 -c '
+  { [[ -n $host ]] && "$host" --windows "$app"; echo; [[ -n $host ]] && "$host" --displays; } 2>/dev/null | python3 -c '
 import json, sys
 docs = [json.loads(l) for l in sys.stdin.read().splitlines() if l.strip().startswith("{")]
-wins = [w for w in (docs[0].get("data") or []) if w.get("accessible")] if docs else []
-disp = (docs[1].get("data") or [{}])[0] if len(docs) > 1 else {}
+wins = [w for w in (docs[0].get("windows") or []) if w.get("accessible")] if docs else []
+disp = (docs[1].get("displays") or [{}])[0] if len(docs) > 1 else {}
 w = max(wins, key=lambda w: w["bounds"]["width"] * w["bounds"]["height"], default=None)
 b = w["bounds"] if w else {"width": 0, "height": 0}
 print(int(b["width"]), int(b["height"]), disp.get("scale", 2.0))'

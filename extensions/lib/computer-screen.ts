@@ -40,7 +40,7 @@ function extraActions(n: HostNode, actions: string[]): string[] {
 }
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
-const q = (s: string, max: number) => JSON.stringify(s.length > max ? s.slice(0, max) + "…" : s);
+const q = (s: string, max: number) => s.length > max ? `${JSON.stringify(s.slice(0, max) + "…")} (${s.length - max} more characters)` : JSON.stringify(s);
 
 export function roleName(n: HostNode): string {
   const sub = typeof n.subrole === "string" ? SUBROLE[n.subrole] : undefined;
@@ -59,12 +59,13 @@ function describe(n: HostNode): { text: string; quiet: boolean; name?: string } 
   const actions = Array.isArray(n.actions) ? (n.actions as unknown[]).filter((a): a is string => typeof a === "string") : [];
   const extra = extraActions(n, actions).map((a) => a.replace(/^AX/, ""));
   const parts = [roleName(n)];
-  if (name) parts.push(q(name, 300));
+  // a text's name is its content (a message, a document): read it whole, a label stays short
+  if (name) parts.push(q(name, n.role === "AXStaticText" ? 6000 : 300));
   const toggle = TOGGLES.has(n.role) || (typeof n.subrole === "string" && TOGGLES.has(n.subrole));
   if (n.role !== "AXStaticText" && n.value !== undefined) {
     const v = String(n.value);
     if (toggle) parts.push(v === "1" ? "checked" : v === "2" ? "mixed" : "unchecked");
-    else if (v !== name) parts.push(`= ${q(v, 2000)}`);
+    else if (v !== name) parts.push(`= ${q(v, 6000)}`);
   }
   if (str(n.placeholder)) parts.push(`placeholder ${q(String(n.placeholder), 120)}`);
   if (str(n.selection)) parts.push(`selected ${q(String(n.selection), 200)}`);

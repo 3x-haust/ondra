@@ -369,7 +369,7 @@ const BROWSER_ALIAS: Record<string, BrowserAction> = {
   scrollintoview: "scroll", screenshot: "screenshot", pdf: "pdf", eval: "eval", wait: "wait", is: "verify",
   back: "back", forward: "forward", reload: "reload", tab: "tab", close: "close", set: "set",
   connect: "connect", mouse: "mouse",
-  // browse (the browser-use skill's lean loop over agent-browser)
+  // browse (the browser-use skill's lean loop over ondra-browser)
   look: "read", shot: "screenshot", visuals: "set",
 };
 const alias = (w: string): BrowserAction | undefined => (Object.prototype.hasOwnProperty.call(BROWSER_ALIAS, w.toLowerCase()) ? BROWSER_ALIAS[w.toLowerCase()] : undefined);
@@ -397,10 +397,10 @@ const FLAG_VALUE = /^--(session|profile|timeout|port|cdp|headers|executable-path
 
 /** what only looks or waits, next to the step that does something */
 const PASSIVE: BrowserAction[] = ["read", "screenshot", "wait", "load", "verify", "other"];
-/** the program in front of a browser command: agent-browser, or the skill's `browse` */
-const BROWSER_PROGRAM = /^.*?(?:\bagent-browser|(?:^|\/)browse)\s+/;
+/** the program in front of a browser command: ondra-browser, or the skill's `browse` */
+const BROWSER_PROGRAM = /^.*?(?:\bondra-browser|(?:^|\/)browse)\s+/;
 
-/** one agent-browser command (its words after `agent-browser` and its --flags) */
+/** one ondra-browser command (its words after `ondra-browser` and its --flags) */
 function browserStep(w: string[]): { action: BrowserAction; target?: string } {
   const args = w.filter((x, i) => !x.startsWith("--") && !FLAG_VALUE.test(w[i - 1] ?? ""));
   const [cmd = "", ...rest] = args;
@@ -469,7 +469,7 @@ function browserStep(w: string[]): { action: BrowserAction; target?: string } {
 
 /**
  * A browser step in plain words, from what was run (`open https://acme.dev/pricing`,
- * `click @e3`, a chain of agent-browser calls) or a stored description
+ * `click @e3`, a chain of ondra-browser calls) or a stored description
  * ("acme.dev/pricing 열기"). `label` is the step done ("열었음"), `now` the step going
  * on ("여는 중"), `target` what it worked on ("acme.dev/pricing", "‘프로 시작하기’");
  * show them verb first. `action` is "other" when it isn't one this knows ("브라우저 씀").
