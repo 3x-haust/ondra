@@ -13,7 +13,9 @@ import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFo
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { switchSpace } from "../state/workspace";
 import { discarded } from "../state/progress";
-import { fileSrc, fsFiles, pickFolder } from "../lib/native";
+import { fsFiles, pickFolder } from "../lib/native";
+import { listFiles, sendFiles, srcOf } from "../engine/far";
+import { splitProjectId } from "../state/mirror";
 import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
@@ -168,7 +170,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
             <Show when={props.live && word()}>
               <span class="job-word">{word()}</span>
             </Show>
-            <Show when={shot()}>{(p) => <img class="job-shot" src={fileSrc(p())} alt="" loading="lazy" />}</Show>
+            <Show when={shot()}>{(p) => <img class="job-shot" src={srcOf(p(), x().host)} alt="" loading="lazy" />}</Show>
           </button>
         );
         const closing = createMemo(() => (props.full && props.live && over() ? closingOf(x()) : undefined));
@@ -650,7 +652,9 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           popDown
           autofocus
           placeholder={t("작업 내용")}
-          files={() => fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~"))}
+          files={() => (computer() ? (p() ? listFiles(computer()!.host, p()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(p()?.folder || spaceById(state.space).folder || "~")))}
+          // a job of another Mac reads attachments there: they are sent over first
+          upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
           onSend={send}
           status={
             <Show
@@ -807,7 +811,9 @@ export function MainView() {
       draftKey={`main:${key()}`}
       big={big}
       autofocus
-      files={() => fsFiles(expand(spaceById(state.space).folder || "~"))}
+      // on another Mac: its project's files, and attachments sent over first
+      files={() => (computer() ? (project() ? listFiles(computer()!.host, project()!.folder).catch(() => []) : Promise.resolve([])) : fsFiles(expand(spaceById(state.space).folder || "~")))}
+      upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
       commands={[
         btwCommand(() => `main:${key()}`),
         ...feedbackCommands(),
@@ -821,7 +827,10 @@ export function MainView() {
         { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
         // the chat only: jobs, results and memory stay
         { name: "clear", desc: t("이 대화 비우기 · 작업과 결과는 그대로"), icon: "refresh", run: () => void resetMain(state.space, project()?.id).then(() => toast(t("대화를 비웠어요"))) },
-        ...skillCommands(() => ({ space: state.space, project: project()?.id })),
+        ...(computer()
+          ? // on another Mac: that Mac's skills, and a skill asked for is a job there that uses it
+            skillCommands(() => ({ space: state.space }), { host: computer()!.host, project: splitProjectId(project()?.id)?.id }).map((c) => ({ ...c, run: (a: string) => sendMain(`/${c.name} ${a}`.trim()) }))
+          : skillCommands(() => ({ space: state.space, project: project()?.id }))),
       ]}
       placeholder={t("메시지 보내기|input")}
       onSend={sendMain}

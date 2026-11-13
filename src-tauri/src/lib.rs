@@ -30,6 +30,7 @@ mod tools;
 mod remote;
 mod worktree;
 mod fs;
+mod farfs;
 #[cfg(debug_assertions)]
 mod devbridge;
 mod bridge;
@@ -453,6 +454,11 @@ pub fn run() {
             fs::save_download,
             fs::ensure_dir,
             fs::space_logs,
+            farfs::far_stat,
+            farfs::far_piece,
+            farfs::far_real,
+            farfs::far_put,
+            farfs::far_cached,
             worktree::worktree_merge,
             worktree::worktree_remove,
             worktree::worktree_landed,

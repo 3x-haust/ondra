@@ -4,7 +4,7 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { state } from "../state/store";
 import { openPanel, openTask, panelOpen, panelShared, panelTab, view } from "../state/ui";
-import { fileSrc } from "../lib/native";
+import { srcOf } from "../engine/far";
 import { useBrowserStream } from "./browserStream";
 import { cornerOf, nearestCorner, pipJob, type Corner } from "./pip";
 import { Icon } from "./Icon";
@@ -104,7 +104,7 @@ export function BrowserPip() {
           <div class="pip-screen">
             <Show
               when={live.frame()}
-              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={fileSrc(p())} alt="" draggable={false} />}</Show>}
+              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={srcOf(p(), j().host)} alt="" draggable={false} />}</Show>}
             >
               {(f) => <img src={f()} alt="" draggable={false} />}
             </Show>

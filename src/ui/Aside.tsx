@@ -170,9 +170,10 @@ export function skillAsk(text: string): { skills: string[]; rest: string } {
   return { skills: [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]), rest: text.slice(m[0].length) };
 }
 
-/** Menu skills as "/name" commands. In a job it runs there; in main it becomes a job that uses it. */
-export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }) =>
-  menuSkills().map((sk) => ({
+/** Menu skills as "/name" commands. In a job it runs there; in main it becomes a job that uses it.
+ *  `on`: a job or project of another Mac, whose skills are that Mac's (its jobs run with those). */
+export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }, on?: { host: string; task?: string; project?: string }) =>
+  menuSkills(on).map((sk) => ({
     name: `skill:${sk.name}`,
     // the same one line as Settings › 스킬 (ours, translated, for a bundled skill); no " · " when there is none
     get desc() {

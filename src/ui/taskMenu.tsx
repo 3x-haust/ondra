@@ -9,6 +9,7 @@ import { archiveTask, duplicateTask, finishTask, removeTask, resumeTask, startTa
 import { expand } from "../engine/rpc";
 import { discarded } from "../state/progress";
 import { openInEditor, revealPath } from "../lib/native";
+import { editorOn, revealOn, setFarShell } from "../engine/far";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { anyPop, closePops } from "./ModelPicker";
 import { Icon } from "./Icon";
@@ -79,7 +80,15 @@ export function taskMenuItems(id: string): MenuEntry[] {
     // its worktree is gone with the discarded changes: nothing to open
     discarded(x)
       ? []
-      : [
+      : x.host
+        ? // a job of another Mac: its folder is there; the editor and Finder open on that Mac's screen,
+          // the terminal is a shell there inside this app
+          [
+            { id: "editor", label: t("그 Mac의 편집기에서 열기"), icon: "external", run: () => void editorOn(x.host, expand(x.cwd)) },
+            { id: "finder", label: t("그 Mac의 Finder에서 보기"), icon: "folder", run: () => void revealOn(x.host, expand(x.cwd)) },
+            { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (setFarShell(id), openTask(id), openPanel("terminal")) },
+          ]
+        : [
           { id: "editor", label: t("편집기에서 열기"), icon: "external", run: () => void openInEditor(expand(x.cwd)) },
           { id: "finder", label: t("Finder에서 보기"), icon: "folder", run: () => void revealPath(expand(x.cwd)) },
           { id: "terminal", label: t("터미널 열기"), icon: "shell", run: () => (openTask(id), openPanel("terminal")) },

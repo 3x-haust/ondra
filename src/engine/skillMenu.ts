@@ -2,9 +2,12 @@
 // (기본), the ones made in the app, and the user's (~/.agents/skills).
 
 import { createSignal } from "solid-js";
+import { createStore } from "solid-js/store";
 import { fsRead, globalSkills, skillList } from "../lib/native";
 import { state } from "../state/store";
+import type { SpaceId } from "../state/types";
 import { skillsIn } from "./memory";
+import { askHost } from "./hosts";
 
 export interface MenuSkill {
   name: string;
@@ -31,14 +34,42 @@ async function load() {
   setFound([...bundled, ...user.map((g) => ({ name: g.name, description: g.description, from: "user" as const }))]);
 }
 
-/** Skills for the "/" menu; the list on disk is read again at most once a minute. */
-export function menuSkills(): MenuSkill[] {
+const mine = (space: SpaceId) => skillsIn(space).map((s) => ({ name: s.name, description: s.description, from: "mine" as const }));
+const once = (list: MenuSkill[]) => {
+  const seen = new Set<string>();
+  return list.filter((s) => s.name && !seen.has(s.name) && !!seen.add(s.name));
+};
+
+/** The skills a job of that workspace gets, read now: what another Mac shows for its jobs here (engine/farHost.ts). */
+export async function skillsFor(space: SpaceId): Promise<MenuSkill[]> {
+  if (Date.now() - at > 60_000 || !found().length) {
+    at = Date.now();
+    await load();
+  }
+  return once([...mine(space), ...found()]);
+}
+
+/** another Mac's skills, per Mac and place (a job, a project): its jobs run with those, not this Mac's */
+const [far, setFar] = createStore<Record<string, MenuSkill[]>>({});
+const farAt = new Map<string, number>();
+
+/** Skills for the "/" menu; the list on disk is read again at most once a minute. A job or project
+ *  of another Mac (`on`) lists that Mac's skills, asked again at most once a minute too. */
+export function menuSkills(on?: { host: string; task?: string; project?: string }): MenuSkill[] {
+  if (on) {
+    const key = `${on.host}|${on.task ?? ""}|${on.project ?? ""}`;
+    if (Date.now() - (farAt.get(key) ?? 0) > 60_000) {
+      farAt.set(key, Date.now());
+      void askHost<MenuSkill[]>(on.host, "far.skills", [{ task: on.task, project: on.project }])
+        .then((l) => void (Array.isArray(l) && setFar(key, l)))
+        // an older Ondra there: none listed, asked again in a minute
+        .catch(() => {});
+    }
+    return far[key] ?? [];
+  }
   if (Date.now() - at > 60_000) {
     at = Date.now();
     void load();
   }
-  const seen = new Set<string>();
-  return [...skillsIn(state.space).map((s) => ({ name: s.name, description: s.description, from: "mine" as const })), ...found()].filter(
-    (s) => s.name && !seen.has(s.name) && !!seen.add(s.name),
-  );
+  return once([...mine(state.space), ...found()]);
 }

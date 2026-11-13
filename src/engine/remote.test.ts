@@ -86,6 +86,10 @@ describe("calls from a Mac allowed in", () => {
     expect((await call("secretSet", [{ project: "secret", name: "K", value: "v" }]))?.error).toBeTruthy();
     expect((await call("togglePin", ["inSecret"]))?.error).toBeTruthy();
     expect((await call("ghWatch", ["secret", "issue", ""]))?.error).toBeTruthy();
+    expect((await call("far.files", ["/tmp/secret"]))?.error).toBeTruthy();
+    setDeviceSpaces(DEV, ["home"]);
+    expect((await call("far.files", ["/tmp/payroll"]))?.error).toBeTruthy();
+    setDeviceSpaces(DEV, undefined);
     expect((await call("togglePin", ["inApp"]))?.error).toBeUndefined();
     expect(taskById("inApp")?.pinned).toBe(true);
   });

@@ -4,7 +4,8 @@ import type { Block, Evidence, Task } from "../state/types";
 import { homeDir } from "../state/store";
 import { expand, tilde } from "../engine/rpc";
 import { mainCommand } from "../engine/describe";
-import { fileSrc, pageSrc } from "../lib/native";
+import { pageSrc } from "../lib/native";
+import { localCopy, srcOf, useHost } from "../engine/far";
 import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
 import { Icon } from "./Icon";
@@ -62,12 +63,14 @@ function Spark(props: { values: number[] }) {
 }
 
 function Shot(props: { path?: string; caption: string }) {
+  // a job of another Mac: its picture is fetched from there
+  const host = useHost();
   return (
     <figure class="shot">
       <Show when={props.path} fallback={<div class="ph">{t("이미지 없음")}</div>}>
         {(p) => (
-          <button onClick={() => openImage(p())} title={t("크게 보기")}>
-            <img src={fileSrc(p())} alt={props.caption} loading="lazy" />
+          <button onClick={() => openImage(p(), [p()], host())} title={t("크게 보기")}>
+            <img src={srcOf(p(), host())} alt={props.caption} loading="lazy" />
           </button>
         )}
       </Show>
@@ -163,6 +166,7 @@ type Row = { e: Evidence; title?: string };
  * proof that backs it (or reads as the job's word), an open line joins what wasn't checked.
  */
 export function ProofView(props: { items: Evidence[]; unverified?: string[]; checks?: { label: string; done: boolean }[]; task?: Task }) {
+  const host = useHost();
   const [allShots, setAllShots] = createSignal(false);
   const built = () => {
     const items = props.items.filter((e) => e && typeof e.ref === "string");
@@ -195,7 +199,7 @@ export function ProofView(props: { items: Evidence[]; unverified?: string[]; che
     return allShots() || s.length <= SHOWN ? s : s.slice(-SHOWN);
   };
   const open = (e: Evidence, ev?: MouseEvent) => {
-    if (e.kind === "shot" || /\.(png|jpe?g|gif|webp)$/i.test(e.ref)) openImage(e.ref, built().shots.map((r) => r.e.ref));
+    if (e.kind === "shot" || /\.(png|jpe?g|gif|webp)$/i.test(e.ref)) openImage(e.ref, built().shots.map((r) => r.e.ref), host());
     else openRef(e.ref, ev);
   };
   const clickable = (e: Evidence) => /^(https?:\/\/|\/|~)/.test(e.ref);
@@ -248,7 +252,7 @@ export function ProofView(props: { items: Evidence[]; unverified?: string[]; che
               {(r) => (
                 <figure class="pf-shot">
                   <button onClick={() => open(r.e)} title={r.e.note ?? t("크게 보기")}>
-                    <img src={fileSrc(r.e.ref)} alt={r.e.note ?? ""} loading="lazy" />
+                    <img src={srcOf(r.e.ref, host())} alt={r.e.note ?? ""} loading="lazy" />
                   </button>
                   <figcaption>
                     <Show when={markOf(r.e) === "ok"} fallback={<span class="pf-badge">{t(MARK_LABEL[markOf(r.e) as Exclude<Mark, "bad">])}</span>}>
@@ -296,6 +300,7 @@ export function BlockView(props: { block: Block; task?: Task }) {
 }
 
 function BlockBody(props: { block: Block; task?: Task }) {
+  const host = useHost();
   const b = () => props.block;
   const as = <T extends Block["type"]>(t: T) => (b().type === t ? (b() as Of<T>) : false);
   return (
@@ -440,7 +445,7 @@ function BlockBody(props: { block: Block; task?: Task }) {
               <span class="spacer" />
               <button class="link-btn" onClick={() => previewFile(p().path)}>{t("크게 보기")}</button>
             </div>
-            <iframe class="blk-page-frame" sandbox="allow-scripts" src={pageSrc(p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
+            <iframe class="blk-page-frame" sandbox="allow-scripts" src={pageSrc(host() ? localCopy(p().path, host()) : p().path)} style={{ height: `${Math.min(Math.max(p().height ?? 420, 200), 900)}px` }} />
           </div>
         )}
       </Match>

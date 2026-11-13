@@ -5,6 +5,7 @@ import { rangeTilde } from "./markdownTilde";
 import { cjkStrong } from "./markdownCjk";
 import { createEffect, onCleanup } from "solid-js";
 import { fileSrc } from "../lib/native";
+import { srcOf, useHost } from "../engine/far";
 import { linkTip } from "../lib/links";
 import { linkMenu, openLink } from "./links";
 import { previewFile } from "../state/ui";
@@ -82,13 +83,15 @@ const plain = (href: string) => { try { return decodeURI(href); } catch { return
 
 /** `github`: the text comes from GitHub (a PR's comments), so pictures it hosts show inline */
 export function Markdown(props: { text: string; class?: string; github?: boolean }) {
+  // a reply of another Mac's job: its pictures are there, fetched and shown from a copy here
+  const host = useHost();
   const onClick = (e: MouseEvent) => {
     const drawing = (e.target as HTMLElement).closest("figure.md-svg");
     if (drawing) return openDrawing(drawing.innerHTML);
     const remote = (e.target as HTMLElement).closest("img.md-remote") as HTMLImageElement | null;
     if (remote) return void openLink(decodeURI(remote.dataset.href ?? ""), { event: e });
     const img = (e.target as HTMLElement).closest("img[data-path]") as HTMLImageElement | null;
-    if (img) return openImage(decodeURI(img.dataset.path ?? ""), [...(el?.querySelectorAll<HTMLImageElement>("img[data-path]") ?? [])].map((x) => decodeURI(x.dataset.path ?? "")));
+    if (img) return openImage(decodeURI(img.dataset.path ?? ""), [...(el?.querySelectorAll<HTMLImageElement>("img[data-path]") ?? [])].map((x) => decodeURI(x.dataset.path ?? "")), host());
     const a = (e.target as HTMLElement).closest("a[data-href]") as HTMLAnchorElement | null;
     if (!a) return;
     e.preventDefault();
@@ -157,6 +160,17 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
         });
       }
     });
+  });
+  // runs after the HTML is in; again when a picture from that Mac has come
+  createEffect(() => {
+    void props.text;
+    const h = host();
+    if (!h || !el) return;
+    for (const img of el.querySelectorAll<HTMLImageElement>("img.md-img[data-path]")) {
+      const s = srcOf(decodeURI(img.dataset.path ?? ""), h);
+      if (!s) img.removeAttribute("src");
+      else if (img.getAttribute("src") !== s) img.src = s;
+    }
   });
   return <div ref={el} class={`md ${props.class ?? ""}`} onClick={onClick} onContextMenu={onMenu} innerHTML={html()} />;
 }

@@ -31,6 +31,7 @@ import { SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 import { agoIn, Badges, outcomeOf, stampOf, tilde } from "./memoryBits";
 import { Detail } from "./MemorySide";
+import { RemoteMemory, RemoteMemoryRows } from "./RemoteMemory";
 import {
   buildGraph,
   buildModel,
@@ -177,7 +178,7 @@ export function MemoryView() {
   const graphSel = () => {
     const s = sel();
     if (s.startsWith("n:")) return model().nows.get(s.slice(2))?.home ?? "";
-    return s === VERSIONS || s === "j" || s.startsWith("j|") ? "" : s;
+    return s === VERSIONS || s === "j" || s.startsWith("j|") || s.startsWith("rp:") ? "" : s;
   };
   const graph = createMemo(() => buildGraph(model(), graphSel(), match(), q()));
 
@@ -231,7 +232,10 @@ export function MemoryView() {
       <div class="mem-body" style={{ "--mt-w": `${widths().tree}px`, "--md-w": `${widths().detail}px` }}>
         <MemTree model={tree()} full={model()} sel={sel()} onSel={setSel} searching={!!match()} />
         <Graph graph={graph()} sel={graphSel()} hover={hover()} onSel={setSel} onHover={setHover} />
-        <Detail model={model()} sel={sel()} onSel={setSel} />
+        {/* another Mac's project: its memory is there */}
+        <Show when={sel().startsWith("rp:")} fallback={<Detail model={model()} sel={sel()} onSel={setSel} />}>
+          <RemoteMemory id={sel()} />
+        </Show>
         <div class="mem-resize left" onPointerDown={(e) => drag(e, "tree")} onDblClick={() => resetWidth("tree")} title={t("너비 조절")} />
         <div class="mem-resize right" onPointerDown={(e) => drag(e, "detail")} onDblClick={() => resetWidth("detail")} title={t("너비 조절")} />
       </div>
@@ -926,6 +930,7 @@ function MemTree(props: { model: Model; full: Model; sel: string; onSel: (id: st
     <aside class="mt">
       <div class="mt-list" classList={{ searching: props.searching }} ref={list} tabindex="0" role="tree" aria-label={t("메모리 폴더")} onKeyDown={onKey}>
         <For each={props.model.roots} fallback={<div class="mt-none">{t("없음")}</div>}>{(n) => <Row n={n} depth={0} />}</For>
+        <RemoteMemoryRows sel={props.sel} onSel={props.onSel} />
       </div>
       <form class="mt-add" onSubmit={(e) => (e.preventDefault(), addHere())}>
         <input placeholder={t("{where}에 메모리 추가", { where: target().where })} value={text()} onInput={(e) => setText(e.currentTarget.value)} />

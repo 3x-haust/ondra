@@ -5,6 +5,7 @@
 //
 //   them → here  {t:"projects"} {t:"watch",projects} {t:"call",seq,fn,args}
 //   here → them  {t:"projects",list} {t:"info",info} {t:"patch",tasks,gone?,all?} {t:"ret",seq,value|error}
+// Files, folders and terminals of those jobs ("far.*" calls, {t:"pty…"}) are engine/farHost.ts.
 //
 // A job goes as its fields and its entries; after the first time only what changed: the
 // fields when they did, and the entries from the first one that differs.
@@ -28,6 +29,7 @@ import { effortFor } from "./models";
 import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
+import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 
 export interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 export interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -324,9 +326,20 @@ function mayUseProject(c: Conn, id: string | undefined) {
   if (!p || p.host || !c.watch?.has(p.id) || !spaceAllowed(spacesOf(c.device), p.space)) throw new Error("그 프로젝트는 쓸 수 없어요");
 }
 
+// ───────── files, folders and terminals of the jobs it sees (engine/farHost.ts checks each path and job)
+
+/** the Mac on that connection, as farHost.ts asks about it: only the projects it keeps in the
+ *  workspaces it may use, and the jobs it may reach */
+const peerOf = (conn: number, c: Conn): FarPeer => {
+  const may = spacesOf(c.device);
+  const watch = new Set([...c.watch].filter((id) => { const p = projectById(id); return !!p && spaceAllowed(may, p.space); }));
+  return { conn, device: c.device, watch, sees: (t) => !t.host && wanted(c, t), send: (data) => void send(conn, data) };
+};
+
 async function handle(conn: number, msg: Record<string, unknown>) {
   const c = conns.get(conn);
   if (!c) return;
+  if (msg.t === "pty-in" || msg.t === "pty-size") return farMsg(peerOf(conn, c), msg);
   switch (msg.t) {
     case "projects":
       await sendProjects(conn);
@@ -357,6 +370,11 @@ async function handle(conn: number, msg: Record<string, unknown>) {
           // both ends of the hand-over must be jobs it may reach
           if (![args[0], args[1]].every((id) => typeof id === "string" && mayReach(reach(c), taskById(id), taskById))) throw new Error("그 작업은 쓸 수 없어요");
           value = jobs.handOn(String(args[0]), String(args[1]));
+        } else if (fn.startsWith("far.")) {
+          // a job's files, folders and terminal: farHost.ts checks each path and job
+          const f = farCall(peerOf(conn, c), fn);
+          if (!f) throw new Error(`unknown: ${fn}`);
+          value = await f(...args);
         } else if (PROJECT_CALLS[fn]) {
           mayUseProject(c, projectOfArgs(args));
           value = await (PROJECT_CALLS[fn] as (...a: unknown[]) => unknown)(...args);
@@ -510,6 +528,7 @@ export function initRemote() {
       case "close": {
         const conn = Number(ev.conn);
         conns.delete(conn);
+        farClosed(conn);
         setRemote((r) => {
           const live = { ...r.live };
           delete live[conn];
@@ -532,6 +551,7 @@ export function initRemote() {
         break;
       case "stopped":
         helperGone();
+        for (const conn of conns.keys()) farClosed(conn);
         conns.clear();
         setRemote((r) => ({ ...r, id: undefined, live: {}, asks: [] }));
         // it went away on its own while still wanted: bring it back
