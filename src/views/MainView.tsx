@@ -1,4 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
+import { RoutineCard } from "./Routines";
 import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
@@ -88,7 +89,7 @@ function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
 }
 /** something of this reply shows in the chat (main reacting to a job's end may add nothing: the job's row says it) */
 const shows = (m: CaptainMessage) =>
-  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
+  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || r.kind === "routine" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
 
 /** What a job is on while it runs: what it last said it is doing, else its to-do step, else its status line. */
 function doingNow(x: Task): string {
@@ -361,6 +362,9 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                         <span>{withName("{task} 멈춤", taskById(a().taskId)?.title ?? t("작업"))}</span>
                       </button>
                     )}
+                  </Match>
+                  <Match when={r.kind === "routine" && r}>
+                    {(a) => <RoutineCard id={a().routineId} />}
                   </Match>
                   <Match when={r.kind === "remember" && r}>
                     {(a) => (

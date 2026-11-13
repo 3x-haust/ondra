@@ -40,6 +40,7 @@ import { presetOf } from "../engine/connections";
 import { keyText, SHORTCUT_EXTRAS } from "./ShortcutSheet";
 import { SkillsTab } from "./SkillsTab";
 import { ToolsTab } from "./Tools";
+import { RoutinesSettings } from "./Routines";
 import { SecretsSettings } from "./SecretsSettings";
 import { HooksTab } from "./Hooks";
 import { Logo, logoFor } from "../ui/Logos";
@@ -1083,6 +1084,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
   { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
+  { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간이나 GitHub에서 일이 생기면 작업을 시작해요", group: "에이전트|group" },
   { id: "secrets", label: "시크릿", icon: "lock", desc: "API 키와 비밀번호를 작업이 쓰되, 에이전트는 값을 보지 못하게 해요", group: "에이전트|group" },
   { id: "tools", label: "macOS 권한", icon: "shield", desc: "작업이 화면을 보고 앱을 다루려면 필요해요", group: "이 Mac" },
   { id: "import", label: "가져오기", icon: "download", desc: "다른 AI 도구에서 쓰던 지침·스킬·세션을 가져와요", group: "이 Mac" },
@@ -1244,6 +1246,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "import"}><Import /></Match>
             <Match when={settingsTab() === "agent-tools"}><ToolsTab /></Match>
             <Match when={settingsTab() === "secrets"}><SecretsSettings /></Match>
+            <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "skills"}><SkillsTab /></Match>
             <Match when={settingsTab() === "hooks"}><HooksTab /></Match>
             <Match when={settingsTab() === "tools"}><Permissions /></Match>

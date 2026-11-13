@@ -13,9 +13,9 @@
 // projects it keeps and the ones it asked for, in the workspaces it may use here.
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
-import { inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, type SavedSecrets } from "../lib/native";
+import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
-import { addProject, onWrite, projectById, setState, state, taskById, updateTask } from "../state/store";
+import { addProject, onWrite, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import type { Decision, Task } from "../state/types";
 import type { FarAsk, HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
@@ -311,6 +311,12 @@ const JOBS: Record<JobCall, (...a: never[]) => unknown> = {
 const PROJECT_CALLS: Record<string, (...a: never[]) => unknown> = {
   // a project's secrets (Settings › 시크릿): names come back, never a value
   ...secretCalls,
+  // 루틴 on another Mac: a routine there that watches one of this Mac's projects looks at its GitHub
+  // repo here, as this Mac's GitHub login (only a project this Mac has, never a path)
+  ghWatch: async (project: string, event: string, search: string) => {
+    const p = projectById(project)!;
+    return ghWatch(p.folder, event, typeof search === "string" ? search : "", await spaceEnv(spaceById(p.space)));
+  },
 };
 const projectOfArgs = (args: unknown[]) => (typeof args[0] === "string" ? args[0] : typeof (args[0] as { project?: unknown })?.project === "string" ? (args[0] as { project: string }).project : undefined);
 function mayUseProject(c: Conn, id: string | undefined) {

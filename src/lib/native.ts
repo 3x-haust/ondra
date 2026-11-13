@@ -623,3 +623,5 @@ export interface SecretGroup {
 }
 /** Every saved secret, those with the same value as one (compared natively, values never sent). */
 export const secretOverview = () => call<SecretGroup[]>("secret_overview", undefined, []);
+/** What a routine watches on the folder's GitHub repo, as gh prints it (routineEvents.ts reads it). */
+export const ghWatch = (cwd: string, event: string, search: string, env: Env = []) => call<string>("gh_watch", { cwd, event, search, env }, "[]");

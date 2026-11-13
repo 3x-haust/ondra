@@ -85,6 +85,7 @@ describe("calls from a Mac allowed in", () => {
     expect((await call("secretList", ["secret"]))?.error).toBeTruthy();
     expect((await call("secretSet", [{ project: "secret", name: "K", value: "v" }]))?.error).toBeTruthy();
     expect((await call("togglePin", ["inSecret"]))?.error).toBeTruthy();
+    expect((await call("ghWatch", ["secret", "issue", ""]))?.error).toBeTruthy();
     expect((await call("togglePin", ["inApp"]))?.error).toBeUndefined();
     expect(taskById("inApp")?.pinned).toBe(true);
   });

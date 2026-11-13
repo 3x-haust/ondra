@@ -1,5 +1,6 @@
 // The left side: main on top, then one quiet row per job with a
 // static status glyph (DESIGN.md §8). The git-style flow lives in the right panel.
+import { routineOf } from "../engine/routines";
 import { version as appVersion } from "../../package.json";
 import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
@@ -195,6 +196,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         title={tip()}
       >
         <Glyph t={face()} />
+        <Show when={!props.kid && routineOf(t())}><Icon name="repeat" size={12} class="sb-rt" /></Show>
         <span class="sb-title">{taskTitle(t())}</span>
         <Show when={!props.kid && nested()}>
           <span

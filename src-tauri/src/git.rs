@@ -496,6 +496,45 @@ pub async fn gh_issue(cwd: String, number: u64, env: Option<Vec<(String, String)
     .map_err(|e| e.to_string())?
 }
 
+/// What a routine watches on the folder's GitHub repo (raw JSON for routineEvents.ts): `issue` and `pr`
+/// (open ones, newest first), `review` (PRs asking me to review), `comment` (my open PRs with their
+/// comments and reviews, each PR tagged with my login as `me`), `ci` (finished runs on the default
+/// branch), `release`. `search` narrows issue/pr/review with GitHub search words.
+#[tauri::command]
+pub async fn gh_watch(cwd: String, event: String, search: Option<String>, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let env = env.unwrap_or_default();
+        let search = search.unwrap_or_default();
+        let search = search.trim();
+        const ITEM: &str = "number,title,url,createdAt,author,body,isDraft";
+        let with_search = |base: &str| if search.is_empty() { base.to_string() } else { format!("{base} {search}") };
+        match event.as_str() {
+            "issue" => run(&cwd, "gh", &["issue", "list", "--limit", "30", "--search", &with_search("is:open sort:created-desc"), "--json", "number,title,url,createdAt,author,body"], &env),
+            "pr" => run(&cwd, "gh", &["pr", "list", "--limit", "30", "--search", &with_search("is:open sort:created-desc"), "--json", ITEM], &env),
+            "review" => run(&cwd, "gh", &["pr", "list", "--limit", "30", "--search", &with_search("is:open review-requested:@me"), "--json", ITEM], &env),
+            "comment" => {
+                let me = run(&cwd, "gh", &["api", "user", "--jq", ".login"], &env).unwrap_or_default();
+                let raw = run(&cwd, "gh", &["pr", "list", "--author", "@me", "--state", "open", "--limit", "20", "--json", "number,title,url,comments,reviews"], &env)?;
+                let mut list: Vec<serde_json::Value> = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+                for pr in list.iter_mut() {
+                    if let Some(o) = pr.as_object_mut() {
+                        o.insert("me".into(), serde_json::Value::String(me.clone()));
+                    }
+                }
+                serde_json::to_string(&list).map_err(|e| e.to_string())
+            }
+            "ci" => {
+                let branch = run(&cwd, "gh", &["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"], &env)?;
+                run(&cwd, "gh", &["run", "list", "--branch", branch.trim(), "--status", "completed", "--limit", "20", "--json", "databaseId,displayTitle,url,createdAt,headBranch,workflowName,conclusion"], &env)
+            }
+            "release" => run(&cwd, "gh", &["release", "list", "--limit", "10", "--json", "name,tagName,publishedAt,createdAt,isDraft"], &env),
+            other => Err(format!("unknown event: {other}")),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 const PR_DIFF_MAX: usize = 1_500_000;
 
 fn pr_json(url: &str, env: &[(String, String)], fields: &str, with_diff: bool) -> Result<String, String> {
