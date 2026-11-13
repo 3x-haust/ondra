@@ -203,9 +203,17 @@ export function Panes() {
             const r = rectOf(id);
             return !r || (r.x < 1 && r.y < 1);
           };
+          // the top-right pane (when split): the panel's one button sits at its header's end
+          const edge = () => {
+            if (!multi() || solo() === id) return true;
+            const r = rectOf(id);
+            return !hidden() && !!r && r.y < 1 && r.x + r.w > box().w - 1;
+          };
           let el!: HTMLElement;
           onMount(() => {
-            const down = () => {
+            const down = (e: PointerEvent) => {
+              // a control for the focused pane (the panel button): it acts there, it doesn't take the focus
+              if ((e.target as Element | null)?.closest?.("[data-keep-focus]")) return;
               byPointer = true;
               focusPane(id);
               setTimeout(() => (byPointer = false), 0);
@@ -219,7 +227,7 @@ export function Panes() {
               el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: "cubic-bezier(.2,0,0,1)" });
           });
           return (
-            <PaneCtx.Provider value={{ id, view: v, focused }}>
+            <PaneCtx.Provider value={{ id, view: v, focused, edge }}>
               <section
                 ref={el}
                 class="pane"

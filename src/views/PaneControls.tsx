@@ -2,7 +2,8 @@
 // go to the one that needs you, and take a job dragged from the sidebar.
 import { createSignal, onCleanup, Show } from "solid-js";
 import * as L from "../state/layout";
-import { closePane, equalizePanes, focusPane, layout, paneCount, paneRoom, setPaneView, splitPane, toggleZoom, view, type View } from "../state/ui";
+import { closePane, equalizePanes, focusPane, layout, paneCount, paneRoom, panelOpen, setPaneView, splitPane, togglePanel, toggleZoom, view, type View } from "../state/ui";
+import { withHint } from "../lib/shortcuts";
 import { usePane } from "../state/panes";
 import { projectById, state, taskById } from "../state/store";
 import { shortcutHint } from "../lib/shortcuts";
@@ -86,6 +87,31 @@ export function nextAttention() {
 
 const [alone, setAlone] = createSignal(false);
 /** In a view's header: 확대됨, the split menu and ✕ (shown on hover, or while the pane has the focus). */
+/**
+ * The panel button. One pane: at the end of its header, as always. Split: only once, at the
+ * window's top right (the top-right pane's header), and it opens or closes the panel of the
+ * focused pane without taking the focus from it (like a terminal's splits: one focus, one set of controls).
+ */
+export function PanelButton(props: { on: boolean }) {
+  const pane = usePane();
+  const split = () => !!pane && paneCount() > 1;
+  return (
+    <Show when={!split() || pane!.edge()}>
+      <button
+        class="icon-btn panel-btn"
+        classList={{ on: split() ? panelOpen() : props.on }}
+        data-shortcut="panel"
+        data-keep-focus={split() || undefined}
+        title={withHint(t("패널"), "panel")}
+        aria-label={t("패널")}
+        onClick={togglePanel}
+      >
+        <Icon name="panel" size={16} />
+      </button>
+    </Show>
+  );
+}
+
 export function PaneControls() {
   const pane = usePane();
   if (!pane) return null;
