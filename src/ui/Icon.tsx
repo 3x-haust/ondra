@@ -32,12 +32,14 @@ const map: Record<string, Component<any>> = {
   arrowUp: ArrowUp, arrowDown: ArrowDown, goto: FileInput, listTree: ListTree, listFlat: List, collapseAll: ChevronsDownUp, fold: FoldVertical, image: ImageIcon,
 };
 
-export function Icon(props: { name: string; size?: number; class?: string; stroke?: number }) {
+/** `fill`: the shape filled in (a pinned pin), else outline only. */
+export function Icon(props: { name: string; size?: number; class?: string; stroke?: number; fill?: boolean }) {
   return (
     <Dynamic
       component={map[props.name] ?? Circle}
       size={props.size ?? 16}
       stroke-width={props.stroke ?? 1.5}
+      fill={props.fill ? "currentColor" : "none"}
       absoluteStrokeWidth={props.stroke === undefined}
       class={`icon ${props.class ?? ""}`}
       aria-hidden="true"

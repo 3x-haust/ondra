@@ -239,13 +239,13 @@ export function ResultsView() {
                     <div class="res-r1">
                       <span class="res-title">{r.title}</span>
                       <Show when={r.pinned}>
-                        <Icon name="pin" size={12} class="res-pin" />
+                        <Icon name="pin" size={12} class="res-pin" fill />
                       </Show>
                       {/* under a day's header only the time; pinned rows have no day header */}
                       <span class="res-time">{r.pinned ? whenOf(r.at) : timeOf(r.at)}</span>
                       <span class="res-acts">
                         <button class="res-act" classList={{ on: r.pinned }} title={r.pinned ? t("고정 해제") : t("고정")} aria-label={r.pinned ? t("고정 해제") : t("고정")} onClick={(e) => (e.stopPropagation(), pinResult(r.id, !r.pinned))}>
-                          <Icon name="pin" size={14} />
+                          <Icon name="pin" size={14} fill={!!r.pinned} />
                         </button>
                         <button class="res-act" title={t("삭제")} aria-label={t("삭제")} onClick={(e) => (e.stopPropagation(), remove([r.id]))}>
                           <Icon name="trash" size={14} />
@@ -269,7 +269,7 @@ export function ResultsView() {
                   <b>{t("{n}개 선택됨", { n: picked().length })}</b>
                   <div class="res-many-acts">
                     <button class="btn sm ghost" onClick={() => pin(picked())}>
-                      <Icon name="pin" size={14} />
+                      <Icon name="pin" size={14} fill={picked().every((id) => all().find((r) => r.id === id)?.pinned)} />
                       {picked().every((id) => all().find((r) => r.id === id)?.pinned) ? t("고정 해제") : t("고정")}
                     </button>
                     <button class="btn sm ghost danger" onClick={() => remove(picked())}>

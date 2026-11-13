@@ -214,13 +214,13 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         {/* the time and the hover actions share one slot: hovering swaps them, the title keeps its width */}
         <span class="sb-trail" classList={{ acts: !props.kid }}>
           <span class="sb-meta">
-            <Show when={t().pinned && !props.kid}><Icon name="pin" size={12} class="sb-pin" /></Show>
+            <Show when={t().pinned && !props.kid}><Icon name="pin" size={12} class="sb-pin" fill /></Show>
             {meta()}
           </span>
           <Show when={!props.kid}>
             <span class="sb-acts">
-              <span class="sb-act" role="button" title={t().pinned ? tr("고정 해제") : tr("고정")} aria-label={t().pinned ? tr("고정 해제") : tr("고정")} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
-                <Icon name="pin" size={14} />
+              <span class="sb-act" classList={{ on: !!t().pinned }} role="button" aria-pressed={!!t().pinned} title={t().pinned ? tr("고정 해제") : tr("고정")} aria-label={t().pinned ? tr("고정 해제") : tr("고정")} onClick={(e) => (e.stopPropagation(), togglePin(t().id))}>
+                <Icon name="pin" size={14} fill={!!t().pinned} />
               </span>
               <span class="sb-act" role="button" title={tr("보관")} aria-label={tr("보관")} onClick={(e) => (e.stopPropagation(), archiveTask(t().id))}>
                 <Icon name="archive" size={14} />
