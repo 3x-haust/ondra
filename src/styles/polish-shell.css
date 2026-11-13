@@ -267,7 +267,11 @@
   border-radius: var(--r-sm);
 }
 .app .sidebar .sb-pin {
-  color: var(--ink-4);
+  color: var(--ink-3);
+}
+/* pinned: the hover button keeps the state, filled and in the accent (as in 결과) */
+.app .sidebar .sb-act.on {
+  color: var(--accent-text);
 }
 .app .sidebar .sb-kids {
   height: 18px;
