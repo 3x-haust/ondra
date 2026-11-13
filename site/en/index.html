@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ondra · Stop babysitting your agents</title>
-<meta name="description" content="Tell one chat what you want done. Ondra splits it into tasks, runs them side by side, and only comes back when a decision is yours. Free beta for Mac.">
+<meta name="description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks. Free beta for Mac.">
 <link rel="canonical" href="https://3x-haust.github.io/ondra/en/">
 <link rel="alternate" hreflang="ko" href="https://3x-haust.github.io/ondra/">
 <link rel="alternate" hreflang="en" href="https://3x-haust.github.io/ondra/en/">
@@ -18,14 +18,14 @@
 <meta property="og:locale:alternate" content="ko_KR">
 <meta property="og:url" content="https://3x-haust.github.io/ondra/en/">
 <meta property="og:title" content="Ondra · Stop babysitting your agents">
-<meta property="og:description" content="Tell one chat what you want done. Ondra splits it into tasks, runs them side by side, and only comes back when a decision is yours.">
+<meta property="og:description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.">
 <meta property="og:image" content="https://3x-haust.github.io/ondra/assets/og-en.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Ondra: Stop babysitting your agents. A screenshot of the canvas">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Ondra · Stop babysitting your agents">
-<meta name="twitter:description" content="Tell one chat what you want done. Ondra splits it into tasks, runs them side by side, and only comes back when a decision is yours.">
+<meta name="twitter:description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.">
 <meta name="twitter:image" content="https://3x-haust.github.io/ondra/assets/og-en.png">
 
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -75,7 +75,7 @@
 
 <div class="wrap hero">
   <h1>Stop babysitting your agents.</h1>
-  <p class="lede">Tell one chat what you want done. Ondra splits it into tasks, runs them side by side, and only comes back when a decision is yours.</p>
+  <p class="lede">Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.</p>
   <div class="cta">
     <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">Download for Mac</a>
     <a class="btn ghost" href="https://github.com/3x-haust/ondra">View on GitHub</a>
@@ -142,13 +142,12 @@
 <section class="wrap lead" aria-labelledby="s-check">
   <div class="split">
     <div class="rv">
-      <p class="kicker">The agent said “all tests pass.” You checked anyway.</p>
-      <h2 id="s-check">Done should mean checked.</h2>
-      <p class="sub">When a task says it's finished, Ondra matches that claim against the commands it actually ran and the files it actually changed, and flags anything it couldn't verify.</p>
+      <h2 id="s-check">“Done” gets checked against the record.</h2>
+      <p class="sub">It compares the report with the commands the task ran and the files it changed. Anything it couldn’t confirm is marked unverified.</p>
       <ul class="points">
-        <li>A task that changes an app opens the app, uses it for real and keeps the screens as proof.</li>
-        <li>Risky changes get two reviewers before they finish, one for the design and one for the code.</li>
-        <li>You get diffs, before-and-after screenshots, videos and test results, not just a summary.</li>
+        <li>If a task changed an app, it runs the app, clicks through it and saves screenshots.</li>
+        <li>Before a risky change is finished, two subagents review it separately: one the design, one the code.</li>
+        <li>Results come with diffs, before-and-after screenshots, videos and test results.</li>
       </ul>
     </div>
     <div class="proof mock" data-scene="proof">
@@ -168,9 +167,8 @@
 
 <section class="wrap" aria-labelledby="s-one">
   <div class="rv">
-    <p class="kicker">You were keeping every tab's state in your head.</p>
-    <h2 id="s-one">Talk to one chat. See it all on the canvas.</h2>
-    <p class="sub">Main splits the work into tasks and runs them at once; the canvas shows what each one is doing.</p>
+    <h2 id="s-one">The canvas shows what each task is doing.</h2>
+    <p class="sub">What you tell Main becomes tasks under each project, running at the same time. Each card shows the tool the task is using and which step it’s on.</p>
   </div>
   <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="The canvas: Main connects to the ondra, acme and blog projects and on to their tasks and subagents, while the task cards move through their steps">
     <div class="cv-head"><b>Canvas</b><span><i class="dot"></i>Running 2</span><span><i class="dot ask"></i>Needs reply 1</span></div>
@@ -224,11 +222,10 @@
 <section class="wrap" aria-labelledby="s-ask">
   <div class="split flip">
     <div class="rv">
-      <p class="kicker">One of your tabs was waiting on you. You didn't know which.</p>
-      <h2 id="s-ask">It only asks when the call is yours.</h2>
-      <p class="sub">When a task needs your intent or your taste, a card shows up in Main with the options and the context behind them.</p>
+      <h2 id="s-ask">It asks only when you need to decide.</h2>
+      <p class="sub">When a task reaches something you have to pick, a card with the options shows up in Main.</p>
       <ul class="points">
-        <li>With the window in the background, you get a system notification when a task finishes or needs you.</li>
+        <li>Even with the window in the background, you get a notification when a task finishes or needs an answer.</li>
       </ul>
     </div>
     <div class="dc mock" id="decide" data-done-ok="Done" data-done-run="Running" data-reset="Try again">
@@ -253,21 +250,20 @@
 
 <section class="wrap" aria-labelledby="s-mem">
   <div class="rv">
-    <p class="kicker">Every new session, you explained the same background again.</p>
-    <h2 id="s-mem">Ondra picks up where the last session stopped.</h2>
+    <h2 id="s-mem">No re-explaining the background in every new session.</h2>
   </div>
   <div class="facts rv">
     <div class="fact">
       <h3>Handoff</h3>
-      <p>Long tasks pass what they did, what they found, the next steps and the evidence to a fresh session. Ask more of a finished task and the new one starts from its results.</p>
+      <p>Long tasks write up what they did, what they found, the next steps and the evidence, and hand that to a new session. Follow up on a finished task and it starts from those results.</p>
     </div>
     <div class="fact">
       <h3>Memory</h3>
-      <p>Preferences and lessons are kept in memory as you work. Save one right away with <code>/remember</code>, and review or edit them on the Memory page.</p>
+      <p>Preferences and lessons it picks up while you work are saved to memory. <code>/remember</code> saves one right away, and you can edit them on the Memory page.</p>
     </div>
     <div class="fact">
       <h3>Project chats</h3>
-      <p>Each project has its own chat. Tasks you start there begin in that folder.</p>
+      <p>Each project has its own chat. Tasks you start there begin in that project’s folder.</p>
     </div>
   </div>
 </section>
@@ -275,11 +271,10 @@
 <section class="wrap" aria-labelledby="s-routine">
   <div class="split wide">
     <div class="rv">
-      <p class="kicker">You asked for the same thing every morning, and found the broken CI hours later.</p>
-      <h2 id="s-routine">Hand recurring work to a routine.</h2>
-      <p class="sub">Tasks start on their own at a set time or when something happens on GitHub. Write “every weekday at 9…” in the chat and Ondra suggests the routine as a card.</p>
+      <h2 id="s-routine">Put the daily stuff on a routine.</h2>
+      <p class="sub">A task starts at the time you set or when something happens on GitHub. Type “every weekday at 9…” in the chat and a card comes up asking whether to make it a routine.</p>
       <ul class="points">
-        <li>A new issue or PR, a review request, a comment on your PR, a failed CI run or a new release.</li>
+        <li>On GitHub, it can start on a new issue or PR, a review request, a comment on your PR, a failed CI run or a new release.</li>
       </ul>
     </div>
     <div class="rt mock" data-scene="routine">
@@ -299,11 +294,10 @@
 <section class="wrap" aria-labelledby="s-mac">
   <div class="split">
     <div class="rv">
-      <p class="kicker">Close the laptop, and the agents stop too.</p>
       <h2 id="s-mac">Run the long jobs on your other Mac.</h2>
-      <p class="sub">Connect another Mac and its projects show up in your sidebar. Their tasks run on that Mac, so they keep going after you close your laptop.</p>
+      <p class="sub">Connect another Mac and its projects appear in your sidebar. Their tasks run on that Mac, so closing your laptop doesn’t stop them.</p>
       <ul class="points">
-        <li>The connection is end-to-end encrypted, and a connected Mac only sees the workspaces and projects you allow.</li>
+        <li>The connection is end-to-end encrypted. A connected Mac only sees the workspaces and projects you allow.</li>
       </ul>
     </div>
     <div class="mock" data-scene="macs">
@@ -340,33 +334,31 @@
 
 <section class="wrap" aria-labelledby="s-tools">
   <div class="rv">
-    <p class="kicker">The code was fixed, but you still opened the app to check.</p>
-    <h2 id="s-tools">It uses the browser and your Mac apps. Your screen stays yours.</h2>
+    <h2 id="s-tools">It uses the browser and Mac apps without taking your cursor or focus.</h2>
   </div>
   <div class="facts four rv">
     <div class="fact">
       <h3>Browser</h3>
-      <p>Each task opens, clicks and types in its own browser tab, and you can watch it live in a small window in the corner. Passwords are filled from the macOS Keychain, so the model never sees them.</p>
+      <p>Each task opens pages, clicks and types in its own browser tab. You can watch it live in a small window in the corner. Passwords are filled from the macOS Keychain, so the model never sees them.</p>
     </div>
     <div class="fact">
       <h3>Mac apps</h3>
-      <p>With permission, it drives Mac apps in the background. It never takes your mouse cursor or focus, so you keep working; its own cursor shows where it is clicking.</p>
+      <p>With permission, it drives Mac apps in the background. It doesn’t use your cursor or focus, so you can keep working. A separate cursor shows where Ondra is clicking.</p>
     </div>
     <div class="fact">
       <h3>Mobile</h3>
-      <p>It checks your app in the iOS Simulator or Android Emulator and keeps screenshots. You can drive the device from Ondra too.</p>
+      <p>It checks your app in the iOS Simulator or Android Emulator and saves screenshots. You can also control the device from inside Ondra.</p>
     </div>
     <div class="fact">
       <h3>Deep research</h3>
-      <p>It splits a question, researches sources and checks quotes against the originals, then collects the answer and evidence in a report and PDF.</p>
+      <p>It splits a question up, finds sources and checks each quote against the original. The answer and the evidence come out as a report and a PDF.</p>
     </div>
   </div>
 </section>
 
 <section class="wrap" id="film" aria-labelledby="s-film" hidden>
   <div class="rv">
-    <p class="kicker">50-second intro</p>
-    <h2 id="s-film">The whole idea, once through</h2>
+    <h2 id="s-film">A 50-second intro</h2>
   </div>
   <figure class="shot real-video">
     <video data-src="../assets/ondra-intro-en.mp4" poster="../assets/ondra-intro-en-poster.jpg" width="1920" height="1080" muted playsinline controls preload="metadata" aria-label="Ondra intro video"></video>
@@ -375,7 +367,7 @@
 
 <section class="wrap" id="real" aria-labelledby="s-real">
   <div class="rv">
-    <h2 id="s-real">Here's what Ondra actually looks like.</h2>
+    <h2 id="s-real">Screenshots of the real app</h2>
   </div>
   <div class="real-tabs" role="tablist" aria-label="Real screenshots">
     <button type="button" role="tab" aria-selected="true" data-src="../assets/main-en.png" data-alt="Ondra's Main view. Tasks are listed by project on the left, and a card in the middle asks whether to publish a blog draft.">Main</button>
@@ -387,18 +379,18 @@
 </section>
 
 <section class="wrap faq" aria-labelledby="s-faq">
-  <h2 id="s-faq">Questions</h2>
+  <h2 id="s-faq">FAQ</h2>
   <details>
     <summary>Is it free?</summary>
-    <p>Yes, it's a free beta for now. The app tells you when a new version is out.</p>
+    <p>Yes, it’s a free beta for now. The app tells you when a new version is out.</p>
   </details>
   <details>
     <summary>What do I need?</summary>
-    <p>An Apple silicon Mac on macOS 13 or later. When you first open Ondra, connect the AI model accounts you use in Settings. Driving Mac apps and capturing windows needs Accessibility and Screen Recording permission, and mobile checks need the iOS Simulator from Xcode or the Android Emulator.</p>
+    <p>An Apple silicon Mac on macOS 13 or later. When you first open Ondra, connect the AI model accounts you use in Settings. Driving Mac apps and capturing windows needs Accessibility and Screen Recording permission. Mobile checks need the iOS Simulator from Xcode or the Android Emulator.</p>
   </details>
   <details>
     <summary>Where do tasks run?</summary>
-    <p>On your Mac. If you've connected another Mac, tasks in its projects run there. Anonymous usage stats can be turned off in Settings.</p>
+    <p>On your Mac. If you’ve connected another Mac, tasks in its projects run there. You can turn off anonymous usage stats in Settings.</p>
   </details>
   <details>
     <summary>macOS won't open it the first time.</summary>
@@ -407,11 +399,11 @@
 </section>
 
 <section class="wrap end" aria-labelledby="s-end">
-  <h2 id="s-end">Stop babysitting your agents.</h2>
+  <h2 id="s-end">It’s a free beta for now.</h2>
   <div class="cta">
     <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">Download for Mac</a>
   </div>
-  <p class="meta">macOS 13+ · Apple silicon · Free beta</p>
+  <p class="meta">macOS 13+ · Apple silicon</p>
 </section>
 
 </main>

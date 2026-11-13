@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ondra · 에이전트 탭은 이제 닫아도 돼요</title>
-<meta name="description" content="채팅 하나에 하고 싶은 일을 말해요. Ondra가 작업으로 나눠 동시에 진행하고, 정해야 할 일이 있을 때만 불러요. macOS용 무료 베타.">
+<meta name="description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요. macOS용 무료 베타.">
 <link rel="canonical" href="https://3x-haust.github.io/ondra/">
 <link rel="alternate" hreflang="ko" href="https://3x-haust.github.io/ondra/">
 <link rel="alternate" hreflang="en" href="https://3x-haust.github.io/ondra/en/">
@@ -18,14 +18,14 @@
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:url" content="https://3x-haust.github.io/ondra/">
 <meta property="og:title" content="Ondra · 에이전트 탭은 이제 닫아도 돼요">
-<meta property="og:description" content="채팅 하나에 하고 싶은 일을 말해요. Ondra가 작업으로 나눠 동시에 진행하고, 정해야 할 일이 있을 때만 불러요.">
+<meta property="og:description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.">
 <meta property="og:image" content="https://3x-haust.github.io/ondra/assets/og-ko.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Ondra: 에이전트 탭은 이제 닫아도 돼요. 메인 화면 스크린샷">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Ondra · 에이전트 탭은 이제 닫아도 돼요">
-<meta name="twitter:description" content="채팅 하나에 하고 싶은 일을 말해요. Ondra가 작업으로 나눠 동시에 진행하고, 정해야 할 일이 있을 때만 불러요.">
+<meta name="twitter:description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.">
 <meta name="twitter:image" content="https://3x-haust.github.io/ondra/assets/og-ko.png">
 
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -75,7 +75,7 @@
 
 <div class="wrap hero">
   <h1>에이전트 탭은 이제 닫아도 돼요.</h1>
-  <p class="lede">채팅 하나에 하고 싶은 일을 말해요. Ondra가 작업으로 나눠 동시에 진행하고, 정해야 할 일이 있을 때만 불러요.</p>
+  <p class="lede">할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.</p>
   <div class="cta">
     <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">macOS용 다운로드</a>
     <a class="btn ghost" href="https://github.com/3x-haust/ondra">GitHub에서 보기</a>
@@ -142,13 +142,12 @@
 <section class="wrap lead" aria-labelledby="s-check">
   <div class="split">
     <div class="rv">
-      <p class="kicker">“다 했어요”라는데, 정말 됐는지는 결국 직접 열어 봤죠.</p>
-      <h2 id="s-check">“다 했어요” 대신, 확인한 결과를 받아요.</h2>
-      <p class="sub">작업이 끝나면 Ondra가 실제로 돌린 명령과 바뀐 파일을 기록과 맞춰 봐요. 확인 못 한 건 확인 못 했다고 표시해요.</p>
+      <h2 id="s-check">작업이 “다 했어요”라고 하면, 기록과 맞춰 봐요.</h2>
+      <p class="sub">보고 내용을 작업이 실제로 돌린 명령, 바꾼 파일과 비교해요. 확인이 안 된 항목엔 “확인 안 됨”이 붙어요.</p>
       <ul class="points">
-        <li>앱을 바꾼 작업은 실제 앱을 띄워 직접 눌러 보고, 화면을 증거로 남겨요.</li>
-        <li>위험한 변경은 끝내기 전에 설계 검토와 코드 검토 서브에이전트 둘이 나란히 봐요.</li>
-        <li>결과는 말보다 diff, 전후 화면, 영상, 테스트 결과로 와요.</li>
+        <li>앱을 바꾼 작업은 그 앱을 실행해서 눌러 보고 스크린샷을 남겨요.</li>
+        <li>위험한 변경은 끝나기 전에 서브에이전트 두 개가 설계와 코드를 따로 검토해요.</li>
+        <li>결과에는 diff, 전후 스크린샷, 영상, 테스트 결과가 붙어 와요.</li>
       </ul>
     </div>
     <div class="proof mock" data-scene="proof">
@@ -168,9 +167,8 @@
 
 <section class="wrap" aria-labelledby="s-one">
   <div class="rv">
-    <p class="kicker">어느 탭이 무슨 일을 하던 중인지, 머릿속으로 붙잡고 있었죠.</p>
-    <h2 id="s-one">말은 메인에게 한 번. 흐름은 캔버스에서 봐요.</h2>
-    <p class="sub">메인이 일을 작업으로 나눠 동시에 진행하고, 캔버스에서 각 작업이 지금 뭘 하는지 한눈에 보여요.</p>
+    <h2 id="s-one">작업마다 지금 뭘 하는지 캔버스에 나와요.</h2>
+    <p class="sub">메인에 말한 일은 프로젝트별 작업으로 나뉘어 동시에 돌아가요. 카드에는 작업이 쓰는 도구와 몇 단계째인지가 떠요.</p>
   </div>
   <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="캔버스: 메인에서 ondra, acme, blog 프로젝트로, 다시 각 작업과 서브에이전트로 선이 이어지고, 작업 카드의 진행 단계가 바뀌는 장면">
     <div class="cv-head"><b>캔버스</b><span><i class="dot"></i>진행 중 2</span><span><i class="dot ask"></i>응답 필요 1</span></div>
@@ -224,11 +222,10 @@
 <section class="wrap" aria-labelledby="s-ask">
   <div class="split flip">
     <div class="rv">
-      <p class="kicker">어느 탭이 내 대답을 기다리는지 몰라서, 하나씩 열어 봤죠.</p>
       <h2 id="s-ask">정해야 할 때만 물어봐요.</h2>
-      <p class="sub">의도나 취향이 필요한 순간에만, 선택지와 맥락을 담은 카드가 메인에 올라와요.</p>
+      <p class="sub">작업이 내가 골라야 하는 지점에 오면 메인에 선택지 카드가 올라와요.</p>
       <ul class="points">
-        <li>창이 뒤에 있어도, 작업이 끝나거나 응답이 필요하면 시스템 알림으로 알려줘요.</li>
+        <li>창이 뒤에 있어도 작업이 끝나거나 답이 필요하면 알림이 와요.</li>
       </ul>
     </div>
     <div class="dc mock" id="decide" data-done-ok="완료" data-done-run="진행 중" data-reset="다시 해 보기">
@@ -253,21 +250,20 @@
 
 <section class="wrap" aria-labelledby="s-mem">
   <div class="rv">
-    <p class="kicker">새 세션을 열 때마다 같은 배경을 처음부터 다시 설명했죠.</p>
-    <h2 id="s-mem">어디까지 했는지는 Ondra가 이어받아요.</h2>
+    <h2 id="s-mem">새 세션에 배경을 다시 설명하지 않아도 돼요.</h2>
   </div>
   <div class="facts rv">
     <div class="fact">
       <h3>이어가기</h3>
-      <p>긴 작업은 한 일, 발견한 것, 다음 단계와 증거를 새 세션에 넘겨요. 끝난 작업에 더 요청해도 앞선 결과를 이어받아요.</p>
+      <p>긴 작업은 한 일과 찾은 것, 다음 단계, 증거를 정리해 새 세션에 넘겨요. 끝난 작업에 이어서 요청하면 앞 결과에서 시작해요.</p>
     </div>
     <div class="fact">
       <h3>메모리</h3>
-      <p>쓰면서 알게 된 취향과 교훈을 메모리에 남겨요. <code>/remember</code>로 바로 남기고, 메모리 화면에서 보고 고쳐요.</p>
+      <p>쓰다가 알게 된 취향과 교훈은 메모리에 저장돼요. <code>/remember</code>로 바로 저장할 수 있고, 메모리 화면에서 고치면 돼요.</p>
     </div>
     <div class="fact">
       <h3>프로젝트 채팅</h3>
-      <p>프로젝트마다 채팅을 따로 둬요. 거기서 맡긴 작업은 그 폴더에서 시작해요.</p>
+      <p>프로젝트마다 채팅이 따로 있어요. 거기서 시킨 작업은 그 프로젝트 폴더에서 시작해요.</p>
     </div>
   </div>
 </section>
@@ -275,11 +271,10 @@
 <section class="wrap" aria-labelledby="s-routine">
   <div class="split wide">
     <div class="rv">
-      <p class="kicker">매일 아침 같은 일을 또 시키고, CI가 깨진 건 한참 뒤에 알았죠.</p>
-      <h2 id="s-routine">반복되는 일은 루틴에 맡겨요.</h2>
-      <p class="sub">정해진 시간이나 GitHub에서 일이 생기면 작업을 알아서 시작해요. 채팅에서 “평일 9시마다 …”라고 하면 루틴을 카드로 제안해요.</p>
+      <h2 id="s-routine">매일 시키던 일은 루틴으로.</h2>
+      <p class="sub">정한 시간이 되거나 GitHub에서 일이 생기면 작업이 시작돼요. 채팅에 “평일 9시마다 …”라고 쓰면 루틴을 만들지 묻는 카드가 떠요.</p>
       <ul class="points">
-        <li>새 이슈나 PR, 리뷰 요청, 내 PR의 댓글, CI 실패, 새 릴리스가 생기면.</li>
+        <li>GitHub에서는 새 이슈나 PR, 리뷰 요청, 내 PR의 댓글, CI 실패, 새 릴리스에 맞춰 시작할 수 있어요.</li>
       </ul>
     </div>
     <div class="rt mock" data-scene="routine">
@@ -299,11 +294,10 @@
 <section class="wrap" aria-labelledby="s-mac">
   <div class="split">
     <div class="rv">
-      <p class="kicker">노트북을 덮으면 에이전트도 같이 멈췄죠.</p>
       <h2 id="s-mac">오래 걸리는 일은 다른 Mac에서 돌려요.</h2>
-      <p class="sub">다른 Mac을 연결하면 그 Mac의 프로젝트가 내 목록에 그대로 보여요. 작업은 그 Mac에서 돌아가니, 노트북을 덮어도 그 Mac의 작업은 계속돼요.</p>
+      <p class="sub">다른 Mac을 연결하면 그 Mac의 프로젝트가 사이드바에 나와요. 작업은 그 Mac에서 돌아서 노트북을 덮어도 멈추지 않아요.</p>
       <ul class="points">
-        <li>Mac끼리는 종단 간 암호화로 연결되고, 연결된 Mac은 허락한 워크스페이스와 프로젝트만 봐요.</li>
+        <li>연결은 종단 간 암호화돼요. 연결된 Mac은 내가 허락한 워크스페이스와 프로젝트만 볼 수 있어요.</li>
       </ul>
     </div>
     <div class="mock" data-scene="macs">
@@ -340,33 +334,31 @@
 
 <section class="wrap" aria-labelledby="s-tools">
   <div class="rv">
-    <p class="kicker">코드는 고쳤다는데, 화면은 결국 내가 열어서 확인했죠.</p>
-    <h2 id="s-tools">브라우저도, Mac 앱도 직접 써요. 내 화면은 그대로 두고요.</h2>
+    <h2 id="s-tools">브라우저와 Mac 앱도 써요. 내 커서와 포커스는 안 가져가요.</h2>
   </div>
   <div class="facts four rv">
     <div class="fact">
       <h3>브라우저</h3>
-      <p>작업마다 자기 브라우저 탭에서 웹을 열고 누르고 입력해요. 하는 모습은 구석의 작은 창으로 실시간으로 보여요. 비밀번호는 macOS 키체인으로 넣어서 모델에 보이지 않아요.</p>
+      <p>작업마다 자기 브라우저 탭에서 페이지를 열고 클릭하고 입력해요. 구석의 작은 창에서 실시간으로 볼 수 있어요. 비밀번호는 macOS 키체인에서 채워서 모델에는 안 보여요.</p>
     </div>
     <div class="fact">
       <h3>Mac 앱</h3>
-      <p>권한을 허용하면 뒤에서 Mac 앱을 조작해요. 내 마우스 커서와 포커스를 가져가지 않아서 그동안 다른 일을 해도 돼요. 대신 Ondra의 커서가 어디를 누르는지 보여 줘요.</p>
+      <p>권한을 주면 Mac 앱을 뒤에서 조작해요. 내 커서와 포커스는 쓰지 않으니 그동안 다른 일을 해도 돼요. Ondra가 누르는 곳은 별도 커서로 보여요.</p>
     </div>
     <div class="fact">
       <h3>모바일</h3>
-      <p>iOS 시뮬레이터와 Android 에뮬레이터에서 앱을 확인하고 화면을 남겨요. Ondra 안에서 직접 조작할 수도 있어요.</p>
+      <p>iOS 시뮬레이터와 Android 에뮬레이터에서 앱을 확인하고 스크린샷을 남겨요. Ondra 안에서 기기를 조작할 수도 있어요.</p>
     </div>
     <div class="fact">
       <h3>딥리서치</h3>
-      <p>질문을 나눠 출처를 조사하고, 인용을 원문과 대조해요. 답과 근거를 보고서와 PDF로 모아요.</p>
+      <p>질문을 나눠서 출처를 찾고, 인용이 원문과 맞는지 확인해요. 답과 근거는 보고서와 PDF로 나와요.</p>
     </div>
   </div>
 </section>
 
 <section class="wrap" id="film" aria-labelledby="s-film" hidden>
   <div class="rv">
-    <p class="kicker">50초 소개</p>
-    <h2 id="s-film">한 번에 훑어보기</h2>
+    <h2 id="s-film">50초 소개 영상</h2>
   </div>
   <figure class="shot real-video">
     <video data-src="assets/ondra-intro-ko.mp4" poster="assets/ondra-intro-ko-poster.jpg" width="1920" height="1080" muted playsinline controls preload="metadata" aria-label="Ondra 소개 영상"></video>
@@ -375,7 +367,7 @@
 
 <section class="wrap" id="real" aria-labelledby="s-real">
   <div class="rv">
-    <h2 id="s-real">실제 Ondra는 이렇게 생겼어요.</h2>
+    <h2 id="s-real">실제 앱 화면</h2>
   </div>
   <div class="real-tabs" role="tablist" aria-label="실제 화면">
     <button type="button" role="tab" aria-selected="true" data-src="assets/main.png" data-alt="Ondra 메인 화면. 왼쪽에 프로젝트별 작업 목록이 있고, 가운데에 블로그 초안을 게시할지 묻는 선택 카드가 떠 있어요.">메인</button>
@@ -387,31 +379,31 @@
 </section>
 
 <section class="wrap faq" aria-labelledby="s-faq">
-  <h2 id="s-faq">자주 묻는 것</h2>
+  <h2 id="s-faq">자주 묻는 질문</h2>
   <details>
     <summary>무료예요?</summary>
-    <p>네, 지금은 무료 베타예요. 새 버전이 나오면 앱 안에서 알려줘요.</p>
+    <p>네, 지금은 무료 베타예요. 새 버전이 나오면 앱에서 알려 줘요.</p>
   </details>
   <details>
-    <summary>무엇이 필요해요?</summary>
-    <p>Apple silicon Mac과 macOS 13 이상이 필요해요. 처음 열면 설정에서 쓰고 있는 AI 모델 계정을 연결해요. Mac 앱 조작과 화면 캡처에는 손쉬운 사용과 화면 기록 권한이, 모바일 확인에는 Xcode의 iOS 시뮬레이터나 Android 에뮬레이터가 필요해요.</p>
+    <summary>뭐가 필요해요?</summary>
+    <p>Apple silicon Mac, macOS 13 이상. 처음 열면 설정에서 쓰는 AI 모델 계정을 연결하세요. Mac 앱 조작과 화면 캡처에는 손쉬운 사용·화면 기록 권한이, 모바일 확인에는 Xcode의 iOS 시뮬레이터나 Android 에뮬레이터가 필요해요.</p>
   </details>
   <details>
     <summary>작업은 어디서 돌아가요?</summary>
-    <p>내 Mac에서 돌아가요. 다른 Mac을 연결했다면, 그 Mac의 프로젝트 작업은 그 Mac에서 돌아가요. 익명 사용 통계는 설정에서 끌 수 있어요.</p>
+    <p>내 Mac에서요. 다른 Mac을 연결했다면 그 Mac 프로젝트의 작업은 그 Mac에서 돌아요. 익명 사용 통계는 설정에서 끌 수 있어요.</p>
   </details>
   <details>
     <summary>macOS가 처음 실행을 막아요.</summary>
-    <p>Finder에서 앱을 오른쪽 클릭하고 <b>열기</b>를 골라요. 그래도 막히면, GitHub 릴리스에서 받은 앱인지 확인한 뒤 터미널에서 <code>xattr -dr com.apple.quarantine /Applications/Ondra.app</code>를 한 번 실행해요.</p>
+    <p>Finder에서 앱을 오른쪽 클릭하고 <b>열기</b>를 고르세요. 그래도 막히면 GitHub 릴리스에서 받은 앱이 맞는지 확인하고, 터미널에서 <code>xattr -dr com.apple.quarantine /Applications/Ondra.app</code>를 한 번 실행하세요.</p>
   </details>
 </section>
 
 <section class="wrap end" aria-labelledby="s-end">
-  <h2 id="s-end">에이전트 탭은 이제 닫아도 돼요.</h2>
+  <h2 id="s-end">지금은 무료 베타예요.</h2>
   <div class="cta">
     <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">macOS용 다운로드</a>
   </div>
-  <p class="meta">macOS 13 이상 · Apple silicon · 무료 베타</p>
+  <p class="meta">macOS 13 이상 · Apple silicon</p>
 </section>
 
 </main>

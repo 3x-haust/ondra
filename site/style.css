@@ -195,6 +195,7 @@ code {
   font-size: clamp(17px, 2vw, 20px);
   line-height: 1.6;
   color: var(--ink-2);
+  text-wrap: balance;
 }
 .hero .cta { justify-content: center; margin-top: 32px; }
 .hero-media { margin: 56px auto 0; max-width: 1120px; }
@@ -217,12 +218,6 @@ code {
 
 /* ── sections */
 section { padding-top: 120px; }
-.kicker {
-  margin: 0 0 14px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ink-3);
-}
 h2 {
   margin: 0;
   font-size: clamp(28px, 3.6vw, 40px);
@@ -308,9 +303,9 @@ h2 {
 .fact h3 { margin: 0 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .fact p { margin: 0; font-size: 15.5px; color: var(--ink-2); line-height: 1.6; }
 
-/* ── FAQ */
-.faq > * { max-width: 760px; }
-.faq h2 { margin-bottom: 24px; }
+/* ── FAQ: a centred reading column, questions left-aligned inside it */
+.faq.wrap { max-width: calc(720px + var(--gutter) * 2); }
+.faq h2 { margin-bottom: 28px; text-align: center; }
 .faq details { border-top: 1px solid var(--line); }
 .faq details:last-of-type { border-bottom: 1px solid var(--line); }
 .faq summary {
