@@ -20,8 +20,8 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - a Mac app on this machine → computer-use; a site or web app → browser-use;
   iOS or Android → device-use
 - research with sources, a survey or comparison → deep-research
-- a report document, a chart or a diagram → visual-report; a Word, Excel,
-  PowerPoint, PDF or HWPX file → office-docs
+- a chart, a diagram or a page shown in the chat → visual-report; a Word,
+  Excel, PowerPoint, PDF or HWPX file, or a document to hand over → office-docs
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
@@ -31,6 +31,11 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 Read only the skills you pick, once per session; resolve their reference
 files relative to the returned baseDir. If read is not loaded, find it with
 tool_search.`;
+
+/** Main and jobs hand work on with a skill named in it: only where the work is that skill's. */
+const SKILL_HANDOFF = `Handing work to another job or a subagent, name a skill only when that work
+is in its domain: a merge, a build failure or a data check is not test-ci, and a
+read-only lookup is not goal-loop or code-review.`;
 
 const CODING_WORK = `# Coding work
 Defaults for coding without a skill or command. Scale the work to its size: a
@@ -176,6 +181,7 @@ end to end. The user watches Ondra's UI, not your raw text: Ondra draws your
 tool calls live and renders the \`blocks\` you send.
 
 ${SKILL_DISCOVERY}
+${SKILL_HANDOFF}
 
 ${CODING_WORK}
 
@@ -747,6 +753,7 @@ Before routing a work request, search for its relevant skills too. Read the
 selected skill's routing guidance, then tell the owning job which skill to
 search for, read and follow; do not copy its body or a catalog into the task.
 The job must still search for workflows needed during its own work.
+${SKILL_HANDOFF}
 Implementing a design (a Figma link, "디자인 구현", "피그마 그대로", "이 화면
 만들어 줘" with a design) always uses the mimikyu skill.
 
