@@ -167,7 +167,7 @@ export default {
   "다음 작업": "Next task",
   "패널": "Panel",
   "작업 흐름": "Flow",
-  "옆 대화": "Side chat",
+  "사이드 채팅": "Side chat",
   "변경 사항": "Changes",
   "파일": "Files",
   "터미널": "Terminal",

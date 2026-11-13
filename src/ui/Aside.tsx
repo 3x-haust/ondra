@@ -60,6 +60,20 @@ export function BtwCard(props: { scope: string }) {
     openPanel("side");
     setTimeout(() => document.getElementById("side-input")?.focus(), 60);
   };
+  // copied: the button says so for a moment, in place of a toast
+  const [copied, setCopied] = createSignal(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(() => setCopied(false), 1400);
+      },
+      () => toast(t("복사하지 못했어요"), "bad"),
+    );
+  };
+  onCleanup(() => clearTimeout(copyTimer));
   const where = (scope: string) => {
     if (scope.startsWith("task:")) return taskById(scope.slice(5))?.title ?? t("작업");
     const p = scope.slice(5).split("~")[1];
@@ -70,7 +84,7 @@ export function BtwCard(props: { scope: string }) {
       {(x) => (
         <div class="btw-card" role="status">
           <div class="btw-head">
-            <span class="btw-tag">{t("짧은 질문")}</span>
+            <span class="btw-tag" title={t("짧은 질문")}>btw</span>
             <span class="btw-q" title={x().question}>{x().question}</span>
             <Show when={btwList().length > 1}>
               <span class="btw-nav">
@@ -107,9 +121,18 @@ export function BtwCard(props: { scope: string }) {
             <div class="btw-foot">
               <span class="btw-note" title={t("대화에는 남지 않아요")}>{where(x().scope)} · {agoIn(x().at)}</span>
               <span class="spacer" />
-              <button class="link-btn" onClick={() => (void navigator.clipboard.writeText(x().answer), toast(t("복사했어요")))}>{t("복사")}</button>
-              <button class="link-btn" title={shortcutHint("side")} onClick={toSide}>{t("옆 대화로 이어가기")}</button>
-              <button class="link-btn" onClick={forward}>{props.scope.startsWith("task:") ? t("작업에 보내기") : t("메인에 보내기")}</button>
+              <button class="btw-act" title={t("답 복사")} onClick={() => copy(x().answer)}>
+                <Icon name={copied() ? "check" : "copy"} size={13} />
+                {copied() ? t("복사했어요") : t("복사")}
+              </button>
+              <button class="btw-act" title={`${t("사이드 채팅으로 이어가기")} ${shortcutHint("side")}`} onClick={toSide}>
+                <Icon name="message" size={13} />
+                {t("사이드 채팅")}
+              </button>
+              <button class="btw-act main" onClick={forward}>
+                <Icon name="handoff" size={13} />
+                {props.scope.startsWith("task:") ? t("작업에 보내기") : t("메인에 보내기")}
+              </button>
             </div>
           </Show>
         </div>
@@ -189,7 +212,7 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
   for (const sk of skillsIn(state.space).filter((x) => x.menu))
     out.push({ section: t("스킬"), icon: "skill", label: sk.name, desc: lineOf({ name: sk.name, description: sk.description, kind: "mine" }) || undefined, run: ({ insert }) => insert(`/${sk.name} `) });
   out.push({ section: t("옆에서"), icon: "bolt", label: t("짧은 질문"), desc: "/btw", run: ({ insert }) => insert("/btw ") });
-  out.push({ section: t("옆에서"), icon: "message", label: t("옆 대화"), keys: shortcutHint("side"), run: () => openPanel("side") });
+  out.push({ section: t("옆에서"), icon: "message", label: t("사이드 채팅"), keys: shortcutHint("side"), run: () => openPanel("side") });
   return out;
 }
 
@@ -252,8 +275,8 @@ export function SideChat() {
           ref={input}
           rows={1}
           id="side-input"
-          placeholder={t("옆 대화에 묻기")}
-          aria-label={t("옆 대화에 묻기")}
+          placeholder={t("사이드 채팅에 묻기")}
+          aria-label={t("사이드 채팅에 묻기")}
           value={text()}
           onInput={(e) => {
             setText(e.currentTarget.value);

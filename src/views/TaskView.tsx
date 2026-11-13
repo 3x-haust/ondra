@@ -519,7 +519,7 @@ export function TaskView(props: { id: string }) {
                     // the same names as Main's list: verbs for what opens, then this task's own actions
                     btwCommand(() => `task:${task().id}`),
                     ...feedbackCommands(),
-                    { name: "side", desc: tr("옆 대화 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (showTool("side"), a.trim() && void sendSide(task().space, a)) },
+                    { name: "side", desc: tr("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (showTool("side"), a.trim() && void sendSide(task().space, a)) },
                     { name: "flow", desc: tr("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => showTool("flow") },
                     { name: "changes", desc: tr("변경 사항 열기"), keys: shortcutHint("changes"), icon: "diff", run: () => showTool("changes") },
                     { name: "files", desc: tr("파일 열기|panel"), keys: shortcutHint("files"), icon: "file", run: () => showTool("files") },

@@ -296,7 +296,7 @@ export default {
   "{n}개 확인 안 됨": "{n} unverified",
   "바이너리 분석": "Reverse engineering",
   "작업 흐름": "Flow",
-  "옆 대화": "Side chat",
+  "사이드 채팅": "Side chat",
   "터미널": "Terminal",
   "작업 정보": "Overview",
   "탭 {n}개 더": "{n} more tab|{n} more tabs",

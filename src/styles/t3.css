@@ -2594,6 +2594,7 @@ input[type="checkbox"] {
   font-size: var(--fs-2xs);
   font-weight: var(--fw-strong);
   letter-spacing: 0.02em;
+  text-transform: lowercase;
 }
 .btw-q {
   flex: 1;
@@ -2648,14 +2649,44 @@ input[type="checkbox"] {
 .btw-foot {
   display: flex;
   align-items: center;
-  gap: var(--s-12);
-  height: 32px;
-  padding: 0 var(--s-12);
+  gap: var(--s-2);
+  height: 40px;
+  padding: 0 var(--s-6) 0 var(--s-12);
   border-top: 1px solid var(--line-soft);
   font-size: var(--fs-xs);
 }
+/* the card's actions: quiet chips, the one that sends it on in the accent */
+.btw-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  transition: background-color 0.12s var(--ease), color 0.12s var(--ease);
+}
+.btw-act:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.btw-act.main {
+  margin-left: var(--s-4);
+  background: var(--accent-soft);
+  color: var(--accent-text, var(--accent));
+}
+.btw-act.main:hover {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--accent-text, var(--accent));
+}
 .btw-note {
+  min-width: 0;
+  overflow: hidden;
   color: var(--ink-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 :root[data-theme="dark"] .btw-card {
   background: #1c1c1f;
