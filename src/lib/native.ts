@@ -612,3 +612,10 @@ export const secretDelete = (o: { name: string; project?: string; folder?: strin
 /** Takes the keys, tokens and passwords this Mac's projects keep in .env into the keychain (values stay native). */
 export const secretSync = (projects: [string, string][]) =>
   call<{ saved: SavedSecrets; added: string[] }>("secret_sync", { projects }, { saved: { global: [], projects: {} }, added: [] });
+export interface SecretGroup {
+  names: string[];
+  /** project: undefined for a secret of every job; item: "NAME" or "dir/sub:NAME" */
+  places: { project?: string | null; item: string }[];
+}
+/** Every saved secret, those with the same value as one (compared natively, values never sent). */
+export const secretOverview = () => call<SecretGroup[]>("secret_overview", undefined, []);

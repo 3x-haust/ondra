@@ -478,6 +478,7 @@ pub fn run() {
             secrets::secret_set,
             secrets::secret_delete,
             secrets::secret_sync,
+            secrets::secret_overview,
             tools::worker_skills,
             tools::global_skills,
             tools::space_env,

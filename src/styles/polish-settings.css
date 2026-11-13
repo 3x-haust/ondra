@@ -1448,3 +1448,17 @@
   color: var(--ink-2);
   font-size: var(--fs-sm);
 }
+.settings-inner .sec-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.settings-inner .sec-place {
+  padding: 1px var(--s-6);
+  border-radius: var(--r-sm);
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}

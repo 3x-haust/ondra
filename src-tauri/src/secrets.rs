@@ -490,6 +490,55 @@ pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, fold
     Ok(saved)
 }
 
+/// One saved secret, where it lives: a project's item, or a global name (no project).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Place {
+    pub project: Option<String>,
+    pub item: String,
+}
+
+/// Saved secrets with the same value, shown as one.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Group {
+    /// the variable names they go by, without repeats
+    pub names: Vec<String>,
+    pub places: Vec<Place>,
+}
+
+/// Puts places with equal values together; `value` reads one (None: gone from the keychain, alone).
+pub fn group_by_value(places: Vec<Place>, value: impl Fn(&Place) -> Option<String>) -> Vec<Group> {
+    use sha2::{Digest, Sha256};
+    let mut groups: Vec<(Option<[u8; 32]>, Group)> = Vec::new();
+    for place in places {
+        let key = value(&place).map(|v| Sha256::digest(v.as_bytes()).into());
+        let name = split_item(&place.item).1.to_string();
+        match groups.iter_mut().find(|(k, _)| key.is_some() && k == &key) {
+            Some((_, g)) => {
+                if !g.names.contains(&name) {
+                    g.names.push(name);
+                }
+                g.places.push(place);
+            }
+            None => groups.push((key, Group { names: vec![name], places: vec![place] })),
+        }
+    }
+    let mut out: Vec<Group> = groups.into_iter().map(|(_, g)| g).collect();
+    out.sort_by(|a, b| a.names[0].cmp(&b.names[0]));
+    out
+}
+
+/// Every saved secret (global and every project's), those with the same value together. Values
+/// are compared here and never sent.
+#[tauri::command]
+pub fn secret_overview(app: AppHandle) -> Vec<Group> {
+    let saved = read_saved(&app);
+    let mut places: Vec<Place> = saved.global.iter().map(|n| Place { project: None, item: n.clone() }).collect();
+    for (p, items) in &saved.projects {
+        places.extend(items.iter().map(|i| Place { project: Some(p.clone()), item: i.clone() }));
+    }
+    group_by_value(places, |pl| store::get(&account(pl.project.as_deref(), &pl.item)))
+}
+
 /// Which secrets a job gets, as (variable name, keychain account): the global ones, then its
 /// project's over them; of a project's items with the same name, the one nearest the project's
 /// top (its own .env, or typed here) wins. The rest are only hidden from output: `masked`.
@@ -562,6 +611,22 @@ pub fn inject(app: &AppHandle, cmd: &mut Command, env: &[(String, String)]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_values_together() {
+        let pl = |p: Option<&str>, i: &str| Place { project: p.map(String::from), item: i.into() };
+        let values = |p: &Place| match p.item.as_str() {
+            "API_KEY" | "Deploy:OPENAI_KEY" => Some("same".to_string()),
+            "GONE" => None,
+            _ => Some(p.item.clone()),
+        };
+        let g = group_by_value(vec![pl(None, "API_KEY"), pl(Some("p1"), "API_KEY"), pl(Some("p2"), "Deploy:OPENAI_KEY"), pl(Some("p1"), "DB_TOKEN"), pl(None, "GONE"), pl(Some("p1"), "GONE")], values);
+        assert_eq!(g.len(), 4);
+        assert_eq!(g[0].names, vec!["API_KEY", "OPENAI_KEY"]);
+        assert_eq!(g[0].places.len(), 3);
+        // without a value nothing is merged
+        assert_eq!(g.iter().filter(|x| x.names == ["GONE"]).count(), 2);
+    }
 
     #[test]
     fn names() {

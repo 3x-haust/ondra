@@ -4,6 +4,8 @@ export default {
   "API 키와 비밀번호를 작업이 쓰되, 에이전트는 값을 보지 못하게 해요": "API keys and passwords jobs can use without the agent seeing the values",
   "적용 범위": "Applies to",
   "모든 작업": "All jobs",
+  "지운 프로젝트": "Removed project",
+  "{n}곳에서 삭제": "Delete from {n} places",
   "값": "Value",
   "없어요": "None",
   "프로젝트 .env에서 {n}개를 가져왔어요": "Brought in {n} from project .env files",

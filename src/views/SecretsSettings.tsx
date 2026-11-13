@@ -5,7 +5,7 @@
 // comes back to this page; jobs get it in their shell and the model sees [secret:NAME] wherever
 // it would show (extensions/secrets.ts).
 import { createMemo, createResource, createSignal, For, onMount, Show } from "solid-js";
-import { secretDelete, secretList, secretSet, secretSync, type SavedSecrets } from "../lib/native";
+import { secretDelete, secretList, secretOverview, secretSet, secretSync, type SavedSecrets, type SecretGroup } from "../lib/native";
 import { state } from "../state/store";
 import { toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
@@ -20,12 +20,21 @@ const split = (item: string) => {
 };
 
 export function SecretsSettings() {
-  const [saved, { mutate }] = createResource(secretList, { initialValue: { global: [], projects: {} } as SavedSecrets });
+  const [saved, { mutate: setSaved }] = createResource(secretList, { initialValue: { global: [], projects: {} } as SavedSecrets });
+  // 전체: every secret, the ones with the same value (base64 of one key in two places …) as one row
+  const [groups, { refetch: regroup }] = createResource(secretOverview, { initialValue: [] as SecretGroup[] });
+  const mutate = (s: SavedSecrets) => (setSaved(s), regroup());
   // this Mac's projects of the current workspace (a project on another Mac has its .env there)
   const projects = createMemo(() => (state.projects ?? []).filter((p) => p.space === state.space && !p.host));
   const [scope, setScope] = createSignal(GLOBAL);
   const project = () => projects().find((p) => p.id === scope());
-  const items = () => (scope() === GLOBAL ? saved().global : (saved().projects[scope()] ?? []));
+  const items = () => saved().projects[scope()] ?? [];
+  const placeLabel = (pl: SecretGroup["places"][number]) => {
+    const p = pl.project ? (state.projects ?? []).find((x) => x.id === pl.project) : undefined;
+    const dir = split(pl.item).dir;
+    return pl.project ? `${p?.name ?? t("지운 프로젝트")}${dir ? `/${dir}` : ""}` : t("모든 작업");
+  };
+  const groupKey = (g: SecretGroup) => g.places.map((pl) => `${pl.project ?? ""}/${pl.item}`).join("|");
   const count = (id: string) => saved().projects[id]?.length ?? 0;
   const [name, setName] = createSignal("");
   const [value, setValue] = createSignal("");
@@ -75,18 +84,52 @@ export function SecretsSettings() {
     }
     setConfirm(null);
   };
+  // a merged row goes from every place it is saved
+  const removeGroup = async (g: SecretGroup) => {
+    try {
+      let last: SavedSecrets | undefined;
+      for (const pl of g.places) {
+        const p = pl.project ? (state.projects ?? []).find((x) => x.id === pl.project) : undefined;
+        last = await secretDelete({ name: pl.item, project: pl.project ?? undefined, folder: p?.folder });
+      }
+      if (last) mutate(last);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "bad");
+    }
+    setConfirm(null);
+  };
 
   return (
     <>
       <PageHead tab="secrets">
         <select class="select" aria-label={t("적용 범위")} value={scope()} onChange={(e) => (setScope(e.currentTarget.value), setAskIgnore(false), setConfirm(null))}>
-          <option value={GLOBAL}>{t("모든 작업")}</option>
+          <option value={GLOBAL}>{t("전체")}</option>
           <For each={projects()}>{(p) => <option value={p.id}>{count(p.id) ? `${p.name} · ${count(p.id)}` : p.name}</option>}</For>
         </select>
       </PageHead>
 
       <div class="set-group">
-        <For each={items()} fallback={<div class="empty-line">{t("없어요")}</div>}>
+        <Show when={scope() === GLOBAL}>
+          <For each={groups()} fallback={<div class="empty-line">{t("없어요")}</div>}>
+            {(g) => (
+              <div class="set-row sec-row">
+                <code class="sec-key">{g.names.join(" · ")}</code>
+                <span class="sec-places">
+                  <For each={g.places}>{(pl) => <span class="sec-place">{placeLabel(pl)}</span>}</For>
+                </span>
+                <span class="spacer" />
+                <Show
+                  when={confirm() === groupKey(g)}
+                  fallback={<button class="icon-btn sm" title={t("삭제")} aria-label={t("{name} 삭제", { name: g.names[0] })} onClick={() => setConfirm(groupKey(g))}><Icon name="trash" size={14} /></button>}
+                >
+                  <button class="btn sm danger" onClick={() => removeGroup(g)}>{g.places.length > 1 ? t("{n}곳에서 삭제", { n: g.places.length }) : t("삭제")}</button>
+                  <button class="btn ghost sm" onClick={() => setConfirm(null)}>{t("취소")}</button>
+                </Show>
+              </div>
+            )}
+          </For>
+        </Show>
+        <For each={scope() === GLOBAL ? [] : items()} fallback={<Show when={scope() !== GLOBAL}><div class="empty-line">{t("없어요")}</div></Show>}>
           {(item) => (
             <div class="set-row sec-row">
               <code class="sec-key">{split(item).name}</code>
