@@ -13,7 +13,7 @@
       "id": "demo-after",
       "text": "Computer use 다 되면 데모 영상 찍어서 PR에 넣어줘",
       "expect": {
-        "appendOrAfter": "t-cu"
+        "appendOrAfter": ["t-cu", "t-qa"]
       }
     },
     {

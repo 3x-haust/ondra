@@ -658,7 +658,8 @@ async function ensureCaptain(space: string) {
   // Called before the next request; pump already owns the busy flag here.
   if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
-  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "");
+  // a simulation in a space this app has no account for (an empty dev app for evals) runs on any account
+  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "") ?? (worlds.has(space) ? state.accounts[0] : undefined);
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   listen(agent, {
@@ -728,7 +729,7 @@ async function ensureCaptain(space: string) {
     // the same system prompt in every main chat (any space, any project): one
     // shared cached prefix per account. What differs per chat (space and project
     // rules) goes into the first message instead.
-    ...[CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
+    ...[simSystem.get(space) ?? CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
   // a simulated project's folder is made up, another Mac's isn't on this one: main runs in the space's folder then
@@ -1315,6 +1316,15 @@ interface World {
 }
 const worlds = new Map<string, World>();
 let simSeq = 0;
+/** dev evals (evals/gepa): a simulated chat's own system prompt in place of CAPTAIN_SYSTEM */
+const simSystem = new Map<string, string>();
+/** main's system prompt as it ships (the seed the prompt optimizer starts from) */
+export const mainSystem = () => CAPTAIN_SYSTEM;
+/** dev evals (evals/gepa): one question to the space's model, no tools, nothing kept */
+export async function evalOneShot(prompt: string): Promise<string> {
+  const { oneShot } = await import("./aside");
+  return oneShot(state.space, "~", prompt);
+}
 
 export interface SimCase {
   space: SpaceId;
@@ -1330,6 +1340,8 @@ export interface SimCase {
   chat?: { from: "me" | "captain"; text: string }[];
   /** the user's messages, or what main is told when a fork or a handed-down project ends */
   messages: (string | { event: Event; text: string })[];
+  /** dev evals only: main's system prompt to try instead of the shipped one */
+  system?: string;
 }
 export interface SimStep {
   text: string;
@@ -1349,6 +1361,8 @@ export interface SimStep {
 export async function simulateMain(c: SimCase): Promise<SimStep[]> {
   const pid = (name: string) => `p-${name.toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-")}`;
   const now = Date.now();
+  // an app without the case's space (an empty dev app for evals) gets a plain one
+  if (!state.spaces.some((s) => s.id === c.space)) setState("spaces", (l) => [...l, { id: c.space, label: c.space === "work" ? "회사" : c.space === "home" ? "개인" : c.space, folder: "~", rules: "" }]);
   const w: World = {
     projects: (c.projects ?? []).map((p) => ({ id: pid(p.name), space: c.space, name: p.name, folder: p.folder })),
     repos: c.repos,
@@ -1358,6 +1372,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     decisions: (c.tasks ?? []).filter((t) => t.question).map((t) => ({ taskId: t.id, question: t.question! })),
   };
   const key = `sim${++simSeq}:${c.space}${c.project ? `~${pid(c.project)}` : ""}`;
+  if (c.system) simSystem.set(key, c.system);
   const projectId = c.project ? pid(c.project) : undefined;
   w.tasks = (c.tasks ?? []).map(
     (t) =>
@@ -1422,6 +1437,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     markDead(agent);
     attached.delete(key);
     worlds.delete(key);
+    simSystem.delete(key);
     sentOf.delete(key);
     for (const m of [texts, errors, settled, accountOf, statsOf, genOf, idleTimers, sigOf]) m.delete(key);
   }
