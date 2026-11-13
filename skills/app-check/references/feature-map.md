@@ -48,6 +48,8 @@ One or two sentences: what a user does here.
 - What happens on success, on cancel, on an error, when empty, after a reload.
 
 ## Checking it
+<!-- recipes run one after another on one copy: use text unique to the recipe
+     and read ids from the output, never assume an empty store or fixed ids -->
 - Preconditions: (account, data, a flag), then each user action paired with
   the exact driver command and the result to see.
 - The state to wait for before checking, and what to read (screen, file,
