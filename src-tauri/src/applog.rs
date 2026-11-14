@@ -20,6 +20,15 @@ fn day_ok(day: &str) -> bool {
     day.len() == 10 && day.chars().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() })
 }
 
+/// The newer half of a full log, from a line start, under a line saying older lines were dropped.
+fn newest_half(text: &[u8]) -> Vec<u8> {
+    let from = text.len().saturating_sub((MAX_FILE / 2) as usize);
+    let start = text[from..].iter().position(|&b| b == b'\n').map(|i| from + i + 1).unwrap_or(text.len());
+    let mut out = b"(older lines of this day were dropped: the file reached its size limit)\n".to_vec();
+    out.extend_from_slice(&text[start..]);
+    out
+}
+
 /// Append lines to that day's file; files from before `keep_from` are removed.
 #[tauri::command]
 pub fn log_append(app: AppHandle, day: String, lines: Vec<String>, keep_from: Option<String>) -> Result<(), String> {
@@ -40,8 +49,13 @@ pub fn log_append(app: AppHandle, day: String, lines: Vec<String>, keep_from: Op
         }
     }
     let path = d.join(format!("ondra-{day}.log"));
+    // full: the day's older half goes, the newest lines keep coming. Stopping here lost what
+    // mattered most: on 11-13 console noise filled the file by 11:00 and a job's engine exit at
+    // 17:23 was never written.
     if fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > MAX_FILE {
-        return Ok(());
+        if let Ok(old) = fs::read(&path) {
+            let _ = fs::write(&path, newest_half(&old));
+        }
     }
     let mut f = OpenOptions::new().create(true).append(true).open(&path).map_err(|e| e.to_string())?;
     let mut text = lines.join("\n");
@@ -129,5 +143,17 @@ mod tests {
         let l = line("2026-11-11 10:20:01", "ERROR", "native", "panic at /Users/me/x.rs:1\n  boom", "/Users/me");
         assert_eq!(l, "2026-11-11 10:20:01 ERROR [native] panic at ~/x.rs:1 ⏎ boom\n");
         assert!(day_ok(&now().1));
+    }
+
+    #[test]
+    fn a_full_log_keeps_its_newest_lines_from_a_line_start() {
+        let noise = "2026-11-13 10:59:00 [vite] noise\n";
+        let mut text = noise.repeat((MAX_FILE as usize / noise.len()) + 10);
+        text.push_str("17:23:01 [engine] t:job exited (143)\n");
+        let out = String::from_utf8(newest_half(text.as_bytes())).unwrap();
+        assert!(out.starts_with("(older lines of this day were dropped"));
+        assert!(out.ends_with("exited (143)\n"));
+        assert!(out.len() as u64 <= MAX_FILE / 2 + 100);
+        assert!(out.lines().skip(1).all(|l| l.starts_with("2026-11-13 10:59:00") || l.starts_with("17:23:01")));
     }
 }
