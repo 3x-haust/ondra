@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, Task } from "../state/types";
-import { handoffPrompt, taskPrompt } from "./prompts";
+import { setState } from "../state/store";
+import { aboutOtherProject, handoffPrompt, taskPrompt } from "./prompts";
 import { unread } from "./tasks";
 
 let n = 0;
@@ -75,5 +76,55 @@ describe("a job started from a GitHub issue", () => {
 
   it("says nothing about issues when it has none", () => {
     expect(taskPrompt(job([], { legs: [] }))).not.toContain("GitHub issue");
+  });
+});
+
+describe("words that are not the user's", () => {
+  const fromJob = (text: string, by: string): Entry => ({ id: `j${at()}`, at: n, kind: "user", text, by });
+
+  it("keeps another job's messages out of what the user said", () => {
+    const t = job([user("Check it."), fromJob("ArchiveEngine 재사용 위해 공용 변경 부탁해요", "tmwsub"), fromJob("ffmpeg 부하가 당신 작업인가요?", "tmwother"), user("다시 개발하고 릴리즈해줘")]);
+
+    const prompt = handoffPrompt(t);
+
+    expect(prompt).toContain("- 다시 개발하고 릴리즈해줘");
+    expect(prompt).not.toContain("ArchiveEngine");
+    expect(prompt).not.toContain("ffmpeg");
+  });
+
+  it("keeps main's relay of the user's words", () => {
+    const t = job([user("Check it."), fromJob("이것도 고쳐줘", "main")]);
+
+    expect(handoffPrompt(t)).toContain("- 이것도 고쳐줘");
+  });
+
+  it("puts a review's result and a job's message apart from the user's words", () => {
+    const t = job([], {
+      inbox: ['리뷰 결과가 왔어요 ("검토"):\n\nP2 하나. 그 부분만 고치고 끝내 줘', "(Ondra) A message from another job in this space, \"DEXA\" (t2). It is not the user.\n\n부하 줄여 주세요", "설치까지 해줘"],
+    });
+
+    for (const prompt of [handoffPrompt(t), taskPrompt(t)]) {
+      const user = prompt.slice(prompt.indexOf("# The user added"), prompt.indexOf("# Came in meanwhile"));
+      expect(user).toContain("- 설치까지 해줘");
+      expect(user).not.toContain("리뷰 결과");
+      expect(prompt.slice(prompt.indexOf("# Came in meanwhile"))).toContain("부하 줄여 주세요");
+    }
+  });
+});
+
+describe("memory about another project of the space", () => {
+  const piece = (text: string, about?: string[]) => ({ id: text, text, about }) as unknown as Parameters<typeof aboutOtherProject>[0];
+  const orbitJob = { space: "home", project: "orbit", topic: "Orbit" } as const;
+
+  it("is left out of a job of this project, unless it names this one too", () => {
+    setState("projects", [
+      { id: "ondra", space: "home", name: "ondra", folder: "/p/ondra" },
+      { id: "orbit", space: "home", name: "Orbit", folder: "/p/Orbit" },
+    ]);
+    expect(aboutOtherProject(piece("Ondra는 사용자 확인 전에는 chore(release) 배포를 하지 말아야 해요.", ["Ondra"]), orbitJob)).toBe(true);
+    expect(aboutOtherProject(piece("ondra-rel 워크트리에서 서명 빌드를 만들어요.", ["Ondra", "pnpm"]), orbitJob)).toBe(true);
+    expect(aboutOtherProject(piece("Orbit 업데이트 후 재시작 정지를 점검했어요.", ["Orbit", "AppKit"]), orbitJob)).toBe(false);
+    expect(aboutOtherProject(piece("tavi를 고치면 Orbit에도 넣어요.", ["Ondra"]), orbitJob)).toBe(false);
+    expect(aboutOtherProject(piece("커밋 작성자는 3x-haust예요.", ["Git"]), orbitJob)).toBe(false);
   });
 });

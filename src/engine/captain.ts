@@ -143,7 +143,7 @@ export function addThought(key: string, delta: string) {
 }
 
 /** Send a request. Returns the id of the reply message to watch (empty if nothing was sent). */
-export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string } = {}): string {
+export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string } = {}): string {
   const t = text.trim();
   if (!t) return "";
   track("message_sent", { where: "main" });
@@ -153,7 +153,8 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
   setState("captain", (list) => [...list.slice(-300), me, reply]);
   followUps.set(space, 0);
-  queues.set(space, [...(queues.get(space) ?? []), { text: t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
+  // `note`: for the model only (the chat shows the user's words)
+  queues.set(space, [...(queues.get(space) ?? []), { text: opts.note ? `${t}\n\n${opts.note}` : t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
   void pump(space);
   return reply.id;
 }
@@ -353,7 +354,7 @@ export function reportUp(space: string) {
     const rowInMain = (id: string) => state.captain.some((m) => m.space === sp(space) && !m.project && handsTo(m, id));
     const text = [
       `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
-      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}${rowInMain(t.id) ? "" : " (no row in your chat)"}`).join(" | ")}` : "",
+      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.status === "failed" ? ` — ${t.error ?? ""}` : t.summary ? ` — ${t.summary}` : ""}${rowInMain(t.id) ? "" : " (no row in your chat)"}`).join(" | ")}` : "",
       answers ? `What the project reported:\n${answers}` : "",
       reported ? `What the jobs reported:\n${reported}` : "",
       asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((x) => `- ${x}`).join("\n")}` : "",

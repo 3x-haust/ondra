@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { startRpc } from "./rpc";
-import { blocking, pauseTask, PLAN_NUDGES, PLAN_QUIET, startTask } from "./tasks";
+import { blocking, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Total fix",
@@ -116,12 +116,33 @@ describe("plan reminder", () => {
     expect(reminders("t:job")).toHaveLength(0);
   });
 
-  it("reminds a fork once per quiet stretch, capped", async () => {
+  it("leaves a fork alone in its first minutes, however many calls it makes", async () => {
     await harness((agent, n, emit) => {
       if (agent !== "t:job" || n !== 1) return;
       emit({ type: "agent_start" });
       say(emit, PLAN);
-      bashCalls(emit, PLAN_QUIET * (PLAN_NUDGES + 2));
+      bashCalls(emit, PLAN_QUIET * 3);
+    });
+    setState("tasks", [job()]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(sent("t:job", "prompt")).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(reminders("t:job")).toHaveLength(0);
+  });
+
+  it("reminds a fork once per quiet stretch, capped", async () => {
+    const now = vi.spyOn(Date, "now");
+    let clock = Date.now();
+    now.mockImplementation(() => clock);
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job" || n !== 1) return;
+      emit({ type: "agent_start" });
+      say(emit, PLAN);
+      // each stretch of calls takes longer than the quiet time
+      for (let i = 0; i < PLAN_NUDGES + 2; i++) {
+        clock += PLAN_QUIET_MS;
+        bashCalls(emit, PLAN_QUIET);
+      }
     });
     setState("tasks", [job()]);
     await startTask("job", true);
