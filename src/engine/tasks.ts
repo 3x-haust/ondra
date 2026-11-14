@@ -183,7 +183,6 @@ export async function accountEnv(accountId: string): Promise<Env> {
   return dir && accountId !== "default" ? [["PI_CODING_AGENT_DIR", dir], ...cache] : cache;
 }
 
-/** What one turn used (null if nothing moved). */
 const browserCheckAt = new Map<string, number>();
 function recheckBrowser(space: string) {
   if (Date.now() - (browserCheckAt.get(space) ?? 0) < 30_000) return;
@@ -191,8 +190,9 @@ function recheckBrowser(space: string) {
   void browserCheck(space).catch(() => {});
 }
 
+/** What one turn used (null if nothing moved). */
 export function turnUsage(a: TokenStats, b: TokenStats, accountId: string, genMs?: number, ms?: number): Usage | null {
-  const reset = b.input < a.input || b.cacheRead < a.cacheRead;
+  const reset = b.input < a.input || b.cacheRead < a.cacheRead || b.output < a.output;
   const from = reset ? zero() : a;
   const u = { input: b.input - from.input, output: b.output - from.output, cacheRead: b.cacheRead - from.cacheRead, cacheWrite: b.cacheWrite - from.cacheWrite };
   if (!u.input && !u.output && !u.cacheRead) return null;
@@ -1391,6 +1391,13 @@ function handlers(id: string, run: Run) {
       const t = taskById(id);
       // the app quitting took it down: it stays running and picks up again when the app opens
       if (appQuitting()) return;
+      // it waits on the user's answer: nothing is lost (the answer starts it again, with the
+      // question and the answer), and failing it drops the question the user hasn't read yet
+      if (t && runs.get(id) === run && t.status === "waiting" && state.decisions.some((d) => d.taskId === id && !d.ui)) {
+        logWarn("engine", `${id} engine exited (${code ?? "signal"}) while it waited on the user: the answer starts it again`);
+        runs.delete(id);
+        return;
+      }
       if (t && runs.get(id) === run && (t.status === "running" || t.status === "waiting")) {
         // it died while working (a job that ended, or one Ondra stopped, is no news)
         const tail = stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ");
@@ -1737,6 +1744,15 @@ export const isRefusedRequest = (e: string) => /\bBad Request\b|"status":\s*400\
 
 /** A handoff card made from the thread, for a session that couldn't write its own. */
 export function cardFromThread(t: Task): Handoff {
+  // the card the session before it wrote holds what this thread alone can't (findings, evidence):
+  // it goes on, with what the cut-off session said after it
+  let at = -1;
+  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "handoff") { at = i; break; }
+  if (at >= 0) {
+    const last = (t.entries[at] as Extract<Task["entries"][number], { kind: "handoff" }>).handoff;
+    const since = t.entries.slice(at + 1).flatMap((e) => (e.kind === "text" && e.text.trim() ? [e.text.trim().replace(/```blocks[\s\S]*?```/g, "").trim().slice(0, 600)] : [])).filter(Boolean).slice(-4);
+    return mergeCards(last, { did: since, next: `${last.next ?? "Pick up where the last session stopped"} (the session after this card was cut off by a provider error: check where it stood first)`, evidence: [] });
+  }
   const said = t.entries.flatMap((e) => (e.kind === "text" && e.text.trim() ? [e.text.trim().replace(/```blocks[\s\S]*?```/g, "").trim().slice(0, 600)] : [])).filter(Boolean).slice(-4);
   const done = t.plan.filter((p) => p.state === "done").map((p) => p.text);
   const open = t.plan.find((p) => p.state === "now" || p.state === "todo")?.text;
@@ -2399,6 +2415,40 @@ async function cutSilent(id: string, run: Run) {
   await request(agentOf(id), { type: "abort" }, 8000).catch(() => {});
 }
 
+/**
+ * The Mac slept for `ms`: the watchdogs' clocks move on by that much. On 11-13 a closed lid made
+ * every dark wake look like ten silent minutes: the job was cut four times and told it "reasoned
+ * too long", about five hours of a night's work.
+ */
+export function sleptFor(ms: number) {
+  for (const [id, run] of runs) {
+    if (run.msgAt) run.msgAt += ms;
+    if (run.heardAt) run.heardAt += ms;
+    for (const sh of taskById(id)?.shells ?? []) {
+      if (!run.tools.has(sh.id)) continue;
+      const was = run.changed?.get(sh.id);
+      if (was) run.changed!.set(sh.id, was + ms);
+      else (run.changed ??= new Map()).set(sh.id, Date.now());
+    }
+  }
+}
+
+let wallAt = 0;
+let monoAt = 0;
+/**
+ * How long the Mac slept since the last look: how far the wall clock ran ahead of the monotonic
+ * one, which stops while the Mac sleeps. Not a late timer: a hidden window's timers are throttled
+ * without any sleep, and the watchdogs must still run then.
+ */
+function sleptSinceLastLook(): number {
+  const wall = Date.now();
+  const mono = performance.now();
+  const drift = wallAt ? wall - wallAt - (mono - monoAt) : 0;
+  wallAt = wall;
+  monoAt = mono;
+  return drift > 30_000 ? drift : 0;
+}
+
 export function stopStalledCommands(now = Date.now()) {
   for (const [id, run] of runs) {
     if (!run.streaming) continue;
@@ -2702,8 +2752,11 @@ export async function decide(decisionId: string, optionId: string) {
     finish(t.id, lastReport(t) ?? "완료");
     return;
   }
-  // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself
-  if (meansStop(label)) {
+  // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself. Not an option
+  // the job offered ("영상 유지 목표로 보류" parked a job that would have wrapped up itself):
+  // that is its answer
+  const offered = d.kind !== "stalled" && d.options.some((o) => o.id === optionId);
+  if (!offered && meansStop(label)) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
     stopTask(t.id);
     return;
@@ -2970,7 +3023,14 @@ export function startScheduler() {
   // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
   setTimeout(() => void watchPrs(), 40_000);
   setInterval(() => void watchPrs(), 3 * 60_000);
-  setInterval(() => stopStalledCommands(), 10_000);
+  setInterval(() => {
+    const slept = sleptSinceLastLook();
+    if (slept) {
+      logInfo("task", `the Mac slept ${Math.round(slept / 60_000)} min: watchdogs move on by that`);
+      sleptFor(slept);
+    }
+    stopStalledCommands();
+  }, 10_000);
   createRoot(() => {
     createEffect(
       on(
