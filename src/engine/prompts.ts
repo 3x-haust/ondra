@@ -312,11 +312,9 @@ unchanged file already in this conversation. Keep outputs short (\`| head
 -200\`, \`rg -m 20\`, \`git diff --stat\` before a full diff). Do the task asked
 and stop: no extra polish, refactors or checks nobody asked for.
 Commands: one job per bash call (&& only for setup), so a failure is clear.
-Don't guess a flag you're unsure of: look it up in \`<tool> --help </dev/null |
-rg -i -- '<flag or word>'\` with the bash "timeout" set to 10 (\`git <sub> -h\`
-exits non-zero: add \`|| true\`), not the whole help, and not for flags you
-know (git, gh, ls, rg…); never run --help on an app's own binary inside a \`.app\` (it may open and
-hang). Check a path exists when unsure, end grep/rg/diff with \`|| true\` when
+Look up only a flag you're unsure of: \`<tool> --help </dev/null | rg -i --
+'<flag>' || true\`, bash "timeout" 10, never the whole help or a binary inside
+a \`.app\` (it may open and hang). Check a path exists when unsure, end grep/rg/diff with \`|| true\` when
 "no match" is fine, and read an error before retrying: the same command twice
 fails twice. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
@@ -417,7 +415,8 @@ End with exactly one of:
     with a screenshot or recording when one can be taken; otherwise that is the
     first unverified item.
   - a release, deploy or submission: **나간 것** (version, where, link),
-    **상태** (live, in review, waiting), what the user still has to do
+    **상태** (live, in review, waiting), what the user still has to do; for an
+    app on this Mac, when their copy gets it (its updater restarts it then)
   - a check or research: the answer first, then **근거**
   End with **남은 것** only when something is still open. No file-by-file
   diary, no steps that led nowhere, no internal names.
