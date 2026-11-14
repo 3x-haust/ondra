@@ -400,6 +400,10 @@ export function tellJob(c: Caller, id: string, message: string, o: { now?: boole
   const from = c.task ? c.task.id : "main";
   if (c.task) {
     if (userParked(t)) return { ok: false, line: "the user stopped or ended that job themselves; tell the user instead of restarting it" };
+    // a finished job of another project isn't started up again by a job: its question or request
+    // became new work there (a release job asking a done Ondra job started an Ondra job)
+    if (finished(t) && t.project !== c.task.project)
+      return { ok: false, line: `not sent: that job has finished and is another project's; read what it did with job_read ${t.id}, and if work is needed there, say so to the user instead` };
     const why = tellGuard(from, t.id, o.at, finished(t));
     if (why) return { ok: false, line: `not sent: ${why}` };
   }

@@ -159,6 +159,13 @@ describe("job_tell", () => {
     expect(taskById("t-old")!).toMatchObject({ status: "queued", inbox: ["다시 해봐요"] });
     expect(taskById("t-old")!.entries.slice(-1)[0]).toMatchObject({ kind: "user", by: "main" });
 
+    // another project's finished job is read, not started up again
+    const cross = tellJob(callerOf("t-guest")!, "t-redesign", "모바일 히어로도 손봐줘요");
+    expect(cross).toMatchObject({ ok: false });
+    expect(cross.line).toContain("job_read t-redesign");
+    expect(state.tasks.filter((x) => x.follows === "t-redesign")).toHaveLength(0);
+
+    setState("tasks", (t) => t.id === "t-guest", "project", "p-site");
     const r = tellJob(callerOf("t-guest")!, "t-redesign", "모바일 히어로도 손봐줘요");
     expect(r.line).toMatch(/^it had finished: a new job carries it on with this \(t/);
     const next = taskById(r.taskId!)!;
