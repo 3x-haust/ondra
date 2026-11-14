@@ -415,4 +415,5 @@ export default {
   "브랜치를 올리고 풀 리퀘스트를 열어요": "Push the branch and open a pull request",
   "이 작업이 바꾼 것을 지워요": "Throw away what this job changed",
   "병합하지 못했어요": "Couldn't merge",
+  "\"{title}\" 작업이 이어받아 진행 중이에요. 그 작업에서 계속해 주세요": "\"{title}\" carried this job on and is still working. Continue there",
 } satisfies Record<string, string>;

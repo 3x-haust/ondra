@@ -90,3 +90,41 @@ describe("a job's own result", () => {
     expect(jobShot(job({ entries: [{ id: "e1", at: 2, kind: "text", text: "끝" }] }))).toBeUndefined();
   });
 });
+
+describe("a job's report", () => {
+  beforeEach(() => {
+    setState(freshState());
+    setState("results", []);
+  });
+
+  it("is its closing words, not every line of narration on the way", () => {
+    const t = job({
+      entries: [
+        { id: "e0", at: 1, kind: "user", text: "리서치 해줘" },
+        { id: "e1", at: 2, kind: "text", text: "증명을 붙여 설명할게요." },
+        { id: "e2", at: 3, kind: "tool", tool: { name: "bash", kind: "bash", target: "python3 check.py", ok: true } },
+        { id: "e3", at: 4, kind: "text", text: "이제 PDF를 만들게요." },
+        { id: "e4", at: 5, kind: "tool", tool: { name: "bash", kind: "bash", target: "make pdf", ok: true } },
+        { id: "e5", at: 6, kind: "text", text: "**있어요.** f(x)=|x| 는 f(f(x))=f(x)예요." },
+        { id: "e6", at: 7, kind: "text", text: "PDF도 첨부했어요." },
+      ],
+    });
+    setState("tasks", [t]);
+    keepJobResult(t);
+    expect(resultOfTask("j1")!.answers[0].text).toBe("**있어요.** f(x)=|x| 는 f(f(x))=f(x)예요.\n\nPDF도 첨부했어요.");
+  });
+
+  it("is its last words when it wrote nothing after its last tool call", () => {
+    const t = job({
+      entries: [
+        { id: "e0", at: 1, kind: "user", text: "고쳐 줘" },
+        { id: "e1", at: 2, kind: "text", text: "고치는 중이에요." },
+        { id: "e2", at: 3, kind: "text", text: "가드를 고쳤어요." },
+        { id: "e3", at: 4, kind: "tool", tool: { name: "bash", kind: "bash", target: "git commit", ok: true } },
+      ],
+    });
+    setState("tasks", [t]);
+    keepJobResult(t);
+    expect(resultOfTask("j1")!.answers[0].text).toBe("가드를 고쳤어요.");
+  });
+});

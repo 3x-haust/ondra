@@ -312,9 +312,10 @@ unchanged file already in this conversation. Keep outputs short (\`| head
 -200\`, \`rg -m 20\`, \`git diff --stat\` before a full diff). Do the task asked
 and stop: no extra polish, refactors or checks nobody asked for.
 Commands: one job per bash call (&& only for setup), so a failure is clear.
-Never guess a CLI's flags: check \`<tool> --help </dev/null\` with the bash
-"timeout" set to 10 first (\`git <sub> -h\` exits non-zero: add \`|| true\`);
-never run --help on an app's own binary inside a \`.app\` (it may open and
+Don't guess a flag you're unsure of: look it up in \`<tool> --help </dev/null |
+rg -i -- '<flag or word>'\` with the bash "timeout" set to 10 (\`git <sub> -h\`
+exits non-zero: add \`|| true\`), not the whole help, and not for flags you
+know (git, gh, ls, rg…); never run --help on an app's own binary inside a \`.app\` (it may open and
 hang). Check a path exists when unsure, end grep/rg/diff with \`|| true\` when
 "no match" is fine, and read an error before retrying: the same command twice
 fails twice. Don't pass a short "timeout" to anything that renders, converts,
@@ -510,7 +511,10 @@ route each item:
   than a few searches, or the user asks for research, a survey, a comparison
   or a report ("리서치", "조사해서 정리", "다 검색해서", "논문 찾아", "보고서",
   "PDF로"), route a fork to research it: it uses the deep-research skill and
-  comes back with a visual report and a PDF. Give "text" (markdown, as short as the
+  comes back with a visual report and a PDF. The word alone doesn't make it
+  research: a question with a short, checkable answer (a math fact, an example,
+  a definition: "f(f(x))=f(x)인 함수 있어? 리서치 해줘") is answered here, with a
+  source or the check, unless they asked for a report or a PDF. Give "text" (markdown, as short as the
   question allows) and optional "blocks". Explain with a picture, the way an
   artifact would, and keep the prose to a line or two around it: how something
   works or what a thing is made of → a board in "text"; situations and what
@@ -852,8 +856,21 @@ export function memoryPrompt(list: Memory[]): string {
 
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
 export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}\n${siteWords(t.ask).join(" ")}`;
+/**
+ * A space-wide piece about another of the space's projects and not this job's ("Ondra 릴리즈는
+ * ondra-rel 워크트리에서", "Ondra는 사용자 확인 전에 배포하지 않아요"): given to an Orbit job as a ★
+ * rule, it read as Orbit's. Pieces that name this project too, or no project, stay.
+ */
+export function aboutOtherProject(m: Memory, t: Pick<Task, "space" | "project" | "topic">): boolean {
+  const names = (state.projects ?? []).filter((p) => p.space === t.space).map((p) => ({ id: p.id, name: p.name.toLowerCase() })).filter((p) => p.name.length >= 3);
+  const mine = names.find((p) => p.id === t.project)?.name ?? t.topic.toLowerCase();
+  const said = `${(m.about ?? []).join(" ")} ${m.text}`.toLowerCase();
+  if (mine.length >= 3 && said.includes(mine)) return false;
+  return names.some((p) => p.id !== t.project && p.name !== mine && ((m.about ?? []).some((a) => a.toLowerCase() === p.name) || said.startsWith(p.name)));
+}
+
 export function relatedMemory(t: Task): Memory[] {
-  const pool = memoriesFor(t.space, homeDir(t), t.reach);
+  const pool = memoriesFor(t.space, homeDir(t), t.reach).filter((m) => !aboutOtherProject(m, t));
   const sites = siteWords(t.ask);
   const found = recall(pool, relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic} ${sites.join(" ")}`, folder: (m) => m.scope === "project" });
   // a site the work links to (Notion, Figma …): how this user reads it, even when the task's words don't match
@@ -924,6 +941,24 @@ function issueNote(t: Task): string[] {
   ];
 }
 
+/**
+ * Words the app or another job wrote, not the user: Ondra's notes, a subagent's or a review's
+ * result, another job's message (the heads in tasks.ts resultHead, crosscheck.ts, jobs.ts fromJob).
+ * Shown to the model under "the user", a review's "fix only this and end" or another job's
+ * request read as the user's orders and outranked what the user had asked.
+ */
+export const notTheUser = (m: string) => /^(\(Ondra|끝내기 전에 빠진 게 있어요|교차 검토|계획 검토|리뷰 결과가 왔어요|서브에이전트 ")/.test(m.trimStart());
+
+/** What came in while the job was stopped: the user's words apart from the app's and other jobs'. */
+function inboxLines(t: Task): string[] {
+  const theirs = t.inbox.filter((m) => !notTheUser(m));
+  const others = t.inbox.filter(notTheUser);
+  return [
+    ...(theirs.length ? ["", "# The user added", ...theirs.map((m) => `- ${m}`)] : []),
+    ...(others.length ? ["", "# Came in meanwhile (from Ondra, subagents and other jobs, not the user: the user's words come first)", ...others.map((m) => `- ${m}`)] : []),
+  ];
+}
+
 export function taskPrompt(t: Task): string {
   const parent = t.parentId ? state.tasks.find((x) => x.id === t.parentId) : undefined;
   const parts = parent
@@ -932,7 +967,7 @@ export function taskPrompt(t: Task): string {
   parts.push(...followed(t));
   parts.push(...earlierSteps(t));
   parts.push(...relatedLines(t));
-  if (t.inbox.length) parts.push("", "# The user added", ...t.inbox.map((m) => `- ${m}`));
+  parts.push(...inboxLines(t));
   return parts.join("\n");
 }
 
@@ -995,8 +1030,9 @@ function lastReport(t: Task): string[] {
  */
 function userSince(t: Task): string[] {
   const said = t.entries
-    .flatMap((e) => (e.kind === "user" ? [e.text.trim()] : []))
-    .filter((m) => m && m !== t.ask.trim() && !m.startsWith("(Ondra") && !t.inbox.includes(m))
+    // another job's words (job_tell, a subagent reporting) are not the user's; main relays the user's
+    .flatMap((e) => (e.kind === "user" && (!e.by || e.by === "main") ? [e.text.trim()] : []))
+    .filter((m) => m && m !== t.ask.trim() && !notTheUser(m) && !t.inbox.includes(m))
     .slice(-12)
     .map((m) => `- ${m.length > 2000 ? `${m.slice(0, 2000)}…` : m}`);
   return said.length ? ["", "# What the user said since (in order; the latest decides what the task is now)", ...said] : [];
@@ -1035,7 +1071,7 @@ export function handoffPrompt(t: Task): string {
     ...planLines(t),
     ...kidLines(t),
     ...relatedLines(t),
-    ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
+    ...inboxLines(t),
     "",
     "Continue from the card with its first next step. What it lists as done, found and evidence holds: don't re-read, re-run or re-review it unless you change that code. The user's words outrank it: if the card's next step drops something they asked for, do what they asked. Send a plan and a `now` block first.",
   ].join("\n");
