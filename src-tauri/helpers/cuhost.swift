@@ -2922,7 +2922,15 @@ func runGuide(_ args: [String]) -> Never {
 if CommandLine.arguments.contains("--guide") { runGuide(CommandLine.arguments) }
 
 if CommandLine.arguments.contains("--version") {
-    print("ondra-cuhost 0.4.6")
+    print("ondra-cuhost 0.4.7")
+    exit(0)
+}
+
+// --reap: end the background copies whose helper is gone, then exit. The app runs it at start:
+// a helper only reaps when it starts, so copies a killed one left ran on until a job used the
+// computer again (16 were found running, up to 18 hours old).
+if CommandLine.arguments.contains("--reap") {
+    print("{\"reaped\":\(reapOrphanCopies())}")
     exit(0)
 }
 

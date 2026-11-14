@@ -319,7 +319,7 @@ export interface ToolStatus {
   screenRecording: boolean;
 }
 export const toolStatus = () =>
-  call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.6", accessibility: true, screenRecording: true });
+  call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.7", accessibility: true, screenRecording: true });
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });

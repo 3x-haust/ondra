@@ -290,7 +290,8 @@ export function readJob(c: Caller, t: Task, o: { messages?: number; now?: number
   if (pr) out.push(`PR: ${pr.url}`);
   const kids = childrenOf(t.id);
   if (kids.length) out.push("", "Subagents:", ...kids.map((k) => `- ${jobLine(k, now)}`));
-  if (t.result) out.push("", "Result:", trimmed(t.result, 1500));
+  // its own subagent's result is the work it asked for: whole (a 1500-char cut made a parent ask again, which restarted it)
+  if (t.result) out.push("", "Result:", trimmed(t.result, c.task && t.parentId === c.task.id ? 12_000 : 1500));
   if (t.summary) out.push("", "Summary:", trimmed(t.summary, 1500));
   if (t.status === "failed" && t.error) out.push("", `Failed: ${flat(t.error, 400)}`);
   const ev = evidenceOf(t);

@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
 import { startRpc } from "./rpc";
-import { finishTask, mergeCards, pauseTask, resumeTask, startTask, stopStalledCommands, tell } from "./tasks";
+import { cardFromThread, decide, finishTask, mergeCards, pauseTask, resumeTask, sleptFor, startTask, stopStalledCommands, tell, turnUsage } from "./tasks";
 
 // What the Orbit jobs of 11-06 to 11-14 ran into: another job's words read as the user's, a job
 // failed by Ondra's own new session, a stale "released" summary on a failed job, a failed job
@@ -26,16 +26,20 @@ const task = (id: string) => state.tasks.find((t) => t.id === id)!;
 const tick = () => new Promise((r) => setTimeout(r));
 
 let emit: (ev: unknown) => void;
+let fire: (name: string, payload: unknown) => void;
+let engineId = "";
 
 beforeEach(async () => {
   setState(reconcile(freshState()));
   const events = new Map<string, (payload: unknown) => void>();
+  fire = (name, payload) => events.get(name)?.(payload);
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
     events.set(name, fn as (payload: unknown) => void);
     return () => { events.delete(name); };
   });
   vi.spyOn(native, "agentSpawn").mockResolvedValue();
   vi.spyOn(native, "agentSend").mockImplementation(async (id, command) => {
+    engineId = id;
     emit = (ev: unknown) => events.get("agent:event")?.({ id, ev });
     emit({ id: command.id, type: "response", success: true, data: command.type === "clear_queue" ? { steering: [], followUp: [] } : {} });
   });
@@ -220,5 +224,75 @@ describe("a handoff card sent again in the same session", () => {
       doneWhen: "a release is out",
     });
     expect(mergeCards(undefined, late)).toBe(late);
+  });
+});
+
+/** the model asks the user and its turn ends */
+async function asks(question: string, options: string[]) {
+  const text = "```blocks\n" + JSON.stringify({ type: "ask", question, options: options.map((label) => ({ label })) }) + "\n```";
+  emit({ type: "message_start", message: { role: "assistant" } });
+  emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
+  emit({ type: "message_end", message: { role: "assistant", stopReason: "stop" } });
+  emit({ type: "agent_settled" });
+  await tick();
+  await tick();
+}
+
+describe("the Mac sleeping while a job works", () => {
+  it("doesn't count the sleep as a silent model", async () => {
+    await working([job()]);
+    sleptFor(4 * 60 * 60_000);
+    stopStalledCommands(Date.now() + 4 * 60 * 60_000 + 60_000);
+    await tick();
+    expect(calls().filter((c) => c.type === "abort")).toHaveLength(0);
+  });
+});
+
+describe("a job waiting on the user's answer", () => {
+  it("keeps its question when its engine is killed, and the answer starts it again", async () => {
+    await working([job()]);
+    await asks("배경과 위젯 조작이 어떤가요?", ["그대로 돼요", "원래 배경이 보여요"]);
+    expect(task("job").status).toBe("waiting");
+    fire("agent:exit", { id: engineId, code: 143 });
+    await tick();
+
+    expect(task("job").status).toBe("waiting");
+    const d = state.decisions.find((x) => x.taskId === "job")!;
+    expect(d.question).toContain("위젯");
+    await decide(d.id, "원래 배경이 보여요");
+    expect(task("job").status).toBe("queued");
+    expect(task("job").inbox.join("\n")).toContain("원래 배경이 보여요");
+  });
+
+  it("takes an option it offered as the answer, even one that says hold", async () => {
+    await working([job()]);
+    await asks("어떻게 이어갈까요?", ["정지 화면으로 대체", "영상 유지 목표로 보류"]);
+    const d = state.decisions.find((x) => x.taskId === "job")!;
+    await decide(d.id, "영상 유지 목표로 보류");
+    await tick();
+    expect(task("job").status).not.toBe("paused");
+    expect(task("job").parkedAt).toBeUndefined();
+    expect(sent("prompt").slice(-1)[0]).toContain("영상 유지 목표로 보류");
+  });
+});
+
+describe("a session the provider refuses", () => {
+  it("goes on from the last card, not only the thread", () => {
+    const t = job({ entries: [
+      { id: "h1", at: 1, kind: "handoff", leg: 1, handoff: { did: ["windows hide by type, not level"], found: ["bit49 needs universal owner rights"], next: "try the wallpaper extension", evidence: [{ kind: "file", ref: "/tmp/findings.md" }] } },
+      { id: "x1", at: 2, kind: "text", text: "NSPanel도 숨겨졌어요" },
+    ] as Task["entries"] });
+    const card = cardFromThread(t);
+    expect(card.found).toContain("bit49 needs universal owner rights");
+    expect(card.evidence).toEqual([{ kind: "file", ref: "/tmp/findings.md" }]);
+    expect(card.did).toEqual(expect.arrayContaining(["windows hide by type, not level", "NSPanel도 숨겨졌어요"]));
+    expect(card.next).toContain("try the wallpaper extension");
+  });
+});
+
+describe("a turn's usage", () => {
+  it("is never negative after a new session starts the counts again", () => {
+    const u = turnUsage({ input: 900, output: 4000, cacheRead: 9000, cacheWrite: 0 } as never, { input: 900, output: 493, cacheRead: 9000, cacheWrite: 0 } as never, "default");
+    expect(u!.output).toBe(493);
   });
 });

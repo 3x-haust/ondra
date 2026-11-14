@@ -288,8 +288,10 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", (event) => {
     if (event.messageType !== "user" || typeof event.prompt !== "string") return;
     const task = taskQuery(event.prompt);
-    const asked = (task ?? userWords(event.prompt)).slice(0, 4000);
-    if (!asked.trim()) return;
+    // an answer to the job's own question is matched by what the user picked or typed, not the
+    // question's words; a reply this short ("문제가 있어요", "못고쳐?") names no skill
+    const asked = (task ?? userWords(event.prompt).replace(/^"[^"\n]*" → /, "")).slice(0, 4000);
+    if (!asked.trim() || (!task && asked.trim().length < 12)) return;
     const hint = messageHint(router.forMessage(asked), !!task);
     if (hint) return { message: { customType: "ondra-skills", content: hint, display: false } };
   });

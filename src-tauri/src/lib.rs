@@ -282,6 +282,12 @@ pub fn run() {
             #[cfg(debug_assertions)]
             devbridge::start(app.handle().clone());
             store::watch_inbox(app.handle().clone());
+            // background apps a killed Mac-app helper left running (a crash, a forced quit) go now
+            std::thread::spawn(|| {
+                if let Some(host) = tools::sidecar("ondra-cuhost") {
+                    let _ = std::process::Command::new(host).arg("--reap").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                }
+            });
             {
                 let handle = app.handle().clone();
                 focus::install(move || handle.state::<engine::Engine>().pids());
