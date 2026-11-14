@@ -14,10 +14,18 @@ export function sinceAsked(t: Task): number {
   return 0;
 }
 
-/** What a job reported since it was last given work: its words and its result blocks. */
+/**
+ * What a job reported since it was last given work: its closing words (what it wrote after its
+ * last tool call) and its result blocks. Every line of narration ("이제 PDF를 만들게요…", "커밋할게요")
+ * joined made a research answer start with the steps that led to it.
+ */
 export function jobReport(t: Task): { said: string; blocks: Block[] } {
   const since = t.entries.slice(sinceAsked(t));
-  const said = since
+  const lastTool = since.map((e) => e.kind).lastIndexOf("tool");
+  const closing = since.slice(lastTool + 1).some((e) => e.kind === "text" && e.text.replace(/```blocks[\s\S]*?```/g, "").trim());
+  // nothing after its last tool call: its last words are its report
+  const words = closing ? since.slice(lastTool + 1) : since.filter((e) => e.kind === "text").slice(-1);
+  const said = words
     .filter((e) => e.kind === "text")
     .map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim())
     .filter(Boolean)
