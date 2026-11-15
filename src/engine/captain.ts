@@ -24,7 +24,7 @@ import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
-import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
+import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
 import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
@@ -182,6 +182,7 @@ export function jobEnded(t: Task) {
   const { said, blocks } = reportOf(t);
   const evidence = jobReport(t).blocks.flatMap((b) => (b.type === "evidence" ? b.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
   const asked = userFollowUps(t.space, [t.id]);
+  const own = toFork(t);
   // main already sent this fork back since the user last spoke: once is enough
   const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
@@ -194,6 +195,7 @@ export function jobEnded(t: Task) {
     said ? `What it reported:\n${said.slice(-3500)}` : "",
     blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
     asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
+    own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}` : "",
     sentBack ? "You already sent this fork back once since the user last spoke. Stop here: no append to it until the user asks; say in one line what is still open, if anything." : "",
     userParked(t) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
@@ -205,6 +207,20 @@ export function jobEnded(t: Task) {
   setState("captain", (list) => [...list.slice(-300), reply]);
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
+}
+
+/**
+ * What the user said to the fork itself: an answer on its question card or a message in its
+ * thread. Main never sees these otherwise, so a "이번 결과로 종료" picked on the card read as
+ * "the user didn't ask to stop" and main started the work again.
+ */
+export function toFork(t: Pick<Task, "entries" | "ask">): string[] {
+  return t.entries
+    .slice(1)
+    .flatMap((e) => (e.kind === "user" && !e.by ? [e.text.trim()] : []))
+    .filter((m) => m && m !== t.ask.trim() && !notTheUser(m))
+    .slice(-5)
+    .map((m) => (m.length > 300 ? `${m.slice(0, 300)}…` : m));
 }
 
 /** What a job reported since it was last given work: its words and its result blocks in lines. */
@@ -849,6 +865,7 @@ export const FORK_ENDED = [
   "Otherwise add only what needs them: one short line as an \"answer\" (no blocks; a 왜 answer may take two sentences), or a route:",
   "- it failed, or stopped short of what the user asked: its row already shows the error, so say plainly what is left or what the user can do about it. Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\").",
   "- the user's follow-ups ask something its summary doesn't answer: answer every such question, the 왜 first.",
+  "- the user's own words to the fork decide over its summary and over your reading of the request: an answer that ends it, settles for what came out or puts it off (\"종료\", \"여기까지\", \"보류\", \"그만\", \"나중에\") means nothing carries it on. Say in one line what is left, if anything, and route nothing.",
   "- what the user asked for still isn't done and the next step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. Its row shows it, so \"reply\" stays empty or one short line.",
   "- a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one \"ask\", your recommendation first.",
   "\"Not verified\" items stay in its result, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Don't redo finished work.",
