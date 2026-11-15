@@ -59,6 +59,10 @@ design direction and carrying an approved direction into later work.
   e.g. "desktop/scrapbook", "editorial typography", "single 3D/canvas scene".
 - Screenshot each at desktop and phone width, record a short clip of its
   interaction, and send: `shot` blocks + a `link` to the file to open live.
+- Concepts and temporary UI are for judging the look: no unit tests, data
+  models, contrast audits or accessibility passes for them (§6 is for the
+  chosen design once it is built). A concept inside an existing app starts
+  from a screenshot of the screen it changes, and its shots sit beside that one.
 - Ask with options `{label, note}` (note = the feeling in one line) and the shots
   as `context`, then wait for the pick before building further.
 
@@ -143,6 +147,8 @@ for comparable data. Keep meaning and readability ahead of novelty.
   media space to avoid layout shifts; keep expensive effects out of routine input.
 
 ## 6. Check the rendered result
+
+For the chosen design built into the product, not for concepts or temporary UI.
 
 `browser-use` covers driving the browser. Reuse the project's existing checks and
 capture the real page, not just source or a successful build. For a native app,
