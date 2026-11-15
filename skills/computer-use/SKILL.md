@@ -125,9 +125,10 @@ the next way, not stop.
 6. Controls missing from the screen: `look`, then `click-at` the pixel. A `staged`
    look (Stage Manager thumbnail) is not to scale; use refs and keys.
 
-Report a limit only after every way above was tried, naming each try and what
-the observation showed. Asking the user is for permission, never for handing
-the work back.
+When three ways fail on the same action, stop trying more. If the user can do
+that one step in a moment (a click, a drag, picking a tile), ask them to with the
+exact step and go on with what you can do meanwhile; otherwise report the limit,
+naming each try and what the observation showed.
 
 If an action returns `USER_ACTIVE`, the user is working in that app: nothing was
 sent. Wait, observe, keep their changes, then continue. Password fields are
