@@ -63,6 +63,9 @@ final class Daemon {
     var extraHeaders: JSON = [:]
     var offline = false
     var viewport: JSON?
+    /// the size the panel shows this session's tab at, while someone watches there and the
+    /// job set no viewport of its own: the page fills the panel as in a real browser
+    var fitted: JSON?
     var geo: JSON?
     var userAgent: String?
     var lastUse = nowMs()
@@ -71,6 +74,10 @@ final class Daemon {
     var stream: StreamServer?
     var recorder: Recorder?
     var downloads: [String: JSON] = [:]
+    /// a popup our tab opened (sign-in with Google, payment, OAuth) → the tab that opened it
+    var openers: [String: String] = [:]
+    /// said once, after the next command's own result: the tab commands act on changed by itself
+    var tabNote: String?
     /// inode of the socket this daemon listens on
     var ownSocket: ino_t = 0
 
@@ -197,6 +204,11 @@ final class Daemon {
                 tabs[t.sessionId] = nil
             }
             lock.unlock()
+            if let a = active, dead.contains(where: { $0 === a }), let op = lock.withLock({ openers[a.targetId] }) {
+                // the popup finished (signed in, paid) and closed itself: back to the tab that opened it
+                q.async { self.popupClosed(a, opener: op) }
+                return
+            }
             if let a = active, dead.contains(where: { $0 === a }) {
                 stream?.tabChanged()
                 if config.pin {
@@ -205,6 +217,13 @@ final class Daemon {
                     writeState(config.session, st)
                 }
             }
+            return
+        }
+        if method == "Target.targetCreated", let info = p.obj("targetInfo"), info.str("type") == "page",
+           let tid = info.str("targetId"), let op = info.str("openerId"), op == active?.targetId {
+            // window.open / target=_blank from the tab this session works in: Google's sign-in
+            // button and other OAuth flows finish in that popup, so commands and the panel follow it
+            q.async { self.followPopup(tid, opener: op) }
             return
         }
         if method == "Target.targetInfoChanged", let info = p.obj("targetInfo"), let tid = info.str("targetId") {
@@ -318,6 +337,7 @@ final class Daemon {
         let headers = extraHeaders
         let off = offline
         let vp = viewport
+        let fit = fitted
         let g = geo
         let ua = userAgent
         lock.unlock()
@@ -334,6 +354,7 @@ final class Daemon {
             _ = try? cdp.call("Network.emulateNetworkConditions", ["offline": false, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1], session: sid)
         }
         if let vp { try cdp.call("Emulation.setDeviceMetricsOverride", vp, session: sid) }
+        else if let fit { _ = try? cdp.call("Emulation.setDeviceMetricsOverride", fit, session: sid) }
         if let g { try cdp.call("Emulation.setGeolocationOverride", g, session: sid) }
         if let ua { try cdp.call("Emulation.setUserAgentOverride", ["userAgent": ua], session: sid) }
     }
@@ -341,6 +362,32 @@ final class Daemon {
     func applyAll() throws {
         lock.lock(); let all = Array(tabs.values); lock.unlock()
         for t in all { try applySettings(t) }
+    }
+
+    /// The panel shows the tab in a w×h area: lay the page out at that size (not when the
+    /// job set its own viewport or device).
+    func fit(_ w: Int, _ h: Int) {
+        let size: JSON = ["width": min(max(w, 320), 3840), "height": min(max(h, 200), 3840), "deviceScaleFactor": 1, "mobile": false]
+        lock.lock()
+        let same = fitted.map { $0.int("width") == size.int("width") && $0.int("height") == size.int("height") } ?? false
+        fitted = size
+        let own = viewport != nil
+        let all = tabs.values.filter { !$0.gone }
+        lock.unlock()
+        if own || same { return }
+        for t in all { _ = try? cdp.call("Emulation.setDeviceMetricsOverride", size, session: t.sessionId, timeout: 5) }
+    }
+
+    /// Nobody watches any more: back to the browser's own size.
+    func unfit() {
+        lock.lock()
+        let was = fitted != nil
+        fitted = nil
+        let own = viewport != nil
+        let all = tabs.values.filter { !$0.gone }
+        lock.unlock()
+        if !was || own { return }
+        for t in all { _ = try? cdp.call("Emulation.clearDeviceMetricsOverride", session: t.sessionId, timeout: 5) }
     }
 
     func makeActive(_ tab: Tab) {
@@ -352,6 +399,28 @@ final class Daemon {
             writeState(config.session, st)
         }
         if changed { stream?.tabChanged() }
+    }
+
+    func followPopup(_ targetId: String, opener: String) {
+        guard let from = active, from.targetId == opener, !from.gone, let tab = try? attach(targetId) else { return }
+        lock.withLock { openers[targetId] = opener }
+        makeActive(tab)
+        sleepMs(300)
+        try? waitLifecycle(tab, loader: nil, until: "domcontentloaded", timeoutMs: 8000)
+        let url = tab.with { tab.url }
+        tabNote = "→ t\(tabNumber(opener)) opened a popup, t\(tabNumber(targetId)) \(url); commands now act on it (take a fresh snapshot). When it closes they go back to t\(tabNumber(opener))."
+    }
+
+    func popupClosed(_ popup: Tab, opener: String) {
+        lock.withLock { openers[popup.targetId] = nil }
+        guard active === popup else { return }
+        if let back = attached(opener), !back.gone {
+            makeActive(back)
+            tabNote = "→ the popup closed; commands act on t\(tabNumber(opener)) again (take a fresh snapshot)."
+            return
+        }
+        stream?.tabChanged()
+        if config.pin { var st = readState(config.session); st["targetId"] = nil; writeState(config.session, st) }
     }
 
     func newTab(_ url: String = "about:blank") throws -> Tab {
@@ -521,7 +590,9 @@ final class Daemon {
         if req.args.first == "batch" { return runBatch(req) }
         do {
             let o = try run(req.args, req)
-            return ["success": true, "data": o.data, "text": o.text]
+            var text = o.text
+            if let n = tabNote { tabNote = nil; text += "\n\(n)" }
+            return ["success": true, "data": o.data, "text": text]
         } catch {
             return ["success": false, "error": "\(error)"]
         }
