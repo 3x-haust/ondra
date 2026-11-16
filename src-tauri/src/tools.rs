@@ -586,6 +586,23 @@ pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<b
     }
 }
 
+/// A short system sound when a job ends (Settings › 작업 끝 소리), at `volume` (0–1). Only the
+/// sounds macOS ships, by name, so the page can't make it play an arbitrary file.
+#[tauri::command]
+pub fn play_sound(name: String, volume: f64) {
+    const SOUNDS: [&str; 14] = ["Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"];
+    if !SOUNDS.contains(&name.as_str()) || !(volume > 0.0) {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/afplay")
+        .args(["-v", &format!("{:.2}", volume.min(1.0))])
+        .arg(format!("/System/Library/Sounds/{name}.aiff"))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
 /** the system sound an alarm rings with (/System/Library/Sounds) */
 const ALARM_SOUND: &str = "Glass";
 

@@ -1,4 +1,5 @@
 import { PairAskDialog } from "./views/RemoteSettings";
+import { ring, soundFor } from "./engine/sound";
 import { quietRun, startRoutines } from "./engine/routines";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
@@ -218,8 +219,11 @@ export default function App() {
         if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
         countLanded(t);
       }
+      // a job that ends or needs you makes a sound, in front or not; a routine's run with nothing
+      // to report ends without a sound or a notice
+      const tone = soundFor(t, was);
+      if (tone && !quietRun(t)) ring(tone);
       if (!was || was === t.status || document.hasFocus()) continue;
-      // a routine's run with nothing to report ends without a notice
       if (quietRun(t)) continue;
       // which space it is in, so a company job never reads as a personal one
       const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;
