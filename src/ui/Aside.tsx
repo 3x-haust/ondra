@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
-import { askBtw, btw as btwOf, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
+import { askBtw, btw as btwOf, btwForward, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
 import { agoIn, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
 import { NO_ACCOUNT, tell } from "../engine/tasks";
@@ -49,7 +49,7 @@ export function BtwCard(props: { scope: string }) {
   const forward = () => {
     const x = btw();
     if (!x) return;
-    const said = withFiles(x.question, x.files ?? []);
+    const said = btwForward(withFiles(x.question, x.files ?? []), x.answer);
     if (props.scope.startsWith("task:")) void tell(props.scope.slice(5), said);
     else {
       const [space, project] = props.scope.slice(5).split("~");

@@ -254,6 +254,10 @@ export async function askBtw(scope: string, question: string, files: string[] = 
   }
 }
 
+/** What "send to Main / to the job" says: the btw question and the answer it got, so the work can act on both. */
+export const btwForward = (question: string, answer: string) =>
+  answer.trim() ? `${question}\n\n${tr("btw 답")}:\n${answer.trim()}` : question;
+
 // ───────────── side chat
 
 const sideAgent = (space: SpaceId) => `side:${space}`;
