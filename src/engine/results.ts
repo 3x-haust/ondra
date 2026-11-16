@@ -66,6 +66,13 @@ export function keepJobResult(t: Task, msg?: string) {
   setState("results", (l) => [...(l ?? []), e].slice(-MAX));
 }
 
+/** The digest of a job's latest finish (digest.ts) leads its kept result: its line, then its points over the job's own words. */
+export function keepDigest(taskId: string, d: { line: string; text: string }) {
+  const t = state.tasks.find((x) => x.id === taskId);
+  if (!t || !(state.results ?? []).some((r) => r.id === jobEntryId(t))) return;
+  setState("results", (r) => r.id === jobEntryId(t), (r) => ({ ...r, reply: d.line, answers: d.text ? [{ text: d.text, blocks: [] }, ...r.answers] : r.answers }));
+}
+
 /** The latest result of a job, if it has one. */
 export const resultOfTask = (taskId: string) => [...(state.results ?? [])].reverse().find((r) => r.taskId === taskId);
 

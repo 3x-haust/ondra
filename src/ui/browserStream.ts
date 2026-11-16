@@ -11,6 +11,11 @@ export function useBrowserStream(job: () => { id: string; space?: string } | und
   let ws: WebSocket | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let gen = 0;
+  /** the area the page is shown in, sent so the page is laid out at that size */
+  let area: { width: number; height: number } | undefined;
+  const sendArea = () => {
+    if (area && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "viewport", ...area }));
+  };
 
   const stop = () => {
     gen++;
@@ -24,6 +29,7 @@ export function useBrowserStream(job: () => { id: string; space?: string } | und
     if (!port) return void (timer = setTimeout(() => connect(id, space, g), 2500));
     const sock = new WebSocket(`ws://127.0.0.1:${port}/?maxFps=${opts.fps ?? 10}`);
     ws = sock;
+    sock.onopen = sendArea;
     sock.onmessage = (m) => {
       try {
         const msg = JSON.parse(m.data);
@@ -61,5 +67,12 @@ export function useBrowserStream(job: () => { id: string; space?: string } | und
     const y = Math.round(fy * size().h);
     for (const eventType of ["mousePressed", "mouseReleased"]) ws.send(JSON.stringify({ type: "input_mouse", eventType, x, y, button: "left", clickCount: 1 }));
   };
-  return { frame, size, url, click };
+  /** lay the page out at w×h (the panel's page area) while this watches */
+  const fit = (w: number, h: number) => {
+    const next = { width: Math.floor(w), height: Math.floor(h) };
+    if (next.width < 50 || next.height < 50 || (area && area.width === next.width && area.height === next.height)) return;
+    area = next;
+    sendArea();
+  };
+  return { frame, size, url, click, fit };
 }

@@ -377,7 +377,19 @@ function TerminalPane(props: { t: Task }) {
 }
 
 function BrowserPane(props: { t: Task }) {
-  const { frame, url, click: clickAt } = useBrowserStream(() => props.t);
+  const { frame, url, click: clickAt, fit } = useBrowserStream(() => props.t);
+  // the page is laid out at the pane's size, so it fills the pane as in a browser
+  // (a desktop-wide page shrunk into a narrow pane was unreadable, with empty space below)
+  let view!: HTMLDivElement;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  onMount(() => {
+    const ro = new ResizeObserver(([e]) => {
+      clearTimeout(settle);
+      settle = setTimeout(() => fit(e.contentRect.width, e.contentRect.height), 250);
+    });
+    ro.observe(view);
+    onCleanup(() => (ro.disconnect(), clearTimeout(settle)));
+  });
   const browsing = () => props.t.entries.flatMap((e) => (e.kind === "tool" && e.tool.kind === "browser" ? [{ ...e.tool, at: e.at }] : []));
   const lastPage = () => {
     const hit = [...browsing()].reverse().find((b) => /[\w-]+\.[a-z]{2,}(\/\S*)?/.test(b.target));
@@ -410,7 +422,7 @@ function BrowserPane(props: { t: Task }) {
           <Icon name="key" size={14} />
         </button>
       </div>
-      <div class="bview">
+      <div class="bview" ref={view}>
         <Show
           when={frame()}
           fallback={
@@ -635,7 +647,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
       if (job || !at || usable(at)) return;
       const alt = ptabs().find(usable);
       if (alt) setActiveTab(alt.id);
-      else setPanelTab("flow");
+      else setPanelTab("new");
     }),
   );
   const tab = panelTab;

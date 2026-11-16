@@ -214,6 +214,8 @@ export interface Task {
   /** on a subagent: its fork took its result */
   taken?: number;
   summary?: string;
+  /** what came of it, written for the user when it finished (digest.ts): `line` for its row, `text` under it */
+  digest?: { line: string; text: string; at: number };
   error?: string;
   /** Imported from another tool's session. */
   origin?: { source: SourceId; path: string };
@@ -636,6 +638,10 @@ export interface Settings {
   isolate: boolean;
   /** Send apps a job starts back behind the user's window when they come forward. */
   focusGuard: boolean;
+  /** a sound when a job finishes, needs an answer or fails (missing = on) */
+  jobSound?: boolean;
+  /** how loud that sound is, 0–1 (missing = 0.5) */
+  jobSoundVolume?: number;
   /** a job's browser floats in a corner while it works (missing = on) */
   browserPip?: boolean;
   /** Model / effort for new forks ("" = automatic). */

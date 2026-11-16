@@ -87,7 +87,7 @@ const trimmed = (s: string | undefined, n: number) => {
 export function lastSaid(t: Task, decisions: Pick<Decision, "taskId" | "question">[] = allDecisions()): { tag: "asks" | "did" | "failed" | "now"; text: string } {
   const q = decisions.find((d) => d.taskId === t.id)?.question;
   if (t.status === "waiting" && q) return { tag: "asks", text: q };
-  if (t.status === "done" && t.summary) return { tag: "did", text: t.summary };
+  if (t.status === "done" && (t.digest || t.summary)) return { tag: "did", text: t.digest?.line ?? t.summary ?? "" };
   if (t.status === "failed" && t.error) return { tag: "failed", text: t.error };
   return { tag: "now", text: t.now ?? "" };
 }

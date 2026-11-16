@@ -514,6 +514,7 @@ pub fn run() {
             store::account_limits,
             store::account_email,
             tools::notify,
+            tools::play_sound,
             git::git_commit,
             git::git_push,
             git::git_pr,

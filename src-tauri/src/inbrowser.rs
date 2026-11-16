@@ -8,10 +8,12 @@
 //! that space's browser: a login in one space never shows up in the other.
 
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::OnceLock;
 
 use serde::Serialize;
-use tauri::webview::{Cookie, PageLoadEvent, WebviewBuilder};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url, Webview, WebviewUrl};
+use tauri::webview::{Cookie, NewWindowResponse, PageLoadEvent, WebviewBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url, Webview, WebviewUrl, WebviewWindowBuilder};
 
 const LABEL: &str = "inbrowser";
 const HOME: &str = "https://www.google.com";
@@ -48,6 +50,98 @@ fn store_id(space: &str) -> [u8; 16] {
         out[half..half + 8].copy_from_slice(&h.to_be_bytes());
     }
     out
+}
+
+/// Safari's own user agent. The webview's default leaves out "Version/… Safari/…", and
+/// Google's sign-in refuses such embedded browsers.
+fn user_agent() -> &'static str {
+    static UA: OnceLock<String> = OnceLock::new();
+    UA.get_or_init(|| {
+        let v = std::process::Command::new("/usr/bin/defaults")
+            .args(["read", "/Applications/Safari.app/Contents/Info", "CFBundleShortVersionString"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "26.0".into());
+        format!("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/{v} Safari/605.1.15")
+    })
+}
+
+// ───────────── popups: "Google 계정으로 계속하기", payments, OAuth ─────────────
+//
+// A page's window.open gets a real window that shares the page's WebKit session, so
+// what it signs in lands in the page (and so in the jobs' browser). WebKit tells nobody
+// when the popup closes itself, so its window.close goes through a navigation this
+// catches, and the popups still open close once the page that opened them moves on
+// (the sign-in finished and the site redirected).
+
+const POPUP: &str = "ondra-popup";
+const CLOSE_URL: &str = "https://ondra-popup.invalid/close";
+
+fn popups(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
+    app.webview_windows().into_iter().filter(|(l, _)| l.starts_with(POPUP)).map(|(_, w)| w).collect()
+}
+
+/// popup label → the address its opener was on when it opened
+static OPENED_ON: std::sync::Mutex<std::collections::BTreeMap<String, String>> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// each space's webview → the page it last finished loading
+static PAGE_OF: std::sync::Mutex<std::collections::BTreeMap<String, String>> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// The opener finished loading `now`: close the popups it opened on another page.
+fn close_left_popups(app: &AppHandle, opener: &str, now: &Url) {
+    PAGE_OF.lock().unwrap().insert(opener.to_string(), now.to_string());
+    let mut on = OPENED_ON.lock().unwrap();
+    for w in popups(app) {
+        let l = w.label().to_string();
+        if on.get(&l).is_some_and(|u| !u.is_empty() && u != now.as_str()) {
+            on.remove(&l);
+            let _ = w.close();
+        }
+    }
+    on.retain(|l, _| app.get_webview_window(l).is_some());
+}
+
+fn open_popup(app: &AppHandle, opened_on: &str, url: Url, features: tauri::webview::NewWindowFeatures) -> NewWindowResponse<tauri::Wry> {
+    static N: AtomicU32 = AtomicU32::new(1);
+    let label = format!("{POPUP}-{}", N.fetch_add(1, Ordering::Relaxed));
+    let close_script = format!(
+        "(() => {{ const close = () => {{ location.href = {CLOSE_URL:?}; }}; try {{ Object.defineProperty(window, 'close', {{ value: close }}); }} catch {{ window.close = close; }} }})();"
+    );
+    let me = app.clone();
+    let mine = label.clone();
+    let positioned = features.position().is_some();
+    let mut b = WebviewWindowBuilder::new(app, &label, WebviewUrl::External("about:blank".parse().expect("blank")))
+        .window_features(features)
+        .title(url.host_str().unwrap_or("로그인"))
+        .user_agent(user_agent())
+        .initialization_script(&close_script)
+        .on_navigation(move |u| {
+            if u.as_str() == CLOSE_URL {
+                if let Some(w) = me.get_webview_window(&mine) {
+                    let _ = w.close();
+                }
+                return false;
+            }
+            true
+        })
+        .on_document_title_changed(|w, title| {
+            if !title.is_empty() {
+                let _ = w.set_title(&title);
+            }
+        });
+    if !positioned {
+        b = b.center();
+    }
+    match b.build() {
+        Ok(window) => {
+            OPENED_ON.lock().unwrap().insert(label, opened_on.to_string());
+            NewWindowResponse::Create { window }
+        }
+        Err(_) => NewWindowResponse::Deny,
+    }
 }
 
 fn parse(url: &str) -> Option<Url> {
@@ -139,13 +233,25 @@ pub async fn inbrowser_show(app: AppHandle, x: f64, y: f64, w: f64, h: f64, url:
     let start = target.unwrap_or_else(|| Url::parse(HOME).expect("home url"));
     let events = app.clone();
     let sp = space.clone();
-    let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start)).data_store_identifier(store_id(&space)).on_page_load(move |wv, p| {
-        let loading = matches!(p.event(), PageLoadEvent::Started);
-        let _ = events.emit("inbrowser-page", PageState { url: p.url().to_string(), loading, space: sp.clone() });
-        if !loading {
-            share_cookies(events.clone(), sp.clone(), wv, p.url().clone());
-        }
-    });
+    let popup_app = app.clone();
+    let popup_label = label(&space);
+    let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start))
+        .data_store_identifier(store_id(&space))
+        .user_agent(user_agent())
+        .on_new_window(move |url, features| {
+            let on = PAGE_OF.lock().unwrap().get(&popup_label).cloned().unwrap_or_default();
+            open_popup(&popup_app, &on, url, features)
+        })
+        .on_page_load(move |wv, p| {
+            let loading = matches!(p.event(), PageLoadEvent::Started);
+            if !loading {
+                close_left_popups(&events, wv.label(), p.url());
+            }
+            let _ = events.emit("inbrowser-page", PageState { url: p.url().to_string(), loading, space: sp.clone() });
+            if !loading {
+                share_cookies(events.clone(), sp.clone(), wv, p.url().clone());
+            }
+        });
     window
         .add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w.max(1.0), h.max(1.0)))
         .map_err(|e| e.to_string())?;

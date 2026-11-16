@@ -1192,6 +1192,7 @@ function fail(id: string, message: string) {
     // a summary or unverified list here is an earlier run's (one finished, then reopened): shown on
     // a failed job they told the user it had shipped ("릴리스를 공개했어요" on a job that failed later)
     t.summary = undefined;
+    t.digest = undefined;
     t.unverified = undefined;
     push(t, { kind: "error", text: explain(message) });
   });
@@ -1941,6 +1942,7 @@ function finish(id: string, summary: string, run?: Run) {
     t.unread = true;
     t.saidDone = undefined;
     t.summary = summary;
+    t.digest = undefined;
     t.now = summary;
     const proven = (run?.evidence ?? []).filter((e) => e.ok !== false && !e.why).length;
     // what still doesn't hold after the job was sent back is listed, not hidden

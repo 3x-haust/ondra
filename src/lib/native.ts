@@ -387,6 +387,8 @@ export const gitPr = (cwd: string, title: string, body: string, env: Env = []) =
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
 /** A system notice. An alarm rings (`sound`); with a `tag`, a click on it comes back as "notify:click" with the tag. */
 export const notify = (title: string, body: string, o: { sound?: boolean; tag?: string } = {}) => call<void>("notify", { title, body, sound: o.sound ?? null, tag: o.tag ?? null });
+/** one of Ondra's bundled sounds by name, at volume 0–1 (job ends) */
+export const playSound = (name: string, volume: number) => call<void>("play_sound", { name, volume });
 export const workerExtensions = () => call<string[]>("worker_extensions", undefined, []);
 export interface SkillFile {
   name: string;

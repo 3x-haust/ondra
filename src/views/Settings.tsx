@@ -1,5 +1,6 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { effortFor, setModelEffort } from "../engine/models";
+import { ring, soundOn, soundVolume } from "../engine/sound";
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { refreshModels } from "../engine/modelList";
@@ -246,6 +247,26 @@ function General() {
         <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
           <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
         </Row>
+        <Row title={t("작업 끝 소리")} desc={t("작업이 끝나거나 답이 필요하면 소리를 내요")}>
+          <Switch_ label={t("작업 끝 소리")} on={soundOn()} set={(v) => (setState("settings", "jobSound", v), v && ring("done", { test: true }))} />
+        </Row>
+        <Show when={soundOn()}>
+          <Row title={t("소리 크기")}>
+            <div class="set-volume">
+              <input
+                type="range"
+                min={5}
+                max={100}
+                step={5}
+                aria-label={t("소리 크기")}
+                value={Math.round(soundVolume() * 100)}
+                onInput={(e) => setState("settings", "jobSoundVolume", Number(e.currentTarget.value) / 100)}
+                onChange={() => ring("done", { test: true })}
+              />
+              <span class="set-volume-n">{Math.round(soundVolume() * 100)}%</span>
+            </div>
+          </Row>
+        </Show>
       </div>
 
       <GroupTitle title={t("공통 지침")}>
@@ -1103,7 +1124,7 @@ const FINDABLE: [SettingsTab, string][] = [
   ["general", "테마"], ["general", "화면 크기"], ["general", "언어"], ["general", "링크 열기"],
   ["general", "기본 모델"], ["general", "기본 권한"], ["general", "동시 작업 수"], ["general", "빌드·시뮬레이터 작업 동시 수"],
   ["general", "작업마다 새 워크트리"], ["general", "PR 리뷰 자동 대응"], ["general", "GitHub 푸시·PR 허용"], ["general", "메모리 자동 저장"],
-  ["general", "작업 브라우저 미리보기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
+  ["general", "작업 브라우저 미리보기"], ["general", "작업 끝 소리"], ["general", "소리 크기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
   ["general", "익명 사용 통계 보내기"],
   ["tools", "손쉬운 사용"], ["tools", "화면 기록"],
   ["remote", "다른 Mac에서 이 Mac 쓰기"], ["remote", "잠자기 방지"], ["remote", "연결 링크"],

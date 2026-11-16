@@ -24,6 +24,7 @@ import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
+import { digestJob } from "./digest";
 import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
@@ -168,6 +169,7 @@ export { userParked } from "./jobs";
  */
 export function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
+  void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
   const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
   const from = owners.find((m) => m.project) ?? owners[0];

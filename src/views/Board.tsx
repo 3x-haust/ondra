@@ -282,7 +282,7 @@ function Card(props: { t: Task; byProject: boolean }) {
     if (st() === "running") return job().now ? nowText(job().now) : t("시작하는 중");
     // the column (or the state word) already says it's queued or paused
     if (st() === "queued" || st() === "paused") return "";
-    const body = job().summary || (job().now ? nowText(job().now) : "");
+    const body = job().digest?.line || job().summary || (job().now ? nowText(job().now) : "");
     // a line that only says the state again says nothing
     return body.trim() === t(word()) ? "" : body;
   };

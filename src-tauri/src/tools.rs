@@ -586,6 +586,25 @@ pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<b
     }
 }
 
+/// Ondra's own sound when a job ends (Settings › 작업 끝 소리), at `volume` (0–1): one of the
+/// bundled `sounds/<name>.wav` (scripts/make-sounds.py), by name only, so the page can't make it
+/// play an arbitrary file.
+#[tauri::command]
+pub fn play_sound(app: AppHandle, name: String, volume: f64) {
+    const SOUNDS: [&str; 3] = ["done", "waiting", "failed"];
+    if !SOUNDS.contains(&name.as_str()) || !(volume > 0.0) {
+        return;
+    }
+    let Ok(dir) = app.path().resource_dir() else { return };
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/afplay")
+        .args(["-v", &format!("{:.2}", volume.min(1.0))])
+        .arg(dir.join("sounds").join(format!("{name}.wav")))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+
 /** the system sound an alarm rings with (/System/Library/Sounds) */
 const ALARM_SOUND: &str = "Glass";
 
