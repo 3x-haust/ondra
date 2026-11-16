@@ -2,11 +2,11 @@
   <img src="docs/assets/readme-cover.svg" width="880" alt="Ondra">
 </p>
 
-<h1 align="center">Don't manage AI.<br>Delegate the work.</h1>
+<h1 align="center">Stop babysitting your agents.</h1>
 
 <p align="center">
-  Ondra is an AI workspace that breaks down the work you delegate, uses the tools it needs, and brings back results it has checked.<br>
-  The important decisions stay with you.
+  Put everything you want done in one chat. Ondra splits it into tasks and runs them side by side.<br>
+  When something needs your call, it asks. Before it says done, it checks.
 </p>
 
 <p align="center">
@@ -16,28 +16,27 @@
 <p align="center"><sub>macOS 13+ · Apple silicon</sub></p>
 
 <p align="center">
-  <img src="docs/assets/main-en.png" width="880" alt="Ondra's main conversation brings together task progress and decisions that need you">
+  <a href="https://3x-haust.github.io/ondra/en/#film"><img src="docs/assets/readme/hero-en.webp" width="880" alt="The opening of Ondra's intro film: one chat replaces a wall of agent tabs, and Ondra splits the request into three tasks. Click to watch the full film."></a>
 </p>
 
-## Say what you want done. Work through the rest together.
+<p align="center"><sub><a href="https://3x-haust.github.io/ondra/en/#film">Watch the full film (1:40) ↗</a> · Every Ondra screen in it is recorded from the app.</sub></p>
 
-**Break down the work.** Main turns your request into tasks, and each task follows its part through. Every project has its own conversation, and work started there runs in that folder.
+<br>
 
-**Use the right tools.** Code and documents, browsers, Mac apps and mobile devices. Each task uses the tools and skills the work calls for.
+## One chat
 
-**Bring back checked results.** Main gathers what changed, how it was checked and what remains. A bug comes back with its cause and fix; research with an answer and sources; a release with what shipped and its current status.
+Close the tabs. Say what you want done in Main, the one conversation for all your work. Each project also has its own conversation, and work started there runs in that folder.
+
+<p align="center"><img src="docs/assets/readme/chat-en.jpg" width="880" alt="Main: one request split into three tasks, then a second request in the same chat that becomes a routine"></p>
+
+## It splits the work into tasks
+
+Main turns your request into tasks that run side by side, each following its part through. The canvas shows how Main, projects, tasks and subagents connect, and what each task is doing now.
+
+<p align="center"><img src="docs/assets/readme/tasks-en.jpg" width="880" alt="The canvas: Main, the app project and its tasks, with each task's live progress"></p>
 
 <details>
-<summary>See the work at a glance</summary>
-
-The canvas shows how Main, projects, tasks and subagents connect, along with what each task is doing now.
-
-<img src="docs/assets/canvas-en.png" width="880" alt="The canvas connects projects, tasks and subagents with their current progress">
-
-</details>
-
-<details>
-<summary>Let Ondra look after sessions and context</summary>
+<summary>Sessions and context are handled for you</summary>
 
 - **A session per task:** each task has its own conversation. Enable per-task worktrees to keep Git changes separate from other tasks and your working folder.
 - **Carry the work forward:** long tasks hand completed work, findings, next steps and evidence to a fresh session. Following up on a finished task or changing direction starts a new task that takes over the earlier results.
@@ -45,49 +44,58 @@ The canvas shows how Main, projects, tasks and subagents connect, along with wha
 
 </details>
 
-<br>
+## It asks only when the call is yours
 
-## The important decisions stay with you.
+When your intent or taste matters, the question comes with context and choices. Press its number or Enter, or write your own answer. You can also step into a running task and change its direction.
 
-When your intent or taste matters, Ondra brings you choices with context. Pick one and press Enter, or write your own answer. You can also step into a running task and change its direction.
+<p align="center"><img src="docs/assets/readme/ask-en.jpg" width="880" alt="Your turn: the dark mode task needs a reply, and its question shows with choices on the canvas"></p>
 
-> Delegate the execution. Keep the decisions that set the direction.
+## It checks in the real app before it says done
 
-### Results come with what was checked
+A task that changes an app starts its own copy and uses the change. What it saw is kept as screenshots and logs; what it couldn't check is marked as not checked. How to check the project is written down once as its own skill (`.agents/skills/check-<name>/`), and later tasks reuse it.
+
+<p align="center"><img src="docs/assets/readme/check-en.jpg" width="880" alt="A task fixing a login redirect signs in to its own copy of the app and opens the dashboard in its browser"></p>
+
+<details>
+<summary>What comes back with a result</summary>
 
 - **Show the work:** plans, changed files and diffs, before-and-after screens, videos and test results. Open HTML results, tables, checklists and diagrams in the panel too.
 - **Check the record:** completion reports are compared with the task's recorded commands, files and other evidence. Unverified items are marked separately.
 - **Review where it matters:** plan and code reviews help check complex or sensitive changes. The review process follows the work's scope and project instructions.
 - **Carry checks forward:** a passing check stays valid until the code it covers changes. Shipping alone is not a reason to repeat it.
-
-<br>
-
-## Tools for the work you delegate
-
-**Browser.** Each task uses its own tab to read and interact with the web. Logins are shared within a workspace; passwords are entered through the macOS Keychain without reaching the model.
-
-**Mac apps.** With the required permissions, tasks can operate an app on your Mac and capture its window to check the result. Foreground protection helps keep your own work in focus.
-
-**Mobile.** With the platform tools installed, tasks can use iOS simulators and Android emulators to check a mobile app and capture its screen. Watch and interact with the device from Ondra.
-
-**Deep research.** Split a question into research threads, investigate sources and check quotations against the originals. Bring the answer, evidence and comparisons together in a visual report and PDF.
-
-<details>
-<summary>Tool access and boundaries</summary>
-
-- Mac app actions need Accessibility permission; window capture needs Screen Recording. Foreground protection is configurable and is not an OS-level isolation environment.
-- Mobile tasks create their own devices by default. They can also use an explicitly allowed existing device; protected devices are left alone.
-- Bundled skills include browser use, computer use, device use, deep research, code review, visual reports and web design. You can invoke one directly with `/skill:<name>`.
+- **Your call:** checking in the app is on by default; turn off *Check in the app before done* in Settings.
 
 </details>
 
-<br>
+## Each task gets its own browser
 
-## A workspace that fits your work
+Each task reads and works the web in its own tab. Logins are shared within a workspace; passwords are filled in from the macOS Keychain and never reach the model. Keep working elsewhere and watch a task's browser in the corner.
 
-Create and name workspaces around the way you work. Configure accounts and instructions for each, and keep their browser logins, memory and task history separate.
+<p align="center"><img src="docs/assets/readme/browser-en.jpg" width="880" alt="A research task with its own Browser tab open on a pricing page"></p>
 
-Choose your model, permissions and concurrency in Settings. Per-task worktrees, automatic memory saving and PR review follow-up are configurable too.
+## Computer use
+
+With your permission, a task uses a Mac app in the background. It acts on that app directly, so your cursor and the app in front stay yours, and it captures the app's window to check the result.
+
+<p align="center"><img src="docs/assets/readme/computer-en.jpg" width="880" alt="From the film: Ondra's pointer adds a chart in a slide app while Ondra's window shows the task clicking 'Chart'. The slide app is drawn for the film; Ondra's window is the real app."></p>
+
+## Simulators and emulators
+
+With the platform tools installed, tasks use iOS simulators and Android emulators to check your mobile app and capture its screen. Watch and use the devices from Ondra.
+
+<p align="center"><img src="docs/assets/readme/devices-en.jpg" width="880" alt="Devices: an iPhone simulator and a Pixel emulator in use by a task"></p>
+
+## Research with sources
+
+Deep research splits a question into threads, reads the sources and checks quotations against the originals. The answer comes back as a cited report and a PDF.
+
+<p align="center"><img src="docs/assets/readme/research-en.jpg" width="880" alt="A research summary with key numbers, cited findings and a comparison table, plus the full PDF"></p>
+
+## You decide what gets merged
+
+When a task on its own worktree finishes with changes, it asks what happens to them: merge, open a PR, or discard. What tasks made collects in Results.
+
+<p align="center"><img src="docs/assets/readme/merge-en.jpg" width="880" alt="The task's checks, then the question: merge the 2 changed files, open a PR, or discard"></p>
 
 <details>
 <summary>Keep pull requests with the work</summary>
@@ -98,15 +106,54 @@ Pushes and PR changes require GitHub write access. Enable automatic review follo
 
 </details>
 
-<details>
-<summary>More ways to make it yours</summary>
+## When words aren't enough, it draws
 
-- **Memory:** keep useful preferences and lessons, or import existing notes. Automatic saving can be turned off.
-- **Quick questions:** use `/btw` for an aside without interrupting the current conversation, or open side chat.
+Answers can draw a step-by-step board, build a 3D model you can turn, or lay out charts, diagrams and slides, right in the chat.
+
+<p align="center"><img src="docs/assets/readme/3d-en.jpg" width="880" alt="A 3D model of a Raspberry Pi board with labelled parts, drawn in an answer"></p>
+
+<details>
+<summary>Boards and charts</summary>
+
+<p align="center"><img src="docs/assets/readme/board-en.jpg" width="880" alt="A board answer drawing the fixed login flow step by step"></p>
+<p align="center"><img src="docs/assets/readme/charts-en.jpg" width="880" alt="Key-number tiles and a line chart in an answer"></p>
+
+</details>
+
+## And the rest
+
+- **Memory:** decide once and it remembers. Keep preferences and lessons, or import existing notes; automatic saving can be turned off.
+- **Routines:** daily work becomes a routine that runs on schedule while Ondra is open and the Mac is awake.
+- **Another Mac:** run tasks on your other Mac's projects. The work shows up here, end-to-end encrypted in between.
+- **`/btw`:** ask a quick question on the side while the work runs, without interrupting it.
+
+<p align="center"><img src="docs/assets/readme/memory-en.jpg" width="880" alt="Memory: a folder tree, a graph of related memories and counts by kind"></p>
+
+<details>
+<summary>A routine, made from the chat</summary>
+
+<p align="center"><img src="docs/assets/readme/routine-en.jpg" width="880" alt="A weekday 9:00 routine created from Main, with its next run"></p>
+
+</details>
+
+<details>
+<summary>Workspaces, settings and more</summary>
+
+- **Workspaces:** create and name workspaces around the way you work. Each has its own accounts and instructions, and keeps its browser logins, memory and task history separate.
+- **Settings:** choose your model, permissions and concurrency. Per-task worktrees, automatic memory saving and PR review follow-up are configurable too.
 - **Search and shortcuts:** find tasks, projects, memories and commands. Customize keyboard shortcuts in Settings.
 - **Hooks:** configure shell commands at the points in a task's lifecycle where you need them.
 - **Notifications:** enable system notifications to hear when work finishes or needs your attention.
 - **Usage data:** optional anonymous telemetry can be disabled in Settings. See [what is sent](docs/TELEMETRY.md).
+
+</details>
+
+<details>
+<summary>Tool access and boundaries</summary>
+
+- Mac app actions need Accessibility permission; window capture needs Screen Recording. Foreground protection is configurable and is not an OS-level isolation environment.
+- Mobile tasks create their own devices by default. They can also use an explicitly allowed existing device; protected devices are left alone.
+- Bundled skills include browser use, computer use, device use, app check, deep research, code review, visual reports and web design. You can invoke one directly with `/skill:<name>`.
 
 </details>
 
@@ -147,7 +194,6 @@ pnpm release notes.md          # release build (see scripts/release.mjs)
 - The agent engine comes from [3xhaustpi](https://github.com/3x-haust/3xhaustpi). Put it in a sibling folder or point `ONDRA_ENGINE_DIST` at `packages/coding-agent/dist`.
 - The engine, Chrome and binary analyzer are components downloaded once per version. Updates use the app and any changed components; the DMG's app includes these components.
 - Static binary analysis includes radare2, r2ghidra, native libraries and processor data, with no separate analysis engine to install. See [build and package checks](tools/binary-analysis/README.md).
-
 - The browser tool (`ondra-browser`) and the computer-use helper (`ondra-cuhost`) are ours, written in Swift with no third-party code: `src-tauri/helpers/browser/` and `src-tauri/helpers/cuhost.swift`, built by `src-tauri/helpers/build.sh` (Xcode command line tools).
 
 </details>
@@ -184,4 +230,4 @@ brand/ docs/         brand and documentation
 <p align="center">
   <a href="https://github.com/3x-haust/ondra/releases">Releases</a> · <a href="docs/TELEMETRY.md">Telemetry</a> · <a href="https://github.com/3x-haust/ondra/issues">Report an issue</a> · <a href="LICENSE">MIT License</a>
 </p>
-<p align="center"><sub>The licenses of the open-source software Ondra includes are in the app: Settings › About › Open-source licenses.</sub></p>
+<p align="center"><sub>Screens in this README and the film use sample data. The licenses of the open-source software Ondra includes are in the app: Settings › About › Open-source licenses.</sub></p>
