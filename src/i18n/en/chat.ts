@@ -98,6 +98,23 @@ export default {
   "첨부 및 기타": "Attach and more",
   "보내기": "Send",
   "보내기 (↵)": "Send (↵)",
+  // dictation (ui/VoiceButton)
+  "말로 입력": "Dictate",
+  "받아쓰기 취소": "Cancel dictation",
+  "받아쓰기 끝내기 (Esc: 취소)": "Finish dictation (Esc to cancel)",
+  "마이크를 켜는 중…": "Turning on the microphone…",
+  "듣고 있어요…": "Listening…",
+  "2분이 지나 받아쓰기를 마쳤어요.": "Dictation stopped after 2 minutes.",
+  "들린 말이 없어요.": "Didn't hear anything.",
+  "마이크 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Ondra를 켜 주세요.":
+    "Ondra can't use the microphone. Turn on Ondra in System Settings › Privacy & Security › Microphone.",
+  "음성 인식 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 음성 인식에서 Ondra를 켜 주세요.":
+    "Ondra can't use speech recognition. Turn on Ondra in System Settings › Privacy & Security › Speech Recognition.",
+  "쓸 수 있는 마이크가 없어요.": "No microphone is available.",
+  "지금은 이 Mac에서 음성 인식을 쓸 수 없어요.": "Speech recognition isn't available on this Mac right now.",
+  "이 언어는 Mac 안에서 받아쓸 수 없어요. 시스템 설정 › 키보드에서 받아쓰기를 켠 뒤 다시 해 보세요.":
+    "This language can't be dictated on this Mac. Turn on Dictation in System Settings › Keyboard, then try again.",
+  "받아쓰기에 실패했어요.": "Dictation failed.",
   "응답 중지": "Stop reply",
   "작업 일시정지": "Pause task",
   "놓아서 첨부": "Drop to attach",

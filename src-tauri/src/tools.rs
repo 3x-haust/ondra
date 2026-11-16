@@ -99,7 +99,12 @@ pub fn request_accessibility() -> bool {
 
 #[tauri::command]
 pub fn open_privacy_settings(pane: String) -> Result<(), String> {
-    let anchor = if pane == "screen" { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
+    let anchor = match pane.as_str() {
+        "screen" => "Privacy_ScreenCapture",
+        "microphone" => "Privacy_Microphone",
+        "speech" => "Privacy_SpeechRecognition",
+        _ => "Privacy_Accessibility",
+    };
     Command::new("/usr/bin/open")
         .arg(format!("x-apple.systempreferences:com.apple.preference.security?{anchor}"))
         .spawn()

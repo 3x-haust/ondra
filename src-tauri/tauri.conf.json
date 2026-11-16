@@ -63,6 +63,7 @@
       "binaries/ondra-binary",
       "binaries/ondra-simhelper",
       "binaries/ondra-cuhost",
+      "binaries/ondra-dictate",
       "binaries/ondra-remote"
     ],
     "icon": [
@@ -73,7 +74,8 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "entitlements": "Entitlements.plist"
     },
     "resources": {
       "binaries/ondra-bgguard.dylib": "ondra-bgguard.dylib",

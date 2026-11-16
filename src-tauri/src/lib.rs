@@ -4,6 +4,7 @@
 //!   pty     — in-app terminals (and account login)
 //!   tools   — bundled ondra-browser + Chrome, ondra-cuhost, permissions
 //!   components — the engine, Chrome and the analyzer, kept outside the app (fetched once per version)
+//!   dictate — the composer's dictation (bundled ondra-dictate, on-device speech recognition)
 //!   browser — the one shared browser every job uses (own tab, shared logins)
 //!   keychain — sign-in from the macOS keychain without the agent seeing it
 //!   providers — direct connections (any OpenAI-, Anthropic- or Google-compatible address) in models.json
@@ -30,6 +31,7 @@ mod pty;
 mod store;
 mod tools;
 mod remote;
+mod dictate;
 mod worktree;
 mod fs;
 mod farfs;
@@ -204,6 +206,7 @@ fn kill_children(app: &AppHandle) {
     app.state::<engine::Engine>().kill_all();
     app.state::<pty::Ptys>().kill_all();
     browser::stop(app);
+    dictate::stop_all();
 }
 
 /// `ondra --keychain-credential`: ondra-browser's keychain helper (see keychain.rs).
@@ -385,9 +388,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| match (window.label(), event) {
             // Closing the main window keeps the app running in the menu bar.
+            // Dictation stops with it: the microphone isn't left on behind a hidden window.
             ("main", WindowEvent::CloseRequested { api, .. }) => {
                 api.prevent_close();
                 let _ = window.hide();
+                dictate::stop_all();
             }
             // Mission Control / Stage Manager narrowing the window it puts back on stage is undone
             ("main", WindowEvent::Resized(_) | WindowEvent::Moved(_)) => winsize::on_change(window.app_handle()),
@@ -495,6 +500,9 @@ pub fn run() {
             remote::remote_awake,
             remote::remote_devices,
             remote::remote_forget,
+            dictate::dictate_start,
+            dictate::dictate_stop,
+            dictate::dictate_cancel,
             tools::worker_env,
             secrets::secret_list,
             secrets::secret_set,

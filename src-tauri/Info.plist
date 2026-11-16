@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Merged into the app's Info.plist by Tauri. Dictation (helpers/dictate.swift) runs in a
+     helper, but macOS asks for the app that started it: the usage strings belong here. -->
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>입력창에 말로 입력할 때 마이크를 써요. Ondra uses the microphone when you dictate into the message box.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>말한 내용을 이 Mac 안에서 글로 바꿔요. 소리는 밖으로 보내지 않아요. Ondra turns what you say into text on this Mac; the audio never leaves it.</string>
+</dict>
+</plist>
