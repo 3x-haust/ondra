@@ -250,6 +250,57 @@ html:not(.motion) .replay { display: none; }
   }
 }
 
+/* ── scroll moments: three places where the scroll itself moves something ──
+   Pure CSS, tied to the scroll position (never to scroll speed, never snapping).
+   Browsers without scroll-driven animations skip all of this: the canvas plays its
+   timed scene from demo.js instead, the screenshot uses the .rv fallback, no hairline.
+   Reduced motion: none of it, everything sits in its final state. */
+@keyframes sc-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes sc-settle { from { opacity: .5; transform: perspective(1600px) rotateX(9deg) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes sc-node { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes sc-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) and (animation-range: entry) {
+    /* 1. a hairline of reading progress along the top edge */
+    body::before {
+      content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 20; pointer-events: none;
+      background: var(--accent); transform-origin: 0 50%;
+      animation: sc-grow linear both; animation-timeline: scroll(root block);
+    }
+
+    /* 2. the real screenshot leans back and stands up as it comes in */
+    #real .real-shot.rv { transform-origin: 50% 100%; animation-name: sc-settle; animation-range: entry 0% cover 42%; }
+
+    /* 3. the canvas, pinned: Main alone, then projects → tasks → subagents branch off
+          with their lines, then the task bars fill. The tall section is the timeline
+          (not the sticky box: WebKit still has sticky + view-timeline edge cases),
+          and contain 0–100% is exactly the stretch while the canvas is pinned. */
+    @media (min-width: 861px) and (min-height: 760px) {
+      .scrolly { height: 185vh; padding-top: 0; view-timeline: --cv block; }
+      .scrolly > .pin { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+      .scrolly + section { padding-top: 56px; }
+
+      /* shorthand first, ranges after it (the shorthand resets animation-range) */
+      .scrolly .cv-lines path { animation: sc-line linear both; animation-timeline: --cv; }
+      .scrolly .node:not([data-depth="0"]) { animation: sc-node linear both; animation-timeline: --cv; }
+      .scrolly .cv-lines path[data-depth="1"] { animation-range: contain 4% contain 18%; }
+      .scrolly .node[data-depth="1"] { animation-range: contain 12% contain 26%; }
+      .scrolly .cv-lines path[data-depth="2"] { animation-range: contain 28% contain 42%; }
+      .scrolly .node[data-depth="2"] { animation-range: contain 36% contain 50%; }
+      .scrolly .cv-lines path[data-depth="3"] { animation-range: contain 52% contain 64%; }
+      .scrolly .node[data-depth="3"] { animation-range: contain 58% contain 70%; }
+
+      .scrolly .bar i.f { position: relative; background: var(--line); }
+      .scrolly .bar i.f::after {
+        content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--accent); transform-origin: 0 50%;
+        animation: sc-grow linear both; animation-timeline: --cv; animation-range: contain 72% contain 80%;
+      }
+      .scrolly .bar i.f:nth-child(2)::after { animation-range: contain 78% contain 86%; }
+      .scrolly .bar i.f:nth-child(3)::after { animation-range: contain 84% contain 92%; }
+    }
+  }
+}
+
 /* ── smaller screens ──────────────────────────────────────────── */
 @media (max-width: 860px) {
   .stage { height: 520px; margin-top: 40px; }

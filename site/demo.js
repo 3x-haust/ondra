@@ -19,6 +19,10 @@
     };
   }
   var quiet = function () {};
+  // CSS scroll-driven animations (Chrome 115+, Safari 26+, Firefox 159+); same test as demo.css
+  function scrollDriven() {
+    return !!(window.CSS && CSS.supports && CSS.supports("animation-timeline: view()") && CSS.supports("animation-range: entry"));
+  }
 
   // ── data-seq: an element's earlier states; the markup holds the last one ──
   function prep(scene) {
@@ -209,6 +213,8 @@
     else window.addEventListener("resize", draw);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
     if (!motion) return;
+    // pinned and built by the scroll itself (demo.css, "scroll moments"): leave the end state to the CSS
+    if (scrollDriven() && window.matchMedia("(min-width: 861px) and (min-height: 760px)").matches) { scene.classList.add("done"); return; }
 
     prep(scene); rewind(scene);
     var w = runner().start();
@@ -358,8 +364,7 @@
 
   // ── section reveal fallback when CSS scroll-driven animations aren't there ──
   function reveals() {
-    var sd = window.CSS && CSS.supports && CSS.supports("animation-timeline: view()") && CSS.supports("animation-range: entry");
-    if (!motion || sd || !("IntersectionObserver" in window)) return;
+    if (!motion || scrollDriven() || !("IntersectionObserver" in window)) return;
     var io = new IntersectionObserver(function (es) {
       es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
     }, { threshold: 0.15 });
