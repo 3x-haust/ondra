@@ -236,13 +236,21 @@ export class BoardView {
     const first = !this.src;
     this.src = src;
     if (first) this.instant = quiet() || seen.has(hashOf(src)) || !!this.opts.big;
+    this.draw(done);
+  }
+
+  /** draw the source as it stands (update decides whether there is anything new) */
+  private draw(done: boolean): void {
+    const src = this.src;
     // the last line may still be arriving: wait for it to settle before drawing it
     clearTimeout(this.settle);
     const whole = done || this.instant;
     if (isProgram(src)) {
-      // a program runs up to its last complete statement; the interpreter loads on the first one
+      // a program runs up to its last complete statement; the interpreter loads on the first one.
+      // Once it has, draw what is there now: going through update would see the same source and
+      // skip it, leaving a board that arrived whole (a reopened chat) blank
       if (!engineReady()) {
-        void loadEngine().then(() => !this.disposed && this.update(this.src, whole));
+        void loadEngine().then(() => !this.disposed && this.draw(done));
         return;
       }
       const ready = whole ? src : completePart(src);
