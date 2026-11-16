@@ -97,6 +97,12 @@ describe("foreignData", () => {
     expect(foreignData(`ls ${D}/artifacts/t1`, D, ok, "home")).toBeUndefined();
     expect(foreignData(`ls ${D}/browser/home/recipes/github.com`, D, ok, "home")).toBeUndefined();
   });
+  it("reads a quoted path's folder without the punctuation or words after it", () => {
+    expect(foreignData(`git commit -m "shots in \`${D}/artifacts/t1\`."`, D, ok, "home")).toBeUndefined();
+    expect(foreignData(`echo "${D}/artifacts/t1였어요."`, D, ok, "home")).toBeUndefined();
+    expect(foreignData(`echo "${D}/worktrees/app-t1."`, D, ok, "home")).toBeUndefined();
+    expect(foreignData(`echo "${D}/artifacts/t9\`."`, D, ok, "home")).toBe("artifacts/t9");
+  });
   it("blocks the app state and anything of other jobs or the other space", () => {
     expect(foreignData(`cat ${D}/state.json`, D, ok, "home")).toBe("state.json");
     expect(foreignData(`rg token ${D}/sessions/t9/x.jsonl`, D, ok, "home")).toBe("sessions/t9");

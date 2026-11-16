@@ -72,7 +72,7 @@ export default function (pi: any) {
     label: "Job tell",
     exposure: "deferred",
     description:
-      "Send a message to another job of this space (its id from jobs_search): your parent, a sibling, or a past job you need something from. A running job gets it at its next turn (now: true steers it in at once), a waiting one as its answer, a paused one resumes with it, a finished one is carried on by a new job. The user sees it in that job's thread as from you. Not for yourself; say what you need in one self-contained message.",
+      "Send a message to another job of this space (its id from jobs_search): your parent, a sibling, or a past job you need something from. A running job gets it at its next turn (now: true steers it in at once), a waiting one as its answer, a paused one resumes with it, a finished one of this project is carried on by a new job (another project's finished job is only read, with job_read). The user sees it in that job's thread as from you. Not for yourself; say what you need in one self-contained message.",
     promptSnippet: "Send a message to another job of this space",
     parameters: Type.Object({
       id: Type.String({ description: "the job's id" }),

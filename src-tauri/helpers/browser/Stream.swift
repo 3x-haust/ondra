@@ -4,6 +4,7 @@
 // Server → client:  {"type":"frame","data":<jpeg base64>,"metadata":{deviceWidth,deviceHeight,…}}
 //                   {"type":"url","url":…}
 // Client → server:  {"type":"input_mouse","eventType":"mousePressed",x,y,button,clickCount}
+//                   {"type":"viewport","width":…,"height":…}: lay the page out at the viewer's size
 //                   {"type":"input_keyboard","eventType":"keyDown",key,code,text,modifiers}
 //                   {"type":"input_touch","eventType":"touchStart",touchPoints:[{x,y}]}
 // `ws://127.0.0.1:<port>/?maxFps=10` caps the frames one client gets.
@@ -206,8 +207,10 @@ final class StreamServer {
         close(fd)
         lock.lock()
         clients.removeAll { $0 === client }
+        let left = clients.isEmpty
         lock.unlock()
         updateCasting()
+        if left, let d = daemon { DispatchQueue.global().async { d.unfit() } }
     }
 
     /// A new viewer sees the page at once: its address and a picture (headless Chrome only
@@ -249,6 +252,9 @@ final class StreamServer {
             d.cdp.send("Input.dispatchKeyEvent", p, session: tab.sessionId)
         case "input_touch":
             d.cdp.send("Input.dispatchTouchEvent", ["type": m.str("eventType") ?? "touchStart", "touchPoints": m.arr("touchPoints") ?? []], session: tab.sessionId)
+        case "viewport":
+            // the panel's page area, so the page fills it (Daemon.fit)
+            if let w = m.int("width"), let h = m.int("height") { DispatchQueue.global().async { d.fit(w, h) } }
         default:
             break
         }

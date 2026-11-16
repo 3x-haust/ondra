@@ -25,7 +25,7 @@ export const PLAN_REVIEW = "계획 검토";
 const FRESH =
   "You read a plan as a newcomer, not its author: you have the requirement, the plan below and the repository, not the conversation that produced them. Read only; change nothing.";
 const PLAN_OUT =
-  "Answer with findings, most serious first, one line each: `- P1|P2|P3 <section or \`path:line\`> — <what's wrong> → <what to change>`. P1: it would build the wrong thing or break something; P2: a gap the builder would trip on; P3: worth a line. A choice only the user can make (a trade-off, not a fact you could check) goes on its own line as `- 질문: …`. Nothing to fix: say so in one line.";
+  "Answer with findings, most serious first, one line each: `- P1|P2|P3 <section or \`path:line\`> — <what's wrong> → <what to change>`. P1: it would build the wrong thing or break something; P2: a gap the builder would trip on; P3: worth a line. Asking for more than the requirement needs (extra guarantees, states, checks, safety or structure) is never P1 or P2. For a mockup, a draft or a temporary page, only what would show the user the wrong thing counts. A choice only the user can make (a trade-off, not a fact you could check) goes on its own line as `- 질문: …`. Nothing to fix: say so in one line.";
 
 /** 계획 검토: two fresh readers of a plan before anything is built. */
 export const PLAN_LENSES = [
@@ -107,7 +107,7 @@ export function disagreements(design: string, code: string): string[] {
 
 /** What the job does with a review's findings. */
 export const REVIEW_FIX =
-  "P1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)를 이어서 하고 끝내. 고칠 게 없으면 바로 남은 단계로 넘어가.";
+  "P1·P2만 고쳐 줘. P3는 고치지 말고 done의 unverified나 메모에 적기만 해. 고친 뒤에는 그 부분을 다루는 테스트만 다시 돌려(전체 검사·리뷰를 다시 돌리지 말고, 앞에서 통과한 게 그대로 유효하니 다시 안 돌린 걸 unverified에 적지도 마). 그다음 계획에 남은 단계(설치, 사진, 올리기처럼 맡은 일에 있던 것)와 아직 통과 못 한 목표 검사를 이어서 해. 리뷰를 반영했다고 일이 끝난 건 아니야: 맡은 일이 다 됐을 때 끝내고, 못 한 건 unverified에 적어. 고칠 게 없으면 바로 남은 단계로 넘어가.";
 
 /**
  * The one message the job gets when both lenses are over: each lens's findings,
@@ -142,7 +142,7 @@ export function crosscheckMessage(group: Task[], memory: { lines: string[]; spli
 
 /** What to do with a plan review's findings. */
 export const PLAN_FIX =
-  "계획을 이 결과대로 고쳐 줘(P1·P2는 꼭, P3는 쉬우면). 사용자만 정할 수 있는 질문이 있으면 decision 하나로 묻고 답을 기다려. 없으면 바로 만들기 시작해. 계획 검토는 다시 띄우지 마.";
+  "계획을 이 결과대로 고쳐 줘(P1·P2는 꼭, P3는 쉬우면). 다만 사용자가 요청하지 않은 보장·상태·검사·안전장치를 더하라는 지적은 P2여도 넣지 말고 보고에 한 줄로 남겨. 사용자만 정할 수 있는 질문이 있으면 decision 하나로 묻고 답을 기다려. 없으면 바로 만들기 시작해. 계획 검토는 다시 띄우지 마.";
 
 function planMessage(group: Task[]): string {
   const done = group.filter((k) => k.status === "done");

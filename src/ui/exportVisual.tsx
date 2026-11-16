@@ -10,7 +10,7 @@ import { t } from "../i18n";
 const PROPS = [
   "fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity", "stroke-dasharray", "stroke-linecap",
   "stroke-linejoin", "opacity", "font-family", "font-size", "font-weight", "font-style", "letter-spacing",
-  "text-anchor", "dominant-baseline", "paint-order", "visibility",
+  "text-anchor", "dominant-baseline", "paint-order", "visibility", "filter",
 ];
 
 /**

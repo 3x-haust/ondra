@@ -1,5 +1,7 @@
 // Skill metadata stays in this process; only search matches reach the model.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { loadSkills, parseFrontmatter, stripFrontmatter, type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -71,6 +73,29 @@ export function skillHint(skills: Skill[], query: string, limit = 3): string {
     ...fit.map(({ skill }) => `- ${skill.name}: ${skill.description.replace(/\s+/g, " ").slice(0, 200)} (${skill.filePath})`),
     "Read the SKILL.md of each one that fits before you act, and follow it. Search again when the work moves to another domain.",
   ].join("\n");
+}
+
+/**
+ * The user's own words in a message, for matching skills: without the context
+ * main's turn carries above "# Message", and empty for a note the app sends by
+ * itself (a restart, a check before done, a review's findings, a fork that ended),
+ * whose stock words ("plan", "test", "review") would offer skills the work never asked for.
+ */
+export function userWords(prompt: string): string {
+  const message = prompt.lastIndexOf("\n# Message\n");
+  if (message >= 0) return prompt.slice(message + "\n# Message\n".length);
+  if (/^# .*\(not a user message\)$/m.test(prompt)) return "";
+  // a routine's run: what to do is under "## 할 일" (src/engine/routines.ts runMessage)
+  if (prompt.startsWith("(Ondra) 루틴")) {
+    const todo = prompt.indexOf("## 할 일\n");
+    return todo >= 0 ? prompt.slice(todo + "## 할 일\n".length) : "";
+  }
+  // another job's message: its words after the note (src/engine/jobs.ts fromJob)
+  if (prompt.startsWith("(Ondra) A message from another job")) return prompt.slice(prompt.indexOf("\n\n") + 2 || prompt.length);
+  // the app's own notes: "(Ondra…" (tasks.ts, captain.ts, handoff.ts), the check before done (tasks.ts),
+  // review and subagent results (crosscheck.ts CROSSCHECK, PLAN_REVIEW; tasks.ts resultHead)
+  if (/^(\(Ondra|끝내기 전에 빠진 게 있어요|교차 검토|계획 검토|리뷰 결과가 왔어요|서브에이전트 ")/.test(prompt)) return "";
+  return prompt;
 }
 
 // ───────────── the router: offer a skill when the work enters its domain
@@ -196,10 +221,34 @@ export function messageHint(fit: Skill[], first: boolean): string {
 export const toolHint = (s: Skill, why: string) =>
   `\n[skill] This step ${why}, which is ${s.name}'s domain: ${s.description.replace(/\s+/g, " ").slice(0, 160)}\nRead ${s.filePath} and follow it before going on, unless you already have.`;
 
+/** where a project keeps skills of its own, for any agent */
+export const PROJECT_SKILL_DIRS = [".agents/skills", ".claude/skills", ".cursor/skills"];
+
+/**
+ * The skill folders of the project a job works in: in its folder and each folder above it up to
+ * the repo root (a worktree's too), never at or above the home folder (those are the user's own,
+ * for every project, and come from Settings).
+ */
+export function projectSkillDirs(cwd: string, home = homedir()): string[] {
+  const out: string[] = [];
+  const top = resolve(home);
+  for (let d = resolve(cwd), i = 0; i < 12; i++) {
+    if (d === top || d === "/") break;
+    for (const s of PROJECT_SKILL_DIRS) if (existsSync(join(d, s))) out.push(join(d, s));
+    if (existsSync(join(d, ".git"))) break;
+    const up = dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return out;
+}
+
 export default function (pi: ExtensionAPI) {
   if (!process.env.ONDRA_SKILL_PATHS) return;
-  const skillPaths: unknown = JSON.parse(process.env.ONDRA_SKILL_PATHS);
-  if (!Array.isArray(skillPaths) || !skillPaths.every((p) => typeof p === "string")) throw new Error("Invalid ONDRA_SKILL_PATHS");
+  const given: unknown = JSON.parse(process.env.ONDRA_SKILL_PATHS);
+  if (!Array.isArray(given) || !given.every((p) => typeof p === "string")) throw new Error("Invalid ONDRA_SKILL_PATHS");
+  // the project's own skills after the app's (a name the app has keeps the app's)
+  const skillPaths = [...given, ...projectSkillDirs(process.cwd()).filter((d) => !given.includes(d))];
   // Keep Pi's parsing, duplicate precedence and relative-path handling without
   // giving its ResourceLoader a catalog to put into the system prompt.
   const { skills, diagnostics } = loadSkills({ cwd: process.cwd(), agentDir: process.cwd(), skillPaths, includeDefaults: false });
@@ -239,7 +288,11 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", (event) => {
     if (event.messageType !== "user" || typeof event.prompt !== "string") return;
     const task = taskQuery(event.prompt);
-    const hint = messageHint(router.forMessage((task ?? event.prompt).slice(0, 4000)), !!task);
+    // an answer to the job's own question is matched by what the user picked or typed, not the
+    // question's words; a reply this short ("문제가 있어요", "못고쳐?") names no skill
+    const asked = (task ?? userWords(event.prompt).replace(/^"[^"\n]*" → /, "")).slice(0, 4000);
+    if (!asked.trim() || (!task && asked.trim().length < 12)) return;
+    const hint = messageHint(router.forMessage(asked), !!task);
     if (hint) return { message: { customType: "ondra-skills", content: hint, display: false } };
   });
 

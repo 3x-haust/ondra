@@ -1,55 +1,39 @@
 #!/usr/bin/env node
-// Ondra evals: send each case to main (in its own "평가" project chat), wait for
+// Ondra evals: send each case to main (in a fresh project chat of its own), wait for
 // the jobs it starts, and score them. Needs the dev app running (`pnpm tauri dev`).
 //
 //   node evals/run.mjs                 all cases
 //   node evals/run.mjs cu-calculator   one or more cases by name
 //   node evals/run.mjs --repeat 3      run each case several times
+//   node evals/run.mjs --note "..."    what this run should show (kept with the result)
 //
 // Writes evals/results/<time>/report.{json,md} (with each failed tool's output,
-// for finding the cause) and appends one line per run to evals/results/history.jsonl.
+// for finding the cause) and meta.json (commit, note, model, case hashes), and appends
+// one line per run to evals/results/history.jsonl. See evals/README.md.
 import { existsSync, mkdirSync, readFileSync, readdirSync, appendFileSync, writeFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DATA, app as bridge } from "./devbridge.mjs";
+import { loadJobCases } from "./job-cases.mjs";
+import { headline, runMeta, tally } from "./tally.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DATA = join(homedir(), "Library/Application Support/dev.3xhaust.ondra");
-// read on every call: the app writes a new one each time it restarts
-const token = () => readFileSync(join(DATA, "devbridge.token"), "utf8").trim();
 const SPACE = "home";
-// outside any repo: a folder inside ondra made jobs open ondra worktrees and task branches
-const PROJECT_DIR = join(DATA, "evals-workspace");
+// outside any repo: a folder inside ondra made jobs open ondra worktrees and task branches.
+// Main and the jobs see this path and the project's name: nothing in them may say it is
+// a test (see META in main-cases.mjs)
+const PROJECT_DIR = join(DATA, "workspace");
 
 const argv = process.argv.slice(2);
 const repeat = Number(argv[argv.indexOf("--repeat") + 1]) || 1;
-const names = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--repeat");
-const cases = readdirSync(join(HERE, "cases"))
-  .filter((f) => f.endsWith(".json"))
-  .map((f) => ({ name: f.replace(/\.json$/, ""), ...JSON.parse(readFileSync(join(HERE, "cases", f), "utf8")) }))
-  .filter((c) => !names.length || names.includes(c.name));
+const note = argv.includes("--note") ? argv[argv.indexOf("--note") + 1] : "";
+const names = argv.filter((a, i) => !a.startsWith("--") && !["--repeat", "--note"].includes(argv[i - 1]));
+const cases = loadJobCases(names);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Run JS inside the app (dev bridge). The body must `return` a JSON-able value. */
-async function app(js) {
-  for (let i = 0; i < 20; i++) {
-    try {
-      const r = await fetch("http://127.0.0.1:17321/eval", { method: "POST", headers: { "x-token": token() }, body: js, signal: AbortSignal.timeout(130_000) });
-      const t = await r.text();
-      if (t.trim() && t.trim() !== '"unauthorized"') {
-        const v = JSON.parse(t);
-        if (typeof v === "string" && v.startsWith("ERR")) throw new Error(v);
-        return v;
-      }
-    } catch (e) {
-      if (String(e).includes("ERR")) throw e;
-    }
-    await sleep(3000); // app restarting
-  }
-  throw new Error("dev bridge not answering — is `pnpm tauri dev` running?");
-}
+// short calls, polled: a minute of retries rides out an app restart
+const app = (js) => bridge(js, { tries: 20, timeout: 130_000 });
 
 const devices = () => {
   const out = {};
@@ -91,9 +75,10 @@ async function runCase(c) {
   // its own project (folder + main chat) per run, so main can't pick up an
   // earlier run's job or its old screenshot
   // a neutral name: a folder called after the case sent jobs searching memory for it
-  const dir = join(PROJECT_DIR, `w-${Date.now().toString(36)}`);
+  const id = Date.now().toString(36);
+  const dir = join(PROJECT_DIR, `folder-${id}`);
   mkdirSync(dir, { recursive: true });
-  const project = await app(`return __ui.store.addProject("${SPACE}", ${JSON.stringify(dir)}, ${JSON.stringify(`평가 ${dir.split("-").pop()}`)});`);
+  const project = await app(`return __ui.store.addProject("${SPACE}", ${JSON.stringify(dir)}, ${JSON.stringify(`새 폴더 ${id}`)});`);
   const replyId = await app(`return __ui.captain.throwThought(${JSON.stringify(c.ask)}, "${SPACE}", { project: ${JSON.stringify(project)} });`);
   let reply;
   for (let i = 0; i < 100; i++) {
@@ -181,6 +166,7 @@ function scoreResearch(dir) {
 }
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+const model = await app(`return __ui.store.state.settings?.captainModel || ""`).catch(() => "");
 const outDir = join(HERE, "results", stamp);
 mkdirSync(outDir, { recursive: true });
 const results = [];
@@ -199,11 +185,17 @@ for (let r = 0; r < repeat; r++) {
   }
 }
 
+const t = tally(results);
+const meta = { at: stamp, ...runMeta({ cwd: HERE, note, repeat, model, cases }) };
+writeFileSync(join(outDir, "meta.json"), JSON.stringify(meta, null, 1));
 const md = [
   `# Ondra evals ${stamp}`,
   "",
-  `${results.filter((r) => r.pass).length}/${results.length} passed`,
+  headline(t),
   "",
+  `commit ${meta.commit}${meta.dirty ? " (with edits)" : ""} · main's model ${meta.model ?? "account default"}${note ? ` · note: ${note}` : ""}`,
+  "",
+  ...(repeat > 1 ? ["| case | passed | harness errors |", "|---|---|---|", ...t.cases.map((c) => `| ${c.name}${c.flaky ? " (flaky)" : ""} | ${c.passed}/${c.runs - c.errors} | ${c.errors || ""} |`), ""] : []),
   "| case | pass | secs | tools | failed tools | asked | failed checks |",
   "|---|---|---|---|---|---|---|",
   ...results.map((r) => `| ${r.name} | ${r.pass ? "yes" : "no"} | ${r.secs ?? "-"} | ${r.tools ?? "-"} | ${r.failedTools ?? "-"} | ${r.asked ?? "-"} | ${r.failedChecks.join(", ")} |`),
@@ -224,5 +216,5 @@ const md = [
   ]),
 ].join("\n");
 writeFileSync(join(outDir, "report.md"), md);
-appendFileSync(join(HERE, "results", "history.jsonl"), JSON.stringify({ at: stamp, results: results.map(({ name, pass, secs, tools, failedTools, failedChecks }) => ({ name, pass, secs, tools, failedTools, failedChecks })) }) + "\n");
-console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed → ${join(outDir, "report.md")}`);
+appendFileSync(join(HERE, "results", "history.jsonl"), JSON.stringify({ at: stamp, commit: meta.commit, dirty: meta.dirty, note: meta.note, results: results.map(({ name, pass, secs, tools, failedTools, failedChecks }) => ({ name, pass, secs, tools, failedTools, failedChecks })) }) + "\n");
+console.log(`\n${headline(t)} → ${join(outDir, "report.md")}`);

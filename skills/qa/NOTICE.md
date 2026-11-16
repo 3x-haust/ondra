@@ -9,3 +9,7 @@ This skill's method draws on, and credits, these public works (see each for its 
 - James Bach, Heuristic Test Strategy Model (HTSM)
 - James Whittaker, exploratory testing tours
 - W3C WAI Easy Checks
+- Cursor `control-ui` skill (cursor-team-kit) — https://github.com/cursor/plugins: one-action
+  interaction loop, selectors over coordinates, reuse the repo's harness
+- verification-skill-example (poteto) — https://github.com/poteto/verification-skill-example:
+  project-local feature map, proof bar, fresh-build check, isolated instance

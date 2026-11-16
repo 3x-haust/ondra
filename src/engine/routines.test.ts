@@ -3,11 +3,11 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state, taskById } from "../state/store";
 import type { Routine } from "../state/types";
-import { applyRoutes } from "./captain";
+import { applyRoutes, nowLine } from "./captain";
 import { CAPTAIN_SYSTEM } from "./prompts";
 import { eventText, newEvents, parseEvents } from "./routineEvents";
-import { addRoutine, NOTHING, pollRoutine, quietRun, routineById, runRoutine, runMessage, saidNothing, saveRoutine, settleRun, tickRoutines } from "./routines";
-import { describeWhen, nextRun, parseWhen } from "./routineTime";
+import { addRoutine, ALARM_LATE, NOTHING, pollRoutine, quietRun, ringAlarm, routineById, routineLine, runRoutine, runMessage, saidNothing, saveRoutine, settleRun, SNOOZE_MIN, snoozeAlarm, tickRoutines } from "./routines";
+import { dayTime, describeWhen, nextRun, parseWhen } from "./routineTime";
 import { agentOf } from "./tasks";
 import { markDead } from "./rpc";
 
@@ -183,5 +183,147 @@ describe("routine runs", () => {
     const m = runMessage(routineById(r.id)!, Date.now(), "- #1 x");
     expect(m).toContain("## 새로 생긴 것");
     expect(m).not.toContain(NOTHING);
+  });
+});
+
+describe("alarms", () => {
+  let notified: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    setState(reconcile(freshState()));
+    setState("spaces", [{ id: "home", label: "개인", folder: "~", rules: "" }]);
+    setState("projects", [{ id: "p-app", space: "home", name: "app", folder: "/repo/app" }] as never);
+    vi.spyOn(native, "agentSend").mockResolvedValue(undefined as never);
+    notified = vi.spyOn(native, "notify").mockResolvedValue(undefined as never);
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const alarm = (over: Partial<Routine> = {}) => routineById(addRoutine({ space: "home", title: "회의", prompt: "회의 있어요", when: { kind: "once", at: Date.now() + 600_000 }, mode: "fresh", quiet: false, alarm: true, ...over }))!;
+  const rang = () => state.captain.flatMap((m) => (m.routes ?? []).filter((r) => r.kind === "alarm").map((r) => ({ m, r: r as Extract<typeof r, { kind: "alarm" }> })));
+
+  it("reads \"N분 뒤\" as minutes from now, and says a day as today or tomorrow", () => {
+    const now = at(2026, 11, 13, 14, 3);
+    expect(parseWhen({ kind: "once", in: 10 }, now)).toEqual({ kind: "once", at: now + 600_000 });
+    expect(parseWhen({ kind: "once", in: 0 }, now)).toBeUndefined();
+    expect(dayTime(at(2026, 11, 13, 15), now)).toBe("오늘 15:00");
+    expect(dayTime(at(2026, 11, 14, 9), now)).toBe("내일 09:00");
+    expect(dayTime(at(2026, 11, 20, 9), now)).toBe("11/20 09:00");
+    expect(describeWhen({ kind: "once", at: at(2026, 11, 14, 9) }, now)).toBe("내일 09:00 한 번");
+  });
+
+  it("main sets one at once from the chat: on, no draft, no job, a card in the chat", async () => {
+    const before = Date.now();
+    const out = await applyRoutes("home", [{ kind: "alarm", text: "회의 있어요", when: { kind: "once", in: 10 } }], "10분 뒤에 회의 있다고 알려줘");
+    expect(out).toEqual([{ kind: "routine", routineId: expect.any(String), alarm: true }]);
+    const r = routineById((out[0] as { routineId: string }).routineId)!;
+    expect(r).toMatchObject({ alarm: true, enabled: true, prompt: "회의 있어요", from: "chat" });
+    expect(r.draft).toBeFalsy();
+    expect(r.nextAt! - before).toBeGreaterThanOrEqual(600_000);
+    expect(r.nextAt! - before).toBeLessThan(605_000);
+    expect(state.tasks).toHaveLength(0);
+    const daily = await applyRoutes("home", [{ kind: "alarm", text: "퇴근하세요", when: { kind: "daily", time: "18:00" } }], "매일 6시에 퇴근하라고 알려줘");
+    expect(routineById((daily[0] as { routineId: string }).routineId)!.when).toEqual({ kind: "daily", time: "18:00" });
+    // no time it can use (or a GitHub event): main asks instead
+    const bad = await applyRoutes("home", [{ kind: "alarm", text: "x", when: { kind: "event", event: "issue" } }], "이슈 오면 알려줘");
+    expect(bad[0].kind).toBe("answer");
+    expect(CAPTAIN_SYSTEM).toContain('"alarm"');
+  });
+
+  it("an alarm set in a project's chat rings there", async () => {
+    const out = await applyRoutes("home~p-app", [{ kind: "alarm", text: "PR 리뷰하기", when: { kind: "once", at: "2099-01-01T09:00" } }], "내일 아침 9시에 PR 리뷰하라고 알려줘");
+    const r = routineById((out[0] as { routineId: string }).routineId)!;
+    expect(r.project).toBe("p-app");
+    expect(r.nextAt).toBe(new Date(2099, 0, 1, 9, 0).getTime());
+    ringAlarm(r.id, r.nextAt!);
+    expect(rang()[0].m).toMatchObject({ space: "home", project: "p-app", from: "captain" });
+  });
+
+  it("once: rings at its time with its words, a sound and the line's id; once only; no job, no model", async () => {
+    const r = alarm();
+    await tickRoutines(r.nextAt! - 1);
+    expect(rang()).toHaveLength(0);
+    await tickRoutines(r.nextAt! + 1_000, { alarmsOnly: true });
+    const [{ m, r: route }] = rang();
+    expect(route).toMatchObject({ routineId: r.id, text: "회의 있어요", due: r.nextAt });
+    expect(route.late).toBeUndefined();
+    expect(m).toMatchObject({ space: "home", from: "captain", relay: true });
+    expect(notified).toHaveBeenCalledWith("회의 있어요", expect.stringContaining("알람"), { sound: true, tag: m.id });
+    expect(routineById(r.id)).toMatchObject({ enabled: false, runs: 1, nextAt: undefined });
+    expect(routineLine(routineById(r.id)!)).toBe("울렸어요");
+    await tickRoutines(r.nextAt! + 120_000);
+    expect(rang()).toHaveLength(1);
+    expect(state.tasks).toHaveLength(0);
+    expect(native.agentSend).not.toHaveBeenCalled();
+  });
+
+  it("daily: rings and is set for the next day", async () => {
+    const r = alarm({ when: { kind: "daily", time: "18:00" } });
+    const due = r.nextAt!;
+    await tickRoutines(due + 5_000);
+    expect(rang()).toHaveLength(1);
+    const after = routineById(r.id)!;
+    expect(after.enabled).toBe(true);
+    expect(new Date(after.nextAt!).getHours()).toBe(18);
+    expect(after.nextAt! - due).toBeGreaterThanOrEqual(23 * 3_600_000);
+    expect(routineLine(after, due + 5_000)).toContain("다음 알림");
+  });
+
+  it("missed while Ondra was closed: rings once on the next launch, marked late", async () => {
+    const r = alarm({ when: { kind: "daily", time: "09:00" } });
+    saveRoutine(r.id, { nextAt: Date.now() - 3 * 86_400_000 });
+    await tickRoutines(Date.now(), { alarmsOnly: true });
+    await tickRoutines(Date.now(), { alarmsOnly: true });
+    expect(rang()).toHaveLength(1);
+    expect(rang()[0].r.late).toBe(true);
+    expect(notified.mock.calls[0][1]).toContain("늦게 울렸어요");
+    expect(routineById(r.id)!.nextAt!).toBeGreaterThan(Date.now());
+    // a minute or two behind (the minute tick) is not late
+    const soon = alarm();
+    await tickRoutines(soon.nextAt! + ALARM_LATE - 1_000);
+    expect(rang()[1].r.late).toBeUndefined();
+  });
+
+  it("switched off or not saved yet: never rings", async () => {
+    const off = alarm();
+    saveRoutine(off.id, { enabled: false });
+    const draft = alarm({ draft: true });
+    await tickRoutines(Date.now() + 86_400_000);
+    expect(rang()).toHaveLength(0);
+    expect(routineById(draft.id)!.runs + routineById(off.id)!.runs).toBe(0);
+  });
+
+  it("snooze rings it again later and leaves its own time alone; switching it off drops the snooze", async () => {
+    const r = alarm({ when: { kind: "daily", time: "18:00" } });
+    const t0 = r.nextAt!;
+    await tickRoutines(t0);
+    const next = routineById(r.id)!.nextAt;
+    snoozeAlarm(r.id, t0);
+    expect(routineLine(routineById(r.id)!, t0)).toContain("다시 알려요");
+    await tickRoutines(t0 + SNOOZE_MIN * 60_000 - 1_000);
+    expect(rang()).toHaveLength(1);
+    await tickRoutines(t0 + SNOOZE_MIN * 60_000);
+    expect(rang()).toHaveLength(2);
+    expect(rang()[1].r.due).toBe(t0 + SNOOZE_MIN * 60_000);
+    expect(routineById(r.id)).toMatchObject({ nextAt: next, snoozeAt: undefined });
+    // a once alarm that rang can be snoozed too
+    const once = alarm();
+    await tickRoutines(once.nextAt!);
+    snoozeAlarm(once.id, once.nextAt!);
+    await tickRoutines(once.nextAt! + SNOOZE_MIN * 60_000);
+    expect(rang().filter((x) => x.r.routineId === once.id)).toHaveLength(2);
+    // off: no snooze either
+    snoozeAlarm(r.id, t0);
+    saveRoutine(r.id, { enabled: false });
+    await tickRoutines(t0 + SNOOZE_MIN * 60_000);
+    expect(rang()).toHaveLength(4);
+  });
+
+  it("the quick alarm look at launch starts no job routine", async () => {
+    const job = addRoutine({ space: "home", title: "PR 정리", prompt: "열린 PR 정리", when: { kind: "every", minutes: 60 }, mode: "fresh", project: "p-app" });
+    saveRoutine(job, { nextAt: Date.now() - 1_000 });
+    await tickRoutines(Date.now(), { alarmsOnly: true });
+    expect(routineById(job)!.runs).toBe(0);
+  });
+
+  it("main is told the time with each message", () => {
+    expect(nowLine(at(2026, 11, 13, 9, 5))).toBe("2026-11-13 Fri 09:05");
   });
 });

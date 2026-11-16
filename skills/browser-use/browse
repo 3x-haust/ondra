@@ -476,6 +476,10 @@ def settled_look(st, pre, bail, full=False, read=None):
     show = ["eval", read_js(read)] if read else ["snapshot", "-c"]
     tail = [settle_cmd(st), show, ["get", "title"], ["get", "url"]]
     rows = batch(pre + tail, bail=bail)
+    if pre and pre[-1][:1] == ["open"] and any(not r[1] and "tab_gone" in str(r[2]) for r in rows):
+        # this job's tab was closed under it: open a new one and load the page there
+        if ok(batch([["tab", "new"]])[0]):
+            rows = batch(pre + tail, bail=bail)
     done, last = rows[: len(pre)], rows[len(pre):]
     for _ in range(3):
         if len(last) == 4 and all(ok(r) for r in last) and last[0][2].get("result") == last[3][2].get("url"):

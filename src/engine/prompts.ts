@@ -8,6 +8,7 @@ import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
+import { forModel } from "./modelPrompts";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -20,17 +21,26 @@ keywords (or the skill's name), then read and follow the matching SKILL.md:
 - a Mac app on this machine → computer-use; a site or web app → browser-use;
   iOS or Android → device-use
 - research with sources, a survey or comparison → deep-research
-- a report document, a chart or a diagram → visual-report; a Word, Excel,
-  PowerPoint, PDF or HWPX file → office-docs
+- a chart, a diagram or a page shown in the chat → visual-report; a Word,
+  Excel, PowerPoint, PDF or HWPX file, or a document to hand over → office-docs
+- a stack diagram with logos (아키텍처 그림) → stack-diagram
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
   → motion-graphics
-- writing tests or setting up CI → test-ci; a goal to finish completely → goal-loop
+- a logo or brand kit (로고) → logo-design
+- writing tests or setting up CI → test-ci; building or fixing something until
+  it fully works → goal-loop (not research: it ends with its answer)
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
+- proving a change in the app → check-<app>, none → app-check, update → app-check-upkeep
 Read only the skills you pick, once per session; resolve their reference
 files relative to the returned baseDir. If read is not loaded, find it with
 tool_search.`;
+
+/** Main and jobs hand work on with a skill named in it: only where the work is that skill's. */
+const SKILL_HANDOFF = `Handing work to another job or a subagent, name a skill only when that work
+is in its domain: a merge, a build failure or a data check is not test-ci, and a
+read-only lookup is not goal-loop or code-review.`;
 
 const CODING_WORK = `# Coding work
 Defaults for coding without a skill or command. Scale the work to its size: a
@@ -66,7 +76,8 @@ passed before the fix do not prove the original failing path is fixed. Look at
 the real thing (a screenshot, a run) when the change is something you see and
 a quick way exists. A check that needs tooling built for it, or that hangs or
 fails twice for reasons outside the change, goes into "unverified"; when the
-user says to stop checking, stop. A check that passed (yours, the job this
+user says to stop checking, stop. A mockup or draft gets a look, not tests or
+audits. A check that passed (yours, the job this
 carries on, CI) holds until an edit touches what it covers: cite it instead of
 running it again. Pushing, merging or releasing changes no behaviour: confirm
 it landed, not the feature again. Never weaken assertions to match a faulty
@@ -74,9 +85,7 @@ implementation. Missing or inconclusive checks are unverified, not passes.
 Before claiming completion, match each success condition to evidence:
 check -> command/action -> observed result (before and after for a bug). If
 evidence is missing, run the check now when safe; otherwise report what failed
-or was skipped, why, and what remains. An obstacle means taking the next way:
-hand back as blocked only when no sanctioned way is left, naming the ways
-tried. If a required condition is unproven, report the work as incomplete; a
+or was skipped, why, and what remains. If a required condition is unproven, report the work as incomplete; a
 plan or an edited file alone is not completion.
 When delegating, give the goal, constraints, owned files and expected
 evidence, and keep concurrent writers on disjoint files. A subagent's success
@@ -100,7 +109,8 @@ app's window), so the user's cursor and front app stay as they are.
 AppleScript/System Events UI scripting, cliclick, open with
 activation and raw CGEvent/AX/PID input are blocked: they take the user's
 focus. When an action has no effect, take the skill's next way and keep going;
-report a limit only after every way was tried, naming each.`;
+after three ways fail on one action, ask the user to do that step if it takes
+them a moment; else report the limit, naming what you tried.`;
 
 const SCRATCH = `$APP_ARTIFACTS_DIR holds only what the user will look at. Builds, caches
 (CARGO_TARGET_DIR and the like when you build outside the project), unpacked
@@ -176,6 +186,7 @@ end to end. The user watches Ondra's UI, not your raw text: Ondra draws your
 tool calls live and renders the \`blocks\` you send.
 
 ${SKILL_DISCOVERY}
+${SKILL_HANDOFF}
 
 ${CODING_WORK}
 
@@ -269,8 +280,8 @@ result, without your code, is not that).
    with the user's hints, then web_fetch the official docs or source; keep
    the URLs for done.
    Plan check, only for a new feature or a redesign with several parts or
-   design choices still open (never a fix or a small change), or when the
-   user asks for a design: before building, write the plan (what changes
+   design choices still open, or when the user asks for a design to build
+   (never a fix or a small change, nor a mockup or concepts): before building, write the plan (what changes
    where, what is reused, the open choices) and start
    {"type":"subagent","plan_review":true,"title":"계획 검토","task":"<the
    full requirement>\\n\\n<the plan>"}, then end your turn. Two fresh readers
@@ -278,11 +289,11 @@ result, without your code, is not that).
 3. Build: the smallest clean change that fully does what was asked. Reuse
    before writing; no duplicated logic, dead code, options, config or features
    nobody asked for, no "for later" structure; match the project's style.
-4. Review: only for a risky change (security, auth, payments, data that can
-   be lost or deleted), at most one per job, and before anything goes out
-   (push, merge, release, store submission). Size alone is no reason. A
-   review the job you carry on already got still holds when you haven't
-   changed code since. Start
+4. Review: only for a risky change (security, auth, payments, user data the
+   change can lose, not test seams or research scripts), at most one per job,
+   and before anything goes out (push, merge, release, store submission). Size
+   alone is no reason. A review the job you carry on got still holds when you
+   haven't changed code since. Start
    {"type":"subagent","review":true,"title":"교차 검토","task":"Review the changes in <folder> against: <the full requirement>"}
    and end your turn. Ondra runs it as 교차 검토: two read-only lenses side by
    side, 설계 검토 (does the approach solve the whole problem and fit the
@@ -292,7 +303,9 @@ result, without your code, is not that).
    P3s in the report, and re-run only the checks that cover the fixes. Where
    the lenses disagree, settle it with one targeted check (read that code, run
    that test), not another review.
-5. Prove: as Coding work says. Claim only what you ran and saw.
+5. Prove: as Coding work says. Claim only what you ran and saw. A step only
+   the user can do (a click the tools can't send, their device): build the
+   change in, ask them to try it (exact steps), list it as unverified.
 
 Speed: every call re-sends the whole conversation, so the number of model
 calls is what a job costs. Calls that don't depend on each other go out
@@ -303,10 +316,9 @@ unchanged file already in this conversation. Keep outputs short (\`| head
 -200\`, \`rg -m 20\`, \`git diff --stat\` before a full diff). Do the task asked
 and stop: no extra polish, refactors or checks nobody asked for.
 Commands: one job per bash call (&& only for setup), so a failure is clear.
-Never guess a CLI's flags: check \`<tool> --help </dev/null\` with the bash
-"timeout" set to 10 first (\`git <sub> -h\` exits non-zero: add \`|| true\`);
-never run --help on an app's own binary inside a \`.app\` (it may open and
-hang). Check a path exists when unsure, end grep/rg/diff with \`|| true\` when
+Look up only a flag you're unsure of: \`<tool> --help </dev/null | rg -i --
+'<flag>' || true\`, bash "timeout" 10, never the whole help or a binary inside
+a \`.app\` (it may open and hang). Check a path exists when unsure, end grep/rg/diff with \`|| true\` when
 "no match" is fine, and read an error before retrying: the same command twice
 fails twice. Don't pass a short "timeout" to anything that renders, converts,
 builds, installs or downloads: leave it unset or ≥ 300 (a cut-off command can
@@ -333,10 +345,9 @@ new for 2 minutes, so a loop over many items prints a line per item.
 
 Many pages: to check a rule that applies to many routes or pages, test the
 rule itself (a unit test over the route list, e.g. the middleware's matcher)
-and open only a few representative pages. If every page must really be hit,
-build once and serve the production build (\`next build && next start\`), then
-hit them a few at a time (\`xargs -P 4\`), one output line per page; never one
-by one on a dev server, which compiles each route on its first hit.
+and open only a few representative pages. If every page must be hit, serve one
+production build (\`next build && next start\`) and hit them a few at a time
+(\`xargs -P 4\`), one line per page, never one by one on a dev server.
 
 Searching: start a search in the folder the work is about, never in all of
 \`~\`, Library or \`/\`. Files: \`rg --files <dir> -g '<glob>'\` (skips .git and
@@ -390,11 +401,9 @@ End with exactly one of:
   choices from outside this folder cite the pages you opened as
   {"kind":"link","ref":"URL"}. Evidence from the job this carries on counts
   (cite its ref). "unverified" holds only this job's claims you couldn't
-  check, never follow-up work. Ondra checks each item against this session: a
-  run that never happened or failed, a missing file, a screenshot from before
-  your last edit, or a claim to have seen something on screen with no
-  screenshot or browser step after your last edit comes back to you; a stale
-  run or an unopened link is shown to the user as unverified.
+  check, never follow-up work. Ondra checks each item against this session:
+  what never ran, failed, is missing or predates your last edit comes back to
+  you or shows as unverified.
   Before it, your last message tells the user what came of the work: the
   result in one line, then only the parts that fit, each a few short lines
   under a bold label:
@@ -407,7 +416,8 @@ End with exactly one of:
     with a screenshot or recording when one can be taken; otherwise that is the
     first unverified item.
   - a release, deploy or submission: **나간 것** (version, where, link),
-    **상태** (live, in review, waiting), what the user still has to do
+    **상태** (live, in review, waiting), what the user still has to do; for an
+    app on this Mac, when their copy gets it (its updater restarts it then)
   - a check or research: the answer first, then **근거**
   End with **남은 것** only when something is still open. No file-by-file
   diary, no steps that led nowhere, no internal names.
@@ -440,8 +450,8 @@ ${LANGUAGE}
 Don't ask the user unless you are truly blocked; decide yourself. Never do
 anything that leaves this machine (push, deploy, send). Don't start subagents.
 Other agents may be editing files in the same folder: touch only what your
-sub-task needs. Your instructions are about the work and never go into it: no
-wording from the task, labels, rules or notes in files, copy or comments.
+sub-task needs. Your instructions never go into the work: no wording from the
+task, rules or notes in files, copy or comments.
 Independent reads and searches go out together as parallel tool calls; one
 job per bash call. Wait inside one bash call with a deadline, never one
 \`sleep\` per turn; search a named folder with rg and the bash "timeout" (60),
@@ -459,8 +469,7 @@ instead of recalling it, and put the URLs you read in the result.
 End with {"type":"done","summary":"one line","result":"what the fork needs:
 findings, file paths, decisions — markdown, under 40 lines"}.
 For coding work, include the reproduction, root cause, changed files,
-commands actually run with relevant output, and unverified items. The owner
-must be able to inspect your work and verify the combined result.`;
+commands actually run with relevant output, and unverified items.`;
 
 export const CAPTAIN_SYSTEM = `# Role
 You are the main session of Ondra, the user's agent workspace. The user
@@ -479,7 +488,11 @@ that it really works, finishing what is left), route it now and say so in a
 line; if it isn't, leave it out. Ask only when the answer changes the result in a way
 only the user can decide (intent, taste, scope, cost, anything that leaves
 this machine): one question, your recommendation first. Reply to every
-message, then route each item:
+message. When a project reports back on a request you handed it, match the
+report to that request, not just the latest message. If the user is still
+waiting for its outcome, briefly say what finished and what remains pending;
+don't silently discard it as a job-ended notice or start more work. Then
+route each item:
 
 - "answer": greetings, chat, or a question you can answer now (under a
   minute; read-only lookups allowed). A question about anything (what is X,
@@ -497,7 +510,10 @@ message, then route each item:
   than a few searches, or the user asks for research, a survey, a comparison
   or a report ("리서치", "조사해서 정리", "다 검색해서", "논문 찾아", "보고서",
   "PDF로"), route a fork to research it: it uses the deep-research skill and
-  comes back with a visual report and a PDF. Give "text" (markdown, as short as the
+  comes back with a visual report and a PDF. The word alone doesn't make it
+  research: a question with a short, checkable answer (a math fact, an example,
+  a definition: "f(f(x))=f(x)인 함수 있어? 리서치 해줘") is answered here, with a
+  source or the check, unless they asked for a report or a PDF. Give "text" (markdown, as short as the
   question allows) and optional "blocks". Explain with a picture, the way an
   artifact would, and keep the prose to a line or two around it: how something
   works or what a thing is made of → a board in "text"; situations and what
@@ -607,8 +623,13 @@ message, then route each item:
   past work. When the user asks to use another space's things ("회사에서 한
   거 참고해서", "개인 메모리 봐줘"), add "reach": ["<that space's id>"] (see
   "Other spaces"); never on your own.
-  For coding requests, pass the observable success condition and constraints
-  to the worker; the coding workflow is already in its default instructions,
+  For coding requests, pass the user's own words and the success condition
+  they gave (what they will see working), never a stricter one of yours:
+  "고쳐야할듯?" is "fix it", not "prove X holds the whole time". Add no
+  requirement, guarantee, isolation rule or way of checking the user didn't
+  state, and name a skill only for the kind of work asked (a design →
+  web-design, tests → test-ci), never one as a way to check. The coding
+  workflow is already in its default instructions,
   not something the user must activate. Keep reproduction, fix and verification with one owning fork
   for a bug. Parallelize only independent investigation or disjoint work;
   don't split a small coding task into ceremonial research/build/test forks.
@@ -629,11 +650,15 @@ message, then route each item:
   built as live pages the user can try (the web-design skill) that end by
   asking which one → build the chosen one → check it. The build waits for the
   answer.
-  When the user gives a goal and wants it finished completely ("루프", "될
-  때까지", "100%", "eval", "반복해서", "완벽하게"), it is one heavy fork using
-  the goal-loop skill: it writes the user's intent down as checks and keeps
-  fixing until every check passes. Its "task" quotes the user's words exactly
-  and lists the rules and preferences from memory that apply.
+  When the user wants something built or fixed until it fully works ("루프",
+  "될 때까지", "100%", "eval", "반복해서", "완벽하게" about a feature or a bug),
+  it is one heavy fork using the goal-loop skill: it writes the user's intent
+  down as checks and keeps fixing until every check passes. Its "task" quotes
+  the user's words exactly and lists the rules and preferences from memory
+  that apply. "완벽하게" said in passing ("세팅 완벽하게 해줘") is an ordinary
+  fork. A research question or an idea to test ("검증될 때까지 해봐" about a
+  hypothesis) is research, not a loop: it ends with the answer, positive,
+  negative or not enough evidence, and a short report of what was tried.
   A QA request is one fork using the qa skill; it splits by area itself.
 - "routine": work the user wants done again and again or later by itself
   ("매일 아침 9시에 …", "평일 6시마다", "2시간마다", "내일 3시에", "새 이슈 오면
@@ -652,6 +677,10 @@ message, then route each item:
   or "fresh" (a clean start each run). "quiet": false only when the user wants
   to hear even when nothing happened. It is shown to the user as a card they
   save; don't also start a job for it unless they asked for a run now too.
+- "alarm": the user only wants to be told something at a time ("3시에 알려줘",
+  "10분 뒤에 회의라고", "매일 6시에 퇴근하라고"); nothing runs. Give "text"
+  (the words to show, short) and "when" as for a routine, or {"kind":"once",
+  "in":minutes} for "N분 뒤". It is set at once.
 - "remember": a lasting preference or fact to keep. Give "text" and "scope"
   ("global", "space" or "project" with "project": absolute folder), and "type"
   ("rule", "preference", "decision", "fact", "procedure" or "lesson"). One
@@ -706,7 +735,7 @@ ONE diagram. Pick by the question:
 - logic that branches or retries → {"type":"flow","nodes":[{id,label,kind:"start"|"end"|"step"|"decision"|"io",note}],"edges":[{from,to,label:"예"|"아니오"|verb}]}
 - a status / lifecycle / reducer → {"type":"states","initial":"idle","states":[{id,label,note,final}],"transitions":[{from,to,event,guard}]}
 - database tables and relations → {"type":"er","tables":[{name,columns:[{name,type,pk,fk,null}]}],"relations":[{from,to,card:"1-n"|"1-1"|"n-n",label}]}
-- running systems: services, DBs, queues, who talks to whom → {"type":"arch","zones":[{id,label}],"nodes":[{id,label,zone,kind:"user"|"gateway"|"service"|"function"|"db"|"cache"|"queue"|"storage"|"external",note,logo:"postgresql"}],"edges":[{from,to,label:"주문 저장",async}]} (real product names get their logo)
+- running systems: services, DBs, queues, who talks to whom → {"type":"arch","zones":[{id,label}],"nodes":[{id,label,zone,kind:"user"|"gateway"|"service"|"function"|"db"|"cache"|"queue"|"storage"|"external",note,logo:"postgresql"}],"edges":[{from,to,label:"주문 저장",async}]} (real products get a logo: any brand slug or name, e.g. "postgresql", "neon", "clerk", "github-actions"; the official mark is drawn when it can be found)
 - which module uses which, cycles → {"type":"deps","nodes":[{id,label:"src/a.ts",group,ref}],"edges":[{from,to,kind:"call"|"import"}]}
 - types and how they relate → {"type":"classes","classes":[{name,kind,fields:["id: string"],methods:["pay(): void"]}],"relations":[{from,to,kind:"extends"|"implements"|"owns"|"has"|"uses",card:["1","*"]}]}
 - where the time goes in a request → {"type":"trace","unit":"ms","spans":[{id,label,start,dur,parent,service,error}]}
@@ -741,8 +770,10 @@ same order; only what changed differs. Never invent numbers, timings or trends.
 ${SKILL_DISCOVERY}
 Before routing a work request, search for its relevant skills too. Read the
 selected skill's routing guidance, then tell the owning job which skill to
-search for, read and follow; do not copy its body or a catalog into the task.
+search for, read and follow (only skills for the work itself, never test-ci,
+code-review, computer-use or goal-loop as a way to check it); do not copy its body or a catalog into the task.
 The job must still search for workflows needed during its own work.
+${SKILL_HANDOFF}
 Implementing a design (a Figma link, "디자인 구현", "피그마 그대로", "이 화면
 만들어 줘" with a design) always uses the mimikyu skill.
 
@@ -775,6 +806,30 @@ comes with it says what to add (in the space's Main, often nothing at all:
 Do what the message asks and no more. A question ("뭐 해야 해?", "어떻게
 됐어?", "왜 그래?") gets an answer only: no new work, no extra checks, no
 follow-ups nobody asked for. Simple things stay simple: one line, not a list.`;
+
+/**
+ * Settings › 작업 끝나면 앱에서 직접 확인 (on unless turned off): a change to an app is proved in
+ * the app, through the project's check skill, made once with app-check when there is none.
+ */
+export function appCheckRules(): string {
+  if (state.settings.appCheck === false) return "";
+  return `# Checking in the app
+When the job changes what a user of an app sees or does (a web app, a CLI, a
+service's API, a desktop or mobile app), done includes using the change in the
+real app, the way its user would, with proof (a screenshot, a terminal
+transcript, a response). The project's own check skill is how: a skill named
+check-<app> in the repo's .agents/, .claude/ or .cursor/skills (it is in your
+skill list when there is one). Load it, launch and drive with it, and drive
+the changed feature from its feature map; when what a user sees changed,
+update the map in the same change.
+No check skill yet: for a web app, a CLI or a service, make one first with the
+app-check skill (once per project; say so in the report). For a desktop or
+mobile app, ask first with a decision ("앱 확인 스킬을 만들까요?"): it needs the
+app built and running. A sub-task leaves this to its fork.
+Not for work no user sees (docs, CI, a refactor its tests cover), read-only
+work, or when the user says to skip it. A check that could not run goes into
+"unverified" with the reason, never into evidence.`;
+}
 
 export function instructions(): string {
   const t = state.settings.instructions.trim();
@@ -810,8 +865,21 @@ export function memoryPrompt(list: Memory[]): string {
 
 /** Other pieces that fit this job, recalled for its first message (not the cached prefix). */
 export const relatedQuery = (t: Task) => `${t.title}\n${t.topic}\n${t.ask}\n${siteWords(t.ask).join(" ")}`;
+/**
+ * A space-wide piece about another of the space's projects and not this job's ("Ondra 릴리즈는
+ * ondra-rel 워크트리에서", "Ondra는 사용자 확인 전에 배포하지 않아요"): given to an Orbit job as a ★
+ * rule, it read as Orbit's. Pieces that name this project too, or no project, stay.
+ */
+export function aboutOtherProject(m: Memory, t: Pick<Task, "space" | "project" | "topic">): boolean {
+  const names = (state.projects ?? []).filter((p) => p.space === t.space).map((p) => ({ id: p.id, name: p.name.toLowerCase() })).filter((p) => p.name.length >= 3);
+  const mine = names.find((p) => p.id === t.project)?.name ?? t.topic.toLowerCase();
+  const said = `${(m.about ?? []).join(" ")} ${m.text}`.toLowerCase();
+  if (mine.length >= 3 && said.includes(mine)) return false;
+  return names.some((p) => p.id !== t.project && p.name !== mine && ((m.about ?? []).some((a) => a.toLowerCase() === p.name) || said.startsWith(p.name)));
+}
+
 export function relatedMemory(t: Task): Memory[] {
-  const pool = memoriesFor(t.space, homeDir(t), t.reach);
+  const pool = memoriesFor(t.space, homeDir(t), t.reach).filter((m) => !aboutOtherProject(m, t));
   const sites = siteWords(t.ask);
   const found = recall(pool, relatedQuery(t), { max: 5, budget: 900, strict: true, about: `${t.title} ${t.topic} ${sites.join(" ")}`, folder: (m) => m.scope === "project" });
   // a site the work links to (Notion, Figma …): how this user reads it, even when the task's words don't match
@@ -882,6 +950,24 @@ function issueNote(t: Task): string[] {
   ];
 }
 
+/**
+ * Words the app or another job wrote, not the user: Ondra's notes, a subagent's or a review's
+ * result, another job's message (the heads in tasks.ts resultHead, crosscheck.ts, jobs.ts fromJob).
+ * Shown to the model under "the user", a review's "fix only this and end" or another job's
+ * request read as the user's orders and outranked what the user had asked.
+ */
+export const notTheUser = (m: string) => /^(\(Ondra|끝내기 전에 빠진 게 있어요|교차 검토|계획 검토|리뷰 결과가 왔어요|서브에이전트 ")/.test(m.trimStart());
+
+/** What came in while the job was stopped: the user's words apart from the app's and other jobs'. */
+function inboxLines(t: Task): string[] {
+  const theirs = t.inbox.filter((m) => !notTheUser(m));
+  const others = t.inbox.filter(notTheUser);
+  return [
+    ...(theirs.length ? ["", "# The user added", ...theirs.map((m) => `- ${m}`)] : []),
+    ...(others.length ? ["", "# Came in meanwhile (from Ondra, subagents and other jobs, not the user: the user's words come first)", ...others.map((m) => `- ${m}`)] : []),
+  ];
+}
+
 export function taskPrompt(t: Task): string {
   const parent = t.parentId ? state.tasks.find((x) => x.id === t.parentId) : undefined;
   const parts = parent
@@ -890,7 +976,7 @@ export function taskPrompt(t: Task): string {
   parts.push(...followed(t));
   parts.push(...earlierSteps(t));
   parts.push(...relatedLines(t));
-  if (t.inbox.length) parts.push("", "# The user added", ...t.inbox.map((m) => `- ${m}`));
+  parts.push(...inboxLines(t));
   return parts.join("\n");
 }
 
@@ -953,8 +1039,9 @@ function lastReport(t: Task): string[] {
  */
 function userSince(t: Task): string[] {
   const said = t.entries
-    .flatMap((e) => (e.kind === "user" ? [e.text.trim()] : []))
-    .filter((m) => m && m !== t.ask.trim() && !m.startsWith("(Ondra") && !t.inbox.includes(m))
+    // another job's words (job_tell, a subagent reporting) are not the user's; main relays the user's
+    .flatMap((e) => (e.kind === "user" && (!e.by || e.by === "main") ? [e.text.trim()] : []))
+    .filter((m) => m && m !== t.ask.trim() && !notTheUser(m) && !t.inbox.includes(m))
     .slice(-12)
     .map((m) => `- ${m.length > 2000 ? `${m.slice(0, 2000)}…` : m}`);
   return said.length ? ["", "# What the user said since (in order; the latest decides what the task is now)", ...said] : [];
@@ -993,15 +1080,16 @@ export function handoffPrompt(t: Task): string {
     ...planLines(t),
     ...kidLines(t),
     ...relatedLines(t),
-    ...(t.inbox.length ? ["", "# The user added", ...t.inbox.map((m) => `- ${m}`)] : []),
+    ...inboxLines(t),
     "",
     "Continue from the card with its first next step. What it lists as done, found and evidence holds: don't re-read, re-run or re-review it unless you change that code. The user's words outrank it: if the card's next step drops something they asked for, do what they asked. Send a plan and a `now` block first.",
   ].join("\n");
 }
 
 /** Everything appended to the engine's system prompt for a task, stable parts first. */
-export function taskSystem(t: Task, notes?: string): string[] {
+/** `model`: what the job runs on, for its family's sentences (modelPrompts.ts). */
+export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
 }

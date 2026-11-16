@@ -13,7 +13,7 @@ import { prepareQuery } from "./vectors";
 import { batch, createEffect, createRoot, on } from "solid-js";
 import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, projectFor, setState, spaceById, kidsOf, state, taskById, taskProject, uid, updateAccount, updateTask } from "../state/store";
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
-import { ctx, noteCall, noteCtx, setCtx, setReuse } from "../state/ctx";
+import { ctx, noteCall, noteCtx, reuse, setCtx, setReuse } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
@@ -58,6 +58,8 @@ interface Run {
   langNudged?: boolean;
   /** tool calls since the job last said where it is in its plan, and how often it was reminded */
   quietTools?: number;
+  /** when the plan last moved (a plan or now block), or the run began */
+  planMovedAt?: number;
   planNudges?: number;
   /** loop guard: each command's last result and how many file edits had happened by then */
   ran?: Map<string, { ok: boolean; edits: number }>;
@@ -79,6 +81,8 @@ interface Run {
   firstDone?: string;
   /** status looks at running work (sleep, tail, ps …) this run */
   polls?: number;
+  /** the look those polls repeat */
+  lastPoll?: string;
   /** how many times it was told its context is long (handoff) */
   longNudges?: number;
   /** a handoff sent while subagents still worked: the new session starts once they are done */
@@ -91,6 +95,16 @@ interface Run {
   msgActed?: boolean;
   /** a message that only reasoned past THINK_MAX_MS was cut: the turn's end sends it on to its next step */
   thinkCut?: boolean;
+  /** what the turn's end sends after a cut (THINK_CUT by default) */
+  cutNote?: string;
+  /** when the engine last sent anything (an event of any kind) */
+  heardAt?: number;
+  /** turns cut because the model sent nothing for MODEL_SILENT_MS */
+  silentCuts?: number;
+  /** the engine is compacting the conversation (quiet while it does, not hung) */
+  compacting?: boolean;
+  /** the user spoke while it waited to hand off: the new session starts at the turn's end, subagents or not */
+  handoffNow?: boolean;
   /** the provider refused the session itself (400): it went on once in a fresh session */
   freshAfterRefusal?: boolean;
   /** toolCallId → when that shell's output last changed (the search and wait watchdog) */
@@ -107,6 +121,9 @@ export const agentOf = (taskId: string) => `t:${taskId}`;
 const MAX_ENTRIES = 600;
 /** tool calls without a step update before a fork is asked where it is, and how often */
 export const PLAN_QUIET = 20;
+/** and this long without a step update: parallel reads reach 20 calls in a minute (reminders came
+ *  47 to 97 seconds into a job, and again right after it had moved on) */
+export const PLAN_QUIET_MS = 5 * 60_000;
 export const PLAN_NUDGES = 2;
 const MAX_SHELLS = 40;
 const TAIL = 3000;
@@ -166,7 +183,6 @@ export async function accountEnv(accountId: string): Promise<Env> {
   return dir && accountId !== "default" ? [["PI_CODING_AGENT_DIR", dir], ...cache] : cache;
 }
 
-/** What one turn used (null if nothing moved). */
 const browserCheckAt = new Map<string, number>();
 function recheckBrowser(space: string) {
   if (Date.now() - (browserCheckAt.get(space) ?? 0) < 30_000) return;
@@ -174,8 +190,9 @@ function recheckBrowser(space: string) {
   void browserCheck(space).catch(() => {});
 }
 
+/** What one turn used (null if nothing moved). */
 export function turnUsage(a: TokenStats, b: TokenStats, accountId: string, genMs?: number, ms?: number): Usage | null {
-  const reset = b.input < a.input || b.cacheRead < a.cacheRead;
+  const reset = b.input < a.input || b.cacheRead < a.cacheRead || b.output < a.output;
   const from = reset ? zero() : a;
   const u = { input: b.input - from.input, output: b.output - from.output, cacheRead: b.cacheRead - from.cacheRead, cacheWrite: b.cacheWrite - from.cacheWrite };
   if (!u.input && !u.output && !u.cacheRead) return null;
@@ -375,6 +392,24 @@ export function closeOpen(t: Task, at = Date.now()) {
 
 const screenshotIn = (cmd: string) => cmd.match(/\bscreenshot\b(?:\s+--\S+)*\s+(["']?)(\/[^"'\s]+\.(?:png|jpe?g))\1/)?.[2];
 
+/**
+ * A later handoff card on top of an earlier one of the same session: what was done, found and
+ * shown adds up, the next step and the finish line are the newest. Replaced whole, a detailed
+ * card became "checked the last install log" and the next session redid the rest.
+ */
+export function mergeCards(before: Handoff | undefined, after: Handoff): Handoff {
+  if (!before) return after;
+  const both = <T,>(a: T[] = [], b: T[] = [], key: (x: T) => string = String) => [...a, ...b].filter((x, i, all) => all.findIndex((y) => key(y) === key(x)) === i);
+  const found = both(before.found, after.found);
+  return {
+    did: both(before.did, after.did),
+    next: after.next || before.next,
+    evidence: both(before.evidence, after.evidence, (e) => `${e.kind}:${e.ref}`),
+    ...(found.length ? { found } : {}),
+    ...(after.doneWhen || before.doneWhen ? { doneWhen: after.doneWhen || before.doneWhen } : {}),
+  };
+}
+
 function applyBlocks(t: Task, items: any[], run: Run) {
   for (const b of items) {
     if (!b || typeof b !== "object" || typeof b.type !== "string") continue;
@@ -383,6 +418,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         // a status line in Chinese (a model slipping language) is dropped, not shown
         if (b.text && !chineseOnly(String(b.text))) t.now = t.intent = String(b.text).slice(0, 140);
         run.quietTools = 0;
+        run.planMovedAt = Date.now();
         if (typeof b.step === "number" && t.plan.length) {
           t.plan.forEach((s, i) => (s.state = i < b.step ? "done" : i === b.step ? "now" : "todo"));
         }
@@ -391,6 +427,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (Array.isArray(b.steps)) {
           t.plan = nextPlan(t.plan, b.steps.slice(0, 10).map(String));
           run.quietTools = 0;
+          run.planMovedAt = Date.now();
         }
         break;
       case "ask": {
@@ -441,13 +478,14 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         run.land = b.type;
         break;
       case "handoff":
-        run.handoff = {
+        // sent again before the new session started (a late result woke it): the cards add up
+        run.handoff = mergeCards(run.handoff ?? run.pendingHandoff, {
           did: Array.isArray(b.did) ? b.did.map(String) : [],
           next: String(b.next ?? ""),
           evidence: Array.isArray(b.evidence) ? b.evidence : [],
           found: Array.isArray(b.found) ? b.found.map(String) : undefined,
           doneWhen: b.doneWhen ? String(b.doneWhen) : undefined,
-        };
+        });
         break;
       case "done": {
         run.done = String(b.summary ?? "완료");
@@ -712,7 +750,9 @@ async function deliver(child: Task) {
   // it is handing off: the result goes to the next session, which starts once all are in
   if (run.handoff || run.pendingHandoff) {
     updateTask(parent.id, (x) => x.inbox.push(message));
-    if (run.pendingHandoff && !left) {
+    // a turn still going (something woke the old session) ends first: new_session in the middle
+    // of it aborts the turn, and the abort read as the job failing (settle starts it instead)
+    if (run.pendingHandoff && !left && !run.streaming) {
       const card = run.pendingHandoff;
       run.pendingHandoff = undefined;
       await newSession(parent.id, run, card);
@@ -1005,7 +1045,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     t.intent = undefined;
   });
 
-  const run: Run = { text: "", cursor: 0, streaming: false, asked: false, turnStart: 0, stats: zero(), tools: new Map(), modelTries: prev?.modelTries ?? 0 };
+  const run: Run = { text: "", cursor: 0, streaming: false, asked: false, turnStart: 0, planMovedAt: Date.now(), stats: zero(), tools: new Map(), modelTries: prev?.modelTries ?? 0 };
   runs.set(id, run);
   listen(agent, handlers(id, run));
   clearStderr(agent);
@@ -1033,7 +1073,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const args = [
       "--session-dir",
       `${engine.info.dataDir}/sessions/${id}`,
-      ...taskSystem(t, t.project && !t.parentId ? await readNotes(t.project) : undefined).flatMap((p) => ["--append-system-prompt", p]),
+      ...taskSystem(t, t.project && !t.parentId ? await readNotes(t.project) : undefined, model).flatMap((p) => ["--append-system-prompt", p]),
       // The search extension owns discovery; Pi must not advertise a catalog.
       "--no-skills",
       ...(model ? ["--model", model] : []),
@@ -1149,6 +1189,11 @@ function fail(id: string, message: string) {
     t.unread = true;
     t.error = explain(message);
     t.now = "실패";
+    // a summary or unverified list here is an earlier run's (one finished, then reopened): shown on
+    // a failed job they told the user it had shipped ("릴리스를 공개했어요" on a job that failed later)
+    t.summary = undefined;
+    t.digest = undefined;
+    t.unverified = undefined;
     push(t, { kind: "error", text: explain(message) });
   });
   releaseBrowser(id);
@@ -1162,6 +1207,7 @@ function handlers(id: string, run: Run) {
   return {
     event(ev: any) {
       if (runs.get(id) !== run) return;
+      run.heardAt = Date.now();
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
@@ -1281,8 +1327,9 @@ function handlers(id: string, run: Run) {
           run.quietTools = (run.quietTools ?? 0) + 1;
           const job = taskById(id);
           const plan = job?.plan ?? [];
-          if (run.streaming && !job?.parentId && run.quietTools >= PLAN_QUIET && (run.planNudges ?? 0) < PLAN_NUDGES && plan.some((s) => s.state !== "done")) {
+          if (run.streaming && !job?.parentId && run.quietTools >= PLAN_QUIET && Date.now() - (run.planMovedAt ?? 0) >= PLAN_QUIET_MS && (run.planNudges ?? 0) < PLAN_NUDGES && plan.some((s) => s.state !== "done")) {
             run.quietTools = 0;
+            run.planMovedAt = Date.now();
             run.planNudges = (run.planNudges ?? 0) + 1;
             void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${plan.map((s, i) => `${i}. [${s.state}] ${s.text}`).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
           }
@@ -1314,7 +1361,11 @@ function handlers(id: string, run: Run) {
           break;
         }
         case "compaction_start":
+          run.compacting = true;
           updateTask(id, (t) => push(t, { kind: "note", text: "컨텍스트 압축 중" }));
+          break;
+        case "compaction_end":
+          run.compacting = false;
           break;
         case "auto_retry_start":
           updateTask(id, (t) => push(t, { kind: "note", text: `재시도 ${ev.attempt ?? ""}/${ev.maxAttempts ?? ""}` }));
@@ -1341,6 +1392,13 @@ function handlers(id: string, run: Run) {
       const t = taskById(id);
       // the app quitting took it down: it stays running and picks up again when the app opens
       if (appQuitting()) return;
+      // it waits on the user's answer: nothing is lost (the answer starts it again, with the
+      // question and the answer), and failing it drops the question the user hasn't read yet
+      if (t && runs.get(id) === run && t.status === "waiting" && state.decisions.some((d) => d.taskId === id && !d.ui)) {
+        logWarn("engine", `${id} engine exited (${code ?? "signal"}) while it waited on the user: the answer starts it again`);
+        runs.delete(id);
+        return;
+      }
       if (t && runs.get(id) === run && (t.status === "running" || t.status === "waiting")) {
         // it died while working (a job that ended, or one Ondra stopped, is no news)
         const tail = stderrOf(agent).split("\n").filter(Boolean).slice(-2).join(" · ");
@@ -1460,6 +1518,8 @@ async function settle(id: string, run: Run) {
       else push(x, { kind: "turn", ms: 0, usage: used });
     });
 
+  // Ondra cut the turn itself (reasoning in circles, a request that hung): its abort is not the job failing
+  if (run.thinkCut && run.error && /abort/i.test(run.error)) run.error = undefined;
   // A connection's model turned out to have no tool calling: mark it so and start over talk-only.
   const tm = t.model || modelFor(t.accountId);
   const row = connModel(t.accountId, tm);
@@ -1515,7 +1575,7 @@ async function settle(id: string, run: Run) {
     void newSession(id, run, cardFromThread(taskById(id)!));
     return;
   }
-  if (run.error && !run.done && !run.handoff && !run.asked) {
+  if (run.error && !run.done && !run.handoff && !run.asked && !run.pendingHandoff) {
     fail(id, run.error);
     return;
   }
@@ -1581,6 +1641,14 @@ async function settle(id: string, run: Run) {
     await newSession(id, run, card);
     return;
   }
+  // it was waiting to hand off and a turn came in between (a subagent's message), or the user spoke: go on now
+  if (run.pendingHandoff && (!activeKids(id).length || run.handoffNow)) {
+    const card = run.pendingHandoff;
+    run.pendingHandoff = undefined;
+    run.handoffNow = false;
+    await newSession(id, run, card);
+    return;
+  }
   // Subagents still working: wait for them; their results wake it up.
   if (activeKids(id).length) {
     updateTask(id, (x) => {
@@ -1594,7 +1662,7 @@ async function settle(id: string, run: Run) {
     run.thinkCut = false;
     try {
       run.turnStart = Date.now();
-      await request(agent, { type: "prompt", message: THINK_CUT });
+      await request(agent, { type: "prompt", message: run.cutNote ?? THINK_CUT });
       return;
     } catch {
       // fall through to the stalled card
@@ -1677,6 +1745,15 @@ export const isRefusedRequest = (e: string) => /\bBad Request\b|"status":\s*400\
 
 /** A handoff card made from the thread, for a session that couldn't write its own. */
 export function cardFromThread(t: Task): Handoff {
+  // the card the session before it wrote holds what this thread alone can't (findings, evidence):
+  // it goes on, with what the cut-off session said after it
+  let at = -1;
+  for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "handoff") { at = i; break; }
+  if (at >= 0) {
+    const last = (t.entries[at] as Extract<Task["entries"][number], { kind: "handoff" }>).handoff;
+    const since = t.entries.slice(at + 1).flatMap((e) => (e.kind === "text" && e.text.trim() ? [e.text.trim().replace(/```blocks[\s\S]*?```/g, "").trim().slice(0, 600)] : [])).filter(Boolean).slice(-4);
+    return mergeCards(last, { did: since, next: `${last.next ?? "Pick up where the last session stopped"} (the session after this card was cut off by a provider error: check where it stood first)`, evidence: [] });
+  }
   const said = t.entries.flatMap((e) => (e.kind === "text" && e.text.trim() ? [e.text.trim().replace(/```blocks[\s\S]*?```/g, "").trim().slice(0, 600)] : [])).filter(Boolean).slice(-4);
   const done = t.plan.filter((p) => p.state === "done").map((p) => p.text);
   const open = t.plan.find((p) => p.state === "now" || p.state === "todo")?.text;
@@ -1707,7 +1784,9 @@ async function newSession(id: string, run: Run, card: Handoff) {
     await request(agent, { type: "new_session" });
     // the old session's size is gone with it: the gauge starts from empty, not from the last call
     if (ctx[agent]) setCtx(agent, { tokens: 0, window: ctx[agent]!.window, percent: 0 });
-    setReuse(agent, "last", 0);
+    // nothing recorded for it yet (its first call, or a restart cleared it): there is nothing to reset,
+    // and setting a field of the missing record threw, failing the job at its handoff
+    if (reuse[agent]) setReuse(agent, "last", 0);
     const t = taskById(id)!;
     const owed = owedAtStart(t, false);
     await request(agent, { type: "prompt", message: handoffPrompt({ ...t, inbox: [...t.inbox, ...owed.texts.filter((m) => !t.inbox.includes(m))] }) });
@@ -1863,6 +1942,7 @@ function finish(id: string, summary: string, run?: Run) {
     t.unread = true;
     t.saidDone = undefined;
     t.summary = summary;
+    t.digest = undefined;
     t.now = summary;
     const proven = (run?.evidence ?? []).filter((e) => e.ok !== false && !e.why).length;
     // what still doesn't hold after the job was sent back is listed, not hidden
@@ -2315,15 +2395,67 @@ const THINK_CUT =
   "(Ondra) You reasoned for over 10 minutes without writing anything or calling a tool, so that message was cut. Don't plan everything again: take the next step now with a tool call, and keep the reasoning before each step short.";
 async function cutThinking(id: string, run: Run) {
   run.thinkCut = true;
+  run.cutNote = THINK_CUT;
   updateTask(id, (t) => void push(t, { kind: "note", text: "생각이 10분 넘게 이어져서 끊고 다음 단계로 넘겼어요" }));
   await request(agentOf(id), { type: "abort" }, 8000).catch(() => {});
 }
 
-function stopStalledCommands() {
-  const now = Date.now();
+/**
+ * A turn whose engine sends nothing at all (no token, no reasoning, no tool) while no tool of it runs
+ * is a model request that hangs: on 11-13 one sat 5 hours 50 minutes before the provider timed it
+ * out, the job showing "working" the whole time. It is cut and asked again, a few times a run.
+ */
+const MODEL_SILENT_MS = 10 * 60_000;
+const SILENT_CUT = "(Ondra) The model sent nothing for over 10 minutes, so that request was cut. Carry on from where you stopped; redo the last step only if it didn't finish.";
+async function cutSilent(id: string, run: Run) {
+  run.thinkCut = true;
+  run.cutNote = SILENT_CUT;
+  run.silentCuts = (run.silentCuts ?? 0) + 1;
+  run.heardAt = Date.now();
+  logWarn("task", `${id} model silent for ${MODEL_SILENT_MS / 60_000} minutes: cut and asked again`);
+  updateTask(id, (t) => void push(t, { kind: "note", text: "모델 응답이 10분 넘게 없어서 다시 요청했어요" }));
+  await request(agentOf(id), { type: "abort" }, 8000).catch(() => {});
+}
+
+/**
+ * The Mac slept for `ms`: the watchdogs' clocks move on by that much. On 11-13 a closed lid made
+ * every dark wake look like ten silent minutes: the job was cut four times and told it "reasoned
+ * too long", about five hours of a night's work.
+ */
+export function sleptFor(ms: number) {
+  for (const [id, run] of runs) {
+    if (run.msgAt) run.msgAt += ms;
+    if (run.heardAt) run.heardAt += ms;
+    for (const sh of taskById(id)?.shells ?? []) {
+      if (!run.tools.has(sh.id)) continue;
+      const was = run.changed?.get(sh.id);
+      if (was) run.changed!.set(sh.id, was + ms);
+      else (run.changed ??= new Map()).set(sh.id, Date.now());
+    }
+  }
+}
+
+let wallAt = 0;
+let monoAt = 0;
+/**
+ * How long the Mac slept since the last look: how far the wall clock ran ahead of the monotonic
+ * one, which stops while the Mac sleeps. Not a late timer: a hidden window's timers are throttled
+ * without any sleep, and the watchdogs must still run then.
+ */
+function sleptSinceLastLook(): number {
+  const wall = Date.now();
+  const mono = performance.now();
+  const drift = wallAt ? wall - wallAt - (mono - monoAt) : 0;
+  wallAt = wall;
+  monoAt = mono;
+  return drift > 30_000 ? drift : 0;
+}
+
+export function stopStalledCommands(now = Date.now()) {
   for (const [id, run] of runs) {
     if (!run.streaming) continue;
     if (!run.thinkCut && !run.msgActed && run.msgAt && now - run.msgAt > THINK_MAX_MS) void cutThinking(id, run);
+    else if (!run.thinkCut && !run.compacting && !run.tools.size && run.heardAt && now - run.heardAt > MODEL_SILENT_MS && (run.silentCuts ?? 0) < 3) void cutSilent(id, run);
     for (const s of taskById(id)?.shells ?? []) {
       if (!run.tools.has(s.id)) continue;
       // one command can be both (wait for the server, then find the pages): each is tried once
@@ -2388,7 +2520,11 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   // re-running a check: telling it "that passed, finish" made a job stop its own
   // check halfway. Repeated looks get a nudge to wait in one call instead.
   if (kind === "poll") {
-    run.polls = (run.polls ?? 0) + 1;
+    // the same look again and again is waiting; different looks (git status, then a log, then
+    // gh pr view) and reading a tool's help are finding things out, not "the same thing"
+    if (/(^|\s)(--help|-h|-help)(\s|$)/.test(cmd)) return;
+    run.polls = run.lastPoll === cmd ? (run.polls ?? 0) + 1 : 1;
+    run.lastPoll = cmd;
     if (run.polls % 4 === 0 && (run.nudges ?? 0) < 3) {
       run.nudges = (run.nudges ?? 0) + 1;
       if (run.streaming)
@@ -2423,6 +2559,27 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
   const wasPaused = t.status === "paused";
   if (!opts.by) track("message_sent", { where: "task" });
   const agent = agentOf(id);
+  // it handed off and waits for its subagents: the old session is over (waking it starts work in a
+  // full context, and the new session then cut that turn off and failed the job). Another job's
+  // words wait for the next session; the user's start it now (the subagents report to it). Not the
+  // queue: nothing drains it until a turn ends, and none comes while it waits.
+  const waiting = runs.get(id);
+  if (isAlive(agent) && waiting?.pendingHandoff) {
+    updateTask(id, (x) => {
+      x.saidDone = undefined;
+      push(x, { kind: "user", text: opts.shown ?? message, ...(opts.by ? { by: opts.by } : {}) });
+      x.inbox.push(message);
+    });
+    if (opts.by && opts.by !== "main") return;
+    if (waiting.streaming) {
+      waiting.handoffNow = true;
+      return;
+    }
+    const card = waiting.pendingHandoff;
+    waiting.pendingHandoff = undefined;
+    await newSession(id, waiting, card);
+    return;
+  }
   // the user's words wait in line while it works; another agent's (a subagent reporting, its parent
   // answering) go in right away, after its current tool calls: they are part of the work, not the user's turn
   if (!opts.now && !(opts.by && opts.by !== "main") && t.status === "running" && isAlive(agent)) {
@@ -2449,7 +2606,8 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     // the user's words may change the plan: the model is asked to update it (the user sees only their words)
     const planNote = t.plan.some((s) => s.state !== "done") ? "\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step." : "";
     // said in the middle of the work: a question gets its answer first, not after the work it interrupted
-    const midNote = run?.streaming
+    // only the user's (or main relaying them): a job's message already says it is not the user
+    const midNote = run?.streaming && (!opts.by || opts.by === "main")
       ? "\n\n(Ondra) The user said this while you were working. If it's a question, answer it now in a sentence or two, before any more tool calls, and don't change files for it; then go on with the work unless they asked you to stop or change course."
       : "";
     const sent = `${message}${midNote}${planNote}`;
@@ -2525,6 +2683,25 @@ function requeue(t: Task) {
   t.error = undefined;
 }
 
+/**
+ * Main's question answered long after it was asked: what the project's jobs did since. A
+ * "릴리즈할까요?" answered 8 hours later started a release of what another job had released
+ * meanwhile, an empty 1.5.0 the same as 1.4.18.
+ */
+export function staleAnswerNote(askedAt: number, space: string, project: string | undefined, now = Date.now()): string | undefined {
+  if (now - askedAt < 30 * 60_000) return undefined;
+  const mins = Math.round((now - askedAt) / 60_000);
+  const ago = mins < 120 ? `${mins} minutes` : `${Math.round(mins / 60)} hours`;
+  const since = state.tasks
+    .filter((t) => t.space === space && !t.parentId && (!project || t.project === project) && (t.finishedAt ?? 0) > askedAt)
+    .map((t) => `- "${t.title}" (${t.id}) ${t.status}${t.summary ? `: ${t.summary}` : ""}`);
+  return [
+    `(Ondra) This answers a question you asked ${ago} ago.${since.length ? " Jobs that ended since:" : ""}`,
+    ...since,
+    "Check what it would do is still to do (the latest release, the branch, these jobs) before routing it; if it was done meanwhile, say so in one line instead of doing it again.",
+  ].join("\n");
+}
+
 export async function decide(decisionId: string, optionId: string) {
   const d = state.decisions.find((x) => x.id === decisionId);
   if (!d) {
@@ -2540,7 +2717,7 @@ export async function decide(decisionId: string, optionId: string) {
     const [space, project] = d.taskId.slice(5).split("~");
     const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
     const { throwThought } = await import("./captain");
-    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project });
+    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note: staleAnswerNote(d.at, space, project) });
     return;
   }
   const t = taskById(d.taskId);
@@ -2577,8 +2754,11 @@ export async function decide(decisionId: string, optionId: string) {
     finish(t.id, lastReport(t) ?? "완료");
     return;
   }
-  // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself
-  if (meansStop(label)) {
+  // "멈춰", "계속 멈춤", "stop": the job stops now, it isn't asked to stop itself. Not an option
+  // the job offered ("영상 유지 목표로 보류" parked a job that would have wrapped up itself):
+  // that is its answer
+  const offered = d.kind !== "stalled" && d.options.some((o) => o.id === optionId);
+  if (!offered && meansStop(label)) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
     stopTask(t.id);
     return;
@@ -2672,8 +2852,23 @@ export function resumeTask(id: string) {
       push(x, { kind: "note", text: "요청이 거부돼서 새 세션으로 이어가요" });
     });
   }
+  // another job carried this one on after it stopped (main starts one when a job fails): two jobs on
+  // one branch redo each other's work, and the follower may have merged and removed the folder
+  const next = t && state.tasks.find((x) => x.follows === id && !x.parentId);
+  if (next && (next.status === "queued" || next.status === "running" || next.status === "waiting")) {
+    toast(tr("\"{title}\" 작업이 이어받아 진행 중이에요. 그 작업에서 계속해 주세요", { title: next.title }), "bad");
+    return;
+  }
   // resumed on its own: it no longer waits for the fork that paused it
-  updateTask(id, (t) => (requeue(t), (t.pausedBy = undefined), (t.resumedAt = Date.now())));
+  updateTask(id, (t) => {
+    requeue(t);
+    t.pausedBy = undefined;
+    t.resumedAt = Date.now();
+    if (next)
+      t.inbox.push(
+        `(Ondra) After this job stopped, the job "${next.title}" (${next.id}) carried it on and is ${next.status}${next.summary ? `: ${next.summary}` : ""}${next.worktree ? ` (branch ${next.worktree.branch}, ${next.worktree.state})` : ""}. Read what it did (job_read ${next.id}) before you change anything, and don't redo work it already merged.`,
+      );
+  });
   resumeKids(id);
 }
 export const finishTask = (id: string) => {
@@ -2830,7 +3025,14 @@ export function startScheduler() {
   // pull requests jobs opened: reviews, failed checks and conflicts go back to the job
   setTimeout(() => void watchPrs(), 40_000);
   setInterval(() => void watchPrs(), 3 * 60_000);
-  setInterval(stopStalledCommands, 10_000);
+  setInterval(() => {
+    const slept = sleptSinceLastLook();
+    if (slept) {
+      logInfo("task", `the Mac slept ${Math.round(slept / 60_000)} min: watchdogs move on by that`);
+      sleptFor(slept);
+    }
+    stopStalledCommands();
+  }, 10_000);
   createRoot(() => {
     createEffect(
       on(

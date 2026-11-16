@@ -3,7 +3,7 @@
 export function lint(step, c, real = false) {
   const out = [];
   const routes = step.routes ?? [];
-  const ids = new Set([...(c.tasks ?? []).map((t) => t.id), ...Array.from({ length: 20 }, (_, i) => `sim-t${i + 1}`)]);
+  const ids = new Set([...(c.tasks ?? []).map((t) => t.id), ...Array.from({ length: 20 }, (_, i) => `job-${i + 1}`)]);
   const spaces = ["work", "home"];
   if (step.error) return out;
   // a job's end that needs nothing from the user may add nothing (its row in the chat says it)
@@ -11,7 +11,7 @@ export function lint(step, c, real = false) {
   if (!routes.length && !event) out.push("lint: no routes");
   if (/할까요\?|원하시면|해 드릴까요/.test(step.reply ?? "")) out.push(`lint: offers work as a question: "${step.reply}"`);
   for (const r of routes) {
-    if (!r || !["answer", "ask", "append", "stop", "new", "remember"].includes(r.kind)) out.push(`lint: unknown route ${JSON.stringify(r)?.slice(0, 80)}`);
+    if (!r || !["answer", "ask", "append", "stop", "new", "remember", "routine", "alarm"].includes(r.kind)) out.push(`lint: unknown route ${JSON.stringify(r)?.slice(0, 80)}`);
     else if (!real && (r.kind === "append" || r.kind === "stop") && !ids.has(r.taskId)) out.push(`lint: ${r.kind} to unknown job ${r.taskId}`);
     else if (r.kind === "append" && !String(r.message ?? "").trim()) out.push("lint: append without a message");
     else if (r.kind === "answer" && !String(r.text ?? "").trim()) out.push("lint: empty answer");

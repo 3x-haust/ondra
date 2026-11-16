@@ -1,5 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
-import { RoutineCard } from "./Routines";
+import { AlarmLine, RoutineCard } from "./Routines";
 import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
@@ -91,7 +91,7 @@ function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
 }
 /** something of this reply shows in the chat (main reacting to a job's end may add nothing: the job's row says it) */
 const shows = (m: CaptainMessage) =>
-  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || r.kind === "routine" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
+  !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || r.kind === "routine" || r.kind === "alarm" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
 
 /** What a job is on while it runs: what it last said it is doing, else its to-do step, else its status line. */
 function doingNow(x: Task): string {
@@ -119,6 +119,8 @@ export function closingOf(t: Task): { text: string; blocks: Extract<Task["entrie
   const tail = e.slice(i, end);
   const text = tail.flatMap((x) => (x.kind === "text" && x.text.trim() ? [x.text.trim()] : [])).join("\n\n");
   const blocks = tail.flatMap((x) => (x.kind === "block" ? [x.block] : []));
+  // written for the user when it finished: its points stand in for the job's last words
+  if (t.digest) return { text: t.digest.text, blocks };
   return { text: text || (blocks.length ? "" : (t.result ?? "").trim()), blocks };
 }
 
@@ -138,7 +140,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
           const t = x();
           if (t.status === "failed") return oneLine(t.error).slice(0, 200);
           if (t.status === "waiting") return oneLine(decisionFor(t.id)?.question ?? nowText(t.now));
-          if (t.status === "done") return discarded(t) ? "" : oneLine(t.summary);
+          if (t.status === "done") return discarded(t) ? "" : oneLine(t.digest?.line ?? t.summary);
           if (t.status === "running") return oneLine(doingNow(t));
           return "";
         };
@@ -366,7 +368,10 @@ function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; l
                     )}
                   </Match>
                   <Match when={r.kind === "routine" && r}>
-                    {(a) => <RoutineCard id={a().routineId} />}
+                    {(a) => <RoutineCard id={a().routineId} alarm={a().alarm} />}
+                  </Match>
+                  <Match when={r.kind === "alarm" && r}>
+                    {(a) => <AlarmLine route={a()} />}
                   </Match>
                   <Match when={r.kind === "remember" && r}>
                     {(a) => (

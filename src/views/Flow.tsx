@@ -173,7 +173,7 @@ export function Flow() {
         const c = changes(t);
         return c.add || c.del ? `+${c.add} −${c.del}` : tr("변경 없음");
       }
-      return t.worktree?.state === "merged" ? tr("병합됨") : t.worktree?.state === "discarded" ? tr("버림") : plain(t.summary ?? "") || tr("완료");
+      return t.worktree?.state === "merged" ? tr("병합됨") : t.worktree?.state === "discarded" ? tr("버림") : plain(t.digest?.line ?? t.summary ?? "") || tr("완료");
     }
     return line(t);
   };

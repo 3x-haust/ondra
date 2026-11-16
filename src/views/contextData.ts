@@ -120,7 +120,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
   const t = taskById(id)!;
   const model = t.model || modelFor(t.accountId);
   const args = [
-    ...taskSystem(t).flatMap((p) => ["--append-system-prompt", p]),
+    ...taskSystem(t, undefined, model).flatMap((p) => ["--append-system-prompt", p]),
     "--no-skills",
     ...(model ? ["--model", model] : []),
     "--thinking",
@@ -136,7 +136,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
 function jobParts(id: string): Part[] {
   const t = taskById(id)!;
   const space = spaceById(t.space);
-  const [role, ...rest] = taskSystem(t);
+  const [role, ...rest] = taskSystem(t, undefined, t.model || modelFor(t.accountId));
   return [
     { title: t.parentId ? tr("서브에이전트 규칙") : tr("작업 규칙"), text: role ?? (t.parentId ? SUB_SYSTEM : TASK_SYSTEM) },
     ...rest.map((text) => ({

@@ -93,6 +93,8 @@ export const pickFolder = (prompt: string) => call<string | null>("pick_folder",
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 /** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
 export const openExternal = (url: string) => call<void>("open_url", { url });
+/** the licenses of the open-source software in the app, in the default text app */
+export const openNotices = () => call<void>("open_notices", {});
 /** The app's log: append lines to a day's file (files before `keepFrom` are removed). */
 export const logAppend = (day: string, lines: string[], keepFrom?: string) => call<void>("log_append", { day, lines, keepFrom: keepFrom ?? null });
 /** The newest part of the app's log, up to `maxBytes`. */
@@ -317,7 +319,7 @@ export interface ToolStatus {
   screenRecording: boolean;
 }
 export const toolStatus = () =>
-  call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.6", accessibility: true, screenRecording: true });
+  call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.7", accessibility: true, screenRecording: true });
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
 export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
@@ -383,7 +385,10 @@ export const ghIssue = (cwd: string, number: number, env: Env = []) =>
 export const ghPrView = (url: string, env: Env = []) => call<string>("gh_pr_view", { url, env }, "");
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
-export const notify = (title: string, body: string) => call<void>("notify", { title, body });
+/** A system notice. An alarm rings (`sound`); with a `tag`, a click on it comes back as "notify:click" with the tag. */
+export const notify = (title: string, body: string, o: { sound?: boolean; tag?: string } = {}) => call<void>("notify", { title, body, sound: o.sound ?? null, tag: o.tag ?? null });
+/** one of Ondra's bundled sounds by name, at volume 0–1 (job ends) */
+export const playSound = (name: string, volume: number) => call<void>("play_sound", { name, volume });
 export const workerExtensions = () => call<string[]>("worker_extensions", undefined, []);
 export interface SkillFile {
   name: string;
@@ -638,3 +643,21 @@ export const farReal = (paths: string[]) => call<(string | null)[]>("far_real", 
 export const farPut = (kind: "cache" | "upload" | "site", name: string, offset: number, data: string) =>
   call<string>("far_put", { kind, name, offset, data }, `/tmp/ondra/${kind}/${name}`);
 export const farCached = (name: string) => call<string | null>("far_cached", { name }, null);
+
+// ───────────────────────── logos for diagrams (src-tauri/src/logos.rs)
+/** A brand's own mark as data: URLs (an SVG already cleaned of anything active). */
+export interface OfficialLogo {
+  /** the mark, for a light background when the source has two */
+  light: string;
+  /** the source's variant for a dark background */
+  dark?: string | null;
+  /** the whole mark is this dark or light: turn its lightness over on a background of the same tone */
+  tone?: "dark" | "light" | null;
+  /** svgl · devicon · gilbarbara */
+  source: string;
+}
+/**
+ * The official logo for a brand name: svgl, then devicon, then gilbarbara/logos, kept on disk
+ * (a miss for a day). Only a brand name goes here, never a box's own text (ui/brandLogo.ts).
+ */
+export const logoFetch = (name: string) => call<OfficialLogo | null>("logo_fetch", { name }, null);

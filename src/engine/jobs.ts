@@ -87,7 +87,7 @@ const trimmed = (s: string | undefined, n: number) => {
 export function lastSaid(t: Task, decisions: Pick<Decision, "taskId" | "question">[] = allDecisions()): { tag: "asks" | "did" | "failed" | "now"; text: string } {
   const q = decisions.find((d) => d.taskId === t.id)?.question;
   if (t.status === "waiting" && q) return { tag: "asks", text: q };
-  if (t.status === "done" && t.summary) return { tag: "did", text: t.summary };
+  if (t.status === "done" && (t.digest || t.summary)) return { tag: "did", text: t.digest?.line ?? t.summary ?? "" };
   if (t.status === "failed" && t.error) return { tag: "failed", text: t.error };
   return { tag: "now", text: t.now ?? "" };
 }
@@ -290,7 +290,8 @@ export function readJob(c: Caller, t: Task, o: { messages?: number; now?: number
   if (pr) out.push(`PR: ${pr.url}`);
   const kids = childrenOf(t.id);
   if (kids.length) out.push("", "Subagents:", ...kids.map((k) => `- ${jobLine(k, now)}`));
-  if (t.result) out.push("", "Result:", trimmed(t.result, 1500));
+  // its own subagent's result is the work it asked for: whole (a 1500-char cut made a parent ask again, which restarted it)
+  if (t.result) out.push("", "Result:", trimmed(t.result, c.task && t.parentId === c.task.id ? 12_000 : 1500));
   if (t.summary) out.push("", "Summary:", trimmed(t.summary, 1500));
   if (t.status === "failed" && t.error) out.push("", `Failed: ${flat(t.error, 400)}`);
   const ev = evidenceOf(t);
@@ -400,6 +401,10 @@ export function tellJob(c: Caller, id: string, message: string, o: { now?: boole
   const from = c.task ? c.task.id : "main";
   if (c.task) {
     if (userParked(t)) return { ok: false, line: "the user stopped or ended that job themselves; tell the user instead of restarting it" };
+    // a finished job of another project isn't started up again by a job: its question or request
+    // became new work there (a release job asking a done Ondra job started an Ondra job)
+    if (finished(t) && t.project !== c.task.project)
+      return { ok: false, line: `not sent: that job has finished and is another project's; read what it did with job_read ${t.id}, and if work is needed there, say so to the user instead` };
     const why = tellGuard(from, t.id, o.at, finished(t));
     if (why) return { ok: false, line: `not sent: ${why}` };
   }

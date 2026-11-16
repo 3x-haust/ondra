@@ -673,7 +673,7 @@ def main():
             for t in tried:
                 print(f"(skipped {t})")
             if not engine:
-                print("No engine answered. Search later, or read the sources you already have.")
+                print("No engine answered. A shorter query (a few words) often does; or read the sources you already have.")
             for i, h in enumerate(hits, 1):
                 print(f"{i}. {h['title']}\n   {h['url']}" + (f"\n   {h['date']}" if h.get("date") else "") + (f"\n   {h['snippet']}" if h.get("snippet") else ""))
         sys.exit(0 if engine else 1)

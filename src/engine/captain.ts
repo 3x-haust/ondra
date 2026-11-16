@@ -24,7 +24,8 @@ import { readNotes } from "./notes";
 import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, recall } from "./memory";
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
-import { CAPTAIN_SYSTEM, instructions, projectRules, spaceRules } from "./prompts";
+import { digestJob } from "./digest";
+import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
 import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
@@ -143,7 +144,7 @@ export function addThought(key: string, delta: string) {
 }
 
 /** Send a request. Returns the id of the reply message to watch (empty if nothing was sent). */
-export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string } = {}): string {
+export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string } = {}): string {
   const t = text.trim();
   if (!t) return "";
   track("message_sent", { where: "main" });
@@ -153,7 +154,8 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
   setState("captain", (list) => [...list.slice(-300), me, reply]);
   followUps.set(space, 0);
-  queues.set(space, [...(queues.get(space) ?? []), { text: t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
+  // `note`: for the model only (the chat shows the user's words)
+  queues.set(space, [...(queues.get(space) ?? []), { text: opts.note ? `${t}\n\n${opts.note}` : t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
   void pump(space);
   return reply.id;
 }
@@ -167,6 +169,7 @@ export { userParked } from "./jobs";
  */
 export function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
+  void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
   const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
   const from = owners.find((m) => m.project) ?? owners[0];
@@ -181,6 +184,7 @@ export function jobEnded(t: Task) {
   const { said, blocks } = reportOf(t);
   const evidence = jobReport(t).blocks.flatMap((b) => (b.type === "evidence" ? b.items.map((i) => `${i.kind}: ${i.ref}`) : [])).slice(-8);
   const asked = userFollowUps(t.space, [t.id]);
+  const own = toFork(t);
   // main already sent this fork back since the user last spoke: once is enough
   const chat = state.captain.filter((m) => m.space === t.space && (m.project ?? undefined) === from.project);
   const sentBack = chat.slice(chat.map((m) => m.from).lastIndexOf("me") + 1).some((m) => m.after && (m.routes ?? []).some((r) => r.kind === "append" && r.taskId === t.id));
@@ -193,6 +197,7 @@ export function jobEnded(t: Task) {
     said ? `What it reported:\n${said.slice(-3500)}` : "",
     blocks.length ? `Its result blocks:\n${blocks.join("\n")}` : "",
     asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((q) => `- ${q}`).join("\n")}` : "",
+    own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}` : "",
     sentBack ? "You already sent this fork back once since the user last spoke. Stop here: no append to it until the user asks; say in one line what is still open, if anything." : "",
     userParked(t) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
     // steps that build on it get its result on their own when they start
@@ -204,6 +209,20 @@ export function jobEnded(t: Task) {
   setState("captain", (list) => [...list.slice(-300), reply]);
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
+}
+
+/**
+ * What the user said to the fork itself: an answer on its question card or a message in its
+ * thread. Main never sees these otherwise, so a "이번 결과로 종료" picked on the card read as
+ * "the user didn't ask to stop" and main started the work again.
+ */
+export function toFork(t: Pick<Task, "entries" | "ask">): string[] {
+  return t.entries
+    .slice(1)
+    .flatMap((e) => (e.kind === "user" && !e.by ? [e.text.trim()] : []))
+    .filter((m) => m && m !== t.ask.trim() && !notTheUser(m))
+    .slice(-5)
+    .map((m) => (m.length > 300 ? `${m.slice(0, 300)}…` : m));
 }
 
 /** What a job reported since it was last given work: its words and its result blocks in lines. */
@@ -353,7 +372,7 @@ export function reportUp(space: string) {
     const rowInMain = (id: string) => state.captain.some((m) => m.space === sp(space) && !m.project && handsTo(m, id));
     const text = [
       `Project "${proj?.name ?? projectId}" finished the request you handed it: "${last.text}".`,
-      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.summary ? ` — ${t.summary}` : ""}${rowInMain(t.id) ? "" : " (no row in your chat)"}`).join(" | ")}` : "",
+      jobs.length ? `Jobs: ${jobs.map((t) => `${t.id} "${t.title}" ${t.status}${t.status === "failed" ? ` — ${t.error ?? ""}` : t.summary ? ` — ${t.summary}` : ""}${rowInMain(t.id) ? "" : " (no row in your chat)"}`).join(" | ")}` : "",
       answers ? `What the project reported:\n${answers}` : "",
       reported ? `What the jobs reported:\n${reported}` : "",
       asked.length ? `User follow-ups since then (answer every question in them, the 왜 first):\n${asked.map((x) => `- ${x}`).join("\n")}` : "",
@@ -658,7 +677,8 @@ async function ensureCaptain(space: string) {
   // Called before the next request; pump already owns the busy flag here.
   if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
-  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "");
+  // a simulation in a space this app has no account for (an empty dev app for evals) runs on any account
+  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "") ?? (worlds.has(space) ? state.accounts[0] : undefined);
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   listen(agent, {
@@ -728,7 +748,7 @@ async function ensureCaptain(space: string) {
     // the same system prompt in every main chat (any space, any project): one
     // shared cached prefix per account. What differs per chat (space and project
     // rules) goes into the first message instead.
-    ...[CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
+    ...[simSystem.get(space) ?? CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
   // a simulated project's folder is made up, another Mac's isn't on this one: main runs in the space's folder then
@@ -847,6 +867,7 @@ export const FORK_ENDED = [
   "Otherwise add only what needs them: one short line as an \"answer\" (no blocks; a 왜 answer may take two sentences), or a route:",
   "- it failed, or stopped short of what the user asked: its row already shows the error, so say plainly what is left or what the user can do about it. Keep the fork's own words on what isn't done or wasn't checked (\"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\").",
   "- the user's follow-ups ask something its summary doesn't answer: answer every such question, the 왜 first.",
+  "- the user's own words to the fork decide over its summary and over your reading of the request: an answer that ends it, settles for what came out or puts it off (\"종료\", \"여기까지\", \"보류\", \"그만\", \"나중에\") means nothing carries it on. Say in one line what is left, if anything, and route nothing.",
   "- what the user asked for still isn't done and the next step is clear (the next step of what they asked, a part the fork left out): route it now instead of offering it. Its row shows it, so \"reply\" stays empty or one short line.",
   "- a real choice only the user can make (intent, taste, scope, cost, anything leaving this machine): one \"ask\", your recommendation first.",
   "\"Not verified\" items stay in its result, not chased: send the fork back only for a check the user's request itself depends on (their feature really runs) that it can do here, and never for checks, evals or polish the user didn't ask for, or to re-confirm what it already reported. Don't redo finished work.",
@@ -870,6 +891,13 @@ export const PROJECT_ENDED = [
   "Otherwise add only what needs them, in one short line (no blocks): a failure or what is still open (keep the jobs' own words on what isn't done or wasn't checked: \"CI 결과는 기다리지 않았어요\" stays that, never \"아직 안 나왔어요\"), an answer to every question in the user's follow-ups the summaries don't answer (the 왜 first), or a choice only the user can make (one \"ask\", your recommendation first).",
   "Don't redo it. Route a next step only if what the user asked still needs one.",
 ].join("\n");
+
+/** "2026-11-13 Fri 14:05" in this Mac's time */
+export function nowLine(now = Date.now()): string {
+  const d = new Date(now);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
@@ -931,7 +959,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
       .filter((m) => inChat(m, space) && !m.pending)
       .slice(-17, -1)
       // a job's end main added nothing to still shows: its row said it
-      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : r.kind === "routine" ? `[routine proposed: ${routineById(r.routineId)?.title ?? ""}${routineById(r.routineId)?.draft === false ? " (saved)" : ""}]` : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
+      .map((m) => (m.from === "me" ? `user: ${m.text}` : `you: ${[m.reply, ...(m.routes ?? []).map((r) => (r.kind === "answer" ? r.text : r.kind === "new" ? `[fork ${r.taskId}]` : r.kind === "append" ? `[→ ${r.taskId}]` : r.kind === "stop" ? `[stopped ${r.taskId}]` : r.kind === "ask" ? `[asked: ${r.question ?? "a question"}]` : r.kind === "remember" ? "[remembered]" : r.kind === "routine" ? (routineById(r.routineId)?.alarm ? `[alarm set: ${routineById(r.routineId)?.title ?? ""}]` : `[routine proposed: ${routineById(r.routineId)?.title ?? ""}${routineById(r.routineId)?.draft === false ? " (saved)" : ""}]`) : r.kind === "alarm" ? `[alarm rang: ${r.text}]` : ""))].filter(Boolean).join(" ") || (m.after ? `[fork ${m.after} ended]` : m.up ? `[project ${m.up} reported]` : "")}`));
     if (recent.length) out.push("", "# Recent conversation (oldest first; the session was cleared, this is the text of it)", recent.map((r) => `- ${r!.slice(0, 400)}`).join("\n"));
   }
   // which model this is, said when it changes: asked "너 무슨 모델이야?", main answers from this, not a guess
@@ -948,7 +976,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
-  else out.push("", "# Message", text);
+  // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
+  else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
@@ -1158,7 +1187,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const sent = relay(target, message, {
         by: "main",
         now: true,
-        display: raw.filter((x) => x?.kind !== "remember" && x?.kind !== "routine").length === 1 && fromUser ? original : undefined,
+        display: raw.filter((x) => x?.kind !== "remember" && x?.kind !== "routine" && x?.kind !== "alarm").length === 1 && fromUser ? original : undefined,
         isolate: isolateOf.get(space),
       });
       out.push(sent.outcome === "continued" ? { kind: "new", taskId: sent.taskId } : { kind: "append", taskId: target.id, message });
@@ -1246,6 +1275,16 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         from: "chat",
       });
       out.push({ kind: "routine", routineId: id });
+    } else if (r?.kind === "alarm" && (r.text || r.task)) {
+      // an alarm is set at once (its card can change or drop it): no job; its words show at its time
+      const when = parseWhen(r.when);
+      if (!when || when.kind === "event") {
+        out.push({ kind: "answer", text: tr("언제 알려 드릴지 알려 주세요. 예: 3시에, 10분 뒤에, 매일 18시에."), blocks: [] });
+        continue;
+      }
+      const text = String(r.text ?? r.task).trim().slice(0, 300);
+      const id = addRoutine({ space: sp(space), title: text.slice(0, 80), prompt: text, when, mode: "fresh", quiet: false, project: projectOf(space)?.id, alarm: true, from: "chat" });
+      out.push({ kind: "routine", routineId: id, alarm: true });
     }
   }
   for (const [projectId, ids] of handed) handDown(sp(space), projectId, original, ids);
@@ -1315,6 +1354,15 @@ interface World {
 }
 const worlds = new Map<string, World>();
 let simSeq = 0;
+/** dev evals (evals/gepa): a simulated chat's own system prompt in place of CAPTAIN_SYSTEM */
+const simSystem = new Map<string, string>();
+/** main's system prompt as it ships (the seed the prompt optimizer starts from) */
+export const mainSystem = () => CAPTAIN_SYSTEM;
+/** dev evals (evals/gepa): one question to the space's model, no tools, nothing kept */
+export async function evalOneShot(prompt: string): Promise<string> {
+  const { oneShot } = await import("./aside");
+  return oneShot(state.space, "~", prompt);
+}
 
 export interface SimCase {
   space: SpaceId;
@@ -1330,6 +1378,8 @@ export interface SimCase {
   chat?: { from: "me" | "captain"; text: string }[];
   /** the user's messages, or what main is told when a fork or a handed-down project ends */
   messages: (string | { event: Event; text: string })[];
+  /** dev evals only: main's system prompt to try instead of the shipped one */
+  system?: string;
 }
 export interface SimStep {
   text: string;
@@ -1349,6 +1399,8 @@ export interface SimStep {
 export async function simulateMain(c: SimCase): Promise<SimStep[]> {
   const pid = (name: string) => `p-${name.toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-")}`;
   const now = Date.now();
+  // an app without the case's space (an empty dev app for evals) gets a plain one
+  if (!state.spaces.some((s) => s.id === c.space)) setState("spaces", (l) => [...l, { id: c.space, label: c.space === "work" ? "회사" : c.space === "home" ? "개인" : c.space, folder: "~", rules: "" }]);
   const w: World = {
     projects: (c.projects ?? []).map((p) => ({ id: pid(p.name), space: c.space, name: p.name, folder: p.folder })),
     repos: c.repos,
@@ -1358,6 +1410,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     decisions: (c.tasks ?? []).filter((t) => t.question).map((t) => ({ taskId: t.id, question: t.question! })),
   };
   const key = `sim${++simSeq}:${c.space}${c.project ? `~${pid(c.project)}` : ""}`;
+  if (c.system) simSystem.set(key, c.system);
   const projectId = c.project ? pid(c.project) : undefined;
   w.tasks = (c.tasks ?? []).map(
     (t) =>
@@ -1401,6 +1454,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
         const r = await route(key, text, undefined, event);
         steps.push({ text, reply: r.reply, routes: r.routes, context: ctx, ms: Date.now() - t0 });
         // what main started becomes part of the world for the next message
+        // (a plain id: nothing main sees should say the world is made up)
         for (const x of r.routes as any[]) {
           if (x?.kind === "new") {
             let proj = typeof x.project === "string" ? w.projects.find((p) => p.name === x.project)?.id : undefined;
@@ -1408,7 +1462,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
               proj = pid(String(x.project.name));
               if (!w.projects.some((p) => p.id === proj)) w.projects.push({ id: proj, space: c.space, name: String(x.project.name), folder: String(x.project.folder ?? "") });
             }
-            w.tasks.push({ id: `sim-t${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
+            w.tasks.push({ id: `job-${++n}`, space: c.space, title: String(x.title ?? "작업"), topic: String(x.topic ?? "기타"), status: "running", cwd: String(x.cwd || spaceById(c.space).folder), now: "시작 중", project: proj ?? projectId, createdAt: Date.now(), entries: [], legs: [], inbox: [], shells: [] } as unknown as Task);
           }
         }
         if (!event) w.chat.push({ id: `c-me-${steps.length}`, at: Date.now(), space: c.space, project: projectId, from: "me", text } as unknown as CaptainMessage);
@@ -1422,6 +1476,7 @@ export async function simulateMain(c: SimCase): Promise<SimStep[]> {
     markDead(agent);
     attached.delete(key);
     worlds.delete(key);
+    simSystem.delete(key);
     sentOf.delete(key);
     for (const m of [texts, errors, settled, accountOf, statsOf, genOf, idleTimers, sigOf]) m.delete(key);
   }

@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: 교차 검토 — review a job's uncommitted changes before it is called done, through the lens your task names (설계 검토 = design, 코드 검토 = code). Run as a review subagent; return evidenced findings (P1/P2/P3, file:line) and a check of the memory you were given. Read-only.
+description: 교차검토 리뷰 — a reviewer of uncommitted changes, through an assigned lens (설계검토 = design, 코드검토 = code) before done; evidence-backed, with a memory audit; never edits. Skip unless started as that review subagent.
 ---
 
 # 교차 검토 (Ondra)
@@ -35,8 +35,10 @@ git ls-files --others --exclude-standard -z
 ```
 
 Scope = staged + unstaged + untracked (read new files in full) + commits on
-this branch not in its base (`git log --oneline @{upstream}..` or the base the
-task named). If nothing changed, say so and finish.
+this branch not in its base: the base the task named, else the default branch
+(e.g. `git log --oneline origin/main..HEAD`). Job branches have no upstream, so
+`@{upstream}` fails. Not a git repository: review the files the task names.
+If nothing changed, say so and finish.
 
 ## 2. Your lens
 
@@ -115,8 +117,10 @@ Check each candidate in the code. Drop what you can't confirm, or say exactly
 what evidence is missing. Run only safe, read-only checks (type check, tests)
 and report their real result.
 
-Finish with a `done` block whose `result` is in the user's language. A shape like this
-keeps the two lenses easy to line up:
+Finish with a `done` block whose `result` is in the user's language and holds
+the whole review: only `result` reaches the job, not text around the block,
+so it keeps `확인한 것` even with no findings. A shape like this keeps the two
+lenses easy to line up:
 
 설계 검토:
 

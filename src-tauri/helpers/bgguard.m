@@ -13,6 +13,9 @@
 // instead: the dragged items go on a private pasteboard, Ondra's following events
 // move the drag over the app's own drop targets, and the release drops it, through
 // the same source and destination calls AppKit makes. Drags the user makes are untouched.
+//
+// And it keeps every window of the app on cuhost's off-screen display (see below), so a panel
+// the app puts up on its own never lands over the user's windows.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdlib.h>
@@ -202,6 +205,71 @@ static void ondraWindowDragImage(NSWindow *self, SEL c, NSImage *img, NSPoint at
   if (!legacyDrag(self, e ? e.locationInWindow : at, pb, src, e)) origWindowDragImage(self, c, img, at, off, e, pb, src, slide);
 }
 
+// ───────────── every window on the off-screen display ─────────────
+// cuhost puts the app on its off-screen display, but a window the app places itself — a floating
+// panel at the pointer or on the main display (orderFrontRegardless at a floating or status
+// level), a tooltip — would come up over the user's windows, where no raise of theirs can cover
+// it. Every frame the app sets and every window it orders in is moved onto the off-screen display
+// (ONDRA_CU_BACKDROP, its display id) at the same place relative to its display, before it shows.
+// A window already on that display (the app's own, a menu or sheet of one) is left as it is.
+
+static CGDirectDisplayID backdrop = 0;
+
+static NSScreen *backdropScreen(void) {
+  if (!backdrop) return nil;
+  for (NSScreen *s in NSScreen.screens)
+    if ([s.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == backdrop) return s;
+  return nil;
+}
+
+static BOOL leaveWhere(NSWindow *w) {
+  NSString *cls = NSStringFromClass(w.class);
+  return [cls containsString:@"StatusBar"] || [cls containsString:@"MenuBar"];
+}
+
+static NSRect ontoBackdrop(NSWindow *w, NSRect f) {
+  NSScreen *b = backdropScreen();
+  if (!b || leaveWhere(w) || NSIntersectsRect(f, b.frame) || f.size.width < 1 || f.size.height < 1) return f;
+  NSRect from = NSScreen.screens.firstObject.frame;
+  NSPoint mid = NSMakePoint(NSMidX(f), NSMidY(f));
+  for (NSScreen *s in NSScreen.screens) if (NSPointInRect(mid, s.frame)) { from = s.frame; break; }
+  NSRect to = b.frame;
+  // the same offset from the top-left of its display, kept inside the off-screen one
+  CGFloat x = NSMinX(to) + (NSMinX(f) - NSMinX(from));
+  CGFloat top = NSMaxY(to) - (NSMaxY(from) - NSMaxY(f));
+  x = MAX(NSMinX(to), MIN(x, NSMaxX(to) - MIN(f.size.width, to.size.width)));
+  top = MIN(NSMaxY(to), MAX(top, NSMinY(to) + MIN(f.size.height, to.size.height)));
+  return NSMakeRect(x, top - f.size.height, f.size.width, f.size.height);
+}
+
+static void (*origSetFrame)(id, SEL, NSRect, BOOL);
+static void (*origSetFrameAnimate)(id, SEL, NSRect, BOOL, BOOL);
+static void (*origSetFrameOrigin)(id, SEL, NSPoint);
+static void (*origSetFrameTopLeft)(id, SEL, NSPoint);
+static void (*origOrderWindow)(id, SEL, NSWindowOrderingMode, NSInteger);
+static void (*origOrderFrontRegardless)(id, SEL);
+static void (*origMakeKeyAndOrderFront)(id, SEL, id);
+static void (*origOrderFront)(id, SEL, id);
+
+static void keepSetFrame(NSWindow *self, SEL c, NSRect f, BOOL d) { origSetFrame(self, c, ontoBackdrop(self, f), d); }
+static void keepSetFrameAnimate(NSWindow *self, SEL c, NSRect f, BOOL d, BOOL a) { origSetFrameAnimate(self, c, ontoBackdrop(self, f), d, a); }
+static void keepSetFrameOrigin(NSWindow *self, SEL c, NSPoint p) {
+  NSRect f = ontoBackdrop(self, (NSRect){p, self.frame.size});
+  origSetFrameOrigin(self, c, f.origin);
+}
+static void keepSetFrameTopLeft(NSWindow *self, SEL c, NSPoint p) {
+  NSRect f = ontoBackdrop(self, NSMakeRect(p.x, p.y - self.frame.size.height, self.frame.size.width, self.frame.size.height));
+  origSetFrameTopLeft(self, c, NSMakePoint(f.origin.x, NSMaxY(f)));
+}
+static void bringOver(NSWindow *w) {
+  NSRect f = ontoBackdrop(w, w.frame);
+  if (!NSEqualRects(f, w.frame)) origSetFrame(w, @selector(setFrame:display:), f, NO);
+}
+static void keepOrderWindow(NSWindow *self, SEL c, NSWindowOrderingMode m, NSInteger rel) { if (m != NSWindowOut) bringOver(self); origOrderWindow(self, c, m, rel); }
+static void keepOrderFrontRegardless(NSWindow *self, SEL c) { bringOver(self); origOrderFrontRegardless(self, c); }
+static void keepMakeKeyAndOrderFront(NSWindow *self, SEL c, id s) { bringOver(self); origMakeKeyAndOrderFront(self, c, s); }
+static void keepOrderFront(NSWindow *self, SEL c, id s) { bringOver(self); origOrderFront(self, c, s); }
+
 static void swap(Class c, SEL s, IMP imp, IMP *orig) { Method m = class_getInstanceMethod(c, s); if (!m) return; IMP o = method_setImplementation(m, imp); if (orig) *orig = o; }
 
 __attribute__((constructor)) static void start(void) {
@@ -215,4 +283,18 @@ __attribute__((constructor)) static void start(void) {
   SEL di = @selector(dragImage:at:offset:event:pasteboard:source:slideBack:);
   swap(objc_getClass("NSView"), di, (IMP)ondraViewDragImage, (IMP *)&origViewDragImage);
   swap(objc_getClass("NSWindow"), di, (IMP)ondraWindowDragImage, (IMP *)&origWindowDragImage);
+  const char *bd = getenv("ONDRA_CU_BACKDROP");
+  backdrop = bd ? (CGDirectDisplayID)strtoul(bd, NULL, 10) : 0;
+  unsetenv("ONDRA_CU_BACKDROP");
+  if (backdrop) {
+    Class w = objc_getClass("NSWindow");
+    swap(w, @selector(setFrame:display:), (IMP)keepSetFrame, (IMP *)&origSetFrame);
+    swap(w, @selector(setFrame:display:animate:), (IMP)keepSetFrameAnimate, (IMP *)&origSetFrameAnimate);
+    swap(w, @selector(setFrameOrigin:), (IMP)keepSetFrameOrigin, (IMP *)&origSetFrameOrigin);
+    swap(w, @selector(setFrameTopLeftPoint:), (IMP)keepSetFrameTopLeft, (IMP *)&origSetFrameTopLeft);
+    swap(w, @selector(orderWindow:relativeTo:), (IMP)keepOrderWindow, (IMP *)&origOrderWindow);
+    swap(w, @selector(orderFrontRegardless), (IMP)keepOrderFrontRegardless, (IMP *)&origOrderFrontRegardless);
+    swap(w, @selector(makeKeyAndOrderFront:), (IMP)keepMakeKeyAndOrderFront, (IMP *)&origMakeKeyAndOrderFront);
+    swap(w, @selector(orderFront:), (IMP)keepOrderFront, (IMP *)&origOrderFront);
+  }
 }

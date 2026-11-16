@@ -319,6 +319,42 @@ process.stdin.on("data", c => { buf += c; let nl;
   });
 });
 
+describe("ComputerHostSession.stop", () => {
+  it("waits for a slow release (an app that has to be killed) before stopping the helper", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cuhost-release-"));
+    const path = join(dir, "slow.mjs"), log = join(dir, "ops.log");
+    writeFileSync(path, `
+import { appendFileSync } from "node:fs";
+const env = { frontmostApp: "a", frontmostPid: 1, frontmostWindowId: 5, mouse: { x: 1, y: 2 } };
+let buf = "";
+process.on("SIGTERM", () => { appendFileSync(${JSON.stringify(log)}, "SIGTERM\\n"); process.exit(0); });
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", c => {
+  buf += c; let nl;
+  while ((nl = buf.indexOf("\\n")) >= 0) {
+    const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+    if (!line.trim()) continue;
+    const req = JSON.parse(line);
+    const answer = (result) => process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
+    if (req.op === "launch") answer({ pid: 42, env, backgroundPreserved: true });
+    else if (req.op === "observe") answer({ tree: { id: "w", role: "AXWindow" }, env });
+    // the helper's worst case: the quit grace, then a kill
+    else if (req.op === "release") setTimeout(() => { appendFileSync(${JSON.stringify(log)}, "released\\n"); answer({ released: true }); }, 2600);
+  }
+});
+`);
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Test");
+    const t0 = Date.now();
+    await session.stop();
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(2500);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["released", "SIGTERM"]);
+  }, 10_000);
+});
+
 describe("HostObservation.label", () => {
   it("names an element by its own title or description, else the first text inside it", () => {
     const obs = new HostObservation();

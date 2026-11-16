@@ -1,0 +1,78 @@
+{
+  "note": "Moments the user had to correct main in real use (names changed)",
+  "space": "home",
+  "projects": [
+    { "name": "ondra", "folder": "/Users/me/projects/ondra" },
+    { "name": "클립보드앱", "folder": "/Users/me/projects/clipapp" },
+    { "name": "모임앱", "folder": "/Users/me/projects/meetup-app" }
+  ],
+  "memory": ["ondra는 Tauri + SolidJS 데스크톱 앱이에요."],
+  "tasks": [],
+  "chat": [],
+  "each": [
+    { "id": "should-we-paper", "note": "\"~어때\" is a question to talk over, not an order: give a view, start nothing",
+      "text": "https://arxiv.org/abs/2507.19457 이거 ondra에 넣는 거 어때",
+      "expect": { "new": 0, "hasNot": ["append"] } },
+    { "id": "how-should-we", "note": "\"어떻게 할까\" wants main's recommendation, not a bare question back or a job",
+      "text": "모임앱 메인 화면에 PC 버전으로 넘어가는 게 있으면 좋겠는데 어떻게 할까",
+      "expect": { "new": 0, "hasNot": ["append"] } },
+    { "id": "idea-follow-up", "note": "A follow-up in a talk about ideas stays a talk",
+      "chat": [
+        { "from": "me", "text": "ondra 원격 기능 만들었잖아. 집 컴퓨터 켜 두고 회사 노트북에서 같이 돌리려는데 UI가 복잡해질 것 같아. 아이디어 있어?" },
+        { "from": "captain", "text": "컴퓨터를 위쪽 막대에 나란히 두고, 일은 그 컴퓨터 이름 아래로 모으는 게 가장 단순해요. 기억은 공간별로 나눠 두고요." }
+      ],
+      "text": "근데 이게 나만 쓰는 게 아니라 다른 사람도 쓰니까 어떻게 해야 할까",
+      "expect": { "answerOnly": true } },
+    { "id": "think-not-plan", "note": "The user wants main's own thinking on a rough idea, not a planning job",
+      "chat": [
+        { "from": "me", "text": "상세페이지 이미지 1장 넣으면 결과 8개에 20분 걸려. 1장 → 1개 3분이면? 목표는 싸고 쉽고 빠르게" },
+        { "from": "captain", "text": "1장 → 1개로 줄이면 기다림은 줄지만 고를 거리가 없어져요. 처음엔 1개를 빨리 보여 주고, 원하면 더 뽑게 하는 쪽을 추천해요." }
+      ],
+      "text": "아니 상세페이지 말고 전체 흐름에 대한 생각이야. 너무 오래 걸려서 사람들이 다 나간다는 피드백이 있더라고",
+      "expect": { "answerOnly": true } },
+    { "id": "standing-ok", "note": "Permission from now on for one project is remembered, and the waiting job goes on",
+      "tasks": [{ "id": "t-short", "title": "단축키 추가", "topic": "ondra", "project": "ondra", "status": "waiting", "question": "커밋하고 PR 올린 뒤 머지할까요?" }],
+      "text": "push pr merge 했어? ondra는 앞으로 묻지 말고 진행해도 돼",
+      "expect": { "has": ["remember"], "append": "t-short", "new": 0 } },
+    { "id": "no-commit-running", "note": "A limit on a job that just started goes to that job",
+      "tasks": [{ "id": "t-ui", "title": "간단 보기 쉽게 다듬기", "topic": "ondra", "project": "ondra", "status": "running", "now": "비슷한 앱 사례 찾는 중" }],
+      "chat": [
+        { "from": "me", "text": "ondra 간단 보기 UI를 비전공자도 알게 다듬어 줘. 사례도 찾아보고" },
+        { "from": "captain", "text": "다듬을게요 [fork t-ui]" }
+      ],
+      "text": "커밋 pr은 하지 마 내가 확인할 거니까",
+      "expect": { "append": "t-ui", "new": 0 } },
+    { "id": "sent-twice", "note": "The same request sent again while its job runs starts no second job",
+      "tasks": [{ "id": "t-clip", "title": "큰 문자열 클립보드 최적화", "topic": "클립보드앱", "project": "클립보드앱", "status": "running", "now": "큰 항목 미리보기 자르는 중" }],
+      "chat": [
+        { "from": "me", "text": "클립보드앱에 엄청 큰 이상한 문자열 복사했더니 클립보드가 안 열린대. 최적화해줘" },
+        { "from": "captain", "text": "고칠게요 [fork t-clip]" }
+      ],
+      "text": "클립보드앱에 엄청 큰 이상한 문자열 복사했더니 클립보드가 안 열린대. 최적화해줘",
+      "expect": { "new": 0 } },
+    { "id": "answer-quoted-question", "note": "A reply that quotes a waiting job's question goes to that job, even when it says \"not that\"",
+      "tasks": [{ "id": "t-pc", "title": "PC 이동 버튼", "topic": "모임앱", "project": "모임앱", "status": "waiting", "question": "어떤 방식으로 넣을까요? 1) 상단 배너 2) 설정 메뉴 3) 첫 실행 안내" }],
+      "text": "\"어떤 방식으로 넣을까요?\" → 아니 그거 말고 그냥 PC 앱 다운로드 버튼을 소개 화면 쪽에 그런 느낌으로",
+      "expect": { "append": "t-pc", "new": 0 } },
+    { "id": "failed-report-later", "note": "A project's report that its job failed answers an older request: say what failed and what's next, start nothing",
+      "tasks": [
+        { "id": "t-pdf", "title": "PDF 트랙패드 조작", "topic": "ondra", "project": "ondra", "status": "failed", "error": "내장 PDF 화면에서는 제스처를 받을 수 없어요" },
+        { "id": "t-key", "title": "단축키 추가", "topic": "ondra", "project": "ondra", "status": "running", "now": "사이드바 단축키 넣는 중" }
+      ],
+      "chat": [
+        { "from": "me", "text": "pdf 뷰어 트랙패드로 확대 축소 다 되게 해줘" },
+        { "from": "captain", "text": "ondra에 맡길게요" },
+        { "from": "me", "text": "ondra 버튼들에 단축키 만들어줘. 사이드바 접기 펴기 같은 거" },
+        { "from": "captain", "text": "ondra에 맡길게요" }
+      ],
+      "messages": [{ "event": "project", "text": "Project \"ondra\" finished the request you handed it: \"pdf 뷰어 트랙패드로 확대 축소 다 되게 해줘\".\nJobs: t-pdf \"PDF 트랙패드 조작\" failed — 내장 PDF 화면에서는 제스처를 받을 수 없어요\nWhat the project reported:\n기존 뷰어는 운영체제 내장 PDF 화면을 그대로 띄워 앱에서 제스처를 제어할 수 없었어요. 직접 그리는 뷰어로 바꾸면 되지만 작업이 커요." }],
+      "expect": { "new": 0, "answerIncludesAny": ["PDF", "pdf", "뷰어"], "maxAnswer": 260 } },
+    { "id": "go-after-talk", "note": "After talking an idea over, a short go-ahead starts the work",
+      "chat": [
+        { "from": "me", "text": "클립보드앱에 고정한 이미지에서 글자 복사랑 번역 되면 좋겠는데 어때" },
+        { "from": "captain", "text": "좋아요. 고정 이미지 위에 글자 인식 버튼을 두고, 번역은 그 옆 한 번 누르기로 하는 걸 추천해요." }
+      ],
+      "text": "ㄱㄱ",
+      "expect": { "new": 1, "project": "클립보드앱" } }
+  ]
+}

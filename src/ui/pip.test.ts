@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
-import { cornerOf, nearestCorner, pipJob } from "./pip";
+import { cornerOf, cornerSpot, nearestCorner, pipJob, projectRelease } from "./pip";
 
 const job = (id: string, o: Partial<Task> & { browsedAt?: number } = {}): Task =>
   ({
@@ -22,6 +22,13 @@ describe("the floating browser", () => {
     expect(pipJob(list, new Set(["c"]))?.id).toBe("d");
     expect(pipJob(list, new Set(["c", "d"]))).toBeUndefined();
   });
+  it("shows the job you went into when it is browsing, else the one that browsed last", () => {
+    const list = [job("a", { browsedAt: 10 }), job("b", { browsedAt: 30 }), job("c", { status: "done", browsedAt: 40 })];
+    expect(pipJob(list, new Set(), "a")?.id).toBe("a");
+    // the open job isn't browsing (done, or closed here): the latest browsing job, as before
+    expect(pipJob(list, new Set(), "c")?.id).toBe("b");
+    expect(pipJob(list, new Set(["a"]), "a")?.id).toBe("b");
+  });
   it("snaps to the nearest corner", () => {
     expect(nearestCorner(100, 100, 1000, 800)).toBe("tl");
     expect(nearestCorner(900, 100, 1000, 800)).toBe("tr");
@@ -32,5 +39,18 @@ describe("the floating browser", () => {
     expect(cornerOf("tl")).toBe("tl");
     expect(cornerOf("middle")).toBe("br");
     expect(cornerOf(null)).toBe("br");
+  });
+  it("sits clear of the title bar, the composer and the sides", () => {
+    expect(cornerSpot("tl", 1200, 800, 320, 200)).toEqual({ x: 16, y: 60 });
+    expect(cornerSpot("br", 1200, 800, 320, 200)).toEqual({ x: 864, y: 496 });
+    // a window too small for it keeps it on screen at the top left
+    expect(cornerSpot("br", 300, 200, 320, 200)).toEqual({ x: 16, y: 60 });
+  });
+  it("is thrown on by how fast it was let go", () => {
+    // a slow let-go in the top left stays there; a flick to the right crosses the window
+    const slow = projectRelease({ x: 300, y: 200 }, { x: 0.2, y: 0 });
+    expect(nearestCorner(slow.x, slow.y, 1200, 800)).toBe("tl");
+    const flick = projectRelease({ x: 300, y: 200 }, { x: 2.5, y: 1.5 });
+    expect(nearestCorner(flick.x, flick.y, 1200, 800)).toBe("br");
   });
 });

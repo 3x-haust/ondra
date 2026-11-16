@@ -1,5 +1,6 @@
 // Settings: general, accounts, import from other tools, skills, tools.
 import { effortFor, setModelEffort } from "../engine/models";
+import { ring, soundOn, soundVolume } from "../engine/sound";
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { refreshModels } from "../engine/modelList";
@@ -22,6 +23,7 @@ import {
   accountProviders,
   accountRemove,
   inTauri,
+  openNotices,
   pickFolder,
   toolStatus,
   spaceGhLogin,
@@ -236,12 +238,35 @@ function General() {
         <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
+        <Row title={t("작업 끝나면 앱에서 직접 확인")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
+          <Switch_ label={t("작업 끝나면 앱에서 직접 확인")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
+        </Row>
         <Row title={t("스킬 다듬기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
           <Switch_ label={t("스킬 다듬기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
         </Row>
         <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
           <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
         </Row>
+        <Row title={t("작업 끝 소리")} desc={t("작업이 끝나거나 답이 필요하면 소리를 내요")}>
+          <Switch_ label={t("작업 끝 소리")} on={soundOn()} set={(v) => (setState("settings", "jobSound", v), v && ring("done", { test: true }))} />
+        </Row>
+        <Show when={soundOn()}>
+          <Row title={t("소리 크기")}>
+            <div class="set-volume">
+              <input
+                type="range"
+                min={5}
+                max={100}
+                step={5}
+                aria-label={t("소리 크기")}
+                value={Math.round(soundVolume() * 100)}
+                onInput={(e) => setState("settings", "jobSoundVolume", Number(e.currentTarget.value) / 100)}
+                onChange={() => ring("done", { test: true })}
+              />
+              <span class="set-volume-n">{Math.round(soundVolume() * 100)}%</span>
+            </div>
+          </Row>
+        </Show>
       </div>
 
       <GroupTitle title={t("공통 지침")}>
@@ -264,6 +289,9 @@ function General() {
       <div class="set-group">
         <UpdateRow />
         <Components />
+        <Row title={t("오픈소스 라이선스")} desc={t("Ondra는 MIT 라이선스예요. 함께 쓰는 오픈소스의 라이선스를 봐요")}>
+          <button class="btn ghost sm" onClick={() => void openNotices().catch((e) => toast(String(e), "bad"))}>{t("보기")}</button>
+        </Row>
         {/* counts, versions and model ids only (docs/TELEMETRY.md); never what was asked or a file */}
         <Show when={canTrack}>
           <Row title={t("익명 사용 통계 보내기")} desc={t("무엇을 시켰는지, 파일, 계정은 보내지 않아요")}>
@@ -1084,7 +1112,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
   { id: "hooks", label: "훅", icon: "bolt", desc: "작업 중 정해진 때에 내 명령을 실행해요", group: "에이전트|group" },
-  { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간이나 GitHub에서 일이 생기면 작업을 시작해요", group: "에이전트|group" },
+  { id: "routines", label: "루틴", icon: "repeat", desc: "정해진 시간에 알려 주거나, 시간이나 GitHub 일에 맞춰 작업을 시작해요", group: "에이전트|group" },
   { id: "secrets", label: "시크릿", icon: "lock", desc: "API 키와 비밀번호를 작업이 쓰되, 에이전트는 값을 보지 못하게 해요", group: "에이전트|group" },
   { id: "tools", label: "macOS 권한", icon: "shield", desc: "작업이 화면을 보고 앱을 다루려면 필요해요", group: "이 Mac" },
   { id: "import", label: "가져오기", icon: "download", desc: "다른 AI 도구에서 쓰던 지침·스킬·세션을 가져와요", group: "이 Mac" },
@@ -1096,7 +1124,7 @@ const FINDABLE: [SettingsTab, string][] = [
   ["general", "테마"], ["general", "화면 크기"], ["general", "언어"], ["general", "링크 열기"],
   ["general", "기본 모델"], ["general", "기본 권한"], ["general", "동시 작업 수"], ["general", "빌드·시뮬레이터 작업 동시 수"],
   ["general", "작업마다 새 워크트리"], ["general", "PR 리뷰 자동 대응"], ["general", "GitHub 푸시·PR 허용"], ["general", "메모리 자동 저장"],
-  ["general", "작업 브라우저 미리보기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
+  ["general", "작업 브라우저 미리보기"], ["general", "작업 끝 소리"], ["general", "소리 크기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
   ["general", "익명 사용 통계 보내기"],
   ["tools", "손쉬운 사용"], ["tools", "화면 기록"],
   ["remote", "다른 Mac에서 이 Mac 쓰기"], ["remote", "잠자기 방지"], ["remote", "연결 링크"],

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, realpathSync, chmodSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, realpathSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +26,7 @@ process.stdin.on("data", c => { buf += c; let nl;
   while ((nl = buf.indexOf("\\n")) >= 0) { const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
     const r = JSON.parse(line); let res;
     if (r.op === "launch" && r.app === "Nope") { process.stdout.write(JSON.stringify({ version: 1, id: r.id, ok: false, error: { code: "LAUNCH_FAILED", message: "app not found" } }) + "\\n"); continue; }
-    if (r.op === "launch") res = { pid: 4242, env: ENV, backgroundPreserved: true };
+    if (r.op === "launch") res = { pid: 4242, ...(r.app === "Installed" ? { path: "/Applications/Installed.app" } : {}), env: ENV, backgroundPreserved: true };
     else if (r.op === "observe") res = { tree: tree("a"), env: ENV };
     else if (r.op === "act") res = { actionMs: 5, env: ENV, backgroundPreserved: true, tree: tree(r.action.kind === "set-value" ? r.action.value : "a") };
     else if (r.op === "look") res = { image: { mimeType: "image/png", data: ${JSON.stringify(png)}, width: 1, height: 1 }, env: ENV };
@@ -60,7 +60,7 @@ describe("computer tool — host background mode", () => {
   it("starts, observes with stable-id tree, acts in one round trip, looks, and never breaks the background invariant", async () => {
     const { call } = load();
     const start = text(await call({ action: "start", app: "TextEdit" }));
-    expect(start).toBe('Opened TextEdit in the background.\nscreen h1:\n[1] window\n  [2] textfield = "a"\n  [3] button "Go"');
+    expect(start).toBe('Opened TextEdit in the background, pid 4242.\nscreen h1:\n[1] window\n  [2] textfield = "a"\n  [3] button "Go"');
     const set = text(await call({ action: "act", input: { kind: "set-value", ref: 2, value: "hello" } }));
     // the re-observation after the action carries the change, in the same call
     expect(set).toBe('set-value [2]: done, screen changed\nscreen h2, changes since h1 (~ changed, + new, - gone):\n~ [2] textfield = "hello"');
@@ -75,6 +75,28 @@ describe("computer tool — host background mode", () => {
     const { call } = load();
     await expect(call({ action: "start", app: "Nope" })).rejects.toThrow(/app not found/);
     expect(text(await call({ action: "start", app: "TextEdit" }))).toContain("Opened TextEdit");
+    await call({ action: "stop" });
+  });
+
+  it("tells a second start to stop the open session first", async () => {
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    await expect(call({ action: "start", app: "Notes" })).rejects.toThrow(/already open: stop it, then start again/);
+    await call({ action: "stop" });
+    expect(text(await call({ action: "start", app: "Notes" }))).toContain("Opened Notes");
+    await call({ action: "stop" });
+  });
+
+  it("opens a job's own build by its .app path, and says which copy a name opened", async () => {
+    const { call } = load();
+    const build = join(mkdtempSync(join(tmpdir(), "cu-build-")), "My App.app");
+    mkdirSync(join(build, "Contents"), { recursive: true });
+    writeFileSync(join(build, "Contents", "Info.plist"), "<plist/>");
+    expect(text(await call({ action: "start", app: build }))).toContain(`Opened ${build} in the background, pid 4242.`);
+    await call({ action: "stop" });
+    await expect(call({ action: "start", app: join(tmpdir(), "missing.app") })).rejects.toThrow(/Invalid app/);
+    await expect(call({ action: "start", app: "../x.app" })).rejects.toThrow(/Invalid app/);
+    expect(text(await call({ action: "start", app: "Installed" }))).toContain("pid 4242, from /Applications/Installed.app.");
     await call({ action: "stop" });
   });
 

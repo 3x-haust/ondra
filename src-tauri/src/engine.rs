@@ -30,15 +30,36 @@ impl Proc {
         // dev server) would run on with nobody reading it, while the resumed job
         // runs it again. A server an earlier call started is no longer below the
         // engine (that call ended), so it stays.
+        let rows = ps_rows();
         let running = match self.child.try_wait() {
-            Ok(None) => below(&ps_rows(), self.child.id() as i32),
+            Ok(None) => below(&rows, self.child.id() as i32),
             _ => vec![],
         };
+        // The Mac-app helper quits the background apps it opened when it is asked to stop;
+        // killed outright, it leaves them running with nobody to stop them. It gets a
+        // SIGTERM and a moment, so do the apps it runs (they are below it).
+        let (now, helpers, theirs) = stop_plan(&rows, &running);
         let _ = self.child.kill();
         let _ = self.child.wait();
-        for pid in running {
+        for pid in now {
             signal("-KILL", pid);
         }
+        if helpers.is_empty() {
+            return;
+        }
+        for &pid in &helpers {
+            signal("-TERM", pid);
+        }
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(5));
+            let now = ps_rows();
+            for pid in helpers.iter().chain(theirs.iter()) {
+                // the same process (a pid can be reused): still running what it ran
+                if now.iter().any(|r| r.pid == *pid && rows.iter().any(|o| o.pid == *pid && o.command == r.command)) {
+                    signal("-KILL", *pid);
+                }
+            }
+        });
     }
 
     fn finish(&mut self) -> Option<i32> {
@@ -114,6 +135,19 @@ fn below(rows: &[PsRow], root: i32) -> Vec<i32> {
     }
     below.remove(0);
     below
+}
+
+/// What stopping a job's engine does to what runs below it: (killed at once, the Mac-app
+/// helpers asked to stop, the apps those helpers run and stop themselves).
+fn stop_plan(rows: &[PsRow], running: &[i32]) -> (Vec<i32>, Vec<i32>, Vec<i32>) {
+    let helpers: Vec<i32> = running
+        .iter()
+        .copied()
+        .filter(|&p| rows.iter().any(|r| r.pid == p && runs_program(&r.command, "ondra-cuhost", None)))
+        .collect();
+    let theirs: Vec<i32> = helpers.iter().flat_map(|&h| below(rows, h)).collect();
+    let now = running.iter().copied().filter(|p| !helpers.contains(p) && !theirs.contains(p)).collect();
+    (now, helpers, theirs)
 }
 
 fn signal(sig: &str, pid: i32) {
@@ -545,6 +579,21 @@ mod tests {
 
     fn rows(list: &[(i32, i32, &str)]) -> Vec<PsRow> {
         list.iter().map(|(pid, ppid, c)| PsRow { pid: *pid, ppid: *ppid, command: c.to_string() }).collect()
+    }
+
+    #[test]
+    fn a_mac_app_helper_gets_to_quit_the_apps_it_opened() {
+        let all = rows(&[
+            (100, 1, "/Applications/Ondra.app/Contents/MacOS/ondra-engine --mode rpc"),
+            (200, 100, "/bin/bash -c swift build"),
+            (201, 200, "swift-build"),
+            (300, 100, "/Applications/Ondra.app/Contents/MacOS/ondra-cuhost"),
+            (301, 300, "/Users/me/Library/Caches/dev.3xhaust.ondra/Applications/Orbit.app/Contents/MacOS/Orbit"),
+        ]);
+        let (now, helpers, theirs) = stop_plan(&all, &below(&all, 100));
+        assert_eq!(now, vec![200, 201]);
+        assert_eq!(helpers, vec![300]);
+        assert_eq!(theirs, vec![301]);
     }
 
     #[test]

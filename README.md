@@ -182,5 +182,6 @@ brand/ docs/         brand and documentation
 ---
 
 <p align="center">
-  <a href="https://github.com/3x-haust/ondra/releases">Releases</a> · <a href="docs/TELEMETRY.md">Telemetry</a> · <a href="https://github.com/3x-haust/ondra/issues">Report an issue</a>
+  <a href="https://github.com/3x-haust/ondra/releases">Releases</a> · <a href="docs/TELEMETRY.md">Telemetry</a> · <a href="https://github.com/3x-haust/ondra/issues">Report an issue</a> · <a href="LICENSE">MIT License</a>
 </p>
+<p align="center"><sub>The licenses of the open-source software Ondra includes are in the app: Settings › About › Open-source licenses.</sub></p>

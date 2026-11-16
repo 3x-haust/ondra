@@ -4,7 +4,9 @@ description: >
   The user gave a goal and wants it finished completely ("루프", "될 때까지",
   "100%", "eval", "반복해서", "완벽하게"). Turn the goal into checks that fail
   until the user's intent is fully met, then loop fix → re-check until every
-  check passes. Done means the checks pass, not that it looks done.
+  check passes. Done means the checks pass, not that it looks done. Not if
+  no fix is to be done, and not for research: a question or hypothesis ends
+  with its answer, even a negative or inconclusive one.
 ---
 
 # Goal loop
@@ -23,7 +25,11 @@ find it (`.ondra/goal/spec.md` works well):
 - **Must not break**: the user's rules and preferences, what works today.
 - **Not asked for**: stay inside the request. Extra requirements, safety
   layers or edge cases the user didn't name pull the checks away from their
-  intent; a real risk you notice goes in the report as one line instead.
+  intent; a real risk you notice goes in the report as one line instead. The
+  same goes for a bar taken from elsewhere: a project's own gates or casebook
+  (CLAUDE.md, a checklist) that asks more than the user did, or another
+  product's feature count or marketing. Those are context, not checks; if one
+  would change what done means, `ask`.
 - **Assumptions** you had to make. If one changes what the checks are, `ask`
   before going on.
 
@@ -31,10 +37,14 @@ Showing it as a `scope` block and a `checklist` helps the user correct you early
 
 ## 2. Make the checks
 
-Every requirement gets a runnable, objective check (a script or test; the
-project's own test tools when there are any). Checks that use the feature the
+Every requirement gets one runnable, objective check, and only requirements
+get checks: no harness, sealed set or monitor beyond what proves them. A
+check is a script or test (the project's own test tools when there are any). Checks that use the feature the
 way the user will (the flow, the command, the screen) catch more than checks
-of internals:
+of internals. When the project has a check skill (`check-<app>` in its
+`.agents/`, `.claude/` or `.cursor/skills/`), drive the app through it: its
+launch, doctor and drive steps, and the area files of its feature map for what
+to cover.
 
 | requirement is about | a good check |
 |---|---|
@@ -71,6 +81,10 @@ Fix, re-check, repeat. What tends to work:
 - A short log (`.ondra/goal/log.md`: check · cause · fix · before → after)
   helps you and the next worker not repeat a dead end.
 - A `progress` block (passing / total) keeps the user oriented on long loops.
+- End a turn with the next action, an `ask`, a `handoff` or `done`, not with
+  a promise of what you will do next.
+- A `handoff` carries the whole goal: its `doneWhen` is every check passing,
+  not just the part left in this session.
 
 If the same check keeps failing, stop patching: re-read the spec, doubt the
 assumption, look a layer deeper. If the approach itself is wrong, undo that
@@ -79,6 +93,13 @@ part (keep the spec, checks and log) and build it another way. Truly blocked
 you tried, and end the turn.
 
 ## 4. Finish
+
+Only every check passing ends the goal, or the user saying it's enough. A
+review follow-up that says to finish ends that review round: if a check still
+fails, keep looping or `handoff` with the failing checks, never `done`. When the
+ways you can see are used up, or a check can only pass with the user's hand
+(their click, device or account), `ask` with what passes and what doesn't
+rather than building more machinery to verify it yourself.
 
 - Run every check once more; all pass.
 - Look for success that isn't real on the path the checks went through: a

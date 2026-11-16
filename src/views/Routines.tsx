@@ -1,14 +1,16 @@
 // Settings › 루틴, and the card main shows in the chat when it proposes one. A routine is a prompt,
 // a project and a "when"; its runs are ordinary jobs (engine/routines.ts). The project picker holds
 // this Mac's projects and the other Macs' ones: a routine on another Mac's project runs there.
+// An alarm is a routine with no job: its words, a time and a repeat (no project, no way of running);
+// when it rings the chat gets a line (AlarmLine) and the Mac a notice with a sound.
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { projectById, projectsShown, state } from "../state/store";
-import type { Routine, RoutineEvent, RoutineWhen } from "../state/types";
+import type { Route, Routine, RoutineEvent, RoutineWhen } from "../state/types";
 import { openTask, setView, toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
-import { addRoutine, removeRoutine, routineById, routineLine, routinesIn, runRoutine, runsOf, saveRoutine } from "../engine/routines";
-import { describeWhen, EVENT_LABEL, MIN_EVERY, validTime } from "../engine/routineTime";
+import { addRoutine, removeRoutine, routineById, routineLine, routinesIn, runRoutine, runsOf, saveRoutine, SNOOZE_MIN, snoozeAlarm } from "../engine/routines";
+import { dayTime, describeWhen, EVENT_LABEL, MIN_EVERY, validTime } from "../engine/routineTime";
 import { EmptyState, PageHead, Switch_ } from "./Settings";
 
 /** the routine the page opens with (a chat card's 수정) */
@@ -55,11 +57,18 @@ function Editor(props: { r: Routine; onDone: () => void }) {
         return { kind: "event", event: event(), ...(filter().trim() ? { filter: filter().trim() } : {}) };
     }
   };
+  const alarm = !!r.alarm;
   const problem = () =>
-    !prompt().trim() ? t("할 일을 적어 주세요") : !when() ? (kind() === "once" ? t("지나지 않은 시간을 골라 주세요") : t("시간을 확인해 주세요")) : kind() === "event" && !project() ? t("GitHub 사건은 프로젝트가 필요해요") : "";
+    !prompt().trim() ? (alarm ? t("알려 줄 말을 적어 주세요") : t("할 일을 적어 주세요")) : !when() ? (kind() === "once" ? t("지나지 않은 시간을 골라 주세요") : t("시간을 확인해 주세요")) : kind() === "event" && !project() ? t("GitHub 사건은 프로젝트가 필요해요") : "";
   const save = () => {
     const w = when();
     if (!w || problem()) return;
+    if (alarm) {
+      // an alarm's name is its words; it stays in the chat it was set in
+      saveRoutine(r.id, { title: prompt().trim().slice(0, 80), prompt: prompt().trim(), when: w, snoozeAt: undefined, ...(r.draft ? { draft: false, enabled: true } : {}) });
+      toast(t("알람 «{name}»: {when}", { name: prompt().trim().slice(0, 40), when: describeWhen(w) }));
+      return props.onDone();
+    }
     saveRoutine(r.id, { title: title().trim() || prompt().trim().slice(0, 40), prompt: prompt().trim(), project: project() || undefined, when: w, mode: mode(), quiet: quiet(), ...(r.draft ? { draft: false, enabled: true } : {}) });
     toast(t("루틴 «{name}»: {when}", { name: title().trim() || prompt().trim().slice(0, 40), when: describeWhen(w) }));
     props.onDone();
@@ -68,14 +77,23 @@ function Editor(props: { r: Routine; onDone: () => void }) {
 
   return (
     <div class="rt-edit">
-      <input class="input rt-title" placeholder={t("이름")} value={title()} onInput={(e) => setTitle(e.currentTarget.value)} aria-label={t("이름")} />
-      <textarea class="rt-prompt" rows={3} placeholder={t("할 일. 예: 열린 PR을 보고 리뷰가 필요한 것만 정리해 줘")} value={prompt()} onInput={(e) => setPrompt(e.currentTarget.value)} aria-label={t("할 일")} />
+      <Show when={!alarm}>
+        <input class="input rt-title" placeholder={t("이름")} value={title()} onInput={(e) => setTitle(e.currentTarget.value)} aria-label={t("이름")} />
+      </Show>
+      <textarea
+        class="rt-prompt"
+        rows={alarm ? 2 : 3}
+        placeholder={alarm ? t("알려 줄 말. 예: 회의 10분 전이에요") : t("할 일. 예: 열린 PR을 보고 리뷰가 필요한 것만 정리해 줘")}
+        value={prompt()}
+        onInput={(e) => setPrompt(e.currentTarget.value)}
+        aria-label={alarm ? t("알려 줄 말") : t("할 일")}
+      />
       <div class="rt-line">
         <select class="select" value={kind()} onChange={(e) => setKind(e.currentTarget.value as Kind)} aria-label={t("언제")}>
           <option value="daily">{t("정해진 시간")}</option>
           <option value="every">{t("간격마다")}</option>
           <option value="once">{t("한 번")}</option>
-          <option value="event">{t("GitHub에서 일이 생기면")}</option>
+          <Show when={!alarm}><option value="event">{t("GitHub에서 일이 생기면")}</option></Show>
         </select>
         <Show when={kind() === "daily"}>
           <input class="input rt-time" type="time" value={time()} onInput={(e) => setTime(e.currentTarget.value)} aria-label={t("시간")} />
@@ -102,6 +120,7 @@ function Editor(props: { r: Routine; onDone: () => void }) {
           <input class="input rt-filter" placeholder={event() === "issue" || event() === "pr" || event() === "review" ? t("검색어 (예: label:bug)") : t("제목에 들어갈 말")} value={filter()} onInput={(e) => setFilter(e.currentTarget.value)} aria-label={t("거르기")} />
         </Show>
       </div>
+      <Show when={!alarm}>
       <div class="rt-line">
         <select class="select" value={project()} onChange={(e) => setProject(e.currentTarget.value)} aria-label={t("프로젝트")}>
           <option value="">{t("프로젝트 없이")}</option>
@@ -116,11 +135,12 @@ function Editor(props: { r: Routine; onDone: () => void }) {
           {t("할 일 없으면 조용히")}
         </label>
       </div>
+      </Show>
       <div class="rt-foot">
         <Show when={problem()}><span class="rt-problem">{problem()}</span></Show>
         <span class="spacer" />
         <button class="btn ghost sm" onClick={props.onDone}>{t("취소")}</button>
-        <button class="btn primary sm" disabled={!!problem()} onClick={save}>{r.draft ? t("루틴 만들기") : t("저장")}</button>
+        <button class="btn primary sm" disabled={!!problem()} onClick={save}>{r.draft ? (alarm ? t("알람 맞추기") : t("루틴 만들기")) : t("저장")}</button>
       </div>
     </div>
   );
@@ -140,8 +160,8 @@ function RoutineRow(props: { r: Routine }) {
       <div class="rt-row" classList={{ off: !r().enabled }}>
         <Switch_ on={r().enabled} set={(on) => saveRoutine(r().id, { enabled: on })} label={r().enabled ? t("켜짐") : t("꺼짐")} />
         <button class="rt-main" onClick={() => setEditing(r().id)} title={r().prompt}>
-          <b>{r().title}</b>
-          <span class="rt-sub">{[describeWhen(r().when), where(), routineLine(r())].filter(Boolean).join(" · ")}</span>
+          <b><Show when={r().alarm}><Icon name="bell" size={13} class="rt-bell" /></Show>{r().title}</b>
+          <span class="rt-sub">{[r().alarm ? t("알람") : "", describeWhen(r().when), r().alarm ? "" : where(), routineLine(r())].filter(Boolean).join(" · ")}</span>
         </button>
         <Show
           when={!confirm()}
@@ -152,10 +172,12 @@ function RoutineRow(props: { r: Routine }) {
             </>
           }
         >
-          <Show when={last()}>
+          <Show when={!r().alarm && last()}>
             <button class="icon-btn sm" title={t("최근 실행 보기")} aria-label={t("최근 실행 보기")} onClick={() => openTask(last()!)}><Icon name="history" size={14} /></button>
           </Show>
-          <button class="icon-btn sm" title={t("지금 실행")} aria-label={t("지금 실행")} onClick={() => { const id = runRoutine(r().id, { manual: true }); if (id) openTask(id); }}><Icon name="play" size={14} /></button>
+          <Show when={!r().alarm}>
+            <button class="icon-btn sm" title={t("지금 실행")} aria-label={t("지금 실행")} onClick={() => { const id = runRoutine(r().id, { manual: true }); if (id) openTask(id); }}><Icon name="play" size={14} /></button>
+          </Show>
           <button class="icon-btn sm" title={t("삭제")} aria-label={t("삭제")} onClick={() => setConfirm(true)}><Icon name="trash" size={14} /></button>
         </Show>
       </div>
@@ -166,10 +188,12 @@ function RoutineRow(props: { r: Routine }) {
 export function RoutinesSettings() {
   const list = () => [...routinesIn(state.space), ...(state.routines ?? []).filter((r) => r.space === state.space && r.draft && editing() === r.id)];
   const add = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, mode: "continue", draft: true }));
+  const addAlarm = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "once", at: Date.now() + 3_600_000 }, mode: "fresh", quiet: false, alarm: true, draft: true }));
   return (
     <>
       <PageHead tab="routines">
         <Show when={list().length}>
+          <button class="btn sm" onClick={addAlarm}><Icon name="bell" size={14} />{t("알람 추가")}</button>
           <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("추가")}</button>
         </Show>
       </PageHead>
@@ -177,8 +201,9 @@ export function RoutinesSettings() {
         <For
           each={list()}
           fallback={
-            <EmptyState icon="repeat" title={t("루틴 없음")} desc={t("정해진 시간이나 GitHub에서 일이 생길 때 작업을 시작해요. 채팅에서 \"매일 9시에 …\"라고 해도 돼요.")}>
+            <EmptyState icon="repeat" title={t("루틴 없음")} desc={t("정해진 시간에 알려 주거나, 시간이나 GitHub 일에 맞춰 작업을 시작해요. 채팅에서 \"3시에 알려줘\", \"매일 9시에 …\"라고 해도 돼요.")}>
               <button class="btn sm" onClick={add}><Icon name="plus" size={14} />{t("루틴 만들기")}</button>
+              <button class="btn sm" onClick={addAlarm}><Icon name="bell" size={14} />{t("알람 추가")}</button>
             </EmptyState>
           }
         >
@@ -189,13 +214,60 @@ export function RoutinesSettings() {
   );
 }
 
+/** In the chat: the alarm main set (already on), to change or drop. */
+function AlarmCard(props: { r: Routine }) {
+  const r = () => props.r;
+  return (
+    <div class="rt-card alarm-card">
+      <div class="rt-card-head">
+        <Icon name="bell" size={14} />
+        <b>{t("알람")}</b>
+        <span class="rt-sub">{[describeWhen(r().when), routineLine(r())].filter(Boolean).join(" · ")}</span>
+        <span class="spacer" />
+        <button class="btn ghost sm" onClick={() => openRoutine(r().id)}>{t("고치기")}</button>
+        <Show when={r().enabled || r().snoozeAt}>
+          <button class="btn ghost sm" onClick={() => removeRoutine(r().id)}>{t("알람 취소")}</button>
+        </Show>
+      </div>
+      <p class="rt-card-prompt">{r().prompt}</p>
+    </div>
+  );
+}
+
+/** In the chat: an alarm that rang, its words as they were set, and a snooze. */
+export function AlarmLine(props: { route: Extract<Route, { kind: "alarm" }> }) {
+  const a = () => props.route;
+  const r = () => routineById(a().routineId);
+  const snoozed = () => (r()?.snoozeAt ?? 0) > Date.now();
+  return (
+    <div class="alarm-line" classList={{ late: !!a().late }} role="status">
+      <span class="alarm-ic"><Icon name="bell" size={15} /></span>
+      <div class="alarm-body">
+        <span class="alarm-when">
+          {t("{time} 알람", { time: dayTime(a().due) })}
+          <Show when={a().late}> · {t("늦게 울렸어요 (Ondra가 꺼져 있었거나 Mac이 잠들어 있었어요)")}</Show>
+        </span>
+        <b class="alarm-text">{a().text}</b>
+      </div>
+      <Show when={r()}>
+        {(x) => (
+          <Show when={!snoozed()} fallback={<span class="rt-sub">{routineLine(x())}</span>}>
+            <button class="btn ghost sm" onClick={() => snoozeAlarm(x().id)}>{t("{n}분 뒤 다시", { n: SNOOZE_MIN })}</button>
+          </Show>
+        )}
+      </Show>
+    </div>
+  );
+}
+
 /** In the chat: the routine main proposed, to save as it is, change first, or drop. */
-export function RoutineCard(props: { id: string }) {
+export function RoutineCard(props: { id: string; alarm?: boolean }) {
   const r = () => routineById(props.id);
   const where = () => (r()?.project ? projectById(r()!.project)?.name : undefined);
   return (
-    <Show when={r()} fallback={<div class="reply-note"><Icon name="repeat" size={14} /><span>{t("루틴을 지웠어요")}</span></div>}>
+    <Show when={r()} fallback={<div class="reply-note"><Icon name={props.alarm ? "bell" : "repeat"} size={14} /><span>{props.alarm ? t("알람을 지웠어요") : t("루틴을 지웠어요")}</span></div>}>
       {(x) => (
+        <Show when={!x().alarm} fallback={<AlarmCard r={x()} />}>
         <div class="rt-card">
           <div class="rt-card-head">
             <Icon name="repeat" size={14} />
@@ -221,6 +293,7 @@ export function RoutineCard(props: { id: string }) {
             </Show>
           </div>
         </div>
+        </Show>
       )}
     </Show>
   );

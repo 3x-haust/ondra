@@ -1,4 +1,5 @@
 import { PairAskDialog } from "./views/RemoteSettings";
+import { ring, soundFor } from "./engine/sound";
 import { quietRun, startRoutines } from "./engine/routines";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
@@ -6,7 +7,7 @@ import { costShort, jobCost } from "./ui/cost";
 import { loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId, Task } from "./state/types";
 import type { View } from "./state/ui";
-import { closePanel, panelTab, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
+import { closePanel, panelTab, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setJumpMsg, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
 import { keepPanes } from "./state/panes";
 import { Panes } from "./views/Panes";
 import { menuClose } from "./views/PaneControls";
@@ -87,7 +88,8 @@ export default function App() {
       ([store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror]) => ((window as any).__ui = { setView, store, tasks, captain, ui, native, memory, absorb, tidy, remote, hosts, mirror }),
     );
   let unCapture: (() => void) | undefined;
-  onCleanup(() => unCapture?.());
+  let unClick: (() => void) | undefined;
+  onCleanup(() => (unCapture?.(), unClick?.()));
   onMount(async () => {
     await loadState();
     // the panes as they were left, without jobs deleted since
@@ -118,6 +120,13 @@ export default function App() {
       void getVersion().then((v) => { setAppVersion(v); installLog(v); setFeedbackVersion(v); void afterLaunch(v); void countLaunch(v); }).catch(() => {});
     }
     void scan();
+    // an alarm's notice clicked: its line in the chat it rang in
+    unClick = await onEvent<string>("notify:click", (id) => {
+      const m = state.captain.find((x) => x.id === id);
+      if (!m) return;
+      setJumpMsg(m.id);
+      switchSpace(m.space, { name: "main", project: m.project });
+    });
     unCapture = await onEvent<{ text: string; space: SpaceId | "" }>("capture:submitted", ({ text, space }) => {
       const target = state.spaces.some((s) => s.id === space) ? space : state.space;
       switchSpace(target, { name: "main" });
@@ -210,8 +219,11 @@ export default function App() {
         if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
         countLanded(t);
       }
+      // a job that ends or needs you makes a sound, in front or not; a routine's run with nothing
+      // to report ends without a sound or a notice
+      const tone = soundFor(t, was);
+      if (tone && !quietRun(t)) ring(tone);
       if (!was || was === t.status || document.hasFocus()) continue;
-      // a routine's run with nothing to report ends without a notice
       if (quietRun(t)) continue;
       // which space it is in, so a company job never reads as a personal one
       const title = `${tr(spaceById(t.space)?.label ?? t.space)} · ${t.title}`;

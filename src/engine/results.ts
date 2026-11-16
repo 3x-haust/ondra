@@ -14,10 +14,18 @@ export function sinceAsked(t: Task): number {
   return 0;
 }
 
-/** What a job reported since it was last given work: its words and its result blocks. */
+/**
+ * What a job reported since it was last given work: its closing words (what it wrote after its
+ * last tool call) and its result blocks. Every line of narration ("이제 PDF를 만들게요…", "커밋할게요")
+ * joined made a research answer start with the steps that led to it.
+ */
 export function jobReport(t: Task): { said: string; blocks: Block[] } {
   const since = t.entries.slice(sinceAsked(t));
-  const said = since
+  const lastTool = since.map((e) => e.kind).lastIndexOf("tool");
+  const closing = since.slice(lastTool + 1).some((e) => e.kind === "text" && e.text.replace(/```blocks[\s\S]*?```/g, "").trim());
+  // nothing after its last tool call: its last words are its report
+  const words = closing ? since.slice(lastTool + 1) : since.filter((e) => e.kind === "text").slice(-1);
+  const said = words
     .filter((e) => e.kind === "text")
     .map((e) => (e as { text: string }).text.replace(/```blocks[\s\S]*?```/g, "").trim())
     .filter(Boolean)
@@ -56,6 +64,13 @@ export function keepJobResult(t: Task, msg?: string) {
   if (!t.summary?.trim() && !said && !blocks.length) return;
   const e: ResultEntry = { id, taskId: t.id, space: t.space, project: t.project, title: t.title, reply: t.summary?.trim() || undefined, answers: said || blocks.length ? [{ text: said, blocks }] : [], at: t.finishedAt ?? Date.now(), msg };
   setState("results", (l) => [...(l ?? []), e].slice(-MAX));
+}
+
+/** The digest of a job's latest finish (digest.ts) leads its kept result: its line, then its points over the job's own words. */
+export function keepDigest(taskId: string, d: { line: string; text: string }) {
+  const t = state.tasks.find((x) => x.id === taskId);
+  if (!t || !(state.results ?? []).some((r) => r.id === jobEntryId(t))) return;
+  setState("results", (r) => r.id === jobEntryId(t), (r) => ({ ...r, reply: d.line, answers: d.text ? [{ text: d.text, blocks: [] }, ...r.answers] : r.answers }));
 }
 
 /** The latest result of a job, if it has one. */
