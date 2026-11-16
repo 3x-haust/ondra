@@ -52,3 +52,9 @@ Dev builds (`pnpm tauri dev`) send nothing. Neither does a build without `VITE_P
 ### The log
 
 The log is a file on your Mac (`logs/ondra-YYYY-MM-DD.log` in the app's data folder, a week kept). It leaves your Mac only attached to feedback you send. It holds the launch (versions, counts), the views you opened, each job's states and model by id, `/commands` by name, native commands that failed, errors you were shown, uncaught errors and native panics, parts arriving, the network going away, and updates. No titles, asks or file contents; **See what is sent** in the feedback sheet shows it before you send.
+
+## The website
+
+The landing page ([3x-haust.github.io/ondra](https://3x-haust.github.io/ondra/), `site/stats.js`) counts visits in the same PostHog project, with no cookies and no person: a random visit id lives in the tab's `sessionStorage` and is gone when the tab closes, and IP addresses are dropped by the project. Do Not Track or Global Privacy Control sends nothing.
+
+It counts the visit (page, language, referring site, campaign tags, screen width), how far down you scrolled (25/50/75/100%), which sections you saw, clicks on download, GitHub, releases and the language switch, FAQ answers you opened, and the intro film: started, sound turned on, 25/50/75% and finished. No text you type (there is none to type), no mouse movement, no recordings.

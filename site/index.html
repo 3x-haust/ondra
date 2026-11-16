@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ondra · 에이전트 탭은 이제 닫아도 돼요</title>
+<meta name="description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요. macOS용 무료 베타.">
+<link rel="canonical" href="https://3x-haust.github.io/ondra/">
+<link rel="alternate" hreflang="ko" href="https://3x-haust.github.io/ondra/">
+<link rel="alternate" hreflang="en" href="https://3x-haust.github.io/ondra/en/">
+<link rel="alternate" hreflang="x-default" href="https://3x-haust.github.io/ondra/">
+<meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ondra">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:url" content="https://3x-haust.github.io/ondra/">
+<meta property="og:title" content="Ondra · 에이전트 탭은 이제 닫아도 돼요">
+<meta property="og:description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.">
+<meta property="og:image" content="https://3x-haust.github.io/ondra/assets/og-ko.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Ondra: 에이전트 탭은 이제 닫아도 돼요. 메인 화면 스크린샷">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ondra · 에이전트 탭은 이제 닫아도 돼요">
+<meta name="twitter:description" content="할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.">
+<meta name="twitter:image" content="https://3x-haust.github.io/ondra/assets/og-ko.png">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" crossorigin>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="demo.css">
+<script>if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("motion");</script>
+<script src="demo.js" defer></script>
+<script src="stats.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">본문으로</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-canvas" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a2.5 2.5 0 0 1 2.5 2.5v5"/></symbol>
+  <symbol id="i-mem" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/></symbol>
+</svg>
+
+<header class="wrap top">
+  <a class="brand" href="./" aria-label="Ondra 홈">
+    <picture><source srcset="assets/mark-dark.svg" media="(prefers-color-scheme: dark)"><img class="mark" src="assets/mark.svg" alt="" width="26" height="26"></picture>
+    <picture><source srcset="assets/wordmark-dark.svg" media="(prefers-color-scheme: dark)"><img src="assets/wordmark.svg" alt="Ondra" width="78" height="22"></picture>
+  </a>
+  <nav aria-label="사이트">
+    <a href="en/" hreflang="en" lang="en">English</a>
+    <a class="gh" href="https://github.com/3x-haust/ondra">GitHub</a>
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">다운로드</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="wrap hero">
+  <h1>에이전트 탭은 이제 닫아도 돼요.</h1>
+  <p class="lede">할 일을 채팅에 한꺼번에 적으면 Ondra가 작업으로 나눠 동시에 돌려요. 내가 골라야 할 게 생기면 그때 물어봐요.</p>
+  <div class="cta">
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">macOS용 다운로드</a>
+    <a class="btn ghost" href="https://github.com/3x-haust/ondra">GitHub에서 보기</a>
+  </div>
+  <p class="meta">macOS 13 이상 · Apple silicon · 무료 베타</p>
+
+  <div class="stage mock" data-scene="hero" role="img" aria-label="터미널 탭 여러 개가 하나의 메인 채팅으로 접히고, 메인이 일을 작업 세 개로 나눈 뒤 블로그 초안을 게시할지 묻는 장면">
+    <div class="tabs" aria-hidden="true">
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>fix-login</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>pricing-page</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>april-recap<span class="wait" data-fmt="대기 {n}분">대기 41분</span></div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>readme</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>deps-bump</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>flaky-test</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>ios-shots</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>api-docs</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>release-notes</div><p class="tab-log"></p></div>
+    </div>
+
+    <div class="m-win" aria-hidden="true">
+      <aside class="m-side">
+        <div class="m-row sel"><svg class="ico"><use href="#i-chat"/></svg><span>메인</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-canvas"/></svg><span>캔버스</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-mem"/></svg><span>메모리</span></div>
+        <div class="m-label">프로젝트</div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>ondra</span></div>
+        <div class="m-row m-kid" data-step="t1"><i class="dot"></i><span>로그인 리다이렉트 수정</span><span class="meta">방금</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>acme</span></div>
+        <div class="m-row m-kid" data-step="t2"><i class="dot"></i><span>요금제 페이지 점검</span><span class="meta">방금</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>blog</span></div>
+        <div class="m-row m-kid" data-step="t3"><i class="dot ask" data-k="ask" data-seq='[["dot",""]]'></i><span>4월 회고 초안</span><span class="meta ask" data-k="ask" data-seq='[["meta","방금"]]'>응답 필요</span></div>
+      </aside>
+      <div class="m-main">
+        <div class="m-head">메인</div>
+        <div class="m-body">
+          <div class="m-bubble" data-step="sent">로그인 리다이렉트 고치고, 요금제 페이지 점검하고, 4월 회고 초안 써 줘</div>
+          <div class="m-reply" data-step="reply">작업 3개로 나눠서 시작했어요. 정할 게 생기면 물어볼게요.
+            <div class="m-chips">
+              <span class="m-chip"><i class="dot"></i>로그인 리다이렉트 수정</span>
+              <span class="m-chip"><i class="dot"></i>요금제 페이지 점검</span>
+              <span class="m-chip"><i class="dot ask" data-k="ask" data-seq='[["dot",""]]'></i>4월 회고 초안</span>
+            </div>
+          </div>
+          <div class="m-ask" data-step="pop">
+            <div class="m-ask-h"><svg class="ico"><use href="#i-chat"/></svg><span>초안을 블로그에 바로 게시할까요?</span><span class="crumb">blog / 4월 회고 초안</span></div>
+            <div class="m-opts">
+              <span class="m-opt"><kbd class="k">1</kbd>게시 <em>추천</em></span>
+              <span class="m-opt"><kbd class="k">2</kbd>초안으로 저장</span>
+              <span class="m-opt"><kbd class="k">3</kbd>수정 후 다시</span>
+              <span class="m-opt"><kbd class="k">4</kbd>직접 입력</span>
+            </div>
+          </div>
+        </div>
+        <div class="m-composer">
+          <div class="typed" data-ph="메인에게 말하기 · 여러 일을 한 번에 적어도 돼요" data-text="로그인 리다이렉트 고치고, 요금제 페이지 점검하고, 4월 회고 초안 써 줘"></div>
+          <div class="row"><svg class="ico"><use href="#i-plus"/></svg><span class="m-send"><svg class="ico"><use href="#i-up"/></svg></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="demo-note"><button class="replay" type="button">다시 보기</button></p>
+</div>
+
+<section class="wrap lead" aria-labelledby="s-check">
+  <div class="split">
+    <div class="rv">
+      <h2 id="s-check">작업이 “다 했어요”라고 하면, 기록과 맞춰 봐요.</h2>
+      <p class="sub">보고 내용을 작업이 실제로 돌린 명령, 바꾼 파일과 비교해요. 확인이 안 된 항목엔 “확인 안 됨”이 붙어요.</p>
+      <ul class="points">
+        <li>앱을 바꾼 작업은 그 앱을 실행해서 눌러 보고 스크린샷을 남겨요.</li>
+        <li>위험한 변경은 끝나기 전에 서브에이전트 두 개가 설계와 코드를 따로 검토해요.</li>
+        <li>결과에는 diff, 전후 스크린샷, 영상, 테스트 결과가 붙어 와요.</li>
+      </ul>
+    </div>
+    <div class="proof mock" data-scene="proof">
+      <div class="proof-h"><span>로그인 리다이렉트 수정</span><span class="pill ask" data-k="state" data-seq='[["pill run","진행 중"]]'>병합 필요</span><span class="count">증거 3개</span></div>
+      <p class="proof-claim">“로그인 후 대시보드로 가도록 고쳤어요. 테스트도 통과했고, 화면도 확인했어요.”</p>
+      <div class="proof-label">작업이 보고한 내용</div>
+      <ol>
+        <li class="ev" data-k="r1"><span class="kind">테스트</span><span class="what"><code>pnpm vitest run auth</code> · 7개 통과</span><span class="mark ok" data-k="m1" data-seq='[["mark","보는 중"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">실행 기록과 일치</span></span></li>
+        <li class="ev" data-k="r2"><span class="kind">파일</span><span class="what"><code>src/router.ts</code>, <code>src/auth/session.ts</code></span><span class="mark ok" data-k="m2" data-seq='[["mark","보는 중"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">파일 있음</span></span></li>
+        <li class="ev" data-k="r3"><span class="kind">화면</span><span class="what">로그인 후 <code>/dashboard</code> 스크린샷</span><span class="mark unv" data-k="m3" data-seq='[["mark","보는 중"],["mark bad","기록과 불일치"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">확인 안 됨</span></span>
+          <span class="note" data-step="note"><span data-k="tries" data-seq='[["","스크린샷 기록이 없어 작업에 다시 보냈어요 · 1/2"]]'>스크린샷 기록이 없어 작업에 다시 보냈어요 · 2/2</span></span></li>
+      </ol>
+      <div class="proof-foot"><span>Ondra가 세션 기록과 대조</span><span class="mark unv" data-k="foot" data-seq='[["mark",""]]'><span class="txt">1개 확인 안 됨</span></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap scrolly" aria-labelledby="s-one">
+  <div class="pin">
+  <div class="rv">
+    <h2 id="s-one">작업마다 지금 뭘 하는지 캔버스에 나와요.</h2>
+    <p class="sub">메인에 말한 일은 프로젝트별 작업으로 나뉘어 동시에 돌아가요. 카드에는 작업이 쓰는 도구와 몇 단계째인지가 떠요.</p>
+  </div>
+  <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="캔버스: 메인에서 ondra, acme, blog 프로젝트로, 다시 각 작업과 서브에이전트로 선이 이어지고, 작업 카드의 진행 단계가 바뀌는 장면">
+    <div class="cv-head"><b>캔버스</b><span><i class="dot"></i>진행 중 2</span><span><i class="dot ask"></i>응답 필요 1</span></div>
+    <div class="cv-grid">
+      <svg class="cv-lines" aria-hidden="true"></svg>
+      <div class="node" data-id="main" data-depth="0" data-step="d0" style="grid-area:1/1/5/2">
+        <div class="node-t"><svg class="ico"><use href="#i-chat"/></svg><span>메인</span></div>
+        <div class="node-m"><i class="dot idle"></i>듣는 중</div>
+      </div>
+      <div class="node" data-id="ondra" data-parent="main" data-depth="1" data-step="d1" style="grid-area:1/2/3/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>ondra</span></div>
+        <div class="node-m"><i class="dot"></i>진행 중 1</div>
+      </div>
+      <div class="node" data-id="t1" data-parent="ondra" data-depth="2" data-step="d2" style="grid-area:1/3/3/4">
+        <div class="node-t"><svg class="ico"><use href="#i-flask"/></svg><span>로그인 리다이렉트 수정</span></div>
+        <div class="bar" style="--n:4" data-k="t1" data-seq='[1,2]'><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div>
+        <div class="tool"><svg class="ico"><use href="#i-term"/></svg><span class="swap" data-k="t1" data-seq='[["swap","읽는 중 router.ts"],["swap","고치는 중 router.ts"]]'>테스트 중 pnpm vitest run auth</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="t1" data-seq='[["swap","1/4단계"],["swap","2/4단계"]]'>3/4단계</span> · 서브 2<span class="r"><span class="add">+8</span> <span class="del">−3</span> · 13분</span></div>
+      </div>
+      <div class="node" data-id="s1" data-parent="t1" data-depth="3" data-step="d3" style="grid-area:1/4/2/5">
+        <div class="node-t"><svg class="ico"><use href="#i-brain"/></svg><span>인증 테스트 돌리기</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="s" data-seq='[["swap","생각 중"]]'>진행 중</span><span class="r">9분</span></div>
+      </div>
+      <div class="node" data-id="s2" data-parent="t1" data-depth="3" data-step="d3" style="grid-area:2/4/3/5">
+        <div class="node-t"><svg class="ico"><use href="#i-check"/></svg><span>소셜 로그인 경로 점검</span></div>
+        <div class="node-m"><i class="dot ok" data-k="s" data-seq='[["dot",""]]'></i><span class="swap" data-k="s" data-seq='[["swap","진행 중"]]'>완료</span><span class="r">6분</span></div>
+      </div>
+      <div class="node" data-id="acme" data-parent="main" data-depth="1" data-step="d1" style="grid-area:3/2/4/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>acme</span></div>
+        <div class="node-m"><i class="dot"></i>진행 중 1</div>
+      </div>
+      <div class="node" data-id="t2" data-parent="acme" data-depth="2" data-step="d2" style="grid-area:3/3/4/4">
+        <div class="node-t"><svg class="ico"><use href="#i-globe"/></svg><span>요금제 페이지 점검</span></div>
+        <div class="bar" style="--n:3" data-k="t2" data-seq='[1]'><i class="f"></i><i class="f"></i><i></i></div>
+        <div class="tool"><svg class="ico"><use href="#i-globe"/></svg><span class="swap" data-k="t2" data-seq='[["swap","여는 중 acme.dev/pricing"]]'>버튼 확인 중 · 업그레이드</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="t2" data-seq='[["swap","1/3단계"]]'>2/3단계</span><span class="r">6분</span></div>
+      </div>
+      <div class="node" data-id="blog" data-parent="main" data-depth="1" data-step="d1" style="grid-area:4/2/5/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>blog</span></div>
+        <div class="node-m"><i class="dot ask"></i>응답 필요 1</div>
+      </div>
+      <div class="node ask" data-id="t3" data-parent="blog" data-depth="2" data-step="d2" data-ask style="grid-area:4/3/5/4">
+        <div class="node-t"><svg class="ico"><use href="#i-bell"/></svg><span>4월 회고 초안</span></div>
+        <div class="q">초안을 블로그에 바로 게시할까요?</div>
+        <div class="node-m"><i class="dot ask"></i>응답 필요<span class="r add">+42</span></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-ask">
+  <div class="split flip">
+    <div class="rv">
+      <h2 id="s-ask">정해야 할 때만 물어봐요.</h2>
+      <p class="sub">작업이 내가 골라야 하는 지점에 오면 메인에 선택지 카드가 올라와요.</p>
+      <ul class="points">
+        <li>창이 뒤에 있어도 작업이 끝나거나 답이 필요하면 알림이 와요.</li>
+      </ul>
+    </div>
+    <div class="dc mock" id="decide" data-done-ok="완료" data-done-run="진행 중" data-reset="다시 해 보기">
+      <div class="dc-task"><svg class="ico"><use href="#i-bell"/></svg><span>4월 회고 초안</span><span class="pill ask">응답 필요</span></div>
+      <div class="dc-card"><div><div class="dc-in">
+        <div class="dc-h"><svg class="ico"><use href="#i-chat"/></svg><span>초안을 블로그에 바로 게시할까요?</span><span class="crumb">blog</span></div>
+        <div class="dc-body">초안을 썼어요.
+          <blockquote><b>4월 회고 — 작게, 자주 내보내기</b><br>이번 달엔 큰 기능 하나 대신 작은 개선을 열두 번 내보냈어요.</blockquote>
+        </div>
+        <ul class="dc-opts" role="listbox" aria-label="선택지">
+          <li><button class="dc-opt sel" type="button" role="option" aria-selected="true" data-me="게시" data-reply="블로그에 게시했어요 · blog/april-retro" data-state="ok"><kbd class="k">1</kbd>게시 <em>추천</em></button></li>
+          <li><button class="dc-opt" type="button" role="option" aria-selected="false" data-me="초안으로 저장" data-reply="초안으로 저장했어요 · drafts/april-retro.md" data-state="ok"><kbd class="k">2</kbd>초안으로 저장</button></li>
+          <li><button class="dc-opt" type="button" role="option" aria-selected="false" data-me="수정 후 다시" data-reply="더 다듬어서 다시 가져올게요" data-state="run"><kbd class="k">3</kbd>수정 후 다시</button></li>
+          <li><div class="dc-opt typed-row" role="option" aria-selected="false" data-reply="알겠어요. 그렇게 진행할게요" data-state="run"><kbd class="k">4</kbd><input class="dc-input" type="text" placeholder="다른 답을 직접 적어도 돼요" aria-label="직접 입력"></div></li>
+        </ul>
+        <div class="dc-hint"><kbd class="k">1</kbd>–<kbd class="k">4</kbd> 또는 <kbd class="k">↑</kbd><kbd class="k">↓</kbd>로 고르고 <kbd class="k">Enter</kbd></div>
+      </div></div></div>
+      <div class="dc-after" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-mem">
+  <div class="rv">
+    <h2 id="s-mem">새 세션에 배경을 다시 설명하지 않아도 돼요.</h2>
+  </div>
+  <div class="facts rv">
+    <div class="fact">
+      <h3>이어가기</h3>
+      <p>긴 작업은 한 일과 찾은 것, 다음 단계, 증거를 정리해 새 세션에 넘겨요. 끝난 작업에 이어서 요청하면 앞 결과에서 시작해요.</p>
+    </div>
+    <div class="fact">
+      <h3>메모리</h3>
+      <p>쓰다가 알게 된 취향과 교훈은 메모리에 저장돼요. <code>/remember</code>로 바로 저장할 수 있고, 메모리 화면에서 고치면 돼요.</p>
+    </div>
+    <div class="fact">
+      <h3>프로젝트 채팅</h3>
+      <p>프로젝트마다 채팅이 따로 있어요. 거기서 시킨 작업은 그 프로젝트 폴더에서 시작해요.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-routine">
+  <div class="split wide">
+    <div class="rv">
+      <h2 id="s-routine">매일 시키던 일은 루틴으로.</h2>
+      <p class="sub">정한 시간이 되거나 GitHub에서 일이 생기면 작업이 시작돼요. 채팅에 “평일 9시마다 …”라고 쓰면 루틴을 만들지 묻는 카드가 떠요.</p>
+      <ul class="points">
+        <li>GitHub에서는 새 이슈나 PR, 리뷰 요청, 내 PR의 댓글, CI 실패, 새 릴리스에 맞춰 시작할 수 있어요.</li>
+      </ul>
+    </div>
+    <div class="rt mock" data-scene="routine">
+      <div class="rt-h"><svg class="ico"><use href="#i-repeat"/></svg><span>루틴 «PR 정리»</span><span class="when">평일 · 9:00 · 할 일 없으면 조용히</span></div>
+      <div class="rt-days">
+        <div class="day"><div class="day-h"><b>월</b><span>9:00</span></div><div class="run" data-step="d1"><i class="dot ok"></i><span>PR 3개 정리 · 리뷰 필요 1개</span></div></div>
+        <div class="day"><div class="day-h"><b>화</b><span>9:00</span></div><div class="run quiet" data-step="d2"><i class="dot idle"></i><span>새로 생긴 것 없음 · 조용히 보관</span></div></div>
+        <div class="day"><div class="day-h"><b>수</b><span>9:42</span></div><div class="sleep" data-step="d3">(9:00에 하려던 실행이에요. Mac이 잠들어 있었어요.)</div><div class="run" data-step="d4"><i class="dot ok"></i><span>PR 2개 정리</span></div></div>
+        <div class="day"><div class="day-h"><b>목</b><span>9:00</span></div><div class="run" data-step="d5"><i class="dot ok"></i><span>PR 1개 정리</span></div></div>
+        <div class="day next"><div class="day-h"><b>금</b><span>9:00</span></div><div class="run quiet" data-step="d6"><span>다음 실행 금 9:00</span></div></div>
+      </div>
+      <div class="rt-gh"><svg class="ico"><use href="#i-git"/></svg><span>기본 브랜치 CI가 실패하면</span><span class="arrow">→</span><span class="pill run" data-step="gh">작업 시작 · CI 고치기</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-mac">
+  <div class="split">
+    <div class="rv">
+      <h2 id="s-mac">오래 걸리는 일은 다른 Mac에서 돌려요.</h2>
+      <p class="sub">다른 Mac을 연결하면 그 Mac의 프로젝트가 사이드바에 나와요. 작업은 그 Mac에서 돌아서 노트북을 덮어도 멈추지 않아요.</p>
+      <ul class="points">
+        <li>연결은 종단 간 암호화돼요. 연결된 Mac은 내가 허락한 워크스페이스와 프로젝트만 볼 수 있어요.</li>
+      </ul>
+    </div>
+    <div class="mock" data-scene="macs">
+      <div class="macs" aria-hidden="true">
+        <div class="laptop">
+          <div class="lid" data-k="lid">
+            <div class="lid-screen">
+              <div class="mini-label">다른 Mac · 책상 위 Mac</div>
+              <div class="mini-row"><i class="dot ok" data-k="lap" data-seq='[["dot",""]]'></i><span>로그인 리다이렉트 수정</span><span class="r swap" data-k="lap" data-seq='[["r swap","2/4단계"]]'>완료</span></div>
+              <div class="mini-row"><i class="dot"></i><span>요금제 페이지 점검</span><span class="r">2/3단계</span></div>
+            </div>
+          </div>
+          <div class="base"></div>
+          <div class="dev-label"><b>노트북</b> · 이 Mac</div>
+        </div>
+        <div>
+          <div class="desk-screen"><div class="desk-in">
+            <div class="node-t"><svg class="ico"><use href="#i-flask"/></svg><span>로그인 리다이렉트 수정</span><span class="pill ok" style="margin-left:auto" data-k="desk" data-seq='[["pill run","진행 중"],["pill run","진행 중"]]'>완료</span></div>
+            <div class="bar" style="--n:4" data-k="desk" data-seq='[2,3]'><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div>
+            <div class="tool node-m" style="margin:0"><svg class="ico"><use href="#i-term"/></svg><span class="swap" data-k="desk" data-seq='[["swap","고치는 중 router.ts"],["swap","테스트 중 pnpm vitest run auth"]]'>변경한 파일 2개 · 테스트 통과</span></div>
+          </div></div>
+          <div class="stand"></div><i></i>
+          <div class="dev-label"><b>책상 위 Mac</b> · 작업이 도는 곳</div>
+        </div>
+      </div>
+      <ol class="mac-log">
+        <li data-step="l1"><span class="n">1</span><span><b>노트북을 덮어요.</b></span></li>
+        <li data-step="l2"><span class="n">2</span><span>작업은 책상 위 Mac에서 <b>계속돼요.</b></span></li>
+        <li data-step="l3"><span class="n">3</span><span>다시 열면 <b>결과가 와 있어요.</b></span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-tools">
+  <div class="rv">
+    <h2 id="s-tools">브라우저와 Mac 앱도 써요. 내 커서와 포커스는 안 가져가요.</h2>
+  </div>
+  <div class="facts four rv">
+    <div class="fact">
+      <h3>브라우저</h3>
+      <p>작업마다 자기 브라우저 탭에서 페이지를 열고 클릭하고 입력해요. 구석의 작은 창에서 실시간으로 볼 수 있어요. 비밀번호는 macOS 키체인에서 채워서 모델에는 안 보여요.</p>
+    </div>
+    <div class="fact">
+      <h3>Mac 앱</h3>
+      <p>권한을 주면 Mac 앱을 뒤에서 조작해요. 내 커서와 포커스는 쓰지 않으니 그동안 다른 일을 해도 돼요. Ondra가 누르는 곳은 별도 커서로 보여요.</p>
+    </div>
+    <div class="fact">
+      <h3>모바일</h3>
+      <p>iOS 시뮬레이터와 Android 에뮬레이터에서 앱을 확인하고 스크린샷을 남겨요. Ondra 안에서 기기를 조작할 수도 있어요.</p>
+    </div>
+    <div class="fact">
+      <h3>딥리서치</h3>
+      <p>질문을 나눠서 출처를 찾고, 인용이 원문과 맞는지 확인해요. 답과 근거는 보고서와 PDF로 나와요.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="film" aria-labelledby="s-film" hidden>
+  <div class="rv">
+    <h2 id="s-film">1분 40초 소개 영상</h2>
+  </div>
+  <figure class="shot real-video">
+    <video data-src="assets/ondra-intro-ko.mp4" poster="assets/ondra-intro-ko-poster.jpg" width="1920" height="1080" muted playsinline controls preload="metadata" aria-label="Ondra 소개 영상"></video>
+  </figure>
+</section>
+
+<section class="wrap" id="real" aria-labelledby="s-real">
+  <div class="rv">
+    <h2 id="s-real">실제 앱 화면</h2>
+  </div>
+  <div class="real-tabs" role="tablist" aria-label="실제 화면">
+    <button type="button" role="tab" aria-selected="true" data-src="assets/main.png" data-alt="Ondra 메인 화면. 왼쪽에 프로젝트별 작업 목록이 있고, 가운데에 블로그 초안을 게시할지 묻는 선택 카드가 떠 있어요.">메인</button>
+    <button type="button" role="tab" aria-selected="false" data-src="assets/canvas.png" data-alt="캔버스 화면. 메인에서 프로젝트, 작업, 서브에이전트로 선이 이어져 있고, 카드마다 터미널 출력이나 웹 페이지 미리보기가 보여요.">캔버스</button>
+  </div>
+  <figure class="shot real-shot rv">
+    <img id="real-img" src="assets/main.png" width="2880" height="1800" loading="lazy" alt="Ondra 메인 화면. 왼쪽에 프로젝트별 작업 목록이 있고, 가운데에 블로그 초안을 게시할지 묻는 선택 카드가 떠 있어요.">
+  </figure>
+</section>
+
+<section class="wrap faq" aria-labelledby="s-faq">
+  <h2 id="s-faq">자주 묻는 질문</h2>
+  <details>
+    <summary>무료예요?</summary>
+    <p>네, 지금은 무료 베타예요. 새 버전이 나오면 앱에서 알려 줘요.</p>
+  </details>
+  <details>
+    <summary>뭐가 필요해요?</summary>
+    <p>Apple silicon Mac, macOS 13 이상. 처음 열면 설정에서 쓰는 AI 모델 계정을 연결하세요. Mac 앱 조작과 화면 캡처에는 손쉬운 사용·화면 기록 권한이, 모바일 확인에는 Xcode의 iOS 시뮬레이터나 Android 에뮬레이터가 필요해요.</p>
+  </details>
+  <details>
+    <summary>작업은 어디서 돌아가요?</summary>
+    <p>내 Mac에서요. 다른 Mac을 연결했다면 그 Mac 프로젝트의 작업은 그 Mac에서 돌아요. 익명 사용 통계는 설정에서 끌 수 있어요.</p>
+  </details>
+  <details>
+    <summary>macOS가 처음 실행을 막아요.</summary>
+    <p>Finder에서 앱을 오른쪽 클릭하고 <b>열기</b>를 고르세요. 그래도 막히면 GitHub 릴리스에서 받은 앱이 맞는지 확인하고, 터미널에서 <code>xattr -dr com.apple.quarantine /Applications/Ondra.app</code>를 한 번 실행하세요.</p>
+  </details>
+</section>
+
+<section class="wrap end" aria-labelledby="s-end">
+  <h2 id="s-end">지금은 무료 베타예요.</h2>
+  <div class="cta">
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">macOS용 다운로드</a>
+  </div>
+  <p class="meta">macOS 13 이상 · Apple silicon</p>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Ondra · <a href="https://github.com/3x-haust/ondra/blob/main/LICENSE">MIT 오픈소스</a></span>
+    <nav aria-label="바닥글">
+      <a href="https://github.com/3x-haust/ondra/releases">릴리스</a>
+      <a href="https://github.com/3x-haust/ondra/issues">문제 알리기</a>
+      <a href="https://github.com/3x-haust/ondra/blob/main/docs/TELEMETRY.md">사용 통계</a>
+      <a href="en/" hreflang="en" lang="en">English</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

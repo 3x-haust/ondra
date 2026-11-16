@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ondra · Stop babysitting your agents</title>
+<meta name="description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks. Free beta for Mac.">
+<link rel="canonical" href="https://3x-haust.github.io/ondra/en/">
+<link rel="alternate" hreflang="ko" href="https://3x-haust.github.io/ondra/">
+<link rel="alternate" hreflang="en" href="https://3x-haust.github.io/ondra/en/">
+<link rel="alternate" hreflang="x-default" href="https://3x-haust.github.io/ondra/">
+<meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ondra">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:url" content="https://3x-haust.github.io/ondra/en/">
+<meta property="og:title" content="Ondra · Stop babysitting your agents">
+<meta property="og:description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.">
+<meta property="og:image" content="https://3x-haust.github.io/ondra/assets/og-en.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Ondra: Stop babysitting your agents. A screenshot of the canvas">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ondra · Stop babysitting your agents">
+<meta name="twitter:description" content="Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.">
+<meta name="twitter:image" content="https://3x-haust.github.io/ondra/assets/og-en.png">
+
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" crossorigin>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../demo.css">
+<script>if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("motion");</script>
+<script src="../demo.js" defer></script>
+<script src="../stats.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-canvas" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a2.5 2.5 0 0 1 2.5 2.5v5"/></symbol>
+  <symbol id="i-mem" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V10a3 3 0 0 0-3-3h-4"/></symbol>
+</svg>
+
+<header class="wrap top">
+  <a class="brand" href="./" aria-label="Ondra home">
+    <picture><source srcset="../assets/mark-dark.svg" media="(prefers-color-scheme: dark)"><img class="mark" src="../assets/mark.svg" alt="" width="26" height="26"></picture>
+    <picture><source srcset="../assets/wordmark-dark.svg" media="(prefers-color-scheme: dark)"><img src="../assets/wordmark.svg" alt="Ondra" width="78" height="22"></picture>
+  </a>
+  <nav aria-label="Site">
+    <a href="../" hreflang="ko" lang="ko">한국어</a>
+    <a class="gh" href="https://github.com/3x-haust/ondra">GitHub</a>
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">Download</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="wrap hero">
+  <h1>Stop babysitting your agents.</h1>
+  <p class="lede">Put everything you want done in one chat. Ondra splits it into tasks and runs them at the same time. When something needs your call, it asks.</p>
+  <div class="cta">
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">Download for Mac</a>
+    <a class="btn ghost" href="https://github.com/3x-haust/ondra">View on GitHub</a>
+  </div>
+  <p class="meta">macOS 13+ · Apple silicon · Free beta</p>
+
+  <div class="stage mock" data-scene="hero" role="img" aria-label="A grid of agent terminal tabs folds into one Main chat; Main splits the request into three tasks, then asks whether to publish a blog draft">
+    <div class="tabs" aria-hidden="true">
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>fix-login</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>pricing-page</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>april-recap<span class="wait" data-fmt="waiting {n}m">waiting 41m</span></div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>readme</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>deps-bump</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>flaky-test</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>ios-shots</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>api-docs</div><p class="tab-log"></p></div>
+      <div class="tab"><div class="tab-bar"><span class="tl"><i></i><i></i><i></i></span>release-notes</div><p class="tab-log"></p></div>
+    </div>
+
+    <div class="m-win" aria-hidden="true">
+      <aside class="m-side">
+        <div class="m-row sel"><svg class="ico"><use href="#i-chat"/></svg><span>Main</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-canvas"/></svg><span>Canvas</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-mem"/></svg><span>Memory</span></div>
+        <div class="m-label">Projects</div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>ondra</span></div>
+        <div class="m-row m-kid" data-step="t1"><i class="dot"></i><span>Fix login redirect</span><span class="meta">Just now</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>acme</span></div>
+        <div class="m-row m-kid" data-step="t2"><i class="dot"></i><span>Check pricing page</span><span class="meta">Just now</span></div>
+        <div class="m-row"><svg class="ico"><use href="#i-folder"/></svg><span>blog</span></div>
+        <div class="m-row m-kid" data-step="t3"><i class="dot ask" data-k="ask" data-seq='[["dot",""]]'></i><span>Draft April recap</span><span class="meta ask" data-k="ask" data-seq='[["meta","Just now"]]'>Needs reply</span></div>
+      </aside>
+      <div class="m-main">
+        <div class="m-head">Main</div>
+        <div class="m-body">
+          <div class="m-bubble" data-step="sent">Fix the login redirect, check the pricing page, and draft the April recap</div>
+          <div class="m-reply" data-step="reply">I split that into 3 tasks and started them. I'll ask if something needs your call.
+            <div class="m-chips">
+              <span class="m-chip"><i class="dot"></i>Fix login redirect</span>
+              <span class="m-chip"><i class="dot"></i>Check pricing page</span>
+              <span class="m-chip"><i class="dot ask" data-k="ask" data-seq='[["dot",""]]'></i>Draft April recap</span>
+            </div>
+          </div>
+          <div class="m-ask" data-step="pop">
+            <div class="m-ask-h"><svg class="ico"><use href="#i-chat"/></svg><span>Publish the draft to the blog?</span><span class="crumb">blog / Draft April recap</span></div>
+            <div class="m-opts">
+              <span class="m-opt"><kbd class="k">1</kbd>Publish <em>Recommended</em></span>
+              <span class="m-opt"><kbd class="k">2</kbd>Save as draft</span>
+              <span class="m-opt"><kbd class="k">3</kbd>Revise first</span>
+              <span class="m-opt"><kbd class="k">4</kbd>Something else</span>
+            </div>
+          </div>
+        </div>
+        <div class="m-composer">
+          <div class="typed" data-ph="Message" data-text="Fix the login redirect, check the pricing page, and draft the April recap"></div>
+          <div class="row"><svg class="ico"><use href="#i-plus"/></svg><span class="m-send"><svg class="ico"><use href="#i-up"/></svg></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="demo-note"><button class="replay" type="button">Play again</button></p>
+</div>
+
+<section class="wrap lead" aria-labelledby="s-check">
+  <div class="split">
+    <div class="rv">
+      <h2 id="s-check">“Done” gets checked against the record.</h2>
+      <p class="sub">It compares the report with the commands the task ran and the files it changed. Anything it couldn’t confirm is marked unverified.</p>
+      <ul class="points">
+        <li>If a task changed an app, it runs the app, clicks through it and saves screenshots.</li>
+        <li>Before a risky change is finished, two subagents review it separately: one the design, one the code.</li>
+        <li>Results come with diffs, before-and-after screenshots, videos and test results.</li>
+      </ul>
+    </div>
+    <div class="proof mock" data-scene="proof">
+      <div class="proof-h"><span>Fix login redirect</span><span class="pill ask" data-k="state" data-seq='[["pill run","Running"]]'>Ready to merge</span><span class="count">Evidence 3</span></div>
+      <p class="proof-claim">“Login now goes to the dashboard. Tests pass, and I checked the screen too.”</p>
+      <div class="proof-label">As the task reported</div>
+      <ol>
+        <li class="ev" data-k="r1"><span class="kind">Test</span><span class="what"><code>pnpm vitest run auth</code> · 7 passed</span><span class="mark ok" data-k="m1" data-seq='[["mark","Looking"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">Matches what ran</span></span></li>
+        <li class="ev" data-k="r2"><span class="kind">Files</span><span class="what"><code>src/router.ts</code>, <code>src/auth/session.ts</code></span><span class="mark ok" data-k="m2" data-seq='[["mark","Looking"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">File exists</span></span></li>
+        <li class="ev" data-k="r3"><span class="kind">Screen</span><span class="what">Screenshot of <code>/dashboard</code> after login</span><span class="mark unv" data-k="m3" data-seq='[["mark","Looking"],["mark bad","Doesn&#39;t match the record"]]'><svg class="ico i-ok"><use href="#i-check"/></svg><svg class="ico i-bad"><use href="#i-x"/></svg><span class="txt">Unverified</span></span>
+          <span class="note" data-step="note"><span data-k="tries" data-seq='[["","No screenshot in the record, so it went back to the task · 1/2"]]'>No screenshot in the record, so it went back to the task · 2/2</span></span></li>
+      </ol>
+      <div class="proof-foot"><span>Checked by Ondra against the session record</span><span class="mark unv" data-k="foot" data-seq='[["mark",""]]'><span class="txt">1 unverified</span></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap scrolly" aria-labelledby="s-one">
+  <div class="pin">
+  <div class="rv">
+    <h2 id="s-one">The canvas shows what each task is doing.</h2>
+    <p class="sub">What you tell Main becomes tasks under each project, running at the same time. Each card shows the tool the task is using and which step it’s on.</p>
+  </div>
+  <div class="cv mock" data-scene="canvas" style="margin-top:40px" role="img" aria-label="The canvas: Main connects to the ondra, acme and blog projects and on to their tasks and subagents, while the task cards move through their steps">
+    <div class="cv-head"><b>Canvas</b><span><i class="dot"></i>Running 2</span><span><i class="dot ask"></i>Needs reply 1</span></div>
+    <div class="cv-grid">
+      <svg class="cv-lines" aria-hidden="true"></svg>
+      <div class="node" data-id="main" data-depth="0" data-step="d0" style="grid-area:1/1/5/2">
+        <div class="node-t"><svg class="ico"><use href="#i-chat"/></svg><span>Main</span></div>
+        <div class="node-m"><i class="dot idle"></i>Idle</div>
+      </div>
+      <div class="node" data-id="ondra" data-parent="main" data-depth="1" data-step="d1" style="grid-area:1/2/3/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>ondra</span></div>
+        <div class="node-m"><i class="dot"></i>Running 1</div>
+      </div>
+      <div class="node" data-id="t1" data-parent="ondra" data-depth="2" data-step="d2" style="grid-area:1/3/3/4">
+        <div class="node-t"><svg class="ico"><use href="#i-flask"/></svg><span>Fix login redirect</span></div>
+        <div class="bar" style="--n:4" data-k="t1" data-seq='[1,2]'><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div>
+        <div class="tool"><svg class="ico"><use href="#i-term"/></svg><span class="swap" data-k="t1" data-seq='[["swap","Read router.ts"],["swap","Edited router.ts"]]'>Testing pnpm vitest run auth</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="t1" data-seq='[["swap","Running · 1/4"],["swap","Running · 2/4"]]'>Running · 3/4</span> · Subagents 2<span class="r"><span class="add">+8</span> <span class="del">−3</span> · 17m</span></div>
+      </div>
+      <div class="node" data-id="s1" data-parent="t1" data-depth="3" data-step="d3" style="grid-area:1/4/2/5">
+        <div class="node-t"><svg class="ico"><use href="#i-brain"/></svg><span>Run auth tests</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="s" data-seq='[["swap","Thinking"]]'>Running</span><span class="r">13m</span></div>
+      </div>
+      <div class="node" data-id="s2" data-parent="t1" data-depth="3" data-step="d3" style="grid-area:2/4/3/5">
+        <div class="node-t"><svg class="ico"><use href="#i-check"/></svg><span>Check social login paths</span></div>
+        <div class="node-m"><i class="dot ok" data-k="s" data-seq='[["dot",""]]'></i><span class="swap" data-k="s" data-seq='[["swap","Running"]]'>Done</span><span class="r">6m</span></div>
+      </div>
+      <div class="node" data-id="acme" data-parent="main" data-depth="1" data-step="d1" style="grid-area:3/2/4/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>acme</span></div>
+        <div class="node-m"><i class="dot"></i>Running 1</div>
+      </div>
+      <div class="node" data-id="t2" data-parent="acme" data-depth="2" data-step="d2" style="grid-area:3/3/4/4">
+        <div class="node-t"><svg class="ico"><use href="#i-globe"/></svg><span>Check pricing page</span></div>
+        <div class="bar" style="--n:3" data-k="t2" data-seq='[1]'><i class="f"></i><i class="f"></i><i></i></div>
+        <div class="tool"><svg class="ico"><use href="#i-globe"/></svg><span class="swap" data-k="t2" data-seq='[["swap","Opening acme.dev/pricing"]]'>Checking the Upgrade button</span></div>
+        <div class="node-m"><i class="dot"></i><span class="swap" data-k="t2" data-seq='[["swap","Running · 1/3"]]'>Running · 2/3</span><span class="r">10m</span></div>
+      </div>
+      <div class="node" data-id="blog" data-parent="main" data-depth="1" data-step="d1" style="grid-area:4/2/5/3">
+        <div class="node-t"><svg class="ico"><use href="#i-folder"/></svg><span>blog</span></div>
+        <div class="node-m"><i class="dot ask"></i>Needs reply 1</div>
+      </div>
+      <div class="node ask" data-id="t3" data-parent="blog" data-depth="2" data-step="d2" data-ask style="grid-area:4/3/5/4">
+        <div class="node-t"><svg class="ico"><use href="#i-bell"/></svg><span>Draft April recap</span></div>
+        <div class="q">Publish the draft to the blog?</div>
+        <div class="node-m"><i class="dot ask"></i>Needs reply<span class="r add">+42 lines</span></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-ask">
+  <div class="split flip">
+    <div class="rv">
+      <h2 id="s-ask">It asks only when you need to decide.</h2>
+      <p class="sub">When a task reaches something you have to pick, a card with the options shows up in Main.</p>
+      <ul class="points">
+        <li>Even with the window in the background, you get a notification when a task finishes or needs an answer.</li>
+      </ul>
+    </div>
+    <div class="dc mock" id="decide" data-done-ok="Done" data-done-run="Running" data-reset="Try again">
+      <div class="dc-task"><svg class="ico"><use href="#i-bell"/></svg><span>Draft April recap</span><span class="pill ask">Needs reply</span></div>
+      <div class="dc-card"><div><div class="dc-in">
+        <div class="dc-h"><svg class="ico"><use href="#i-chat"/></svg><span>Publish the draft to the blog?</span><span class="crumb">blog</span></div>
+        <div class="dc-body">The draft is ready.
+          <blockquote><b>April recap — ship small, ship often</b><br>This month, we shipped twelve small improvements instead of one big feature.</blockquote>
+        </div>
+        <ul class="dc-opts" role="listbox" aria-label="Options">
+          <li><button class="dc-opt sel" type="button" role="option" aria-selected="true" data-me="Publish" data-reply="Published to the blog · blog/april-retro" data-state="ok"><kbd class="k">1</kbd>Publish <em>Recommended</em></button></li>
+          <li><button class="dc-opt" type="button" role="option" aria-selected="false" data-me="Save as draft" data-reply="Saved as a draft · drafts/april-retro.md" data-state="ok"><kbd class="k">2</kbd>Save as draft</button></li>
+          <li><button class="dc-opt" type="button" role="option" aria-selected="false" data-me="Revise first" data-reply="I'll tighten it up and bring it back" data-state="run"><kbd class="k">3</kbd>Revise first</button></li>
+          <li><div class="dc-opt typed-row" role="option" aria-selected="false" data-reply="Got it. Going with that" data-state="run"><kbd class="k">4</kbd><input class="dc-input" type="text" placeholder="Something else" aria-label="Write your own answer"></div></li>
+        </ul>
+        <div class="dc-hint">Press <kbd class="k">1</kbd>–<kbd class="k">4</kbd>, or <kbd class="k">↑</kbd><kbd class="k">↓</kbd> then <kbd class="k">Enter</kbd></div>
+      </div></div></div>
+      <div class="dc-after" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-mem">
+  <div class="rv">
+    <h2 id="s-mem">No re-explaining the background in every new session.</h2>
+  </div>
+  <div class="facts rv">
+    <div class="fact">
+      <h3>Handoff</h3>
+      <p>Long tasks write up what they did, what they found, the next steps and the evidence, and hand that to a new session. Follow up on a finished task and it starts from those results.</p>
+    </div>
+    <div class="fact">
+      <h3>Memory</h3>
+      <p>Preferences and lessons it picks up while you work are saved to memory. <code>/remember</code> saves one right away, and you can edit them on the Memory page.</p>
+    </div>
+    <div class="fact">
+      <h3>Project chats</h3>
+      <p>Each project has its own chat. Tasks you start there begin in that project’s folder.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-routine">
+  <div class="split wide">
+    <div class="rv">
+      <h2 id="s-routine">Put the daily stuff on a routine.</h2>
+      <p class="sub">A task starts at the time you set or when something happens on GitHub. Type “every weekday at 9…” in the chat and a card comes up asking whether to make it a routine.</p>
+      <ul class="points">
+        <li>On GitHub, it can start on a new issue or PR, a review request, a comment on your PR, a failed CI run or a new release.</li>
+      </ul>
+    </div>
+    <div class="rt mock" data-scene="routine">
+      <div class="rt-h"><svg class="ico"><use href="#i-repeat"/></svg><span>Routine «PR roundup»</span><span class="when">Weekdays · 9:00 · Quiet when nothing's new</span></div>
+      <div class="rt-days">
+        <div class="day"><div class="day-h"><b>Mon</b><span>9:00</span></div><div class="run" data-step="d1"><i class="dot ok"></i><span>Sorted 3 PRs · 1 needs review</span></div></div>
+        <div class="day"><div class="day-h"><b>Tue</b><span>9:00</span></div><div class="run quiet" data-step="d2"><i class="dot idle"></i><span>Nothing new · archived quietly</span></div></div>
+        <div class="day"><div class="day-h"><b>Wed</b><span>9:42</span></div><div class="sleep" data-step="d3">(This run was due at 9:00. The Mac was asleep.)</div><div class="run" data-step="d4"><i class="dot ok"></i><span>Sorted 2 PRs</span></div></div>
+        <div class="day"><div class="day-h"><b>Thu</b><span>9:00</span></div><div class="run" data-step="d5"><i class="dot ok"></i><span>Sorted 1 PR</span></div></div>
+        <div class="day next"><div class="day-h"><b>Fri</b><span>9:00</span></div><div class="run quiet" data-step="d6"><span>Next run Fri 9:00</span></div></div>
+      </div>
+      <div class="rt-gh"><svg class="ico"><use href="#i-git"/></svg><span>When CI fails on the default branch</span><span class="arrow">→</span><span class="pill run" data-step="gh">Task started · fix CI</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-mac">
+  <div class="split">
+    <div class="rv">
+      <h2 id="s-mac">Run the long jobs on your other Mac.</h2>
+      <p class="sub">Connect another Mac and its projects appear in your sidebar. Their tasks run on that Mac, so closing your laptop doesn’t stop them.</p>
+      <ul class="points">
+        <li>The connection is end-to-end encrypted. A connected Mac only sees the workspaces and projects you allow.</li>
+      </ul>
+    </div>
+    <div class="mock" data-scene="macs">
+      <div class="macs" aria-hidden="true">
+        <div class="laptop">
+          <div class="lid" data-k="lid">
+            <div class="lid-screen">
+              <div class="mini-label">Another Mac · Desk Mac</div>
+              <div class="mini-row"><i class="dot ok" data-k="lap" data-seq='[["dot",""]]'></i><span>Fix login redirect</span><span class="r swap" data-k="lap" data-seq='[["r swap","2/4"]]'>Done</span></div>
+              <div class="mini-row"><i class="dot"></i><span>Check pricing page</span><span class="r">2/3</span></div>
+            </div>
+          </div>
+          <div class="base"></div>
+          <div class="dev-label"><b>Laptop</b> · this Mac</div>
+        </div>
+        <div>
+          <div class="desk-screen"><div class="desk-in">
+            <div class="node-t"><svg class="ico"><use href="#i-flask"/></svg><span>Fix login redirect</span><span class="pill ok" style="margin-left:auto" data-k="desk" data-seq='[["pill run","Running"],["pill run","Running"]]'>Done</span></div>
+            <div class="bar" style="--n:4" data-k="desk" data-seq='[2,3]'><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div>
+            <div class="tool node-m" style="margin:0"><svg class="ico"><use href="#i-term"/></svg><span class="swap" data-k="desk" data-seq='[["swap","Edited router.ts"],["swap","Testing pnpm vitest run auth"]]'>2 files changed · tests pass</span></div>
+          </div></div>
+          <div class="stand"></div><i></i>
+          <div class="dev-label"><b>Desk Mac</b> · where the task runs</div>
+        </div>
+      </div>
+      <ol class="mac-log">
+        <li data-step="l1"><span class="n">1</span><span><b>Close the laptop.</b></span></li>
+        <li data-step="l2"><span class="n">2</span><span>The task <b>keeps going</b> on the desk Mac.</span></li>
+        <li data-step="l3"><span class="n">3</span><span>Open it again and <b>the result is there.</b></span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" aria-labelledby="s-tools">
+  <div class="rv">
+    <h2 id="s-tools">It uses the browser and Mac apps without taking your cursor or focus.</h2>
+  </div>
+  <div class="facts four rv">
+    <div class="fact">
+      <h3>Browser</h3>
+      <p>Each task opens pages, clicks and types in its own browser tab. You can watch it live in a small window in the corner. Passwords are filled from the macOS Keychain, so the model never sees them.</p>
+    </div>
+    <div class="fact">
+      <h3>Mac apps</h3>
+      <p>With permission, it drives Mac apps in the background. It doesn’t use your cursor or focus, so you can keep working. A separate cursor shows where Ondra is clicking.</p>
+    </div>
+    <div class="fact">
+      <h3>Mobile</h3>
+      <p>It checks your app in the iOS Simulator or Android Emulator and saves screenshots. You can also control the device from inside Ondra.</p>
+    </div>
+    <div class="fact">
+      <h3>Deep research</h3>
+      <p>It splits a question up, finds sources and checks each quote against the original. The answer and the evidence come out as a report and a PDF.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="film" aria-labelledby="s-film" hidden>
+  <div class="rv">
+    <h2 id="s-film">A 100-second intro</h2>
+  </div>
+  <figure class="shot real-video">
+    <video data-src="../assets/ondra-intro-en.mp4" poster="../assets/ondra-intro-en-poster.jpg" width="1920" height="1080" muted playsinline controls preload="metadata" aria-label="Ondra intro video"></video>
+  </figure>
+</section>
+
+<section class="wrap" id="real" aria-labelledby="s-real">
+  <div class="rv">
+    <h2 id="s-real">Screenshots of the real app</h2>
+  </div>
+  <div class="real-tabs" role="tablist" aria-label="Real screenshots">
+    <button type="button" role="tab" aria-selected="true" data-src="../assets/main-en.png" data-alt="Ondra's Main view. Tasks are listed by project on the left, and a card in the middle asks whether to publish a blog draft.">Main</button>
+    <button type="button" role="tab" aria-selected="false" data-src="../assets/canvas-en.png" data-alt="The canvas. Main connects to the blog, acme and ondra projects and on to their tasks and subagents, each card showing its current step.">Canvas</button>
+  </div>
+  <figure class="shot real-shot rv">
+    <img id="real-img" src="../assets/main-en.png" width="2880" height="1800" loading="lazy" alt="Ondra's Main view. Tasks are listed by project on the left, and a card in the middle asks whether to publish a blog draft.">
+  </figure>
+</section>
+
+<section class="wrap faq" aria-labelledby="s-faq">
+  <h2 id="s-faq">FAQ</h2>
+  <details>
+    <summary>Is it free?</summary>
+    <p>Yes, it’s a free beta for now. The app tells you when a new version is out.</p>
+  </details>
+  <details>
+    <summary>What do I need?</summary>
+    <p>An Apple silicon Mac on macOS 13 or later. When you first open Ondra, connect the AI model accounts you use in Settings. Driving Mac apps and capturing windows needs Accessibility and Screen Recording permission. Mobile checks need the iOS Simulator from Xcode or the Android Emulator.</p>
+  </details>
+  <details>
+    <summary>Where do tasks run?</summary>
+    <p>On your Mac. If you’ve connected another Mac, tasks in its projects run there. You can turn off anonymous usage stats in Settings.</p>
+  </details>
+  <details>
+    <summary>macOS won't open it the first time.</summary>
+    <p>Right-click the app in Finder and choose <b>Open</b>. If it's still blocked, make sure you downloaded it from the GitHub releases, then run <code>xattr -dr com.apple.quarantine /Applications/Ondra.app</code> once in Terminal.</p>
+  </details>
+</section>
+
+<section class="wrap end" aria-labelledby="s-end">
+  <h2 id="s-end">It’s a free beta for now.</h2>
+  <div class="cta">
+    <a class="btn" href="https://github.com/3x-haust/ondra/releases/latest">Download for Mac</a>
+  </div>
+  <p class="meta">macOS 13+ · Apple silicon</p>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Ondra · <a href="https://github.com/3x-haust/ondra/blob/main/LICENSE">Open source (MIT)</a></span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/3x-haust/ondra/releases">Releases</a>
+      <a href="https://github.com/3x-haust/ondra/issues">Report an issue</a>
+      <a href="https://github.com/3x-haust/ondra/blob/main/docs/TELEMETRY.md">Usage stats</a>
+      <a href="../" hreflang="ko" lang="ko">한국어</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
