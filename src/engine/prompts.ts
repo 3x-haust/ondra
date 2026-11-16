@@ -8,6 +8,7 @@ import type { Memory, Space, SpaceId, Task } from "../state/types";
 import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
+import { forModel } from "./modelPrompts";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -1086,8 +1087,9 @@ export function handoffPrompt(t: Task): string {
 }
 
 /** Everything appended to the engine's system prompt for a task, stable parts first. */
-export function taskSystem(t: Task, notes?: string): string[] {
+/** `model`: what the job runs on, for its family's sentences (modelPrompts.ts). */
+export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [t.parentId ? SUB_SYSTEM : TASK_SYSTEM, t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
 }

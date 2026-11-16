@@ -1073,7 +1073,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const args = [
       "--session-dir",
       `${engine.info.dataDir}/sessions/${id}`,
-      ...taskSystem(t, t.project && !t.parentId ? await readNotes(t.project) : undefined).flatMap((p) => ["--append-system-prompt", p]),
+      ...taskSystem(t, t.project && !t.parentId ? await readNotes(t.project) : undefined, model).flatMap((p) => ["--append-system-prompt", p]),
       // The search extension owns discovery; Pi must not advertise a catalog.
       "--no-skills",
       ...(model ? ["--model", model] : []),
