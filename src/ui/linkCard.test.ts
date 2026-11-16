@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shortUrl } from "../lib/links";
+import { shortUrl, urlsIn } from "../lib/links";
 import { nextRender } from "./renderPace";
 
 describe("link card", () => {
@@ -15,5 +15,15 @@ describe("render pace", () => {
     expect(nextRender(1000, 5)).toBe(1010);
     expect(nextRender(1000, 3000)).toBe(3000);
     expect(nextRender(1000, -1)).toBe(1000);
+  });
+});
+
+describe("links in a message", () => {
+  it("finds each address once, without the punctuation after it", () => {
+    expect(urlsIn("이거 봐 https://github.com/deepseek-ai/chat-demo, 그리고 https://katex.org.")).toEqual(["https://github.com/deepseek-ai/chat-demo", "https://katex.org"]);
+    expect(urlsIn("(https://en.wikipedia.org/wiki/Foo_(bar)) 참고")).toEqual(["https://en.wikipedia.org/wiki/Foo_(bar)"]);
+    expect(urlsIn("same https://a.example.com/x https://a.example.com/x")).toEqual(["https://a.example.com/x"]);
+    expect(urlsIn("http://localhost:3000 and https://x")).toEqual([]);
+    expect(urlsIn("a https://a.io b https://b.io c https://c.io d https://d.io")).toHaveLength(3);
   });
 });

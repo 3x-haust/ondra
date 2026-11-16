@@ -10,7 +10,8 @@ const HIDE_AFTER = 120;
 const GAP = 6;
 
 const known = new Map<string, Promise<LinkCardInfo | null>>();
-const info = (url: string) => {
+/** what a page says about itself, asked once per address (the hover card, link chips, site icons) */
+export const cardOf = (url: string) => {
   let p = known.get(url);
   if (!p) {
     p = linkCard(url).catch(() => null);
@@ -87,7 +88,7 @@ function show(a: HTMLElement, url: string) {
   fill(c, url, undefined);
   document.body.append(c);
   place(c, a);
-  void info(url).then((i) => {
+  void cardOf(url).then((i) => {
     if (showing !== url || !c.isConnected) return;
     fill(c, url, i);
     place(c, a);

@@ -25,6 +25,7 @@ import { AnsweredCard, answerOf } from "./DecisionCard";
 import { costDetail, jobCost } from "./cost";
 import { Glyph } from "../views/Sidebar";
 import { t as tr } from "../i18n";
+import { SiteIcons } from "./SiteBits";
 
 type Item =
   | { kind: "tools"; id: string; tools: (Entry & { kind: "tool" })[] }
@@ -509,7 +510,8 @@ function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
     const d = on.length === 1 ? steps().find((x) => x.target === on[0]) : undefined;
     return d ? { verb: d.label, target: d.target! } : undefined;
   };
-  const sites = () => names(steps().map((d) => (d.action === "open" ? d.target?.split("/")[0] : undefined)));
+  const hosts = () => steps().map((d) => (d.action === "open" ? d.target?.split("/")[0] : undefined)).filter((h): h is string => !!h);
+  const sites = () => names(hosts());
   // computer steps: the one going on ("클릭 중 ‘보내기’"), else the app(s) they worked in ("앱 조작함 Instagram")
   const apps = () => names(props.tools.map((t) => t.tool.app));
   // "살펴봄 a.ts, b.ts", "파일 3개 수정함", "브라우저 5번 씀"
@@ -539,6 +541,8 @@ function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
           <span class="spin" />
         </Show>
         <span class="tool-verb" classList={{ shimmer: !!live() }}>{summary()}</span>
+        {/* the sites the browser opened, by their icons */}
+        <Show when={fam() === "browser"}><SiteIcons hosts={hosts()} /></Show>
         <span class="tool-target" classList={{ cmd: fam() === "run" }}>{detail()}</span>
         <span class="tool-end">
           {/* a browser step named by its verb ("클릭 중 ‘프로 시작하기’") says how many steps the row holds */}

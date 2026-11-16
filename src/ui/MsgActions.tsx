@@ -11,6 +11,7 @@ import { editing, previewFile, setEditing } from "../state/ui";
 import { stamp } from "./bits";
 import { Icon } from "./Icon";
 import { t } from "../i18n";
+import { LinkChips } from "./SiteBits";
 
 export function MsgActions(props: { text: string; at?: number; mine?: boolean; onEdit?: () => void; onRetry?: () => void }) {
   const [copied, setCopied] = createSignal(false);
@@ -83,6 +84,8 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
                 {skillAsk(splitQuotes(split().body).rest).rest}
               </div>
             </Show>
+            {/* the web links it carries, by their own titles and icons */}
+            <LinkChips text={split().body} />
             <Show when={split().files.length}>
               <div class="msg-files">
                 <For each={split().files}>
