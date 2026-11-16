@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { activeTab, newPanelTab, panelOpen, panelTab, ptabs, setActiveTab, setPanelOpen, setPanelTab, setPtabs, setRoomy, setSidebarHidden, sidebarAway, sidebarHidden, toggleSidebar } from "./ui";
+import { activeTab, newPanelTab, panelOpen, panelTab, ptabs, setActiveTab, setPanelOpen, setPanelTab, setPtabs, setRoomy, setSidebarHidden, sidebarAway, sidebarHidden, toggleSidebar, togglePanel } from "./ui";
 
 beforeEach(() => {
   setRoomy(true);
@@ -46,6 +46,20 @@ describe("panel tools", () => {
     setPanelTab("side");
     expect(activeTab()).toBe(id);
     expect(ptabs().map((t) => t.kind)).toEqual(["flow", "side"]);
+  });
+
+  it("opens on the new tab when nothing was open, not the flow", () => {
+    setPtabs([]);
+    togglePanel();
+    expect(panelOpen()).toBe(true);
+    expect(panelTab()).toBe("new");
+  });
+
+  it("opens on the tab that was open", () => {
+    setPtabs([{ id: 1, kind: "flow" }, { id: 2, kind: "files" }]);
+    setActiveTab(2);
+    togglePanel();
+    expect(panelTab()).toBe("files");
   });
 
   it("opens an empty tab and replaces it when a tool is chosen", () => {

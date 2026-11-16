@@ -635,7 +635,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
       if (job || !at || usable(at)) return;
       const alt = ptabs().find(usable);
       if (alt) setActiveTab(alt.id);
-      else setPanelTab("flow");
+      else setPanelTab("new");
     }),
   );
   const tab = panelTab;

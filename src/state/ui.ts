@@ -213,7 +213,8 @@ export interface PTab {
   kind: PanelTab;
 }
 let tabSeq = 1;
-export const [ptabs, setPtabs] = createSignal<PTab[]>([{ id: 1, kind: "flow" }]);
+// nothing open yet: the new tab (its tools to pick from), not the flow
+export const [ptabs, setPtabs] = createSignal<PTab[]>([{ id: 1, kind: "new" }]);
 export const [activeTab, setActiveTab] = createSignal(1);
 export const panelTab = (): PanelTab => ptabs().find((t) => t.id === activeTab())?.kind ?? "new";
 /** Show a tool: switch to its tab, or turn the empty tab into it, or open a new tab. */
@@ -283,11 +284,11 @@ function enterPlace(v: View) {
   setPanelOpen(openAt.get(to) ?? false);
   const cur = ptabs().find((t) => t.id === activeTab());
   const keep = ptabs().filter((t) => t.kind === "new" || tabFits(to, t.kind) !== "drop");
-  if (keep.length !== ptabs().length) setPtabs(keep.length ? keep : [{ id: ++tabSeq, kind: "flow" }]);
+  if (keep.length !== ptabs().length) setPtabs(keep.length ? keep : [{ id: ++tabSeq, kind: "new" }]);
   const back = lastTab.get(to);
   if (back && back !== "new" && tabFits(to, back) === "use") return setPanelTab(back);
   if (cur && keep.includes(cur) && (cur.kind === "new" || tabFits(to, cur.kind) === "use")) return;
-  setPanelTab("flow");
+  setPanelTab("new");
 }
 /** File the panel should show: its diff (Changes) or its contents (Files). Path is relative to the task folder. */
 export const [panelFile, setPanelFile] = createSignal<{ path: string; mode: "diff" | "file"; n: number } | null>(null);
@@ -432,7 +433,7 @@ export function togglePanel() {
   if (panelOpen() && Date.now() - movedAt < 350) return;
   if (panelOpen()) void closePanel();
   else {
-    if (!ptabs().length) setPanelTab("flow");
+    if (!ptabs().length) setPanelTab("new");
     setPanelOpen(true);
   }
 }

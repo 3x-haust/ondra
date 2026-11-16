@@ -84,7 +84,7 @@ export function switchSpace(id: SpaceId, then?: View, leaving: View = view()) {
     } else if (split(l)) setLayout(L.single(newPaneId(), blankPane(then ?? carried(leaving, id))));
     else setView(then ?? carried(leaving, id));
     if (p) {
-      setPtabs(p.tabs?.length ? p.tabs : [{ id: 1, kind: "flow" }]);
+      setPtabs(p.tabs?.length ? p.tabs : [{ id: 1, kind: "new" }]);
       setActiveTab(p.tab ?? p.tabs?.[0]?.id ?? 1);
       setPreviewPath(p.preview ?? null);
       setPanelOpen(!!p.panel);
