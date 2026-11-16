@@ -586,18 +586,20 @@ pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<b
     }
 }
 
-/// A short system sound when a job ends (Settings › 작업 끝 소리), at `volume` (0–1). Only the
-/// sounds macOS ships, by name, so the page can't make it play an arbitrary file.
+/// Ondra's own sound when a job ends (Settings › 작업 끝 소리), at `volume` (0–1): one of the
+/// bundled `sounds/<name>.wav` (scripts/make-sounds.py), by name only, so the page can't make it
+/// play an arbitrary file.
 #[tauri::command]
-pub fn play_sound(name: String, volume: f64) {
-    const SOUNDS: [&str; 14] = ["Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"];
+pub fn play_sound(app: AppHandle, name: String, volume: f64) {
+    const SOUNDS: [&str; 3] = ["done", "waiting", "failed"];
     if !SOUNDS.contains(&name.as_str()) || !(volume > 0.0) {
         return;
     }
+    let Ok(dir) = app.path().resource_dir() else { return };
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("/usr/bin/afplay")
         .args(["-v", &format!("{:.2}", volume.min(1.0))])
-        .arg(format!("/System/Library/Sounds/{name}.aiff"))
+        .arg(dir.join("sounds").join(format!("{name}.wav")))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();

@@ -4,8 +4,8 @@ import { playSound } from "../lib/native";
 import { state } from "../state/store";
 import type { Task } from "../state/types";
 
-/** macOS system sounds (/System/Library/Sounds): done, needs an answer, failed */
-export const JOB_SOUNDS = { done: "Glass", waiting: "Ping", failed: "Basso" } as const;
+/** Ondra's own sounds (src-tauri/sounds, made by scripts/make-sounds.py) */
+export const JOB_SOUNDS = { done: "done", waiting: "waiting", failed: "failed" } as const;
 export type SoundKind = keyof typeof JOB_SOUNDS;
 
 export const soundOn = () => state.settings.jobSound !== false;
