@@ -15,6 +15,7 @@ mod update;
 mod applog;
 mod components;
 mod logos;
+mod linkcard;
 mod browser;
 mod inbrowser;
 mod devices;
@@ -471,6 +472,7 @@ pub fn run() {
             farfs::far_put,
             farfs::far_cached,
             logos::logo_fetch,
+            linkcard::link_card,
             worktree::worktree_merge,
             worktree::worktree_remove,
             worktree::worktree_landed,
