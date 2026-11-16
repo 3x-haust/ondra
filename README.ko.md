@@ -27,7 +27,7 @@
 
 탭은 닫으세요. 모든 일을 메인 대화 하나에 말하면 돼요. 프로젝트마다 대화도 따로 있어서, 거기서 맡긴 일은 그 프로젝트 폴더에서 진행돼요.
 
-<p align="center"><img src="docs/assets/readme/chat-ko.jpg" width="880" alt="메인 입력창에 적은 요청 하나: 로그인 버그 고치고, 설정에 다크 모드 넣고, 경쟁사 가격 조사해 줘"></p>
+<p align="center"><img src="docs/assets/readme/chat-ko.jpg" width="880" alt="메인: 요청 하나가 작업 세 개로 나뉘고, 같은 채팅에서 이어 말한 요청은 루틴이 돼요"></p>
 
 ## 일은 작업으로 나눠서 동시에
 
@@ -48,7 +48,7 @@
 
 의도나 취향이 필요한 순간에만 맥락과 선택지를 함께 보여줘요. 번호나 Enter를 누르거나 직접 답을 적으면 돼요. 진행 중인 작업에 들어가 방향을 바꿀 수도 있어요.
 
-<p align="center"><img src="docs/assets/readme/ask-ko.jpg" width="880" alt="입력창 위에 붙은 질문: 다크 모드 기본값을 어떻게 할까요? 번호가 붙은 선택지"></p>
+<p align="center"><img src="docs/assets/readme/ask-ko.jpg" width="880" alt="내 차례: 다크 모드 작업이 응답을 기다리고, 캔버스에 질문과 선택지가 떠 있어요"></p>
 
 ## 다 했다고 하기 전에 실제 앱에서 써 봐요
 
@@ -71,13 +71,13 @@
 
 작업마다 자기 탭에서 웹을 살펴보고 조작해요. 같은 워크스페이스에서는 로그인 상태를 함께 쓰고, 비밀번호는 macOS 키체인이 넣어서 모델에는 보이지 않아요. 다른 일을 하면서 작업의 브라우저를 구석 작은 창으로 지켜볼 수 있어요.
 
-<p align="center"><img src="docs/assets/readme/browser-ko.jpg" width="880" alt="다음 요청을 적는 동안 메인 구석에 떠 있는 작업의 브라우저"></p>
+<p align="center"><img src="docs/assets/readme/browser-ko.jpg" width="880" alt="자기 브라우저 탭에서 요금제 페이지를 연 경쟁사 가격 조사 작업"></p>
 
 ## 컴퓨터 사용
 
 권한을 허용하면 작업이 Mac 앱을 뒤에서 써요. 앱에 직접 동작을 보내기 때문에 내 커서와 앞에 띄운 앱은 그대로예요. 결과는 그 앱의 창을 캡처해서 확인해요.
 
-<p align="center"><img src="docs/assets/readme/computer-ko.jpg" width="880" alt="Mac 앱에서 슬라이드를 고치는 작업: 클릭 중 '차트'. 그동안 다음 요청을 적는 중"></p>
+<p align="center"><img src="docs/assets/readme/computer-ko.jpg" width="880" alt="영상의 한 장면: Ondra의 포인터가 슬라이드 앱에 차트를 넣고, Ondra 창에는 작업이 '차트'를 클릭하는 중이라고 떠요. 슬라이드 앱은 영상용으로 그린 것이고 Ondra 창은 실제 앱이에요."></p>
 
 ## 시뮬레이터와 에뮬레이터
 
@@ -130,11 +130,9 @@ GitHub 계정을 연결하면 PR 상태, 검사, 리뷰와 바뀐 파일을 작�
 <p align="center"><img src="docs/assets/readme/memory-ko.jpg" width="880" alt="메모리: 폴더 트리, 서로 이어진 메모리 그래프, 종류별 개수"></p>
 
 <details>
-<summary>루틴, 다른 Mac, /btw</summary>
+<summary>채팅에서 만든 루틴</summary>
 
-<p align="center"><img src="docs/assets/readme/routine-ko.jpg" width="880" alt="메인이 평일 9시 루틴을 제안하고 만드는 화면"></p>
-<p align="center"><img src="docs/assets/readme/othermac-ko.jpg" width="880" alt="Mac 바에서 Mac Studio를 고르면 새 작업은 그 Mac에서 진행돼요"></p>
-<p align="center"><img src="docs/assets/readme/btw-ko.jpg" width="880" alt="작업 세 개가 도는 동안 짧은 질문에 답하는 /btw 카드"></p>
+<p align="center"><img src="docs/assets/readme/routine-ko.jpg" width="880" alt="메인에서 만든 평일 9시 루틴과 다음 실행 시각"></p>
 
 </details>
 

@@ -27,7 +27,7 @@
 
 Close the tabs. Say what you want done in Main, the one conversation for all your work. Each project also has its own conversation, and work started there runs in that folder.
 
-<p align="center"><img src="docs/assets/readme/chat-en.jpg" width="880" alt="Main's composer with one request: fix the login bug, add dark mode to settings, research competitor pricing"></p>
+<p align="center"><img src="docs/assets/readme/chat-en.jpg" width="880" alt="Main: one request split into three tasks, then a second request in the same chat that becomes a routine"></p>
 
 ## It splits the work into tasks
 
@@ -48,7 +48,7 @@ Main turns your request into tasks that run side by side, each following its par
 
 When your intent or taste matters, the question comes with context and choices. Press its number or Enter, or write your own answer. You can also step into a running task and change its direction.
 
-<p align="center"><img src="docs/assets/readme/ask-en.jpg" width="880" alt="A question docked above the composer: what should dark mode default to, with numbered choices"></p>
+<p align="center"><img src="docs/assets/readme/ask-en.jpg" width="880" alt="Your turn: the dark mode task needs a reply, and its question shows with choices on the canvas"></p>
 
 ## It checks in the real app before it says done
 
@@ -71,13 +71,13 @@ A task that changes an app starts its own copy and uses the change. What it saw 
 
 Each task reads and works the web in its own tab. Logins are shared within a workspace; passwords are filled in from the macOS Keychain and never reach the model. Keep working elsewhere and watch a task's browser in the corner.
 
-<p align="center"><img src="docs/assets/readme/browser-en.jpg" width="880" alt="A task's browser floating in the corner of Main while you type the next request"></p>
+<p align="center"><img src="docs/assets/readme/browser-en.jpg" width="880" alt="A research task with its own Browser tab open on a pricing page"></p>
 
 ## Computer use
 
 With your permission, a task uses a Mac app in the background. It acts on that app directly, so your cursor and the app in front stay yours, and it captures the app's window to check the result.
 
-<p align="center"><img src="docs/assets/readme/computer-en.jpg" width="880" alt="A task editing slides in a Mac app: Clicking 'Chart', while you type the next step"></p>
+<p align="center"><img src="docs/assets/readme/computer-en.jpg" width="880" alt="From the film: Ondra's pointer adds a chart in a slide app while Ondra's window shows the task clicking 'Chart'. The slide app is drawn for the film; Ondra's window is the real app."></p>
 
 ## Simulators and emulators
 
@@ -130,11 +130,9 @@ Answers can draw a step-by-step board, build a 3D model you can turn, or lay out
 <p align="center"><img src="docs/assets/readme/memory-en.jpg" width="880" alt="Memory: a folder tree, a graph of related memories and counts by kind"></p>
 
 <details>
-<summary>Routines, another Mac and /btw</summary>
+<summary>A routine, made from the chat</summary>
 
-<p align="center"><img src="docs/assets/readme/routine-en.jpg" width="880" alt="Main proposes a weekday 9:00 routine and creates it"></p>
-<p align="center"><img src="docs/assets/readme/othermac-en.jpg" width="880" alt="The Mac bar switched to Mac Studio: new work runs there"></p>
-<p align="center"><img src="docs/assets/readme/btw-en.jpg" width="880" alt="A /btw card answering a quick question while three tasks run"></p>
+<p align="center"><img src="docs/assets/readme/routine-en.jpg" width="880" alt="A weekday 9:00 routine created from Main, with its next run"></p>
 
 </details>
 
