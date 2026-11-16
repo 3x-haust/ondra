@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ondra's own sounds (a job finished, needs an answer, failed), synthesized so nothing is
-borrowed: soft mallet notes (a sine with a few inharmonic partials, a 4 ms attack and an
-exponential decay) and a short room tail. Writes src-tauri/sounds/<name>.wav
+borrowed: soft electric-piano notes (two-operator FM: a harmonic body whose brightness fades,
+plus a short metallic tine) and a short room tail. Writes src-tauri/sounds/<name>.wav
 (48 kHz, 16-bit mono). Run: python3 scripts/make-sounds.py  (needs numpy)
 """
 from pathlib import Path
@@ -13,15 +13,16 @@ RATE = 48_000
 OUT = Path(__file__).resolve().parent.parent / "src-tauri" / "sounds"
 
 
-def note(freq: float, dur: float, decay: float, bright: float = 1.0) -> np.ndarray:
-    """One mallet hit: the fundamental, a soft octave and a marimba-like 3.9× partial that dies fast."""
+def note(freq: float, dur: float, bright: float = 1.0) -> np.ndarray:
+    """One electric-piano note: an FM body whose brightness fades, and a tine that dies fast."""
     t = np.arange(int(RATE * dur)) / RATE
-    partials = [(1.0, 1.0, decay), (2.0, 0.18 * bright, decay * 0.6), (3.9, 0.10 * bright, decay * 0.25)]
-    s = sum(a * np.sin(2 * np.pi * freq * k * t) * np.exp(-t / d) for k, a, d in partials)
-    attack = np.minimum(1.0, t / 0.004)
+    index = 1.3 * bright * np.exp(-t / 0.25)
+    body = np.sin(2 * np.pi * freq * t + index * np.sin(2 * np.pi * freq * t)) * np.exp(-t / 0.6)
+    tine = 0.12 * bright * np.sin(2 * np.pi * freq * 7.0 * t) * np.exp(-t / 0.03)
+    attack = np.minimum(1.0, t / 0.002)
     # let it die out instead of stopping mid-ring (a cut is a click)
-    release = np.minimum(1.0, (dur - t) / 0.08)
-    return s * attack * release
+    release = np.clip((dur - t) / 0.06, 0, 1)
+    return (body + tine) * attack * release
 
 
 def place(parts: list[tuple[float, np.ndarray]], length: float) -> np.ndarray:
@@ -33,13 +34,13 @@ def place(parts: list[tuple[float, np.ndarray]], length: float) -> np.ndarray:
     return out
 
 
-def room(s: np.ndarray, mix: float = 0.18) -> np.ndarray:
+def room(s: np.ndarray, mix: float = 0.2) -> np.ndarray:
     """A small, dark room: a few decaying taps, low-passed."""
     wet = np.zeros_like(s)
-    for ms, g in [(23, 0.5), (37, 0.4), (53, 0.3), (79, 0.22), (113, 0.15)]:
+    for ms, g in [(19, 0.5), (31, 0.42), (47, 0.33), (71, 0.25), (103, 0.18), (149, 0.12)]:
         d = int(RATE * ms / 1000)
         wet[d:] += g * s[:-d]
-    k = 24
+    k = 20
     wet = np.convolve(wet, np.ones(k) / k, mode="same")
     return s + mix * wet
 
@@ -51,16 +52,17 @@ def finish(s: np.ndarray, peak: float) -> np.ndarray:
     return s / np.max(np.abs(s)) * peak
 
 
+C5, E5, G5, A5, C6, E4 = 523.25, 659.25, 783.99, 880.0, 1046.5, 329.63
+
 SOUNDS = {
-    # up a fifth, the second note a little brighter: something is ready
-    "done": lambda: finish(room(place([(0.0, note(659.25, 0.75, 0.16)), (0.11, note(987.77, 1.0, 0.22, 1.2))], 1.2)), PEAK["done"]),
+    # a C major chord rolled upward, the top note a little brighter: something is ready
+    "done": lambda: finish(room(place([(0.0, note(C5, 1.2)), (0.06, note(E5, 1.2)), (0.12, note(G5, 1.2)), (0.18, note(C6, 1.3, 1.2))], 1.5)), PEAK["done"]),
     # the same note twice, lightly: look here
-    "waiting": lambda: finish(room(place([(0.0, note(880.0, 0.5, 0.09, 0.8)), (0.13, note(880.0, 0.7, 0.14, 0.8))], 0.95)), PEAK["waiting"]),
-    # down a fourth, low and muted: it stopped
-    "failed": lambda: finish(room(place([(0.0, note(392.0, 0.7, 0.14, 0.5)), (0.14, note(293.66, 1.0, 0.2, 0.4))], 1.25)), PEAK["failed"]),
+    "waiting": lambda: finish(room(place([(0.0, note(A5, 0.6)), (0.18, note(A5, 0.9))], 1.1)), PEAK["waiting"]),
+    # down a third, darker: it stopped
+    "failed": lambda: finish(room(place([(0.0, note(E4 * 2, 0.9, 0.7)), (0.15, note(C5 * 0.75, 1.2, 0.6))], 1.4)), PEAK["failed"]),
 }
-# about as loud as macOS's own Glass (−26 LUFS) at full volume; the setting scales it down from there
-PEAK = {"done": 0.3, "waiting": 0.27, "failed": 0.25}
+PEAK = {"done": 0.28, "waiting": 0.18, "failed": 0.25}
 
 
 def main() -> None:
