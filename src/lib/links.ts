@@ -92,3 +92,17 @@ export function shortUrl(url: string): { host: string; rest: string } {
     return { host: url, rest: "" };
   }
 }
+
+/** The web addresses written in a message, in order and each once (trailing punctuation left out). */
+export function urlsIn(text: string, max = 3): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"'`]+/g)) {
+    let u = m[0].replace(/[.,;:!?…。、]+$/, "");
+    // a closing bracket belongs to the address only when it opened one
+    while (/[)\]}>]$/.test(u) && (u.match(/[([{<]/g)?.length ?? 0) < (u.match(/[)\]}>]/g)?.length ?? 0)) u = u.slice(0, -1);
+    if (!/^https?:\/\/[^/]+\.[^/]/.test(u) || out.includes(u)) continue;
+    out.push(u);
+    if (out.length >= max) break;
+  }
+  return out;
+}

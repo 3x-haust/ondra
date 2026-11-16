@@ -39,11 +39,11 @@ const make = (github: boolean) => new Marked({
         return `<div class="md-board" data-n="${boardN++}"><pre hidden>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre></div>`;
       // a diagram in Mermaid's words, drawn once its block has closed
       if ((lang ?? "").trim().toLowerCase() === "mermaid") return mermaidBlock(text, /(```|~~~)\s*$/.test(raw.trimEnd()) && raw.trimEnd().length > 3, t("그림 그리는 중"));
-      if ((lang ?? "").trim().toLowerCase() !== "svg") return false;
+      if ((lang ?? "").trim().toLowerCase() !== "svg") return codeBlock(text, lang);
       const svg = safeSvg(text);
       if (svg) return `<figure class="md-svg" title="${t("크게 보기")}">${svg}</figure>`;
       // still being written (the answer streams in): a quiet line, not the code scrolling past
-      return /<\/svg>/i.test(text) ? false : `<p class="md-svg-wait">${t("그림 그리는 중")}</p>`;
+      return /<\/svg>/i.test(text) ? codeBlock(text, lang) : `<p class="md-svg-wait">${t("그림 그리는 중")}</p>`;
     },
     link({ href, text }: Tokens.Link) {
       const safe = /^https?:\/\//.test(href) || href.startsWith("/") ? href : "";
@@ -64,6 +64,13 @@ const make = (github: boolean) => new Marked({
     },
   },
 });
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/** fenced code with a head: its language and a copy button (the code is copied as it was written) */
+function codeBlock(text: string, lang: string | undefined) {
+  const name = (lang ?? "").trim().split(/\s+/)[0] ?? "";
+  const cls = name ? ` class="language-${esc(name)}"` : "";
+  return `<div class="md-code"><div class="md-code-head"><span class="md-code-lang">${esc(name)}</span><button type="button" class="md-copy">${esc(t("복사"))}</button></div><pre><code${cls}>${esc(text)}</code></pre></div>`;
+}
 // boards in the text being parsed, numbered so each keeps its view while the text streams in
 let boardN = 0;
 /**
@@ -96,6 +103,16 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
   // a reply of another Mac's job: its pictures are there, fetched and shown from a copy here
   const host = useHost();
   const onClick = (e: MouseEvent) => {
+    const copy = (e.target as HTMLElement).closest("button.md-copy") as HTMLButtonElement | null;
+    if (copy) {
+      const code = copy.closest(".md-code")?.querySelector("pre > code")?.textContent ?? "";
+      void navigator.clipboard.writeText(code.replace(/\n$/, "")).then(() => {
+        copy.textContent = t("복사했어요");
+        copy.classList.add("done");
+        window.setTimeout(() => copy.isConnected && ((copy.textContent = t("복사")), copy.classList.remove("done")), 1500);
+      });
+      return;
+    }
     const drawing = (e.target as HTMLElement).closest("figure.md-svg");
     if (drawing) return openDrawing(drawing.innerHTML);
     const remote = (e.target as HTMLElement).closest("img.md-remote") as HTMLImageElement | null;

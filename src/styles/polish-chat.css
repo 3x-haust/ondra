@@ -2527,3 +2527,132 @@
 .lightbox .lb-board .bd-stage {
   max-height: 76vh;
 }
+
+/* fenced code: one box, its language and a copy button on a quiet head above the code */
+.md .md-code {
+  margin: 0 0 var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--code-surface);
+  overflow: hidden;
+}
+.md .md-code > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding-top: 2px;
+}
+.md .md-code-head {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 6px 0 var(--s-14);
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.md .md-code-lang {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md .md-copy {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  cursor: pointer;
+}
+.md .md-copy:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.md .md-copy.done {
+  color: var(--ok);
+}
+
+/* sites by their icons: a few overlapping beside a browser row, one in each link chip */
+.site-ico {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: var(--card);
+}
+.site-letter {
+  display: inline-grid;
+  place-items: center;
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-3);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+.site-icons {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-right: 2px;
+}
+.site-icons > .site-ico {
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+.site-icons > .site-ico + .site-ico {
+  margin-left: -5px;
+}
+
+/* the web links a message carries, under it, by their own titles */
+.link-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-6);
+  max-width: 85%;
+  margin: var(--s-6) 0 0 auto;
+}
+.link-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 300px;
+  min-width: 0;
+  padding: 6px 10px 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.link-chip:hover {
+  background: var(--hover);
+}
+.link-chip-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.link-chip-title,
+.link-chip-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-chip-title {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.link-chip-host {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
