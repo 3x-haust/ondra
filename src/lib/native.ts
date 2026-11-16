@@ -661,3 +661,11 @@ export interface OfficialLogo {
  * (a miss for a day). Only a brand name goes here, never a box's own text (ui/brandLogo.ts).
  */
 export const logoFetch = (name: string) => call<OfficialLogo | null>("logo_fetch", { name }, null);
+/** What a web page says about itself (title, description, site, icon as a data: URL); null when it can't be read. */
+export interface LinkCardInfo {
+  title?: string | null;
+  description?: string | null;
+  site?: string | null;
+  icon?: string | null;
+}
+export const linkCard = (url: string) => call<LinkCardInfo | null>("link_card", { url }, null);

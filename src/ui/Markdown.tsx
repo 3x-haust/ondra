@@ -3,8 +3,8 @@
 import { Marked, type Tokens } from "marked";
 import { rangeTilde } from "./markdownTilde";
 import { cjkStrong } from "./markdownCjk";
-import { createEffect, onCleanup } from "solid-js";
-import { fileSrc } from "../lib/native";
+import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { fileSrc, inTauri } from "../lib/native";
 import { srcOf, useHost } from "../engine/far";
 import { linkTip } from "../lib/links";
 import { linkMenu, openLink } from "./links";
@@ -15,6 +15,10 @@ import { composerFor } from "./QuoteBar";
 import { safeSvg } from "./svgSafe";
 import { langOf, tokenize, toHtml } from "./highlight";
 import { t } from "../i18n";
+import { drawMath, mathExtensions } from "./markdownMath";
+import { drawMermaidIn, mermaidBlock } from "./markdownMermaid";
+import { linkCards } from "./linkCard";
+import { nextRender } from "./renderPace";
 
 // pictures GitHub hosts (PR comments); anything else remote stays text
 const GITHUB_IMG = /^https:\/\/(github\.com\/user-attachments\/|user-images\.githubusercontent\.com\/|private-user-images\.githubusercontent\.com\/|avatars\.githubusercontent\.com\/|raw\.githubusercontent\.com\/)/;
@@ -23,15 +27,18 @@ const make = (github: boolean) => new Marked({
   gfm: true,
   breaks: true,
   tokenizer: { del: rangeTilde, emStrong: cjkStrong },
+  extensions: mathExtensions,
   renderer: {
     html() {
       return "";
     },
     // a picture the agent drew: shown when it is a clean drawing, else the code as it was
-    code({ text, lang }: Tokens.Code) {
+    code({ text, lang, raw }: Tokens.Code) {
       // an explanation drawn stroke by stroke: a place for it, filled in once the HTML is in
       if ((lang ?? "").trim().toLowerCase() === "board")
         return `<div class="md-board" data-n="${boardN++}"><pre hidden>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre></div>`;
+      // a diagram in Mermaid's words, drawn once its block has closed
+      if ((lang ?? "").trim().toLowerCase() === "mermaid") return mermaidBlock(text, /(```|~~~)\s*$/.test(raw.trimEnd()) && raw.trimEnd().length > 3, t("그림 그리는 중"));
       if ((lang ?? "").trim().toLowerCase() !== "svg") return false;
       const svg = safeSvg(text);
       if (svg) return `<figure class="md-svg" title="${t("크게 보기")}">${svg}</figure>`;
@@ -41,8 +48,11 @@ const make = (github: boolean) => new Marked({
     link({ href, text }: Tokens.Link) {
       const safe = /^https?:\/\//.test(href) || href.startsWith("/") ? href : "";
       if (!safe) return text;
-      // where it goes, when the words don't say (a bare URL already does)
-      const tip = linkTip(plain(safe), text);
+      // a numbered source ("[1]"): a small mark, its card says where it goes
+      const n = /^\[?(\d{1,3})\]?$/.exec(text.trim());
+      if (n && safe.startsWith("http")) return `<a class="md-cite" data-href="${encodeURI(safe)}">${n[1]}</a>`;
+      // where it goes, when the words don't say (a bare URL already does); a web link's card says it in the app
+      const tip = inTauri && safe.startsWith("http") ? "" : linkTip(plain(safe), text);
       return `<a data-href="${encodeURI(safe)}"${tip ? ` title="${tip.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""}>${text}</a>`;
     },
     // local pictures (screenshots the agent took) show inline; remote ones stay a link
@@ -107,14 +117,30 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
   let el!: HTMLDivElement;
   const boards = new Map<number, BoardView>();
   onCleanup(() => boards.forEach((b) => park(b)));
+  // a long reply streaming in is re-rendered no faster than it can be drawn: the next render waits
+  // twice as long as the last one took (at most 2 s), and what came in meanwhile goes in at once
+  const [text, setText] = createSignal(props.text);
+  let readyAt = 0;
+  let began = 0;
+  let pending: number | undefined;
+  createEffect(on(() => props.text, (v) => {
+    clearTimeout(pending);
+    const wait = readyAt - performance.now();
+    if (wait <= 0) setText(v);
+    else pending = window.setTimeout(() => setText(props.text), wait);
+  }, { defer: true }));
+  onCleanup(() => clearTimeout(pending));
+  onMount(() => linkCards(el));
   const html = () => {
     boardN = 0;
-    return (props.github ? mdGithub : md).parse(spacedPaths(props.text), { async: false }) as string;
+    began = performance.now();
+    return (props.github ? mdGithub : md).parse(spacedPaths(text()), { async: false }) as string;
   };
   // colour fenced code once the HTML is in; a block keeps its plain text until then
   createEffect(() => {
-    void props.text;
+    void text();
     queueMicrotask(() => {
+      if (el) (drawMath(el), drawMermaidIn(el));
       // a picture that needs a GitHub login the app doesn't have: its link instead
       for (const img of el?.querySelectorAll<HTMLImageElement>("img.md-remote") ?? []) {
         const swap = () => {
@@ -159,11 +185,13 @@ export function Markdown(props: { text: string; class?: string; github?: boolean
           }
         });
       }
+      const now = performance.now();
+      readyAt = nextRender(now, now - began);
     });
   });
   // runs after the HTML is in; again when a picture from that Mac has come
   createEffect(() => {
-    void props.text;
+    void text();
     const h = host();
     if (!h || !el) return;
     for (const img of el.querySelectorAll<HTMLImageElement>("img.md-img[data-path]")) {

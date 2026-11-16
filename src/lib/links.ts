@@ -80,3 +80,15 @@ export function linkTip(href: string, text: string): string | undefined {
   if (!href || bare(text) === bare(href)) return undefined;
   return isWeb(href) ? href.replace(/^https?:\/\/(www\.)?/i, "") : href;
 }
+
+/** host without www., then the path when there is one ("example.com/docs/a") */
+export function shortUrl(url: string): { host: string; rest: string } {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    const rest = decodeURI(u.pathname + u.search).replace(/\/$/, "");
+    return { host, rest };
+  } catch {
+    return { host: url, rest: "" };
+  }
+}
