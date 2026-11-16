@@ -6,6 +6,9 @@
 #                      ScreenCaptureKit window capture + an off-screen display to hold
 #                      background windows), signed with cuhost.entitlements. If a
 #                      per-source header (cuhost.h) exists it is imported.
+#   - ondra-dictate:   the composer's dictation (microphone + on-device speech recognition),
+#                      with dictate.plist linked in as its Info.plist and signed with
+#                      dictate.entitlements.
 #   - ondra-browser:   the browser tool jobs and the app drive Chrome with (browser/,
 #                      one Swift module: CDP client, session daemon, snapshot, stream).
 #   - ondra-bgguard.dylib: injected into an app cuhost starts in the background so the
@@ -17,16 +20,20 @@ arch="$(uname -m)"
 case "$arch" in arm64) triple=aarch64-apple-darwin ;; *) triple=x86_64-apple-darwin ;; esac
 mkdir -p "$here/../binaries"
 
+# A 4th argument is an Info.plist linked into the binary: a command-line tool has no bundle
+# to read usage strings from, and the privacy APIs quit a process without them.
 build() {
-  name="$1"; src="$2"; ents="$3"
+  name="$1"; src="$2"; ents="$3"; plist="$4"
   out="$here/../binaries/$name-$triple"
   header="$here/${src%.swift}.h"
   [ -f "$header" ] || header=""
-  if [ -f "$out" ] && [ "$out" -nt "$here/$src" ] && { [ -z "$ents" ] || [ "$out" -nt "$here/$ents" ]; } && { [ -z "$header" ] || [ "$out" -nt "$header" ]; }; then
+  if [ -f "$out" ] && [ "$out" -nt "$here/$src" ] && { [ -z "$ents" ] || [ "$out" -nt "$here/$ents" ]; } && { [ -z "$header" ] || [ "$out" -nt "$header" ]; } && { [ -z "$plist" ] || [ "$out" -nt "$here/$plist" ]; }; then
     echo "$name: up to date"
     return 0
   fi
-  xcrun swiftc -O -target "$arch-apple-macos13.0" ${header:+-import-objc-header "$header"} "$here/$src" -o "$out"
+  xcrun swiftc -O -target "$arch-apple-macos13.0" ${header:+-import-objc-header "$header"} \
+    ${plist:+-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$here/$plist"} \
+    "$here/$src" -o "$out"
   if [ -n "$ents" ]; then
     /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --entitlements "$here/$ents" "$out"
     /usr/bin/codesign --verify --strict "$out"
@@ -84,6 +91,7 @@ build_remote() {
 
 build ondra-simhelper simhelper.swift ""
 build ondra-cuhost cuhost.swift cuhost.entitlements
+build ondra-dictate dictate.swift dictate.entitlements dictate.plist
 build_browser
 build_guard
 build_remote

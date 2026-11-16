@@ -1,5 +1,5 @@
 // Puts everything Ondra needs in place, so installing the app is the only step a user takes:
-//   • the Swift helpers (ondra-browser, ondra-cuhost, ondra-simhelper) and ondra-remote,
+//   • the Swift helpers (ondra-browser, ondra-cuhost, ondra-simhelper, ondra-dictate) and ondra-remote,
 //     built from source by src-tauri/helpers/build.sh → src-tauri/binaries/<name>-<triple>
 // and the components, which live outside the app's update package (scripts/components.mjs):
 //   • the agent engine (3xhaustPi coding agent, one binary, and its support files) → src-tauri/resources/engine
@@ -34,7 +34,7 @@ const log = (msg) => console.log(`bundle: ${msg}`);
 mkdirSync(binDir, { recursive: true });
 mkdirSync(resDir, { recursive: true });
 
-// our own helpers (browser tool, computer use, iOS simulator, remote) are built from source here
+// our own helpers (browser tool, computer use, iOS simulator, dictation, remote) are built from source here
 execFileSync("sh", [join(tauri, "helpers", "build.sh")], { stdio: "inherit" });
 
 // ── native static binary analysis (engine, decompiler, libraries and source) ──

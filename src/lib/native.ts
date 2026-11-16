@@ -322,7 +322,7 @@ export const toolStatus = () =>
   call<ToolStatus>("tool_status", undefined, { browserVersion: "1.0.0", chromeReady: true, desktopVersion: "0.4.7", accessibility: true, screenRecording: true });
 /** Ask macOS for Accessibility (shows the system prompt once). */
 export const requestAccessibility = () => call<boolean>("request_accessibility", undefined, true);
-export const openPrivacySettings = (pane: "accessibility" | "screen") => call<void>("open_privacy_settings", { pane });
+export const openPrivacySettings = (pane: "accessibility" | "screen" | "microphone" | "speech") => call<void>("open_privacy_settings", { pane });
 export const remoteStart = () => call<void>("remote_start");
 export const remoteStop = () => call<void>("remote_stop");
 export const remoteCmd = (cmd: Record<string, unknown>) => call<void>("remote_cmd", { cmd });
@@ -334,6 +334,16 @@ export const remoteDevices = () => call<{ id: string; name: string; addedAt: num
 export const remoteForget = (id: string) => call<{ id: string; name: string; addedAt: number; lastSeen: number }[] | null>("remote_forget", { id });
 export const onRemote = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
   inTauri ? listen<Record<string, unknown>>("remote", (e) => fn(e.payload)) : Promise.resolve(() => {});
+/**
+ * Dictation (bundled ondra-dictate: the microphone and on-device speech recognition). `id`
+ * names the run: its lines arrive as "dictate" events carrying it, {id, end: true} last.
+ */
+export const dictateStart = (id: number, lang: string) => call<void>("dictate_start", { id, lang });
+/** stop recording: the text follows as {final} */
+export const dictateStop = (id: number) => call<void>("dictate_stop", { id });
+export const dictateCancel = (id: number) => call<void>("dictate_cancel", { id });
+export const onDictate = (fn: (ev: Record<string, unknown>) => void): Promise<UnlistenFn> =>
+  inTauri ? listen<Record<string, unknown>>("dictate", (e) => fn(e.payload)) : Promise.resolve(() => {});
 export const permissionGuide = (pane: "accessibility" | "screen", title: string, sub: string) => call<void>("permission_guide", { pane, title, sub });
 /** Env every worker gets: bundled tools on PATH, its tab in the shared browser, keychain sign-in, artifacts dir. */
 export const workerEnv = async (workerId: string, space?: string) => {

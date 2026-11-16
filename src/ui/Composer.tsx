@@ -1,7 +1,8 @@
 // The one input (a new request, or a follow-up to one task).
 // Card with the text area; a bar below it: [+] and left chips, right chips,
-// send ↔ stop. Strips (paused, plan, background…) dock on top, an optional
-// row sits under the card. Files can be attached with + or dropped on the window.
+// the mic (dictation, VoiceButton.tsx), send ↔ stop. Strips (paused, plan,
+// background…) dock on top, an optional row sits under the card. Files can be
+// attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line; while a task works, Enter puts the
 // words in now and Cmd+Enter queues them for after.
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
@@ -20,6 +21,8 @@ import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
 import { midTrim } from "./bits";
 import { isPastedText, longPaste } from "./paste";
 import { t } from "../i18n";
+import { cancelDictation, DictateLive, dictating, VoiceButton } from "./VoiceButton";
+import { insertWords } from "./dictation";
 
 /** A /command that ran, for the log a feedback report carries: its name, not what followed (a skill's own name stays out). */
 const ran = (name: string) => {
@@ -152,12 +155,16 @@ export function Composer(props: {
   ];
   const [files, setFiles] = createSignal<string[]>([]);
   let el!: HTMLTextAreaElement;
+  /** this input, as the owner of a dictation */
+  const voice = {};
   // each chat keeps its own unsent text: saved as it is typed, brought back when the
   // chat (or a new input for it) shows up
   createEffect(
     on(
       () => props.draftKey,
       (key) => {
+        // words still being heard were meant for the chat that was here
+        cancelDictation(voice);
         const d = (key !== undefined && drafts.get(key)) || { text: "", files: [] };
         setText(d.text);
         setFiles(d.files);
@@ -339,6 +346,16 @@ export function Composer(props: {
     composers.add(me);
     onCleanup(() => composers.delete(me));
   });
+  /** dictated words, where the cursor is (over a selection) */
+  const dictated = (words: string) => {
+    const at = insertWords(el.value, el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length, words);
+    setText(at.value);
+    el.value = at.value;
+    el.focus();
+    el.setSelectionRange(at.caret, at.caret);
+    grow();
+    props.onTyping?.();
+  };
   const insert = (t: string) => {
     const v = el.value;
     const next = v && !v.endsWith(" ") && !t.startsWith("/") ? `${v} ${t}` : t.startsWith("/") ? `${t}${v ? ` ${v}` : ""}` : `${v}${t}`;
@@ -476,7 +493,7 @@ export function Composer(props: {
     for (const k of ends) window.removeEventListener(k, up, true);
     window.removeEventListener("blur", left);
   });
-  const want = () => !!props.big || engaged() || !!text() || files().length > 0 || quotes().length > 0 || plusOpen() || !!pick();
+  const want = () => !!props.big || engaged() || dictating(voice) || !!text() || files().length > 0 || quotes().length > 0 || plusOpen() || !!pick();
   // the to-do list and other strips above the input work on their own: touching them never opens the input
   const inStrips = (n: EventTarget | null) => n instanceof Element && !!n.closest(".strips");
   const [open, setOpenState] = createSignal(want());
@@ -768,6 +785,7 @@ export function Composer(props: {
             }
           }}
         />
+        <DictateLive owner={voice} />
         <div class="composer-bar">
           <div class="plus-wrap">
             <button
@@ -817,6 +835,9 @@ export function Composer(props: {
           </div>
           <div class="composer-meta">{props.left}</div>
           <div class="composer-right">{props.right}</div>
+          <Show when={inTauri}>
+            <VoiceButton owner={voice} onText={dictated} />
+          </Show>
           <Show
             when={props.running && props.onStop && !text().trim()}
             fallback={

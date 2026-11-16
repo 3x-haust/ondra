@@ -50,6 +50,80 @@
   background: var(--hover);
   color: var(--ink);
 }
+/* dictation (ui/VoiceButton.tsx): the mic is a ghost button like +; recording, it turns
+   red, with a small level meter and the time beside it and the words so far under the text */
+.composer-wrap .dictate-btn.rec,
+.composer-wrap .dictate-btn.rec:hover {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.composer-wrap .dictate-btn.rec .icon {
+  animation: dictate-pulse 1.6s ease-in-out infinite;
+}
+@keyframes dictate-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.dictate-spin {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  border-top-color: var(--ink-3);
+  animation: dictate-spin 0.8s linear infinite;
+}
+@keyframes dictate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.dictate-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.dictate-meter i {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--bad);
+  opacity: 0.75;
+  transform-origin: center;
+  transition: transform 60ms linear;
+}
+.dictate-clock {
+  flex-shrink: 0;
+  min-width: 3.2ch;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.dictate-live {
+  padding: 0 var(--s-16) var(--s-4);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-md);
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 88px;
+  overflow-y: auto;
+}
+.dictate-live.waiting {
+  font-size: var(--fs-sm);
+  color: var(--ink-4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-wrap .dictate-btn.rec .icon,
+  .dictate-spin {
+    animation: none;
+  }
+  .dictate-meter i {
+    transition: none;
+  }
+}
 /* chips in the bar: h 28, ghost, quiet until hovered */
 .composer-bar .chip {
   height: var(--h-sm);

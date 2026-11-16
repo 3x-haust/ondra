@@ -10,7 +10,7 @@ import {
   Smartphone, Sparkles, Square, SquarePen, SquareTerminal, ArrowLeft, CircleCheck, Terminal, Trash2, Video, Wrench, X, Zap, Puzzle, Bookmark,
   GitMerge, Paperclip, FolderOpen, Copy, Pencil, Lock, LockOpen, Pin, Archive, ArrowUpFromLine, GitCommitHorizontal, Minimize2, Bell, CopyPlus, Slash, AtSign, Columns3, Workflow, Repeat, Grip, SmilePlus, Palette, Minus, Maximize, LayoutGrid, Binary, CircleDot,
   Flag, Undo2, Hand, CircleArrowUp, FolderPlus, Keyboard, Languages, SunMoon, Columns2, Rows2, Maximize2, Equal, ChevronUp, WrapText,
-  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote, Eye, EyeOff, Unplug,
+  ArrowDown, ChevronsDownUp, FileInput, FoldVertical, Image as ImageIcon, List, ListTree, TextQuote, Eye, EyeOff, Unplug, Mic,
 } from "lucide-solid";
 
 const map: Record<string, Component<any>> = {
@@ -30,6 +30,7 @@ const map: Record<string, Component<any>> = {
   keyboard: Keyboard, language: Languages, theme: SunMoon, smilePlus: SmilePlus, palette: Palette,
   splitRight: Columns2, splitDown: Rows2, zoom: Maximize2, equal: Equal, up: ChevronUp, wrap: WrapText,
   arrowUp: ArrowUp, arrowDown: ArrowDown, goto: FileInput, listTree: ListTree, listFlat: List, collapseAll: ChevronsDownUp, fold: FoldVertical, image: ImageIcon,
+  mic: Mic,
 };
 
 /** `fill`: the shape filled in (a pinned pin), else outline only. */
