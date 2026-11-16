@@ -242,6 +242,7 @@ export default {
   "사이드챗으로": "Continue in side chat",
   "작업에 보내기": "Send to task",
   "메인에 보내기": "Send to Main",
+  "btw 답": "btw answer",
   "옆에서 묻기": "Ask on the side",
   "btw 없음 · /btw 뒤에 질문을 적어요": "No btw yet · type a question after /btw",
   "기본 스킬": "Built-in skill",

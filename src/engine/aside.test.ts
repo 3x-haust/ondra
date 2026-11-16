@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { reconcile } from "solid-js/store";
 import { freshState, setState } from "../state/store";
 import type { Task } from "../state/types";
-import { btw, btwIndex, btwList, btwPrompt, closeBtw, showBtw } from "./aside";
+import { btw, btwForward, btwIndex, btwList, btwPrompt, closeBtw, showBtw } from "./aside";
 
 const job = (id: string, title: string, extra: Partial<Task> = {}): Task => ({
   id, space: "home", topic: "Example", title, ask: `Do ${title}`, cwd: "/repo", status: "done",
@@ -31,6 +31,14 @@ describe("btw", () => {
     expect(prompt).toContain("summary: Rejected under 2.1(a)");
     expect(prompt).toContain("user: how is the release going?");
     expect(prompt).toContain("/data/sessions");
+  });
+});
+
+describe("btw forward", () => {
+  it("sends the question with its answer, not the question alone", () => {
+    setState("settings", "language", "ko");
+    expect(btwForward("왜 빌드가 깨졌어?", "  lockfile이 오래됐어요.\n")).toBe("왜 빌드가 깨졌어?\n\nbtw 답:\nlockfile이 오래됐어요.");
+    expect(btwForward("왜 빌드가 깨졌어?", "")).toBe("왜 빌드가 깨졌어?");
   });
 });
 
