@@ -22,7 +22,7 @@ import { expand } from "./rpc";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
-import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, unionSources, userOwned } from "./memory";
+import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, sourcesOf, unionSources, userOwned } from "./memory";
 import { inTauri, pathsExist, skillSave } from "../lib/native";
 import { projectById, projectFor, setState, spaceById, state, taskById, uid } from "../state/store";
 import type { Memory, MemoryConflict, MemoryKind, SpaceId, Task } from "../state/types";
@@ -144,7 +144,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
     `You keep the long-term memory of a coding agent for the space "${spaceById(space)?.label ?? space}". Tidy it. Be conservative: when unsure, change nothing.`,
     "",
     "Do these:",
-    "1. merge: pieces that say the same thing → keep one (prefer the user's own), drop the others, optionally a better merged text (one short sentence, in the language the pieces are in). Never drop or reword a user's own piece.",
+    "1. merge: pieces that say the same thing → keep one (prefer the user's own), drop the others, optionally a better merged text (one short sentence, in the language the pieces are in). Never reword a user's own piece. Two of the user's own that say the same thing in other words: still list one in drop (both stay; it counts as said again).",
     "2. retire: when two pieces contradict, the older one (the newer replaces it). Never retire a user's own piece: when a piece that is not the user's own contradicts one that is, put the pair in conflict instead; the user's own stays and the other goes.",
     "3. keys: for EVERY piece without {keys}, 4–8 related search words a future task might use for it: synonyms, Korean and English forms, the general topic (e.g. 'iOS 빌드 실패' → 'Xcode, 시뮬레이터, build error, 캐시, 빌드 오류'). Short words only.",
     "4. about: for each piece, 0–3 named things it is about (tools, services, libraries, products, projects), in their usual spelling (e.g. 'Supabase', 'Next.js', 'GitHub').",
@@ -244,12 +244,20 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
     if (!keep) continue;
     for (const id of g.drop ?? []) {
       const d = live(id);
-      if (!d || d.id === keep.id || userOwned(d) || d.invalidAt) continue;
+      if (!d || d.id === keep.id || d.invalidAt) continue;
+      // the user said it again in other words: their words both stay (never merged away), but it
+      // counts as said again on the one kept, once, so a rule repeated in new words still grows
+      if (userOwned(d)) {
+        if (d.echoOf === keep.id) continue;
+        setState("memory", (m) => m.id === d.id, { echoOf: keep.id });
+        setState("memory", (m) => m.id === keep.id, (m) => ({ seen: (m.seen ?? 1) + 1, updatedAt: Math.max(now, m.updatedAt ?? 0) }));
+        continue;
+      }
       retireMemory(d.id, keep.id, "같은 기억과 합쳤어요");
       // merged away = it came up again; where both came from stays with the one kept
       setState("memory", (m) => m.id === keep.id, (m) => {
         const sources = unionSources(m, d);
-        return { seen: (m.seen ?? 1) + (d.seen ?? 1), ...(sources.length ? { sources } : {}) };
+        return { seen: (m.seen ?? 1) + (d.seen ?? 1), updatedAt: Math.max(now, m.updatedAt ?? 0), ...(sources.length ? { sources } : {}) };
       });
       n.merged++;
     }
@@ -492,22 +500,24 @@ export const CHECK_SEEN = 2;
 /** only a rule said again lately: one said twice long ago (before this existed) is left alone */
 const CHECK_RECENT_MS = 7 * 24 * 60 * 60_000;
 
-/** A project rule the user had to say again: worth making it hold by itself. */
-export function wantsCheck(m: Memory, now = Date.now()): boolean {
-  return (
-    isLive(m) &&
-    kindOf(m) === "rule" &&
-    m.scope === "project" &&
-    !!m.project &&
-    !m.checkTask &&
-    (m.seen ?? 1) >= CHECK_SEEN &&
-    now - (m.updatedAt ?? m.createdAt) < CHECK_RECENT_MS
-  );
+/**
+ * Why a piece is worth making hold by itself: a project rule the user had to say again (in any
+ * words), or a lesson the quiet pass found as the same trouble in 3+ jobs. Neither, or not lately: none.
+ */
+export function checkReason(m: Memory, now = Date.now()): "rule" | "lesson" | undefined {
+  if (!isLive(m) || m.scope !== "project" || !m.project || m.checkTask || now - (m.updatedAt ?? m.createdAt) >= CHECK_RECENT_MS) return undefined;
+  const k = kindOf(m);
+  if (k === "rule" && (m.seen ?? 1) >= CHECK_SEEN) return "rule";
+  if (k === "lesson" && sourcesOf(m).length >= MIN_EVIDENCE) return "lesson";
+  return undefined;
 }
+export const wantsCheck = (m: Memory, now = Date.now()) => !!checkReason(m, now);
 
-export const checkAsk = (rule: string) =>
+export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0) =>
   [
-    `The user had to say this rule for this project more than once: "${rule}"`,
+    why === "lesson"
+      ? `The same trouble came up in ${jobs || MIN_EVIDENCE} different jobs in this project, and was written down as: "${rule}"`
+      : `The user had to say this rule for this project more than once: "${rule}"`,
     "Make it hold by itself so no one has to say it again: turn it into an automatic check in this repo, the lightest one that fits: a lint rule (the project's linter config, or a small custom rule), a type, a test, or a step in the check or CI scripts the project already runs.",
     "- The check has to pass on the code as it is: fix the few places that break it. If many places break it, change nothing and say so.",
     "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on a small bad example you don't keep.",
@@ -542,7 +552,7 @@ export async function growChecks(only?: SpaceId, now = Date.now()): Promise<numb
       cwd: m.project,
       title: tr("규칙을 자동 검사로 · {rule}", { rule: m.text.slice(0, 40) }),
       topic: tr("자동 검사"),
-      ask: checkAsk(m.text),
+      ask: checkAsk(m.text, checkReason(m, now), sourcesOf(m).length),
       display: tr("같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}", { rule: m.text }),
       weight: "light",
     });

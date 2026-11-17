@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setState, state } from "../state/store";
 import type { Entry, Memory, Task } from "../state/types";
-import { applyPlan, CHECK_SEEN, checkAsk, growChecks, jobMaterial, jobsShown, MIN_ANSWERS, tidyPrompt, wantsCheck, type Plan } from "./tidy";
+import { applyPlan, CHECK_SEEN, checkAsk, checkReason, growChecks, jobMaterial, jobsShown, MIN_ANSWERS, MIN_EVIDENCE, tidyPrompt, wantsCheck, type Plan } from "./tidy";
 import * as tasks from "./tasks";
 
 const H = 3_600_000;
@@ -106,5 +106,33 @@ describe("a rule said again becomes a check", () => {
     expect(await growChecks(undefined, now)).toBe(0);
     expect(spy).not.toHaveBeenCalled();
     setState("settings", "ruleChecks", true);
+  });
+});
+
+describe("the way up widens", () => {
+  const now = 100 * DAY;
+  it("a rule the user said again in other words counts as said again, once, and both stay", () => {
+    const a = piece({ id: "a", text: "색은 하드코딩하지 말고 토큰을 써요", seen: 1 });
+    const b = piece({ id: "b", text: "컴포넌트 색상값 직접 쓰지 마, 디자인 토큰으로", seen: 1 });
+    reset([a, b]);
+    run({ merge: [{ keep: "a", drop: ["b"] }] }, []);
+    const kept = state.memory.find((m) => m.id === "a")!;
+    expect(kept.seen).toBe(2);
+    expect(state.memory.find((m) => m.id === "b")).toMatchObject({ echoOf: "a" });
+    expect(state.memory.every((m) => !m.invalidAt)).toBe(true);
+    // the next pass sees the same pair: not counted twice
+    run({ merge: [{ keep: "a", drop: ["b"] }] }, []);
+    expect(state.memory.find((m) => m.id === "a")!.seen).toBe(2);
+    // and now it is worth a check
+    expect(wantsCheck(state.memory.find((m) => m.id === "a")!)).toBe(true);
+  });
+
+  it(`a lesson found in ${MIN_EVIDENCE}+ jobs is worth a check too, asked as trouble seen again`, () => {
+    const l = piece({ kind: "lesson", by: "agent", text: "main 프로세스 코드를 렌더러에서 import 하면 화면이 버벅여요", sources: ["j1", "j2", "j3"], updatedAt: now - DAY });
+    expect(checkReason(l, now)).toBe("lesson");
+    expect(checkReason({ ...l, sources: ["j1", "j2"] }, now)).toBeUndefined();
+    expect(checkReason(piece({ seen: CHECK_SEEN, updatedAt: now - DAY }), now)).toBe("rule");
+    expect(checkAsk(l.text, "lesson", 3)).toMatch(/^The same trouble came up in 3 different jobs/);
+    expect(checkAsk(l.text, "lesson", 3)).toContain('{"type":"merge","kind":"fix"}');
   });
 });
