@@ -122,7 +122,7 @@ Answers can draw a step-by-step board, build a 3D model you can turn, or lay out
 
 ## And the rest
 
-- **Memory:** decide once and it remembers. Keep preferences and lessons, or import existing notes; automatic saving can be turned off.
+- **Memory:** decide once and it remembers. Answer the same question the same way and it stops asking; say a project rule twice and a task turns it into an automatic check, like a lint rule or a test. Keep preferences and lessons, or import existing notes; automatic saving can be turned off.
 - **Routines:** daily work becomes a routine that runs on schedule while Ondra is open and the Mac is awake.
 - **Another Mac:** run tasks on your other Mac's projects. The work shows up here, end-to-end encrypted in between.
 - **`/btw`:** ask a quick question on the side while the work runs, without interrupting it.

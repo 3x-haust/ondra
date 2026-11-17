@@ -24,7 +24,7 @@ import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
 import { addMemory, forgotten, isLive, KINDS, kindLabel, kindOf, placeOf, retireMemory, unionSources, userOwned } from "./memory";
 import { inTauri, pathsExist, skillSave } from "../lib/native";
-import { projectById, setState, spaceById, state, uid } from "../state/store";
+import { projectById, projectFor, setState, spaceById, state, taskById, uid } from "../state/store";
 import type { Memory, MemoryConflict, MemoryKind, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { memorySentence, t as tr } from "../i18n";
@@ -34,6 +34,8 @@ const EVERY_MS = 6 * 60 * 60_000;
 export const WINDOW = 30;
 /** different jobs a pattern needs */
 export const MIN_EVIDENCE = 3;
+/** different jobs where the user answered a question the same way before it stops being asked */
+export const MIN_ANSWERS = 2;
 /** characters of job material one call gets (new jobs first) */
 const JOBS_BUDGET = 16_000;
 const KIND_IDS = new Set<MemoryKind>(KINDS.map((k) => k.id));
@@ -77,6 +79,11 @@ export function jobMaterial(t: Task, full: boolean): JobLines {
     else if (e.kind === "error") errors.push(e.text);
     else if (e.kind === "tool" && e.tool.ok === false && !e.tool.stopped && (e.tool.kind === "bash" || e.tool.kind === "test")) failed.push({ cmd: e.tool.target.replace(/\s+/g, " ").trim().slice(0, 100), shell: e.tool.shellId });
   }
+  // the user's answers to the job's questions (decide() writes them as `"question" → answer`)
+  const answered = (t.entries ?? [])
+    .filter((e): e is Extract<typeof e, { kind: "user" }> => e.kind === "user" && /^".{4,300}" → .{1,120}$/s.test(e.text))
+    .map((e) => e.text.replace(/\s+/g, " ").trim().slice(0, 240))
+    .slice(-3);
   const tail = (id?: string) => (id ? (t.shells ?? []).find((s) => s.id === id)?.tail : undefined);
   const out = [...new Set(failed.map((f) => errorLine(tail(f.shell))).filter(Boolean))].slice(0, 2);
   const err = (t.error ?? errors[errors.length - 1] ?? "").split("\n").find((l) => l.trim())?.trim().slice(0, 200) ?? "";
@@ -90,6 +97,7 @@ export function jobMaterial(t: Task, full: boolean): JobLines {
     [
       ["Asked", t.ask.replace(/\s+/g, " ").trim().slice(0, full ? 400 : 160)],
       ["Result", (t.summary ?? "").trim().slice(0, full ? 900 : 200)],
+      ["Answered", answered.join(" · ")],
       ["Notes", counted(notes, 5).join(" · ")],
       ["Failed", counted(failed.map((f) => f.cmd), 4).join(" · ")],
       ["Output", out.join(" · ")],
@@ -104,7 +112,7 @@ const flat = (s: string) => s.replace(/[`"'“”‘’]/g, "").replace(/\s+/g, 
 /** Is the quote really in what these jobs said (whitespace and quote marks aside)? */
 export function grounded(quote: unknown, mats: JobLines[]): boolean {
   if (typeof quote !== "string") return false;
-  const q = flat(quote.replace(/^\s*(asked|result|notes|failed|output|error|subtask failed)\s*:\s*/i, ""));
+  const q = flat(quote.replace(/^\s*(asked|result|answered|notes|failed|output|error|subtask failed)\s*:\s*/i, ""));
   if (q.length < 5 || q.length > 300) return false;
   return mats.some((m) => m.lines.some(([, v]) => flat(v).includes(q)));
 }
@@ -130,7 +138,7 @@ export function jobsShown(recent: Task[], fresh: Set<string>, learn: Set<string>
   return { shown, mats, text: shown.map((t) => text.get(t.id)!) };
 }
 
-export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn: boolean, patterns: boolean): string {
+export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn: boolean, patterns: boolean, answers = false): string {
   const lines = list.map((m) => `- [${m.id}] (${kindOf(m)}${userOwned(m) ? ", user's own" : ""}${m.scope === "project" ? `, project ${m.project}` : m.scope === "global" ? ", everywhere" : ""}) ${m.text}${m.keys?.length ? `  {keys: ${m.keys.join(", ")}}` : ""}`);
   return [
     `You keep the long-term memory of a coding agent for the space "${spaceById(space)?.label ?? space}". Tidy it. Be conservative: when unsure, change nothing.`,
@@ -151,10 +159,15 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
           `7. patterns: a lesson or procedure that recurs across at least ${MIN_EVIDENCE} different jobs below (the same failure, the same fix, the same slow or repeated step, the same setup), with at least one job marked [new]. One piece per pattern, citing every job it shows in. Read the Notes, Failed, Output and Error lines and how long jobs took, not only the results. E.g. "이 프로젝트 dev 서버는 3217 포트를 써요 — 이미 떠 있으면 다시 띄우지 말고 curl로 확인해요", "acme는 pnpm test 전에 pnpm build가 필요해요". Skip what memory already says. Usually there is none.`,
         ]
       : []),
-    ...(learn || patterns
+    ...(answers
+      ? [
+          `8. answers: a question jobs asked the user (the Answered lines, \`"question" → answer\`) that the user answered the same way in at least ${MIN_ANSWERS} different jobs below, with at least one job marked [new]. One decision piece per such question, so future jobs do it without asking: when the situation comes up, what to do (e.g. "배포 전 확인을 물으면 사용자는 항상 '스테이징 먼저'를 골라요 — 묻지 않고 스테이징에 먼저 올려요"). Skip questions about merging, a PR or discarding a job's branch (Ondra keeps those itself), answers that differ between jobs, and choices about one job's own content (a name, a wording). Usually there is none.`,
+        ]
+      : []),
+    ...(learn || patterns || answers
       ? [
           "",
-          `Each ${learn && patterns ? "learn or pattern" : learn ? "learn" : "pattern"} piece: ${memorySentence()}, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved: the user's own stays).`,
+          `Each ${[learn && "learn", patterns && "pattern", answers && "answers"].filter(Boolean).join(" or ")} piece: ${memorySentence()}, no temp paths, ids or localhost URLs. "quote": a short phrase (under 120 characters) copied exactly from a line of a cited job below, without its label; a piece whose quote is not there is thrown away. If it contradicts a user's own piece, set "against" to that piece's id (it is not saved: the user's own stays).`,
         ]
       : []),
     "",
@@ -167,6 +180,7 @@ export function tidyPrompt(space: SpaceId, list: Memory[], jobs: string[], learn
       '"kind":{"id":"rule"}',
       ...(learn ? ['"learn":[{"job":"id","quote":"...","text":"...","kind":"lesson","project":true}]'] : []),
       ...(patterns ? ['"patterns":[{"jobs":["id","id","id"],"quote":"...","text":"...","kind":"procedure","project":true}]'] : []),
+      ...(answers ? ['"answers":[{"jobs":["id","id"],"quote":"...","text":"...","project":true}]'] : []),
     ].join(",")}}\n\`\`\``,
     "",
     "# Memory pieces",
@@ -185,6 +199,7 @@ export type Plan = {
   kind?: Record<string, string>;
   learn?: Filed[];
   patterns?: Filed[];
+  answers?: Filed[];
 };
 
 /** What one call was given about the space's finished jobs. */
@@ -317,6 +332,17 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
     }
     file(p, ids.map((id) => byId.get(id)!).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)));
   }
+  // the same answer in 2+ jobs (one of them new): a decision, so the question isn't asked again;
+  // the quote has to come from an Answered line, the user's own answer, not the job's words
+  for (const p of plan.answers ?? []) {
+    const ids = [...new Set(Array.isArray(p.jobs) ? p.jobs : [])].filter((id): id is string => typeof id === "string" && byId.has(id));
+    const answeredIn = (id: string) => (seen.mats.get(id)?.lines ?? []).filter(([k]) => k === "Answered");
+    if (ids.length < MIN_ANSWERS || !ids.some((id) => seen.fresh.has(id)) || !grounded(p.quote, ids.map((id) => ({ id, head: "", lines: answeredIn(id) })))) {
+      n.dropped++;
+      continue;
+    }
+    file({ ...p, kind: "decision" }, ids.map((id) => byId.get(id)!).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)));
+  }
   return n;
 }
 
@@ -377,12 +403,15 @@ export async function tidyMemory(force = false, only?: SpaceId) {
       const fresh = recent.filter((t) => (t.finishedAt ?? 0) > cursor && !seen.has(t.id));
       const learn = new Set(fresh.filter((t) => learnable(t, seen, cursor)).slice(0, 6).map((t) => t.id));
       const patterns = fresh.length > 0 && recent.length >= MIN_EVIDENCE;
-      const needs = learn.size || patterns || list.some((m) => !m.keys?.length) || (force && list.length > 1);
+      // a new job with an answer, and another job answered before it: maybe the same question
+      const answered = (t: Task) => (t.entries ?? []).some((e) => e.kind === "user" && /^".{4,300}" → /s.test(e.text));
+      const answers = fresh.some(answered) && recent.filter(answered).length >= MIN_ANSWERS;
+      const needs = learn.size || patterns || answers || list.some((m) => !m.keys?.length) || (force && list.length > 1);
       if (!needs) continue;
       const freshIds = new Set(fresh.map((t) => t.id));
-      const given = jobsShown(patterns ? recent : recent.filter((t) => learn.has(t.id)), freshIds, learn);
+      const given = jobsShown(patterns || answers ? recent : recent.filter((t) => learn.has(t.id)), freshIds, learn);
       try {
-        const raw = await within(oneShot(sp.id, sp.folder, tidyPrompt(sp.id, list, given.text, learn.size > 0, patterns)));
+        const raw = await within(oneShot(sp.id, sp.folder, tidyPrompt(sp.id, list, given.text, learn.size > 0, patterns, answers)));
         const plan = (readFences(raw, "tidy").items[0] ?? {}) as Plan;
         const n = applyPlan(plan, list, { space: sp.id, shown: given.shown, mats: given.mats, fresh: freshIds, learn });
         for (const k of Object.keys(total) as (keyof typeof total)[]) if (k in n) total[k] += n[k as keyof typeof n];
@@ -394,6 +423,7 @@ export async function tidyMemory(force = false, only?: SpaceId) {
       }
     }
     total.skills = await growSkills(only);
+    await growChecks(only);
     // one space tidied: the others keep their turn (the timer and the cursor of jobs not yet learned from)
     // a pass that did nothing (it failed, or one space had nothing to tidy) leaves no record behind
     const did = touched.length > 0 || Object.values(total).some(Boolean);
@@ -455,6 +485,71 @@ async function growSkills(only?: SpaceId): Promise<number> {
     }
   }
   return made;
+}
+
+/** a rule said this many times becomes a check */
+export const CHECK_SEEN = 2;
+/** only a rule said again lately: one said twice long ago (before this existed) is left alone */
+const CHECK_RECENT_MS = 7 * 24 * 60 * 60_000;
+
+/** A project rule the user had to say again: worth making it hold by itself. */
+export function wantsCheck(m: Memory, now = Date.now()): boolean {
+  return (
+    isLive(m) &&
+    kindOf(m) === "rule" &&
+    m.scope === "project" &&
+    !!m.project &&
+    !m.checkTask &&
+    (m.seen ?? 1) >= CHECK_SEEN &&
+    now - (m.updatedAt ?? m.createdAt) < CHECK_RECENT_MS
+  );
+}
+
+export const checkAsk = (rule: string) =>
+  [
+    `The user had to say this rule for this project more than once: "${rule}"`,
+    "Make it hold by itself so no one has to say it again: turn it into an automatic check in this repo, the lightest one that fits: a lint rule (the project's linter config, or a small custom rule), a type, a test, or a step in the check or CI scripts the project already runs.",
+    "- The check has to pass on the code as it is: fix the few places that break it. If many places break it, change nothing and say so.",
+    "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on a small bad example you don't keep.",
+    "- A rule a machine can't check (taste, wording, how or when to ask, commit or deploy, anything outside the code): change nothing and say why in one line with done.",
+    '- This is a check, not a change anyone sees: once it is in and proven, send {"type":"merge","kind":"fix"} with your done.',
+  ].join("\n");
+
+/**
+ * A rule the user had to say again (seen twice, lately) in a project: a job of its own makes
+ * it an automatic check (lint, test, CI), so it holds without anyone saying it again
+ * (the inverted pyramid: what a correction teaches goes into the code base first, prose last).
+ * One job per pass, one at a time per project, and a rule is handed over once.
+ */
+export async function growChecks(only?: SpaceId, now = Date.now()): Promise<number> {
+  if (state.settings.ruleChecks === false) return 0;
+  const busy = new Set(
+    state.memory
+      .filter((m) => m.checkTask)
+      .map((m) => taskById(m.checkTask!))
+      .filter((t) => t && t.status !== "done" && t.status !== "failed")
+      .map((t) => t!.project),
+  );
+  for (const m of state.memory.filter((x) => wantsCheck(x, now) && (!only || placeOf(x) === only))) {
+    const space = placeOf(m);
+    if (!space) continue;
+    const project = projectFor(space, m.project);
+    if (!project || busy.has(project)) continue;
+    const { createTask } = await import("./tasks");
+    const id = createTask({
+      space,
+      project,
+      cwd: m.project,
+      title: tr("규칙을 자동 검사로 · {rule}", { rule: m.text.slice(0, 40) }),
+      topic: tr("자동 검사"),
+      ask: checkAsk(m.text),
+      display: tr("같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}", { rule: m.text }),
+      weight: "light",
+    });
+    setState("memory", (x) => x.id === m.id, { checkTask: id });
+    return 1;
+  }
+  return 0;
 }
 
 /** Every 10 minutes: run the pass when nothing is working (and it's due). */

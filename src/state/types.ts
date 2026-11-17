@@ -503,6 +503,8 @@ export interface Memory {
   cites?: string[];
   /** grown into this skill (a procedure used again and again) */
   skill?: string;
+  /** a rule said again and again, handed to a job that makes it an automatic check (lint, test, CI): that job */
+  checkTask?: string;
   /** last checked against the code and found to hold (교차 검토) */
   verifiedAt?: number;
 }
@@ -684,6 +686,8 @@ export interface Settings {
   appCheck?: boolean;
   /** a checked bug or performance fix that changes nothing the user sees is merged without asking (memory can say otherwise); missing = on */
   autoMergeFixes?: boolean;
+  /** a project rule the user had to say again becomes an automatic check (lint, test, CI) made by a job of its own; missing = on */
+  ruleChecks?: boolean;
   /** anonymous usage numbers go to Ondra's maintainers (lib/telemetry.ts, docs/TELEMETRY.md); missing = on */
   telemetry?: boolean;
   /** Settings › 단축키: shortcut id → "cmd+shift+KeyD" or "none" (unbound); a missing id keeps its default */
