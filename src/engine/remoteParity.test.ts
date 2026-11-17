@@ -159,7 +159,7 @@ describe("a new job in that Mac's project", () => {
     const c = calls().find((x) => x.fn === "create")!;
     expect(c.args[0]).toMatchObject({
       project: "repo", priority: 0, weight: "heavy", branch: "fix/ship", after: ["far1"], reach: ["회사"], follows: "far1", by: "far1", isolate: false,
-      issue: { n: 7 }, permission: "edits",
+      issue: { n: 7 }, permission: "auto",
     });
     expect(mirror.hosts[HOST].tasks.some((t) => t.title === "Ship it")).toBe(true);
   });
@@ -183,7 +183,7 @@ describe("a new job in that Mac's project", () => {
   it("a Mac too old to send the new fields gets the old defaults", () => {
     setState("projects", [{ id: "repo", space: "home", name: "repo", folder: "/repo" }]);
     create({ device: "dev" }, { id: "n2", title: "Old", ask: "Old ask", project: "repo", space: "home" });
-    expect(taskById("n2")).toMatchObject({ priority: 2, weight: "light", permission: "edits" });
+    expect(taskById("n2")).toMatchObject({ priority: 2, weight: "light", permission: "auto" });
     expect(taskById("n2")?.after).toBeUndefined();
   });
 });

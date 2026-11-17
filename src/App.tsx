@@ -172,14 +172,14 @@ export default function App() {
       spaces_n: state.spaces.length, accounts_n: state.accounts.length, tasks_n: state.tasks.length, memories_n: state.memory.length, skills_n: state.skills.length,
       anthropic_connected: has(/anthropic|claude/), openai_connected: has(/openai|codex/), google_connected: has(/google|gemini/), other_connected: providers.some((p) => !/anthropic|claude|openai|codex|google|gemini/.test(p)),
       isolate_on: state.settings.isolate, learn_on: state.settings.learn, watch_prs_on: !!state.settings.watchPullRequests, github_write_on: state.settings.githubWrite !== false, focus_guard_on: state.settings.focusGuard, links_inside: state.settings.links !== "outside",
-      permission: pick(PERMISSIONS, state.settings.permission, "edits"), theme: pick(THEMES, state.settings.theme, "system"),
+      permission: pick(PERMISSIONS, state.settings.permission, "auto"), theme: pick(THEMES, state.settings.theme, "system"),
     });
   };
   // a job as numbers: what kind, which model family, how long. Never its title, its ask or its folder.
   const countJob = (t: Task, was: string | undefined) => {
     const kind = t.answer ? "answer" : t.review ? "review" : t.parentId ? "subagent" : "job";
     logInfo("task", `${t.id} ${was ? `${was} → ` : "new, "}${t.status} (${kind}${t.parentId ? ` of ${t.parentId}` : ""}, ${t.model || "account model"}${t.status === "done" && t.unverified?.length ? `, ${t.unverified.length} unverified` : ""})`);
-    const about = { kind, ...modelOf(t.model || state.accounts.find((a) => a.id === t.accountId)?.model), effort: pick(EFFORTS, t.thinking, "auto"), permission: pick(PERMISSIONS, t.permission ?? state.settings.permission, "edits"), weight: pick(WEIGHTS, t.weight, "light") } as const;
+    const about = { kind, ...modelOf(t.model || state.accounts.find((a) => a.id === t.accountId)?.model), effort: pick(EFFORTS, t.thinking, "auto"), permission: pick(PERMISSIONS, t.permission ?? state.settings.permission, "auto"), weight: pick(WEIGHTS, t.weight, "light") } as const;
     if (!was) return track("job_started", { ...about, isolated: !!t.worktree, from_issue: !!t.issue });
     if (t.status !== "done" && t.status !== "failed") return;
     const seconds = t.startedAt ? Math.max(0, Math.round(((t.finishedAt ?? Date.now()) - t.startedAt) / 1000)) : 0;

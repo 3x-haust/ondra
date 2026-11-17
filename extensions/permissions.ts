@@ -1,6 +1,10 @@
 // Ondra's permission modes, enforced inside the engine.
 //   ask   — ask before every edit and every command (reading is free)
-//   edits — edits inside the job's folder go through; commands and paths outside ask
+//   auto  — the AI judges: edits inside the job's folder and plainly safe commands (reading, building,
+//           testing) go through; anything else is weighed against the job's request by the job's model,
+//           which lets it through or asks the user (when unsure, or when it can't tell, it asks).
+//           Older Ondra called this slot "edits" (edits in the folder went through, commands asked):
+//           "edits" is read as auto.
 //   full  — no prompts; safety restrictions still apply
 // Starts from ONDRA_PERMISSION and can be changed mid-run with `/ondra-permission <mode>`.
 // Questions go out as ui.select, which Ondra shows as a decision card.
@@ -8,8 +12,136 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { visitShellCommands } from "./lib/shell-commands";
 
-type Mode = "ask" | "edits" | "full";
-const MODES: Mode[] = ["ask", "edits", "full"];
+type Mode = "ask" | "auto" | "full";
+const MODES: Mode[] = ["ask", "auto", "full"];
+/** a mode as given (env, a command, an older app's "edits") */
+export const modeOf = (v: unknown): Mode => (v === "edits" ? "auto" : MODES.includes(v as Mode) ? (v as Mode) : "auto");
+
+// ───────────── auto: what needs no judging, and the judge
+
+/** Programs that only read, or build and check inside the folder: they go through without a judgement. */
+const QUIET = new Set([
+  "ls", "cat", "head", "tail", "wc", "grep", "rg", "ag", "fd", "tree", "pwd", "echo", "printf", "which", "type", "file", "stat", "du", "df",
+  "diff", "cmp", "sort", "uniq", "cut", "tr", "jq", "yq", "basename", "dirname", "realpath", "readlink", "date", "printenv",
+  "true", "false", "test", "[", "sleep", "nl", "column", "less", "more", "od", "xxd", "hexdump", "shasum", "md5", "sha256sum", "tsc", "eslint", "prettier", "biome",
+  "vitest", "jest", "pytest", "ruff", "mypy", "cargo-clippy",
+]);
+/** subcommands that only read or check, per tool */
+const QUIET_SUB: Record<string, RegExp> = {
+  // (not env, awk, xargs: they run other programs)
+  git: /^(status|diff|log|show|rev-parse|ls-files|blame|grep|describe|config --get|stash list|worktree list|fetch|tag --list|shortlog|cat-file|merge-base)\b|^(branch|remote)( (-a|-r|-v|-vv|--list|--show-current|get-url \S+))*$/,
+  npm: /^(test|run (test|build|lint|typecheck|check)|ls|view|outdated|ci|install)\b/,
+  pnpm: /^(test|build|lint|typecheck|check|run (test|build|lint|typecheck|check)|ls|why|outdated|install|i)\b/,
+  yarn: /^(test|build|lint|typecheck|install)\b/,
+  bun: /^(test|run (test|build|lint|typecheck)|install)\b/,
+  npx: /^(tsc|vitest|jest|eslint|prettier --check|biome check)\b/,
+  cargo: /^(check|build|test|clippy|fmt --check|tree|metadata)\b/,
+  go: /^(build|test|vet|list|env|version)\b/,
+  python: /^(-m (pytest|mypy|ruff|unittest)|--version)\b/,
+  python3: /^(-m (pytest|mypy|ruff|unittest)|--version)\b/,
+  swift: /^(build|test)\b/,
+  xcodebuild: /^(-list|-showBuildSettings)\b|\b(build|test)\b/,
+  gh: /^(pr (view|list|diff|checks|status)|issue (view|list)|run (view|list)|repo view|api [^-]*$)/,
+  find: /^(?!.*(-delete|-exec|-execdir|-ok)\b)/,
+  sed: /^-n\b(?!.*(\bw\b|\s-i\b|--in-place))/,
+};
+
+/**
+ * A command that needs no judging: every part of it (split on ; && || |) is a quiet program, and it
+ * writes nowhere (no > redirect except to /dev/null). Anything else is judged.
+ */
+export function quietCommand(command: string): boolean {
+  const c = command.trim();
+  if (!c || /`|\$\(/.test(c)) return false;
+  if (/(^|[^>&0-9])>{1,2}\s*(?!\/dev\/null|&)/.test(c.replace(/2>&1|>&2/g, ""))) return false;
+  for (const part of c.split(/;|&&|\|\||\||\n/)) {
+    const words = part.trim().replace(/^(\w+=\S*\s+)+/, "").split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    let [cmd, ...rest] = words;
+    if (cmd === "cd") continue;
+    cmd = basename(cmd);
+    if (QUIET.has(cmd)) continue;
+    const sub = QUIET_SUB[cmd];
+    if (sub && sub.test(rest.join(" "))) continue;
+    return false;
+  }
+  return true;
+}
+
+export type Verdict = { allow: boolean; why: string };
+
+/** What the judge is asked: the job's request, where it works, and the one action. */
+export function judgePrompt(task: string, action: string, cwd: string): string {
+  return [
+    "You decide whether an AI coding job may do one action without asking its user first.",
+    "The user picked \"auto\": let through what the job plainly needs for its request and what can be undone;",
+    "ask about the rest. When unsure, ask.",
+    "",
+    "Let through: work inside the job's folder (building, testing, running it, installing its dependencies,",
+    "formatting, generating files, local git commits on its own branch, starting local servers on free ports),",
+    "reading anything, temporary files, network reads (downloads, docs, APIs that only read).",
+    "Ask: deleting or overwriting outside the job's folder or anything not made by this job; git push, force",
+    "push, merging into main, releases, deploys, publishing; sending messages, emails, posts, payments;",
+    "writing to shared or production systems (databases, cloud resources, other people's issues); sudo,",
+    "global installs, system settings; reading or printing secrets, keys, tokens; killing processes it did",
+    "not start; anything unrelated to the request; anything the request says to ask about or not to do.",
+    "",
+    `The job's request:\n${task.slice(0, 2_000) || "(unknown)"}`,
+    "",
+    `The job's folder: ${cwd}`,
+    "",
+    `The action:\n${action.slice(0, 2_000)}`,
+    "",
+    'Answer with JSON only: {"allow": true | false, "why": "<one short line in Korean, 해요체: what this does and why it may go or needs asking>"}',
+  ].join("\n");
+}
+
+/** The judge's answer; anything unreadable asks. */
+export function readVerdict(text: string): Verdict {
+  const m = text.match(/\{[\s\S]*\}/);
+  try {
+    const j = JSON.parse(m?.[0] ?? "");
+    return { allow: j.allow === true, why: typeof j.why === "string" ? j.why.slice(0, 200) : "" };
+  } catch {
+    return { allow: false, why: "" };
+  }
+}
+
+/** The job's request: its first message from the user. */
+function taskOf(ctx: any): string {
+  try {
+    for (const e of ctx.sessionManager?.getBranch?.() ?? []) {
+      if (e?.type !== "message" || e.message?.role !== "user") continue;
+      const c = e.message.content;
+      const text = typeof c === "string" ? c : Array.isArray(c) ? c.filter((x: any) => x?.type === "text").map((x: any) => x.text).join("\n") : "";
+      if (text.trim()) return text;
+    }
+  } catch {
+    /* no session to read */
+  }
+  return "";
+}
+
+const JUDGE_MS = 20_000;
+
+/** One judgement by the job's own model, quick (no long thinking). It fails closed: no model, no answer, too slow → ask. */
+async function judge(ctx: any, action: string): Promise<Verdict> {
+  const model = ctx.model;
+  if (!model || !ctx.modelRegistry?.streamSimple) return { allow: false, why: "" };
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), JUDGE_MS);
+  try {
+    const reply = await ctx.modelRegistry
+      .streamSimple(model, { messages: [{ role: "user", content: [{ type: "text", text: judgePrompt(taskOf(ctx), action, ctx.cwd) }], timestamp: Date.now() }] }, { reasoning: "minimal", signal: stop.signal })
+      .result();
+    const text = (reply?.content ?? []).filter((c: any) => c?.type === "text").map((c: any) => c.text).join("");
+    return readVerdict(text);
+  } catch {
+    return { allow: false, why: "" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const ALLOW = "허용";
 const DENY = "막기";
 const HOST_POLICY = "Mac 앱 조작은 computer 도구(백그라운드 호스트 도우미)로만 하세요. 이 도우미는 앱을 앞으로 가져오거나 커서를 옮기거나 전역 이벤트를 보내지 않고, 매 동작 전후로 전경 앱·키 윈도·마우스가 그대로인지 확인해요. osascript·System Events UI 스크립팅, cliclick, 활성화되는 open, 직접 CGEvent 입력으로 우회하지 마세요. 배경으로 할 수 없는 동작이면 포기하지 말고 그대로 보고하세요.";
@@ -211,13 +343,15 @@ function jobDevices(): string[] | undefined {
 }
 
 export default function (pi: any) {
-  let mode: Mode = MODES.includes(process.env.ONDRA_PERMISSION as Mode) ? (process.env.ONDRA_PERMISSION as Mode) : "edits";
+  let mode: Mode = modeOf(process.env.ONDRA_PERMISSION);
+  /** auto's answers this run, so the same action isn't judged twice */
+  const judged = new Map<string, Verdict>();
 
   pi.registerCommand("ondra-permission", {
-    description: "Ondra 권한 모드 바꾸기 (ask · edits · full)",
+    description: "Ondra 권한 모드 바꾸기 (ask · auto · full)",
     handler: async (args: string) => {
-      const next = args.trim() as Mode;
-      if (MODES.includes(next)) mode = next;
+      const next = args.trim();
+      if (next === "edits" || MODES.includes(next as Mode)) mode = modeOf(next);
     },
   });
 
@@ -282,13 +416,29 @@ export default function (pi: any) {
     const name = event.toolName as string;
     const input = event.input ?? {};
     let question: string | undefined;
+    let action = "";
     if (name === "bash") {
-      question = `명령을 실행해도 될까요?\n\n${String(input.command ?? "").slice(0, 600)}`;
+      const command = String(input.command ?? "");
+      if (mode === "auto" && quietCommand(command)) return undefined;
+      question = `명령을 실행해도 될까요?\n\n${command.slice(0, 600)}`;
+      action = `Run in a shell (in ${ctx.cwd}):\n${command}`;
     } else if (name === "edit" || name === "write") {
-      if (mode === "edits" && inside(ctx.cwd, input.path)) return undefined;
+      if (mode === "auto" && inside(ctx.cwd, input.path)) return undefined;
       const where = inside(ctx.cwd, input.path) ? "" : " (작업 폴더 밖)";
       question = `${name === "write" ? "파일을 만들어도" : "파일을 고쳐도"} 될까요?${where}\n\n${input.path ?? ""}`;
+      action = `${name === "write" ? "Write the file" : "Edit the file"} ${input.path ?? ""} (outside the job's folder)`;
     } else return undefined;
+
+    // auto: the job's model weighs it; what it lets through goes, the rest is asked with its reason
+    if (mode === "auto") {
+      const key = `${name}\n${action}`;
+      const v = judged.get(key) ?? (await judge(ctx, action));
+      if (v.allow) {
+        judged.set(key, v);
+        return undefined;
+      }
+      if (v.why) question = `${question}\n\nAI 판단: ${v.why}`;
+    }
 
     if (!ctx.hasUI) return { block: true, reason: "권한 모드 때문에 막았어요 (물어볼 화면이 없어요)" };
     const choice = await ctx.ui.select(question, [ALLOW, DENY]);
