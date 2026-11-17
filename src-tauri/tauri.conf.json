@@ -46,7 +46,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/**", "$HOME/**", "$TEMP/ondra-scratch/**"],
+          "allow": ["$APPDATA/**", "$HOME/**", "$TEMP/**", "/tmp/**"],
           "deny": ["$HOME/.ssh/**", "$HOME/.gnupg/**", "$HOME/.aws/**", "$HOME/.tauri/**", "$HOME/.config/gh/**", "$HOME/Library/Keychains/**"],
           "requireLiteralLeadingDot": false
         }

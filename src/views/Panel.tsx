@@ -29,6 +29,7 @@ import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
 import { ReversePane } from "./Reverse";
 import { usesReverse } from "../engine/reverse";
+import { lastPage } from "../engine/lastPage";
 import { ChangesPane, DiscardGlyph, FilesPane, PreviewPane } from "../ui/Review";
 import { IssuesPane } from "../ui/IssuesPane";
 import { PrPane } from "../ui/PrPane";
@@ -379,16 +380,13 @@ function BrowserPane(props: { t: Task }) {
     onCleanup(() => (ro.disconnect(), clearTimeout(settle)));
   });
   const browsing = () => props.t.entries.flatMap((e) => (e.kind === "tool" && e.tool.kind === "browser" ? [{ ...e.tool, at: e.at }] : []));
-  const lastPage = () => {
-    const hit = [...browsing()].reverse().find((b) => /[\w-]+\.[a-z]{2,}(\/\S*)?/.test(b.target));
-    return hit?.target.match(/[\w.-]+\.[a-z]{2,}(\/\S*)?/)?.[0];
-  };
+  const page = () => lastPage(browsing().map((b) => b.target));
   const click = (e: MouseEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     clickAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   };
 
-  const shown = () => url() || (lastPage() ? `https://${lastPage()}` : "");
+  const shown = () => url() || page() || "";
   // the palette's 기본 브라우저에서 열기 opens what this shows
   createEffect(() => setBrowserPage(shown()));
   onCleanup(() => setBrowserPage(""));
@@ -415,7 +413,7 @@ function BrowserPane(props: { t: Task }) {
           when={frame()}
           fallback={
             <Show when={props.t.shot} fallback={<div class="bempty">{!props.t.browser ? tr("브라우저 없음") : props.t.status === "running" ? tr("연결 중") : tr("브라우저 닫힘")}</div>}>
-              {(p) => <img src={srcOf(p(), props.t.host)} alt={tr("마지막 스크린샷")} />}
+              {(p) => <img src={srcOf(p(), props.t.host)} alt={tr("마지막 스크린샷")} onLoad={(e) => (e.currentTarget.style.visibility = "")} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />}
             </Show>
           }
         >

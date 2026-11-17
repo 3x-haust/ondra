@@ -1,5 +1,5 @@
 // A job's browser, floating in a corner while it works (picture-in-picture):
-// the live page, small, wherever you are in the app. Clicking it opens that job on its browser tab;
+// the live page, small, while you are in that job with its browser tab not showing. Clicking it opens the browser tab;
 // × keeps it closed for that job; Settings can keep it from showing at all.
 // It moves like a thing you hold: drag it anywhere, let go and it carries on in the direction
 // you threw it to the nearest corner (a flick crosses the window), easing in without overshoot.
@@ -204,7 +204,7 @@ export function BrowserPip() {
           <div class="pip-screen">
             <Show
               when={live.frame()}
-              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={srcOf(p(), j().host)} alt="" draggable={false} />}</Show>}
+              fallback={<Show when={j().shot} fallback={<span class="pip-wait">{t("연결 중")}</span>}>{(p) => <img src={srcOf(p(), j().host)} alt="" draggable={false} onLoad={(e) => (e.currentTarget.style.visibility = "")} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />}</Show>}
             >
               {(f) => <img src={f()} alt="" draggable={false} />}
             </Show>

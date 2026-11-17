@@ -14,20 +14,18 @@ const job = (id: string, o: Partial<Task> & { browsedAt?: number } = {}): Task =
   }) as unknown as Task;
 
 describe("the floating browser", () => {
-  it("shows the running job that browsed last", () => {
-    expect(pipJob([job("a", { browsedAt: 10 }), job("b", { browsedAt: 30 }), job("c", { browsedAt: 20 })], new Set())?.id).toBe("b");
-  });
-  it("leaves out jobs that aren't browsing, aren't running, or were closed", () => {
-    const list = [job("a", { browser: false, browsedAt: 50 }), job("b", { status: "done", browsedAt: 40 }), job("c", { browsedAt: 30 }), job("d", { browsedAt: 20 })];
-    expect(pipJob(list, new Set(["c"]))?.id).toBe("d");
-    expect(pipJob(list, new Set(["c", "d"]))).toBeUndefined();
-  });
-  it("shows the job you went into when it is browsing, else the one that browsed last", () => {
-    const list = [job("a", { browsedAt: 10 }), job("b", { browsedAt: 30 }), job("c", { status: "done", browsedAt: 40 })];
+  it("shows only the browsing job open on screen", () => {
+    const list = [job("a", { browsedAt: 10 }), job("b", { browsedAt: 30 })];
     expect(pipJob(list, new Set(), "a")?.id).toBe("a");
-    // the open job isn't browsing (done, or closed here): the latest browsing job, as before
-    expect(pipJob(list, new Set(), "c")?.id).toBe("b");
-    expect(pipJob(list, new Set(["a"]), "a")?.id).toBe("b");
+    // a project, the main page, or another job: nothing floats
+    expect(pipJob(list, new Set())).toBeUndefined();
+    expect(pipJob(list, new Set(), "elsewhere")).toBeUndefined();
+  });
+  it("leaves out an open job that isn't browsing, isn't running, or was closed", () => {
+    const list = [job("a", { browser: false, browsedAt: 50 }), job("b", { status: "done", browsedAt: 40 }), job("c", { browsedAt: 30 })];
+    expect(pipJob(list, new Set(), "a")).toBeUndefined();
+    expect(pipJob(list, new Set(), "b")).toBeUndefined();
+    expect(pipJob(list, new Set(["c"]), "c")).toBeUndefined();
   });
   it("snaps to the nearest corner", () => {
     expect(nearestCorner(100, 100, 1000, 800)).toBe("tl");
