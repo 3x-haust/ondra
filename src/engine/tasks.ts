@@ -469,6 +469,14 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         void writeNotes(p.id, md).then((ok) => ok && updateTask(t.id, (x) => void push(x, { kind: "note", text: "프로젝트 노트 갱신" })));
         break;
       }
+      // a pet job made a pet (skills/pet-maker): it goes on the screen
+      case "pet": {
+        const id = typeof b.id === "string" ? b.id : "";
+        if (!id || t.parentId) break;
+        void import("./pet").then((m) => m.wearPet(id));
+        push(t, { kind: "note", text: "펫을 화면에 띄웠어요" });
+        break;
+      }
       // the branch's fate, when the user (or a memory rule) already said: done after the turn
       case "merge":
       case "discard":

@@ -41,6 +41,7 @@ mod bridge;
 mod embed;
 mod keys;
 mod winsize;
+mod pet;
 
 use tauri::{
     AppHandle, Emitter, Manager, RunEvent, WindowEvent,
@@ -413,6 +414,16 @@ pub fn run() {
             components::components_wait,
             open_capture,
             hide_capture,
+            pet::pet_list,
+            pet::pet_folder,
+            pet::pet_delete,
+            pet::pet_set,
+            pet::pet_get,
+            pet::pet_say,
+            pet::pet_clicked,
+            pet::pet_tell,
+            pet::pet_frame,
+            pet::pet_windows,
             submit_capture,
             set_tray_count,
             keys::keys_apply,

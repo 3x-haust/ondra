@@ -457,6 +457,35 @@ export const hideCapture = () => call<void>("hide_capture");
 export const submitCapture = (text: string, space: string) => call<void>("submit_capture", { text, space });
 export const setFocusGuard = (on: boolean) => call<void>("focus_guard", { on });
 export const setTrayCount = (running: number, waiting: number) => call<void>("set_tray_count", { running, waiting });
+
+// ───────────── the pet (src-tauri/src/pet.rs, src/pet)
+export interface PetConfig {
+  on: boolean;
+  /** the pets on screen, each "default" (built in) or a folder name in <data>/pets: a window each */
+  ids: string[];
+  /** its height on screen, points */
+  size: number;
+  /** names the user gave pets (id → name) */
+  names?: Record<string, string>;
+  /** bumped when a pet's pictures were made again: the pets load them anew instead of the old ones */
+  v?: number;
+}
+export type PetWord =
+  | { kind: "done" | "waiting" | "failed"; taskId: string; title: string; at: number; ask?: { decisionId: string; question: string; options: { id: string; label: string; primary?: boolean }[] } }
+  | { kind: "clear"; taskId: string }
+  | { kind: "busy"; n: number };
+export const petList = () => call<{ id: string; dir: string; json: string }[]>("pet_list", undefined, []);
+export const petFolder = () => call<string>("pet_folder", undefined, "");
+export const petDelete = (id: string) => call<void>("pet_delete", { id });
+export const petSet = (config: PetConfig) => call<void>("pet_set", { config });
+export const petGet = () => call<PetConfig | null>("pet_get", undefined, null);
+export const petSay = (word: PetWord) => call<void>("pet_say", { word });
+/** from the pet: open the app on a job, or on the pet's settings */
+export const petClicked = (word: { taskId?: string; settings?: boolean }) => call<void>("pet_clicked", { word });
+/** from the pet, without bringing the app forward: an answer to a job's question, or hide the pet */
+export const petTell = (word: { answer?: { decisionId: string; optionId: string }; hide?: boolean }) => call<void>("pet_tell", { word });
+export const petFrame = (x: number, y: number, w: number, h: number) => call<void>("pet_frame", { x, y, w, h });
+export const petWindows = () => call<{ id: number; x: number; y: number; w: number; h: number }[]>("pet_windows", undefined, []);
 /** The keys Rust answers to, as chord text (null: unbound): quick input's global hotkey, the menu's Quit
  * (held) and Close; with `save`, kept for the next launch too. Resolves to what couldn't be taken ("capture"). */
 export const applyKeys = (keys: { capture: string | null; quit: string | null; closePane: string | null }, save = true) =>

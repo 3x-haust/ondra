@@ -1,0 +1,107 @@
+/* the pet window: nothing but the pet (and what it says), on a transparent window */
+html.pet-window,
+html.pet-window body,
+html.pet-window #root {
+  background: transparent !important;
+  margin: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pet {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.pet-img {
+  display: block;
+  image-rendering: pixelated;
+  cursor: grab;
+  touch-action: none;
+}
+/* the pictures not shown now: loaded and kept out of the way (stacked over the one shown) */
+.pet-img.off {
+  position: absolute !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+.pet-img:active {
+  cursor: grabbing;
+}
+.pet-bubble {
+  all: unset;
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: calc(100% - var(--s-8));
+  padding: var(--s-8) var(--s-12);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-medium);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  cursor: pointer;
+  /* no drop shadow: the window is only as big as the bubble, so a shadow would be cut into a grey box */
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.pet-bubble b {
+  font-weight: var(--fw-strong);
+}
+.pet-bubble b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pet-bubble-text {
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pet-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  margin-top: var(--s-6);
+}
+.pet-opt {
+  all: unset;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: var(--s-4) var(--s-10);
+  border-radius: var(--r-pill);
+  background: var(--muted);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.pet-opt:hover {
+  background: var(--hover);
+}
+.pet-opt.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.pet-opt:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.pet-bubble.pet-waiting b {
+  color: var(--accent-text);
+}
+.pet-bubble.pet-failed b {
+  color: var(--bad-ink);
+}

@@ -1,6 +1,7 @@
 import { PairAskDialog } from "./views/RemoteSettings";
 import { ring, soundFor } from "./engine/sound";
 import { quietRun, startRoutines } from "./engine/routines";
+import { startPet, tellPet } from "./engine/pet";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
@@ -109,6 +110,8 @@ export default function App() {
     void import("./engine/results").then((m) => m.backfillResults());
     warmModels();
     startBridge();
+    // after the awaits above there is no owner: the pet's effects get their own root
+    createRoot(() => startPet((t) => switchSpace(t.space, { name: "task", id: t.id }), () => setView({ name: "settings", tab: "pet" })));
     // memory changed → its vectors are refreshed a moment later
     createEffect(() => {
       for (const m of state.memory) void (m.text, m.invalidAt, m.keys, m.about);
@@ -223,6 +226,7 @@ export default function App() {
       // to report ends without a sound or a notice
       const tone = soundFor(t, was);
       if (tone && !quietRun(t)) ring(tone);
+      if (!t.host && !quietRun(t)) tellPet(t, was);
       if (!was || was === t.status || document.hasFocus()) continue;
       if (quietRun(t)) continue;
       // which space it is in, so a company job never reads as a personal one
