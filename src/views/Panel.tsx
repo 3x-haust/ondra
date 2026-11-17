@@ -21,8 +21,9 @@ import { Xterm } from "../ui/Xterm";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
 import { openImage } from "../ui/Lightbox";
 import { ago, compact, now, priorityLabel, short } from "../ui/bits";
-import { discarded, ended, legTimes, planCount, stepState, workedMs } from "../state/progress";
+import { discarded, ended, legTimes, planCount, workedMs } from "../state/progress";
 import { Icon } from "../ui/Icon";
+import { PlanList } from "../ui/PlanList";
 import { prettyModel, usePop } from "../ui/ModelPicker";
 import { SideChat } from "../ui/Aside";
 import { Flow } from "./Flow";
@@ -215,20 +216,7 @@ function Overview(props: { t: Task }) {
         <div>
           <div class="pane-title">{tr("할 일")} <span class="pane-count">{planCount(t().plan).label}</span></div>
           {/* the same marks as the to-do list under the job */}
-          <ol class="todos-list plan-list">
-            <For each={t().plan}>
-              {(s) => (
-                <li class={`todo ${stepState(s, t())}`}>
-                  <span class="todo-box">
-                    <Show when={s.state === "done"} fallback={<Show when={stepState(s, t()) === "now"}><i /></Show>}>
-                      <Icon name="check" size={10} stroke={3} />
-                    </Show>
-                  </span>
-                  <span class="todo-text">{s.text}</span>
-                </li>
-              )}
-            </For>
-          </ol>
+          <PlanList t={t()} class="plan-list" />
         </div>
       </Show>
       <Show when={t().legs.length > 1}>

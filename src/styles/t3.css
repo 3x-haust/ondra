@@ -5413,6 +5413,50 @@ div.queued {
   color: var(--ink);
   font-weight: var(--fw-medium);
 }
+/* the smaller steps of the one being worked on, under it */
+.todo.todo-sub {
+  padding-left: calc(15px + var(--s-8));
+  font-size: var(--fs-sm);
+}
+.todo.todo-sub .todo-box {
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+}
+.todo.todo-sub.now .todo-box i {
+  width: 5px;
+  height: 5px;
+}
+.todo.todo-sub.now .todo-text {
+  font-weight: var(--fw-regular);
+}
+/* asked for by the user while it worked */
+.todo-user {
+  flex: none;
+  align-self: center;
+  padding: 0 var(--s-6);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* their newest words, until the job puts them in its plan */
+.todo.todo-ask .todo-box {
+  border-style: dashed;
+}
+.todo.todo-ask .todo-text {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* the user's words wait on the running command */
+.live-line.held-line {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
 
 /* said while it worked: waits for the work to finish */
 div.queued {

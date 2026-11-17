@@ -78,6 +78,9 @@ const NOTE_FORMS: { key: string; was?: string[] }[] = [
   { key: '"{title}" 작업으로 넘어가요', was: ['"{title}" 일로 넘어가요'] },
   { key: "검색 멈춤 · 1분 넘게 결과 없음" },
   { key: "기다림 멈춤 · 2분 넘게 변화 없음" },
+  { key: "기다림 멈춤 · 새 메시지를 바로 전해요" },
+  { key: "명령 멈춤 · 새 메시지를 바로 전해요" },
+  { key: "남은 요청 · {what}" },
   // main looking jobs up (its reply's steps)
   { key: "작업 찾음 · {q}" },
   { key: "작업 찾는 중 · {q}" },

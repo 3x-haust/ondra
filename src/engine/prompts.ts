@@ -9,6 +9,7 @@ import { applying, core, memoryLines, recall, siteWords } from "./memory";
 import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
 import { forModel } from "./modelPrompts";
+import { planText } from "./plan";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -192,8 +193,9 @@ ${CODING_WORK}
 
 # Reporting
 Put one JSON object per line in a \`\`\`blocks fence:
-- first {"type":"plan","steps":[...]} (2–6 short steps) and {"type":"now","text":"…","step":0}
-- a new "now" when you move to another step (update "step"), not for every call
+- first {"type":"plan","steps":[...]} (2–6 big steps in order, the current one
+  split: {"text":"…","sub":["…"]}) and {"type":"now","text":"…","step":0}
+- a new "now" when you move to another step ("step": 1, or [1, 2] in a split one)
 - results as blocks with short prose around them, never walls of text:
   {"type":"tests","suites":[{name,pass,fail,skip,ms}],"failures":[{name,ref,msg}]} (always when something failed),
   {"type":"checklist","items":[{label,done}]}, {"type":"files","files":[{path,add,del}]},
@@ -1050,8 +1052,7 @@ function userSince(t: Task): string[] {
 /** The plan as it stood, so the new session picks up the right step. */
 function planLines(t: Task): string[] {
   if (!t.plan.length) return [];
-  const mark = { done: "[x]", now: "[>]", todo: "[ ]", skip: "[-]" } as const;
-  return ["", "# Plan so far", ...t.plan.map((p) => `${mark[p.state]} ${p.text}`)];
+  return ["", "# Plan so far (send it again as your plan block; \"(user asked)\" steps keep \"user\": true)", ...planText(t.plan)];
 }
 
 export function handoffPrompt(t: Task): string {

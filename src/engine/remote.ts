@@ -295,6 +295,7 @@ const JOBS: Record<JobCall, (...a: never[]) => unknown> = {
   duplicateTask: jobs.duplicateTask,
   editTurn: jobs.editTurn,
   steerQueued: jobs.steerQueued,
+  sendNow: jobs.sendNow,
   dropQueued: jobs.dropQueued,
   editQueued: jobs.editQueued,
   moveQueued: jobs.moveQueued,

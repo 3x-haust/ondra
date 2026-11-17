@@ -167,6 +167,10 @@ export interface Shell {
 export interface PlanStep {
   text: string;
   state: "done" | "now" | "todo" | "skip";
+  /** the smaller steps this one is split into, written once the job reaches it */
+  sub?: PlanStep[];
+  /** the user asked for it while the job worked: it isn't dropped without a word */
+  user?: boolean;
 }
 
 export interface Task {
@@ -211,6 +215,8 @@ export interface Task {
    * yet: an engine that dies (a restart) loses them, so the next session is given them.
    * `from`: the subagent whose result it is; `shown`: the words in the thread when they differ */
   pending?: { text: string; from?: string; shown?: string }[];
+  /** the user's words said while it worked, until the job puts them in its plan (shown under the to-dos) */
+  planAsk?: string;
   /** on a subagent: its fork took its result */
   taken?: number;
   summary?: string;

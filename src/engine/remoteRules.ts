@@ -52,6 +52,7 @@ export const JOB_CALLS = [
   "duplicateTask",
   "editTurn",
   "steerQueued",
+  "sendNow",
   "dropQueued",
   "editQueued",
   "moveQueued",

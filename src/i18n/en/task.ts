@@ -42,6 +42,12 @@ export default {
 
   // above the composer
   "할 일": "To-dos",
+  "요청|plan": "Asked",
+  "일하는 중에 요청한 일이에요": "You asked for this while it worked",
+  "새 요청 정리 중": "Placing your new request",
+  "지금 명령이 끝나면 메시지를 읽어요": "It reads your message once the running command ends",
+  "멈추고 바로 전달": "Stop and send now",
+  "돌고 있는 명령을 멈추고 메시지를 바로 전해요": "Stop the running command and pass your message on now",
   "지금 보내기": "Send now",
   "끌어서 순서 바꾸기": "Drag to reorder",
   "수정": "Edit",

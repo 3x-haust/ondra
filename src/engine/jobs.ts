@@ -15,6 +15,7 @@ import { SECRET_WORDS } from "./proof";
 import { expand, isAlive } from "./rpc";
 import { agentOf, childrenOf, createTask, finished, jobsAllowed, prOf, tell } from "./tasks";
 import { workedIn } from "./workedIn";
+import { planText } from "./plan";
 
 /** who is asking: a job (by its worker id), or main of a chat (`captain:<space>[~<project>]`) */
 export type Caller = { space: SpaceId; task?: Task; chat?: string; project?: string };
@@ -278,7 +279,7 @@ export function readJob(c: Caller, t: Task, o: { messages?: number; now?: number
   if (follows) out.push(`carries on ${follows.id} "${flat(follows.title, 80)}"`);
   if (handed) out.push(`handed on to ${handed.id} "${flat(handed.title, 80)}"`);
   out.push("", "Ask:", trimmed(t.ask, 1500));
-  if (t.plan.length) out.push("", "Plan:", ...t.plan.map((s) => `${s.state === "done" ? "[x]" : s.state === "now" ? "[>]" : s.state === "skip" ? "[-]" : "[ ]"} ${flat(s.text, 160)}`));
+  if (t.plan.length) out.push("", "Plan:", ...planText(t.plan.map((s) => ({ ...s, text: flat(s.text, 160) }))));
   const wait = waitingOn(t);
   if (wait) out.push("", `Waiting on: ${wait}`);
   else if (t.status === "running" && (t.intent || t.now)) out.push("", `Now: ${flat(t.intent || t.now, 200)}`);
