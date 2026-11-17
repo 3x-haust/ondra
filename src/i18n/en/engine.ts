@@ -190,6 +190,7 @@ export default {
   "실행 검토": "Fit check",
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
   "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
+  "확인된 수정이라 묻지 않고 합쳐요": "A checked fix, so it's merged without asking",
   "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",
   "{into} 병합됨 · 워크트리 정리": "{into} merged · worktree removed",
   "{into}에 이미 반영됨 · 워크트리 정리": "Already in {into} · worktree removed",

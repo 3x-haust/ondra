@@ -42,8 +42,9 @@ interface Run {
   done?: string;
   handoff?: Handoff;
   asked: boolean;
-  /** what the job said becomes of its branch at the end ({"type":"merge"} / {"type":"discard"}) */
-  land?: "merge" | "discard";
+  /** what the job said becomes of its branch at the end ({"type":"merge"} / {"type":"discard"});
+   *  "fix" = {"type":"merge","kind":"fix"}: a bug or performance fix, merged only when all of it was checked */
+  land?: "merge" | "discard" | "fix";
   error?: string;
   turnStart: number;
   /** time spent generating (between assistant message start and end) this turn */
@@ -471,7 +472,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
       // the branch's fate, when the user (or a memory rule) already said: done after the turn
       case "merge":
       case "discard":
-        run.land = b.type;
+        run.land = b.type === "merge" && b.kind === "fix" ? "fix" : b.type;
         break;
       case "handoff":
         // sent again before the new session started (a late result woke it): the cards add up
@@ -929,7 +930,7 @@ const mergeFailed = (why: string, home: string) =>
  * them (merge, a pull request, or throw them away), every time. Nothing to ask
  * when the work went into a PR or has already landed.
  */
-async function askMerge(id: string) {
+async function askMerge(id: string, why?: string) {
   const t = taskById(id);
   const w = t?.worktree;
   if (!t || t.parentId || !w || w.state !== "open" || t.status !== "done" || prOf(t)) return;
@@ -942,7 +943,7 @@ async function askMerge(id: string) {
     taskId: id,
     at: Date.now(),
     kind: "merge",
-    question: tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home }),
+    question: `${why ? `${why} · ` : ""}${tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })}`,
     options: [
       { id: "merge", label: tr("합치기"), primary: true, note: tr("원래 폴더의 지금 브랜치에 합쳐요") },
       { id: "pr", label: tr("PR로 올리기"), note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
@@ -954,12 +955,57 @@ async function askMerge(id: string) {
   updateTask(id, (x) => (x.unread = true));
 }
 
+/** The last done's evidence has a test or build the app saw run and pass in the session (not the job's word). */
+export const ranChecks = (t: Pick<Task, "entries">) => {
+  for (let i = (t.entries ?? []).length - 1; i >= 0; i--) {
+    const e = t.entries[i];
+    if (e.kind === "block" && e.block.type === "evidence")
+      return e.block.items.some((x) => (x.kind === "test" || x.kind === "build") && x.check === "ran" && x.ok !== false && !x.why);
+  }
+  return false;
+};
+
+/**
+ * A fix lands on its own: a bug or performance fix that changes nothing the user sees, nothing
+ * left unchecked, and a test or build the app saw pass. Otherwise, or the setting off: the user is asked.
+ */
+export const fixLands = (t: Pick<Task, "unverified" | "entries">) => state.settings.autoMergeFixes !== false && !t.unverified?.length && ranChecks(t);
+
+/** the same answer this many times in a row for a project's branches: it stops being asked */
+export const LAND_STREAK = 3;
+
+/**
+ * The user answered "what becomes of this branch": kept per project. The same merge or PR
+ * answer LAND_STREAK times in a row becomes a project decision in memory, and jobs act on it
+ * without asking (the git note tells them to). A discard is about that one job, not a habit.
+ */
+export function noteLandAnswer(t: Task, pick: "merge" | "pr" | "discard", now = Date.now()): string | null {
+  const folder = projectById(t.project, t.space)?.folder;
+  if (!folder) return null;
+  const list = [...(state.landAnswers ?? []), { folder, pick, at: now }].slice(-60);
+  setState("landAnswers", list);
+  if (pick === "discard") return null;
+  const last = list.filter((a) => a.folder === folder && a.pick !== "discard").slice(-LAND_STREAK);
+  if (last.length < LAND_STREAK || last.some((a) => a.pick !== pick)) return null;
+  const text =
+    pick === "merge"
+      ? tr("이 프로젝트에서 작업이 끝나면 묻지 않고 원래 폴더에 합쳐요 (사용자가 {n}번 연속 합치기를 골랐어요)", { n: LAND_STREAK })
+      : tr("이 프로젝트에서 작업이 끝나면 묻지 않고 PR로 올려요 (사용자가 {n}번 연속 PR을 골랐어요)", { n: LAND_STREAK });
+  const had = state.memory.find((m) => !m.invalidAt && m.scope === "project" && m.project === folder && m.key === "land");
+  if (had?.text === text) return null;
+  // the key names the one decision per project: a new streak replaces the old one; the user's own words stay
+  return addMemory(text, "project", { space: t.space, project: folder, kind: "decision", key: "land", importance: 4, by: "agent", source: "ondra", taskId: t.id });
+}
+
 /** The job's own say on its branch, then the question if it is still open. */
-async function landBranch(id: string, land?: "merge" | "discard") {
+export async function landBranch(id: string, land?: "merge" | "discard" | "fix") {
   const t = taskById(id);
   if (!t || t.worktree?.state !== "open") return;
   if (land === "discard") return discardTask(id);
-  if (land === "merge") {
+  if (land === "fix" && !fixLands(t))
+    return askMerge(id, state.settings.autoMergeFixes === false ? undefined : t.unverified?.length ? tr("확인 못 한 게 있어요") : tr("테스트·빌드를 돌린 기록이 없어요"));
+  if (land === "fix") updateTask(id, (x) => push(x, { kind: "note", text: "확인된 수정이라 묻지 않고 합쳐요" }));
+  if (land === "merge" || land === "fix") {
     const why = await mergeWhy(id);
     if (why !== undefined) await tell(id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;
@@ -2854,6 +2900,7 @@ export async function decide(decisionId: string, optionId: string) {
   }
   if (d.kind === "merge" && (optionId === "merge" || optionId === "pr" || optionId === "discard")) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
+    noteLandAnswer(t, optionId);
     if (optionId === "discard") return void (await discardTask(t.id));
     if (optionId === "pr")
       return void (await tell(t.id, "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.", { shown: label }));

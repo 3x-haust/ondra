@@ -241,6 +241,9 @@ function General() {
         <Row title={t("작업 끝나면 앱에서 직접 확인")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
           <Switch_ label={t("작업 끝나면 앱에서 직접 확인")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
         </Row>
+        <Row title={t("확인된 버그 수정은 바로 합치기")} desc={t("화면이 바뀌지 않는 버그·성능 수정은 다 확인되면 묻지 않고 합쳐요. 메모리에 다르게 적혀 있으면 그걸 따라요")}>
+          <Switch_ label={t("확인된 버그 수정은 바로 합치기")} on={state.settings.autoMergeFixes !== false} set={(v) => setState("settings", "autoMergeFixes", v)} />
+        </Row>
         <Row title={t("스킬 다듬기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
           <Switch_ label={t("스킬 다듬기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
         </Row>

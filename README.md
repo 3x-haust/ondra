@@ -93,7 +93,7 @@ Deep research splits a question into threads, reads the sources and checks quota
 
 ## You decide what gets merged
 
-When a task on its own worktree finishes with changes, it asks what happens to them: merge, open a PR, or discard. What tasks made collects in Results.
+When a task on its own worktree finishes with changes, it asks what happens to them: merge, open a PR, or discard. A bug or performance fix that changes nothing on screen goes in without asking once all of it is checked, and after you give the same answer three times in a row, that project stops asking. What your memory says always comes first. What tasks made collects in Results.
 
 <p align="center"><img src="docs/assets/readme/merge-en.jpg" width="880" alt="The task's checks, then the question: merge the 2 changed files, open a PR, or discard"></p>
 
