@@ -1641,7 +1641,9 @@ async function settle(id: string, run: Run) {
       }
       return;
     }
-    const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run);
+    // every done gets its proof checked and shown, also one that changed nothing (a look, a capture)
+    const checked = await markEvidence(t, run);
+    const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run, checked);
     if (missing) {
       run.gates = (run.gates ?? 0) + 1;
       const summary = run.done;
@@ -1902,7 +1904,22 @@ function lastText(t: Task): string {
  */
 export const blocking = (e: Evidence) => e.check === "no-run" || e.check === "failed" || e.check === "missing" || (e.kind === "shot" && e.check === "stale");
 
-async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: string } | null> {
+/** check the evidence of this done against the session, and show the result on its block */
+async function markEvidence(t: Task, run: Run): Promise<Evidence[]> {
+  const checked = await checkEvidence(t, run.evidence ?? []);
+  updateTask(t.id, (x) => {
+    for (let i = x.entries.length - 1; i >= 0; i--) {
+      const e = x.entries[i];
+      if (e.kind === "block" && e.block.type === "evidence") {
+        e.block.items = e.block.items.map((it) => checked.find((c) => c.kind === it.kind && c.ref === it.ref) ?? it);
+        break;
+      }
+    }
+  });
+  return checked;
+}
+
+async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ label: string; ask: string } | null> {
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
     return {
@@ -1926,18 +1943,7 @@ async function proofMissing(t: Task, run: Run): Promise<{ label: string; ask: st
   const reviewed = !needsReview || reviewSettled(kids);
   const reviewing = !reviewed && kids.some((x) => x.review && reviewGoing(x));
   const unresolved = changed && reviewed && !out && reviewUnresolved(t, kids);
-  // check the evidence of this done against the session, and show the result on its block
-  const checked = await checkEvidence(t, run.evidence ?? []);
   run.evidence = checked;
-  updateTask(t.id, (x) => {
-    for (let i = x.entries.length - 1; i >= 0; i--) {
-      const e = x.entries[i];
-      if (e.kind === "block" && e.block.type === "evidence") {
-        e.block.items = e.block.items.map((it) => checked.find((c) => c.kind === it.kind && c.ref === it.ref) ?? it);
-        break;
-      }
-    }
-  });
   // stale runs and unopened links don't send the job back; finish lists every `why` as unverified
   const bad = checked.filter((e) => e.why && blocking(e));
   const soft = checked.filter((e) => e.why && !blocking(e));
