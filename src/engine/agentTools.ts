@@ -26,6 +26,7 @@ const KO: Record<string, string> = {
   web_search: "웹에서 검색해요",
   web_fetch: "웹 페이지를 읽어요",
   device: "시뮬레이터와 에뮬레이터를 켜고, 화면을 찍고, 눌러요",
+  image: "GPT로 이미지를 그려요",
 };
 
 /** What an open row says about the engine's own tools: a little more than the one line (keys for t()). */
@@ -46,6 +47,7 @@ const KO_MORE: Record<string, string> = {
   web_search: "웹에서 검색하고 결과 목록을 받아요",
   web_fetch: "웹 페이지를 받아 읽을 수 있는 글로 바꿔요",
   device: "iOS 시뮬레이터와 Android 에뮬레이터를 켜고, 화면을 찍고, 누르고, 글자를 입력해요",
+  image: "로그인한 GPT 계정으로 이미지를 새로 그리거나 고쳐요. 참고 그림의 캐릭터를 그대로 살려요",
 };
 
 /** One plain line for the bundled skills (their own descriptions are written for the model). */
@@ -60,6 +62,7 @@ const SKILL_LINE: Record<string, string> = {
   "device-use": "시뮬레이터와 에뮬레이터에서 앱을 다뤄요",
   "goal-loop": "목표를 이룰 때까지 고치고 확인해요",
   "logo-design": "로고와 브랜드 키트를 만들어요",
+  "pet-maker": "데스크톱 펫을 만들어요",
   mimikyu: "Figma 디자인을 코드로 옮기고 맞춰 봐요",
   "modern-web-guidance": "웹 화면 코드를 요즘 방식으로 짜요",
   "motion-graphics": "홍보 영상과 모션그래픽을 만들어요",
