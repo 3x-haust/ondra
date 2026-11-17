@@ -1,8 +1,9 @@
-// Settings › 펫: the pets on the screen (on or off, which ones, how big), each pet's name and
-// throwing one away, and a new pet made by a job from a character's name (skills/pet-maker).
+// Settings › 펫: the pets on the screen (on or off, which ones, how big each one is), each pet's name and
+// throwing one away, sharing one as a file (and taking one in), and a new pet made by a job from a character's
+// name (skills/pet-maker).
 import { createResource, createSignal, For, Show } from "solid-js";
-import { fileSrc, petDelete, petList } from "../lib/native";
-import { MAX_PETS, PET_SIZE, petConfig, pickPet } from "../engine/pet";
+import { fileSrc, petDelete, petExport, petImport, petList, pickFiles, revealPath } from "../lib/native";
+import { MAX_PETS, PET_SIZE, petConfig, pickPet, wearPet } from "../engine/pet";
 import { BUILTIN, parseSpec, type PetSpec } from "../pet/spec";
 import { setState, state } from "../state/store";
 import { goMain, toast } from "../state/ui";
@@ -33,7 +34,10 @@ export function PetSettings() {
     return [BUILTIN, ...list.map((p) => parseSpec(p.id, p.json, (f) => `${fileSrc(`${p.dir}/${f}`)}?v=${state.settings.pet?.v ?? 0}`)).filter((p) => !!p)];
   });
   const [renaming, setRenaming] = createSignal<string | null>(null);
-  const set = (patch: Partial<{ on: boolean; size: number }>) => setState("settings", "pet", { ...petConfig(), names: state.settings.pet?.names, ...patch });
+  // each pet its own height (a big character and a small one side by side); one never set: the shared size
+  const sizeOf = (id: string) => state.settings.pet?.sizes?.[id] ?? state.settings.pet?.size ?? PET_SIZE;
+  const resize = (id: string, n: number) => setState("settings", "pet", { ...petConfig(), sizes: { ...(state.settings.pet?.sizes ?? {}), [id]: n } });
+  const set = (patch: Partial<{ on: boolean }>) => setState("settings", "pet", { ...petConfig(), names: state.settings.pet?.names, ...patch });
   const rename = (id: string, name: string) => {
     if (renaming() !== id) return;
     const names = { ...(state.settings.pet?.names ?? {}) };
@@ -41,6 +45,31 @@ export function PetSettings() {
     else delete names[id];
     setState("settings", "pet", { ...petConfig(), names });
     setRenaming(null);
+  };
+  // a pet as one file (<name>.ondrapet in Downloads) to send; one sent taken in and put on screen
+  const share = async (p: PetSpec) => {
+    try {
+      const path = await petExport(p.id);
+      toast(t("다운로드 폴더에 저장했어요: {file}", { file: path.split("/").pop() ?? path }), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
+    } catch (e) {
+      toast(String(e), "bad");
+    }
+  };
+  const take = async () => {
+    const files = await pickFiles(t("가져올 펫 파일(.ondrapet)을 골라 주세요"));
+    let got = 0;
+    for (const f of files) {
+      try {
+        wearPet(await petImport(f));
+        got++;
+      } catch (e) {
+        toast(`${f.split("/").pop()}: ${String(e)}`, "bad");
+      }
+    }
+    if (got) {
+      toast(t("펫 {n}마리를 가져와서 화면에 띄웠어요", { n: got }));
+      void refetch();
+    }
   };
   const remove = (p: PetSpec) =>
     confirmAsk({
@@ -56,8 +85,10 @@ export function PetSettings() {
         }
         const ids = petConfig().ids.filter((x) => x !== p.id);
         const names = { ...(state.settings.pet?.names ?? {}) };
+        const sizes = { ...(state.settings.pet?.sizes ?? {}) };
         delete names[p.id];
-        setState("settings", "pet", { ...petConfig(), ids: ids.length ? ids : ["default"], names });
+        delete sizes[p.id];
+        setState("settings", "pet", { ...petConfig(), ids: ids.length ? ids : ["default"], names, sizes });
         void refetch();
       },
     });
@@ -69,12 +100,23 @@ export function PetSettings() {
         <Row title={t("화면에 펫 띄우기")} desc={t("화면 위를 돌아다니다가, 작업이 끝나거나 물어볼 게 생기면 알려 줘요")}>
           <Switch_ label={t("화면에 펫 띄우기")} on={!!state.settings.pet?.on} set={(v) => set({ on: v })} />
         </Row>
-        <Row title={t("펫 크기")}>
-          <div class="set-volume">
-            <input type="range" min={48} max={160} step={8} aria-label={t("펫 크기")} value={state.settings.pet?.size ?? PET_SIZE} onInput={(e) => set({ size: Number(e.currentTarget.value) })} />
-            <span class="set-volume-n">{state.settings.pet?.size ?? PET_SIZE}</span>
-          </div>
-        </Row>
+        <For each={petConfig().ids}>
+          {(id) => {
+            const name = () => {
+              const p = (pets() ?? [BUILTIN]).find((x) => x.id === id);
+              return p ? petName(p) : id;
+            };
+            const title = () => (petConfig().ids.length > 1 ? t("{name} 크기", { name: name() }) : t("펫 크기"));
+            return (
+              <Row title={title()}>
+                <div class="set-volume">
+                  <input type="range" min={48} max={160} step={4} aria-label={title()} value={sizeOf(id)} onInput={(e) => resize(id, Number(e.currentTarget.value))} />
+                  <span class="set-volume-n">{sizeOf(id)}</span>
+                </div>
+              </Row>
+            );
+          }}
+        </For>
       </div>
 
       <GroupTitle title={t("펫 고르기")} />
@@ -90,7 +132,12 @@ export function PetSettings() {
                 `pet:${p.id}`,
                 () => [
                   { id: "rename", label: t("이름 바꾸기"), icon: "pencil", run: () => setRenaming(p.id) },
-                  ...(p.id === "default" ? [] : [{ id: "delete", label: t("삭제"), icon: "trash", danger: true, run: () => remove(p) }]),
+                  ...(p.id === "default"
+                    ? []
+                    : [
+                        { id: "share", label: t("파일로 내보내기"), icon: "download", run: () => void share(p) },
+                        { id: "delete", label: t("삭제"), icon: "trash", danger: true, run: () => remove(p) },
+                      ]),
                 ],
                 e.type === "contextmenu" ? e : (e.currentTarget as HTMLElement).getBoundingClientRect(),
               );
@@ -143,6 +190,12 @@ export function PetSettings() {
           <button class="btn sm" onClick={draftPet}>
             <Icon name="pet" size={14} />
             {t("만들기")}
+          </button>
+        </Row>
+        <Row title={t("파일에서 가져오기")} desc={t("다른 사람이 보낸 펫 파일(.ondrapet)을 펫으로 추가해요. 펫은 ⋯ 메뉴의 「파일로 내보내기」로 보낼 수 있어요")}>
+          <button class="btn sm" onClick={() => void take()}>
+            <Icon name="open" size={14} />
+            {t("가져오기")}
           </button>
         </Row>
       </div>

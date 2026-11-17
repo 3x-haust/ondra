@@ -6,6 +6,7 @@
 //!   - move and size its window every frame (pet_frame)
 //!   - the other apps' windows on screen, for ledges to stand on (pet_windows)
 //!   - the pets on disk (<data>/pets/<id>/pet.json + GIFs) and the folder jobs make them in
+//!   - a pet shared as one file (<name>.ondrapet: a zip of its pet.json and pictures) and taken in from one
 //!   - the main window's word passed on (pet_set / pet_say) and the pet's click passed back (pet_clicked)
 use serde::Serialize;
 use serde_json::Value;
@@ -53,7 +54,7 @@ pub fn pet_list(app: AppHandle) -> Vec<PetOnDisk> {
 /// A pet made by a job, thrown away: its folder in <data>/pets (only a plain folder name there).
 #[tauri::command]
 pub fn pet_delete(app: AppHandle, id: String) -> Result<(), String> {
-    if id.is_empty() || id.starts_with('.') || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if !pet_id_ok(&id) {
         return Err("bad pet id".into());
     }
     let dir = pets_dir(&app).join(&id);
@@ -61,6 +62,188 @@ pub fn pet_delete(app: AppHandle, id: String) -> Result<(), String> {
         return Err("no such pet".into());
     }
     std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())
+}
+
+// ───────────── sharing a pet as one file
+
+/// what a shared pet holds: its pet.json and its pictures (not source/ or preview.png: not shown)
+const SHARE_EXT: &str = "ondrapet";
+const SHARE_KINDS: [&str; 4] = ["json", "gif", "png", "webp"];
+const SHARE_MAX_FILE: u64 = 10 * 1024 * 1024;
+const SHARE_MAX_ALL: u64 = 60 * 1024 * 1024;
+const SHARE_MAX_FILES: usize = 64;
+
+fn pet_id_ok(id: &str) -> bool {
+    !id.is_empty() && !id.starts_with('.') && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
+/// a scratch folder of its own (removed when dropped)
+struct Scratch(std::path::PathBuf);
+impl Scratch {
+    fn new(what: &str) -> Result<Self, String> {
+        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let p = std::env::temp_dir().join(format!("ondra-{what}-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+        Ok(Self(p))
+    }
+}
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The files of a pet folder that are shared, checked: plain files (no links), a kind a pet uses, not too big.
+fn share_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let mut out = vec![];
+    let mut all = 0u64;
+    for e in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
+        let p = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        let Ok(meta) = std::fs::symlink_metadata(&p) else { continue };
+        let kind = p.extension().and_then(|x| x.to_str()).unwrap_or("").to_ascii_lowercase();
+        if !meta.is_file() || name.starts_with('.') || name == "preview.png" || !SHARE_KINDS.contains(&kind.as_str()) {
+            continue;
+        }
+        if meta.len() > SHARE_MAX_FILE {
+            return Err(format!("{name}: 파일이 너무 커요"));
+        }
+        all += meta.len();
+        out.push(p);
+    }
+    if all > SHARE_MAX_ALL || out.len() > SHARE_MAX_FILES {
+        return Err("펫이 너무 커요".into());
+    }
+    if !out.iter().any(|p| p.file_name().is_some_and(|n| n == "pet.json")) {
+        return Err("pet.json이 없어요".into());
+    }
+    Ok(out)
+}
+
+/// A pet as one file in Downloads (<its name>.ondrapet), to send to someone; its path.
+#[tauri::command]
+pub async fn pet_export(app: AppHandle, id: String) -> Result<String, String> {
+    if !pet_id_ok(&id) {
+        return Err("bad pet id".into());
+    }
+    let dir = pets_dir(&app).join(&id);
+    let files = share_files(&dir)?;
+    let name = std::fs::read_to_string(dir.join("pet.json"))
+        .ok()
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(str::to_string))
+        .unwrap_or_else(|| id.clone());
+    let clean: String = name.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '\0' | '.')).take(60).collect();
+    let clean = if clean.trim().is_empty() { id.clone() } else { clean.trim().to_string() };
+    // staged as <id>/…: the archive's one folder names the pet when it is taken in
+    let scratch = Scratch::new("pet-export")?;
+    let stage = scratch.0.join(&id);
+    std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
+    for f in &files {
+        std::fs::copy(f, stage.join(f.file_name().unwrap_or_default())).map_err(|e| e.to_string())?;
+    }
+    let out_dir = crate::engine::home().join("Downloads");
+    std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let mut out = out_dir.join(format!("{clean}.{SHARE_EXT}"));
+    let mut n = 2;
+    while out.exists() {
+        out = out_dir.join(format!("{clean} {n}.{SHARE_EXT}"));
+        n += 1;
+    }
+    let ok = std::process::Command::new("/usr/bin/ditto")
+        .args(["-c", "-k", "--norsrc", "--keepParent"])
+        .arg(&stage)
+        .arg(&out)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !ok.success() {
+        return Err("펫 파일을 만들지 못했어요".into());
+    }
+    Ok(out.to_string_lossy().into_owned())
+}
+
+/// A shared pet file taken in: a new folder in <data>/pets (another id when that one is taken); its id.
+/// Only its pet.json and pictures are kept, checked, whatever else the file holds.
+#[tauri::command]
+pub async fn pet_import(app: AppHandle, path: String) -> Result<String, String> {
+    let src = std::path::PathBuf::from(&path);
+    let meta = std::fs::metadata(&src).map_err(|_| "파일을 찾지 못했어요".to_string())?;
+    if !meta.is_file() || meta.len() > SHARE_MAX_ALL {
+        return Err("펫 파일이 아니에요".into());
+    }
+    let scratch = Scratch::new("pet-import")?;
+    let ok = std::process::Command::new("/usr/bin/ditto").args(["-x", "-k"]).arg(&src).arg(&scratch.0).status().map_err(|e| e.to_string())?;
+    if !ok.success() {
+        return Err("펫 파일이 아니에요".into());
+    }
+    // pet.json at the top, or in the one folder there (not macOS's __MACOSX)
+    let root = if scratch.0.join("pet.json").is_file() {
+        scratch.0.clone()
+    } else {
+        let dirs: Vec<_> = std::fs::read_dir(&scratch.0)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()) && !e.file_name().to_string_lossy().starts_with("__MACOSX"))
+            .map(|e| e.path())
+            .collect();
+        match dirs.as_slice() {
+            [d] if d.join("pet.json").is_file() => d.clone(),
+            _ => return Err("펫 파일이 아니에요 (pet.json이 없어요)".into()),
+        }
+    };
+    let json = std::fs::read_to_string(root.join("pet.json")).map_err(|e| e.to_string())?;
+    let spec: Value = serde_json::from_str(&json).map_err(|_| "pet.json을 읽지 못했어요".to_string())?;
+    if !spec.get("actions").is_some_and(|a| a.is_object()) {
+        return Err("pet.json에 동작이 없어요".into());
+    }
+    let files = share_files(&root)?;
+    // its id: the folder it came in, else the file's name, as letters, digits and -
+    let base = if root != scratch.0 { root.file_name() } else { src.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let mut id: String = base.to_ascii_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    id = id.trim_matches('-').chars().take(48).collect();
+    if !pet_id_ok(&id) || id == "default" {
+        id = "pet".into();
+    }
+    let pets = pets_dir(&app);
+    let mut dest = pets.join(&id);
+    let mut n = 2;
+    while dest.exists() {
+        dest = pets.join(format!("{id}-{n}"));
+        n += 1;
+    }
+    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    for f in &files {
+        if let Err(e) = std::fs::copy(f, dest.join(f.file_name().unwrap_or_default())) {
+            let _ = std::fs::remove_dir_all(&dest);
+            return Err(e.to_string());
+        }
+    }
+    Ok(dest.file_name().unwrap_or_default().to_string_lossy().into_owned())
+}
+
+/// pet files opened with Ondra (double-clicked in Finder) not yet taken in: the page asks for them when it
+/// loads, and again on "pet:opened" (a file opened while it runs)
+static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Files the system asked Ondra to open: the pet files among them wait for the page.
+pub fn opened(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
+    let pets: Vec<String> = paths
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case(SHARE_EXT)))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    if pets.is_empty() {
+        return;
+    }
+    if let Ok(mut q) = OPENED.lock() {
+        q.extend(pets);
+    }
+    let _ = app.emit_to("main", "pet:opened", ());
+}
+
+#[tauri::command]
+pub fn pet_opened() -> Vec<String> {
+    OPENED.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
 }
 
 #[tauri::command]

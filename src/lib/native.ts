@@ -467,6 +467,8 @@ export interface PetConfig {
   size: number;
   /** names the user gave pets (id → name) */
   names?: Record<string, string>;
+  /** a pet's own height (id → points), set in Settings › 펫; else size */
+  sizes?: Record<string, number>;
   /** bumped when a pet's pictures were made again: the pets load them anew instead of the old ones */
   v?: number;
 }
@@ -477,6 +479,12 @@ export type PetWord =
 export const petList = () => call<{ id: string; dir: string; json: string }[]>("pet_list", undefined, []);
 export const petFolder = () => call<string>("pet_folder", undefined, "");
 export const petDelete = (id: string) => call<void>("pet_delete", { id });
+/** a pet as one file in Downloads (<name>.ondrapet), to send to someone: its path */
+export const petExport = (id: string) => call<string>("pet_export", { id });
+/** a shared pet file taken in as a new pet: its id */
+export const petImport = (path: string) => call<string>("pet_import", { path });
+/** pet files opened with Ondra (double-clicked in Finder) waiting to be taken in */
+export const petOpened = () => call<string[]>("pet_opened", undefined, []);
 export const petSet = (config: PetConfig) => call<void>("pet_set", { config });
 export const petGet = () => call<PetConfig | null>("pet_get", undefined, null);
 export const petSay = (word: PetWord) => call<void>("pet_say", { word });

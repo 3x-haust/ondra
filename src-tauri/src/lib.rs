@@ -417,6 +417,9 @@ pub fn run() {
             pet::pet_list,
             pet::pet_folder,
             pet::pet_delete,
+            pet::pet_export,
+            pet::pet_import,
+            pet::pet_opened,
             pet::pet_set,
             pet::pet_get,
             pet::pet_say,
@@ -581,6 +584,12 @@ pub fn run() {
 
     app.run(|app, event| match event {
         RunEvent::Reopen { .. } => show_main(app),
+        // a file double-clicked in Finder (a shared pet, <name>.ondrapet)
+        #[cfg(target_os = "macos")]
+        RunEvent::Opened { urls } => {
+            pet::opened(app, urls.iter().filter_map(|u| u.to_file_path().ok()).collect());
+            show_main(app);
+        }
         // the last change is saved before the app goes (an update's restart saved it already)
         RunEvent::ExitRequested { code, api, .. } if code != Some(tauri::RESTART_EXIT_CODE) => {
             if store::hold_quit_for_save(app, code.unwrap_or(0)) {

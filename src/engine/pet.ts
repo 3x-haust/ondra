@@ -3,7 +3,9 @@
 // given), and opens the job the pet was clicked on. A pet job makes new pets (skills/pet-maker)
 // and sends {"type":"pet","id":…} to put one on.
 import { createEffect, on } from "solid-js";
-import { onEvent, petSay, petSet, type PetConfig, type PetWord } from "../lib/native";
+import { onEvent, petImport, petOpened, petSay, petSet, type PetConfig, type PetWord } from "../lib/native";
+import { toast } from "../state/ui";
+import { t } from "../i18n";
 import { decisionFor, setState, state, taskById } from "../state/store";
 import type { Decision, Task } from "../state/types";
 
@@ -20,6 +22,7 @@ export const petConfig = (): PetConfig => ({
   ids: petIds(),
   size: state.settings.pet?.size ?? PET_SIZE,
   names: state.settings.pet?.names,
+  sizes: state.settings.pet?.sizes,
   v: state.settings.pet?.v,
 });
 
@@ -93,6 +96,20 @@ export function startPet(open: (t: Task) => void, openSettings: () => void) {
     const t = taskId ? taskById(taskId) : undefined;
     if (t) open(t);
   });
+  // a shared pet file double-clicked in Finder: taken in and put on screen (now, and whenever another is opened)
+  const takeOpened = async () => {
+    for (const path of await petOpened().catch(() => [])) {
+      const file = path.split("/").pop() ?? path;
+      try {
+        wearPet(await petImport(path));
+        toast(t("{file} 펫을 가져와서 화면에 띄웠어요", { file }));
+      } catch (e) {
+        toast(`${file}: ${String(e)}`, "bad");
+      }
+    }
+  };
+  void takeOpened();
+  void onEvent("pet:opened", () => void takeOpened());
   void onEvent<{ answer?: { decisionId: string; optionId: string }; hide?: boolean }>("pet:tell", ({ answer, hide }) => {
     if (hide) setState("settings", "pet", { ...petConfig(), on: false });
     if (answer) void import("./tasks").then((m) => m.decide(answer.decisionId, answer.optionId));
