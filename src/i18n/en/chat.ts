@@ -284,4 +284,6 @@ export default {
   "일시정지 · 다시 시작함": "Paused · resumed",
   "메모리에 저장|note": "Saved to memory",
   "기타": "Other",
+  "자동 판단": "Auto",
+  "AI가 판단해서 위험한 것만 물어봐요": "The AI decides, and asks only about risky things",
 } satisfies Record<string, string>;

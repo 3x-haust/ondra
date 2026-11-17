@@ -1118,7 +1118,7 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   try {
     const t0 = taskById(id)!;
     const t = t0;
-    const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "edits"] as [string, string], ["ONDRA_SPACE", t0.space] as [string, string], ["ONDRA_GITHUB_WRITE", state.settings.githubWrite === false ? "0" : "1"] as [string, string], ["ONDRA_DEVICES_ALLOWED", allowedDevices(t0.space, id).join(",")] as [string, string], ...dataEnv(t0)];
+    const env = [...(await workerEnv(id, t0.space)), ...(await accountEnv(account.id)), ...(await spaceEnv(spaceById(t0.space))), ["ONDRA_PERMISSION", t0.permission ?? "auto"] as [string, string], ["ONDRA_SPACE", t0.space] as [string, string], ["ONDRA_GITHUB_WRITE", state.settings.githubWrite === false ? "0" : "1"] as [string, string], ["ONDRA_DEVICES_ALLOWED", allowedDevices(t0.space, id).join(",")] as [string, string], ...dataEnv(t0)];
     env.push(["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t0.space))]);
     // the project's secrets on top of the global ones (Settings › 시크릿; native side reads them)
     const secretProject = taskProject(t0);
@@ -2293,7 +2293,7 @@ export function createTask(f: {
     // no model of its own unless asked for one: it runs on its account's model (each account picks its own)
     model: f.model || undefined,
     thinking: f.thinking || undefined,
-    permission: state.settings.permission ?? "edits",
+    permission: state.settings.permission ?? "auto",
     ...(f.from ? { from: f.from } : {}),
     ...(f.routine ? { routine: f.routine } : {}),
   };

@@ -17,6 +17,7 @@ import { unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
 import { addProject, onWrite, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { permissionOf } from "../state/persist";
 import type { Decision, Task } from "../state/types";
 import type { FarAsk, HostInfo } from "../state/mirror";
 import { creditsOf, emails, loadEmail, usageOf } from "../state/limits";
@@ -226,7 +227,9 @@ export function create(c: { device: string }, f: FarAsk) {
     ...(typeof f.by === "string" && f.by ? { by: f.by } : {}),
   });
   // asked with a permission of its own (that Mac's default, or the one picked there)
-  if (f.permission === "ask" || f.permission === "edits" || f.permission === "full") updateTask(id, (x) => (x.permission = f.permission));
+  // an older Mac still says "edits" for auto
+  const perm = permissionOf(f.permission);
+  if (perm) updateTask(id, (x) => (x.permission = perm));
   return id;
 }
 

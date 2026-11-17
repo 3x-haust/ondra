@@ -237,7 +237,7 @@ export function ModelPicker(props: {
 // ───────────── what a job may do without asking
 export const PERMISSIONS: { id: Permission; label: string; icon: string; desc: string }[] = [
   { id: "ask", label: "매번 묻기", icon: "lock", desc: "수정 전에 확인" },
-  { id: "edits", label: "편집 허용", icon: "pencil", desc: "폴더 안 파일은 바로 수정" },
+  { id: "auto", label: "자동 판단", icon: "bolt", desc: "AI가 판단해서 위험한 것만 물어봐요" },
   { id: "full", label: "전체 권한", icon: "shield", desc: "확인 없이 모두 실행" },
 ];
 
