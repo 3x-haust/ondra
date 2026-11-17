@@ -126,6 +126,7 @@ Answers can draw a step-by-step board, build a 3D model you can turn, or lay out
 - **Routines:** daily work becomes a routine that runs on schedule while Ondra is open and the Mac is awake.
 - **Another Mac:** run tasks on your other Mac's projects. The work shows up here, end-to-end encrypted in between.
 - **`/btw`:** ask a quick question on the side while the work runs, without interrupting it.
+- **Pet:** a little pet that lives on your whole screen. It walks along the bottom and on top of other windows, falls when a window closes, can be picked up and thrown, and dozes off when nothing happens. It cheers when a task is done and calls you when one needs an answer. Type `/pet Pikachu` (any character) and a task finds (or draws) its GIFs and turns it into your pet.
 
 <p align="center"><img src="docs/assets/readme/memory-en.jpg" width="880" alt="Memory: a folder tree, a graph of related memories and counts by kind"></p>
 

@@ -58,6 +58,18 @@
     "active": true,
     "targets": ["app"],
     "category": "DeveloperTool",
+    "fileAssociations": [
+      {
+        "ext": ["ondrapet"],
+        "name": "Ondra Pet",
+        "description": "A desktop pet for Ondra",
+        "role": "Viewer",
+        "rank": "Owner",
+        "mimeType": "application/x-ondra-pet",
+        "contentTypes": ["dev.3xhaust.ondra.pet"],
+        "exportedType": { "identifier": "dev.3xhaust.ondra.pet", "conformsTo": ["public.zip-archive", "public.data"] }
+      }
+    ],
     "externalBin": [
       "binaries/ondra-browser",
       "binaries/ondra-binary",

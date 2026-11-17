@@ -807,6 +807,111 @@ button.route:hover {
   align-items: center;
   gap: var(--s-8);
 }
+.pet-list-hint {
+  margin: calc(-1 * var(--s-4)) 0 var(--s-10);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.pet-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--s-10);
+  margin-bottom: var(--s-24);
+}
+.pet-card {
+  border-radius: var(--r-xl);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pet-card.on {
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+  background: var(--accent-soft);
+}
+.pet-card.ctx {
+  box-shadow: inset 0 0 0 1.5px var(--focus);
+}
+.pet-card-pick {
+  all: unset;
+  position: relative;
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: var(--s-6);
+  cursor: pointer;
+}
+.pet-card-pick:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+}
+.pet-card-pick img {
+  height: 72px;
+  image-rendering: pixelated;
+}
+.pet-card-on {
+  position: absolute;
+  top: var(--s-8);
+  right: var(--s-8);
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+}
+.pet-card-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-6) var(--s-6) var(--s-6) var(--s-12);
+  border-top: 1px solid var(--line-soft);
+  min-height: 36px;
+}
+.pet-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pet-card-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  font-size: var(--fs-sm);
+}
+.pet-card-more {
+  all: unset;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.pet-card-more:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.pet-card-more:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.pet-make {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-8);
+}
+.pet-make .input {
+  width: 200px;
+}
 .set-volume {
   display: flex;
   align-items: center;

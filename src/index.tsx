@@ -20,13 +20,17 @@ import "./styles/changes.css";
 import App from "./App";
 import { Capture } from "./views/Capture";
 import { VizGallery } from "./views/VizGallery";
+import { Pet } from "./pet/Pet";
+import "./pet/pet.css";
 
-// One bundle, two windows: the ⌥Space window loads with #capture.
+// One bundle, three windows: the ⌥Space window loads with #capture, the pet with #pet.
 const isCapture = location.hash === "#capture";
+const isPet = location.hash.startsWith("#pet");
 document.documentElement.classList.toggle("capture-window", isCapture);
+document.documentElement.classList.toggle("pet-window", isPet);
 // every chart kind with its examples, for checking them side by side (?gallery)
 const isGallery = new URLSearchParams(location.search).has("gallery");
-render(() => (isCapture ? <Capture /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
+render(() => (isCapture ? <Capture /> : isPet ? <Pet /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
 
 // text boxes grow with what's typed (WebKit without field-sizing)
 if (!CSS.supports("field-sizing", "content")) {

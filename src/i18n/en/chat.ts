@@ -284,6 +284,8 @@ export default {
   "일시정지 · 다시 시작함": "Paused · resumed",
   "메모리에 저장|note": "Saved to memory",
   "기타": "Other",
+  "펫 만들기 · 뒤에 캐릭터 이름 (픽셀도 돼요)": "Make a pet · a character's name after it (pixel art too)",
+  "펫 만들기 스킬을 찾지 못했어요": "Couldn't find the pet skill",
   "자동 판단": "Auto",
   "AI가 판단해서 위험한 것만 물어봐요": "The AI decides, and asks only about risky things",
 } satisfies Record<string, string>;

@@ -102,6 +102,12 @@ type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "
 const drafts = new Map<string, { text: string; files: string[]; nums?: [string, number][] }>();
 /** something unsent is kept for this input */
 export const hasDraft = (key: string) => drafts.has(key);
+/** words put into a chat's input from elsewhere (Settings › 펫 → "/skill:pet-maker …"), part of them picked to type over */
+const [filled, setFilled] = createSignal<{ key: string; text: string; pick: [number, number] } | null>(null);
+export function fillDraft(key: string, text: string, pick: [number, number] = [text.length, text.length]) {
+  drafts.set(key, { text, files: [] });
+  setFilled({ key, text, pick });
+}
 
 export function Composer(props: {
   placeholder: string;
@@ -181,6 +187,14 @@ export function Composer(props: {
       },
     ),
   );
+  createEffect(() => {
+    const f = filled();
+    if (!f || f.key !== props.draftKey || !el) return;
+    setFilled(null);
+    setText(f.text);
+    el.value = f.text;
+    queueMicrotask(() => (grow(), el.focus(), el.setSelectionRange(...f.pick)));
+  });
   createEffect(() => {
     const t = text();
     const f = files();
@@ -316,6 +330,18 @@ export function Composer(props: {
     }
     setPick(null);
   };
+  // the commands came in after "/" was typed (the skills are read from disk the first time they are
+  // asked for): the menu being typed is looked up again, so "/skill:" isn't left with nothing
+  createEffect(
+    on(
+      () => props.commands?.length ?? 0,
+      () => {
+        if (el && document.activeElement === el && /(^|\s)\/\S*$/.test(el.value.slice(0, el.selectionStart ?? el.value.length))) void refresh();
+      },
+      { defer: true },
+    ),
+  );
+
   const choose = (i: number) => {
     const p = pick();
     if (!p) return;

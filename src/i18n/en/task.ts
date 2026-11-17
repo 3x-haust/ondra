@@ -427,4 +427,12 @@ export default {
   "이 프로젝트에서 작업이 끝나면 묻지 않고 원래 폴더에 합쳐요 (사용자가 {n}번 연속 합치기를 골랐어요)": "In this project, a finished job's changes are merged into the original folder without asking (the user chose merge {n} times in a row)",
   "이 프로젝트에서 작업이 끝나면 묻지 않고 PR로 올려요 (사용자가 {n}번 연속 PR을 골랐어요)": "In this project, a finished job's changes go up as a PR without asking (the user chose a PR {n} times in a row)",
   "\"{title}\" 작업이 이어받아 진행 중이에요. 그 작업에서 계속해 주세요": "\"{title}\" carried this job on and is still working. Continue there",
+  "다 했어요": "Done",
+  "물어볼 게 있어요": "I have a question",
+  "잘 안 됐어요": "It didn't work",
+  "펫을 화면에 띄웠어요": "Put the pet on screen",
+  "펫 설정…": "Pet settings…",
+  "깨우기": "Wake up",
+  "재우기": "Put to sleep",
+  "펫 숨기기": "Hide pet",
 } satisfies Record<string, string>;

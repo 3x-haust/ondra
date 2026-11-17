@@ -306,6 +306,7 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     env.extend(crate::bridge::env());
     env.push(("ONDRA_HOOKS_FILE".into(), hooks_file(&app).display().to_string()));
     env.push(("APP_SCRATCH_DIR".into(), crate::store::scratch_dir(&worker_id).display().to_string()));
+    env.push(("APP_PETS_DIR".into(), crate::pet::pets_dir(&app).display().to_string()));
     env.push(("APP_ARTIFACTS_DIR".into(), crate::store::artifacts_dir(app, worker_id)));
     env
 }

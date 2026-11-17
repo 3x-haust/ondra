@@ -24,6 +24,8 @@ import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
+import type { Command } from "../ui/Composer";
+import { petWords } from "./PetSettings";
 import { sendSide } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
@@ -629,9 +631,11 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
   const account = () => chooseAccount(state.space, p()?.name ?? "");
   const computer = () => (p() ? (p()!.host ? { host: p()!.host! } : undefined) : chosenComputer());
   const send = (text: string) => {
+    // "/skill:pet-maker 피카츄" is titled by its words, not the skill's name
+    const words = text.replace(/^\/skill:\S+\s*(\(also use [^)]*\)\s*)?/, "");
     const id = createTask({
       space: state.space,
-      title: titleOf(text),
+      title: titleOf(words || text),
       topic: p()?.name ?? "",
       ask: text,
       cwd: p()?.folder,
@@ -661,6 +665,18 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           // a job of another Mac reads attachments there: they are sent over first
           upload={computer() ? (f) => sendFiles(computer()!.host, f) : undefined}
           onSend={send}
+          // skills: the new job starts with "/skill:name …" (the engine hands it that skill); /pet makes a pet
+          commands={[
+            btwCommand(() => `main:${chatKey(state.space, props.project)}`),
+            ...feedbackCommands(),
+            ...everyCommands().filter((c) => c.name !== "pet"),
+            { name: "pet", desc: t("펫 만들기 · 뒤에 캐릭터 이름 (픽셀도 돼요)"), icon: "pet", run: (a: string) => send(`/skill:pet-maker ${a.trim() || petWords()}`) },
+            ...skillCommands(() => ({ space: state.space, project: p()?.id }), computer() ? { host: computer()!.host, project: splitProjectId(p()?.id)?.id } : undefined).map((c) => ({
+              ...c,
+              run: (a: string, also: string[] = []) =>
+                send(`/${c.name} ${also.length ? `(also use the ${also.join(", ")} skill${also.length > 1 ? "s" : ""}) ` : ""}${a}`.trim()),
+            })),
+          ]}
           status={
             <Show
               when={computer()}
@@ -822,14 +838,7 @@ export function MainView() {
       commands={[
         btwCommand(() => `main:${key()}`),
         ...feedbackCommands(),
-        { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
-        { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
-        { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
-        { name: "auto", desc: t("권한: {name}", { name: t("자동 판단") }), icon: "bolt", run: () => setState("settings", "permission", "auto") },
-        { name: "full", desc: t("권한: {name}", { name: t("전체 권한") }), icon: "shield", run: () => setState("settings", "permission", "full") },
-        { name: "remember", desc: t("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
-        { name: "memory", desc: t("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
-        { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
+        ...everyCommands(),
         // the chat only: jobs, results and memory stay
         { name: "clear", desc: t("이 대화 비우기 · 작업과 결과는 그대로"), icon: "refresh", run: () => void resetMain(state.space, project()?.id).then(() => toast(t("대화를 비웠어요"))) },
         ...(computer()
@@ -1325,4 +1334,29 @@ function RequestBoard(props: { msgs: CaptainMessage[]; started: (m: CaptainMessa
       </div>
     </Show>
   );
+}
+
+/** /pet: the pet-maker skill with the character asked for (or one that suits the user) */
+function petCommand(arg: string) {
+  const words = arg.trim() || petWords();
+  const skill = skillCommands(() => ({ space: state.space })).find((c) => c.name === "skill:pet-maker");
+  if (skill) skill.run(words);
+  else toast(t("펫 만들기 스킬을 찾지 못했어요"));
+}
+
+/** The "/" commands of every place a job starts from (main and the new-task screen): the panels,
+ *  the permission, memory, settings and /pet. */
+function everyCommands(): Command[] {
+  return [
+    { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
+    { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
+    { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
+    { name: "auto", desc: t("권한: {name}", { name: t("자동 판단") }), icon: "bolt", run: () => setState("settings", "permission", "auto") },
+    { name: "full", desc: t("권한: {name}", { name: t("전체 권한") }), icon: "shield", run: () => setState("settings", "permission", "full") },
+    // "/pet 피카츄": the pet skill, asked the way "/skill:pet-maker 피카츄" is; alone, a pet that suits the user
+    { name: "pet", desc: t("펫 만들기 · 뒤에 캐릭터 이름 (픽셀도 돼요)"), icon: "pet", run: (a) => petCommand(a) },
+    { name: "remember", desc: t("메모리에 저장"), icon: "memory", run: (a) => a.trim() && addMemory(a, "space", { space: state.space }) },
+    { name: "memory", desc: t("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
+    { name: "settings", desc: t("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
+  ];
 }

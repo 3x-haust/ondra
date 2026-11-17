@@ -687,6 +687,9 @@ export interface Settings {
   extraTools?: string[];
   /** a job that changes an app drives the change in the real app before it is done (the project's check skill); missing = on */
   appCheck?: boolean;
+  /** the pets on the screen (src/pet): on, which ("default" or folders in <data>/pets; `id` from before
+   *  there could be several), their height in points */
+  pet?: { on: boolean; ids?: string[]; id?: string; size: number; names?: Record<string, string>; sizes?: Record<string, number>; v?: number };
   /** a checked bug or performance fix that changes nothing the user sees is merged without asking (memory can say otherwise); missing = on */
   autoMergeFixes?: boolean;
   /** a project rule the user had to say again becomes an automatic check (lint, test, CI) made by a job of its own; missing = on */
