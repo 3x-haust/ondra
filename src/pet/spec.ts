@@ -45,3 +45,59 @@ export function parseSpec(id: string, json: string, src: (file: string) => strin
   if (!actions.idle) return null;
   return { id, name: typeof j.name === "string" && j.name.trim() ? j.name.trim().slice(0, 40) : id, faces: j.faces === "left" ? "left" : "right", actions };
 }
+
+/** Where the character itself is in a picture (its first frame), in the picture's pixels: the first and last
+ *  columns and rows where something shows. Pets are sized by its height and put against walls by its sides,
+ *  so a picture drawn with room around it shows the same as one cut close. null: nothing showing. */
+export function bodyBox(rgba: Uint8ClampedArray, w: number, h: number, alpha = 40): { l: number; r: number; t: number; b: number } | null {
+  let l = w, r = -1, t = -1, b = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (rgba[(y * w + x) * 4 + 3] <= alpha) continue;
+      if (t < 0) t = y;
+      b = y;
+      if (x < l) l = x;
+      if (x > r) r = x;
+    }
+  }
+  return t < 0 ? null : { l, r, t, b };
+}
+
+/** how tall the character is in a picture's pixels (bodyBox) */
+export const bodyHeight = (rgba: Uint8ClampedArray, w: number, h: number, alpha = 40) => {
+  const box = bodyBox(rgba, w, h, alpha);
+  return box ? box.b - box.t + 1 : null;
+};
+
+export interface PictureBody {
+  w: number;
+  h: number;
+  /** the character in it (the whole picture when it can't be read) */
+  box: { l: number; r: number; t: number; b: number };
+}
+
+/** a picture by address: its size and where the character is in it */
+export async function pictureBody(src: string): Promise<PictureBody | null> {
+  const im = new Image();
+  im.crossOrigin = "anonymous";
+  const ok = await new Promise<boolean>((done) => {
+    im.onload = () => done(true);
+    im.onerror = () => done(false);
+    im.src = src;
+  });
+  const w = im.naturalWidth, h = im.naturalHeight;
+  if (!ok || !w || !h) return null;
+  const whole = { w, h, box: { l: 0, r: w - 1, t: 0, b: h - 1 } };
+  try {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const x = c.getContext("2d", { willReadFrequently: true });
+    if (!x) return whole;
+    x.drawImage(im, 0, 0);
+    const box = bodyBox(x.getImageData(0, 0, w, h).data, w, h);
+    return box ? { w, h, box } : whole;
+  } catch {
+    return whole;
+  }
+}

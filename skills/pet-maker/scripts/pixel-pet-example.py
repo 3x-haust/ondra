@@ -307,7 +307,7 @@ for i in range(6):
     greet.append(pose(eyes="happy", mouth="open", arms=((-11, 2), (11 + s * 2, -12)), lift=1 if i == 0 else 0, look=2))
 FRAMES["greet"] = (greet, [160] * 6)
 
-# on a wall (the app turns the picture so its feet touch the wall): reaching up paw over paw, legs pushing
+# on a wall (upright, the wall just in front of it): reaching up paw over paw, legs pushing
 climb = []
 for i in range(4):
     s = 1 if i % 2 else -1

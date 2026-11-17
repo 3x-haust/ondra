@@ -61,15 +61,16 @@ Make all fifteen, each one moving. Frames: 4–8 (walk 6–8).
 | work | jobs are running | sitting at a laptop, typing (hands taking turns), looking at the screen |
 | fall | in the air (dropped, thrown) | arms and legs flailing, mouth open |
 | drag | held by the mouse | held up, legs kicking and dangling |
-| climb | climbing a wall (the app turns it) | facing the wall from behind or upright, reaching up hand over hand, legs pushing |
-| cling | holding on to a wall (turned) | both hands up holding on, legs hanging |
+| climb | climbing a wall | upright, side view facing the wall (`faces`), reaching up hand over hand, a knee lifting, the other leg pushing |
+| cling | holding on to a wall | upright, side view facing the wall, both hands up holding on, legs hanging and swaying |
 
 Every GIF: transparent background, feet on the bottom edge (sleep: lying on it),
 facing `faces`, the character at the same size in every act (about 96 px tall
 standing; pixel art 64–128), looping, under 2 MB. The app draws every GIF at one
 scale (idle's height is the pet's size), so a GIF may have room above for Zz or
 sparkles, but the character itself must not change size. The app mirrors it to
-walk the other way, and turns climb/cling on walls itself (draw them upright).
+walk the other way and to face the wall it climbs; it never turns a picture on its side, so draw climb
+and cling upright, as if the wall were just in front of it.
 
 ## The style
 

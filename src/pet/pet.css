@@ -105,3 +105,23 @@ html.pet-window #root {
 .pet-bubble.pet-failed b {
   color: var(--bad-ink);
 }
+/* its right-click menu: a bubble of rows over its head */
+.pet-bubble.pet-menu {
+  padding: var(--s-4);
+  gap: 0;
+  cursor: default;
+}
+.pet-menu-item {
+  all: unset;
+  box-sizing: border-box;
+  padding: var(--s-6) var(--s-10);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pet-menu-item:hover,
+.pet-menu-item:focus-visible {
+  background: var(--hover);
+}

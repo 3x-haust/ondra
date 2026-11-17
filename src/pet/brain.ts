@@ -21,7 +21,7 @@ const FALLBACK: Record<Act, Act[]> = {
   alert: ["happy", "idle"],
   sad: ["sit", "idle"],
   work: ["sit", "idle"],
-  // on a wall the picture is turned so its feet touch the wall: walking up it is climbing
+  // on a wall it stays upright, facing the wall: a pet with no climbing picture walks up it
   climb: ["walk", "idle"],
   cling: ["idle"],
   poke: ["happy", "idle"],
@@ -215,7 +215,7 @@ export function step(b: Body, world: World, work: Box, dt: number, now: number, 
     if ((nx < minX || nx > maxX) && Math.abs(n.vx) >= STICK_SPEED) {
       const w = world.walls.find((x) => x.id === (nx < minX ? -2 : -3));
       if (w) {
-        const y = Math.min(w.y1 - half, Math.max(w.y0 + half, n.y - H / 2));
+        const y = Math.min(w.y1 - H / 2, Math.max(w.y0 + H / 2, n.y - H / 2));
         return { ...n, wall: w.id, x: w.x, y, vx: 0, vy: 0, act: "cling", dir: -1, on: undefined, until: now + between(r, 1_500, 4_000) };
       }
     }
@@ -246,7 +246,7 @@ export function step(b: Body, world: World, work: Box, dt: number, now: number, 
     // a wall in front, rising from where it walks: sometimes it climbs it
     const w = world.walls.find((x) => x.side === n.dir && (before - x.x) * (front - x.x) <= 0 && x.y1 >= on.y - 6 && x.y0 <= on.y - 60);
     if (w && r() < CLIMB_CHANCE) {
-      return { ...n, wall: w.id, x: w.x, y: Math.min(on.y, w.y1) - half - 1, act: "climb", dir: -1, on: undefined, until: now + between(r, 3_000, 9_000) };
+      return { ...n, wall: w.id, x: w.x, y: Math.min(on.y, w.y1) - H / 2 - 1, act: "climb", dir: -1, on: undefined, until: now + between(r, 3_000, 9_000) };
     }
     if (n.x <= minX || n.x >= maxX) {
       n.x = Math.min(maxX, Math.max(minX, n.x));
@@ -268,15 +268,16 @@ export function step(b: Body, world: World, work: Box, dt: number, now: number, 
   return n;
 }
 
-/** where the pet's picture is when on wall `w` at y: its middle (the picture is turned, feet on the wall) */
-export const wallMiddle = (w: Wall, y: number, H: number) => ({ x: w.x - w.side * (H / 2), y });
+/** where the pet's picture is when on wall `w` at y: its middle (upright beside the wall, W wide) */
+export const wallMiddle = (w: Wall, y: number, W: number) => ({ x: w.x - w.side * (W / 2), y });
 
 function onWall(n: Body, world: World, dt: number, now: number, r: Rand, o: StepOpts, W: number, H: number): Body {
-  const half = W / 2;
+  // along the wall it is its height (upright)
+  const half = H / 2;
   const w = world.walls.find((x) => x.id === n.wall);
   // upright again around the same middle, so it doesn't jump
   const off = (vx = 0): Body => {
-    const m = w ? wallMiddle(w, n.y, H) : { x: n.x, y: n.y };
+    const m = w ? wallMiddle(w, n.y, W) : { x: n.x, y: n.y };
     return { ...n, wall: undefined, act: "fall", x: m.x, y: m.y + H / 2, vx, vy: 0, on: undefined, dir: vx < 0 ? -1 : vx > 0 ? 1 : n.dir };
   };
   // its wall went away (the window closed or moved off)
@@ -289,10 +290,10 @@ function onWall(n: Body, world: World, dt: number, now: number, r: Rand, o: Step
     if (n.y - half <= w.y0) {
       // the top: it hops up and over onto the window it climbed (an arc from where it is, not a jump
       // cut), or (nothing up there) it holds on
-      const tx = w.x + w.side * (half + 2);
+      const tx = w.x + w.side * (W / 2 + 2);
       const top = world.ledges.find((l) => !l.floor && Math.abs(l.y - w.y0) <= 3 && tx >= l.x0 && tx <= l.x1);
       if (top) {
-        const m = wallMiddle(w, n.y, H);
+        const m = wallMiddle(w, n.y, W);
         return { ...n, wall: undefined, act: "fall", x: m.x, y: m.y + H / 2, vx: w.side * HOP_VX, vy: -HOP_VY, on: undefined, dir: w.side };
       }
       n.y = w.y0 + half;

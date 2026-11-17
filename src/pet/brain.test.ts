@@ -73,8 +73,8 @@ describe("moving", () => {
     let b = step(body({ x: 563, act: "walk", dir: 1 }), w2, work, 0.05, 0, r(0.1));
     expect(b).toMatchObject({ act: "climb", x: 600, dir: -1 });
     // it climbs, then hops over in an arc: never a jump of more than a few points in one step
-    // where the picture's middle is (upright: half its height above the feet; on a wall: beside it)
-    const mid = (x: Body) => (x.wall === undefined ? { x: x.x, y: x.y - 44 } : wallMiddle(w2.walls.find((w) => w.id === x.wall)!, x.y, 88));
+    // where the picture's middle is (half its height above the feet; on a wall: beside it, upright)
+    const mid = (x: Body) => (x.wall === undefined ? { x: x.x, y: x.y - 44 } : wallMiddle(w2.walls.find((w) => w.id === x.wall)!, x.y, 70));
     let moved = 0;
     for (let i = 0; i < 4000 && !(b.act === "idle" && b.on !== undefined); i++) {
       const before = mid(b);
