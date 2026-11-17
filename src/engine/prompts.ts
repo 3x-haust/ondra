@@ -223,8 +223,8 @@ intent or taste (a design direction, tone, what to show about them, scope),
 send {"type":"ask","question":"…","options":[{"label":"…","note":"what it means, one line"},…],"context":[pictures that show each option]}
 and end your turn. Ask once, where it matters: 2–3 concrete options, your
 recommendation first. Technical details (how to build it, which library, file
-layout) you decide yourself. Don't ask what the user already allowed (in the
-task, a later message, or a memory rule like "push, PR and merge on your
+layout) you decide yourself. Don't ask what the user already allowed or
+answered (the task, a later message, memory like "push, PR and merge on your
 own"): go ahead and say so in the report. Never ask about details that don't
 change the result, or about something done that can't be undone: report it
 under **남은 것**. A choice answered once in this task is settled for the same
@@ -935,11 +935,23 @@ function kidLines(t: Task): string[] {
   return out;
 }
 
+/** What the project's memory says becomes of a job's branch (learned from the user's answers, or their own words). */
+export function landHabit(t: Task): string | undefined {
+  const folder = projectById(t.project, t.space)?.folder;
+  if (!folder) return undefined;
+  return state.memory.find((m) => !m.invalidAt && m.scope === "project" && m.project === folder && m.key === "land")?.text;
+}
+
 function gitNote(t: Task): string[] {
   const w = t.worktree;
   if (!w || w.state !== "open") return [];
+  const habit = landHabit(t);
+  const fixes =
+    state.settings.autoMergeFixes === false
+      ? ""
+      : ' By default a bug or performance fix (also a new lint rule, test or check) that changes nothing the user sees or does, with all of it checked, goes in without asking: send {"type":"merge","kind":"fix"} with your done. Ondra merges it only when a test or build you ran passed (in your evidence) and nothing is left in "unverified", and asks the user otherwise. Anything that changes what the user sees or does (screens, wording, flows, a new feature) is never a fix: leave it to the question.';
   return [
-    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done. When you finish with changes, Ondra asks the user whether to merge them, open a PR or throw them away: don't ask that yourself. When the user or the project's memory already said what happens to this work, do it: push and open the PR yourself, or send {\"type\":\"merge\"} (merge into the original folder's current branch) or {\"type\":\"discard\"} with your done, and Ondra does it after your turn. Only what is meant to be merged goes in this folder: scripts you run to check something, notes and downloads for a question or research go in $APP_SCRATCH_DIR, reports in $APP_ARTIFACTS_DIR. A job that leaves the repo unchanged ends without a merge.`,
+    `Git: you work in your own worktree on branch \`${w.branch}\`, so other tasks can't touch your files. Stay on this branch and don't edit the original folder ${homeDir(t)}. Commit when a piece is done. When you finish with changes, Ondra asks the user whether to merge them, open a PR or throw them away: don't ask that yourself.${fixes} The user's words and the project's memory come first, either way: when they already said what happens to this work (always merge, always a PR, always ask), do that: push and open the PR yourself, or send {\"type\":\"merge\"} (merge into the original folder's current branch) or {\"type\":\"discard\"} with your done, and Ondra does it after your turn; when they said to ask, send no merge.${habit ? ` The project's memory says: "${habit}"` : ""} Only what is meant to be merged goes in this folder: scripts you run to check something, notes and downloads for a question or research go in $APP_SCRATCH_DIR, reports in $APP_ARTIFACTS_DIR. A job that leaves the repo unchanged ends without a merge.`,
   ];
 }
 

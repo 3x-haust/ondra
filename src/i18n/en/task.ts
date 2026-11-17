@@ -422,5 +422,9 @@ export default {
   "브랜치를 올리고 풀 리퀘스트를 열어요": "Push the branch and open a pull request",
   "이 작업이 바꾼 것을 지워요": "Throw away what this job changed",
   "병합하지 못했어요": "Couldn't merge",
+  "확인 못 한 게 있어요": "Some of it wasn't checked",
+  "테스트·빌드를 돌린 기록이 없어요": "No test or build was seen running",
+  "이 프로젝트에서 작업이 끝나면 묻지 않고 원래 폴더에 합쳐요 (사용자가 {n}번 연속 합치기를 골랐어요)": "In this project, a finished job's changes are merged into the original folder without asking (the user chose merge {n} times in a row)",
+  "이 프로젝트에서 작업이 끝나면 묻지 않고 PR로 올려요 (사용자가 {n}번 연속 PR을 골랐어요)": "In this project, a finished job's changes go up as a PR without asking (the user chose a PR {n} times in a row)",
   "\"{title}\" 작업이 이어받아 진행 중이에요. 그 작업에서 계속해 주세요": "\"{title}\" carried this job on and is still working. Continue there",
 } satisfies Record<string, string>;

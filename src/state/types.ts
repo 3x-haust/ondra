@@ -503,6 +503,8 @@ export interface Memory {
   cites?: string[];
   /** grown into this skill (a procedure used again and again) */
   skill?: string;
+  /** a rule said again and again, handed to a job that makes it an automatic check (lint, test, CI): that job */
+  checkTask?: string;
   /** last checked against the code and found to hold (교차 검토) */
   verifiedAt?: number;
 }
@@ -682,6 +684,10 @@ export interface Settings {
   extraTools?: string[];
   /** a job that changes an app drives the change in the real app before it is done (the project's check skill); missing = on */
   appCheck?: boolean;
+  /** a checked bug or performance fix that changes nothing the user sees is merged without asking (memory can say otherwise); missing = on */
+  autoMergeFixes?: boolean;
+  /** a project rule the user had to say again becomes an automatic check (lint, test, CI) made by a job of its own; missing = on */
+  ruleChecks?: boolean;
   /** anonymous usage numbers go to Ondra's maintainers (lib/telemetry.ts, docs/TELEMETRY.md); missing = on */
   telemetry?: boolean;
   /** Settings › 단축키: shortcut id → "cmd+shift+KeyD" or "none" (unbound); a missing id keeps its default */
@@ -716,6 +722,8 @@ export interface AppState {
   memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number; /** conflicts with the user's own pieces it asked about */ held?: number };
   /** 확인 필요: learned pieces that contradict the user's own, waiting for the user */
   memoryConflicts?: MemoryConflict[];
+  /** what the user picked when a job asked what becomes of its branch, by project folder (newest last, capped) */
+  landAnswers?: { folder: string; pick: "merge" | "pr" | "discard"; at: number }[];
   /** skill refinement: changes proposed to skills from jobs that went badly (newest last, capped) */
   skillProposals?: SkillProposal[];
   /** skill refinement: when it last read jobs, and the jobs already read */

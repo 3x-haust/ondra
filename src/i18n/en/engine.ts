@@ -190,6 +190,7 @@ export default {
   "실행 검토": "Fit check",
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
   "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
+  "확인된 수정이라 묻지 않고 합쳐요": "A checked fix, so it's merged without asking",
   "{into}에 병합 · 워크트리 정리": "Merged into {into} · worktree removed",
   "{into} 병합됨 · 워크트리 정리": "{into} merged · worktree removed",
   "{into}에 이미 반영됨 · 워크트리 정리": "Already in {into} · worktree removed",
@@ -275,6 +276,9 @@ export default {
   "내 것 유지 {n}": "{n} kept yours",
   "메모리 정리 · {parts}": "Memory tidied · {parts}",
   "정리할 메모리가 없어요": "Nothing to tidy",
+  "규칙을 자동 검사로 · {rule}": "Rule into a check · {rule}",
+  "자동 검사": "Automatic checks",
+  "같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}": "Making this rule an automatic check so it needn't be said again: {rule}",
 
   // prWatch.ts
   "리뷰·코멘트 {n}개": "{n} review or comment|{n} reviews and comments",

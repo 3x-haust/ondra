@@ -600,4 +600,8 @@ export default {
   "라이선스 파일이 없어요": "The license file is missing",
   "작업 끝나면 앱에서 직접 확인": "Check in the app before done",
   "앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요": "A job that changes an app runs it and uses the change before it finishes",
+  "확인된 버그 수정은 바로 합치기": "Merge checked fixes without asking",
+  "화면이 바뀌지 않는 버그·성능 수정은 다 확인되면 묻지 않고 합쳐요. 메모리에 다르게 적혀 있으면 그걸 따라요": "A bug or performance fix that changes nothing on screen is merged once all of it is checked. What memory says comes first",
+  "반복한 규칙은 자동 검사로": "Turn repeated rules into checks",
+  "프로젝트 규칙을 두 번 말하면, 작업이 린트·테스트 같은 자동 검사로 만들어요": "When you say a project rule twice, a job makes it an automatic check, like a lint rule or a test",
 } satisfies Record<string, string>;
