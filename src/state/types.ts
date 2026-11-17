@@ -505,6 +505,8 @@ export interface Memory {
   skill?: string;
   /** a rule said again and again, handed to a job that makes it an automatic check (lint, test, CI): that job */
   checkTask?: string;
+  /** the user's own piece that says the same thing in other words: counted there once as said again (both stay) */
+  echoOf?: string;
   /** last checked against the code and found to hold (교차 검토) */
   verifiedAt?: number;
 }
