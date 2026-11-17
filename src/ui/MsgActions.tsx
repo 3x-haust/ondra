@@ -6,6 +6,7 @@ import { skillAsk } from "./Aside";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { srcOf, useHost } from "../engine/far";
 import { isImage } from "./Composer";
+import { fileLine, splitTokens } from "./imageTokens";
 import { openImage } from "./Lightbox";
 import { editing, previewFile, setEditing } from "../state/ui";
 import { stamp } from "./bits";
@@ -65,10 +66,14 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
   const split = () => {
     // files alone ("첨부한 파일:\n- a") or after the text ("…\n\n첨부한 파일:\n- a")
     const i = props.text.startsWith("첨부한 파일:\n") ? 0 : props.text.indexOf("\n\n첨부한 파일:\n");
-    if (i < 0) return { body: props.text, files: [] as string[] };
-    const files = props.text.slice(i).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).trim());
-    return { body: props.text.slice(0, i), files };
+    if (i < 0) return { body: props.text, files: [] as string[], nums: new Map<number, string>() };
+    const lines = props.text.slice(i).split("\n").filter((l) => l.startsWith("- ")).map(fileLine);
+    // "[Image #2]" in the words → the picture listed with that number
+    const nums = new Map(lines.filter((l) => l.n !== undefined).map((l) => [l.n!, l.path] as [number, string]));
+    return { body: props.text.slice(0, i), files: lines.map((l) => l.path), nums };
   };
+  const pics = () => split().files.filter(isImage);
+  const numOf = (f: string) => [...split().nums].find(([, p]) => p === f)?.[0];
   return (
     <div class="user-turn" classList={{ editing: open() }} data-mid={props.id}>
       <Show when={props.from}><div class="msg-from">{props.from}</div></Show>
@@ -81,7 +86,22 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
               <div class="msg-user">
                 <For each={splitQuotes(split().body).quotes}>{(q) => <div class="msg-quote">{q}</div>}</For>
                 <For each={skillAsk(splitQuotes(split().body).rest).skills}>{(n) => <span class="msg-skill"><Icon name="skill" size={12} />{n}</span>}</For>
-                {skillAsk(splitQuotes(split().body).rest).rest}
+                <For each={splitTokens(skillAsk(splitQuotes(split().body).rest).rest)}>
+                  {(part) =>
+                    typeof part === "string" ? (
+                      part
+                    ) : (
+                      <Show when={split().nums.get(part.n)} fallback={`[Image #${part.n}]`}>
+                        {(pic) => (
+                          <button type="button" class="msg-imgref" title={t("크게 보기")} onClick={() => openImage(pic(), pics(), host())}>
+                            <Icon name="image" size={12} />
+                            Image #{part.n}
+                          </button>
+                        )}
+                      </Show>
+                    )
+                  }
+                </For>
               </div>
             </Show>
             {/* the web links it carries, by their own titles and icons */}
@@ -99,7 +119,10 @@ export function UserMsg(props: { text: string; at?: number; from?: string; id?: 
                         </button>
                       }
                     >
-                      <img class="msg-img" src={srcOf(f, host())} alt="" title={f.split("/").pop()} onClick={() => openImage(f, split().files.filter(isImage), host())} />
+                      <span class="msg-img-wrap">
+                        <img class="msg-img" src={srcOf(f, host())} alt="" title={f.split("/").pop()} onClick={() => openImage(f, pics(), host())} />
+                        <Show when={numOf(f)}>{(n) => <span class="attach-no">#{n()}</span>}</Show>
+                      </span>
                     </Show>
                   )}
                 </For>

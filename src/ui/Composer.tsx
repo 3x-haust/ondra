@@ -15,6 +15,7 @@ import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
 import { openImage } from "./Lightbox";
+import { dropToken, listLine, putToken, tokenAt } from "./imageTokens";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
@@ -53,10 +54,11 @@ async function listenDrops() {
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 /** A message with its attachments listed the way jobs and main read them. */
-export const withFiles = (text: string, files: string[]) => {
+export const withFiles = (text: string, files: string[], nums?: (path: string) => number | undefined) => {
   const t = text.trim();
   if (!files.length) return t;
-  const list = `첨부한 파일:\n${files.map((p) => `- ${p}`).join("\n")}`;
+  // a picture's number goes with it ("- [Image #2] /path"): the token in the words names it
+  const list = `첨부한 파일:\n${files.map((p) => listLine(p, nums?.(p))).join("\n")}`;
   return t ? `${t}\n\n${list}` : list;
 };
 
@@ -97,7 +99,7 @@ export interface Command {
 type Pick = { kind: "cmd"; items: Command[]; q: string; at: number } | { kind: "file"; items: string[]; q: string; at: number };
 
 /** what was typed in each chat, so switching chats (company / personal, projects, jobs) keeps each its own */
-const drafts = new Map<string, { text: string; files: string[] }>();
+const drafts = new Map<string, { text: string; files: string[]; nums?: [string, number][] }>();
 /** something unsent is kept for this input */
 export const hasDraft = (key: string) => drafts.has(key);
 
@@ -154,6 +156,8 @@ export function Composer(props: {
     ...(props.plus ?? []),
   ];
   const [files, setFiles] = createSignal<string[]>([]);
+  /** each attached picture's number, as its "[Image #n]" in the words names it */
+  const [nums, setNums] = createSignal(new Map<string, number>());
   let el!: HTMLTextAreaElement;
   /** this input, as the owner of a dictation */
   const voice = {};
@@ -168,6 +172,7 @@ export function Composer(props: {
         const d = (key !== undefined && drafts.get(key)) || { text: "", files: [] };
         setText(d.text);
         setFiles(d.files);
+        setNums(new Map(d.nums ?? d.files.filter(isImage).map((f, i) => [f, i + 1] as [string, number])));
         if (el) {
           el.value = d.text;
           queueMicrotask(grow);
@@ -181,7 +186,7 @@ export function Composer(props: {
     const f = files();
     const key = untrack(() => props.draftKey);
     if (key === undefined) return;
-    if (t || f.length) drafts.set(key, { text: t, files: f });
+    if (t || f.length) drafts.set(key, { text: t, files: f, nums: [...nums()] });
     else drafts.delete(key);
   });
 
@@ -189,7 +194,7 @@ export function Composer(props: {
   const unpaste = async (path: string) => {
     const words = pastedText.get(path) ?? (await fsRead(path).then((r) => r.text).catch(() => ""));
     if (!words) return;
-    setFiles((l) => l.filter((x) => x !== path));
+    remove(path);
     const at = el.selectionStart ?? el.value.length;
     const next = `${el.value.slice(0, at)}${words}${el.value.slice(el.selectionEnd ?? at)}`;
     el.value = next;
@@ -199,8 +204,46 @@ export function Composer(props: {
     grow();
   };
   const add = (paths: string[]) => {
-    setFiles((f) => [...f, ...paths.filter((p) => !f.includes(p))]);
+    const fresh = paths.filter((p, i) => !files().includes(p) && paths.indexOf(p) === i);
+    setFiles((f) => [...f, ...fresh]);
+    // a new picture gets the next number, and its "[Image #n]" goes in where the caret is
+    const pics = fresh.filter(isImage);
+    if (pics.length && el) {
+      const m = new Map(nums());
+      let n = Math.max(0, ...m.values());
+      let v = el.value;
+      let at = el.selectionStart ?? v.length;
+      let end = el.selectionEnd ?? at;
+      for (const p of pics) {
+        m.set(p, ++n);
+        const put = putToken(v, at, end, n);
+        v = put.text;
+        at = end = put.caret;
+      }
+      setNums(m);
+      el.value = v;
+      setText(v);
+      el.setSelectionRange(at, at);
+      queueMicrotask(grow);
+    }
     el?.focus();
+  };
+  /** an attachment taken off, and its "[Image #n]" out of the words */
+  const remove = (path: string) => {
+    setFiles((l) => l.filter((x) => x !== path));
+    const n = nums().get(path);
+    if (n === undefined) return;
+    setNums((m) => {
+      const next = new Map(m);
+      next.delete(path);
+      return next;
+    });
+    if (!el) return;
+    const next = dropToken(el.value, n);
+    if (next === el.value) return;
+    el.value = next;
+    setText(next);
+    grow();
   };
   const pane = usePane();
   onMount(() => {
@@ -411,13 +454,14 @@ export function Composer(props: {
       keep(text());
       setText("");
       el.value = "";
-      if (f.length) setFiles([]);
+      if (f.length) (setFiles([]), setNums(new Map()));
       queueMicrotask(grow);
       ran(cmd.name);
       cmd.run(m![2] ?? "", [], f);
       return;
     }
     const f = files();
+    const n0 = nums();
     const v = withQuotes(quotes(), text());
     const text0 = text();
     keep(text());
@@ -427,10 +471,12 @@ export function Composer(props: {
     // and a draft saved after that would come back the next time
     setText("");
     setFiles([]);
+    setNums(new Map());
     el.value = "";
     const key = props.draftKey;
     if (key !== undefined) drafts.delete(key);
-    const hand = (paths: string[]) => (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, paths));
+    // the copies on another Mac keep the numbers of the files they were made from
+    const hand = (paths: string[]) => (queue && props.onQueue ? props.onQueue : props.onSend)(withFiles(v, paths, (p) => n0.get(f[paths.indexOf(p)])));
     queueMicrotask(grow);
     if (!f.length || !props.upload) return hand(f);
     // to another Mac: its copies of the files go in the message; when they can't be sent, nothing is, and it all comes back
@@ -447,6 +493,7 @@ export function Composer(props: {
           grow();
         }
         setFiles((l) => [...f, ...l.filter((x) => !f.includes(x))]);
+        setNums((m) => new Map([...n0, ...m]));
       })
       .finally(() => (clearTimeout(slow), setSending(false)));
   };
@@ -620,7 +667,7 @@ export function Composer(props: {
                         <span class="attach" title={tilde(f)}>
                           <Icon name="file" size={13} />
                           <span class="attach-name">{base(f)}</span>
-                          <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                          <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => remove(f)}>
                             <Icon name="x" size={12} />
                           </button>
                         </span>
@@ -638,7 +685,7 @@ export function Composer(props: {
                             <Icon name="chevron" size={12} />
                           </button>
                         </span>
-                        <button type="button" class="paste-card-x" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                        <button type="button" class="paste-card-x" aria-label={t("제거")} title={t("제거")} onClick={() => remove(f)}>
                           <Icon name="x" size={11} />
                         </button>
                       </span>
@@ -647,7 +694,8 @@ export function Composer(props: {
                 >
                   <span class="attach-img" title={tilde(f)}>
                     <img src={fileSrc(f)} alt={base(f)} onClick={() => openImage(f, files().filter(isImage))} />
-                    <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => setFiles((l) => l.filter((x) => x !== f))}>
+                    <Show when={nums().get(f)}>{(n) => <span class="attach-no">#{n()}</span>}</Show>
+                    <button type="button" aria-label={t("제거")} title={t("제거")} onClick={() => remove(f)}>
                       <Icon name="x" size={12} />
                     </button>
                   </span>
@@ -676,6 +724,13 @@ export function Composer(props: {
             props.onTyping?.();
           }}
           onBlur={() => setTimeout(() => setPick(null), 120)}
+          onClick={() => {
+            // a click inside an "[Image #n]": that picture, big
+            if (el.selectionStart !== el.selectionEnd) return;
+            const n = tokenAt(el.value, el.selectionStart);
+            const pic = n === null ? undefined : [...nums()].find(([, x]) => x === n)?.[0];
+            if (pic) openImage(pic, files().filter(isImage));
+          }}
           onPaste={async (e) => {
             // files copied as files (Finder, a screenshot tool): the web view only gets their names
             const plain = e.clipboardData?.getData("text/plain") ?? "";

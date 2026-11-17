@@ -293,6 +293,31 @@ JSON.stringify(out)"#;
         .collect()
 }
 
+/// A picture (PNG bytes) onto the macOS clipboard. The web view's own clipboard
+/// refuses images once the click's permission has lapsed, which drawing the picture
+/// takes long enough to do.
+#[tauri::command]
+pub fn copy_image(bytes: Vec<u8>) -> Result<(), String> {
+    if bytes.is_empty() || bytes.len() > 60 * 1024 * 1024 {
+        return Err("이미지가 비었거나 너무 커요".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypePNG};
+        use objc2_foundation::NSData;
+        let data = NSData::with_bytes(&bytes);
+        let board = NSPasteboard::generalPasteboard();
+        board.clearContents();
+        if unsafe { board.setData_forType(Some(&data), NSPasteboardTypePNG) } {
+            Ok(())
+        } else {
+            Err("클립보드에 넣지 못했어요".into())
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("이 운영체제에서는 이미지를 복사할 수 없어요".into())
+}
+
 /// Make a new project folder (main can start a project somewhere new). Only inside home.
 #[tauri::command]
 pub fn ensure_dir(path: String) -> Result<String, String> {

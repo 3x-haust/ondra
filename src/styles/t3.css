@@ -3726,6 +3726,41 @@ input[type="checkbox"] {
   object-fit: cover;
   cursor: zoom-in;
 }
+/* a picture's number, as "[Image #n]" in the words names it */
+.attach-no {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 60%);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.msg-img-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.msg-imgref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 2px;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft, var(--active));
+  color: var(--accent, var(--ink));
+  font: inherit;
+  font-size: var(--fs-sm);
+  vertical-align: 1px;
+  cursor: zoom-in;
+}
+.msg-imgref:hover {
+  filter: brightness(1.1);
+}
 .msg-file {
   display: inline-flex;
   align-items: center;
