@@ -688,7 +688,7 @@ function NewTask(props: { project?: string; onProject: (id?: string) => void; pa
           left={
             <>
               <ProjectPick value={props.project} onChange={props.onProject} />
-              <PermissionPicker value={state.settings.permission ?? "edits"} onChange={(x) => setState("settings", "permission", x)} />
+              <PermissionPicker value={state.settings.permission ?? "auto"} onChange={(x) => setState("settings", "permission", x)} />
             </>
           }
           right={<Show when={computer()} fallback={<AccountModel accountId={account()} />}>{(c) => <HostModel place={c()} />}</Show>}
@@ -863,7 +863,7 @@ export function MainView() {
       running={msgs().some((m) => m.pending)}
       onStop={() => void stopMain(key())}
       stopKind="stop"
-      left={<PermissionPicker value={state.settings.permission ?? "edits"} onChange={(p) => setState("settings", "permission", p)} />}
+      left={<PermissionPicker value={state.settings.permission ?? "auto"} onChange={(p) => setState("settings", "permission", p)} />}
       right={<Show when={raw()} fallback={<AccountModel accountId={account()} up={!big} rest="low" />}>{(c) => <HostModel place={c()} up={!big} />}</Show>}
     />
   );
@@ -1351,7 +1351,7 @@ function everyCommands(): Command[] {
     { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
     { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
     { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
-    { name: "edits", desc: t("권한: {name}", { name: t("편집 허용") }), icon: "pencil", run: () => setState("settings", "permission", "edits") },
+    { name: "auto", desc: t("권한: {name}", { name: t("자동 판단") }), icon: "bolt", run: () => setState("settings", "permission", "auto") },
     { name: "full", desc: t("권한: {name}", { name: t("전체 권한") }), icon: "shield", run: () => setState("settings", "permission", "full") },
     // "/pet 피카츄": the pet skill, asked the way "/skill:pet-maker 피카츄" is; alone, a pet that suits the user
     { name: "pet", desc: t("펫 만들기 · 뒤에 캐릭터 이름 (픽셀도 돼요)"), icon: "pet", run: (a) => petCommand(a) },

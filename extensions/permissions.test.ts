@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import permissions, { focusSteal, foreignData, githubWrite, hostComputerUse, systemInput } from "./permissions";
+import permissions, { focusSteal, foreignData, githubWrite, hostComputerUse, judgePrompt, modeOf, quietCommand, readVerdict, systemInput } from "./permissions";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -192,5 +192,94 @@ describe("GitHub writes switched off", () => {
     expect(await run("0")).toMatchObject({ block: true });
     vi.unstubAllEnvs();
     expect(await run(undefined)).toBeUndefined();
+  });
+});
+
+describe("auto: what goes through without a judgement", () => {
+  it.each([
+    "ls -la src",
+    "git status && git diff --stat",
+    "cd app && pnpm test",
+    "rg -n foo src | head -20",
+    "npx tsc --noEmit",
+    "cargo check 2>&1 | tail -5",
+    "git branch --show-current",
+    "sed -n 1,40p src/index.ts",
+    "find . -name '*.ts' | wc -l",
+    "gh pr view 12",
+  ])("quiet: %s", (c) => expect(quietCommand(c)).toBe(true));
+  it.each([
+    "rm -rf dist",
+    "git push origin main",
+    "git branch -D old",
+    "git remote add up git@x:y.git",
+    "env FOO=1 rm -rf /",
+    "awk 'BEGIN{system(\"rm x\")}'",
+    "echo hi > ~/.zshrc",
+    "find . -name '*.log' -delete",
+    "sed -n 1p -i a.txt",
+    "curl -X POST https://api.example.com",
+    "ls $(rm -rf x)",
+    "npm publish",
+    "gh pr merge 3",
+  ])("judged: %s", (c) => expect(quietCommand(c)).toBe(false));
+});
+
+describe("auto: the judge", () => {
+  it("is asked about the job's request and the one action", () => {
+    const p = judgePrompt("로그인 버튼 고쳐줘", "Run in a shell:\nrm -rf node_modules", "/w/app");
+    expect(p).toContain("로그인 버튼 고쳐줘");
+    expect(p).toContain("rm -rf node_modules");
+    expect(p).toContain("/w/app");
+  });
+  it("reads its answer; anything unreadable asks", () => {
+    expect(readVerdict('ok {"allow": true, "why": "빌드 산출물만 지워요"}')).toEqual({ allow: true, why: "빌드 산출물만 지워요" });
+    expect(readVerdict('{"allow": "yes"}').allow).toBe(false);
+    expect(readVerdict("sure").allow).toBe(false);
+  });
+  it("an older app's \"edits\" is auto", () => {
+    expect(modeOf("edits")).toBe("auto");
+    expect(modeOf("full")).toBe("full");
+    expect(modeOf(undefined)).toBe("auto");
+  });
+
+  const run = async (toolName: string, input: Record<string, unknown>, reply: string | Error, cwd = "/w/app") => {
+    vi.stubEnv("ONDRA_PERMISSION", "auto");
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    permissions({ registerCommand: vi.fn(), on: (name: string, fn: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, fn) });
+    const select = vi.fn(async () => "막기");
+    const streamSimple = vi.fn(() => ({ result: async () => (reply instanceof Error ? Promise.reject(reply) : { content: [{ type: "text", text: reply }] }) }));
+    const ctx = {
+      cwd,
+      hasUI: true,
+      ui: { select },
+      model: { id: "m" },
+      modelRegistry: { streamSimple },
+      sessionManager: { getBranch: () => [{ type: "message", message: { role: "user", content: [{ type: "text", text: "배포 스크립트 정리해줘" }] } }] },
+    };
+    const out = await handlers.get("tool_call")!({ toolName, input }, ctx);
+    return { out, select, streamSimple };
+  };
+  it("edits in the folder and quiet commands go through without asking the model", async () => {
+    const a = await run("edit", { path: "src/a.ts" }, "");
+    expect(a.out).toBeUndefined();
+    expect(a.streamSimple).not.toHaveBeenCalled();
+    const b = await run("bash", { command: "pnpm test" }, "");
+    expect(b.out).toBeUndefined();
+    expect(b.streamSimple).not.toHaveBeenCalled();
+  });
+  it("what the model lets through goes; the rest is asked with its reason", async () => {
+    const ok = await run("bash", { command: "rm -rf dist" }, '{"allow": true, "why": "빌드 결과만 지워요"}');
+    expect(ok.out).toBeUndefined();
+    expect(ok.select).not.toHaveBeenCalled();
+    const no = await run("bash", { command: "git push --force origin main" }, '{"allow": false, "why": "main에 강제로 올려요"}');
+    expect(no.out).toMatchObject({ block: true });
+    expect(no.select.mock.calls[0][0]).toContain("AI 판단: main에 강제로 올려요");
+  });
+  it("the model failing or outside-folder edits it won't allow: asked", async () => {
+    const err = await run("bash", { command: "curl -X DELETE https://x" }, new Error("down"));
+    expect(err.select).toHaveBeenCalled();
+    const out = await run("write", { path: "/etc/hosts" }, '{"allow": false, "why": "시스템 파일이에요"}');
+    expect(out.select).toHaveBeenCalled();
   });
 });

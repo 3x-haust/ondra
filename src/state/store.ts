@@ -7,7 +7,7 @@ import { createStore, produce, reconcile, unwrap, type SetStoreFunction } from "
 import { bindingSource } from "../lib/shortcuts";
 import { inTauri, onEvent, stateFlushed, stateLoad, stateSaveParts } from "../lib/native";
 import { fixture } from "./fixture";
-import { debounce, Saver, unpackTask } from "./persist";
+import { debounce, permissionOf, Saver, unpackTask } from "./persist";
 import type { Account, AppState, Decision, SpaceId, Task } from "./types";
 
 /**
@@ -67,7 +67,7 @@ export const freshState = (): AppState => ({
   side: [],
   projects: [],
   canvas: {},
-  settings: { slots: { light: 3, heavy: 1 }, captainModel: "", theme: "system", instructions: "", learn: true, isolate: true, focusGuard: true, forkModel: "", forkThinking: "", permission: "edits", watchPullRequests: false },
+  settings: { slots: { light: 3, heavy: 1 }, captainModel: "", theme: "system", instructions: "", learn: true, isolate: true, focusGuard: true, forkModel: "", forkThinking: "", permission: "auto", watchPullRequests: false },
 });
 
 const [state, writeState] = createStore<AppState>(freshState());
@@ -149,7 +149,7 @@ export async function loadState() {
             ...base,
             ...parsed,
             tasks: (parsed.tasks ?? []).map(unpackTask),
-            settings: { ...base.settings, ...parsed.settings },
+            settings: { ...base.settings, ...parsed.settings, permission: permissionOf(parsed.settings?.permission) ?? base.settings.permission },
             accounts: parsed.accounts.map((a) => ({ ...base.accounts[0], ...a, badModels: a.badModels ?? [] })),
             // the request queue lives in memory: a reply still "thinking" when the app closed never comes back
             captain: (parsed.captain ?? []).map((m) => (m.pending ? { ...m, pending: false, error: "앱이 닫혀 응답이 끊겼어요" } : m)),

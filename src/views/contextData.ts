@@ -129,7 +129,7 @@ async function jobArgs(id: string): Promise<{ cwd: string; args: string[]; env: 
     ...workerTools(),
     ...offTools(),
   ];
-  const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "edits"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t.space))]];
+  const env: Env = [...(await workerEnv(id, t.space)), ...(await accountEnv(t.accountId)), ["ONDRA_PERMISSION", t.permission ?? "auto"], ["ONDRA_SKILL_PATHS", JSON.stringify(await skillPaths(t.space))]];
   return { cwd: expand(t.cwd || homeDir(t) || "~"), args, env };
 }
 

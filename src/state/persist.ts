@@ -6,7 +6,7 @@
 // just the tasks that changed: the rest of the file is reused as it was. The native
 // side keeps every task's text and writes the whole file (temp file + rename), so
 // only the changed parts cross the bridge.
-import type { AppState, Entry, Shell, Task, ToolCall } from "./types";
+import type { AppState, Entry, Permission, Shell, Task, ToolCall } from "./types";
 
 // ───────────────────────── the file's form of a task
 
@@ -41,7 +41,11 @@ export function packTask(t: Task): Task {
 }
 
 /** A task read from the file, in either form (files written before packing too). Mutates and returns it. */
+/** a permission as saved: an older app's "edits" (edits in the folder go through) became "auto" */
+export const permissionOf = (p: unknown): Permission | undefined => (p === "edits" ? "auto" : p === "ask" || p === "auto" || p === "full" ? p : undefined);
+
 export function unpackTask(t: Task): Task {
+  if (t.permission) t.permission = permissionOf(t.permission);
   t.entries ??= [];
   t.shells ??= [];
   const cmd = new Map<string, string>();

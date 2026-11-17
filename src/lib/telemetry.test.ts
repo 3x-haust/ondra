@@ -3,7 +3,7 @@ import { EVENTS_DOC, faultOf, frames, installId, modelOf, pick, PERMISSIONS, SHA
 // @ts-ignore node types are not in this project: the test runs under node
 import { readFileSync } from "node:fs";
 
-const job = { kind: "job", provider: "anthropic", model: "claude-opus", effort: "high", permission: "edits", weight: "light" } as const;
+const job = { kind: "job", provider: "anthropic", model: "claude-opus", effort: "high", permission: "auto", weight: "light" } as const;
 
 describe("telemetry", () => {
   it("keeps one random id per install and says when it was made", () => {
@@ -54,9 +54,9 @@ describe("telemetry", () => {
     expect(faultOf(undefined)).toBe("unknown");
   });
   it("keeps a value in its set", () => {
-    expect(pick(PERMISSIONS, "full", "edits")).toBe("full");
-    expect(pick(PERMISSIONS, "root", "edits")).toBe("edits");
-    expect(pick(PERMISSIONS, undefined, "edits")).toBe("edits");
+    expect(pick(PERMISSIONS, "full", "auto")).toBe("full");
+    expect(pick(PERMISSIONS, "root", "auto")).toBe("auto");
+    expect(pick(PERMISSIONS, undefined, "auto")).toBe("auto");
   });
   it("cuts a stack down to file names", () => {
     const f = frames("Error: x\n    at send (tauri://localhost/assets/index-abc.js?v=1:10:5)\n    at /Users/me/app/src/a.ts:3:1\nrun@tauri://localhost/assets/b.js:7:2");

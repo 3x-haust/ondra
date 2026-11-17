@@ -529,7 +529,7 @@ export function TaskView(props: { id: string }) {
                     { name: "rename", desc: tr("이름 바꾸기"), icon: "pencil", run: (a) => a.trim() && renameTask(task().id, a) },
                     { ...drawCommand(() => task().id), desc: tr("작업 흐름 그림") },
                     { name: "ask", desc: tr("권한: {name}", { name: tr("매번 묻기") }), icon: "lock", run: () => void setTaskPermission(task().id, "ask") },
-                    { name: "edits", desc: tr("권한: {name}", { name: tr("편집 허용") }), icon: "pencil", run: () => void setTaskPermission(task().id, "edits") },
+                    { name: "auto", desc: tr("권한: {name}", { name: tr("자동 판단") }), icon: "bolt", run: () => void setTaskPermission(task().id, "auto") },
                     { name: "full", desc: tr("권한: {name}", { name: tr("전체 권한") }), icon: "shield", run: () => void setTaskPermission(task().id, "full") },
                     { name: "remember", desc: task().project && projectById(task().project!, task().space) ? tr("프로젝트 메모리에 저장") : tr("메모리에 저장"), icon: "memory", run: (a) => a.trim() && remember(task(), a) },
                     { name: "memory", desc: tr("메모리 열기"), icon: "memory", run: () => setView({ name: "memory" }) },
@@ -537,7 +537,7 @@ export function TaskView(props: { id: string }) {
                     ...skillCommands(() => ({ task: task().id, space: task().space }), task().host ? { host: task().host!, task: task().id } : undefined),
                   ]}
                   placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
-                  left={<PermissionPicker value={task().permission ?? "edits"} onChange={(p) => void setTaskPermission(task().id, p)} />}
+                  left={<PermissionPicker value={task().permission ?? "auto"} onChange={(p) => void setTaskPermission(task().id, p)} />}
                   onSend={(m) => tell(task().id, m, { now: true })}
                   onQueue={task().status === "running" ? (m) => tell(task().id, m) : undefined}
                   running={task().status === "running"}

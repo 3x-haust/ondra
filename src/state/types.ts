@@ -1,7 +1,8 @@
 // Everything Ondra keeps. The whole AppState is saved to state.json.
 import type { SourceId } from "../lib/native";
 
-export type Permission = "ask" | "edits" | "full";
+/** "auto": the AI judges what may go without asking (older saves call it "edits") */
+export type Permission = "ask" | "auto" | "full";
 /** "home" = 개인 (always there); others are made by the user. */
 export type SpaceId = string;
 export type Status = "running" | "waiting" | "queued" | "done" | "paused" | "failed";

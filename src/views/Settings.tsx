@@ -210,10 +210,10 @@ function General() {
             </Row>
           )}
         </For>
-        <Row title={t("기본 권한")} desc={t(PERMISSIONS.find((p) => p.id === (state.settings.permission ?? "edits"))?.desc ?? "")}>
+        <Row title={t("기본 권한")} desc={t(PERMISSIONS.find((p) => p.id === (state.settings.permission ?? "auto"))?.desc ?? "")}>
           <div class="seg">
             <For each={PERMISSIONS}>
-              {(p) => <button classList={{ on: (state.settings.permission ?? "edits") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
+              {(p) => <button classList={{ on: (state.settings.permission ?? "auto") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
             </For>
           </div>
         </Row>

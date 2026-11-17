@@ -141,7 +141,7 @@ Answers can draw a step-by-step board, build a 3D model you can turn, or lay out
 <summary>Workspaces, settings and more</summary>
 
 - **Workspaces:** create and name workspaces around the way you work. Each has its own accounts and instructions, and keeps its browser logins, memory and task history separate.
-- **Settings:** choose your model, permissions and concurrency. Per-task worktrees, automatic memory saving and PR review follow-up are configurable too.
+- **Settings:** choose your model, permissions (ask every time, auto: the AI lets safe steps through and asks about risky ones, or full) and concurrency. Per-task worktrees, automatic memory saving and PR review follow-up are configurable too.
 - **Search and shortcuts:** find tasks, projects, memories and commands. Customize keyboard shortcuts in Settings.
 - **Hooks:** configure shell commands at the points in a task's lifecycle where you need them.
 - **Notifications:** enable system notifications to hear when work finishes or needs your attention.
