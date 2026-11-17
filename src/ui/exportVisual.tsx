@@ -1,7 +1,7 @@
 // A diagram as a picture: the SVG with its computed look written into it, drawn
 // at 2x onto a canvas. Used to see it full size, save it to Downloads, or copy it.
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { revealPath, saveDownload } from "../lib/native";
+import { copyImage, inTauri, revealPath, saveDownload } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 import { toast } from "../state/ui";
@@ -120,8 +120,9 @@ export async function saveVisual(svg: SVGSVGElement, label?: string) {
 
 export async function copyVisual(svg: SVGSVGElement) {
   try {
-    // the promise form keeps the click's permission while the picture is drawn
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": svgPng(svg) })]);
+    // natively: WKWebView's clipboard refuses the picture once drawing it has outlasted the click
+    if (inTauri) await copyImage(await bytes(await svgPng(svg)));
+    else await navigator.clipboard.write([new ClipboardItem({ "image/png": svgPng(svg) })]);
     toast(t("이미지를 복사했어요"));
   } catch (e) {
     toast(t("복사하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");

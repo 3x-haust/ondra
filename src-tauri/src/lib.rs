@@ -468,6 +468,7 @@ pub fn run() {
             fs::fs_grep,
             fs::save_paste,
             fs::clipboard_files,
+            fs::copy_image,
             fs::save_download,
             fs::ensure_dir,
             fs::space_logs,

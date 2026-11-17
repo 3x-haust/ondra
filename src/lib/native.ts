@@ -616,6 +616,8 @@ export const installUpdate = () => call<void>("update_install");
 export const onUpdateProgress = (f: (p: { version: string; percent: number }) => void): Promise<UnlistenFn> =>
   inTauri ? listen<{ version: string; percent: number }>("update:progress", (e) => f(e.payload)) : Promise.resolve(() => {});
 /** Save bytes as a file in ~/Downloads (a free name); returns the path. */
+/** PNG bytes onto the system clipboard (the web view refuses images after an await). */
+export const copyImage = (bytes: number[]) => call<void>("copy_image", { bytes });
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
 export interface SavedSecrets {
