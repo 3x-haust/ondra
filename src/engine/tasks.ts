@@ -15,6 +15,7 @@ import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, pro
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx, reuse, setCtx, setReuse } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
+import { closePlan, moveTo, nextPlan, openAsked, planText } from "./plan";
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
@@ -22,7 +23,7 @@ import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agent
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
-import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
+import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
 import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange, unbackedClaim } from "./proof";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
@@ -61,6 +62,12 @@ interface Run {
   /** when the plan last moved (a plan or now block), or the run began */
   planMovedAt?: number;
   planNudges?: number;
+  /** the user's words said while it worked, until the model takes them (then `replanCalls` counts) */
+  replanFor?: string;
+  /** tool calls since it took the user's words without sending a new plan */
+  replanCalls?: number;
+  /** said done with steps the user asked for still open: sent back once */
+  askedGate?: boolean;
   /** loop guard: each command's last result and how many file edits had happened by then */
   ran?: Map<string, { ok: boolean; edits: number }>;
   edits?: number;
@@ -125,6 +132,8 @@ export const PLAN_QUIET = 20;
  *  47 to 97 seconds into a job, and again right after it had moved on) */
 export const PLAN_QUIET_MS = 5 * 60_000;
 export const PLAN_NUDGES = 2;
+/** tool calls after the user's words came in without a new plan before it is asked to place them */
+export const REPLAN_CALLS = 3;
 const MAX_SHELLS = 40;
 const TAIL = 3000;
 const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
@@ -286,21 +295,7 @@ export function pushNote(id: string, text: string) {
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 /** Files that hold what was decided or where things stand, not code. */
 /** Chinese characters and no Korean: a line the user can't read. */
-const stepKey = (s: string) => s.replace(/[\s·.,()]/g, "").toLowerCase();
-
-/** A new plan keeps the steps already finished (same text) as done; the first open one is current. */
-export function nextPlan(old: { text: string; state: string }[], steps: string[]): Task["plan"] {
-  const finished = new Set(old.filter((s) => s.state === "done").map((s) => stepKey(s.text)));
-  const plan: Task["plan"] = steps.map((text) => ({ text, state: finished.has(stepKey(text)) ? "done" : "todo" }));
-  const cur = plan.find((s) => s.state !== "done");
-  if (cur) cur.state = "now";
-  return plan;
-}
-
-/** A finished job's plan: the step it was on is done, steps it never reached are skipped (not left open). */
-export function closePlan(plan: Task["plan"]): Task["plan"] {
-  return plan.map((s) => ({ ...s, state: s.state === "now" ? "done" : s.state === "todo" ? "skip" : s.state }));
-}
+export { closePlan, nextPlan } from "./plan";
 
 /** a sentence of English prose shown to a user who writes Korean */
 export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
@@ -419,15 +414,16 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (b.text && !chineseOnly(String(b.text))) t.now = t.intent = String(b.text).slice(0, 140);
         run.quietTools = 0;
         run.planMovedAt = Date.now();
-        if (typeof b.step === "number" && t.plan.length) {
-          t.plan.forEach((s, i) => (s.state = i < b.step ? "done" : i === b.step ? "now" : "todo"));
-        }
+        if (b.step !== undefined) moveTo(t.plan, b.step);
         break;
       case "plan":
         if (Array.isArray(b.steps)) {
-          t.plan = nextPlan(t.plan, b.steps.slice(0, 10).map(String));
+          t.plan = nextPlan(t.plan, b.steps);
           run.quietTools = 0;
           run.planMovedAt = Date.now();
+          // the user's words said while it worked are in the plan now
+          run.replanCalls = undefined;
+          t.planAsk = undefined;
         }
         break;
       case "ask": {
@@ -662,6 +658,29 @@ function heard(id: string, gone: { text: string; from?: string }[]) {
 function tookMessage(id: string, text: string) {
   const p = (taskById(id)?.pending ?? []).find((x) => text === x.text || text.startsWith(x.text));
   if (p) heard(id, [{ ...p }]);
+  // the user's words said while it worked: from now on it has them, and places them in its plan
+  const run = runs.get(id);
+  if (run?.replanFor && (text === run.replanFor || text.startsWith(run.replanFor))) {
+    run.replanFor = undefined;
+    run.replanCalls = 0;
+  }
+}
+
+/**
+ * It took the user's words a few tool calls ago and its plan hasn't changed: asked once to put
+ * them where they belong (or carry on, when they only asked something).
+ */
+function askReplan(id: string, run: Run) {
+  run.replanCalls = undefined;
+  const t = taskById(id);
+  if (!t) return;
+  if (t.planAsk) updateTask(id, (x) => (x.planAsk = undefined));
+  if (!run.streaming) return;
+  const list = t.plan.length ? `\nCurrent list:\n${planText(t.plan).join("\n")}` : "";
+  void request(agentOf(id), {
+    type: "steer",
+    message: `(Ondra) The user's message came in ${REPLAN_CALLS} tool calls ago and your to-do list hasn't changed.${list}\nIf it added or changed work, send the updated plan block now: put it where it belongs by what depends on what, mark it "user": true, and say in one line where it went. If it only asked something, carry on.`,
+  }).catch(() => {});
 }
 
 const userText = (m: any): string =>
@@ -1282,6 +1301,7 @@ function handlers(id: string, run: Run) {
         case "tool_execution_start": {
           // it went on after a refused review: the steer reached it
           run.refused = undefined;
+          if (run.replanCalls !== undefined && ++run.replanCalls >= REPLAN_CALLS) askReplan(id, run);
           const tool = describeTool(ev.toolName, ev.args);
           updateTask(id, (t) => {
             const { now, ...call } = tool;
@@ -1331,7 +1351,7 @@ function handlers(id: string, run: Run) {
             run.quietTools = 0;
             run.planMovedAt = Date.now();
             run.planNudges = (run.planNudges ?? 0) + 1;
-            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${plan.map((s, i) => `${i}. [${s.state}] ${s.text}`).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
+            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${planText(plan).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
           }
           // a job booted or shut down a phone: the hub and the sidebar show it now
           if (done?.kind === "tool" && done.tool.name === "device") void refreshDevices();
@@ -1376,6 +1396,11 @@ function handlers(id: string, run: Run) {
         case "agent_settled":
           run.streaming = false;
           run.ended = true;
+          // the turn ended on the user's words (a question answered): nothing is left to place
+          if (!run.replanFor) {
+            run.replanCalls = undefined;
+            if (taskById(id)?.planAsk) updateTask(id, (t) => (t.planAsk = undefined));
+          }
           if (run.turnStart) {
             const ms = Date.now() - run.turnStart;
             run.turnStart = 0;
@@ -1594,6 +1619,28 @@ async function settle(id: string, run: Run) {
     return;
   }
   if (run.done !== undefined) {
+    // steps the user asked for while it worked and it never reached: not dropped without a word
+    const asked = run.askedGate || t.parentId ? [] : openAsked(t.plan);
+    if (asked.length) {
+      run.askedGate = true;
+      const summary = run.done;
+      run.done = undefined;
+      updateTask(id, (x) => {
+        x.saidDone = undefined;
+        x.now = "요청받은 일을 마저 하는 중";
+        push(x, { kind: "note", text: asked.length > 1 ? `남은 요청 · ${asked[0]} 외 ${asked.length - 1}개` : `남은 요청 · ${asked[0]}` });
+      });
+      try {
+        run.turnStart = Date.now();
+        await request(agent, {
+          type: "prompt",
+          message: `(Ondra) You said done, but steps the user asked for while you worked are still open in your plan:\n${asked.map((a) => `- ${a}`).join("\n")}\nDo them now. If one is already done, mark it in a plan block; if one turned out not to be needed or can't be done, say why in a sentence and send a plan without it. Then send done again.`,
+        });
+      } catch {
+        finish(id, summary, run);
+      }
+      return;
+    }
     const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run);
     if (missing) {
       run.gates = (run.gates ?? 0) + 1;
@@ -1939,6 +1986,7 @@ function finish(id: string, summary: string, run?: Run) {
   updateTask(id, (t) => {
     t.status = "done";
     t.plan = closePlan(t.plan);
+    t.planAsk = undefined;
     t.unread = true;
     t.saidDone = undefined;
     t.summary = summary;
@@ -2552,6 +2600,52 @@ function loopGuard(id: string, run: Run, call: ToolCall, ok: boolean) {
   if (run.streaming) void request(agentOf(id), { type: "steer", message: msg }).catch(() => {});
 }
 
+/** what the model is told with the user's words said while it worked */
+const midNote = (open: boolean) =>
+  `\n\n(Ondra) The user said this while you were working. Before your next tool call, decide where it goes:
+- a question: answer it in a sentence or two, don't change files for it, and go on.
+- a change to the step you are on: apply it now.
+- something for a later step (how to deploy, what to check at the end) or new work: don't jump to it. Put it in your plan where it belongs by what depends on what, not by when it came (a survey that ships with the deploy is built before the deploy), with "user": true. Say in one line where it went ("설문 먼저 끝내고, 배포할 때 말씀하신 방식으로 할게요"), finish the small step in your hands, and go on in plan order.
+- stop, now, or instead of what you are doing: switch now.
+${open ? "Added or changed work: send the updated plan block before any other tool call." : "Added work: send a plan block with the whole job in it (what is done, this, what is left) before any other tool call."}`;
+
+/** a wait younger than this is about to answer on its own */
+const WAIT_STOP_AFTER_MS = 3000;
+/**
+ * Commands of its own still running that keep the user's words from it: ones that only wait or look
+ * (sleep, pgrep, tail, a status check, here or over ssh), or with `all` every one (the user asked).
+ */
+function waitsToStop(id: string, run: Run, all = false) {
+  const now = Date.now();
+  const live = (taskById(id)?.shells ?? []).filter((s) => run.tools.has(s.id) && !s.endedAt && !s.background);
+  return live.flatMap((s) => {
+    if (!all && (now - s.startedAt < WAIT_STOP_AFTER_MS || !waitsOnly(s.command))) return [];
+    const arg = shellArg(s.command, live.filter((x) => x.id !== s.id).map((x) => x.command));
+    return arg ? [{ id: s.id, command: s.command, arg }] : [];
+  });
+}
+/** the shells running them (`/bin/bash -c <command>`): the call returns and the steered words go in */
+function stopShells(id: string, list: { arg: string }[], note: string) {
+  for (const w of list) void agentStopCommand(agentOf(id), "bash", w.arg).catch(() => 0);
+  updateTask(id, (t) => void push(t, { kind: "note", text: note }));
+}
+
+/** The user's words wait on a command doing real work (a build, a test): the user stops it to get them in now. */
+export function sendNow(id: string) {
+  { const r = far(id, "sendNow", [id]); if (r) return r as never; }
+  const run = runs.get(id);
+  if (!run?.streaming) return;
+  const list = waitsToStop(id, run, true);
+  if (!list.length) return;
+  const cmds = list.map((w) => `\`${shortCmd(w.command)}\``).join(", ");
+  void request(agentOf(id), {
+    type: "steer",
+    message: `(Ondra) The user stopped ${cmds} to get their message to you now. If it was work the plan still needs (a build, a test, a deploy), run it again when you are back at that step.`,
+  })
+    .catch(() => {})
+    .then(() => stopShells(id, list, "명령 멈춤 · 새 메시지를 바로 전해요"));
+}
+
 export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string; by?: string } = {}) {
   { const r = far(id, "tell", [id, message, opts]); if (r) return r as never; }
   const t = taskById(id);
@@ -2603,19 +2697,32 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
     updateTask(id, (x) => {
       x.status = "running";
     });
-    // the user's words may change the plan: the model is asked to update it (the user sees only their words)
-    const planNote = t.plan.some((s) => s.state !== "done") ? "\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step." : "";
-    // said in the middle of the work: a question gets its answer first, not after the work it interrupted
-    // only the user's (or main relaying them): a job's message already says it is not the user
-    const midNote = run?.streaming && (!opts.by || opts.by === "main")
-      ? "\n\n(Ondra) The user said this while you were working. If it's a question, answer it now in a sentence or two, before any more tool calls, and don't change files for it; then go on with the work unless they asked you to stop or change course."
+    const open = t.plan.some((s) => s.state !== "done" && s.state !== "skip");
+    // said in the middle of the work: placed in the plan by what depends on what, not done on arrival.
+    // Only the user's (or main relaying them): a job's message already says it is not the user
+    const mid = !!run?.streaming && (!opts.by || opts.by === "main");
+    // a command that only waits or looks would keep these words from it for minutes: it stops
+    const waits = mid && run ? waitsToStop(id, run) : [];
+    const stopNote = waits.length
+      ? `\n\n(Ondra) To bring you this now, Ondra stopped ${waits.map((w) => `\`${shortCmd(w.command)}\``).join(", ")}: it only waited or looked, and what it waited on still runs. Look again once if you still need it.`
       : "";
-    const sent = `${message}${midNote}${planNote}`;
+    // the user's words may change the plan: the model is asked to update it (the user sees only their words)
+    const planNote = !mid && open ? "\n\n(Ondra) If this changes your plan, send a new plan block; mark the steps already finished with a now block's step." : "";
+    const sent = `${message}${mid ? midNote(open) : ""}${stopNote}${planNote}`;
     // steered words wait for the current tool calls: kept until taken, as a restart loses them
     hold(id, sent, { shown: opts.shown ?? message });
+    if (mid && run) {
+      run.replanFor = sent;
+      run.replanCalls = undefined;
+      const said = (opts.shown ?? message).replace(/\s+/g, " ").trim();
+      updateTask(id, (x) => (x.planAsk = said.length > 80 ? `${said.slice(0, 80)}…` : said));
+    }
     try {
       await request(agent, run?.streaming ? { type: "steer", message: sent } : { type: "prompt", message: sent });
+      if (waits.length) stopShells(id, waits, "기다림 멈춤 · 새 메시지를 바로 전해요");
     } catch (e) {
+      if (run?.replanFor === sent) run.replanFor = undefined;
+      updateTask(id, (x) => (x.planAsk = undefined));
       unhold(id, sent);
       toast(e instanceof Error ? e.message : String(e), "bad");
     }

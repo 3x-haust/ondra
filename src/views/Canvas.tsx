@@ -975,13 +975,28 @@ function Drawer(props: { t: Task; onClose: () => void }) {
             <ol class="cv-dr-plan">
               <For each={job().plan}>
                 {(p) => (
-                  <li class={`p-${stepState(p, job())}`}>
-                    {/* done: a quiet check; the one being worked on now (running tasks only): an accent dot */}
-                    <Show when={stepState(p, job()) === "done"} fallback={<i />}>
-                      <Icon name="check" size={12} class="cv-dr-check" />
+                  <>
+                    <li class={`p-${stepState(p, job())}`}>
+                      {/* done: a quiet check; the one being worked on now (running tasks only): an accent dot */}
+                      <Show when={stepState(p, job()) === "done"} fallback={<i />}>
+                        <Icon name="check" size={12} class="cv-dr-check" />
+                      </Show>
+                      <span>{p.text}</span>
+                    </li>
+                    {/* the step being worked on opens to its smaller steps */}
+                    <Show when={p.state === "now" && p.sub?.length}>
+                      <For each={p.sub}>
+                        {(x) => (
+                          <li class={`p-${stepState(x, job())} p-sub`}>
+                            <Show when={stepState(x, job()) === "done"} fallback={<i />}>
+                              <Icon name="check" size={12} class="cv-dr-check" />
+                            </Show>
+                            <span>{x.text}</span>
+                          </li>
+                        )}
+                      </For>
                     </Show>
-                    <span>{p.text}</span>
-                  </li>
+                  </>
                 )}
               </For>
             </ol>

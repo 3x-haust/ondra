@@ -14,12 +14,13 @@ import { shortcutHint, withHint } from "../lib/shortcuts";
 import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { farError, farMemAdd, HostCtx, listFiles, sendFiles } from "../engine/far";
-import { discarded, endTime, pausedAt, planCount, stepState, taskDiff, workedMs } from "../state/progress";
+import { discarded, endTime, pausedAt, planCount, taskDiff, workedMs } from "../state/progress";
 import { rawStats, prOf, renameTask, finishTask, markRead, stopTask, resumeTask, startTask, setTaskAccount, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
 import { Icon } from "../ui/Icon";
+import { PlanList } from "../ui/PlanList";
 import { ProjectBadge } from "../ui/ProjectBadge";
 import { ModelPicker, usePop, PermissionPicker } from "../ui/ModelPicker";
 import { effortFor } from "../engine/models";
@@ -63,22 +64,7 @@ function MoreMenu(props: { id: string }) {
 
 /** The whole to-do list: done, now, next. Opens from its part of the tray line. */
 function TodoList(props: { t: Task }) {
-  return (
-    <ol class="todos-list">
-      <For each={props.t.plan}>
-        {(p) => (
-          <li class={`todo ${stepState(p, props.t)}`}>
-            <span class="todo-box">
-              <Show when={p.state === "done"} fallback={<Show when={stepState(p, props.t) === "now"}><i /></Show>}>
-                <Icon name="check" size={10} stroke={3} />
-              </Show>
-            </span>
-            <span class="todo-text">{p.text}</span>
-          </li>
-        )}
-      </For>
-    </ol>
-  );
+  return <PlanList t={props.t} />;
 }
 
 /**

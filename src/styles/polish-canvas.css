@@ -1630,6 +1630,10 @@
   background: none;
   border-color: var(--ink-4);
 }
+.cv-dr-plan li.p-sub {
+  padding: 2px 0 2px var(--s-20);
+  font-size: var(--fs-xs);
+}
 
 /* ── memory tree: a piece's name comes first; its "2번 사용" tag shows only where it fits beside a
    readable name (it wraps onto a hidden second line otherwise; the row's tooltip and the detail say it) */

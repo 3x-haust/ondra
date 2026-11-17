@@ -14,6 +14,8 @@ const STATUS = [
   /^curl\b/,
   /^git\s+(status|log|diff|show|branch|rev-parse|remote|fetch|ls-files|ls-remote|describe|blame|reflog|shortlog|worktree\s+list|stash\s+list|config\s+--get|tag(\s+-l|\s*$))\b/,
   /^xcrun\s+simctl\s+list\b|^adb\s+devices\b|^emulator\s+-list-avds\b/,
+  /^kubectl\s+(get|describe|logs|top|rollout\s+status|version|config\s+(view|current-context|get-contexts))\b/,
+  /^docker\s+(ps|logs|images|inspect|stats|version|info)\b|^docker\s+(compose\s+)?(ps|logs)\b/,
 ];
 const HELP = /(^|\s)(--help|-h|help)(\s|$)/;
 const CHECK = /(^|[\s/:])(test|tests|typecheck|type-check|tsc|vitest|jest|pytest|build|lint|eslint|clippy|check|check:[\w:-]+|vet|xcodebuild|assemble\w*)(\s|$|:)/;
@@ -56,12 +58,28 @@ export const runsProgram = (cmd: string, program: RegExp) => steps(unwrap(cmd)).
 export function commandKind(cmd: string): "poll" | "check" | "other" {
   const ps = steps(cmd);
   if (!ps.length) return "other";
-  const look = (p: string) => (STATUS.some((re) => re.test(p)) && !MUTATE.test(` ${p}`)) || HELP.test(p);
+  // -f/-d are a request's body for curl and gh; `docker logs -f` and `kubectl get -f` only follow or read
+  const look = (p: string) => (STATUS.some((re) => re.test(p)) && (/^(kubectl|docker)\s/.test(p) || !MUTATE.test(` ${p}`))) || HELP.test(p);
   const waits = (p: string) => WAIT.test(p);
   if (ps.every((p) => look(p) || waits(p)) && ps.some((p) => look(p) || /^(sleep|tail|pgrep|ps|date)\b/.test(p))) return "poll";
   if (ps.some((p) => CHECK.test(p) && !look(p) && !onlyReads(p))) return "check";
   return "other";
 }
+
+/** `ssh -n host 'pgrep -f "docker build"'` runs its quoted command over there: that command is what it does */
+const SSH = /(^|[\s;&|(])ssh\s+(?:[^\s'";|&]+\s+)*?(['"])((?:(?!\2)[\s\S])*)\2/g;
+export const unwrapSsh = (cmd: string) => cmd.replace(SSH, (_m, lead: string, _q, inner: string) => `${lead}${inner}`);
+/** a download saves what it fetches: cut, it is lost */
+const SAVES = /\bcurl\b[^|;&\n]*\s(-o|-O|--output|--remote-name)(\s|$)/;
+
+/**
+ * A command that only waits or looks (sleep, pgrep, tail, a status check, a watch on CI), here or
+ * over ssh: stopping it loses nothing, as what it waits on runs on without it.
+ */
+export const waitsOnly = (cmd: string) => {
+  const c = unwrapSsh(cmd);
+  return commandKind(c) === "poll" && !SAVES.test(c);
+};
 
 // Searches and listings walk a folder tree: from a small project folder they are
 // quick, from ~ or / they can run for many minutes and print nothing.
