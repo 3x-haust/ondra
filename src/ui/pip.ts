@@ -4,28 +4,12 @@ import type { Task } from "../state/types";
 export type Corner = "tl" | "tr" | "bl" | "br";
 export const CORNERS: Corner[] = ["tl", "tr", "bl", "br"];
 
-/** when the job last did something in its browser (a running job that opened one but hasn't yet: when it started) */
-const lastBrowse = (t: Task) => {
-  for (let i = t.entries.length - 1; i >= 0; i--) {
-    const e = t.entries[i];
-    if (e.kind === "tool" && e.tool.kind === "browser") return e.at;
-  }
-  return t.startedAt ?? t.createdAt;
-};
-
-/** The running job whose browser to show, leaving out the ones closed here: the job open on screen
- *  when it is one of them (you went into it, so it is its browser you want to watch), else the one
- *  that browsed last. */
+/** The job whose browser floats in the corner: only the running, browsing job open on screen
+ *  (you went into it to watch it). Anywhere else (another job, a project, the main page) nothing
+ *  floats over what you are doing; a job closed here stays closed. */
 export function pipJob(tasks: Task[], closed: ReadonlySet<string>, viewing?: string): Task | undefined {
-  const shows = (t: Task) => !!t.browser && t.status === "running" && !closed.has(t.id);
   const here = viewing ? tasks.find((t) => t.id === viewing) : undefined;
-  if (here && shows(here)) return here;
-  let best: Task | undefined;
-  for (const t of tasks) {
-    if (!shows(t)) continue;
-    if (!best || lastBrowse(t) > lastBrowse(best)) best = t;
-  }
-  return best;
+  return here && !!here.browser && here.status === "running" && !closed.has(here.id) ? here : undefined;
 }
 
 /** the corner nearest to where the window was let go (its centre, in a w×h window) */
