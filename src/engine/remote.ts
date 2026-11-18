@@ -215,7 +215,7 @@ export function create(c: { device: string }, f: FarAsk) {
   const reach = (Array.isArray(f.reach) ? f.reach : []).map((l) => state.spaces.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space);
   const id = jobs.createTask({
     id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id,
-    isolate: typeof f.isolate === "boolean" ? f.isolate : state.settings.isolate, accountId: account, from, model: f.model, thinking: f.thinking,
+    isolate: typeof f.isolate === "boolean" ? f.isolate : state.settings.isolate, accountId: account, accountPinned: account === f.account, from, model: f.model, thinking: f.thinking,
     ...(typeof f.branch === "string" && f.branch ? { branch: f.branch } : {}),
     ...(f.priority === 0 || f.priority === 1 || f.priority === 2 || f.priority === 3 ? { priority: f.priority } : {}),
     ...(f.weight === "light" || f.weight === "heavy" ? { weight: f.weight } : {}),

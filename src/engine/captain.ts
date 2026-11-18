@@ -28,7 +28,7 @@ import { digestJob } from "./digest";
 import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
-import { accountEnv, collectStats, NO_ACCOUNT, spaceAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
@@ -450,6 +450,16 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
           continue;
         }
       }
+      // the account hit its limit: 자동 sits it out and main sends again on one with room, in a fresh
+      // session that gets the recent chat as text (moving the session itself re-sends it all uncached)
+      const acc = accountOf.get(space);
+      if (acc && hitLimit(msg, acc)) {
+        markLimited(acc);
+        if (attempt < 3 && autoMain(space) && spareAccount(sp(space), acc)) {
+          await moveMain(space);
+          continue;
+        }
+      }
       throw new Error(explain(msg));
     }
   }
@@ -671,8 +681,32 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
   return undefined;
 }
 
+/** main routes on 자동 in this space */
+const autoMain = (space: string) => (state.accountPick?.[sp(space)] ?? "auto") === "auto";
+/** chats whose next engine starts a fresh session (with the recent chat as text) instead of --continue */
+const freshNext = new Set<string>();
+/** Stop main to start it again on another account, in a fresh session. */
+async function moveMain(space: string) {
+  const agent = agentOf(space);
+  // its exit has to land before the new engine listens, or it would mark that one dead
+  const gone = new Promise<void>((done) => {
+    listen(agent, { event() {}, exit: () => done() });
+    setTimeout(done, 3000);
+  });
+  await agentKill(agent);
+  await gone;
+  markDead(agent);
+  attached.delete(space);
+  errors.delete(space);
+  sigOf.delete(space);
+  freshNext.add(space);
+}
+
 async function ensureCaptain(space: string) {
   const agent = agentOf(space);
+  // its account nearly out (on 자동, another with room): it moves before this message instead of into the limit
+  const cur = accountOf.get(space);
+  if (cur && isAlive(agent) && attached.has(space) && autoMain(space) && accountFull(cur) && spareAccount(sp(space), cur)) await moveMain(space);
   const skills = await skillScope(sp(space));
   // Called before the next request; pump already owns the busy flag here.
   if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
@@ -730,7 +764,8 @@ async function ensureCaptain(space: string) {
   // is still in the provider cache. After a quiet spell it would be cold anyway,
   // so a fresh session with a text recap is cheaper.
   const lastAt = Math.max(0, ...state.captain.filter((m) => inChat(m, space) && m.from === "captain" && !m.pending && !m.error && !m.relay).map((m) => m.at));
-  const resume = !isSim(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
+  const fresh = freshNext.delete(space);
+  const resume = !fresh && !isSim(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
   const args = [
     "--session-dir",
     sessionDir(space),

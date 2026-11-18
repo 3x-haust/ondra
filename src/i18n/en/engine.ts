@@ -220,6 +220,7 @@ export default {
   "남은 요청 · {what}": "Still to do as asked · {what}",
   "요청받은 일을 마저 하는 중": "Finishing what you asked for",
   "요청이 거부돼서 새 세션으로 이어가요": "The request was refused, so it goes on in a new session",
+  "사용 한도가 차서 다른 계정의 새 세션에서 이어가요": "Usage limit nearly reached · going on in a fresh session on another account",
   "프로젝트 노트 갱신": "Project notes updated",
   "생각이 10분 넘게 이어져서 끊고 다음 단계로 넘겼어요": "Reasoned for over 10 minutes; cut it and moved on to the next step",
   // main and jobs looking up other jobs (jobs_search, job_read, job_tell)

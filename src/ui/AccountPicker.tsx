@@ -1,6 +1,6 @@
 // The account chip under an input: which login this work runs on.
 // 자동 = routed (stays where the cache is warm, moves only when a plan window is
-// nearly used up). Picking one pins new work in this space to it. A job already
+// nearly used up or the provider says its limit is hit); the chip then says only 자동. Picking one pins new work in this space to it. A job already
 // running keeps its account; switching a job starts its cache fresh, so it's said.
 import { createEffect, createSignal, For, Show } from "solid-js";
 import { accountsIn, setState, state } from "../state/store";
@@ -85,13 +85,13 @@ export function AccountPicker(props: {
       <button
         class="st-acc"
         classList={{ on: open() }}
-        aria-label={accountName(props.accountId)}
-        title={[auto() ? t("자동 선택") : "", accountName(props.accountId)].filter(Boolean).join(" · ")}
+        aria-label={auto() ? t("자동 선택") : accountName(props.accountId)}
+        title={auto() ? t("자동 선택") : accountName(props.accountId)}
         onClick={(e) => toggle(e.currentTarget)}
       >
-        {/* on 자동, it says so and which account the routing is on now: "자동 · ChatGPT" */}
-        <Logos id={props.accountId} />
-        <span class="st-acc-name">{auto() ? `${t("자동")} · ${accountName(props.accountId, true)}` : accountName(props.accountId, true)}</span>
+        {/* on 자동 it says only that: which account the routing is on now changes by itself */}
+        <Show when={!auto()}><Logos id={props.accountId} /></Show>
+        <span class="st-acc-name">{auto() ? t("자동") : accountName(props.accountId, true)}</span>
         <Icon name="chevron" size={12} class="st-acc-chev" />
       </button>
       <Show when={open()}>
@@ -148,8 +148,8 @@ export function FarAccountPicker(props: { accounts: FarAccount[]; current?: FarA
   return (
     <div class="picker" onClick={(e) => e.stopPropagation()}>
       <button class="st-acc" classList={{ on: open() }} aria-label={props.current?.name} title={props.title} onClick={(e) => toggle(e.currentTarget)}>
-        <Logos a={props.current} />
-        <span class="st-acc-name">{props.auto ? `${t("자동")} · ${props.current?.name ?? ""}` : props.current?.name}</span>
+        <Show when={!props.auto}><Logos a={props.current} /></Show>
+        <span class="st-acc-name">{props.auto ? t("자동") : props.current?.name}</span>
         <Icon name="chevron" size={12} class="st-acc-chev" />
       </button>
       <Show when={open()}>
