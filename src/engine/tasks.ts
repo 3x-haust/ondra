@@ -109,6 +109,8 @@ interface Run {
   heardAt?: number;
   /** turns cut because the model sent nothing for MODEL_SILENT_MS */
   silentCuts?: number;
+  /** asked to hand off because its account is nearly out (once per session) */
+  limitAsked?: boolean;
   /** the engine is compacting the conversation (quiet while it does, not hung) */
   compacting?: boolean;
   /** the user spoke while it waited to hand off: the new session starts at the turn's end, subagents or not */
@@ -149,20 +151,18 @@ const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite:
  * when that account is nearly out of its plan window. A running job never moves.
  */
 export function chooseAccount(space: Task["space"], topic: string): string {
-  const all = accountsIn(space);
-  const pool = all.filter((a) => a.providers.length).length ? all.filter((a) => a.providers.length) : all;
+  const pool = loggedIn(space);
   // never another space's account: with none here, there is none
   if (!pool.length) return "";
   const pick = state.accountPick?.[space];
   if (pick && pick !== "auto" && pool.some((a) => a.id === pick)) return pick;
   if (pool.length === 1) return pool[0].id;
-  // a direct connection (a local model, a gateway) runs work only when picked, unless it is all there is
-  const routed = pool.filter((a) => !isDirect(a));
-  const auto = routed.length ? routed : pool;
+  const auto = autoPool(space);
   if (auto.length === 1) return auto[0].id;
-  const load = (id: string) => Math.max(0, ...usageOf(id).map((l) => l.used));
-  const roomy = auto.filter((a) => load(a.id) < 85);
-  const use = roomy.length ? roomy : auto;
+  // one the provider just said no to, or nearly out, sits out; the rest is kept under 85% of every window
+  const open = auto.filter((a) => !accountFull(a.id));
+  const roomy = open.filter((a) => load(a.id) < 85);
+  const use = roomy.length ? roomy : open.length ? open : auto;
   const HOUR = 60 * 60_000;
   const same = state.tasks
     .filter((t) => t.space === space && t.topic === topic && use.some((a) => a.id === t.accountId))
@@ -174,7 +174,84 @@ export function chooseAccount(space: Task["space"], topic: string): string {
   return [...use].sort((a, b) => load(a.id) - load(b.id) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0].id;
 }
 
+/** the space's accounts that are logged in (all of them when none is yet) */
+const loggedIn = (space: Task["space"]) => {
+  const all = accountsIn(space);
+  const on = all.filter((a) => a.providers.length);
+  return on.length ? on : all;
+};
+/** the accounts 자동 routes between: a direct connection (a local model, a gateway) only when it is all there is */
+const autoPool = (space: Task["space"]) => {
+  const pool = loggedIn(space);
+  const routed = pool.filter((a) => !isDirect(a));
+  return routed.length ? routed : pool;
+};
+/** how full an account's fullest plan window is, in percent */
+const load = (id: string) => Math.max(0, ...usageOf(id).map((l) => l.used));
+
+/** The provider refused for the account's limit (a plan window used up, or too much at once). */
+export const isUsageLimit = (e: string) => /rate.?limit|usage.?limit|exceed your account|\b429\b|quota|too many requests/i.test(e) && !/context|too long|prompt is too/i.test(e);
+
+/** accounts the provider said no to → until when they sit out 자동 routing */
+const limitedUntil = new Map<string, number>();
+const limited = (id: string, at = Date.now()) => (limitedUntil.get(id) ?? 0) > at;
+/** An account hit its limit: 자동 leaves it until its full window resets (10 minutes for a short burst limit). */
+export function markLimited(accountId: string, at = Date.now()) {
+  const full = usageOf(accountId, at).filter((l) => l.used >= 95 && l.resetsAt);
+  limitedUntil.set(accountId, full.length ? Math.max(...full.map((l) => l.resetsAt!)) : at + 10 * 60_000);
+  void refreshLimits(accountId, true);
+}
+/** A window this full (%) is nearly out: no new work goes there, and a job on it hands off while it still can. */
+export const FULL = 95;
+/** too full to keep sending work to: refused lately, or a window at FULL or more */
+export const accountFull = (id: string) => limited(id) || load(id) >= FULL;
+
+/** The space routes on 자동 and the job wasn't put on an account by hand. */
+export const autoRouted = (t: Pick<Task, "space" | "accountPinned">) => !t.accountPinned && (state.accountPick?.[t.space] ?? "auto") === "auto";
+
+/**
+ * Where work goes on when its account is full: another account of the space with room,
+ * one on the same service first (the conversation and its model carry over as they are),
+ * the emptiest of them. None with room: undefined.
+ */
+export function spareAccount(space: Task["space"], from: string): string | undefined {
+  const cur = accountById(from);
+  const free = autoPool(space).filter((a) => a.id !== from && !accountFull(a.id));
+  if (!free.length) return undefined;
+  const same = free.filter((a) => a.providers.some((p) => cur?.providers.includes(p)));
+  return [...(same.length ? same : free)].sort((a, b) => load(a.id) - load(b.id) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0].id;
+}
+/** The account a job on 자동 moves to at a fresh session: its own is full, or past 85% with one under it free. */
+export function movesAt(t: Pick<Task, "space" | "accountId" | "accountPinned">): string | undefined {
+  if (!autoRouted(t)) return undefined;
+  const spare = spareAccount(t.space, t.accountId);
+  if (!spare) return undefined;
+  return accountFull(t.accountId) || (load(t.accountId) >= 85 && load(spare) < 85) ? spare : undefined;
+}
+/** a refusal for the account's limit; a 503 counts on an account nearly out (GPT answers its limit with 503 now) */
+export const hitLimit = (e: string, accountId: string) => isUsageLimit(e) || (/\b503\b|service unavailable/i.test(e) && load(accountId) >= 90);
+/** Kill a job's engine and wait for its exit, so it doesn't land on the next engine's listeners. */
+async function stopEngine(agent: string) {
+  const gone = new Promise<void>((done) => {
+    listen(agent, { event() {}, exit: () => done() });
+    setTimeout(done, 3000);
+  });
+  void agentKill(agent);
+  await gone;
+  markDead(agent);
+}
+
+/** whether two accounts sign in to the same service (a model of one runs on the other) */
+const sameService = (a: string, b: string) => {
+  const x = accountById(a)?.providers ?? [];
+  return (accountById(b)?.providers ?? []).some((p) => x.includes(p));
+};
+
 export const NO_ACCOUNT = "이 워크스페이스에 계정이 없어요";
+
+/** what a job is told when its account is nearly out: it never tells it to stop working */
+export const LIMIT_STEER =
+  '(Ondra) The account this job runs on has nearly used up its usage limit. Finish the step you are on without starting a new one, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) right away: a fresh session on another account continues from it. If only the wrap-up is left, send done instead.';
 
 /** The account work in this space runs on: the one given if it is this space's, else the space's pick. */
 export function spaceAccount(space: Task["space"], topic = "", given?: string): Account | undefined {
@@ -1101,9 +1178,18 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
   const t0 = taskById(id);
   if (!t0) return;
   const agent = agentOf(id);
-  const account = spaceAccount(t0.space, t0.topic, t0.accountId);
+  // on 자동, a fresh session on an account that is full starts on one with room instead (nothing is
+  // cached for it anywhere yet). A resumed session stays: moving it would re-send it all uncached; if
+  // the limit refuses it, it goes on in a fresh session from a card (settle).
+  const spare = !resume && autoRouted(t0) && accountFull(t0.accountId) ? spareAccount(t0.space, t0.accountId) : undefined;
+  const account = spaceAccount(t0.space, t0.topic, spare ?? t0.accountId);
   if (!account) return fail(id, tr(NO_ACCOUNT));
-  if (account.id !== t0.accountId) updateTask(id, (x) => (x.accountId = account.id));
+  if (account.id !== t0.accountId)
+    updateTask(id, (x) => {
+      // its model runs on the new account only when that signs in to the same service
+      if (!sameService(x.accountId, account.id)) x.model = undefined;
+      x.accountId = account.id;
+    });
   const cwd = expand(t0.cwd || spaceById(t0.space).folder || "~");
   const prev = runs.get(id);
 
@@ -1349,6 +1435,13 @@ function handlers(id: string, run: Run) {
           if (run.streaming && level < at.length && prompt > at[level] && !run.done && !run.handoff) {
             run.longNudges = level + 1;
             void request(agentOf(id), { type: "steer", message: handoffSteer(level, prompt, win) }).catch(() => {});
+          }
+          // its account is nearly out (on 자동, with another that has room): it hands off while it can still
+          // write the card, and the fresh session goes on on the other account (newSession)
+          if (job) void refreshLimits(job.accountId);
+          if (run.streaming && !run.limitAsked && !run.done && !run.handoff && job && autoRouted(job) && accountFull(job.accountId) && spareAccount(job.space, job.accountId)) {
+            run.limitAsked = true;
+            void request(agentOf(id), { type: "steer", message: LIMIT_STEER }).catch(() => {});
           }
           break;
         }
@@ -1636,6 +1729,21 @@ async function settle(id: string, run: Run) {
       return;
     }
   }
+  // the account hit its limit (a 503 counts on one nearly out: GPT says that now instead of 429):
+  // 자동 sits it out, and a job routed on 자동 can't write its own handoff card any more, so one is
+  // made from the thread and a fresh session goes on with it on an account with room. A fresh
+  // session, not the same one moved: re-sending the whole conversation uncached would cost the new
+  // account as much as the old one had used on it.
+  if (run.error && hitLimit(run.error, t.accountId)) {
+    markLimited(t.accountId);
+    const next = !run.done && !run.handoff && !run.asked && autoRouted(t) ? spareAccount(t.space, t.accountId) : undefined;
+    if (next) {
+      logWarn("task", `${id} ${t.accountId} hit its limit (${run.error.slice(0, 120)}): a fresh session on ${next}`);
+      run.error = undefined;
+      await newSession(id, run, cardFromThread(taskById(id)!), next);
+      return;
+    }
+  }
   // the connection dropped (lid closed, Wi-Fi gone): wait for it and carry on in the same session
   if (run.error && isNetError(run.error) && !run.done && !run.handoff && !run.asked && (run.netTries ?? 0) < 40) {
     const err = run.error;
@@ -1867,10 +1975,16 @@ export function cardFromThread(t: Task): Handoff {
   };
 }
 
-/** Start a fresh session on the handoff card (and the results that came in meanwhile). */
-async function newSession(id: string, run: Run, card: Handoff) {
+/**
+ * Start a fresh session on the handoff card (and the results that came in meanwhile).
+ * `to`: the account it goes on on (its own hit the limit). Without it, a job on 자동 whose
+ * account is full, or past 85% with a roomier one free, moves at this point anyway: a fresh
+ * session starts its cache over wherever it runs, so this move costs nothing.
+ */
+async function newSession(id: string, run: Run, card: Handoff, to?: string) {
   const agent = agentOf(id);
   run.longNudges = 0;
+  run.limitAsked = false;
   updateTask(id, (x) => {
     const leg = x.legs[x.legs.length - 1];
     if (leg) {
@@ -1882,6 +1996,21 @@ async function newSession(id: string, run: Run, card: Handoff) {
     x.now = "새 세션으로 이어가는 중";
     push(x, { kind: "handoff", leg: x.legs.length, handoff: card });
   });
+  const next = to ?? movesAt(taskById(id)!);
+  if (next) {
+    // the engine restarts on the other account; the new session is given the card (startTask, its leg already open)
+    runs.delete(id);
+    await stopEngine(agent);
+    // stopped or removed while it waited
+    if (taskById(id)?.status !== "running") return;
+    updateTask(id, (x) => {
+      if (!sameService(x.accountId, next)) x.model = undefined;
+      x.accountId = next;
+      push(x, { kind: "note", text: "사용 한도가 차서 다른 계정의 새 세션에서 이어가요" });
+    });
+    void startTask(id, false);
+    return;
+  }
   try {
     run.turnStart = Date.now();
     await request(agent, { type: "new_session" });
@@ -2236,6 +2365,8 @@ export function createTask(f: {
   priority?: Priority;
   weight?: Weight;
   accountId?: string;
+  /** the account was picked by hand (another Mac's picker): 자동 doesn't move it */
+  accountPinned?: boolean;
   origin?: Task["origin"];
   /** Shown as the first message instead of the full ask (for long imported context). */
   display?: string;
@@ -2285,6 +2416,7 @@ export function createTask(f: {
     priority: f.priority ?? 2,
     weight: f.weight ?? "light",
     accountId: f.accountId ?? chooseAccount(f.space, topic),
+    ...(f.accountPinned ? { accountPinned: true } : {}),
     createdAt: Date.now(),
     now: "대기 중",
     plan: [],
@@ -3121,8 +3253,9 @@ export function setTaskAccount(id: string, accountId: string) {
   { const r = far(id, "setTaskAccount", [id, accountId]); if (r) return r as never; }
   // one of its own workspace's accounts only (another Mac names one this Mac showed it)
   const t = taskById(id);
-  if (!t || t.accountId === accountId || accountById(accountId)?.space !== t.space) return;
-  updateTask(id, (x) => ((x.accountId = accountId), (x.model = undefined)));
+  if (!t || accountById(accountId)?.space !== t.space) return;
+  if (t.accountId === accountId) return void (t.accountPinned || updateTask(id, (x) => (x.accountPinned = true)));
+  updateTask(id, (x) => ((x.accountId = accountId), (x.model = undefined), (x.accountPinned = true)));
 }
 
 // ─────────────────────────────── scheduler

@@ -188,6 +188,8 @@ export interface Task {
   priority: Priority;
   weight: Weight;
   accountId: string;
+  /** put on its account by hand (작업 정보, the job's picker): 자동 never moves it */
+  accountPinned?: boolean;
   createdAt: number;
   startedAt?: number;
   finishedAt?: number;
