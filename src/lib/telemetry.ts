@@ -25,15 +25,15 @@ const ID = "ondra.telemetry.id";
 export const VIEWS = ["main", "task", "board", "devices", "memory", "results", "changes", "settings"] as const;
 export const PANEL_TABS = ["new", "flow", "side", "artifacts", "changes", "pr", "files", "terminal", "browser", "overview", "preview", "reverse", "issues"] as const;
 export const KINDS = ["job", "subagent", "review", "answer"] as const;
-export const PROVIDERS = ["anthropic", "openai", "openai-codex", "google", "openrouter", "xai", "groq", "mistral", "deepseek", "github-copilot", "bedrock", "vertex", "azure", "ollama", "other", "none"] as const;
-export const MODELS = ["claude-fable", "claude-mythos", "claude-opus", "claude-sonnet", "claude-haiku", "claude", "gpt-6", "gpt-5", "gpt", "o-series", "gemini-pro", "gemini-flash", "gemini", "grok", "deepseek", "qwen", "llama", "mistral", "kimi", "glm", "other", "none"] as const;
+const PROVIDERS = ["anthropic", "openai", "openai-codex", "google", "openrouter", "xai", "groq", "mistral", "deepseek", "github-copilot", "bedrock", "vertex", "azure", "ollama", "other", "none"] as const;
+const MODELS = ["claude-fable", "claude-mythos", "claude-opus", "claude-sonnet", "claude-haiku", "claude", "gpt-6", "gpt-5", "gpt", "o-series", "gemini-pro", "gemini-flash", "gemini", "grok", "deepseek", "qwen", "llama", "mistral", "kimi", "glm", "other", "none"] as const;
 export const EFFORTS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const PERMISSIONS = ["ask", "auto", "full"] as const;
 export const WEIGHTS = ["light", "heavy"] as const;
 export const THEMES = ["system", "dark", "light"] as const;
-export const FAULTS = ["network", "auth", "usage_limit", "context_limit", "refused", "engine_exit", "timeout", "no_model", "unknown"] as const;
+const FAULTS = ["network", "auth", "usage_limit", "context_limit", "refused", "engine_exit", "timeout", "no_model", "unknown"] as const;
 export const COMMANDS = ["feedback", "btw", "side", "flow", "changes", "files", "terminal", "browser", "pause", "resume", "retry", "start", "done", "merge", "discard", "rename", "ask", "auto", "full", "remember", "memory", "settings", "clear", "compact", "stop", "task", "main", "skill", "other"] as const;
-export const WHERE = ["main", "task"] as const;
+const WHERE = ["main", "task"] as const;
 
 type In<T extends readonly string[]> = T[number];
 /** What every job event says about the job. */
@@ -70,7 +70,7 @@ export interface Events {
   feedback_sent: { with_log: boolean };
   telemetry_off: Record<string, never>;
 }
-export type EventName = keyof Events;
+type EventName = keyof Events;
 /** where the events are listed for people (a test keeps it complete) */
 export const EVENTS_DOC = "docs/TELEMETRY.md";
 type Kind = "number" | "boolean" | readonly string[];

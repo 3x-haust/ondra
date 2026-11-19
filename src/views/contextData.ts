@@ -13,7 +13,7 @@ import { homeDir, spaceById, state, taskById } from "../state/store";
 import type { Memory, SpaceId } from "../state/types";
 import { t as tr } from "../i18n";
 
-export interface SourceInfo {
+interface SourceInfo {
   path: string;
   source: string;
   scope: string;

@@ -15,8 +15,8 @@ import { accountById, accountsIn, appQuitting, homeDir, loaded, projectById, pro
 import { refreshLimits, snapshot, usageOf } from "../state/limits";
 import { ctx, noteCall, noteCtx, reuse, setCtx, setReuse } from "../state/ctx";
 import { handoffAt, handoffSteer, windowFor } from "./handoff";
-import { closePlan, moveTo, nextPlan, openAsked, planText } from "./plan";
-import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
+import { closePlan, moveTo, nextPlan, openAsked, planText, unexplained } from "./plan";
+import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Size, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
 import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
@@ -24,7 +24,7 @@ import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./pr
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
-import { checkEvidence, isCodeFile, promisesLater, reviewUnresolved, riskyChange, unbackedClaim } from "./proof";
+import { causeFooting, checkEvidence, isBugFix, isCodeFile, leftovers, promisesLater, readUnverified, reproGap, reviewUnresolved, riskyChange, unbackedChecked, unbackedClaim, uncheckedLine, unreasoned } from "./proof";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -81,6 +81,8 @@ interface Run {
   /** done/evidence handed in; checked once before finishing */
   evidence?: Evidence[];
   unverified?: string[];
+  /** unverified items given with no real reason they couldn't be done here */
+  bare?: string[];
   /** already sent back once for missing review/evidence */
   gated?: boolean;
   /** times the job was sent back before done (max 2) */
@@ -202,7 +204,7 @@ export function markLimited(accountId: string, at = Date.now()) {
   void refreshLimits(accountId, true);
 }
 /** A window this full (%) is nearly out: no new work goes there, and a job on it hands off while it still can. */
-export const FULL = 95;
+const FULL = 95;
 /** too full to keep sending work to: refused lately, or a window at FULL or more */
 export const accountFull = (id: string) => limited(id) || load(id) >= FULL;
 
@@ -250,7 +252,7 @@ const sameService = (a: string, b: string) => {
 export const NO_ACCOUNT = "이 워크스페이스에 계정이 없어요";
 
 /** what a job is told when its account is nearly out: it never tells it to stop working */
-export const LIMIT_STEER =
+const LIMIT_STEER =
   '(Ondra) The account this job runs on has nearly used up its usage limit. Finish the step you are on without starting a new one, then send a {"type":"handoff"} block (did, found, next, doneWhen, evidence) right away: a fresh session on another account continues from it. If only the wrap-up is left, send done instead.';
 
 /** The account work in this space runs on: the one given if it is this space's, else the space's pick. */
@@ -386,7 +388,7 @@ export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefi
 
 export const chineseOnly = (s: string) => /[\u4e00-\u9fff]/.test(s) && !/[\uac00-\ud7a3]/.test(s);
 
-export const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
+const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
 const lines = (s: unknown) => (typeof s === "string" && s ? s.split("\n").length : 0);
 
 const jobName = (id: unknown) => (typeof id === "string" ? (taskById(id)?.title ?? id) : "");
@@ -574,7 +576,9 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         t.saidDone = run.done;
         if (b.result) t.result = String(b.result).slice(0, 8000);
         const items: Evidence[] = Array.isArray(b.evidence) ? b.evidence.filter((e: any) => e && e.ref).map((e: any) => ({ kind: String(e.kind ?? "file"), ref: String(e.ref), ok: e.ok !== false, note: e.note ? String(e.note) : undefined })) : [];
-        const unverified: string[] = [...new Set<string>(Array.isArray(b.unverified) ? b.unverified.map((u: unknown) => String(u).trim()).filter(Boolean) : [])];
+        const listed = readUnverified(b.unverified);
+        const unverified = listed.map(uncheckedLine);
+        run.bare = unreasoned(listed).map((u) => u.what);
         // a later done replaces what it proves again (same kind + ref)
         run.evidence = [...(run.evidence ?? []).filter((o) => !items.some((n) => n.kind === o.kind && n.ref === o.ref)), ...items];
         run.unverified = unverified;
@@ -1041,7 +1045,7 @@ async function askMerge(id: string, why?: string) {
 }
 
 /** The last done's evidence has a test or build the app saw run and pass in the session (not the job's word). */
-export const ranChecks = (t: Pick<Task, "entries">) => {
+const ranChecks = (t: Pick<Task, "entries">) => {
   for (let i = (t.entries ?? []).length - 1; i >= 0; i--) {
     const e = t.entries[i];
     if (e.kind === "block" && e.block.type === "evidence")
@@ -1326,7 +1330,7 @@ const releaseBrowser = (id: string) => {
 };
 const DEVICE_GRACE_MS = 5 * 60_000;
 let deviceSweep: ReturnType<typeof setTimeout> | undefined;
-export function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
+function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
   clearTimeout(deviceSweep);
   deviceSweep = setTimeout(() => {
     const keep = state.tasks.filter((t) => t.status === "running" || t.status === "queued" || t.status === "waiting").map((t) => t.id);
@@ -1498,7 +1502,7 @@ function handlers(id: string, run: Run) {
             run.quietTools = 0;
             run.planMovedAt = Date.now();
             run.planNudges = (run.planNudges ?? 0) + 1;
-            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${planText(plan).join("\n")}\nSend a now block with the step you are on (finished steps before it count as done), or a new plan if it changed.` }).catch(() => {});
+            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${planText(plan).join("\n")}\nSend a now block with the step you are on (the step you were on before it counts as done; one you never were on needs {"text":"…","done":true} or {"text":"…","skip":"why"} in a plan block), or a new plan if it changed.` }).catch(() => {});
           }
           // a job booted or shut down a phone: the hub and the sidebar show it now
           if (done?.kind === "tool" && done.tool.name === "device") void refreshDevices();
@@ -1796,7 +1800,7 @@ async function settle(id: string, run: Run) {
         run.turnStart = Date.now();
         await request(agent, {
           type: "prompt",
-          message: `(Ondra) You said done, but steps the user asked for while you worked are still open in your plan:\n${asked.map((a) => `- ${a}`).join("\n")}\nDo them now. If one is already done, mark it in a plan block; if one turned out not to be needed or can't be done, say why in a sentence and send a plan without it. Then send done again.`,
+          message: `(Ondra) You said done, but steps the user asked for while you worked are still open in your plan:\n${asked.map((a) => `- ${a}`).join("\n")}\nDo them now. If one is already done, send it in a plan block as {"text":"…","done":true}; if one turned out not to be needed or can't be done, send it as {"text":"…","skip":"why"} and say why in a sentence. Then send done again.`,
         });
       } catch {
         finish(id, summary, run);
@@ -2102,6 +2106,61 @@ async function markEvidence(t: Task, run: Run): Promise<Evidence[]> {
   return checked;
 }
 
+/**
+ * What a job of normal size or more owes before done, beyond its evidence: a reason for each
+ * plan step it skipped or left open, a reason for each thing it lists as not checked, a
+ * footing for the cause it names. Small jobs (a wording, a colour) owe none of it.
+ */
+function owedReasons(t: Task, run: Run, said: string): { needs: string[]; lines: string[] } {
+  if (t.size === "small") return { needs: [], lines: [] };
+  const needs: string[] = [];
+  const lines: string[] = [];
+  const open = unexplained(t.plan);
+  if (open.length) {
+    needs.push("건너뛴 단계");
+    lines.push(`- 계획에서 이유 없이 지나치거나 남긴 단계가 있어요: ${open.map((s) => `«${s}»`).join(", ")}. 한 단계면 지금 하고, 이미 했으면 plan 블록에서 {"text":"…","done":true}로, 안 하기로 했으면 {"text":"…","skip":"이유"}로 다시 보내 줘. 말없이 지우지 마.`);
+  }
+  if (run.bare?.length) {
+    needs.push("확인 못 한 이유");
+    lines.push(`- unverified에 이유가 없거나 이유가 아닌 항목이 있어요: ${run.bare.map((s) => `«${s}»`).join(", ")}. 여기서 도구로 할 수 있는 일(테스트·실행·스크린샷·첨부·PR에 올리기)이면 지금 하고 evidence에 넣어 줘. 정말 못 하면 {"what":"…","why":"막힌 이유"}로 적어 줘: 사용자의 손이 필요함(기기·계정·로그인), 여기 도구가 닿지 않음, 허락 없이 밖으로 나가는 일, 사용자가 빼라고 함, 변경과 무관한 이유로 두 번 실패함.`);
+  }
+  const cause = causeFooting(said);
+  if (cause === "bare") {
+    needs.push("원인 근거");
+    lines.push("- **원인**에 근거 라벨이 없어요. 실행해서 직접 본 거면 (확인함), 코드를 읽고 판단했으면 (추론), 둘 다 아니면 (추측)을 붙여 줘. (추측)이면 지금 확인할 수 있는지 먼저 봐 줘.");
+  }
+  const checkedClaim = unbackedChecked(t, said);
+  if (checkedClaim) {
+    needs.push("확인 안 한 라벨");
+    lines.push(`- "${checkedClaim}"에 (확인함)을 붙였는데 이 세션에서 돌리거나 본 기록이 없어요. 지금 돌려서 확인하거나 라벨을 (추론)·(추측)으로 고쳐 줘.`);
+  }
+  return { needs, lines };
+}
+
+/** a fix/ job: the reproduction it ran before changing code, and the same run passing after */
+function reproOwed(t: Task, checked: Evidence[], unverified: string[]): string | null {
+  if (t.size === "small" || !isBugFix(t)) return null;
+  const repro = checked.find((e) => e.kind === "repro");
+  if (!repro) {
+    if (unverified.some((u) => /재현|repro/i.test(u))) return null;
+    return '- 버그 작업인데 재현 기록이 없어요. 고치기 전에 돌린 재현(명령이나 화면 조작)을 고친 뒤 같은 방법으로 다시 돌리고, evidence에 {"kind":"repro","ref":"그 명령"}으로 넣어 줘. 재현이 안 됐으면 unverified에 {"what":"재현","why":"무엇을 해 봤고 왜 안 됐는지"}로 적어 줘.';
+  }
+  const gap = reproGap(t, repro.ref);
+  if (gap === "before") return `- 재현 «${repro.ref}»을 코드를 바꾸기 전에 돌린 기록이 없어요. 고친 결과만으로는 원래 실패가 고쳐졌는지 알 수 없어요: 수정 전 상태에서 재현을 보여 주거나(되돌려 돌리기, 실패하는 테스트 먼저), 못 하면 unverified에 이유와 함께 적어 줘.`;
+  if (gap === "after") return `- 재현 «${repro.ref}»을 마지막 수정 뒤에 다시 돌려 통과한 기록이 없어요. 지금 같은 방법으로 돌려 줘.`;
+  return null;
+}
+
+/** debug output, code left commented out and fix-later notes the job's own changes add */
+async function leftoversOwed(t: Task, codeFiles: Set<string>): Promise<string[]> {
+  if (t.size === "small" || !codeFiles.size) return [];
+  const w = t.worktree?.state === "open" ? t.worktree : undefined;
+  const c = await gitChanges(w?.path ?? expand(t.cwd), w?.base).catch(() => null);
+  if (!c?.patch) return [];
+  const mine = [...codeFiles].map((p) => expand(p));
+  return leftovers(c.patch, (f) => mine.some((p) => p === f || p.endsWith(`/${f}`)));
+}
+
 async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ label: string; ask: string } | null> {
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
@@ -2109,8 +2168,11 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
       label: "남은 작업 있음",
       ask: "끝냈다고 했는데 요약이 앞으로 할 일이에요. 그 일을 지금 끝내고 done으로 끝내 줘. 지금 할 수 없으면 무엇이 막혔는지 사용자에게 묻거나, 못 한 걸 unverified에 적고 요약은 실제로 한 것만 적어 줘.",
     };
+  const said = [run.done ?? "", lastText(t)].join("\n");
+  const owed = owedReasons(t, run, said);
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
-  if (!wrote.length) return null; // looked things up, answered: nothing to prove
+  // looked things up, answered: nothing to prove but its reasons
+  if (!wrote.length) return owed.needs.length ? { label: owed.needs.join(" · "), ask: ["끝내기 전에 빠진 게 있어요.", ...owed.lines, "안 해 본 걸 했다고 하지 말고, 고친 뒤 다시 done으로 끝내 줘."].join("\n") } : null;
   // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)
   const code = (p: string) => isCodeFile(p, t) && !/\.html?$/i.test(p);
   const changed = wrote.some((e) => e.kind === "tool" && code((e.tool.detail ?? "").split("\n")[0]));
@@ -2132,9 +2194,13 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
   const soft = checked.filter((e) => e.why && !blocking(e));
   const proven = checked.some((e) => !e.why) || soft.length > 0 || (run.unverified ?? []).length > 0;
   // the answer says it looked at the screen: something in the session has to show it did
-  const said = [run.done ?? "", lastText(t)].join("\n");
   const claim = unbackedClaim(t, said, checked, run.unverified ?? []);
-  const needs = [changed && !reviewed && "리뷰", unresolved && "리뷰 지적", !proven && "증거", bad.length && "증거 안 맞음", claim && "확인 안 한 말"].filter(Boolean) as string[];
+  // a cause left as a guess: the fix can't be called checked (and doesn't merge on its own)
+  if (changed && causeFooting(said) === "guess" && !(run.unverified ?? []).some((u) => u.startsWith("원인을 확인하지 못했어요")))
+    run.unverified = [...(run.unverified ?? []), "원인을 확인하지 못했어요 — 보고에서 원인이 (추측)이에요"];
+  const repro = changed && !out ? reproOwed(t, checked, run.unverified ?? []) : null;
+  const left = changed ? await leftoversOwed(t, codeFiles) : [];
+  const needs = [changed && !reviewed && "리뷰", unresolved && "리뷰 지적", !proven && "증거", bad.length && "증거 안 맞음", claim && "확인 안 한 말", repro && "재현", left.length && "남은 디버그·임시 코드", ...owed.needs].filter(Boolean) as string[];
   if (!needs.length) return null;
   const lines = [
     "끝내기 전에 빠진 게 있어요.",
@@ -2151,6 +2217,9 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
         : `- 답에 "${claim.claim}"라고 했는데 ${claim.why}. 지금 실제로 화면에서 확인하고 스크린샷을 evidence에 넣거나, 답에서 그 말을 빼고 unverified에 적어 줘.`
       : "",
     ...bad.map((e) => `- evidence «${e.ref}»: ${e.why}. ${e.check === "missing" ? "파일을 실제로 만들거나 경로를 고쳐 줘." : e.kind === "shot" ? "지금 화면을 다시 찍어 그 사진을 넣어 줘." : "지금 실제로 돌리고 그 결과를 적어 줘."}`),
+    repro ?? "",
+    left.length ? `- 바꾼 코드에 남기면 안 되는 줄이 있어요: ${left.join(", ")}. 지우거나 제대로 고쳐 줘(임시라는 주석 대신 지금 고치거나, 못 하면 보고에 한 줄).` : "",
+    ...owed.lines,
     "안 해 본 걸 했다고 하지 말고, 못 한 건 unverified에 적은 뒤 다시 done으로 끝내 줘.",
   ];
   return { label: `${needs.join(" · ")}`, ask: lines.filter(Boolean).join("\n") };
@@ -2270,7 +2339,7 @@ let prPolling = false;
  * gets a follow-on job on its branch). Merged or closed PRs, and ones quiet for
  * a week, stop being watched.
  */
-export async function watchPrs() {
+async function watchPrs() {
   if (prPolling || !state.settings.watchPullRequests) return;
   prPolling = true;
   try {
@@ -2364,6 +2433,10 @@ export function createTask(f: {
   cwd?: string;
   priority?: Priority;
   weight?: Weight;
+  /** how much rigor the work earns (main's call); none = normal */
+  size?: Size;
+  /** a new app or repo started from nothing */
+  fresh?: boolean;
   accountId?: string;
   /** the account was picked by hand (another Mac's picker): 자동 doesn't move it */
   accountPinned?: boolean;
@@ -2415,6 +2488,8 @@ export function createTask(f: {
     status: "queued",
     priority: f.priority ?? 2,
     weight: f.weight ?? "light",
+    ...(f.size && f.size !== "normal" ? { size: f.size } : {}),
+    ...(f.fresh ? { fresh: true } : {}),
     accountId: f.accountId ?? chooseAccount(f.space, topic),
     ...(f.accountPinned ? { accountPinned: true } : {}),
     createdAt: Date.now(),
@@ -2554,7 +2629,7 @@ export function handOn(prevId: string, nextId: string) {
  * and sub-agents; no list when the user opened another space to it), its space's
  * own folders (browser recipes).
  */
-export function dataEnv(t: Task): [string, string][] {
+function dataEnv(t: Task): [string, string][] {
   const data = engine.info.dataDir;
   if (!data) return [];
   const key = t.space.replace(/[^A-Za-z0-9_-]/g, "") || "home";
@@ -2576,43 +2651,6 @@ export function jobsAllowed(t: Task): string[] | undefined {
 
 /** A finished job (not a quick answer): more work on it starts as a new job that follows it. */
 export const finished = (t: Task | undefined) => !!t && !t.parentId && !t.answer && (t.status === "done" || t.status === "failed");
-
-/** A question answered on the spot: a finished thread the user can keep talking in. */
-export function createAnswer(f: { space: Task["space"]; question: string; text: string; blocks: Block[]; title?: string; topic?: string }): string {
-  const id = uid("t");
-  const at = Date.now();
-  const first = f.question.split("\n")[0].trim();
-  const entries: Entry[] = [
-    { id: uid("e"), at, kind: "user", text: f.question },
-    ...(f.text.trim() ? [{ id: uid("e"), at, kind: "text" as const, text: f.text }] : []),
-    ...f.blocks.map((block) => ({ id: uid("e"), at, kind: "block" as const, block })),
-  ];
-  const topic = f.topic?.trim() || "대화";
-  const task: Task = {
-    id,
-    space: f.space,
-    topic,
-    title: cutTitle(f.title?.trim() || cutTitle(first, 29) || "질문"),
-    ask: f.question,
-    cwd: spaceById(f.space).folder || "~",
-    status: "done",
-    priority: 2,
-    weight: "light",
-    accountId: chooseAccount(f.space, topic),
-    createdAt: at,
-    startedAt: at,
-    finishedAt: at,
-    now: "답변함",
-    plan: [],
-    legs: [],
-    entries,
-    shells: [],
-    inbox: [],
-    answer: true,
-  };
-  setState("tasks", (list) => [...list, task]);
-  return id;
-}
 
 // ─────────────────────────────── user actions
 
@@ -2987,7 +3025,7 @@ function requeue(t: Task) {
  * "릴리즈할까요?" answered 8 hours later started a release of what another job had released
  * meanwhile, an empty 1.5.0 the same as 1.4.18.
  */
-export function staleAnswerNote(askedAt: number, space: string, project: string | undefined, now = Date.now()): string | undefined {
+function staleAnswerNote(askedAt: number, space: string, project: string | undefined, now = Date.now()): string | undefined {
   if (now - askedAt < 30 * 60_000) return undefined;
   const mins = Math.round((now - askedAt) / 60_000);
   const ago = mins < 120 ? `${mins} minutes` : `${Math.round(mins / 60)} hours`;
@@ -3102,7 +3140,7 @@ export function lastReport(t: Task): string | undefined {
 }
 
 /** The user's words ask to stop or hold the work (not "don't stop"). */
-export const meansStop = (text: string) => /멈춰|멈추|멈춤|그만|중지|중단|보류|\bstop\b|\bpause\b|\bhold\b/i.test(text) && !/말고|않|안 ?멈|계속 (진행|해)|don'?t stop|keep going|continue/i.test(text);
+const meansStop = (text: string) => /멈춰|멈추|멈춤|그만|중지|중단|보류|\bstop\b|\bpause\b|\bhold\b/i.test(text) && !/말고|않|안 ?멈|계속 (진행|해)|don'?t stop|keep going|continue/i.test(text);
 
 export function pauseTask(id: string) {
   { const r = far(id, "pauseTask", [id]); if (r) return r as never; }
@@ -3342,24 +3380,6 @@ export function startScheduler() {
       ),
     );
   });
-}
-
-export const slotsUsed = () => {
-  const busy = state.tasks.filter((t) => t.status === "running" && !t.parentId);
-  return { light: busy.filter((t) => t.weight === "light").length, heavy: busy.filter((t) => t.weight === "heavy").length };
-};
-
-/** Summarize the conversation so far and keep going in the same session (frees context). */
-export async function compactAgent(agent: string) {
-  if (!isAlive(agent)) return toast(tr("압축할 대화가 없어요"));
-  toast(tr("대화 압축 중"));
-  try {
-    await request(agent, { type: "compact" }, 180_000);
-    noteCtx(agent, await request(agent, { type: "get_session_stats" }, 8000));
-    toast(tr("대화를 압축했어요"));
-  } catch (e) {
-    toast(e instanceof Error ? e.message : String(e), "bad");
-  }
 }
 
 // ─────────────────────────────── edit / retry (rewind the session)

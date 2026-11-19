@@ -18,7 +18,7 @@ export const EFFORTS: { id: string; label: string; name: string }[] = [
   { id: "xhigh", label: "xhigh", name: "매우 높음" },
   { id: "max", label: "max", name: "최대" },
 ];
-export const effortLabel = (id: string) => t(EFFORTS.find((e) => e.id === id)?.name ?? id);
+const effortLabel = (id: string) => t(EFFORTS.find((e) => e.id === id)?.name ?? id);
 /** effort when nothing was picked */
 export const effortOf = (t: string | undefined) => (EFFORTS.some((e) => e.id === t) ? t! : "high");
 

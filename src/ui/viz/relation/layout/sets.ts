@@ -2,7 +2,7 @@
 // label points, and the UpSet aggregation.
 import { arr, isObj, rng, toNum, toStr } from "./text";
 
-export interface SetItem { sets: string[]; value: number; em?: boolean }
+interface SetItem { sets: string[]; value: number; em?: boolean }
 export interface Circle { x: number; y: number; r: number }
 
 /** items `{sets: ["A","B"], value}`; single-set items are set sizes. Unknown/empty skipped. */
@@ -234,7 +234,7 @@ export function exclusive(names: string[], items: SetItem[]): Map<number, number
 }
 export const bits = (m: number) => { let c = 0; for (let x = m; x; x &= x - 1) c++; return c; };
 
-export interface UpsetCombo { sets: string[]; mask: number; value: number; em?: boolean }
+interface UpsetCombo { sets: string[]; mask: number; value: number; em?: boolean }
 
 /**
  * UpSet: each item is an exclusive combination (`value` = only these sets). Set totals

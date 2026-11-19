@@ -17,7 +17,7 @@ import { prepareQuery } from "./vectors";
 import { accountById, addProject, allDecisions, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
 import { readNotes } from "./notes";
@@ -121,8 +121,6 @@ function keptSent(space: string): SentHeader | undefined {
   }
 }
 
-export const captainAgent = agentOf;
-
 /** what main reasons while it answers, per chat; cleared when the next answer starts */
 const [thoughtsAll, setThoughtsAll] = createSignal<Record<string, string>>({});
 export const mainThought = (key: string) => thoughtsAll()[key] ?? "";
@@ -138,7 +136,7 @@ function setDraft(key: string, text: string) {
   const was = draftsAll()[key];
   if (was?.id !== id || was.text !== text) setDraftsAll((all) => ({ ...all, [key]: { id, text } }));
 }
-export function addThought(key: string, delta: string) {
+function addThought(key: string, delta: string) {
   if (!delta) return;
   setThoughtsAll((all) => ({ ...all, [key]: ((all[key] ?? "") + delta).slice(-40_000) }));
 }
@@ -167,7 +165,7 @@ export { userParked } from "./jobs";
  * main, which carries on (next job, or a question). The chat's row for the job
  * already shows what came out, so main adds only what needs the user.
  */
-export function jobEnded(t: Task) {
+function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
   void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
@@ -252,7 +250,7 @@ function userFollowUps(spaceId: SpaceId, jobIds: string[]): string[] {
  * repo), made a project when it isn't one yet. The space folder itself, or a
  * folder outside it, is no project.
  */
-export function projectForFolder(space: SpaceId, dir?: string) {
+function projectForFolder(space: SpaceId, dir?: string) {
   if (!dir?.startsWith("/") && !dir?.startsWith("~")) return undefined;
   const base = expand(spaceById(space).folder || "").replace(/\/+$/, "");
   const full = repoHome(expand(dir));
@@ -341,7 +339,7 @@ function handDown(spaceId: SpaceId, projectId: string, request: string, taskIds:
 /** this chat message started the job or relayed to it (the chat shows it as the job's row) */
 const handsTo = (m: CaptainMessage, id: string) => (m.routes ?? []).some((r) => (r.kind === "new" || r.kind === "append") && r.taskId === id);
 
-export function reportUp(space: string) {
+function reportUp(space: string) {
   const projectId = pj(space);
   if (!projectId) return;
   const reqs = requestsOf(space);
@@ -527,7 +525,7 @@ const promptSig = () => {
   return h.toString(36);
 };
 /** How hard main thinks: the level picked under its chat, else 낮음 (it answers and hands work on, fast). */
-export const mainEffort = (accountId: string | undefined) => (accountId && effortFor(accountId, mainModel(accountId))) || "low";
+const mainEffort = (accountId: string | undefined) => (accountId && effortFor(accountId, mainModel(accountId))) || "low";
 /** The model main runs on: the account's, or the one set for main (not on a direct connection, whose models are its own). */
 export function mainModel(accountId: string | undefined): string | undefined {
   const acc = state.accounts.find((a) => a.id === accountId);
@@ -1131,7 +1129,7 @@ async function tidy(space: string, ms?: number) {
 const clampPriority = (p: unknown): Priority => (p === 0 || p === 1 || p === 2 || p === 3 ? p : 2);
 
 /** A message without its attached files' list and without any file path in it. */
-export function spokenPart(text: string): string {
+function spokenPart(text: string): string {
   const i = text.startsWith("첨부한 파일:\n") ? 0 : text.indexOf("\n\n첨부한 파일:\n");
   return (i >= 0 ? text.slice(0, i) : text).replace(/(?:~|\/)[^\s"'`]*\/[^\s"'`]*/g, " ");
 }
@@ -1231,11 +1229,14 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const before = job(r.from)?.project ? projectById(job(r.from)!.project!, sp(space)) : undefined;
       const making = !!r.project && typeof r.project === "object" && typeof r.project.folder === "string";
       let proj = projectOf(space) ?? before ?? (making ? undefined : existingProject(sp(space), r, original));
+      // a new project in a folder with nothing in it yet: the app is started from nothing (0→1)
+      let fresh = false;
       // main starting something new: make its folder and project chat first
       if (!proj && r.project && typeof r.project.folder === "string" && r.project.folder.startsWith("/")) {
         // a project is the repo, never one of its branch/worktree folders
         const wt = r.project.folder.match(/^(.*)\/worktrees\/([^/]+)(?:\/|$)/);
         if (wt) r.project = { name: wt[2], folder: `${wt[1]}/projects/${wt[2]}` };
+        fresh = !(await fsFiles(r.project.folder).then((f) => f.length > 0).catch(() => false));
         const folder = await ensureDir(r.project.folder).catch(() => "");
         if (folder) proj = projectById(addProject(sp(space), folder, String(r.project.name ?? "") || undefined), sp(space));
       }
@@ -1257,6 +1258,9 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         project: proj?.id,
         priority: clampPriority(r.priority),
         weight: r.weight === "heavy" ? "heavy" : "light",
+        size: r.size === "small" || r.size === "large" ? r.size : undefined,
+        // main made the folder for it: an app started from nothing (no playbooks, skeleton first)
+        fresh: fresh && !!proj,
         // one request → one task: show what the user typed, not the rewrite
         display: work === 1 ? original : undefined,
         isolate: isolateOf.get(space),
@@ -1324,10 +1328,6 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
   }
   for (const [projectId, ids] of handed) handDown(sp(space), projectId, original, ids);
   return out;
-}
-
-export function captainBusy(space: string) {
-  return busy.has(space);
 }
 
 /**
@@ -1399,7 +1399,7 @@ export async function evalOneShot(prompt: string): Promise<string> {
   return oneShot(state.space, "~", prompt);
 }
 
-export interface SimCase {
+interface SimCase {
   space: SpaceId;
   /** the project chat it happens in (a project's name), else the space's main chat */
   project?: string;
@@ -1416,7 +1416,7 @@ export interface SimCase {
   /** dev evals only: main's system prompt to try instead of the shipped one */
   system?: string;
 }
-export interface SimStep {
+interface SimStep {
   text: string;
   reply: string;
   routes: any[];

@@ -1,0 +1,12 @@
+{
+  "note": "Main sizes a job: a colour or wording is small, an overnight run is large, a bug is neither",
+  "space": "home",
+  "projects": [{ "name": "웹앱", "folder": "/Users/me/projects/webapp" }],
+  "project": "웹앱",
+  "each": [
+    { "id": "colour", "text": "로그인 버튼 색 좀 진한 파랑으로 바꿔줘", "expect": { "new": 1, "size": "small" } },
+    { "id": "typo", "text": "설정 화면에 '알람'이 '알림'으로 잘못 써 있어 고쳐줘", "expect": { "new": 1, "size": "small" } },
+    { "id": "bug", "text": "로그인하면 가끔 메인 화면으로 튕기는 버그 고쳐줘", "expect": { "new": 1, "size": "normal" } },
+    { "id": "overnight", "text": "나 자러 갈게. 결제 모듈 테스트 다 통과할 때까지 계속 고쳐줘", "expect": { "new": 1, "size": "large" } }
+  ]
+}

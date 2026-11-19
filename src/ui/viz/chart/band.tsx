@@ -21,7 +21,7 @@ export interface Seg {
   /** is this segment the end of its bar (gets the rounded end) */
   end?: boolean;
 }
-export interface BandLine { label: string; values: (number | null)[]; color: string; dash?: boolean }
+interface BandLine { label: string; values: (number | null)[]; color: string; dash?: boolean }
 
 export function BandPlot(props: {
   label?: string;

@@ -9,7 +9,7 @@ import type { SpaceId } from "../state/types";
 import { skillsIn } from "./memory";
 import { askHost } from "./hosts";
 
-export interface MenuSkill {
+interface MenuSkill {
   name: string;
   description: string;
   from: "bundled" | "mine" | "user";

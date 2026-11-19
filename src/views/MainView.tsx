@@ -112,7 +112,7 @@ const oneLine = (s?: string) => (s ?? "").replace(/\s+/g, " ").trim();
  * What a finished job ended on, as it said it: the words and result blocks its last turn closed with
  * (after its steps), else its result line. A project's chat shows it under the job's row, as is.
  */
-export function closingOf(t: Task): { text: string; blocks: Extract<Task["entries"][number], { kind: "block" }>["block"][] } {
+function closingOf(t: Task): { text: string; blocks: Extract<Task["entries"][number], { kind: "block" }>["block"][] } {
   const e = t.entries;
   let end = e.length;
   while (end > 0 && (e[end - 1].kind === "note" || e[end - 1].kind === "turn")) end--;

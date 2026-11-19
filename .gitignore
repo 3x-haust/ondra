@@ -14,3 +14,7 @@ docs/research/
 
 # remote control: build output
 remote/*/target/
+
+# Python byte-code from running bundled skill scripts (would ship inside the app)
+__pycache__/
+*.pyc

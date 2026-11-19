@@ -1112,7 +1112,7 @@ function Shortcuts() {
   );
 }
 
-export const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: string; group: string }[] = [
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: string; group: string }[] = [
   { id: "general", label: "일반", icon: "gear", desc: "화면, 새 작업, 작업 방식을 정해요", group: "" },
   { id: "accounts", label: "계정과 워크스페이스", icon: "key", desc: "워크스페이스마다 쓸 AI 계정과 모델을 연결해요", group: "" },
   { id: "remote", label: "연결", icon: "monitor", desc: "다른 Mac의 프로젝트를 여기서 써요. 오가는 내용은 끝까지 암호화돼요.", group: "" },

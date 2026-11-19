@@ -28,13 +28,13 @@ const CALLS_PER_PASS = 3;
 /** only jobs finished lately are worth a lesson */
 const RECENT_MS = 3 * 24 * 60 * 60_000;
 /** lessons one proposal carries (the newest) */
-export const MAX_LESSONS = 5;
+const MAX_LESSONS = 5;
 const TRACE_BUDGET = 5_000;
 const WAIT_MS = 4 * 60_000;
 
 // ───────────── which skills a job used
 
-export type SkillKind = "bundled" | "changed" | "mine";
+type SkillKind = "bundled" | "changed" | "mine";
 export interface KnownSkill {
   name: string;
   /** its SKILL.md */
@@ -82,7 +82,7 @@ export function troubleOf(t: Pick<Task, "status" | "error" | "entries">): string
   return why;
 }
 
-export const TROUBLE_LABEL: Record<string, string> = { failed: "실패했어요", corrected: "사용자가 바로잡았어요", retried: "같은 실패를 되풀이했어요" };
+const TROUBLE_LABEL: Record<string, string> = { failed: "실패했어요", corrected: "사용자가 바로잡았어요", retried: "같은 실패를 되풀이했어요" };
 
 // ───────────── the trace the model reads
 
@@ -131,7 +131,7 @@ export function applyEdits(text: string, edits: SkillEdit[]): string | null {
   return out;
 }
 
-export type DiffLine = { kind: "same" | "add" | "del" | "gap"; text: string };
+type DiffLine = { kind: "same" | "add" | "del" | "gap"; text: string };
 
 /** Lines removed and added between two texts (longest common subsequence), only the changed parts with `context` lines around. */
 export function lineDiff(a: string, b: string, context = 2): DiffLine[] {
@@ -253,11 +253,11 @@ async function knownSkills(): Promise<KnownSkill[]> {
 
 let running = false;
 const within = <T,>(p: Promise<T>, ms = WAIT_MS) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
-export const skillReflectOn = () => !!state.settings.skillReflect;
+const skillReflectOn = () => !!state.settings.skillReflect;
 export const openProposals = () => (state.skillProposals ?? []).filter((p) => !p.status);
 
 /** Read the jobs that finished badly since last time and propose skill changes (at most a few calls). */
-export async function reflectSkills(force = false) {
+async function reflectSkills(force = false) {
   if (running || !skillReflectOn() || !engine.ready) return 0;
   const last = state.skillReflect;
   if (!force && last && Date.now() - last.at < EVERY_MS) return 0;

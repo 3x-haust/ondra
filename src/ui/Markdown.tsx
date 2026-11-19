@@ -16,6 +16,7 @@ import { safeSvg } from "./svgSafe";
 import { langOf, tokenize, toHtml } from "./highlight";
 import { t } from "../i18n";
 import { drawMath, mathExtensions } from "./markdownMath";
+import { footing } from "./markdownFooting";
 import { drawMermaidIn, mermaidBlock } from "./markdownMermaid";
 import { linkCards } from "./linkCard";
 import { nextRender } from "./renderPace";
@@ -27,7 +28,7 @@ const make = (github: boolean) => new Marked({
   gfm: true,
   breaks: true,
   tokenizer: { del: rangeTilde, emStrong: cjkStrong },
-  extensions: mathExtensions,
+  extensions: [...mathExtensions, footing],
   renderer: {
     html() {
       return "";

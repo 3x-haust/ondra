@@ -61,7 +61,7 @@ export function xLabel(x: unknown, kind: XKind): string {
 // ───────────── series
 
 export interface Series { label: string; values: (number | null)[]; em?: boolean; dash?: boolean; as?: string }
-export interface SeriesData { x: (string | number)[]; series: Series[] }
+interface SeriesData { x: (string | number)[]; series: Series[] }
 /**
  * Every "values over x" input in one shape. Accepts
  *   {x, series:[{label, values}]}, {x, values} (one series), {items:[{label, value}]}
@@ -85,7 +85,7 @@ export function normSeries(b: any): SeriesData {
   return { x, series: series.filter((s) => s.values.some((v) => v !== null)) };
 }
 
-export type StackMode = "stack" | "percent" | "stream" | "diverging";
+type StackMode = "stack" | "percent" | "stream" | "diverging";
 /** [lo, hi] per series per x; nulls count as 0 */
 export function stackSeries(values: (number | null)[][], mode: StackMode): [number, number][][] {
   if (!values.length) return [];
@@ -266,7 +266,7 @@ export function sharePct(values: number[], digits = 0): number[] {
 
 // ───────────── waterfall, pareto
 
-export interface WfStep { label: string; start: number; end: number; kind: "up" | "down" | "total"; value: number }
+interface WfStep { label: string; start: number; end: number; kind: "up" | "down" | "total"; value: number }
 /**
  * Waterfall steps. An item with `total: true` is a subtotal bar from 0 to the
  * running sum (or to its own value when given, which resets the sum). The first
@@ -311,7 +311,7 @@ export function ranksOf(values: (number | null)[][]): (number | null)[][] {
 
 // ───────────── marimekko
 
-export interface MekkoRect { col: number; row: number; x: number; w: number; y0: number; y1: number; value: number; share: number }
+interface MekkoRect { col: number; row: number; x: number; w: number; y0: number; y1: number; value: number; share: number }
 /** columns as wide as their totals, each split by its series' shares; all in 0..1 */
 export function marimekko(values: (number | null)[][], gap = 0): { cols: { x: number; w: number; total: number }[]; rects: MekkoRect[] } {
   const nCols = Math.max(0, ...values.map((v) => v.length));
@@ -340,7 +340,7 @@ export function marimekko(values: (number | null)[][], gap = 0): { cols: { x: nu
 
 // ───────────── calendar
 
-export interface DayCell { date: string; t: number; value: number | null; week: number; dow: number }
+interface DayCell { date: string; t: number; value: number | null; week: number; dow: number }
 /** days placed in week columns (Monday first) from the first to the last date */
 export function calendarCells(days: { date: string; value: number | null }[]): { cells: DayCell[]; weeks: number; months: { week: number; month: number; year: number }[] } {
   const parsed = days.map((d) => ({ t: parseTime(d.date), value: d.value })).filter((d): d is { t: number; value: number | null } => d.t !== null);

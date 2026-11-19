@@ -47,7 +47,7 @@ function nowOf(t: Task): ProjectNow {
 }
 
 /** Record a finished top-level job (once). */
-export function writeJournal(t: Task) {
+function writeJournal(t: Task) {
   if (t.parentId || t.answer || !t.finishedAt) return;
   if ((state.journal ?? []).some((j) => j.taskId === t.id && j.at === t.finishedAt)) return;
   const e = entryOf(t);
@@ -56,7 +56,7 @@ export function writeJournal(t: Task) {
 }
 
 /** 지금 notes are kept per space and folder: the same folder used from both spaces has two. */
-export const nowKey = (space: string, folder: string) => `${space}:${folder}`;
+const nowKey = (space: string, folder: string) => `${space}:${folder}`;
 /** "<space>:<folder>" → its parts; an older key is the folder alone (its space comes from the job that wrote it). */
 export function parseNowKey(k: string): { space?: string; folder: string } {
   const m = /^([^:/~]+):(.*)$/s.exec(k);

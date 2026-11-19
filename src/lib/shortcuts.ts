@@ -156,7 +156,7 @@ const KEY_GLYPHS: Record<string, string> = {
   NumpadAdd: "+", NumpadSubtract: "−", NumpadMultiply: "×", NumpadDivide: "÷", NumpadDecimal: ".", NumpadEqual: "=",
 };
 /** one key as shown: ⌘ ⌥ ⌃ ⇧ glyphs, arrows, ↵ ⇥ and the key's own character */
-export function keyGlyph(code: string): string {
+function keyGlyph(code: string): string {
   return KEY_GLYPHS[code] ?? code.replace(/^(Key|Digit|Numpad)/, "");
 }
 /** a chord as written, modifiers in the macOS order ⌃⌥⇧⌘ */

@@ -25,7 +25,7 @@ const readTools = (accountId: string, model: string | undefined) => (canUseTools
 // ───────────── btw
 
 /** The space a btw / side scope belongs to: "main:<space>[~project]", "task:<id>", "side:<space>". */
-export function spaceOfScope(scope: string): SpaceId {
+function spaceOfScope(scope: string): SpaceId {
   const [kind, id = ""] = scope.split(/:(.*)/s);
   if (kind === "task") return (taskById(id)?.space ?? state.space) as SpaceId;
   return (id.split("~")[0] || state.space) as SpaceId;

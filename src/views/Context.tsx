@@ -52,7 +52,7 @@ const share = (n: number, of: number) => {
 };
 
 /** Split `total` in proportion to `parts`, in whole numbers that add up to it exactly. */
-export function apportion(parts: number[], total: number): number[] {
+function apportion(parts: number[], total: number): number[] {
   const sum = parts.reduce((a, b) => a + b, 0);
   if (!sum || total <= 0) return parts.map(() => 0);
   const exact = parts.map((v) => (v * total) / sum);
@@ -68,7 +68,7 @@ export function apportion(parts: number[], total: number): number[] {
 
 /** A message's opening as plain words: no markdown marks, one line. The preview may already be
  *  flattened to one line, so a quote, heading or list mark is dropped mid-line too. */
-export function plainPreview(text: string): string {
+function plainPreview(text: string): string {
   return text
     .replace(/```[\w-]*\n?/g, " ")
     .replace(/<\/?[a-z][^>]*>/gi, " ")

@@ -13,7 +13,7 @@ import { Icon } from "../ui/Icon";
 import { t } from "../i18n";
 
 /** a remote project's row id in the tree */
-export const remoteMemId = (p: Project) => `rp:${p.id}`;
+const remoteMemId = (p: Project) => `rp:${p.id}`;
 /** the other Macs' projects of this space */
 export const remoteProjects = () => projectsShown(state.space).filter((p) => !!splitProjectId(p.id));
 

@@ -50,7 +50,7 @@ const bundled = (name?: string): Icon | undefined => {
  * drops every other letter, so "파일·git" would read as "git" and "작업 (Go 서버)" as Go;
  * a box like that names its brand with `logo`.
  */
-export const guessable = (s?: string): s is string => !!s && !/[^\x00-\x7F·•–—]/.test(s);
+const guessable = (s?: string): s is string => !!s && !/[^\x00-\x7F·•–—]/.test(s);
 
 /**
  * What a box shows and what may be asked online for it. `full` is the whole set once it
@@ -137,7 +137,7 @@ function officialFor(name: string): OfficialLogo | undefined {
   return undefined;
 }
 
-export type BrandMark = { glyph?: { d: string; color: string }; official?: OfficialLogo };
+type BrandMark = { glyph?: { d: string; color: string }; official?: OfficialLogo };
 
 /**
  * A diagram box's logo, reactive: the simple-icons glyph first (or nothing), the official

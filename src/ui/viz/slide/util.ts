@@ -236,7 +236,7 @@ export function day(x: unknown): number | undefined {
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return undefined;
   return Math.round(Date.UTC(+m[1], mo - 1, d) / DAY);
 }
-export const dateOf = (d: number) => new Date(d * DAY);
+const dateOf = (d: number) => new Date(d * DAY);
 /** "11. 2." (same year) or "2026. 11. 2." */
 export const fmtDay = (d: number, withYear = false) => {
   const t = dateOf(d);

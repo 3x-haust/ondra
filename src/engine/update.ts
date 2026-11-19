@@ -26,7 +26,7 @@ let notice = 0;
 let lastCheck = 0;
 let preparing: { version: string; done: Promise<boolean> } | null = null;
 
-export type UpdateState = "idle" | "checking" | "latest" | "installing";
+type UpdateState = "idle" | "checking" | "latest" | "installing";
 const [status, setStatus] = createSignal<UpdateState>("idle");
 const [available, setAvailable] = createSignal<string | null>(null);
 const [checkedAt, setCheckedAt] = createSignal(0);

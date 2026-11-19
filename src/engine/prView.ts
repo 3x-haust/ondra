@@ -3,9 +3,9 @@
 // Pure; the raw JSON comes from gh_pr_view.
 import type { PrNote } from "./prWatch";
 
-export type CheckState = "ok" | "bad" | "run" | "skip";
+type CheckState = "ok" | "bad" | "run" | "skip";
 export interface PrCheck { name: string; state: CheckState; url?: string }
-export interface PrLine { id: number; who: string; body: string; at: number; url?: string; reply?: number; path: string; line?: number; side?: string }
+interface PrLine { id: number; who: string; body: string; at: number; url?: string; reply?: number; path: string; line?: number; side?: string }
 export interface PrThread { id: number; path: string; line?: number; side?: string; notes: PrLine[]; at: number }
 export type PrItem =
   | { kind: "comment"; id: string; who: string; body: string; at: number }
@@ -45,7 +45,7 @@ function checkOf(c: Record<string, string>): PrCheck {
 }
 
 /** line comments into threads: a reply joins its root */
-export function threadsOf(lines: PrLine[]): PrThread[] {
+function threadsOf(lines: PrLine[]): PrThread[] {
   const byId = new Map<number, PrThread>();
   const out: PrThread[] = [];
   for (const l of [...lines].sort((a, b) => a.at - b.at)) {

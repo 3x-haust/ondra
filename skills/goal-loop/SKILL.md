@@ -75,11 +75,14 @@ Fix, re-check, repeat. What tends to work:
 - Most important failures first: broken behaviour > missing requirement >
   something it broke > look > speed.
 - Find why a check fails (the actual output, logs), not just that it fails.
-- Small changes, one cause at a time, then rerun the checks that cover what
-  you changed, so you know which change fixed or broke what. If something
-  that passed now fails, undo and try again.
-- A short log (`.ondra/goal/log.md`: check · cause · fix · before → after)
-  helps you and the next worker not repeat a dead end.
+- One hypothesis per round: say it ("the total is wrong because tax is added
+  twice" (추측)), make the one change it calls for, rerun the checks that cover
+  it. Keep the change only if the checks moved and nothing that passed now
+  fails; otherwise revert it in full before the next hypothesis, so no line
+  ships for a cause that turned out wrong.
+- A decision log (`.ondra/goal/log.md`: hypothesis · change · before → after ·
+  kept or reverted) helps you and the next worker not repeat a dead end, and
+  lets the user see after a long run why each step went the way it did.
 - A `progress` block (passing / total) keeps the user oriented on long loops.
 - End a turn with the next action, an `ask`, a `handoff` or `done`, not with
   a promise of what you will do next.

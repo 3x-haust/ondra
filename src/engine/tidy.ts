@@ -67,7 +67,7 @@ const errorLine = (tail?: string) => {
 const home = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
 /** One finished job as the pass reads it: a head line, then labelled lines (only these are quotable). */
-export type JobLines = { id: string; head: string; lines: [string, string][] };
+type JobLines = { id: string; head: string; lines: [string, string][] };
 
 /** What a job asked and got, and what the harness saw: notes, failed commands, errors, how long. `full` = a new job (more of its result). */
 export function jobMaterial(t: Task, full: boolean): JobLines {
@@ -219,7 +219,7 @@ const keepConflicts = (l: MemoryConflict[]) => [...l.filter((c) => !c.done), ...
 const recordConflict = (space: SpaceId, c: Omit<MemoryConflict, "id" | "at" | "space">, at = Date.now()) =>
   setState("memoryConflicts", (l) => keepConflicts([...(l ?? []), { id: uid("c"), at, space, ...c, done: "mine" }]));
 /** the same new text was already asked about for this piece (and not taken) */
-export const askedBefore = (mine: string, text: string) => (state.memoryConflicts ?? []).some((c) => c.mine === mine && !!c.text && flat(c.text) === flat(text) && c.done !== "new");
+const askedBefore = (mine: string, text: string) => (state.memoryConflicts ?? []).some((c) => c.mine === mine && !!c.text && flat(c.text) === flat(text) && c.done !== "new");
 
 /** Check the model's plan and apply what holds up. */
 export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
@@ -453,7 +453,7 @@ export async function tidyMemory(force = false, only?: SpaceId) {
  * one-line rule or fact stays a memory: as a skill it only repeats the memory
  * and fills the + menu.
  */
-export function canGrow(m: Memory, linked: Memory[]): boolean {
+function canGrow(m: Memory, linked: Memory[]): boolean {
   const name = (m.key ?? "").replace(/[^a-z0-9-]/g, "");
   return name.length >= 3 && (m.text.length >= 300 || linked.length >= 2);
 }
@@ -518,9 +518,10 @@ export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0
     why === "lesson"
       ? `The same trouble came up in ${jobs || MIN_EVIDENCE} different jobs in this project, and was written down as: "${rule}"`
       : `The user had to say this rule for this project more than once: "${rule}"`,
-    "Make it hold by itself so no one has to say it again: turn it into an automatic check in this repo, the lightest one that fits: a lint rule (the project's linter config, or a small custom rule), a type, a test, or a step in the check or CI scripts the project already runs.",
-    "- The check has to pass on the code as it is: fix the few places that break it. If many places break it, change nothing and say so.",
-    "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on a small bad example you don't keep.",
+    "Make it hold by itself so no one has to say it again, at the strongest place that works, in this order: the code's shape (delete the old way so the mistake can't be written), a type, a lint rule whose message names the fix (the project's linter config, or a small custom rule), a test, a step in the check or CI scripts the project already runs. Prose in AGENTS.md is the last resort, for what none of these can hold.",
+    "- The check has to pass on the code as it is: fix the few places that break it. If many places break it, make it fail only on new ones (an allowlist of today's places, or a count that may only go down) and say how many are left.",
+    "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on the mistake itself: the real place the user had to correct, put back for a moment, or a small bad example you don't keep.",
+    "- Add one line to the rule list in AGENTS.md (or CLAUDE.md, whichever the repo has; make the list if there is none): the rule, then what holds it (the lint rule's name, the test file).",
     "- A rule a machine can't check (taste, wording, how or when to ask, commit or deploy, anything outside the code): change nothing and say why in one line with done.",
     '- This is a check, not a change anyone sees: once it is in and proven, send {"type":"merge","kind":"fix"} with your done.',
   ].join("\n");

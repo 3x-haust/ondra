@@ -29,7 +29,7 @@ interface Ev { x: unknown; label: string; series?: string }
 const curveOf = (c?: string) => (c === "step" ? curveStepAfter : c === "smooth" ? curveMonotoneX : curveLinear);
 
 /** where an x value (label, number or date) falls in xs */
-export function xIndex(xs: X, v: unknown): number {
+function xIndex(xs: X, v: unknown): number {
   const kind = xKind(xs);
   if (kind === "cat") return xs.findIndex((x) => String(x) === String(v));
   const want = kind === "time" ? parseTime(v) : toNum(v);
@@ -51,7 +51,7 @@ const targetOf = (g: unknown): { value: number; label: string } | null => {
  * The shared line plot: gridlines, lines (with washes, bands, markers), a target
  * rule, events, direct end labels that never overlap, and a crosshair.
  */
-export function LinePlot(props: {
+function LinePlot(props: {
   label?: string;
   unit?: string;
   x: X;

@@ -3,8 +3,8 @@
 import { sankey, sankeyLinkHorizontal, type SankeyGraph } from "d3-sankey";
 import { arr, isObj, toNum, toStr } from "./text";
 
-export interface FNode { id: string; label: string; em?: boolean; group?: string; stage?: number; cat?: number }
-export interface FLink { from: string; to: string; value: number; em?: boolean; note?: string }
+interface FNode { id: string; label: string; em?: boolean; group?: string; stage?: number; cat?: number }
+interface FLink { from: string; to: string; value: number; em?: boolean; note?: string }
 
 /** links from {from,to,value} or {source,target,value}; duplicates merged, self-links dropped */
 export function cleanLinks(raw: unknown): FLink[] {
@@ -63,7 +63,7 @@ export function cleanNodes(raw: unknown, links: { from: string; to: string }[]):
 }
 
 export interface SNode extends FNode { x0: number; x1: number; y0: number; y1: number; value: number; depth: number; color: number }
-export interface SLink { from: SNode; to: SNode; value: number; width: number; path: string; em: boolean; color: number; note?: string; y0: number; y1: number; cat?: number }
+interface SLink { from: SNode; to: SNode; value: number; width: number; path: string; em: boolean; color: number; note?: string; y0: number; y1: number; cat?: number }
 
 /**
  * Sankey geometry inside w×h. `path` (a list of node ids) marks the highlighted route.

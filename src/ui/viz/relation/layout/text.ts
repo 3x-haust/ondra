@@ -77,7 +77,7 @@ export function hash(s: string): number {
 }
 
 /** "#rgb" / "#rrggbb" / "rgb(r, g, b)" → [r, g, b] in 0..255 */
-export function parseColor(c: string): [number, number, number] | undefined {
+function parseColor(c: string): [number, number, number] | undefined {
   const s = c.trim();
   let m = s.match(/^#([0-9a-f]{3})$/i);
   if (m) return [...m[1]].map((h) => parseInt(h + h, 16)) as [number, number, number];

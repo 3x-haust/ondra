@@ -191,7 +191,7 @@ export const skillCommands = (target: () => { task?: string; space: SpaceId; pro
   }));
 
 /** After Whiteboard: ask a job to draw what it did, each part pointing at the code. */
-export const DRAW_ASK =
+const DRAW_ASK =
   "방금까지 한 일을 그림 한 장으로 설명해 줘. 구조나 흐름이 보이는 그림(시퀀스·호출 흐름·바뀐 파일 관계 중 맞는 것)으로, 그림의 각 부분에 해당 파일:줄을 적고, 내가 정한 것과 네가 스스로 정한 것을 구분해서 표시해 줘. 결과물 폴더에 HTML 한 장으로 만들어 줘. 코드는 바꾸지 마.";
 export const drawCommand = (task: () => string) => ({
   name: "draw",

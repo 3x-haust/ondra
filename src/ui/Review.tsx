@@ -72,7 +72,7 @@ const indent = (text: string) => {
   return Math.min(40, [...lead].reduce((n, c) => n + (c === "\t" ? 2 : 1), 0));
 };
 
-export function CodeText(props: { text: string; toks?: Tok[]; mark?: [number, number] }) {
+function CodeText(props: { text: string; toks?: Tok[]; mark?: [number, number] }) {
   // runs: consecutive parts with the same em flag, so a marked change is one block
   const runs = () => {
     const out: { em: boolean; parts: Tok[] }[] = [];

@@ -1,8 +1,7 @@
 //! In-app terminals. A PTY per id, output streamed to the UI as UTF-8 text
-//! (`pty:data`), exit as `pty:exit`. Also used to log an account in: the
-//! engine's own interactive UI runs in a PTY and `/login` is typed for the user.
+//! (`pty:data`), exit as `pty:exit`.
 
-use crate::engine::{engine_bin, engine_env, home, user_path, user_var, with_sidecars};
+use crate::engine::{home, user_path, user_var, with_sidecars};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde_json::json;
 use std::{
@@ -155,32 +154,6 @@ pub fn pty_open(
         }
     }
     spawn(app, &ptys, id, cmd, cols, rows)
-}
-
-/// The engine's interactive UI for one account, with `/login` typed in.
-#[tauri::command]
-pub fn pty_open_login(app: AppHandle, ptys: State<'_, Ptys>, id: String, account_id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let bin = engine_bin(&app).filter(|b| b.is_file()).ok_or("엔진 파일이 앱에 없습니다")?;
-    let mut cmd = CommandBuilder::new(bin);
-    cmd.arg("--no-extensions");
-    cmd.cwd(home());
-    for (k, v) in engine_env(&app) {
-        cmd.env(k, v);
-    }
-    if let Some(dir) = crate::store::account_dir(&app, &account_id) {
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        cmd.env("PI_CODING_AGENT_DIR", dir);
-    }
-    spawn(app.clone(), &ptys, id.clone(), cmd, cols, rows)?;
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(1200));
-        use tauri::Manager;
-        if let Some(p) = app.state::<Ptys>().map.lock().unwrap().get_mut(&id) {
-            let _ = p.writer.write_all(b"/login\r");
-            let _ = p.writer.flush();
-        }
-    });
-    Ok(())
 }
 
 #[tauri::command]

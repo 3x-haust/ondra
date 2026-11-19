@@ -147,7 +147,7 @@ export const isOff = (name: string, extra: readonly string[] = state.settings.ex
 export const enabledToolTokens = (c: Pick<EngineContext, "tools">, extra?: readonly string[]) =>
   enabledTools(c, extra).reduce((n, x) => n + x.schemaTokens, 0);
 
-export interface LoadedSkill {
+interface LoadedSkill {
   name: string;
   description: string;
   /** the SKILL.md, or the folder that holds it */

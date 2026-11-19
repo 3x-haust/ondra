@@ -119,7 +119,7 @@ export function minSize(n: Node, axis: Axis, room: Room): number {
 }
 
 /** A split's ratio kept where both sides get their minimum (shared fairly when they can't). */
-export function clampRatio(n: Split, ratio: number, ext: number, room: Room): number {
+function clampRatio(n: Split, ratio: number, ext: number, room: Room): number {
   const avail = ext - room.gap;
   const minA = minSize(n.a, n.axis, room);
   const minB = minSize(n.b, n.axis, room);

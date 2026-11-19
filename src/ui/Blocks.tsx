@@ -126,7 +126,7 @@ const near = (a: string, b: string) => {
 const sameLine = (s: string) => s.trim().replace(/[.。!]+$/, "").replace(/\s+/g, " ").toLowerCase();
 
 /** "/Users/me/ondra-wt/src/a.ts" → "src/a.ts": inside the project, else "~/…" */
-export function relPath(ref: string, task?: Task): string {
+function relPath(ref: string, task?: Task): string {
   const clean = ref.replace(/\/+$/, "");
   if (!/^[/~]/.test(clean)) return clean;
   const abs = expand(clean);
@@ -164,7 +164,7 @@ type Row = { e: Evidence; title?: string };
  * it could not check, once each. A to-do checklist the job ended with folds in: a done line takes the
  * proof that backs it (or reads as the job's word), an open line joins what wasn't checked.
  */
-export function ProofView(props: { items: Evidence[]; unverified?: string[]; checks?: { label: string; done: boolean }[]; task?: Task }) {
+function ProofView(props: { items: Evidence[]; unverified?: string[]; checks?: { label: string; done: boolean }[]; task?: Task }) {
   const host = useHost();
   const [allShots, setAllShots] = createSignal(false);
   const built = () => {

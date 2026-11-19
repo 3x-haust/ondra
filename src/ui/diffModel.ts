@@ -302,7 +302,7 @@ export function stepAcross(order: ChangedFile[], path: string | undefined, step:
 // ───────────── the unchanged stretches the diff hides ("n hidden lines")
 
 /** VS Code's defaults: 3 lines kept around a change, at least 3 to hide, 20 more on each reveal */
-export const HIDE = { context: 3, min: 3, reveal: 20 };
+const HIDE = { context: 3, min: 3, reveal: 20 };
 
 /**
  * An unchanged stretch: its first line on each side, how long it is, and how many of its lines show at

@@ -4,7 +4,7 @@ import type { Task } from "../state/types";
 import { long, tokens } from "./bits";
 import { t } from "../i18n";
 
-export interface JobCost {
+interface JobCost {
   /** from its (last) start to its end; the turns' own times when that's unknown */
   ms: number;
   input: number;

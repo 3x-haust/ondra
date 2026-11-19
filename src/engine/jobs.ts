@@ -18,7 +18,7 @@ import { workedIn } from "./workedIn";
 import { planText } from "./plan";
 
 /** who is asking: a job (by its worker id), or main of a chat (`captain:<space>[~<project>]`) */
-export type Caller = { space: SpaceId; task?: Task; chat?: string; project?: string };
+type Caller = { space: SpaceId; task?: Task; chat?: string; project?: string };
 
 export function callerOf(worker: string | undefined): Caller | undefined {
   if (!worker) return undefined;
@@ -44,7 +44,7 @@ export function visibleJobs(c: Caller): Task[] {
 export const sameSpace = (c: Caller, t: Task) => t.space === c.space && !t.answer;
 
 /** the caller may read its messages and folder: main always, a job where tasks.ts lets it read the logs */
-export function mayReadLogs(c: Caller, t: Task): boolean {
+function mayReadLogs(c: Caller, t: Task): boolean {
   if (!c.task) return t.space === c.space;
   const ids = jobsAllowed(c.task);
   return !ids || ids.includes(t.id);
@@ -137,7 +137,7 @@ export function jobLine(t: Task, now = Date.now()): string {
 
 // ─────────────────────────────── search
 
-export const LIVE: Task["status"][] = ["running", "waiting", "queued", "paused"];
+const LIVE: Task["status"][] = ["running", "waiting", "queued", "paused"];
 const STATUS_WORDS: Record<string, Task["status"][]> = {
   live: LIVE,
   open: LIVE,
@@ -168,7 +168,7 @@ const prefix = (a: string, b: string) => {
 };
 
 /** how well the words match: each query word counts by the best field it is in (0 = none) */
-export function wordScore(t: Task, query: string): number {
+function wordScore(t: Task, query: string): number {
   const q = [...new Set(tokens(query))];
   if (!q.length) return 0;
   const fields = fieldsOf(t).map(([text, w]) => ({ low: text.toLowerCase(), words: new Set(tokens(text)), w }));
@@ -187,7 +187,7 @@ export function wordScore(t: Task, query: string): number {
   return (sum / q.length) * (hit === q.length ? 1.5 : 1);
 }
 
-export type SearchOpts = { status?: string; project?: string; limit?: number; now?: number; sims?: Map<string, number> };
+type SearchOpts = { status?: string; project?: string; limit?: number; now?: number; sims?: Map<string, number> };
 
 /**
  * Jobs that match, best first; no query lists the live ones first (running, waiting,
@@ -326,7 +326,7 @@ export function userParked(t: Task | undefined): boolean {
 }
 
 export type Outcome = "queued" | "delivered" | "answered" | "resumed" | "waits" | "continued";
-export const OUTCOME_LINE: Record<Outcome, string> = {
+const OUTCOME_LINE: Record<Outcome, string> = {
   queued: "queued for its next turn",
   delivered: "delivered",
   answered: "delivered as the answer to its question",
@@ -374,13 +374,13 @@ export const fromJob = (sender: Task, message: string) =>
 // PAIR_PER_WINDOW times (both ways) in ten minutes, and starts at most CARRY_PER_WINDOW new jobs
 export const TELL_PER_MIN = 4;
 export const PAIR_PER_WINDOW = 6;
-export const CARRY_PER_WINDOW = 2;
+const CARRY_PER_WINDOW = 2;
 const WINDOW = 10 * 60_000;
 const sends: { from: string; to: string; at: number; carried?: boolean }[] = [];
 export const resetSends = () => void sends.splice(0);
 
 /** why this message may not go (undefined = it may) */
-export function tellGuard(from: string, to: string, now = Date.now(), carries = false): string | undefined {
+function tellGuard(from: string, to: string, now = Date.now(), carries = false): string | undefined {
   if (from === to) return "that is this job itself";
   while (sends.length && now - sends[0].at > WINDOW) sends.shift();
   if (sends.filter((s) => s.from === from && now - s.at < 60_000).length >= TELL_PER_MIN)
@@ -391,7 +391,7 @@ export function tellGuard(from: string, to: string, now = Date.now(), carries = 
     return `you already started ${CARRY_PER_WINDOW} new jobs from finished ones in ten minutes; ask the user instead`;
   return undefined;
 }
-export const noteSend = (from: string, to: string, now = Date.now(), carried = false) => void sends.push({ from, to, at: now, ...(carried ? { carried } : {}) });
+const noteSend = (from: string, to: string, now = Date.now(), carried = false) => void sends.push({ from, to, at: now, ...(carried ? { carried } : {}) });
 
 /** job_tell: checks, then the message goes; one line on what happened (or why not) */
 export function tellJob(c: Caller, id: string, message: string, o: { now?: boolean; at?: number } = {}): { ok: boolean; line: string; taskId?: string } {

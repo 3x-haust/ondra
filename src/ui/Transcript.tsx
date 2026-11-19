@@ -731,7 +731,7 @@ const isPause = (e: Entry) => e.kind === "note" && e.text === "일시정지";
  * again later), and how long it lasted when the task records when it left: the next message or work
  * after the note, or the time it was resumed. undefined while this is the pause it is in.
  */
-export function pauseSpan(task: Pick<Task, "entries" | "status" | "resumedAt">, id: string): { over: boolean; ms?: number } | undefined {
+function pauseSpan(task: Pick<Task, "entries" | "status" | "resumedAt">, id: string): { over: boolean; ms?: number } | undefined {
   const es = task.entries;
   const i = es.findIndex((x) => x.id === id);
   if (i < 0) return undefined;

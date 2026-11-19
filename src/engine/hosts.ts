@@ -192,7 +192,7 @@ const endedHooks: ((t: Task) => void)[] = [];
 export const onFarEnded = (f: (t: Task) => void) => void endedHooks.push(f);
 
 /** the questions that Mac's jobs (those kept here) wait on */
-export const applyDecisions = (host: string, list: Decision[]) => mirror.hosts[host] && setMirror("hosts", host, "decisions", list);
+const applyDecisions = (host: string, list: Decision[]) => mirror.hosts[host] && setMirror("hosts", host, "decisions", list);
 
 /** opened here: its dot goes here until it says more (that Mac's own dot is left alone) */
 export function markFarRead(id: string) {
@@ -367,7 +367,7 @@ export function onPeer(ev: Record<string, unknown>) {
 }
 
 /** a link from another Mac (its 연결 링크 복사): ondra://connect/<id>?code=…&name=… */
-export function parseLink(text: string): { id: string; code: string; name: string } | undefined {
+function parseLink(text: string): { id: string; code: string; name: string } | undefined {
   const m = text.trim().match(/ondra:\/\/connect\/([0-9a-f]{64})\?([^\s]+)/i);
   if (!m) return undefined;
   const q = new URLSearchParams(m[2]);
@@ -394,7 +394,7 @@ export async function addHost(text: string): Promise<boolean> {
  * only another Mac has gets a tab of its own here (its work runs on that Mac); it goes when no
  * added Mac has it anymore, unless something of this Mac's was put in it since.
  */
-export function syncSpaces() {
+function syncSpaces() {
   const want = new Set((state.settings.hosts ?? []).flatMap((h) => h.spaces ?? []));
   const add = [...want].filter((l) => !state.spaces.some((s) => s.label === l));
   const drop = state.spaces.filter((s) => s.only && !want.has(s.label) && !accountsIn(s.id).length && !projectsIn(s.id).length && !tasksIn(s.id).length).map((s) => s.id);

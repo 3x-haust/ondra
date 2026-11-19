@@ -10,6 +10,14 @@ export type Status = "running" | "waiting" | "queued" | "done" | "paused" | "fai
 export type Priority = 0 | 1 | 2 | 3;
 /** heavy = needs the one machine-wide slot (simulator, builds, desktop control) */
 export type Weight = "light" | "heavy";
+/**
+ * How much rigor a job's work earns (main sets it; the job may raise it): small = a wording,
+ * colour, typo or one-line setting (fix it, run the cheapest check there is, no playbook or
+ * proof gates); normal = a bug, feature, refactor or perf change in an existing repo (the
+ * coding playbooks and their gates); large = unattended, long or multi-PR work (also a
+ * decision log). Older jobs have none and count as normal.
+ */
+export type Size = "small" | "normal" | "large";
 
 export interface Space {
   id: SpaceId;
@@ -92,7 +100,7 @@ export interface ConnectionModel {
 }
 
 /** One relay leg = one fresh engine session. */
-export interface Leg {
+interface Leg {
   startedAt: number;
   endedAt?: number;
   handoff?: Handoff;
@@ -172,6 +180,8 @@ export interface PlanStep {
   sub?: PlanStep[];
   /** the user asked for it while the job worked: it isn't dropped without a word */
   user?: boolean;
+  /** why it was skipped, in the job's words: a skip without one is sent back before done */
+  why?: string;
 }
 
 export interface Task {
@@ -187,6 +197,10 @@ export interface Task {
   status: Status;
   priority: Priority;
   weight: Weight;
+  /** how much rigor the work earns (see Size); none = normal */
+  size?: Size;
+  /** started a new app or repo from nothing (0→1): the skeleton comes first, no playbooks */
+  fresh?: boolean;
   accountId: string;
   /** put on its account by hand (작업 정보, the job's picker): 자동 never moves it */
   accountPinned?: boolean;
@@ -361,9 +375,9 @@ type BlockBody =
   | { type: "steps"; label?: string; items: VisItem[] }
   /** a chart or figure from the viz families (src/ui/viz) */
   | VizBlock;
-export type VizBlock = { type: import("../ui/viz/kinds").VizKind; label?: string; say?: string; [k: string]: unknown };
+type VizBlock = { type: import("../ui/viz/kinds").VizKind; label?: string; say?: string; [k: string]: unknown };
 
-export interface VisItem {
+interface VisItem {
   label: string;
   note?: string;
   /** "off": there, but not used (dimmed; say why in note) */

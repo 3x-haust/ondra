@@ -167,7 +167,7 @@ export async function loadState() {
 }
 
 /** Every task carries the project `taskProject` finds, so each place that reads `task.project` agrees. */
-export function fileTasks() {
+function fileTasks() {
   // one write for all of them: the lists redraw once, not once per task
   const moves = new Map<string, string | undefined>();
   for (const t of state.tasks) {
@@ -312,23 +312,6 @@ export const accountById = (id: string) => state.accounts.find((a) => a.id === i
 export const accountsIn = (space: SpaceId) => state.accounts.filter((a) => a.space === space);
 export const decisionsIn = (space: SpaceId) => allDecisions().filter((d) => taskById(d.taskId)?.space === space);
 export const decisionFor = (taskId: string) => state.decisions.find((d) => d.taskId === taskId) ?? mirroredDecisions().find((d) => d.taskId === taskId);
-
-const rank = (t: Task) => ({ waiting: 0, running: 1, failed: 2, paused: 3, queued: 4, done: 5 })[t.status];
-
-/** Tasks for the sidebar, grouped by topic, most urgent group first. */
-export function topicsIn(space: SpaceId): { topic: string; tasks: Task[] }[] {
-  const map = new Map<string, Task[]>();
-  const order = tasksIn(space)
-    .filter((t) => t.status !== "queued")
-    .sort((a, b) => rank(a) - rank(b) || (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt));
-  for (const t of order) map.set(t.topic, [...(map.get(t.topic) ?? []), t]);
-  return [...map].map(([topic, tasks]) => ({ topic, tasks }));
-}
-
-export function cacheShare(a: Account): number | null {
-  const total = a.stats.input + a.stats.cacheRead + a.stats.cacheWrite;
-  return total > 0 ? a.stats.cacheRead / total : null;
-}
 
 // ── writes ──
 export const setSpace = (space: SpaceId) => setState("space", space);

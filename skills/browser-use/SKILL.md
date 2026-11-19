@@ -112,6 +112,12 @@ of what each one reads, not the commands. So: one `do` per step, `read` with
 `--section` instead of the whole page, `look -s <css>` instead of `--all`, and no
 screenshot together with a look for the same step.
 
+Many pages: to check a rule that applies to many routes or pages, test the
+rule itself (a unit test over the route list, e.g. the middleware's matcher)
+and open only a few representative pages. If every page must be hit, serve one
+production build (`next build && next start`) and hit them a few at a time
+(`xargs -P 4`), one line per page, never one by one on a dev server.
+
 ## Report
 
 Keep `now` current as you move ("결제 버튼 누르는 중", "결과 확인 중"), and finish

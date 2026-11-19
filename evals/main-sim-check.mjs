@@ -3,7 +3,7 @@
 // Every key check() reads. A key it doesn't know is skipped without a word, so a typo in a
 // case would pass every time: evals/main-cases.mjs rejects keys not here, and
 // evals/cases.test.mjs fails when this list and check() drift apart.
-export const EXPECT_KEYS = ["new", "append", "stop", "answerOnly", "ask", "project", "cwdIncludes", "reach", "taskIncludes", "taskExcludes", "has", "hasNot", "stopCount", "follows", "appendAny", "cwdEmpty", "appendOrAfter", "afterTask", "answerIncludes", "answerIncludesAny", "quiet", "maxAnswer", "after", "noAfter"];
+export const EXPECT_KEYS = ["new", "append", "stop", "answerOnly", "ask", "project", "cwdIncludes", "reach", "taskIncludes", "taskExcludes", "has", "hasNot", "stopCount", "follows", "appendAny", "cwdEmpty", "appendOrAfter", "afterTask", "answerIncludes", "answerIncludesAny", "quiet", "maxAnswer", "after", "noAfter", "size"];
 
 /** Every check a step's "expect" can hold; each returns a problem or "". */
 export function check(step, x) {
@@ -56,6 +56,8 @@ export function check(step, x) {
     const ids = [x.appendOrAfter].flat();
     need(routes.some((r) => r?.kind === "append" && ids.includes(r.taskId)) || news.some((r) => Array.isArray(r.after) && r.after.some((a) => ids.includes(a))), `expected an append to ${ids.join(" or ")} or a job after it`);
   }
+  // "small" | "large" | "normal" (no size given): how much rigor main gave the new job
+  if (x.size !== undefined) need(news.some((r) => (r.size ?? "normal") === x.size), `expected a ${x.size} job, got ${news.map((r) => r.size ?? "normal").join(", ") || "none"}`);
   if (x.afterTask) need(news.some((r) => Array.isArray(r.after) && r.after.includes(x.afterTask)), `expected a job after ${x.afterTask}`);
   if (x.answerIncludes) {
     const t = routes.filter((r) => r?.kind === "answer").map((r) => r.text ?? "").join(" ");

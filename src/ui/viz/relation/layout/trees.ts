@@ -125,7 +125,7 @@ export function balance(sizes: number[]): { right: number[]; left: number[] } {
   return { right: idx.slice(0, best), left: idx.slice(best).reverse() };
 }
 
-export interface OrgBox { id: string; node: TNode; x: number; y: number; depth: number; hidden: number; kids: string[]; stacked: boolean }
+interface OrgBox { id: string; node: TNode; x: number; y: number; depth: number; hidden: number; kids: string[]; stacked: boolean }
 
 /**
  * Org chart: top-down, a parent centred over its children; a parent whose children
@@ -181,7 +181,7 @@ export function orgLayout(root: TNode, open: (id: string, depth: number) => bool
   return { boxes, links, cols, rows: maxY };
 }
 
-export function countAll(n: TNode): number {
+function countAll(n: TNode): number {
   return (n.children ?? []).reduce((s, c) => s + 1 + countAll(c), 0);
 }
 

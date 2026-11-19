@@ -3,7 +3,7 @@
 // attached files' list names it again ("- [Image #2] /path"), so whoever reads the
 // message knows which picture "this" is.
 
-export const imageToken = (n: number) => `[Image #${n}]`;
+const imageToken = (n: number) => `[Image #${n}]`;
 const TOKEN = /\[Image #(\d+)\]/g;
 
 /** "- [Image #2] /a/b.png" → the path and its number; "- /a/b.txt" → the path alone */

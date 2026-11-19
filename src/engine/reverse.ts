@@ -11,7 +11,7 @@ export function usesReverse(t: Task, all: Task[]): boolean {
   return used(t) || all.some((k) => k.parentId === t.id && used(k));
 }
 
-export interface RFn {
+interface RFn {
   name: string;
   addr: number;
   size: number;
@@ -25,7 +25,7 @@ export interface ROp {
   j?: number;
   f?: number;
 }
-export interface RAsm {
+interface RAsm {
   name: string;
   addr: number;
   size: number;
@@ -34,19 +34,19 @@ export interface RAsm {
   at: number;
 }
 /** decompiler pseudocode, with the instruction addresses each line came from */
-export interface RCode {
+interface RCode {
   code: string;
   lines: number[][];
   totalLines: number;
   at: number;
 }
-export interface RSection {
+interface RSection {
   name: string;
   vaddr: number;
   vsize: number;
   perm: string;
 }
-export type ROpName = "inspect" | "functions" | "disassemble" | "decompile";
+type ROpName = "inspect" | "functions" | "disassemble" | "decompile";
 export interface RStep {
   seq: string;
   op: ROpName;

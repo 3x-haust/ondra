@@ -64,11 +64,6 @@ export function noteCall(agent: string, u: any) {
   persist();
 }
 
-export const hitPct = (agent: string) => {
-  const h = reuse[agent]?.hit;
-  return h === undefined ? undefined : h * 100;
-};
-
 /** one decimal, two once it is above 99.9 (so 99.99 doesn't read as 100) */
 export const pctText = (p: number) => (p >= 99.9 && p < 100 ? p.toFixed(2) : p.toFixed(1));
 

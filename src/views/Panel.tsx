@@ -38,7 +38,7 @@ import { lang, t as tr } from "../i18n";
 import { accountName } from "../ui/AccountPicker";
 
 /** The task's own branch: where it is, and merge / throw away. */
-export function BranchCard(props: { t: Task }) {
+function BranchCard(props: { t: Task }) {
   return <Show when={props.t.worktree}>{(wt) => <BranchCardIn t={props.t} w={wt()} />}</Show>;
 }
 function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {

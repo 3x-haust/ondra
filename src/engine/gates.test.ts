@@ -98,6 +98,76 @@ describe("proof gate", () => {
   });
 });
 
+describe("what a job leaves unchecked comes with why", () => {
+  const ran = (at: number, cmd: string): Entry => tool(`b${at}`, at, "bash", cmd);
+  const finish = async (over: Partial<Task>, done: object, extra = "") => {
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n === 1) say(emit, `고쳤어요.${extra}\n${block(done)}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job(over)]);
+    await startTask("job", true);
+  };
+  const backs = () => sent("t:job", "prompt").filter((m) => m.includes("끝내기 전에"));
+
+  it("sends back an unverified item that has no reason, naming what can still be done", async () => {
+    await finish(
+      { entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
+      { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: ["스크린샷을 PR 본문에 첨부하지 않음"] },
+    );
+    await vi.waitFor(() => expect(backs()).toHaveLength(1));
+    expect(backs()[0]).toContain("«스크린샷을 PR 본문에 첨부하지 않음»");
+    expect(backs()[0]).toContain("지금 하고 evidence에 넣어 줘");
+  });
+
+  it("finishes when each unverified item says what blocked it", async () => {
+    await finish(
+      { entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
+      { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "실제 결제 화면", why: "사용자 계정 로그인이 필요해요" }] },
+    );
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(backs()).toHaveLength(0);
+    expect(state.tasks[0].unverified).toEqual(["실제 결제 화면 — 사용자 계정 로그인이 필요해요"]);
+  });
+
+  it("sends back a plan step left open, and lets a skip with its reason through", async () => {
+    const plan = [{ text: "원인 찾기", state: "done" as const }, { text: "회귀 테스트", state: "todo" as const }, { text: "고치기", state: "done" as const }];
+    await finish(
+      { plan, entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
+      { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] },
+    );
+    await vi.waitFor(() => expect(backs()).toHaveLength(1));
+    expect(backs()[0]).toContain("«회귀 테스트»");
+  });
+
+  it("asks a fix/ job for its reproduction before and after, but not a small one", async () => {
+    const entries = [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")];
+    const done = { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] };
+    await finish({ branch: "fix/total", entries }, done);
+    await vi.waitFor(() => expect(backs()).toHaveLength(1));
+    expect(backs()[0]).toContain("재현 기록이 없어요");
+
+    pauseTask("job");
+    vi.restoreAllMocks();
+    setState(reconcile(freshState()));
+    await finish({ branch: "fix/total", size: "small", entries }, { ...done, unverified: ["화면"] });
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(backs()).toHaveLength(0);
+  });
+
+  it("sends back a cause given with no footing", async () => {
+    await finish(
+      { entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
+      { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] },
+      "\n\n**원인** 세금을 두 번 더했어요.",
+    );
+    await vi.waitFor(() => expect(backs()).toHaveLength(1));
+    expect(backs()[0]).toContain("근거 라벨이 없어요");
+  });
+});
+
 describe("plan reminder", () => {
   const PLAN = block({ type: "plan", steps: ["원인 찾기", "고치기", "확인"] }, { type: "now", text: "원인을 찾고 있어요", step: 0 });
   const reminders = (agent: string) => sent(agent, "steer").filter((m) => m.includes("to-do list hasn't moved"));

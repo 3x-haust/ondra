@@ -78,7 +78,7 @@ export function hover(tip: ReturnType<typeof useTip>, content: () => JSX.Element
 
 // ───────────── x for values over time
 
-export interface XS { kind: XKind; pos: (i: number) => number; ticks: { x: number; label: string }[]; label: (i: number) => string; n: number }
+interface XS { kind: XKind; pos: (i: number) => number; ticks: { x: number; label: string }[]; label: (i: number) => string; n: number }
 /**
  * Positions for x values (numbers, ISO dates or labels) across [x0, x1], with
  * tick labels thinned so none overlap.
@@ -135,7 +135,7 @@ export function XTicks(props: { ticks: { x: number; label: string }[]; y: number
 
 // ───────────── y (values)
 
-export interface YS { s: (v: number) => number; ticks: number[]; fmt: (v: number) => string; width: number; log: boolean }
+interface YS { s: (v: number) => number; ticks: number[]; fmt: (v: number) => string; width: number; log: boolean }
 /** a value scale from lo..hi onto [y1 (bottom), y0 (top)], with tick labels and their width */
 export function makeY(dom: [number, number], y0: number, y1: number, opt: { log?: boolean; unit?: string; fmt?: (v: number) => string; count?: number } = {}): YS {
   const count = opt.count ?? clamp(Math.floor((y1 - y0) / 44), 2, 7);
@@ -170,7 +170,7 @@ export function YGrid(props: { y: YS; x0: number; x1: number; side?: "left" | "r
 
 // ───────────── crosshair
 
-export interface CrossPoint { x: number; y: number; color: string }
+interface CrossPoint { x: number; y: number; color: string }
 /**
  * Hover layer for line and area charts: a hairline snaps to the nearest x, dots
  * mark every series there and one tooltip lists them all.
@@ -203,7 +203,7 @@ export function Crosshair(props: { b: Box; n: number; pos: (i: number) => number
 
 // ───────────── category axis for bars
 
-export interface BandLabels { rotate: boolean; labels: string[]; height: number; keep: Set<number> }
+interface BandLabels { rotate: boolean; labels: string[]; height: number; keep: Set<number> }
 /**
  * Labels for a band of categories `step` px apart: flat when they fit, else
  * turned 40° and cut, thinned only as a last resort. `height` is the room below.

@@ -42,7 +42,7 @@ const steps = (cmd: string) => parts(dropHeredocs(cmd)).map((p) => p.replace(/^(
 // src/__tests__/a.test.tsx` is no test, `rg "next build"` no build, `ls build` no
 // check. Nor are the shell's own `test -f` and `[`.
 const READS = /^(?:\S*\/)?(sed|cat|head|tail|less|more|bat|nl|wc|ls|tree|stat|file|rg|grep|egrep|fgrep|ag|ack|awk|jq|yq|cut|sort|uniq|diff|echo|printf|find|fd|du|which|pwd|test|\[)(?=\s|$)|^git\s+(grep|log|show|diff|status|blame)\b/;
-export const onlyReads = (part: string) => READS.test(part);
+const onlyReads = (part: string) => READS.test(part);
 /** paths and file names in a command (`src/a.test.ts`, `./gradlew`): what it reads or writes, not what it runs */
 const noPaths = (p: string) => p.replace(/(['"]?)[^\s'"]*(\/|\.[A-Za-z]{1,5}\b)[^\s'"]*\1/g, " ");
 const TEST = /\b(test|vitest|jest|pytest|mocha|cargo test|go test)\b/;

@@ -4,7 +4,7 @@ import { type Accessor, createContext, createEffect, onCleanup, useContext } fro
 import * as L from "./layout";
 import { layout, setLayout, view, type PaneLayout, type PaneState, type View } from "./ui";
 
-export interface PaneInfo {
+interface PaneInfo {
   id: string;
   /** what this pane shows */
   view: Accessor<View>;

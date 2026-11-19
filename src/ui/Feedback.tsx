@@ -12,7 +12,7 @@ import { t } from "../i18n";
 
 const [open, setOpen] = createSignal<string | null>(null);
 /** Open the feedback sheet, with what was typed after /feedback. */
-export const openFeedback = (text = "") => setOpen(text);
+const openFeedback = (text = "") => setOpen(text);
 
 let version = "";
 export const setFeedbackVersion = (v: string) => void (version = v);

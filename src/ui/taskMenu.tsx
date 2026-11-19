@@ -113,7 +113,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
 }
 
 /** The items as menu buttons; `done` closes whatever holds them. */
-export function MenuList(props: { items: MenuEntry[]; done: () => void }) {
+function MenuList(props: { items: MenuEntry[]; done: () => void }) {
   return (
     <For each={props.items}>
       {(it) =>
@@ -156,7 +156,6 @@ function arrowKeys(e: KeyboardEvent, root: HTMLElement) {
 const [ctx, setCtx] = createSignal<{ items: () => MenuEntry[]; x: number; y: number; key: string; keyboard?: boolean; row?: { top: number; bottom: number; right: number } } | null>(null);
 /** what the open right-click menu belongs to ("task:t1", "project:ondra"), to mark its row */
 export const ctxFor = () => ctx()?.key;
-export const closeCtx = () => setCtx(null);
 
 /** Open a menu at a point (a right-click) or under an element (⇧F10, a ⋯ button). */
 export function openMenuAt(key: string, items: () => MenuEntry[], at: MouseEvent | DOMRect, keyboard = false) {
@@ -247,7 +246,7 @@ const [ask, setAsk] = createSignal<Ask | null>(null);
 export const confirmAsk = (a: Ask) => (closePops(), setCtx(null), setAsk(a));
 
 /** 버리기 / Discard, wherever it is offered (menu, review bar, /discard, Panel): asked once, same words */
-export function confirmDeleteTask(id: string) {
+function confirmDeleteTask(id: string) {
   const x = taskById(id);
   if (!x) return;
   const kids = kidsOf(id).length;

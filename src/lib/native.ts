@@ -70,16 +70,12 @@ export const engineModels = (accountId: string) => call<string[]>("engine_models
  */
 export const ptyOpen = (id: string, cwd: string, command: string | null, args: string[], env: Env, cols: number, rows: number) =>
   call<void>("pty_open", { id, cwd, command, args, env, cols, rows });
-/** A PTY running the bundled engine's interactive UI for one account (used for /login). */
-export const ptyOpenLogin = (id: string, accountId: string, cols: number, rows: number) =>
-  call<void>("pty_open_login", { id, accountId, cols, rows });
 export const ptyWrite = (id: string, data: string) => call<void>("pty_write", { id, data });
 export const ptyResize = (id: string, cols: number, rows: number) => call<void>("pty_resize", { id, cols, rows });
 export const ptyClose = (id: string) => call<void>("pty_close", { id });
 
 // ───────────────────────── state & files ─────────────────────────
 export const stateLoad = () => call<string | null>("state_load", undefined, null);
-export const stateSave = (json: string) => call<void>("state_save", { json });
 /**
  * Save the state from its parts (see state/persist.ts): the state without its tasks, every
  * task's slot in order, and the tasks' JSON the native side doesn't hold yet. Returns the
@@ -88,7 +84,6 @@ export const stateSave = (json: string) => call<void>("state_save", { json });
 export const stateSaveParts = (head: string, order: string[], tasks: Record<string, string>) => call<string[]>("state_save_parts", { head, order, tasks }, []);
 /** The app is quitting and waits for the last save: it has been written. */
 export const stateFlushed = () => call<void>("state_flushed");
-export const artifactsDir = (workerId: string) => call<string>("artifacts_dir", { workerId }, "/tmp/ondra/artifacts");
 export const pickFolder = (prompt: string) => call<string | null>("pick_folder", { prompt }, null);
 export const revealPath = (path: string) => call<void>("reveal_path", { path });
 /** The system's default browser (or Mail for mailto:). Links go through openLink (ui/links.ts), which picks this or the app's own browser. */
@@ -186,7 +181,7 @@ export interface Merged {
 export const gitMerged = (repo: string, branch: string, into: string | undefined, base: string): Promise<Merged | null> =>
   inTauri ? invoke<Merged | null>("git_merged", { repo, branch, into: into ?? null, base }) : import("../state/fixtureChanges").then((m) => m.fixtureMerged());
 
-export interface WorktreeInfo {
+interface WorktreeInfo {
   repo: string;
   path: string;
   branch: string;
@@ -260,7 +255,6 @@ export const providerCheck = (target: ProviderTarget, model: string, reasoning: 
  *  key: "" removes it, null keeps the stored one. */
 export const providerSave = (accountId: string, provider: string, entry: object, key: string | null, headers: { name: string; value: string | null }[]) =>
   call<void>("provider_save", { accountId, provider, entry, key, headers });
-export const providerRemove = (accountId: string, provider: string) => call<void>("provider_remove", { accountId, provider });
 /** delete a session folder's old conversation files, keeping the newest one */
 export const sessionsPrune = (dir: string) => call<void>("sessions_prune", { dir }, undefined);
 
@@ -394,7 +388,6 @@ export const ghIssue = (cwd: string, number: number, env: Env = []) =>
   call<string>("gh_issue", { cwd, number, env }, JSON.stringify({ number, title: "로그인 후 대시보드로 가지 않아요", state: "OPEN", body: "로그인하면 `/login`에 그대로 머물러요.\n\n- 크롬, 사파리 둘 다\n- 새로고침하면 대시보드로 가요", labels: [{ name: "bug", color: "d73a4a" }], assignees: [], author: { login: "mina" }, url: `https://github.com/acme/web/issues/${number}`, comments: [] }));
 export const ghPrView = (url: string, env: Env = []) => call<string>("gh_pr_view", { url, env }, "");
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
-export const gitRevertFile = (cwd: string, path: string) => call<void>("git_revert_file", { cwd, path });
 /** A system notice. An alarm rings (`sound`); with a `tag`, a click on it comes back as "notify:click" with the tag. */
 export const notify = (title: string, body: string, o: { sound?: boolean; tag?: string } = {}) => call<void>("notify", { title, body, sound: o.sound ?? null, tag: o.tag ?? null });
 /** one of Ondra's bundled sounds by name, at volume 0–1 (job ends) */
@@ -431,13 +424,8 @@ export const hooksSave = (json: string) => call<void>("hooks_save", { json });
 export const browserStreamPort = (workerId: string, space?: string) => call<number | null>("browser_stream_port", { workerId, space: space ?? null }, null);
 /** A job ended: close its tab in the shared browser (logins stay). */
 export const browserRelease = (workerId: string, space?: string) => call<void>("browser_release", { workerId, space: space ?? null });
-/** Start (or find) the shared browser and the Browser view's own tab; its live stream port. */
-export const sharedBrowserOpen = (space?: string) => call<number>("shared_browser_open", { space: space ?? null }, 0);
 /** check the shared browser with a fresh connection and restart it if it hangs */
 export const browserCheck = (space?: string) => call<number>("browser_check", { space: space ?? null }, 0);
-/** Drive the Browser view's tab. */
-export const sharedBrowserGo = (action: "open" | "back" | "forward" | "reload", url?: string, space?: string) =>
-  call<void>("shared_browser_go", { action, url: url ?? null, space: space ?? null });
 
 // ───────────────────────── in-app browser ─────────────────────────
 /** Show the space's in-app browser (a real webview, its own cookies) over this area of the window; `url` opens a page. */
@@ -451,7 +439,6 @@ export const onInBrowserPage = (f: (p: { url: string; loading: boolean; space: s
   inTauri ? listen<{ url: string; loading: boolean; space: string }>("inbrowser-page", (e) => f(e.payload)) : Promise.resolve(() => {});
 
 // ───────────────────────── windows ─────────────────────────
-export const openCapture = () => call<void>("open_capture");
 export const hideCapture = () => call<void>("hide_capture");
 /** From the capture window: emits `capture:submitted` {text, space} to main. */
 export const submitCapture = (text: string, space: string) => call<void>("submit_capture", { text, space });
@@ -477,7 +464,6 @@ export type PetWord =
   | { kind: "clear"; taskId: string }
   | { kind: "busy"; n: number };
 export const petList = () => call<{ id: string; dir: string; json: string }[]>("pet_list", undefined, []);
-export const petFolder = () => call<string>("pet_folder", undefined, "");
 export const petDelete = (id: string) => call<void>("pet_delete", { id });
 /** a pet as one file in Downloads (<name>.ondrapet), to send to someone: its path */
 export const petExport = (id: string) => call<string>("pet_export", { id });

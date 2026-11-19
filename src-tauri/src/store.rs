@@ -292,14 +292,6 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// the tasks that changed, and the file is put together here.
 static TASK_PARTS: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
 
-#[tauri::command(async)]
-pub fn state_save(app: AppHandle, json: String) -> Result<(), String> {
-    let mut parts = TASK_PARTS.lock().unwrap_or_else(|e| e.into_inner());
-    // a whole file replaces what was held: the next partial save sends every task again
-    *parts = None;
-    write_atomic(&state_file(&app), json.as_bytes())
-}
-
 /// The whole state file from the state without its tasks (`head`, a JSON object), the tasks'
 /// order (`order`, their slots) and their JSON. Returns the slots it doesn't hold (then it
 /// writes nothing and the app sends those).
@@ -385,7 +377,6 @@ fn safe_id(worker_id: &str) -> String {
     worker_id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect()
 }
 
-#[tauri::command]
 pub fn artifacts_dir(app: AppHandle, worker_id: String) -> String {
     let dir = data_dir(&app).join("artifacts").join(safe_id(&worker_id));
     let _ = std::fs::create_dir_all(&dir);
