@@ -212,14 +212,6 @@ pub fn merge_provider(text: Option<&str>, id: &str, entry: Value) -> Result<Stri
     serde_json::to_string_pretty(&Value::Object(root)).map(|s| s + "\n").map_err(|e| e.to_string())
 }
 
-/// Takes one provider out; returns the new text and the entry that was there.
-pub fn remove_provider(text: Option<&str>, id: &str) -> Result<(String, Option<Value>), String> {
-    let mut root = parse_models(text)?;
-    let old = root.get_mut("providers").and_then(Value::as_object_mut).ok_or("providers")?.remove(id);
-    let s = serde_json::to_string_pretty(&Value::Object(root)).map_err(|e| e.to_string())?;
-    Ok((s + "\n", old))
-}
-
 /// Provider ids in the file (names only).
 pub fn provider_ids(text: &str) -> Vec<String> {
     parse_models(Some(text))
@@ -244,13 +236,18 @@ fn models_path(dir: &Path) -> PathBuf {
     dir.join("models.json")
 }
 
-/// Removes every keychain item the folder's models.json names (before the folder goes).
+/// Removes every keychain item the folder's models.json names (before the folder goes):
+/// deleting a direct connection deletes its account, and this takes its keys with it.
 pub fn forget_secrets(dir: &Path) {
+    forget_in(SERVICE, dir)
+}
+
+fn forget_in(service: &str, dir: &Path) {
     let Ok(text) = std::fs::read_to_string(models_path(dir)) else { return };
     let Ok(root) = parse_models(Some(&text)) else { return };
     for entry in root.get("providers").and_then(Value::as_object).map(|p| p.values().cloned().collect::<Vec<_>>()).unwrap_or_default() {
-        for acct in refs_in(SERVICE, &entry) {
-            secret_delete(SERVICE, &acct);
+        for acct in refs_in(service, &entry) {
+            secret_delete(service, &acct);
         }
     }
 }
@@ -331,22 +328,6 @@ pub fn save_in(service: &str, dir: &Path, account_id: &str, provider: &str, mut 
     write_atomic(&path, &next)
 }
 
-pub fn remove_in(service: &str, dir: &Path, account_id: &str, provider: &str) -> Result<(), String> {
-    let path = models_path(dir);
-    let text = std::fs::read_to_string(&path).ok();
-    let (next, old) = remove_provider(text.as_deref(), provider)?;
-    if let Some(old) = old {
-        for acct in refs_in(service, &old) {
-            secret_delete(service, &acct);
-        }
-    }
-    secret_delete(service, &key_account(account_id, provider));
-    if text.is_some() {
-        write_atomic(&path, &next)?;
-    }
-    Ok(())
-}
-
 fn own_dir(app: &AppHandle, account_id: &str) -> Result<PathBuf, String> {
     // the user's own ~/.pi/agent is never written: a connection is always an Ondra-made account
     crate::store::account_dir(app, account_id).ok_or_else(|| "bad account".to_string())
@@ -356,12 +337,6 @@ fn own_dir(app: &AppHandle, account_id: &str) -> Result<PathBuf, String> {
 pub fn provider_save(app: AppHandle, account_id: String, provider: String, entry: Value, key: Option<String>, headers: Vec<HeaderIn>) -> Result<(), String> {
     let dir = own_dir(&app, &account_id)?;
     save_in(SERVICE, &dir, &account_id, &provider, entry, key, headers)
-}
-
-#[tauri::command]
-pub fn provider_remove(app: AppHandle, account_id: String, provider: String) -> Result<(), String> {
-    let dir = own_dir(&app, &account_id)?;
-    remove_in(SERVICE, &dir, &account_id, &provider)
 }
 
 // ───────────── talking to the server
@@ -861,13 +836,7 @@ mod tests {
         // a missing or empty file
         let fresh: Value = serde_json::from_str(&merge_provider(None, "p", json!({})).unwrap()).unwrap();
         assert_eq!(fresh, json!({ "providers": { "p": {} } }));
-        // removing
-        let (gone, old) = remove_provider(Some(&again), "direct-ollama").unwrap();
-        assert!(old.is_some());
-        let v: Value = serde_json::from_str(&gone).unwrap();
-        assert!(v["providers"].get("direct-ollama").is_none());
-        assert_eq!(v["providers"]["mine"]["baseUrl"], "http://x/v1");
-        assert_eq!(provider_ids(&gone), vec!["mine".to_string()]);
+        assert_eq!(provider_ids(&again), vec!["direct-ollama".to_string(), "mine".to_string()]);
     }
 
     #[test]
@@ -1131,10 +1100,9 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("models.json")).unwrap();
         assert_eq!(provider_entry(Some(&text), "direct-x").unwrap()["apiKey"], secret_ref(svc, &key_account(&id, "direct-x")));
         assert!(!secret_exists(svc, &header_account(&id, "direct-x", "X-Team")));
-        remove_in(svc, &dir, &id, "direct-x").unwrap();
+        // 연결 삭제 deletes the account: every key its models.json names goes with it
+        forget_in(svc, &dir);
         assert!(!secret_exists(svc, &key_account(&id, "direct-x")));
-        let text = std::fs::read_to_string(dir.join("models.json")).unwrap();
-        assert!(provider_entry(Some(&text), "direct-x").is_none() && provider_entry(Some(&text), "other").is_some());
         // no key: a placeholder, nothing in the keychain
         save_in(svc, &dir, &id, "direct-y", json!({ "baseUrl": "http://h/v1", "api": "openai-completions" }), Some(String::new()), vec![]).unwrap();
         let text = std::fs::read_to_string(dir.join("models.json")).unwrap();

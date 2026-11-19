@@ -454,7 +454,6 @@ pub fn run() {
             store::account_providers,
             store::account_remove,
             providers::provider_save,
-            providers::provider_remove,
             providers::provider_models,
             providers::provider_check,
             store::memory_git_commit,
