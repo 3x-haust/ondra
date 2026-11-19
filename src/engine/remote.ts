@@ -32,8 +32,8 @@ import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hos
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
 
-export interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
-export interface PairAsk { conn: number; device: { id: string; name: string } }
+interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
+interface PairAsk { conn: number; device: { id: string; name: string } }
 
 /** what the window shows about this Mac's side */
 export const [remote, setRemote] = createSignal<{

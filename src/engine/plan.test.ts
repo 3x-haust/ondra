@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanStep } from "../state/types";
-import { closePlan, moveTo, nextPlan, openAsked, planText, stepAt } from "./plan";
+import { closePlan, moveTo, nextPlan, openAsked, planText, stepAt, unexplained } from "./plan";
 import { unwrapSsh, waitsOnly } from "./commandKind";
 
 const states = (plan: PlanStep[]) => plan.map((s) => [s.state, ...(s.sub ?? []).map((x) => x.state)].join(" "));
@@ -37,6 +37,28 @@ describe("nextPlan", () => {
     expect(states(plan)).toEqual(["done done done", "now"]);
   });
 
+  it("reads a step the job marked done, or skipped with its reason, and keeps the reason", () => {
+    const plan = nextPlan([], ["코드 파악", { text: "구조 설계", skip: "파일 두 개라 이미 다 읽음" }, { text: "구현", done: true }, "확인"]);
+    expect(states(plan)).toEqual(["now", "skip", "done", "todo"]);
+    expect(plan[1].why).toBe("파일 두 개라 이미 다 읽음");
+    // sent again without the mark: the skip and its reason stay
+    const again = nextPlan(plan, ["코드 파악", "구조 설계", "구현", "확인"]);
+    expect(again[1]).toMatchObject({ state: "skip", why: "파일 두 개라 이미 다 읽음" });
+    expect(planText(again)[1]).toBe("[-] 구조 설계 (skipped: 파일 두 개라 이미 다 읽음)");
+  });
+
+  it("a step the user asked for stays when a new plan leaves it out", () => {
+    const old: PlanStep[] = [
+      { text: "설문 넣기", state: "now" },
+      { text: "대시보드도", state: "todo", user: true },
+    ];
+    const plan = nextPlan(old, ["설문 넣기", "배포"]);
+    expect(plan.map((s) => s.text)).toEqual(["설문 넣기", "배포", "대시보드도"]);
+    expect(openAsked(plan)).toEqual(["대시보드도"]);
+    // skipped with a reason, it is closed
+    expect(openAsked(nextPlan(old, ["설문 넣기", { text: "대시보드도", skip: "이미 있어요" }]))).toEqual([]);
+  });
+
   it("caps the list", () => {
     expect(nextPlan([], Array.from({ length: 14 }, (_, i) => `s${i}`))).toHaveLength(10);
     expect(nextPlan([], [{ text: "A", sub: Array.from({ length: 12 }, (_, i) => `a${i}`) }])[0].sub).toHaveLength(8);
@@ -68,10 +90,19 @@ describe("moveTo", () => {
     expect(states(p)).toEqual(["done", "now done now todo", "todo todo"]);
   });
 
-  it("past a split step: its smaller steps are done too", () => {
+  it("past a split step it was on: its smaller steps are done too", () => {
     const p = plan();
+    moveTo(p, 1);
     moveTo(p, 2);
     expect(states(p)).toEqual(["done", "done done done done", "now now"]);
+  });
+
+  it("a big step jumped over without being on it is skipped, with no reason yet", () => {
+    const p = plan();
+    moveTo(p, 2);
+    expect(states(p)).toEqual(["done", "skip skip skip skip", "now now"]);
+    expect(p[1].why).toBeUndefined();
+    expect(unexplained(p)).toEqual(["B"]);
   });
 
   it("a step past the end is the last one", () => {
@@ -95,6 +126,18 @@ describe("closePlan and openAsked", () => {
       { text: "웹에서 확인", state: "todo" },
     ];
     expect(openAsked(p)).toEqual(["배포 › 백엔드도 mmhs로", "대시보드"]);
+  });
+
+  it("names the big steps left open or skipped without a reason, not the user's or the current one", () => {
+    const p: PlanStep[] = [
+      { text: "재현", state: "done" },
+      { text: "구조 설계", state: "skip", why: "한 파일이에요" },
+      { text: "가설 검증", state: "skip" },
+      { text: "고치기", state: "now" },
+      { text: "화면에서 확인", state: "todo" },
+      { text: "대시보드", state: "todo", user: true },
+    ];
+    expect(unexplained(p)).toEqual(["가설 검증", "화면에서 확인"]);
   });
 });
 

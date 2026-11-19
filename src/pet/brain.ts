@@ -43,7 +43,7 @@ export interface Box {
   h: number;
 }
 /** a place to stand: a level line from x0 to x1 at height y (screen points, y down). floor: the screen's bottom */
-export interface Ledge {
+interface Ledge {
   id: number;
   x0: number;
   x1: number;
@@ -152,20 +152,20 @@ export interface Body {
   stirred: number;
 }
 
-export const GRAVITY = 2200;
+const GRAVITY = 2200;
 export const WALK = 46;
-export const CLIMB = 34;
+const CLIMB = 34;
 /** walking into a wall, how often it climbs instead of turning */
-export const CLIMB_CHANCE = 0.5;
+const CLIMB_CHANCE = 0.5;
 /** thrown at least this fast into the screen's side, it holds on to it */
-export const STICK_SPEED = 250;
+const STICK_SPEED = 250;
 /** at a window's top it hops over onto it: up this fast, inward this fast */
 const HOP_VY = 800;
 const HOP_VX = 150;
 /** nothing for this long: it may fall asleep */
 export const BORED_MS = 150_000;
 
-export type Rand = () => number;
+type Rand = () => number;
 const between = (r: Rand, a: number, b: number) => a + (b - a) * r();
 
 /** what it does next, standing, when the last act ran out */
@@ -185,7 +185,7 @@ export function nextAct(b: Body, now: number, r: Rand, busy: boolean): { act: Ac
 /** acts that hold it still and end on their own */
 const STILL: Act[] = ["idle", "sit", "sleep", "happy", "alert", "sad", "work", "poke", "play", "greet"];
 
-export interface StepOpts {
+interface StepOpts {
   busy?: boolean;
   hold?: Act;
   /** its picture's size on screen (points) */
@@ -328,7 +328,7 @@ export function release(b: Body, vx: number, vy: number): Body {
 
 // ───────────── what it says
 
-export type WordKind = "done" | "waiting" | "failed";
+type WordKind = "done" | "waiting" | "failed";
 export interface Word {
   kind: WordKind;
   taskId: string;
@@ -369,11 +369,11 @@ export interface Other {
   wall?: number;
 }
 /** close enough to notice each other (points between their middles, on the same ground) */
-export const MEET_NEAR = 150;
+const MEET_NEAR = 150;
 /** two pets who met don't meet again for this long */
 export const MEET_AGAIN_MS = 60_000;
 /** how long a wave lasts */
-export const GREET_MS = 2_200;
+const GREET_MS = 2_200;
 /** acts it can be pulled out of by another pet (not held, thrown, on a wall, or told something by a job) */
 const FREE: Act[] = ["idle", "walk", "sit", "play"];
 

@@ -51,16 +51,12 @@ export { layout, view };
 export const focusId = () => layout().focus;
 export const paneCount = () => Object.keys(layout().panes).length;
 export const paneState = (id: string): PaneState | undefined => layout().panes[id];
-// what lives only on Main (the new-task screen) closes when you go anywhere else
-const leavingMain: (() => void)[] = [];
-export const onLeaveMain = (f: () => void) => void leavingMain.push(f);
 /** Put a layout on screen; the focused pane's view becomes the app's view (and the panel follows it). */
 export function setLayout(l: PaneLayout) {
   const was = layout();
   const before = was.panes[was.focus]?.view;
   const to = l.panes[l.focus].view;
   if (to !== before || l.focus !== was.focus) {
-    if (to.name !== "main" && before?.name === "main") leavingMain.forEach((f) => f());
     // the panel's tabs first, so the view opens on its own tab
     enterPlace(to);
   }
@@ -267,7 +263,7 @@ const lastTab = new Map<Place, PanelTab>();
 const openAt = new Map<Place, boolean>();
 /** What a tab is to a place: shown, kept out of sight for later (a task's tab on Main), or dropped.
  *  The panel fills this in (it knows the tasks). */
-export type TabFit = "use" | "keep" | "drop";
+type TabFit = "use" | "keep" | "drop";
 let tabFits: (place: Place, kind: PanelTab) => TabFit = () => "use";
 export const setTabFits = (f: typeof tabFits) => void (tabFits = f);
 /** The place was left on a tab before (it comes back on that one). */
@@ -368,14 +364,12 @@ export const goMain = (project?: string) => {
   setView(v);
   setTimeout(() => inPane<HTMLTextAreaElement>("#main-input")?.focus(), 30);
 };
-/** old name, used by shortcuts */
-export const newTask = goMain;
 
 /** Text an agent is writing right now, per agent id (task id or captain:<space>). */
 export const [live, setLive] = createStore<Record<string, string>>({});
 
 // ── toasts ──
-export interface Toast {
+interface Toast {
   id: number;
   text: string;
   tone: "info" | "bad";
@@ -436,11 +430,6 @@ export function togglePanel() {
     if (!ptabs().length) setPanelTab("new");
     setPanelOpen(true);
   }
-}
-/** Open the right side on the flow (no job needed). */
-export function openFlow() {
-  setPanelTab("flow");
-  setPanelOpen(true);
 }
 
 /** A main message to scroll to once the main view shows it (set before switching to it). */

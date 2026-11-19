@@ -10,7 +10,7 @@ type P = { x: number; y: number };
 import { DecisionCard } from "../ui/DecisionCard";
 import { decisionFor, projectsShown, queueWith, setState, spaceById, kidsOf, state, taskById, tasksShown } from "../state/store";
 import type { Project, Task, ToolKind } from "../state/types";
-import { goMain, live, openPanel, openTask, setView } from "../state/ui";
+import { goMain, live, openPanel, openTask } from "../state/ui";
 import { decide, resumeTask, startTask, tell } from "../engine/tasks";
 import { costDetail, jobCost } from "../ui/cost";
 import { ago, compact, IssueTag, long, soon, statusLabel, taskTitle, tokens } from "../ui/bits";
@@ -1845,5 +1845,3 @@ export function Canvas() {
     </div>
   );
 }
-
-export const openCanvas = () => setView({ name: "board" });

@@ -5,7 +5,7 @@ import type { Lang } from "../i18n";
 export type DictateError = "mic-denied" | "speech-denied" | "no-mic" | "unavailable" | "no-on-device" | "failed";
 const ERRORS: DictateError[] = ["mic-denied", "speech-denied", "no-mic", "unavailable", "no-on-device", "failed"];
 
-export type DictateEvent =
+type DictateEvent =
   | { kind: "ready" }
   | { kind: "level"; level: number }
   | { kind: "partial"; text: string }

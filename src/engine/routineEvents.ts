@@ -2,7 +2,7 @@
 // them are new since the routine last looked. Pure; routines.ts does the polling (gh_watch).
 import type { Routine, RoutineEvent } from "../state/types";
 
-export interface RepoEvent {
+interface RepoEvent {
   /** stable across polls: "issue#12", "comment:IC_kw…", "run:123" */
   id: string;
   title: string;
@@ -69,7 +69,7 @@ export function matches(e: RepoEvent, event: RoutineEvent, filter?: string): boo
   return f.split(/\s+/).every((w) => `${e.title} ${e.body ?? ""}`.toLowerCase().includes(w));
 }
 
-export const SEEN_MAX = 500;
+const SEEN_MAX = 500;
 
 /**
  * What is new for a routine: items after it started looking that it hasn't handed over yet.

@@ -2,7 +2,7 @@
 import type { Task } from "../state/types";
 
 export type Corner = "tl" | "tr" | "bl" | "br";
-export const CORNERS: Corner[] = ["tl", "tr", "bl", "br"];
+const CORNERS: Corner[] = ["tl", "tr", "bl", "br"];
 
 /** The job whose browser floats in the corner: only the running, browsing job open on screen
  *  (you went into it to watch it). Anywhere else (another job, a project, the main page) nothing

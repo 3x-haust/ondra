@@ -5,8 +5,8 @@ import { state } from "../state/store";
 import type { Task } from "../state/types";
 
 /** Ondra's own sounds (src-tauri/sounds, made by scripts/make-sounds.py) */
-export const JOB_SOUNDS = { done: "done", waiting: "waiting", failed: "failed" } as const;
-export type SoundKind = keyof typeof JOB_SOUNDS;
+const JOB_SOUNDS = { done: "done", waiting: "waiting", failed: "failed" } as const;
+type SoundKind = keyof typeof JOB_SOUNDS;
 
 export const soundOn = () => state.settings.jobSound !== false;
 export const soundVolume = () => Math.min(1, Math.max(0, state.settings.jobSoundVolume ?? 0.5));

@@ -63,12 +63,12 @@ function palette() {
 }
 
 /** the diagram's SVG when it was drawn before (this theme), else undefined */
-export const mermaidSvg = (src: string) => drawn.get(key(src));
+const mermaidSvg = (src: string) => drawn.get(key(src));
 /** it was tried and isn't a diagram Mermaid can read: shown as code */
-export const mermaidFailed = (src: string) => failed.has(key(src));
+const mermaidFailed = (src: string) => failed.has(key(src));
 
 /** draw one diagram; undefined when Mermaid can't read it */
-export function drawMermaid(src: string): Promise<string | undefined> {
+function drawMermaid(src: string): Promise<string | undefined> {
   const k = key(src);
   const ready = drawn.get(k);
   if (ready !== undefined) return Promise.resolve(ready);

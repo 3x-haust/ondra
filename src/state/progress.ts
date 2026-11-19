@@ -11,7 +11,7 @@ export interface FileDiff {
   add: number;
   del: number;
 }
-export interface TaskDiff {
+interface TaskDiff {
   files: FileDiff[];
   add: number;
   del: number;
@@ -116,7 +116,7 @@ export const ended = (t: Task) => t.status === "done" || t.status === "failed";
  * from its start to its end (a running or waiting one: to `at`). A task that
  * stopped without an end time ends where its last session or entry did.
  */
-export function workSpan(t: Task, at: number): { start: number; end: number } | null {
+function workSpan(t: Task, at: number): { start: number; end: number } | null {
   if (!t.startedAt) return null;
   const last = t.legs[t.legs.length - 1];
   const live = t.status === "running" || t.status === "waiting";

@@ -89,7 +89,7 @@ export function thresholds(values: number[], count?: number): number[] {
   if (out[out.length - 1] <= hi) out.push(+(out[out.length - 1] + step).toPrecision(12));
   return out;
 }
-export interface Bin { x0: number; x1: number; n: number }
+interface Bin { x0: number; x1: number; n: number }
 export function histogram(values: number[], th: number[]): Bin[] {
   if (th.length < 2) return [];
   const v = finite(values);
@@ -157,7 +157,7 @@ export function normInv(p: number): number {
   const q = p - 0.5, r = q * q;
   return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
 }
-export const normPdf = (x: number, mu = 0, s = 1) => Math.exp(-0.5 * ((x - mu) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+const normPdf = (x: number, mu = 0, s = 1) => Math.exp(-0.5 * ((x - mu) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
 /** standard normal CDF (Abramowitz–Stegun 7.1.26 via erf) */
 export function normCdf(x: number): number {
   const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
@@ -165,7 +165,7 @@ export function normCdf(x: number): number {
   return x >= 0 ? 0.5 * (1 + y) : 0.5 * (1 - y);
 }
 /** log Γ (Lanczos) */
-export function lgamma(x: number): number {
+function lgamma(x: number): number {
   const g = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
   let y = x;
   const t = x + 5.5 - (x + 0.5) * Math.log(x + 5.5);
@@ -174,8 +174,8 @@ export function lgamma(x: number): number {
   return -t + Math.log((2.5066282746310005 * s) / x);
 }
 export const tPdf = (x: number, df: number) => Math.exp(lgamma((df + 1) / 2) - lgamma(df / 2) - 0.5 * Math.log(df * Math.PI) - ((df + 1) / 2) * Math.log(1 + (x * x) / df));
-export const chi2Pdf = (x: number, k: number) => (x <= 0 ? 0 : Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.LN2 - lgamma(k / 2)));
-export const fPdf = (x: number, d1: number, d2: number) =>
+const chi2Pdf = (x: number, k: number) => (x <= 0 ? 0 : Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.LN2 - lgamma(k / 2)));
+const fPdf = (x: number, d1: number, d2: number) =>
   x <= 0 ? 0 : Math.exp(0.5 * (d1 * Math.log(d1 * x) + d2 * Math.log(d2) - (d1 + d2) * Math.log(d1 * x + d2)) - Math.log(x) - (lgamma(d1 / 2) + lgamma(d2 / 2) - lgamma((d1 + d2) / 2)));
 /** t quantile (Hill 1970 approximation; exact enough for confidence bands) */
 export function tInv(p: number, df: number): number {
@@ -237,7 +237,7 @@ export function swarm(pos: number[], r: number, side: "both" | "up" = "both"): n
 
 // ───────────── fits
 
-export interface LinFit { slope: number; icpt: number; r2: number; r: number; n: number; band: (x: number) => number }
+interface LinFit { slope: number; icpt: number; r2: number; r: number; n: number; band: (x: number) => number }
 /** least squares with the 95% confidence half-width of the mean at x */
 export function linreg(pts: Pt[]): LinFit | null {
   const n = pts.length;
@@ -311,7 +311,7 @@ export function fit4pl(pts: Pt[]): { bottom: number; top: number; ec50: number; 
   if (![bottom, top, le, hill].every(Number.isFinite)) return null;
   return { bottom, top, ec50: 10 ** le, hill };
 }
-export function nelderMead(f: (v: number[]) => number, x0: number[], step: number[], iters = 600): number[] {
+function nelderMead(f: (v: number[]) => number, x0: number[], step: number[], iters = 600): number[] {
   const n = x0.length;
   let s = [x0, ...x0.map((_, i) => x0.map((v, j) => (i === j ? v + step[i] : v)))].map((x) => ({ x, f: f(x) }));
   for (let it = 0; it < iters; it++) {
@@ -395,8 +395,8 @@ export function calibrationFrom(scores: number[], truth: unknown[], bins = 10): 
 
 // ───────────── survival
 
-export interface KmStep { t: number; s: number; lo: number; hi: number }
-export interface Km { steps: KmStep[]; censored: Pt[]; atRisk: (t: number) => number; median: number | null; end: number }
+interface KmStep { t: number; s: number; lo: number; hi: number }
+interface Km { steps: KmStep[]; censored: Pt[]; atRisk: (t: number) => number; median: number | null; end: number }
 /** Kaplan–Meier with Greenwood log-log 95% band; events: 1 = event, 0 = censored */
 export function kaplanMeier(times: unknown[], events: unknown[]): Km {
   const d = (Array.isArray(times) ? times : []).map((t, i) => [toNum(t), Array.isArray(events) ? (events[i] === 0 || events[i] === false ? 0 : 1) : 1] as const)
@@ -427,16 +427,10 @@ export function kaplanMeier(times: unknown[], events: unknown[]): Km {
   }
   return { steps, censored, median, end: all.length ? all[all.length - 1] : 0, atRisk: (t) => all.filter((x) => x >= t).length };
 }
-/** survival at time t from KM steps */
-export function survAt(steps: KmStep[], t: number): number {
-  let s = 1;
-  for (const st of steps) if (st.t <= t) s = st.s;
-  return s;
-}
 
 // ───────────── clustering (heatmap dendrograms)
 
-export interface Dendro { order: number[]; /** merges: [left node, right node, height]; leaves are 0..n-1, merge k is node n+k */ merges: [number, number, number][] }
+interface Dendro { order: number[]; /** merges: [left node, right node, height]; leaves are 0..n-1, merge k is node n+k */ merges: [number, number, number][] }
 /** agglomerative clustering, average linkage on Euclidean distance (skips NaN pairs) */
 export function hclust(rows: number[][]): Dendro {
   const n = rows.length;
@@ -492,7 +486,7 @@ export function dendroLines(d: Dendro): { x1: number; x2: number; y1: number; y2
 
 // ───────────── quality control
 
-export interface Spc { center: number; ucl: number; lcl: number; sigma: number; out: boolean[]; run: boolean[] }
+interface Spc { center: number; ucl: number; lcl: number; sigma: number; out: boolean[]; run: boolean[] }
 /**
  * Individuals chart: centre = mean, σ from the average moving range (MR̄ / 1.128),
  * limits ±3σ unless given. `out`: beyond a limit; `run`: part of 8 in a row on one side.

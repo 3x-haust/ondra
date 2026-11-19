@@ -34,7 +34,7 @@ const remember = (h: string) => {
   seen.add(h);
   try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-400))); } catch { /* private mode */ }
 };
-export const hashOf = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0).toString(36); };
+const hashOf = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0).toString(36); };
 
 const quiet = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -156,7 +156,7 @@ function extent(m: Mark): [number, number, number, number] {
 
 type Drawn = { key: string; g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[]; step: number };
 
-export type BoardOptions = { big?: boolean; onExpand?: (src: string) => void; onAsk?: (text: string) => void };
+type BoardOptions = { big?: boolean; onExpand?: (src: string) => void; onAsk?: (text: string) => void };
 
 export class BoardView {
   readonly root: HTMLDivElement;

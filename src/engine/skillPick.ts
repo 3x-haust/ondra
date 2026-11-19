@@ -5,12 +5,6 @@ import { globalSkills, workerSkills } from "../lib/native";
 import { skillsIn } from "./memory";
 import type { SpaceId } from "../state/types";
 
-export interface GlobalSkill {
-  name: string;
-  path: string;
-  description: string;
-}
-
 export async function skillScope(space: SpaceId) {
   const [bundled, global] = await Promise.all([workerSkills(), globalSkills()]);
   const local = skillsIn(space).map(({ name, path, description }) => ({ name, path, description }));

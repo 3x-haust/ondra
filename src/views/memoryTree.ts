@@ -12,7 +12,7 @@ import { isLive, KINDS, kindLabel, kindOf } from "../engine/memory";
 import type { JournalEntry, Memory, MemoryKind, Project, ProjectNow, SpaceId } from "../state/types";
 import { lang, t } from "../i18n";
 
-export type HomeKind = "global" | "space" | "project";
+type HomeKind = "global" | "space" | "project";
 export interface Home {
   id: string;
   kind: HomeKind;
@@ -27,7 +27,7 @@ export interface Home {
   files: string[];
 }
 
-export type RowType = "home" | "kind" | "topics" | "topic" | "past" | "memory" | "file" | "now" | "journal" | "month" | "day" | "entry" | "index";
+type RowType = "home" | "kind" | "topics" | "topic" | "past" | "memory" | "file" | "now" | "journal" | "month" | "day" | "entry" | "index";
 export interface TreeNode {
   /** unique per row (open state, keyboard cursor) */
   key: string;
@@ -80,8 +80,8 @@ export const LIMIT = 50;
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 export const topicKey = (a: string) => a.trim().toLowerCase();
 export const kindFolderId = (home: string, k: MemoryKind) => `${home}|k:${k}`;
-export const pastId = (home: string) => `${home}|past`;
-export const topicsId = (home: string) => `${home}|t`;
+const pastId = (home: string) => `${home}|past`;
+const topicsId = (home: string) => `${home}|t`;
 export const JOURNAL = "j";
 export const VERSIONS = "v";
 export const entryId = (e: JournalEntry) => `j:${e.id}`;
@@ -98,8 +98,8 @@ export function monthLabel(at: number) {
   return d.toLocaleDateString(locale(), d.getFullYear() === new Date().getFullYear() ? { month: "long" } : { year: "numeric", month: "long" });
 }
 /** a 작업 기록 folder: "2026년 11월" / "Nov 2026", "11월 9일" / "Nov 9" (the folders on disk stay 202611 / 09) */
-export const monthFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { year: "numeric", month: "short" } : { year: "numeric", month: "long" });
-export const dayFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { month: "short", day: "numeric" } : { month: "long", day: "numeric" });
+const monthFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { year: "numeric", month: "short" } : { year: "numeric", month: "long" });
+const dayFolder = (at: number) => new Date(at).toLocaleDateString(locale(), lang() === "en" ? { month: "short", day: "numeric" } : { month: "long", day: "numeric" });
 export function dayLabel(at: number, withMonth = false) {
   const d = new Date(at);
   const k = dayKey(at);
@@ -114,7 +114,7 @@ export const homeName = (h: { label: string; hint?: string }) => (h.hint ? `${h.
 /** the person's home folder ("~", /Users/me, /home/me) */
 const isHomeDir = (dir: string) => !dir || dir === "~" || /^\/(Users|home)\/[^/]+\/?$/.test(dir);
 /** the folder a path sits in, as a short path: "~" (the home folder), "~/work", "~/…/01_Projects", "/…/srv" */
-export const parentPath = (p: string) => {
+const parentPath = (p: string) => {
   const parts = p.replace(/\/+$/, "").split("/");
   parts.pop();
   const dir = parts.join("/");
@@ -143,7 +143,7 @@ export interface Input {
   journalName?: (title: string, id: string) => string;
 }
 
-export const entryMatches = (e: JournalEntry, s: string) => [e.title, e.ask, e.text].some((x) => x.toLowerCase().includes(s));
+const entryMatches = (e: JournalEntry, s: string) => [e.title, e.ask, e.text].some((x) => x.toLowerCase().includes(s));
 
 /** Homes, topics and the folder tree. `match` keeps only what a search finds. */
 export function buildModel(inp: Input, match?: (m: Memory) => boolean, q = ""): Model {
@@ -324,11 +324,10 @@ export function homeChain(model: Model, id: string): Home[] {
 
 /** the folder a piece is filed in (its kind folder, or 지난 기억) */
 export const folderOf = (homeId: string, m: Memory) => (isLive(m) ? kindFolderId(homeId, kindOf(m)) : pastId(homeId));
-export const homeIdOf = (m: Memory, expand: (p: string) => string) => (m.scope === "global" ? "g" : m.scope === "space" ? `s:${m.space}` : `p:${expand(m.project ?? "기타")}`);
 
 // ───────────── graph
 
-export type GKind = "global" | "space" | "project" | "folder" | "past" | "topics" | "topic" | "memory" | "file" | "entry";
+type GKind = "global" | "space" | "project" | "folder" | "past" | "topics" | "topic" | "memory" | "file" | "entry";
 export interface GNode {
   id: string;
   kind: GKind;

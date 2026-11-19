@@ -4,7 +4,7 @@ import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY
 import { arr, isObj, toNum, toStr } from "./text";
 
 export interface GNode { id: string; label: string; group?: string; value?: number; em?: boolean; note?: string }
-export interface GLink { from: string; to: string; value: number; em?: boolean; label?: string }
+interface GLink { from: string; to: string; value: number; em?: boolean; label?: string }
 export interface Graph { nodes: GNode[]; links: GLink[]; groups: string[]; directed: boolean }
 
 /** nodes + links, forgiving: ids from either side, unknown ends become nodes, duplicates merge (undirected) */
@@ -40,7 +40,7 @@ export function degrees(g: Graph): Map<string, number> {
   return d;
 }
 
-export interface Placed extends GNode { x: number; y: number; r: number; deg: number }
+interface Placed extends GNode { x: number; y: number; r: number; deg: number }
 
 /**
  * Force layout computed to rest and fitted into w×h (minus `pad`). Same input → same
@@ -84,7 +84,7 @@ export function forceLayout(g: Graph, w: number, h: number, opt: { pad?: number;
 }
 
 /** scale points (keeping aspect) into the box */
-export function fitPoints<T extends { x: number; y: number }>(ps: T[], w: number, h: number, pad: number): T[] {
+function fitPoints<T extends { x: number; y: number }>(ps: T[], w: number, h: number, pad: number): T[] {
   if (!ps.length) return ps;
   const xs = ps.map((p) => p.x);
   const ys = ps.map((p) => p.y);
@@ -124,7 +124,7 @@ export function bundleTree(g: Graph): { name: string; children: { name: string; 
   return { name: "", children: [...groups.entries()].map(([name, children]) => ({ name, children })) };
 }
 
-export interface EgoNode extends GNode { ring: number; angle: number; parent?: string; deg: number }
+interface EgoNode extends GNode { ring: number; angle: number; parent?: string; deg: number }
 
 /**
  * Ego network: the centre, its neighbours (ring 1) and, if `depth` is 2, their other

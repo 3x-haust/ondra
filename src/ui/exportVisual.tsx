@@ -36,7 +36,7 @@ function backdrop(el: Element): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export async function svgPng(svg: SVGSVGElement, scale = 2): Promise<Blob> {
+async function svgPng(svg: SVGSVGElement, scale = 2): Promise<Blob> {
   const vb = svg.viewBox.baseVal;
   const w = vb?.width || svg.clientWidth;
   const h = vb?.height || svg.clientHeight;

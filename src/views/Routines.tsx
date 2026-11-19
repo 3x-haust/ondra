@@ -15,7 +15,7 @@ import { EmptyState, PageHead, Switch_ } from "./Settings";
 
 /** the routine the page opens with (a chat card's 수정) */
 export const [editing, setEditing] = createSignal<string | null>(null);
-export const openRoutine = (id: string) => (setEditing(id), setView({ name: "settings", tab: "routines" }));
+const openRoutine = (id: string) => (setEditing(id), setView({ name: "settings", tab: "routines" }));
 
 const DAYS = ["일|day", "월|day", "화|day", "수|day", "목|day", "금|day", "토|day"];
 type Kind = "daily" | "every" | "once" | "event";

@@ -31,8 +31,8 @@ export const arr = <T = any,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[])
 /** the colour of series i, the "기타" grey from the 9th on */
 export const col = series;
 
-export type Pad = { t?: number; r?: number; b?: number; l?: number };
-export interface AxisSpec {
+type Pad = { t?: number; r?: number; b?: number; l?: number };
+interface AxisSpec {
   domain: [number, number];
   log?: boolean;
   title?: string;
@@ -80,7 +80,7 @@ function ticksOf(s: AxisSpec, sc: any, count: number): { major: number[]; minor:
 export const edge = (x: number, w: number, W: number) => (x + w / 2 > W ? "end" : x - w / 2 < 0 ? "start" : "middle");
 /** 10ⁿ for log axes when the numbers get long */
 const sup = (n: number) => String(n).split("").map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+c] ?? (c === "-" ? "⁻" : c)).join("");
-export function logFmt(v: number): string {
+function logFmt(v: number): string {
   const e = Math.log10(v);
   if (Math.abs(e - Math.round(e)) < 1e-9 && (e >= 5 || e <= -3)) return `10${sup(Math.round(e))}`;
   return v >= 1e4 ? compact(v) : num(v);
@@ -278,14 +278,14 @@ export function RowPlot(props: {
  * Category labels under vertical bands: straight when they fit, else tilted and cut.
  * Returns the extra bottom margin it needs for the given band width.
  */
-export function catLayout(cats: string[], band: number): { tilt: boolean; max: number; extra: number } {
+function catLayout(cats: string[], band: number): { tilt: boolean; max: number; extra: number } {
   const widest = Math.max(0, ...cats.map((c) => tw(c)));
   if (widest <= band - 6) return { tilt: false, max: band - 6, extra: 0 };
   const max = Math.min(110, Math.max(36, widest));
   if (band >= 26 && widest <= band * 2 - 8) return { tilt: false, max: band - 6, extra: 0 };
   return { tilt: true, max, extra: Math.ceil(max * 0.6) };
 }
-export function CatAxis(props: { cats: string[]; x: (i: number) => number; y: number; band: number }) {
+function CatAxis(props: { cats: string[]; x: (i: number) => number; y: number; band: number }) {
   const lay = () => catLayout(props.cats, props.band);
   return (
     <g class="viz-axis">

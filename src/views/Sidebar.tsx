@@ -29,7 +29,7 @@ import { Fold } from "../ui/Fold";
 import { archiveTask, togglePin } from "../engine/tasks";
 import { t as tr } from "../i18n";
 
-export type Bucket = "you" | "failed" | "review" | "work" | "done";
+type Bucket = "you" | "failed" | "review" | "work" | "done";
 
 /** What a job needs from you. A subagent waiting on you pulls its job up.
  *  Failed is its own bucket: never counted or shown as 응답 필요. */
@@ -44,10 +44,10 @@ export function bucket(t: Task): Bucket {
   return "work";
 }
 /** needs you: a reply, a failure to look at, or a merge (내 차례) */
-export const needsYou = (t: Task) => bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review";
+const needsYou = (t: Task) => bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review";
 
 /** Jobs of a space, most urgent first (the order ⌘⇧[ ] walks). */
-export function forkOrder(space: string): Task[] {
+function forkOrder(space: string): Task[] {
   const order: Bucket[] = ["you", "failed", "review", "work", "done"];
   return tasksShown(space as Task["space"])
     .filter((t) => !t.parentId && !t.answer)

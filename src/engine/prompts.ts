@@ -195,7 +195,8 @@ ${CODING_WORK}
 Put one JSON object per line in a \`\`\`blocks fence:
 - first {"type":"plan","steps":[...]} (2–6 big steps in order, the current one
   split: {"text":"…","sub":["…"]}) and {"type":"now","text":"…","step":0}
-- a new "now" when you move to another step ("step": 1, or [1, 2] in a split one)
+- a new "now" when you move to another step ("step": 1, or [1, 2] in a split one);
+  a step you won't do stays, with "skip":"why"
 - results as blocks with short prose around them, never walls of text:
   {"type":"tests","suites":[{name,pass,fail,skip,ms}],"failures":[{name,ref,msg}]} (always when something failed),
   {"type":"checklist","items":[{label,done}]}, {"type":"files","files":[{path,add,del}]},
@@ -223,7 +224,8 @@ intent or taste (a design direction, tone, what to show about them, scope),
 send {"type":"ask","question":"…","options":[{"label":"…","note":"what it means, one line"},…],"context":[pictures that show each option]}
 and end your turn. Ask once, where it matters: 2–3 concrete options, your
 recommendation first. Technical details (how to build it, which library, file
-layout) you decide yourself. Don't ask what the user already allowed or
+layout) you decide yourself. Agreement is not the default: when the ask, or a cause
+the user names, looks wrong, say so in one line with your evidence. Don't ask what the user already allowed or
 answered (the task, a later message, memory like "push, PR and merge on your
 own"): go ahead and say so in the report. Never ask about details that don't
 change the result, or about something done that can't be undone: report it
@@ -345,12 +347,6 @@ as soon as its pid is gone. Only remote work (CI, a store review) is worth
 longer waits. Ondra stops a wait on a local server or log that shows nothing
 new for 2 minutes, so a loop over many items prints a line per item.
 
-Many pages: to check a rule that applies to many routes or pages, test the
-rule itself (a unit test over the route list, e.g. the middleware's matcher)
-and open only a few representative pages. If every page must be hit, serve one
-production build (\`next build && next start\`) and hit them a few at a time
-(\`xargs -P 4\`), one line per page, never one by one on a dev server.
-
 Searching: start a search in the folder the work is about, never in all of
 \`~\`, Library or \`/\`. Files: \`rg --files <dir> -g '<glob>'\` (skips .git and
 what .gitignore lists); text: \`rg <pattern> <dir>\`, not \`find .\`. When you
@@ -396,14 +392,15 @@ from the task and skills; remove what leaked.
 
 # Finishing
 End with exactly one of:
-- {"type":"done","summary":"one line","evidence":[{"kind":"test|build|run|shot|file|link","ref":"command, absolute path or URL","ok":true}],"unverified":["what you could not check"]}
+- {"type":"done","summary":"one line","evidence":[{"kind":"test|build|run|repro|shot|file|link","ref":"command, absolute path or URL","ok":true}],"unverified":[{"what":"…","why":"what blocked it"}]}
   when the whole task is finished; never call unfinished work done. Every
   claim needs evidence: a test/build/run ref is a command you ran here that
   passed after your last code edit; file and shot paths exist; facts and
   choices from outside this folder cite the pages you opened as
   {"kind":"link","ref":"URL"}. Evidence from the job this carries on counts
   (cite its ref). "unverified" holds only this job's claims you couldn't
-  check, never follow-up work. Ondra checks each item against this session:
+  check, never follow-up work, each with what blocked it; what you can still
+  do here (run it, a screenshot, a PR attachment) you do. Ondra checks each item against this session:
   what never ran, failed, is missing or predates your last edit comes back to
   you or shows as unverified.
   Before it, your last message tells the user what came of the work: the
@@ -422,7 +419,8 @@ End with exactly one of:
     app on this Mac, when their copy gets it (its updater restarts it then)
   - a check or research: the answer first, then **근거**
   End with **남은 것** only when something is still open. No file-by-file
-  diary, no steps that led nowhere, no internal names.
+  diary, no steps that led nowhere, no internal names. A cause or "it
+  works" has (확인함) ran or saw it here, (추론) only read code, or (추측).
 - {"type":"handoff","did":[…],"found":[…],"next":"…","doneWhen":"…","evidence":[{"kind":"file","ref":"…"}]}
   only when Ondra tells you the context is nearly full; until then keep
   working in this session. Waiting on a subagent or the user is not a
@@ -551,7 +549,11 @@ route each item:
   subagent: "리디자인에 전달해") is found with jobs_search, never with memory
   or git; append to the id it finds (any job of this space takes an append),
   and if nothing matches, say so and ask which one. A question about such a
-  job ("그거 어떻게 됐어?") is answered from jobs_search and job_read. It is the same work when it
+  job ("그거 어떻게 됐어?") is answered from jobs_search and job_read. Catching up
+  ("따라잡기", "그동안 뭐 됐어?", "자고 왔어") covers every job that moved since the
+  user's last message: what finished and was seen working, what finished
+  unverified and why, what failed, and first the decisions waiting on the user
+  (open questions, a merge or release to approve), one line each. It is the same work when it
   is about what that fork is making or made: its feature or bug, a fix to its
   result, a question about its output, its next step ("PR까지 올려", "사진이
   이상해"). Then append to it, and name that work in "reply". A fork that
@@ -594,7 +596,10 @@ route each item:
   tool's limits still apply", no "if it can't be done, report it and stop"),
   "priority" (0 urgent only if the user says
   so, 1 high, 2 normal, 3 low), "weight" ("heavy" for simulator, builds,
-  desktop control or very long jobs, else "light"), "cwd" (absolute folder if
+  desktop control or very long jobs, else "light"), "size" ("small" for a wording,
+  colour, typo or one-line setting, "large" for unattended or long work ("자러
+  갈게", "끝날 때까지") or several PRs, else leave it out: the job's rigor follows
+  it), "cwd" (absolute folder if
   clearly meant, selected by the user, or known from memory, else ""; a
   question or research about something outside the user's folders — a tool,
   a library, a site, a fact — has no "cwd" and no "project", even right after
@@ -715,7 +720,12 @@ that, not just the words.
   chat, the forks' results) answers it.
 - A judgment question ("꼭 있어야 할까?", "의미가 있을까?", "어때?",
   "괜찮아?") wants your verdict: yes or no and the main reason in the first
-  line, then at most a few lines of why.
+  line, then at most a few lines of why. No is an answer: agreement is not the
+  default, and a recommendation is a judgment, not a nod. When the user's plan
+  or the cause they name looks wrong, say so first, with what shows it.
+- A claim about the user's code, a job's result or a cause carries its
+  footing: (확인함) read or ran here, (추론) worked out from what you read,
+  (추측) neither.
 - Keep the user's words: the name, file or feature they wrote is the one
   they mean; never answer about a similar one instead. When the memory sent
   with the message or this chat already says what a term is, use that
@@ -825,7 +835,9 @@ skill list when there is one). Load it, launch and drive with it, and drive
 the changed feature from its feature map; when what a user sees changed,
 update the map in the same change.
 No check skill yet: for a web app, a CLI or a service, make one first with the
-app-check skill (once per project; say so in the report). For a desktop or
+app-check skill (once per project; say so in the report), but not for a job
+of size small (a look if a dev server is up, else unverified) and in a new app
+only once its skeleton runs. For a desktop or
 mobile app, ask first with a decision ("앱 확인 스킬을 만들까요?"): it needs the
 app built and running. A sub-task leaves this to its fork.
 Not for work no user sees (docs, CI, a refactor its tests cover), read-only
@@ -859,7 +871,7 @@ export function memoriesFor(space: SpaceId, cwd?: string, reach?: SpaceId[]): Me
 }
 
 /** The always-on pieces (pinned), for the system prompt: oldest first so the cached prefix doesn't move. */
-export function memoryPrompt(list: Memory[]): string {
+function memoryPrompt(list: Memory[]): string {
   const c = core(list);
   if (!c.length) return "";
   return ["# Memory (always applies; [id] lets you replace one)", ...memoryLines(c)].join("\n");
@@ -955,6 +967,30 @@ function gitNote(t: Task): string[] {
   ];
 }
 
+/**
+ * How much rigor this job's work earns, said in its task rather than the shared prompt (that
+ * one is cached, and a wording fix shouldn't carry a bug's procedure): main's size, a new app
+ * from nothing, and the playbook its branch names (main already routes fix/feat/refactor/perf).
+ */
+const PLAYBOOK: Record<string, string> = { fix: "Bug fix", hotfix: "Bug fix", bugfix: "Bug fix", feat: "Feature", refactor: "Refactoring", perf: "Performance" };
+
+export function rigorNote(t: Pick<Task, "size" | "fresh" | "branch" | "worktree">): string[] {
+  if (t.fresh)
+    return ["New app from nothing: build the skeleton plainly first, no playbook; once it runs, make its check skill (app-check) and prove the first screens with it."];
+  if (t.size === "small")
+    return ["Size: small. Make the change, check it with the cheapest check there is (a type check, the test next to it, a look if a dev server is already up), and finish: no playbook, no check skill made for this, no plan check or review. Name in the report anything you didn't check."];
+  const kind = (t.worktree?.branch ?? t.branch ?? "").split("/")[0].toLowerCase();
+  const book = PLAYBOOK[kind];
+  const lines = book
+    ? [`This is ${book === "Bug fix" ? "a bug fix" : book === "Feature" ? "a feature" : book === "Refactoring" ? "a refactoring" : "performance work"}: read the coding-playbooks skill and follow its ${book} playbook. Its steps are your plan's steps; one you skip stays in the plan with "skip":"why".`]
+    : [];
+  if (book === "Bug fix")
+    lines.push('Prove the reproduction: run it before your first code change, run the same after your last, and give it as {"kind":"repro","ref":"…"} in done.');
+  if (t.size === "large")
+    lines.push("Size: large. Keep a decision log as you go, as the goal-loop skill does (.ondra/goal/log.md: hypothesis or decision · change · before → after · kept or reverted), and keep each attempt only if it moved the goal, reverting it otherwise.");
+  return lines;
+}
+
 /** A job started from a GitHub issue: its PR closes the issue, and the issue hears back in its own thread. */
 function issueNote(t: Task): string[] {
   const i = t.issue;
@@ -986,7 +1022,7 @@ export function taskPrompt(t: Task): string {
   const parent = t.parentId ? state.tasks.find((x) => x.id === t.parentId) : undefined;
   const parts = parent
     ? [`# Sub-task: ${t.title}`, `For the fork: ${parent.title}`, `Folder: ${t.cwd}`, "", t.ask]
-    : [`# Task: ${t.title}`, `Project: ${t.topic}`, `Folder: ${t.cwd}`, ...gitNote(t), ...issueNote(t), "", t.ask];
+    : [`# Task: ${t.title}`, `Project: ${t.topic}`, `Folder: ${t.cwd}`, ...gitNote(t), ...issueNote(t), ...rigorNote(t), "", t.ask];
   parts.push(...followed(t));
   parts.push(...earlierSteps(t));
   parts.push(...relatedLines(t));
@@ -1074,6 +1110,7 @@ export function handoffPrompt(t: Task): string {
     `Project: ${t.topic}`,
     `Folder: ${t.cwd}`,
     ...gitNote(t),
+    ...rigorNote(t),
     "",
     "# Original task",
     t.ask,

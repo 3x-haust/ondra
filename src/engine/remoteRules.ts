@@ -17,7 +17,7 @@ export interface Reach {
 type ById = (id: string) => Task | undefined;
 
 /** a job's top job (a subagent's parent, up the line) */
-export function rootOf(t: Task, byId: ById): Task {
+function rootOf(t: Task, byId: ById): Task {
   let x: Task = t;
   for (let i = 0; x.parentId && i < 20; i++) x = byId(x.parentId) ?? x;
   return x;

@@ -10,7 +10,7 @@ import { expand } from "../engine/rpc";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 import { t } from "../i18n";
 
-export interface OpenLinkOpts {
+interface OpenLinkOpts {
   /** the click (or key) that opened it: ⌘ or ⌥ held sends it to the default browser */
   event?: { metaKey?: boolean; altKey?: boolean };
   /** it needs the real browser (an app sign-in, a device code page) */
@@ -21,7 +21,7 @@ export interface OpenLinkOpts {
 const panelHere = () => view().name === "main" || view().name === "task";
 
 /** Where a link would open now. */
-export const linkRoute = (url: string, opts: OpenLinkOpts = {}): LinkRoute =>
+const linkRoute = (url: string, opts: OpenLinkOpts = {}): LinkRoute =>
   routeLink(url, {
     setting: state.settings.links,
     outsideKey: !!(opts.event?.metaKey || opts.event?.altKey),
@@ -43,7 +43,7 @@ export function openLink(url: string, opts: OpenLinkOpts = {}): LinkRoute {
 }
 
 /** The default browser, whatever the setting. */
-export const openOutside = (url: string) => void openExternal(url);
+const openOutside = (url: string) => void openExternal(url);
 
 /** A web link's right-click menu: open here, in the default browser, copy. */
 export function linkMenuItems(url: string): MenuEntry[] {

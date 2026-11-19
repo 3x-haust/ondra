@@ -8,7 +8,7 @@
 //! (`ONDRA_BROWSER_CDP` + `ONDRA_BROWSER_PIN_TAB`): a fresh pinned session
 //! opens a new tab instead of taking one that is already there, so jobs never
 //! drive each other's pages, while cookies and storage are the profile's and
-//! are shared. A login made once (by a job or by the user in the Browser view)
+//! are shared. A login made once (by a job, or by the user in a job's tab)
 //! holds for every job and survives restarts.
 //!
 //! Only one Chrome may own a profile, so there is one process per space: it is
@@ -346,80 +346,6 @@ pub fn attach_env(port: u16, session: &str) -> Vec<(String, String)> {
         ("ONDRA_BROWSER_IDLE_TIMEOUT_MS".into(), IDLE_MS.into()),
         ("ONDRA_BROWSER_SESSION".into(), session.into()),
     ]
-}
-
-// ───────────── the Browser view: Ondra's own tab in the shared browser ─────────────
-
-fn view_session(port: u16) -> String {
-    format!("ondra-{port}")
-}
-
-fn view_command(app: &AppHandle, port: u16) -> Option<Command> {
-    let mut cmd = crate::tools::browser_command(app)?;
-    for (k, v) in attach_env(port, &view_session(port)) {
-        cmd.env(k, v);
-    }
-    cmd.stdin(Stdio::null()).stderr(Stdio::null());
-    Some(cmd)
-}
-
-fn stream_port(mut cmd: Command) -> Option<u16> {
-    let out = cmd.args(["stream", "status", "--json"]).output().ok()?;
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-    let data = v.get("data")?;
-    if data.get("connected").and_then(|c| c.as_bool()) != Some(true) {
-        return None;
-    }
-    data.get("port").and_then(|p| p.as_u64()).map(|p| p as u16)
-}
-
-/// Start (or find) the shared browser and the view's tab; the tab's live stream port.
-#[tauri::command]
-pub async fn shared_browser_open(app: AppHandle, space: Option<String>) -> Result<u16, String> {
-    let space = space.unwrap_or_default();
-    tauri::async_runtime::spawn_blocking(move || {
-        let port = ensure(&app, &space)?;
-        let cmd = || view_command(&app, port).ok_or_else(|| "브라우저 도구를 찾을 수 없어요".to_string());
-        // the view's tab can be closed under it (a job closing tabs): then the stream
-        // stays up with nothing to show, so bind a new tab first
-        let has_tab = cmd()?.args(["get", "url"]).stdout(Stdio::null()).status().is_ok_and(|s| s.success());
-        if !has_tab {
-            let _ = cmd()?.args(["tab", "new", "about:blank"]).stdout(Stdio::null()).status();
-        }
-        if let Some(p) = stream_port(cmd()?) {
-            return Ok(p);
-        }
-        // connecting opens the view's own tab; streaming may already be on
-        let _ = cmd()?.args(["stream", "enable"]).stdout(Stdio::null()).status();
-        stream_port(cmd()?).ok_or_else(|| "화면을 받을 수 없어요".to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-/// Drive the view's tab: open a URL, or go back / forward / reload.
-#[tauri::command]
-pub async fn shared_browser_go(app: AppHandle, action: String, url: Option<String>, space: Option<String>) -> Result<(), String> {
-    let space = space.unwrap_or_default();
-    tauri::async_runtime::spawn_blocking(move || {
-        let port = ensure(&app, &space)?;
-        let mut cmd = view_command(&app, port).ok_or("브라우저 도구를 찾을 수 없어요")?;
-        match action.as_str() {
-            "open" => {
-                let url = url.filter(|u| u.starts_with("http://") || u.starts_with("https://")).ok_or("주소가 올바르지 않아요")?;
-                cmd.args(["open", &url]);
-            }
-            "back" | "forward" | "reload" => {
-                cmd.arg(&action);
-            }
-
-            _ => return Err("unknown action".into()),
-        }
-        let ok = cmd.stdout(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
-        if ok { Ok(()) } else { Err("페이지를 열 수 없어요".into()) }
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// A job ended: close its tab and its session (the profile, and so the logins, stay).

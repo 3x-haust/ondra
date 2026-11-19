@@ -33,7 +33,7 @@ export function togglePet(ids: string[], id: string): string[] {
 }
 
 /** A job's question as the pet carries it: answerable in its bubble when it is a plain choice (at most 3). */
-export function petAsk(d: Decision | undefined) {
+function petAsk(d: Decision | undefined) {
   if (!d || d.ui || !d.options.length || d.options.length > 3) return undefined;
   return { decisionId: d.id, question: d.question, options: d.options.map((o) => ({ id: o.id, label: o.label, primary: o.primary })) };
 }

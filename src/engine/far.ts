@@ -85,7 +85,7 @@ export function farError(e: unknown): string {
 // ───────── pictures, videos and pages: fetched once per version, kept here
 
 /** the biggest file fetched to show (a picture, a video, a page) */
-export const MAX_MEDIA = 48 << 20;
+const MAX_MEDIA = 48 << 20;
 const PIECE = 512 << 10;
 
 const [local, setLocal] = createStore<Record<string, { path?: string; big?: boolean }>>({});
@@ -159,8 +159,8 @@ export function srcOf(path: string, host: Where): string {
 // ───────── a page of that Mac, with what it uses
 
 /** a page brings at most this many files with it, and this much in all */
-export const SITE_FILES = 400;
-export const SITE_BYTES = 200 << 20;
+const SITE_FILES = 400;
+const SITE_BYTES = 200 << 20;
 /** a file read for more links: no bigger than this */
 const SCAN_MAX = 4 << 20;
 
@@ -275,7 +275,7 @@ export const pageTooBig = (path: string, host: Where) => !!host && !!sites[`${ho
 // ───────── attachments: sent to that Mac, its paths given back
 
 /** the biggest attachment sent */
-export const MAX_UPLOAD = 100 << 20;
+const MAX_UPLOAD = 100 << 20;
 
 /** Send files of this Mac to that one (into its attachments folder); the paths there, in order. */
 export async function sendFiles(host: string, files: string[]): Promise<string[]> {

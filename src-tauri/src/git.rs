@@ -573,13 +573,3 @@ fn pr_json(url: &str, env: &[(String, String)], fields: &str, with_diff: bool) -
     out.push('}');
     Ok(out)
 }
-
-/// Throw away uncommitted changes to one file (back to the last commit).
-#[tauri::command]
-pub async fn git_revert_file(cwd: String, path: String) -> Result<(), String> {
-    if run(&cwd, "git", &["ls-files", "--error-unmatch", &path], &[]).is_ok() {
-        run(&cwd, "git", &["checkout", "--", &path], &[]).map(|_| ())
-    } else {
-        std::fs::remove_file(std::path::Path::new(&cwd).join(&path)).map_err(|e| e.to_string())
-    }
-}

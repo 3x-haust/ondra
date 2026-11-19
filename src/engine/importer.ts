@@ -23,7 +23,7 @@ export async function scan() {
 
 const stripFront = (t: string) => t.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
 
-export interface ImportPick {
+interface ImportPick {
   rules: boolean;
   skills: boolean;
   memories: boolean;

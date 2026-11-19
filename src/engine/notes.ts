@@ -24,7 +24,7 @@ export async function readNotes(projectId: string): Promise<string> {
 
 const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 20) : []);
 
-export type NotesBlock = { state?: unknown; todo?: unknown; decisions?: unknown; where?: unknown };
+type NotesBlock = { state?: unknown; todo?: unknown; decisions?: unknown; where?: unknown };
 
 /** The notes as Markdown, from a job's {"type":"notes"} block; undefined when it says nothing. */
 export function notesMarkdown(project: string, by: string, b: NotesBlock, at = new Date()): string | undefined {

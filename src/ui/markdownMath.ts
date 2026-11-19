@@ -8,7 +8,7 @@ type Katex = typeof import("katex").default;
 let lib: Katex | undefined;
 let loading: Promise<Katex> | undefined;
 /** KaTeX and its stylesheet, loaded once */
-export const loadKatex = () =>
+const loadKatex = () =>
   (loading ??= Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(([k]) => (lib = k.default)));
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -16,7 +16,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // the same formula comes back on every streamed update: drawn once
 const drawn = new Map<string, string>();
 /** the formula as HTML, or undefined while KaTeX isn't loaded */
-export function mathHtml(tex: string, display: boolean): string | undefined {
+function mathHtml(tex: string, display: boolean): string | undefined {
   if (!lib) return undefined;
   const key = `${display ? "D" : "I"}${tex}`;
   let html = drawn.get(key);

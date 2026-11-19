@@ -5,11 +5,11 @@
 
 /** inside: the panel's browser. outside: the system's default browser (or the app for the scheme).
  *  file: the app's file viewer (outside = Finder). none: nothing to open. */
-export type LinkPlace = "inside" | "outside" | "file" | "none";
+type LinkPlace = "inside" | "outside" | "file" | "none";
 /** Settings › 일반 › 링크 열기 */
-export type LinkSetting = "inside" | "outside";
+type LinkSetting = "inside" | "outside";
 
-export interface LinkContext {
+interface LinkContext {
   /** the user's choice; inside when not set */
   setting?: LinkSetting;
   /** ⌘ or ⌥ held on the click: the default browser this time */
@@ -37,12 +37,12 @@ const SIGN_IN_HOSTS = new Set(["accounts.google.com", "appleid.apple.com", "logi
 const DEVICE_PAGES = /^(github\.com\/login\/(device|oauth)|microsoft\.com\/devicelogin|www\.microsoft\.com\/devicelogin)/i;
 
 /** A local path a link can mean: /abs, ~/x, file:///abs. */
-export const isPath = (s: string) => /^(\/|~\/|~$|file:\/\/)/.test(s);
+const isPath = (s: string) => /^(\/|~\/|~$|file:\/\/)/.test(s);
 /** An http(s) address. */
 export const isWeb = (s: string) => /^https?:\/\/[^\s/]/i.test(s.trim());
 
 /** An OAuth or device sign-in: the provider wants the system's browser (and its callback). */
-export function isSignIn(u: URL): boolean {
+function isSignIn(u: URL): boolean {
   if (SIGN_IN_HOSTS.has(u.hostname.toLowerCase())) return true;
   if (DEVICE_PAGES.test(`${u.hostname}${u.pathname}`)) return true;
   const q = u.searchParams;

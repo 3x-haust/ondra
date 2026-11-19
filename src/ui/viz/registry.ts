@@ -4,7 +4,7 @@ import type { JSX } from "solid-js";
 
 export type VizFamily = "stat" | "chart" | "relation" | "slide";
 
-export interface VizSpec<B = any> {
+interface VizSpec<B = any> {
   /** the block's "type" the agent writes */
   type: string;
   family: VizFamily;

@@ -36,7 +36,7 @@ export const Tag = (p: { state?: State }) => (
   </Show>
 );
 
-export const STATUS_WORD: Record<Status, string> = { good: "달성", warn: "주의", bad: "미달" };
+const STATUS_WORD: Record<Status, string> = { good: "달성", warn: "주의", bad: "미달" };
 const STATUS_ICON: Record<Status, string> = { good: "check", warn: "minus", bad: "x" };
 /** a status as a filled dot with its glyph and word */
 export const StatusMark = (p: { s: Status; word?: string; bare?: boolean }) => (

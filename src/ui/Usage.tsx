@@ -55,31 +55,6 @@ const left = (ms: number) => {
   return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
 };
 
-/** Live plan windows for an account, under the input. */
-export function LimitBar(props: { accountId: string }) {
-  onMount(() => void refreshLimits(props.accountId));
-  const list = () => limitsShown(props.accountId);
-  return (
-    <Show when={list().length}>
-      <div class="limit-bar">
-        <For each={list()}>
-          {(l) => (
-            <span class="limit" classList={{ hot: l.used >= 80 && !creditsOf(props.accountId) }} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
-              <span class="limit-name">{windowLabel(l.window)}</span>
-              <span class="limit-track"><i style={{ width: `${Math.min(100, l.used)}%` }} /></span>
-              <span class="limit-num">{Math.round(l.used)}%</span>
-              <Show when={l.resetsAt}><span class="limit-reset">{t("{t} 후", { t: left(l.resetsAt! - Date.now()) })}</span></Show>
-            </span>
-          )}
-        </For>
-        <Show when={creditsOf(props.accountId)}>
-          {(c) => <span class="limit limit-credits" title={t("요금제 한도 이후 사용")}><span class="limit-name">{t("크레딧")}</span><span class="limit-num">{c()}</span></span>}
-        </Show>
-      </div>
-    </Show>
-  );
-}
-
 /**
  * The status line under an input, like a terminal agent's footer:
  * account · plan windows · context used · permission · shells · branch.

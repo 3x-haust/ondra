@@ -17,8 +17,8 @@ import { TaskView } from "./TaskView";
 import { t } from "../i18n";
 
 /** the least a pane may get: a chat column with its input, and a header that still fits */
-export const MIN_W = 360;
-export const MIN_H = 220;
+const MIN_W = 360;
+const MIN_H = 220;
 const MAIN: View = { name: "main" };
 
 // ───────────── what a pane shows

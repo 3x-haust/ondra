@@ -246,11 +246,6 @@ pub fn pet_opened() -> Vec<String> {
     OPENED.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
 }
 
-#[tauri::command]
-pub fn pet_folder(app: AppHandle) -> String {
-    pets_dir(&app).display().to_string()
-}
-
 /// most pets on screen at once
 const MAX_PETS: usize = 5;
 

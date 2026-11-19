@@ -96,7 +96,7 @@ function uses(): Map<string, number> {
 /** light / cheap tiers go after the full ones */
 const small = (p: Parsed) => (/haiku|mini|nano|lite|flash|luna/.test(p.family) ? 1 : 0);
 
-export type Ranked = { often: string[]; latest: [provider: string, models: string[]][]; older: string[] };
+type Ranked = { often: string[]; latest: [provider: string, models: string[]][]; older: string[] };
 
 export function rankModels(list: string[]): Ranked {
   const used = uses();

@@ -163,11 +163,6 @@ fn toggle_capture(app: &AppHandle) {
 }
 
 #[tauri::command]
-fn open_capture(app: AppHandle) {
-    toggle_capture(&app);
-}
-
-#[tauri::command]
 fn hide_capture(app: AppHandle) {
     if let Some(w) = app.get_webview_window("capture") {
         let _ = w.hide();
@@ -412,10 +407,8 @@ pub fn run() {
             update::update_prepare,
             components::components_status,
             components::components_wait,
-            open_capture,
             hide_capture,
             pet::pet_list,
-            pet::pet_folder,
             pet::pet_delete,
             pet::pet_export,
             pet::pet_import,
@@ -439,7 +432,6 @@ pub fn run() {
             engine::agent_alive,
             engine::engine_models,
             pty::pty_open,
-            pty::pty_open_login,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_close,
@@ -450,10 +442,8 @@ pub fn run() {
             store::memory_folder,
             store::artifacts_list,
             store::reverse_trace,
-            store::state_save,
             store::state_save_parts,
             store::state_flushed,
-            store::artifacts_dir,
             store::pick_folder,
             store::reveal_path,
             store::open_url,
@@ -548,11 +538,8 @@ pub fn run() {
             git::gh_issues,
             git::gh_watch,
             git::gh_issue,
-            git::git_revert_file,
             tools::browser_stream_port,
-            browser::shared_browser_open,
             browser::browser_check,
-            browser::shared_browser_go,
             inbrowser::inbrowser_show,
             inbrowser::inbrowser_hide,
             inbrowser::inbrowser_go,

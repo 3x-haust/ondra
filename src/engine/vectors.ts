@@ -44,7 +44,7 @@ function save() {
 
 let busy = false;
 /** Vectors for pieces that have none or whose text changed. */
-export async function indexMemory() {
+async function indexMemory() {
   if (!inTauri || busy) return;
   load();
   busy = true;

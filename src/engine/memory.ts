@@ -82,7 +82,7 @@ const overlap = (a: Set<string>, b: Set<string>) => {
 };
 
 /** One piece per line or bullet; a long line is cut at sentence ends. */
-export function atoms(text: string): string[] {
+function atoms(text: string): string[] {
   const lines = text
     .split(/\n+/)
     .map((l) => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, "").trim())
@@ -95,7 +95,7 @@ export function atoms(text: string): string[] {
   return out.filter((s) => s.length >= 3).map((s) => (s.length > 300 ? `${s.slice(0, 299)}…` : s));
 }
 
-export function guessKind(t: string): MemoryKind {
+function guessKind(t: string): MemoryKind {
   if (/(결정|기로\s?(했|정했|함|해요)|정했|골랐|decided|chose)/i.test(t)) return "decision";
   if (/(하지\s?마|하지 않|않아요|금지|절대|항상|반드시|무조건|꼭\s|해야|으?로 해요|never|always|don't|do not|must)/i.test(t)) return "rule";
   if (/(좋아|싫어|선호|원해|원함|편해|prefer|like)/i.test(t)) return "preference";
@@ -118,7 +118,7 @@ export function strength(m: Memory, now = Date.now()): number {
   return Math.pow(0.5, Math.max(0, days) / half);
 }
 /** the user's own rules and preferences don't fade */
-export const evergreen = (m: Memory) => m.by === "user" && (m.kind === "rule" || m.kind === "preference");
+const evergreen = (m: Memory) => m.by === "user" && (m.kind === "rule" || m.kind === "preference");
 /** written by the user (or brought from their notes): the quiet pass never changes it */
 export const userOwned = (m: Memory) => m.by === "user" || (m.by === undefined && m.source !== "ondra");
 /** ranks lower and shows faint */
@@ -177,7 +177,7 @@ export const slug = (t: string) =>
  * "this time only") are not memory. Only checked for what agents save.
  */
 const ONE_OFF = /(\/tmp\/|\/private\/var\/|\/var\/folders\/|localhost:\d+|127\.0\.0\.1:\d+|\b\d{1,3}(\.\d{1,3}){3}:\d+|\b[0-9a-f]{16,}\b|\bpid\s*\d+|이번만|이번 한 ?번|오늘만|임시로|for now|this time only|temporarily)/i;
-export const oneOff = (t: string) => ONE_OFF.test(t);
+const oneOff = (t: string) => ONE_OFF.test(t);
 
 /** glob → RegExp ("**" any depth, "*" one segment) */
 const globRe = (g: string) =>
@@ -231,7 +231,7 @@ export const inSpace = (m: Memory, space: SpaceId, reach: SpaceId[] = []) => {
 };
 
 /** The space a skill belongs to: its own, or (a skill grown before skills carried one) the space of the memory it grew from. */
-export const skillSpace = (s: Skill): SpaceId | undefined => {
+const skillSpace = (s: Skill): SpaceId | undefined => {
   if (s.space) return s.space;
   if (s.source !== "ondra") return undefined;
   const m = state.memory.find((x) => x.skill === s.name);
@@ -595,7 +595,6 @@ export function memoryFileNames(list: Memory[]): Map<string, string> {
 }
 /** A 일 기록 entry's file name (without .md). */
 export const journalFileName = (title: string, id: string) => safe(title).slice(0, 48) || id;
-export const safeName = (t: string) => safe(t);
 
 function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
   const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
@@ -743,7 +742,7 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
  * `<space folder>/.ondra/memory` (회사/규칙/x.md → 규칙/x.md, 회사/회사.md → 목차.md);
  * 모든 일, spaces without a folder, the whole 목차 and git versions stay in the app's folder.
  */
-export function mirrorPlan(): { space?: string; files: { path: string; text: string; once?: boolean }[] }[] {
+function mirrorPlan(): { space?: string; files: { path: string; text: string; once?: boolean }[] }[] {
   const all = mirrorFiles();
   const roots = state.spaces
     .filter((sp) => sp.folder && sp.folder !== "~" && sp.folder !== "/")

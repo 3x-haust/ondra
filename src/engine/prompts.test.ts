@@ -4,7 +4,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { appCheckRules, CAPTAIN_SYSTEM, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
+import { appCheckRules, CAPTAIN_SYSTEM, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
 import { REVIEW_FIX } from "./crosscheck";
@@ -86,7 +86,8 @@ describe("coding defaults", () => {
   });
 
   it("checks a rule over many pages by the rule, not by crawling a dev server", () => {
-    const p = flat(TASK_SYSTEM);
+    // in the browser-use skill, read when pages get checked: the always-on prompt has no room for it
+    const p = flat(bundledSkills["../../skills/browser-use/SKILL.md"]);
     for (const rule of ["the middleware's matcher", "a few representative pages", "`next build && next start`", "`xargs -P 4`", "never one by one on a dev server"])
       expect(p).toContain(rule);
   });
@@ -365,5 +366,35 @@ describe("교차 검토 in the task prompt and the review skill", () => {
       '"type":"memory-check"', "`confirmed`", "`contradicted`", "`unchecked`", "a contradiction without a quote is dropped",
     ]) expect(skill).toContain(rule);
     expect(skill).not.toMatch(/left brain|right brain|dual-brain review/i);
+  });
+});
+
+describe("rigor that fits the job", () => {
+  it("gives a small job the cheapest check and no playbook, whatever its branch", () => {
+    const n = rigorNote({ size: "small", branch: "fix/button-colour" }).join("\n");
+    expect(n).toContain("Size: small");
+    expect(n).not.toContain("coding-playbooks");
+    expect(n).not.toContain('"kind":"repro"');
+  });
+
+  it("names the playbook the branch says, and the reproduction for a fix", () => {
+    expect(rigorNote({ branch: "fix/total" }).join("\n")).toMatch(/Bug fix playbook[\s\S]*"kind":"repro"/);
+    expect(rigorNote({ branch: "refactor/plan" }).join("\n")).toContain("Refactoring playbook");
+    expect(rigorNote({ branch: "perf/list" }).join("\n")).toContain("Performance playbook");
+    expect(rigorNote({ branch: "chore/release-1.0.0" })).toEqual([]);
+    expect(rigorNote({})).toEqual([]);
+  });
+
+  it("builds a new app's skeleton first, and logs a large job's decisions", () => {
+    expect(rigorNote({ fresh: true, branch: "feat/app" }).join("\n")).toMatch(/skeleton plainly first, no playbook/);
+    expect(rigorNote({ size: "large", branch: "feat/sync" }).join("\n")).toMatch(/Feature playbook[\s\S]*decision log/);
+  });
+
+  it("lets main size a job, say no, and label what a claim stands on", () => {
+    const p = flat(CAPTAIN_SYSTEM);
+    expect(p).toContain('"size" ("small" for a wording, colour, typo or one-line setting');
+    expect(p).toContain("No is an answer: agreement is not the default");
+    expect(p).toContain("(확인함) read or ran here, (추론) worked out from what you read");
+    expect(flat(TASK_SYSTEM)).toContain("Agreement is not the default");
   });
 });

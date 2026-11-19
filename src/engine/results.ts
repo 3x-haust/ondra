@@ -8,7 +8,7 @@ import type { Block, CaptainMessage, ResultEntry, SpaceId, Task } from "../state
 const MAX = 500;
 
 /** Where a job's latest report starts: after the last thing it was given (a card it asked and got answered is part of that work). */
-export function sinceAsked(t: Task): number {
+function sinceAsked(t: Task): number {
   const answered = (e: Task["entries"][number]) => e.kind === "user" && /^"[^\n]*" → /.test(e.text);
   for (let i = t.entries.length - 1; i >= 0; i--) if (t.entries[i].kind === "user" && !answered(t.entries[i])) return i + 1;
   return 0;

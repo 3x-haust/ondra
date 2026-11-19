@@ -2,7 +2,7 @@
 // launch of the new version shows its notes once (a fresh install shows nothing).
 import { createSignal } from "solid-js";
 
-export interface ReleaseEntry { version: string; date?: number; notes: string; url: string }
+interface ReleaseEntry { version: string; date?: number; notes: string; url: string }
 
 const REPO = "3x-haust/ondra";
 const CACHE = "ondra.releases";

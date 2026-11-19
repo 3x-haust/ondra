@@ -16,16 +16,16 @@ import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
 
 /** "make a pet" the way a skill is asked for: the main chat's input gets the pet skill and words to send, the
  *  words picked so a character's name typed replaces them (sent as is, it makes one that suits the user) */
-export const PET_SKILL = "/skill:pet-maker ";
+const PET_SKILL = "/skill:pet-maker ";
 export const petWords = () => t("나에 대해 아는 걸 바탕으로 어울리는 펫을 만들어서 화면에 띄워 줘");
-export function draftPet() {
+function draftPet() {
   const words = petWords();
   goMain();
   fillDraft(`main:${chatKey(state.space)}`, PET_SKILL + words, [PET_SKILL.length, PET_SKILL.length + words.length]);
 }
 
 /** a pet's name: the one the user gave it, else its own */
-export const petName = (p: PetSpec) => state.settings.pet?.names?.[p.id] || p.name;
+const petName = (p: PetSpec) => state.settings.pet?.names?.[p.id] || p.name;
 
 export function PetSettings() {
   // read again when a pet was made (or made again)

@@ -25,16 +25,16 @@ import { viaHost } from "./hosts";
 /** What a run says, at the start of its last message, when there was nothing to do or report. */
 export const NOTHING = "(루틴: 없음)";
 /** events are looked at this often */
-export const EVENT_EVERY = 5 * 60_000;
+const EVENT_EVERY = 5 * 60_000;
 
 export const routinesIn = (space: SpaceId) => (state.routines ?? []).filter((r) => r.space === space && !r.draft);
 export const routineById = (id: string) => (state.routines ?? []).find((r) => r.id === id);
 
-export function patchRoutine(id: string, patch: Partial<Routine>) {
+function patchRoutine(id: string, patch: Partial<Routine>) {
   setState("routines", (list) => (list ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
 }
 
-export type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled" | "alarm">>;
+type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled" | "alarm">>;
 
 /** A new routine (a draft from the chat waits for the user to save it). Returns its id. */
 export function addRoutine(d: RoutineDraft, now = Date.now()): string {
@@ -272,7 +272,6 @@ export async function tickRoutines(now = Date.now(), o: { alarmsOnly?: boolean }
     polling = false;
   }
 }
-export const resetPolls = () => void (lastPoll = new Map());
 
 /** The routine a job is a run of (a run on another Mac is known by the routine's last job). */
 export const routineOf = (x: Pick<Task, "id" | "routine">) => (x.routine ? routineById(x.routine) : undefined) ?? (state.routines ?? []).find((r) => r.lastTask === x.id);
@@ -348,11 +347,6 @@ export function routineLine(r: Routine, now = Date.now()): string {
     return r.alarm ? t("다음 알림 {when}", { when }) : t("다음 실행 {when}", { when });
   }
   return t("끝났어요");
-}
-
-/** Lets the toast say what was made. */
-export function announce(r: Routine) {
-  toast(t("루틴 «{name}»: {when}", { name: r.title, when: describeWhen(r.when) }));
 }
 
 export type { RoutineWhen };

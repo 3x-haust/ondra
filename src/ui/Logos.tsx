@@ -86,9 +86,3 @@ export function Logo(props: { name?: string; icon?: SimpleIcon; size?: number; m
 
 /** a glyph's colour in a diagram: its brand colour, or the text colour for a dark one */
 export const glyphColor = (hex: string) => (dark(hex) ? "var(--ink)" : `#${hex}`);
-
-/** in SVG diagrams: the path and colour only (placed by the caller) */
-export function logoPath(name?: string): { d: string; color: string } | undefined {
-  const i = logoFor(name);
-  return i ? { d: i.path, color: glyphColor(i.hex) } : undefined;
-}

@@ -28,7 +28,7 @@ const PLAN_OUT =
   "Answer with findings, most serious first, one line each: `- P1|P2|P3 <section or \`path:line\`> — <what's wrong> → <what to change>`. P1: it would build the wrong thing or break something; P2: a gap the builder would trip on; P3: worth a line. Asking for more than the requirement needs (extra guarantees, states, checks, safety or structure) is never P1 or P2. For a mockup, a draft or a temporary page, only what would show the user the wrong thing counts. A choice only the user can make (a trade-off, not a fact you could check) goes on its own line as `- 질문: …`. Nothing to fix: say so in one line.";
 
 /** 계획 검토: two fresh readers of a plan before anything is built. */
-export const PLAN_LENSES = [
+const PLAN_LENSES = [
   {
     lens: "scope",
     title: "범위 검토",
@@ -86,7 +86,7 @@ export function lensText(group: Task[]): string {
 type Finding = { p: number; path: string; line?: number };
 
 /** "- P1 `src/a.ts:12` — …" lines of a lens's result */
-export function findingsIn(text: string): Finding[] {
+function findingsIn(text: string): Finding[] {
   const out: Finding[] = [];
   for (const l of text.split("\n")) {
     const m = /^\s*(?:[-*]\s*)?\**P([123])\b[^`\n]*`([^`\s]+?)(?::(\d+)(?:[-–]\d+)?)?`/.exec(l);

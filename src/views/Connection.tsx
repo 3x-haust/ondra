@@ -12,7 +12,7 @@ import { APIS, defaults, firstModel, GENERIC_PRESETS, modelFromFound, normalBase
 import { refreshModels } from "../engine/modelList";
 
 /** A failed request in plain words (Korean keys), with the server's own words under it. */
-export function failText(f: unknown): { text: string; detail?: string } {
+function failText(f: unknown): { text: string; detail?: string } {
   const e = (typeof f === "object" && f && "kind" in f ? f : { kind: "http", detail: String(f) }) as ProviderFail;
   const status = e.status ?? "";
   const text =

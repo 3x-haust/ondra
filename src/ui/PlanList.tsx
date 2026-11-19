@@ -16,7 +16,12 @@ function Row(props: { s: PlanStep; t: Task; sub?: boolean }) {
           <Icon name="check" size={props.sub ? 8 : 10} stroke={3} />
         </Show>
       </span>
-      <span class="todo-text">{props.s.text}</span>
+      <span class="todo-text">
+        {props.s.text}
+        <Show when={props.s.state === "skip" && props.s.why}>
+          <span class="todo-why">{props.s.why}</span>
+        </Show>
+      </span>
       <Show when={props.s.user}>
         <span class="todo-user" title={tr("일하는 중에 요청한 일이에요")}>{tr("요청|plan")}</span>
       </Show>

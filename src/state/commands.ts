@@ -48,7 +48,7 @@ function showBoard() {
   setView({ name: "board" });
   requestAnimationFrame(() => inPane<HTMLElement>('.cv-mode [role="tab"]:last-child:not([aria-selected="true"])')?.click());
 }
-export function showCommands() {
+function showCommands() {
   setPaletteMode("commands");
   setPaletteOpen(true);
 }

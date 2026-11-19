@@ -14,7 +14,7 @@ export const APIS: { id: ConnectionApi; label: string }[] = [
   { id: "google-generative-ai", label: "Google Gemini" },
 ];
 
-export type Preset = {
+type Preset = {
   id: string;
   /** shown as is for products, through t() for the generic ones */
   name: string;

@@ -10,7 +10,7 @@ import { linkMenuItems } from "./links";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 
 /** What the menu offers for a right-click on `target`, with `picked` the text selected then. */
-export type MenuTarget = { kind: "image"; src: string; name: string } | { kind: "text"; text: string } | { kind: "link"; url: string } | { kind: "field" } | { kind: "none" };
+type MenuTarget = { kind: "image"; src: string; name: string } | { kind: "text"; text: string } | { kind: "link"; url: string } | { kind: "field" } | { kind: "none" };
 
 export function menuTarget(target: Element | null, picked: string): MenuTarget {
   if (!target) return { kind: "none" };
@@ -77,7 +77,7 @@ export async function copyImage(src: string) {
   }
 }
 
-export async function saveImage(src: string, name: string) {
+async function saveImage(src: string, name: string) {
   try {
     const b = await fetchImage(src);
     const ext = EXT[b.type] ?? "png";

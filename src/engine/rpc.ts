@@ -3,7 +3,7 @@ import { createSignal } from "solid-js";
 import { agentAlive, agentSend, engineInfo, onEvent, type EngineInfo } from "../lib/native";
 import { t } from "../i18n";
 
-export interface AgentHandlers {
+interface AgentHandlers {
   event: (ev: any) => void;
   exit?: (code: number | null) => void;
 }

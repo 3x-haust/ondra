@@ -435,44 +435,6 @@
   margin: var(--s-4) 0 var(--s-12);
 }
 
-/* live plan windows under the input */
-.limit-bar {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--s-16);
-  padding: var(--s-6) var(--s-8) 0;
-  font-size: var(--fs-2xs);
-  color: var(--ink-4);
-  font-variant-numeric: tabular-nums;
-}
-.limit {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-6);
-}
-.limit-track {
-  width: 44px;
-  height: 4px;
-  border-radius: var(--r-pill);
-  background: var(--active);
-  overflow: hidden;
-}
-.limit-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ink-3);
-  transform-origin: left;
-}
-.limit.hot .limit-track i {
-  background: var(--bad);
-}
-.limit.hot {
-  color: var(--bad-ink);
-}
-.limit-num {
-  color: var(--ink-3);
-}
 .limit-reset {
   color: var(--ink-4);
 }
@@ -857,12 +819,9 @@
 .flow-pane {
   padding: var(--s-12) var(--s-8) var(--s-24);
 }
-/* 6 · main: input, messages and the limit row share both edges */
+/* 6 · main: input and messages share both edges */
 .dock-inner {
   max-width: calc(var(--chat-w) - 2 * var(--s-24));
-}
-.limit-bar {
-  padding-right: 0;
 }
 /* 7 · tabs: even padding around icon + label */
 .panel-tab {
@@ -5437,6 +5396,16 @@ div.queued {
 }
 .todo.skip .todo-text {
   color: var(--ink-4);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--ink-4) 60%, transparent);
+}
+/* why a step was skipped, kept on its line (a skip with no reason is sent back before done) */
+.todo-why {
+  /* inline-block keeps the step's strike-through off the reason */
+  display: inline-block;
+  margin-left: var(--s-4);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
 }
 .todo.now .todo-box i {
   width: 7px;

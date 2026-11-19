@@ -110,7 +110,7 @@ const PROOF_PARTS: Record<string, string> = {
 const EFFORT_WORDS: Record<string, string> = { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최대" };
 
 /** "openai-codex/gpt-5.6-terra" → "GPT-5.6 Terra", the name the model picker shows */
-export function modelName(m: string): string {
+function modelName(m: string): string {
   const id = m.split("/").pop() || m;
   return id
     .split("-")
@@ -363,7 +363,7 @@ const BROWSER_VERBS = {
   mouse: ["마우스 조작함", "마우스 조작 중"],
   other: ["브라우저 씀", "브라우저 쓰는 중"],
 } as const satisfies Record<string, readonly [string, string]>;
-export type BrowserAction = keyof typeof BROWSER_VERBS;
+type BrowserAction = keyof typeof BROWSER_VERBS;
 const BROWSER_ALIAS: Record<string, BrowserAction> = {
   open: "open", goto: "open", navigate: "open", read: "read", snapshot: "read", get: "read",
   click: "click", tap: "click", dblclick: "dblclick", type: "type", fill: "type", keyboard: "type",
