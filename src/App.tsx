@@ -5,7 +5,7 @@ import { startPet, tellPet } from "./engine/pet";
 import { createMemo, createRoot, createSignal, createEffect, For, on, onCleanup, onMount, Show } from "solid-js";
 import { keepSpaces, switchSpace } from "./state/workspace";
 import { costShort, jobCost } from "./ui/cost";
-import { loaded, loadState, seedProjects, state } from "./state/store";
+import { agentWork, loaded, loadState, seedProjects, state } from "./state/store";
 import type { SpaceId, Task } from "./state/types";
 import type { View } from "./state/ui";
 import { closePanel, panelTab, panelWide, setPanelWide, layout, paletteOpen, paneCount, paneEl, panelShown, setJumpMsg, setView, sidebarAway, toast, toasts, dropToast, holdToast, releaseToast, view } from "./state/ui";
@@ -224,6 +224,8 @@ export default function App() {
         if (was ? was !== t.status : Date.now() - t.createdAt < 60_000) countJob(t, was);
         countLanded(t);
       }
+      // the Discord agent's work tells Discord, not this Mac: no sound, pet or notice
+      if (agentWork(t)) continue;
       // a job that ends or needs you makes a sound, in front or not; a routine's run with nothing
       // to report ends without a sound or a notice
       const tone = soundFor(t, was);
@@ -239,7 +241,7 @@ export default function App() {
     }
   });
   createEffect(() => {
-    setTrayCount(allTasks().filter((t) => t.status === "running" && !t.parentId).length, allDecisions().length);
+    setTrayCount(allTasks().filter((t) => t.status === "running" && !t.parentId && !t.agent).length, allDecisions().length);
   });
   createEffect(() => {
     void setFocusGuard(state.settings.focusGuard);

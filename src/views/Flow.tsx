@@ -55,7 +55,7 @@ export function Flow() {
   const [kidsOpen, setKidsOpen] = createSignal<Record<string, boolean>>({});
   const roots = createMemo(() =>
     tasksShown(state.space)
-      .filter((t) => !t.parentId && !t.answer)
+      .filter((t) => !t.parentId && !t.answer && !t.agent)
       .sort((a, b) => b.createdAt - a.createdAt),
   );
   /** finished, merged and not from today: tucked away under "earlier" */

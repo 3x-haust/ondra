@@ -57,7 +57,7 @@ const jobEntryId = (t: Task) => `res-${t.id}-${t.finishedAt ?? 0}`;
  * reports again). `msg`: the chat message that shows it.
  */
 export function keepJobResult(t: Task, msg?: string) {
-  if (t.status !== "done" || t.parentId || t.answer) return;
+  if (t.status !== "done" || t.parentId || t.answer || t.agent) return;
   const id = jobEntryId(t);
   if ((state.results ?? []).some((r) => r.id === id)) return;
   const { said, blocks } = jobReport(t);

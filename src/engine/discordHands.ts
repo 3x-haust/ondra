@@ -1,7 +1,7 @@
-// The Discord agent's own hands on the server, for main (extensions/discord.ts → bridge op
+// The Discord agent's own hands on the server, for its chat (extensions/discord.ts → bridge op
 // "discord"): which servers it is in, their channels, making or removing a channel, saying
-// something in one. Main is the agent itself, so a request like "필요없는 채널 지우고 채널 하나
-// 만들어서 거기서 일해" is main's own work with these, not a feature of its own.
+// something in one. The agent's chat is Ondra's main with its own session, so a request like
+// "필요없는 채널 지우고 채널 하나 만들어서 거기서 일해" is its own work with these.
 import { discordChannelCreate, discordChannelDelete, discordChannels, discordGuilds, discordSend } from "../lib/native";
 import { state } from "../state/store";
 
@@ -9,8 +9,9 @@ type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 export async function discordHands(worker: string | undefined, a: Args): Promise<unknown> {
-  // main only: a job doesn't speak on the user's server, and nothing runs while the agent is off
-  if (!worker?.startsWith("captain:")) return { error: "only main can use the Discord agent's hands" };
+  // a job doesn't speak on the user's server, and nothing runs while the agent is off;
+  // the agent's own chat only ("captain:home~@agent"): the user's main in the app never posts to Discord
+  if (!worker?.startsWith("captain:") || !worker.endsWith("~@agent")) return { error: "only the Discord agent's own chat can use its hands" };
   const agent = state.settings.agent;
   if (!agent?.on) return { error: "the Discord agent is off (Settings › 에이전트)" };
   const action = str(a.action);

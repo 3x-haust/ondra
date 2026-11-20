@@ -18,6 +18,8 @@ export type View =
   | { name: "memory" }
   /** what finished jobs came back with */
   | { name: "results"; id?: string }
+  /** the Discord agent's own place: its talk, work and memory (AgentView) */
+  | { name: "agent" }
   /** a job's changes in a full-size diff editor, on one of its files */
   | { name: "changes"; id: string; path?: string }
   | { name: "settings"; tab?: SettingsTab };

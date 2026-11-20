@@ -21,7 +21,8 @@ async function call(args: Record<string, unknown>, signal?: AbortSignal): Promis
 const out = (v: unknown) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 1) }], details: v });
 
 export default function (pi: any) {
-  if (!URL_ || !TOKEN || !WORKER || !MAIN) return;
+  // the Discord agent's own chat only (captain:<space>~@agent), not the user's main
+  if (!URL_ || !TOKEN || !WORKER || !MAIN || !WORKER.endsWith("~@agent")) return;
   pi.registerTool({
     name: "discord",
     label: "Discord",

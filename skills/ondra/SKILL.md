@@ -20,7 +20,7 @@ questions about the app, changing its settings for the user, and changing the ap
 
 The left bar: **메인** (the chat; each project has its own chat too), **캔버스** (main,
 projects, jobs and subagents as a live map), **메모리**, **결과물** (everything jobs made),
-**내 차례** (questions and work waiting on the user), **프로젝트** with their jobs, **디바이스**
+**에이전트** (the Discord agent's own talk and work, when it is on), **내 차례** (questions and work waiting on the user), **프로젝트** with their jobs, **디바이스**
 (iOS simulators, Android emulators), **설정** at the bottom.
 
 | Thing | What it does |
@@ -38,7 +38,7 @@ projects, jobs and subagents as a live map), **메모리**, **결과물** (every
 | `/feedback` | Send feedback with recent logs to Ondra's maintainers |
 | Pet | A desktop pet; `/pet 피카츄` makes one |
 | 다른 Mac | Run jobs on another of the user's Macs (Settings › 연결), end-to-end encrypted |
-| 에이전트 | Ondra on Discord, as itself (main is the agent, not a relay): the user's words there are main's; others only get talk. Its own memory (people, the server, lessons; Settings › 에이전트 › 기억) is apart from the work memory. Main acts on the server with the `discord` tool (servers, channels, make or remove one, post) |
+| 에이전트 | Ondra on Discord, as itself: the user's words there go to the agent's own chat (Ondra main with its own session), not the user's main. Its talk, its jobs (kept out of projects, 내 차례, canvas and 결과물), its questions and its memory (people, the server, lessons) are in the sidebar's 에이전트 tab, view only; work memory is shared. Others only get talk. The `discord` tool (servers, channels, make or remove one, post) is the agent chat's |
 
 Settings tabs: 일반 (theme, size, language, links, default model and permission, parallel jobs,
 worktrees, PR review follow-up, GitHub push/PR, auto memory, job browser preview, job sound,

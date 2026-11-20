@@ -7,15 +7,22 @@ import type { DiscordEvent, DiscordMessage } from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision } from "../state/types";
 
-const said = vi.hoisted(() => ({ hook: undefined as undefined | ((id: string) => void), endNote: undefined as undefined | ((t: { id: string; parentId?: string }) => string | undefined), thrown: [] as { text: string; space: string; note?: string }[], prompts: [] as string[], answer: "" }));
-vi.mock("./captain", () => ({
-  throwThought: (text: string, space: string, opts: { note?: string } = {}) => {
-    said.thrown.push({ text, space, note: opts.note });
-    return `reply${said.thrown.length}`;
+const said = vi.hoisted(() => ({ hook: undefined as undefined | ((id: string) => void), endNote: undefined as undefined | ((t: { id: string; parentId?: string }) => string | undefined), thrown: [] as { text: string; space: string; note?: string; project?: string }[], prompts: [] as string[], answer: "" }));
+vi.mock("./captain", async () => {
+  const { setState } = await import("../state/store");
+  return {
+  AGENT_CHAT: "@agent",
+  // like captain's: the user's words and a pending reply, in the chat asked for
+  throwThought: (text: string, space: string, opts: { note?: string; project?: string; discord?: { channel: string; message: string } } = {}) => {
+    said.thrown.push({ text, space, note: opts.note, project: opts.project });
+    const n = said.thrown.length;
+    setState("captain", (l: CaptainMessage[]) => [...l, { id: `me${n}`, at: n, space, project: opts.project, from: "me", text, discord: opts.discord }, { id: `reply${n}`, at: n, space, project: opts.project, from: "captain", pending: true }]);
+    return `reply${n}`;
   },
   onMainSaid: (fn: (id: string) => void) => ((said.hook = fn), () => (said.hook = undefined)),
   onJobEndNote: (fn: (t: { id: string }) => string | undefined) => ((said.endNote = fn), () => (said.endNote = undefined)),
-}));
+  };
+});
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
 import { askedLine, askPrompt, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
@@ -168,29 +175,36 @@ describe("the whole way round", () => {
     emit({ kind: "ready", id: BOT, name: "메타몽" });
   };
 
-  it("the user's words go to main, and main's reply comes back to that message", async () => {
+  it("the user's words go to its own chat (not main), and its reply comes back to that message", async () => {
     await ready();
     emit({ kind: "message", message: msg({ id: "m9", author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}> 로그인 버그 고쳐줘`, mentions: [BOT] }) });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     expect(said.thrown[0].text).toBe("메타몽 로그인 버그 고쳐줘");
+    expect(said.thrown[0].project).toBe("@agent");
     expect(said.thrown[0].note).toContain("Discord");
     expect(said.thrown[0].note).toContain("Ask first only before what can't be undone");
     // it is the one doing the work, not a relay that sends it somewhere
     expect(said.thrown[0].note).toContain("You are the agent yourself, the one doing the work, not a relay");
     expect(said.thrown[0].note).toContain("잡으러 보냈어");
     expect(native.discordReact).toHaveBeenCalledWith("c1", "m9", "👀");
-    setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] }]);
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] });
+    // the job it started is the agent's, and knows where to report (captain sets this)
+    setState("tasks", [{ id: "t7", title: "로그인 버그", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", "m9"));
+    // main's own words never go to Discord
+    setState("captain", (l) => [...l, { id: "main1", at: 3, space: "home", from: "captain", reply: "메인 답" }]);
+    said.hook?.("main1");
     // the job it started ends: main hears to write about it as the agent, in its voice and as the one who did it
     expect(said.endNote?.({ id: "t7" })).toContain("as the one who did it");
     expect(said.endNote?.({ id: "t7" })).toContain(DEFAULT_VOICE);
     expect(said.endNote?.({ id: "t7" })).toContain("server channel others read");
     expect(said.endNote?.({ id: "other" })).toBeUndefined();
     // the job it started ends: main's words about it come back to the same channel
-    setState("captain", (l) => [...l, { id: "reply2", at: 2, space: "home", from: "captain", after: "t7", reply: "다 고쳤어 PR #12" }]);
+    setState("captain", (l) => [...l, { id: "reply2", at: 4, space: "home", project: "@agent", from: "captain", after: "t7", reply: "다 고쳤어 PR #12" }]);
     said.hook?.("reply2");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "다 고쳤어 PR #12", undefined));
+    expect(native.discordSend).not.toHaveBeenCalledWith(expect.anything(), "메인 답", expect.anything());
   });
 
   const owner = { id: OWNER, name: "성윤", bot: false };
@@ -199,7 +213,8 @@ describe("the whole way round", () => {
     await ready();
     emit({ kind: "message", message: msg({ id: "m1", author: owner, content: "메타몽 Orbit 어때" }) });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
-    setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "Orbit 릴리즈할까?" }]);
+    // main answers in the agent's own chat, after the user's words (which keep where they came from)
+    setState("captain", (l) => l.map((m) => (m.id === "reply1" ? { ...m, pending: false, reply: "Orbit 릴리즈할까?" } : m)));
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "Orbit 릴리즈할까?", "m1"));
     await settle();
@@ -278,9 +293,9 @@ describe("the whole way round", () => {
     await ready();
     emit({ kind: "message", message: msg({ id: "m1", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 배포 준비해" }) });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
-    setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "시작했어", routes: [{ kind: "new", taskId: "t1" }] }]);
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "시작했어", routes: [{ kind: "new", taskId: "t1" }] });
+    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
-    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [] } as never]);
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "배포 준비: 어디에 먼저 올릴까요? (스테이징 / 운영)"), { timeout: 5000 });
     const tasks = await import("./tasks");
@@ -296,6 +311,20 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d6", "b"));
     expect(said.thrown).toHaveLength(1);
   }, 15_000);
+
+  it("a question already asked on Discord isn't asked again (after a restart too)", async () => {
+    said.answer = "";
+    setState("tasks", [{ id: "t1", title: "배포", entries: [], agent: { channel: "c1" } } as never]);
+    setState("decisions", [{ id: "d9", taskId: "t1", at: 1, kind: "ask", question: "먼저?", context: [], options: [{ id: "a", label: "스테이징" }], posted: "c1" }]);
+    await ready();
+    await new Promise((r) => setTimeout(r, 3300));
+    expect(native.discordSend).not.toHaveBeenCalled();
+    // and a reply in that channel still answers it
+    const tasks = await import("./tasks");
+    const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
+    emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
+    await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d9", "a"));
+  }, 10_000);
 
   it("remembers a quiet channel's talk in its own memory, and reads it the next time", async () => {
     said.answer = "ㅋㅋ 반가워요";

@@ -696,6 +696,7 @@ function spawnChild(parent: Task, title: string, ask: string, review = false, ex
     shells: [],
     inbox: [],
     parentId: parent.id,
+    ...(parent.agent ? { agent: parent.agent } : {}),
     review: review || undefined,
     isolate: false,
     model: parent.model,
@@ -2572,6 +2573,8 @@ export function createTask(f: {
   from?: Task["from"];
   /** a run of this routine */
   routine?: string;
+  /** the Discord agent's work (else the job it carries on decides) */
+  agent?: Task["agent"];
 }): string {
   const id = f.id && !taskById(f.id) ? f.id : uid("t");
   const prev = f.follows ? taskById(f.follows) : undefined;
@@ -2618,6 +2621,7 @@ export function createTask(f: {
     permission: state.settings.permission ?? "auto",
     ...(f.from ? { from: f.from } : {}),
     ...(f.routine ? { routine: f.routine } : {}),
+    ...((f.agent ?? prev?.agent) ? { agent: f.agent ?? prev!.agent } : {}),
   };
   // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
   const far_ = splitProjectId(f.project);
@@ -3628,7 +3632,7 @@ export function duplicateTask(id: string): string | undefined | Promise<string |
   const t = taskById(id);
   if (!t) return;
   // one another Mac asked for stays its: that Mac keeps a copy of it as of the first one
-  const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId, ...(t.from ? { from: t.from } : {}) });
+  const n = createTask({ space: t.space, title: `${t.title} (복제)`, topic: t.topic, ask: t.ask, cwd: homeDir(t), priority: t.priority, weight: t.weight, accountId: t.accountId, ...(t.from ? { from: t.from } : {}), ...(t.agent ? { agent: t.agent } : {}) });
   updateTask(n, (x) => {
     x.model = t.model;
     x.thinking = t.thinking;
