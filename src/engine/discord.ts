@@ -245,24 +245,65 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   if (replyId) replies.set(replyId, { channel: m.channel, message: m.id });
 }
 
-/** main's message as a chat line: its reply, its answers, and a question with numbered choices */
-export function sayOf(msg: CaptainMessage): string {
+/** main's message as a chat line: its reply, its answers, and a question with numbered choices
+ *  (as `asks` has it said, else plainly) */
+export function sayOf(msg: CaptainMessage, asks: Record<string, string> = {}): string {
   if (msg.error) return `앗 답을 못 만들었어: ${msg.error}`;
   const lines = [msg.reply?.trim() ?? ""];
   for (const r of msg.routes ?? []) {
     if (r.kind === "answer" && r.text.trim() && !sameStart(r.text, msg.reply)) lines.push(r.text.trim());
     if (r.kind === "ask") {
       const d = state.decisions.find((x) => x.id === r.decisionId);
-      if (d) lines.push(questionText(d));
+      if (d) lines.push(asks[d.id] ?? questionText(d));
     }
   }
   return lines.filter(Boolean).join("\n\n");
 }
 const sameStart = (a: string, b?: string) => !!b && a.trim().startsWith(b.trim());
 
+/** a question as it is, numbered: what goes out when it can't be said in the agent's voice */
 export function questionText(d: Decision): string {
   const opts = d.options.map((o, i) => `${i + 1}. ${o.label}${o.primary ? " (추천)" : ""}`);
-  return [d.question, ...opts, "번호로 답해 줘"].join("\n");
+  return [d.question, ...opts].join("\n");
+}
+
+/** The prompt that turns a question (a job's, written for the app, often formal) into the agent asking it in chat. */
+export function askPrompt(a: AgentSettings, d: Decision, about?: string): string {
+  return [
+    `너는 디스코드에서 주인과 얘기하는 "${a.name}"이야. 하던 일에서 주인한테 물어볼 게 생겼어. 아래 질문을 네가 직접 묻는 말로, 메시지 하나로 바꿔 써.`,
+    "",
+    "# 말투",
+    voiceOf(a),
+    "",
+    "# 지킬 것",
+    "- 친구한테 채팅으로 묻듯이. 존댓말이나 딱딱한 말로 쓰인 질문도 네 말투로 바꿔.",
+    "- 무슨 일 얘긴지는 문장 안에서 자연스럽게 (대괄호 머리말 없이). 이미 아는 사이니 인사나 설명은 붙이지 마.",
+    "- 선택지는 한 줄에 하나씩 \"1. …\"처럼 번호를 그대로 두고 짧게. 순서와 뜻은 바꾸지 마.",
+    "- 추천이 있으면 \"(추천)\" 같은 꼬리표 대신 네 말로 한마디 (\"난 1번이 나을 듯\").",
+    "- \"번호로 답해 줘\" 같은 사용 안내, 표, 제목, 존댓말 금지. 메시지 본문만 써.",
+    "",
+    about ? `# 하던 일\n${about}\n` : "",
+    `# 질문\n${d.question}`,
+    "",
+    `# 선택지\n${d.options.map((o, i) => `${i + 1}. ${o.label}${o.primary ? " (추천)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
+  ].join("\n");
+}
+
+/** what came back keeps every choice under its number, so "2" still answers it */
+export const keepsChoices = (out: string, n: number) =>
+  !!out && out.length <= 1200 && Array.from({ length: n }, (_, i) => new RegExp(`(^|\\n)\\s*${i + 1}\\s*[.)]`).test(out)).every(Boolean);
+
+/** A question as the agent asks it in chat, in its voice; as it is when that fails. */
+export async function askedLine(d: Decision, a: AgentSettings | undefined = settings(), about?: string): Promise<string> {
+  if (!a) return questionText(d);
+  try {
+    const { oneShot } = await import("./aside");
+    const out = (await oneShot(agentSpace(a), "~", askPrompt(a, d, about))).trim();
+    if (keepsChoices(out, d.options.length)) return out;
+  } catch (e) {
+    logError("agent", `ask line: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return (about ? `${about}: ` : "") + questionText(d);
 }
 
 async function mainSaid(replyId: string) {
@@ -274,8 +315,14 @@ async function mainSaid(replyId: string) {
   if (!channel) return;
   replies.delete(replyId);
   for (const r of msg.routes ?? []) if (r.kind === "new") origin.set(r.taskId, channel);
-  for (const r of msg.routes ?? []) if (r.kind === "ask") posted.set(r.decisionId, channel);
-  const text = sayOf(msg);
+  const asks: Record<string, string> = {};
+  for (const r of msg.routes ?? []) {
+    if (r.kind !== "ask") continue;
+    posted.set(r.decisionId, channel);
+    const d = state.decisions.find((x) => x.id === r.decisionId);
+    if (d) asks[d.id] = await askedLine(d);
+  }
+  const text = sayOf(msg, asks);
   if (!text) return;
   const ids = await discordSend(channel, text, from?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   keepSaid(channel, ids);
@@ -290,8 +337,9 @@ function postQuestions() {
     const channel = origin.get(d.taskId) ?? (t?.parentId ? origin.get(t.parentId) : undefined);
     if (!channel) continue;
     posted.set(d.id, channel);
-    const title = t ? `[${t.title}] ` : "";
-    void discordSend(channel, title + questionText(d)).then((ids) => keepSaid(channel, ids), () => posted.delete(d.id));
+    void askedLine(d, settings(), t?.title)
+      .then((text) => discordSend(channel, text).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
+      .catch(() => posted.delete(d.id));
   }
 }
 

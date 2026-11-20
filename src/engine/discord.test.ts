@@ -18,7 +18,7 @@ vi.mock("./captain", () => ({
 }));
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, questionText, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
+import { askedLine, askPrompt, calledIn, cleanText, DEFAULT_VOICE, digest, keepsChoices, OTHERS_RULES, ownerNote, questionText, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
 
 /** what a user keeps in their own rules file: their line right after it spoke in a channel is for it */
 const FOLLOW_UP = `function listen(message, ctx) {
@@ -102,8 +102,24 @@ describe("main's words on Discord", () => {
     setState("decisions", [d]);
     const m: CaptainMessage = { id: "c1", at: 1, space: "home", from: "captain", reply: "PR 올렸어", routes: [{ kind: "answer", text: "링크: https://x/pull/1", blocks: [] }, { kind: "ask", decisionId: "d1" }] };
     expect(sayOf(m)).toBe(`PR 올렸어\n\n링크: https://x/pull/1\n\n${questionText(d)}`);
-    expect(questionText(d)).toBe("바뀐 파일을 어떻게 할까요?\n1. PR로 올리기 (추천)\n2. 합치기\n번호로 답해 줘");
+    expect(questionText(d)).toBe("바뀐 파일을 어떻게 할까요?\n1. PR로 올리기 (추천)\n2. 합치기");
+    expect(sayOf(m, { d1: "파일 바뀐 거 어떻게 할까\n1. PR로 올리기\n2. 합치기\n난 1번" })).toContain("PR 올렸어\n\n링크: https://x/pull/1\n\n파일 바뀐 거 어떻게 할까");
     expect(sayOf({ ...m, error: "모델이 바빠요" })).toContain("모델이 바빠요");
+  });
+
+  it("a question is asked in its own voice, not as a form, keeping each choice's number", async () => {
+    const p = askPrompt({ on: true, name: "메타몽" }, d, "Orbit 이슈 #49");
+    expect(p).toContain(DEFAULT_VOICE);
+    expect(p).toContain("존댓말");
+    expect(p).toContain("번호로 답해 줘\" 같은 사용 안내");
+    expect(p).toContain("# 하던 일\nOrbit 이슈 #49");
+    expect(keepsChoices("49번 어떻게 할까\n1. PR로 올리기\n2) 합치기\n난 1번", 2)).toBe(true);
+    expect(keepsChoices("PR로 올리는 게 나을 듯", 2)).toBe(false);
+    said.answer = "파일 바뀐 거 어떻게 할까\n1. PR로 올리기\n2. 합치기\n난 1번이 나을 듯";
+    expect(await askedLine(d, { on: true, name: "메타몽" })).toBe(said.answer);
+    // an answer that lost a choice: the question as it is, so a number still answers it
+    said.answer = "PR로 올릴까?";
+    expect(await askedLine(d, { on: true, name: "메타몽" }, "배포")).toBe(`배포: ${questionText(d)}`);
   });
 
   it('"지워" takes back what it said', () => {
@@ -259,7 +275,7 @@ describe("the whole way round", () => {
     said.hook?.("reply1");
     setState("tasks", [{ id: "t1", title: "배포 준비", entries: [] } as never]);
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "[배포 준비] 어디에 먼저 올릴까요?\n1. 스테이징\n2. 운영\n번호로 답해 줘"), { timeout: 5000 });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "배포 준비: 어디에 먼저 올릴까요?\n1. 스테이징\n2. 운영"), { timeout: 5000 });
     const tasks = await import("./tasks");
     const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
     emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
