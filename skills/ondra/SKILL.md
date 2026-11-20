@@ -68,11 +68,14 @@ The Discord agent ("에이전트 설정해줘", "디스코드 연결해줘"):
 5. Read again: say it is connected, or why not (a wrong token, the intent off).
 
 How the Discord agent listens, the user's own way ("멘션 안 해도 들어", "이 채널에선 조용히
-있어", "민수 말은 다 받아"): not a setting and not a PR, but their own rules file, on their Mac only.
+있어", "민수 말은 다 받아", "매번 답하지 말고 보다가 끼어들어"): not a setting and not a PR, but their own rules file, on their Mac only.
 It is `agent/rules.js` in Ondra's data folder (`~/Library/Application Support/dev.3xhaust.ondra/`;
 a message from Discord names the exact path). Ondra asks its `listen(message, ctx)` for every
-message the agent sees: `true` takes it as if called, `false` leaves it even if called, anything
-else is the usual way (a DM, a mention, a reply to it, its name, a question of its waiting there).
+message the agent sees: `true` takes it as if called, `false` leaves it even if called, `"watch"`
+looks on and lets the agent pick (mostly nothing, now and then an emoji reaction, a line when it
+has something to add; talk only, never work, the user's words too), anything else is the usual
+way (a DM, a mention, a reply to it, its name, a question of its waiting there). Others' lines
+it watches keep to where others are answered (Settings › 에이전트).
 - `message`: `id`, `channel`, `guild` (null in a DM), `author` {`id`, `name`, `bot`}, `content`,
   `mentions` (ids), `reply_to` (the id of whom it answers), `files`, `at`.
 - `ctx`: `owner` (it is the user's), `called` (what the usual way decided), `name`, `me` (its
@@ -81,13 +84,16 @@ else is the usual way (a DM, a mention, a reply to it, its name, a question of i
 - Plain JavaScript in a worker: no imports, no app, no files. It throws or takes over a second:
   the usual way. A change counts from the next message, nothing to restart.
 Read the file first and keep the rules already in it; one `listen`, each rule a commented `if`.
-Say in one line what it does now. For example, the user's line right after it spoke:
+Rules are read top to bottom, so the narrower one goes first. Say in one line what it does now.
+For example, the user's line right after it spoke, and the rest of a server channel watched:
 
 ```js
 function listen(message, ctx) {
   // 방금 내가 말한 채널에서 5분 안에 주인이 이어 말하면 멘션 없어도 받는다
   const last = ctx.recent[ctx.recent.length - 1];
   if (ctx.owner && last?.me && ctx.now - last.at < 5 * 60_000) return true;
+  // 서버 채널에서 나를 부르지 않은 말은 보고만 있다가 알아서 끼어들거나 공감 리액션만 한다
+  if (message.guild && !ctx.called) return "watch";
 }
 ```
 
