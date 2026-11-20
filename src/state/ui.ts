@@ -1,5 +1,5 @@
 // Live, unsaved UI state: routing, panels, streaming text, toasts.
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import * as L from "./layout";
 import { logWarn } from "../lib/log";
@@ -344,6 +344,18 @@ if (typeof window !== "undefined") window.addEventListener("resize", () => setWi
 const crowded = () => !roomy() || winW() - 320 - 440 - 32 < splitNeed();
 /** The job the pointer is over, in the graph or a chip: main lights up the message that started it. */
 export const [hoverTask, setHoverTask] = createSignal<string | null>(null);
+/** A row's handlers for `hoverTask`. A row removed under the pointer (a click that opens the job, a
+ *  list that changes) never gets its mouseleave, so it lets go when it goes away too; otherwise the
+ *  job stays lit in the sidebar like a second selection. */
+export function hoverOn(id: () => string) {
+  let mine: string | null = null;
+  const leave = () => {
+    if (mine !== null && hoverTask() === mine) setHoverTask(null);
+    mine = null;
+  };
+  onCleanup(leave);
+  return { onMouseEnter: () => setHoverTask((mine = id())), onMouseLeave: leave };
+}
 /** Bring the list back (in a narrow window that means closing the panel). */
 export function showSidebar() {
   setSidebarHidden(false);

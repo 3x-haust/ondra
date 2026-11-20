@@ -1,5 +1,6 @@
+import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { activeTab, newPanelTab, panelOpen, panelTab, ptabs, setActiveTab, setPanelOpen, setPanelTab, setPtabs, setRoomy, setSidebarHidden, sidebarAway, sidebarHidden, toggleSidebar, togglePanel } from "./ui";
+import { hoverOn, hoverTask, setHoverTask, activeTab, newPanelTab, panelOpen, panelTab, ptabs, setActiveTab, setPanelOpen, setPanelTab, setPtabs, setRoomy, setSidebarHidden, sidebarAway, sidebarHidden, toggleSidebar, togglePanel } from "./ui";
 
 beforeEach(() => {
   setRoomy(true);
@@ -71,5 +72,30 @@ describe("panel tools", () => {
     expect(activeTab()).toBe(id);
     expect(panelTab()).toBe("files");
     expect(ptabs()).toHaveLength(2);
+  });
+});
+
+describe("job hover", () => {
+  it("lets go when the row is removed under the pointer, as a click that opens the job does", () => {
+    setHoverTask(null);
+    createRoot((dispose) => {
+      const h = hoverOn(() => "a");
+      h.onMouseEnter();
+      expect(hoverTask()).toBe("a");
+      dispose();
+    });
+    expect(hoverTask()).toBeNull();
+  });
+
+  it("keeps another row's hover when a row it already left goes away", () => {
+    setHoverTask(null);
+    createRoot((dispose) => {
+      const h = hoverOn(() => "a");
+      h.onMouseEnter();
+      h.onMouseLeave();
+      setHoverTask("b");
+      dispose();
+    });
+    expect(hoverTask()).toBe("b");
   });
 });
