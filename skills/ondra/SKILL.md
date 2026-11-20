@@ -4,7 +4,8 @@ description: >
   Ondra (온드라) itself, the app this runs in: what an Ondra feature, button or screen is
   and where it lives (온드라 기능, 온드라 설정, 이 화면, 내 차례, 캔버스, 결과물), changing
   Ondra's settings for the user (에이전트 설정, 디스코드 에이전트, 디스코드 연결, 테마, 동시
-  작업, 기본 권한, 워크트리), and a feature or bug for Ondra (온드라 기능 추가, Ondra feature
+  작업, 기본 권한, 워크트리), the Discord agent's own rules for this user (멘션 없이 듣기, 이
+  채널에선 조용히), and a feature or bug for Ondra (온드라 기능 추가, Ondra feature
   request, Ondra bug) turned into a short proposal and, when they say so, a pull request to
   3x-haust/ondra.
 ---
@@ -65,6 +66,30 @@ The Discord agent ("에이전트 설정해줘", "디스코드 연결해줘"):
 4. Then what they asked: `agent.name`, `agent.space`, `agent.channels`, `agent.voice`; and
    `{"agent.on": true}` last. `agent.ownerId` can stay empty: the bot's owner is the user.
 5. Read again: say it is connected, or why not (a wrong token, the intent off).
+
+How the Discord agent listens, the user's own way ("멘션 안 해도 들어", "이 채널에선 조용히
+있어", "민수 말은 다 받아"): not a setting and not a PR, but their own rules file, on their Mac only.
+It is `agent/rules.js` in Ondra's data folder (`~/Library/Application Support/dev.3xhaust.ondra/`;
+a message from Discord names the exact path). Ondra asks its `listen(message, ctx)` for every
+message the agent sees: `true` takes it as if called, `false` leaves it even if called, anything
+else is the usual way (a DM, a mention, a reply to it, its name, a question of its waiting there).
+- `message`: `id`, `channel`, `guild` (null in a DM), `author` {`id`, `name`, `bot`}, `content`,
+  `mentions` (ids), `reply_to` (the id of whom it answers), `files`, `at`.
+- `ctx`: `owner` (it is the user's), `called` (what the usual way decided), `name`, `me` (its
+  id), `recent` (the channel's lines before this one, oldest first: `who`, `name`, `text`, `at`,
+  `me` on its own, `owner` on the user's), `now` (ms, like `at`).
+- Plain JavaScript in a worker: no imports, no app, no files. It throws or takes over a second:
+  the usual way. A change counts from the next message, nothing to restart.
+Read the file first and keep the rules already in it; one `listen`, each rule a commented `if`.
+Say in one line what it does now. For example, the user's line right after it spoke:
+
+```js
+function listen(message, ctx) {
+  // 방금 내가 말한 채널에서 5분 안에 주인이 이어 말하면 멘션 없어도 받는다
+  const last = ctx.recent[ctx.recent.length - 1];
+  if (ctx.owner && last?.me && ctx.now - last.at < 5 * 60_000) return true;
+}
+```
 
 ## A feature they want, or a bug in Ondra
 

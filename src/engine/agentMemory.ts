@@ -89,7 +89,7 @@ export function forgetNote(id: string) {
 }
 
 /** A line of talk the pass reads. */
-export type Heard = { who: string; name: string; text: string; me?: boolean; owner?: boolean };
+export type Heard = { who: string; name: string; text: string; me?: boolean; owner?: boolean; at?: number };
 
 /** The prompt of the quiet pass over a channel's talk. */
 export function digestPrompt(a: AgentSettings, heard: Heard[], ctx: { place?: string; dm: boolean }): string {

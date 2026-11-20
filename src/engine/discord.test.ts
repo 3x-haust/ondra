@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// @ts-ignore node types are not in this project: the test runs under node
+import { resolveObjectURL } from "node:buffer";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import type { DiscordEvent, DiscordMessage } from "../lib/native";
@@ -17,6 +19,30 @@ vi.mock("./captain", () => ({
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
 import { calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, questionText, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
+
+/** what a user keeps in their own rules file: their line right after it spoke in a channel is for it */
+const FOLLOW_UP = `function listen(message, ctx) {
+  if (!ctx.owner || ctx.called) return;
+  const last = ctx.recent[ctx.recent.length - 1];
+  if (last && last.me && ctx.now - last.at < 5 * 60_000) return true;
+}`;
+const rules = { text: undefined as string | undefined };
+/** a page's Worker, run here: the script it is made from, with its own self and postMessage */
+class PageWorker {
+  onmessage?: (e: { data: unknown }) => void;
+  private ready: Promise<(data: unknown) => void>;
+  constructor(url: string) {
+    this.ready = resolveObjectURL(url)!.text().then((code: string) => {
+      const self: { onmessage?: (e: { data: unknown }) => void } = {};
+      new Function("self", "postMessage", code)(self, (data: unknown) => this.onmessage?.({ data }));
+      return (data: unknown) => self.onmessage?.({ data });
+    });
+  }
+  postMessage(data: unknown) {
+    void this.ready.then((send) => send(data));
+  }
+  terminate() {}
+}
 
 const BOT = "999";
 const OWNER = "111";
@@ -102,10 +128,18 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordDelete").mockResolvedValue();
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
     vi.spyOn(native, "discordReact").mockResolvedValue();
+    rules.text = undefined;
+    vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: null, engineVersion: null, dataDir: "/data", home: "/Users/me" });
+    vi.spyOn(native, "fsRead").mockImplementation(async (path) => {
+      if (path !== "/data/agent/rules.js" || rules.text === undefined) throw "파일이 없어요";
+      return { text: rules.text, size: rules.text.length, binary: false, modified: 1 };
+    });
+    vi.stubGlobal("Worker", PageWorker);
   });
   afterEach(() => {
     stopAgent();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
   const ready = async () => {
     await startAgent();
@@ -135,6 +169,64 @@ describe("the whole way round", () => {
     setState("captain", (l) => [...l, { id: "reply2", at: 2, space: "home", from: "captain", after: "t7", reply: "다 고쳤어 PR #12" }]);
     said.hook?.("reply2");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "다 고쳤어 PR #12", undefined));
+  });
+
+  const owner = { id: OWNER, name: "성윤", bot: false };
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  const asked = async () => {
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m1", author: owner, content: "메타몽 Orbit 어때" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "Orbit 릴리즈할까?" }]);
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "Orbit 릴리즈할까?", "m1"));
+    await settle();
+    emit({ kind: "message", message: msg({ id: "m2", author: owner, content: "릴리즈해" }) });
+  };
+
+  it("with no rules of the user's own, their answer right after it spoke still needs a mention", async () => {
+    await asked();
+    await settle();
+    expect(said.thrown).toHaveLength(1);
+    // main hears where the user's own rules for it are, to write them when asked
+    expect(said.thrown[0].note).toContain("/data/agent/rules.js");
+  });
+
+  it("the user's own rules decide: their answer right after it spoke reaches it without a mention", async () => {
+    rules.text = FOLLOW_UP;
+    await asked();
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.thrown[1].text).toBe("릴리즈해");
+  });
+
+  it("with that rule, once someone else spoke or a while went by, the user's words are theirs again", async () => {
+    rules.text = FOLLOW_UP;
+    said.answer = "안녕하세요";
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m1", content: "메타몽 안녕" }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalled());
+    await settle();
+    emit({ kind: "message", message: msg({ id: "m2", author: { id: "333", name: "민수", bot: false }, content: "ㅋㅋ" }) });
+    emit({ kind: "message", message: msg({ id: "m3", author: owner, content: "점심 뭐 먹지" }) });
+    emit({ kind: "message", message: msg({ id: "m4", content: "메타몽 또 안녕" }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledTimes(2));
+    await settle();
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 5 * 60_000 + 1);
+    emit({ kind: "message", message: msg({ id: "m5", author: owner, content: "저녁 뭐 먹지" }) });
+    await settle();
+    expect(said.thrown).toHaveLength(0);
+  });
+
+  it("a rule can also keep it quiet when called, and a broken one leaves the usual way", async () => {
+    rules.text = `function listen(message) { if (message.content.includes("조용")) return false; }`;
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m1", author: owner, content: "메타몽 조용히 해봐" }) });
+    await settle();
+    expect(said.thrown).toHaveLength(0);
+    rules.text = `function listen() { throw new Error("oops"); }`;
+    emit({ kind: "message", message: msg({ id: "m2", author: owner, content: "메타몽 안녕" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
   });
 
   it("anyone else only talks, and never reaches main", async () => {
