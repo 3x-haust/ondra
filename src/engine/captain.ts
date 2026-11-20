@@ -496,11 +496,11 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. */
+/** Main searches skills and jobs directly; read / bash / web_fetch load through tool_search. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts")).flatMap((e) => ["--extension", e]);
+  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];

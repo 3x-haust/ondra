@@ -7,7 +7,7 @@
 //   [secret:NAME] before the model sees it;
 // - values in the job folder's .env files whose key looks secret are hidden the same way, so
 //   `cat .env` or reading it shows the keys but not the values;
-// - the tokens in Codex's login file (~/.codex/auth.json, or $CODEX_HOME/auth.json) are hidden the
+// - the tokens in Codex's login files (~/.codex/auth.json and $CODEX_HOME/auth.json) are hidden the
 //   same way, so reading that file never puts the user's Codex credentials in a job's history;
 // - each command that uses a secret, and each result something was hidden from, is logged to
 //   <data dir>/secrets-audit.jsonl (names and the job, never values).
@@ -80,9 +80,11 @@ export function jsonSecrets(text: string, file: string): Secret[] {
   return out;
 }
 
-/** Codex's login file: $CODEX_HOME/auth.json, else ~/.codex/auth.json. */
-export function codexAuthPath(env: NodeJS.ProcessEnv): string {
-  return join(env.CODEX_HOME || join(env.HOME || homedir(), ".codex"), "auth.json");
+/** Codex's login files: ~/.codex/auth.json, and $CODEX_HOME/auth.json when that is set elsewhere. */
+export function codexAuthPaths(env: NodeJS.ProcessEnv): string[] {
+  const home = join(env.HOME || homedir(), ".codex", "auth.json");
+  const custom = env.CODEX_HOME ? join(env.CODEX_HOME, "auth.json") : home;
+  return [...new Set([home, custom])];
 }
 
 /** The secrets from Ondra: the names it says it set, with their values from this environment. */
@@ -197,25 +199,25 @@ export default function (pi: ExtensionAPI) {
   };
 
   // Codex's tokens: read again when the file changes (a token refresh rewrites it)
-  const codexPath = codexAuthPath(process.env);
-  let codex = { stamp: -1, secrets: [] as Secret[] };
-  const codexSecrets = (): Secret[] => {
-    let stamp = 0;
-    try {
-      stamp = statSync(codexPath).mtimeMs;
-    } catch {
-      /* no Codex login */
-    }
-    if (stamp === codex.stamp) return codex.secrets;
-    let secrets: Secret[] = [];
-    try {
-      if (stamp) secrets = jsonSecrets(readFileSync(codexPath, "utf8"), "codex/auth.json");
-    } catch {
-      /* unreadable now: tried again on the next change */
-    }
-    codex = { stamp, secrets };
-    return secrets;
-  };
+  const codex = new Map(codexAuthPaths(process.env).map((p) => [p, { stamp: -1, secrets: [] as Secret[] }]));
+  const codexSecrets = (): Secret[] =>
+    [...codex].flatMap(([path, seen]) => {
+      let stamp = 0;
+      try {
+        stamp = statSync(path).mtimeMs;
+      } catch {
+        /* no Codex login here */
+      }
+      if (stamp === seen.stamp) return seen.secrets;
+      let secrets: Secret[] = [];
+      try {
+        if (stamp) secrets = jsonSecrets(readFileSync(path, "utf8"), "codex/auth.json");
+      } catch {
+        /* unreadable now: tried again on the next change */
+      }
+      codex.set(path, { stamp, secrets });
+      return secrets;
+    });
 
   const log = (entry: Record<string, unknown>) => {
     if (!audit) return;

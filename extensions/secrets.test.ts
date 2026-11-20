@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import secrets, { codexAuthPath, dotenvSecrets, jsonSecrets, envFilesUnder, envSecrets, maskSecrets, namesUsed, promptNote, redact, secretDirs, variants } from "./secrets";
+import secrets, { codexAuthPaths, dotenvSecrets, jsonSecrets, envFilesUnder, envSecrets, maskSecrets, namesUsed, promptNote, redact, secretDirs, variants } from "./secrets";
 
 const KEY = "sk_live_51Habc123XYZ";
 
@@ -115,6 +115,10 @@ describe("secrets", () => {
 
   it("never shows the tokens in Codex's auth.json, even when the file is printed", () => {
     const home = mkdtempSync(join(tmpdir(), "codex-"));
+    const user = mkdtempSync(join(tmpdir(), "home-"));
+    mkdirSync(join(user, ".codex"));
+    // an older login left in ~/.codex while CODEX_HOME points elsewhere
+    writeFileSync(join(user, ".codex", "auth.json"), JSON.stringify({ tokens: { access_token: "eyJ.old-home-token" } }));
     const auth = {
       auth_mode: "chatgpt",
       OPENAI_API_KEY: "sk-codex-api-key-1",
@@ -123,12 +127,13 @@ describe("secrets", () => {
     };
     const file = JSON.stringify(auth, null, 2);
     writeFileSync(join(home, "auth.json"), file);
-    expect(codexAuthPath({ CODEX_HOME: home })).toBe(join(home, "auth.json"));
-    expect(codexAuthPath({ HOME: "/Users/x" })).toBe("/Users/x/.codex/auth.json");
+    expect(codexAuthPaths({ HOME: "/Users/x", CODEX_HOME: home })).toEqual(["/Users/x/.codex/auth.json", join(home, "auth.json")]);
+    expect(codexAuthPaths({ HOME: "/Users/x", CODEX_HOME: "/Users/x/.codex" })).toEqual(["/Users/x/.codex/auth.json"]);
+    expect(codexAuthPaths({ HOME: "/Users/x" })).toEqual(["/Users/x/.codex/auth.json"]);
     const handlers: Record<string, (e: any, ctx: any) => any> = {};
     const pi = { on: (name: string, fn: (e: any, ctx: any) => any) => (handlers[name] = fn) };
     const saved = { ...process.env };
-    process.env = { HOME: saved.HOME, CODEX_HOME: home };
+    process.env = { HOME: user, CODEX_HOME: home };
     try {
       secrets(pi as any);
       // `cat ~/.codex/auth.json`: the keys show, no token does
@@ -137,6 +142,8 @@ describe("secrets", () => {
       for (const v of [auth.OPENAI_API_KEY, ...Object.values(auth.tokens)]) expect(text).not.toContain(v);
       expect(text).toContain("[secret:codex/auth.json:access_token]");
       expect(text).toContain('"auth_mode": "chatgpt"');
+      const old = handlers.tool_result({ toolName: "read", content: [{ type: "text", text: "eyJ.old-home-token" }] }, { cwd: home });
+      expect(old.content[0].text).toBe("[secret:codex/auth.json:access_token]");
       // nor in memory, which outlives the job
       expect(handlers.tool_call({ toolName: "memory_save", input: { text: auth.tokens.refresh_token } }, { cwd: home })).toMatchObject({ block: true });
     } finally {
