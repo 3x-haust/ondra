@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleBinaryAnalysis } from "./bundle-binary-analysis.mjs";
+import { analyzerSigned } from "./signed.mjs";
 import { pack, plan, previousManifest, treeHash } from "./components.mjs";
 import { engineNotices, writeAppNotices } from "./notices.mjs";
 
@@ -38,7 +39,20 @@ mkdirSync(resDir, { recursive: true });
 execFileSync("sh", [join(tauri, "helpers", "build.sh")], { stdio: "inherit" });
 
 // ── native static binary analysis (engine, decompiler, libraries and source) ──
-await bundleBinaryAnalysis();
+// Its files signed by this identity already (the build before): built or checked without signing
+// them again; anything it changed (a rebuild) is signed after all, by a second pass.
+const identity = process.env.APPLE_SIGNING_IDENTITY;
+const analyzerDir = join(resDir, "binary-analysis");
+if (identity && analyzerSigned(analyzerDir, identity)) {
+  delete process.env.APPLE_SIGNING_IDENTITY;
+  try {
+    await bundleBinaryAnalysis();
+  } finally {
+    process.env.APPLE_SIGNING_IDENTITY = identity;
+  }
+  if (!analyzerSigned(analyzerDir, identity)) await bundleBinaryAnalysis();
+  else log("binary-analysis: signed already");
+} else await bundleBinaryAnalysis();
 
 // ── engine: 3xhaustPi coding agent compiled with bun ──
 // the engine build worktree tracks main (the main checkout may be on a feature branch)
