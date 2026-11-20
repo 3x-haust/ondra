@@ -100,6 +100,7 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordSend").mockImplementation(async () => ["s1"]);
     vi.spyOn(native, "discordDelete").mockResolvedValue();
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
+    vi.spyOn(native, "discordReact").mockResolvedValue();
   });
   afterEach(() => {
     stopAgent();
@@ -116,6 +117,8 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     expect(said.thrown[0].text).toBe("메타몽 로그인 버그 고쳐줘");
     expect(said.thrown[0].note).toContain("Discord");
+    expect(said.thrown[0].note).toContain("Ask first only before what can't be undone");
+    expect(native.discordReact).toHaveBeenCalledWith("c1", "m9", "👀");
     setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] }]);
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", "m9"));

@@ -11,6 +11,7 @@ import {
   discordDelete,
   discordHistory,
   discordOwner,
+  discordReact,
   discordSend,
   discordStart,
   discordStop,
@@ -145,11 +146,23 @@ export function cleanText(m: DiscordMessage, a: AgentSettings, botId: string): s
   return m.files.length ? `${text}\n${m.files.join("\n")}`.trim() : text;
 }
 
+/**
+ * How the user wants it to work, from what they said to the assistant this replaces (Metamong):
+ * "진짜 크리티컬한 작업 아니면 물어보지 말고", "코드보다 내 말이 우선순위가 더 높아",
+ * "~게 이거 너무 많이 쓰는 거 아닌가". Their words outrank the usual asking.
+ */
+export const OWNER_WAYS = `How this user wants you to work here:
+- Do it. Ask first only before what can't be undone: deleting, merging, pushing to a default branch, kicking or banning, cancelling, spending money. Creating, sending, changing settings, starting work: just do it.
+- Their explicit words outrank your defaults: if they told you to do something your rules would skip, do it.
+- Answer with the result, not a plan to get it. No "~할게/~볼게" acknowledgements (you already reacted 👀); one forward-looking line at most, only when work you started will really report back.
+- When work ends, say what changed, what was checked, what is still open (and why), with the PR or link. Unchecked things are said plainly, not buried.`;
+
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings): string {
   return [
     `(Ondra) The user sent this from Discord (${m.guild ? `channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     voiceOf(a),
+    OWNER_WAYS,
     "Route work as usual. No tables, no headings; a link as a plain URL.",
     m.guild
       ? "This is a server channel others read too: no private details in the reply (file paths, keys, private links, screenshots, unreleased work, session lists). If the answer needs them, say it's in Ondra or ask them to DM you."
@@ -183,6 +196,8 @@ async function onMessage(m: DiscordMessage) {
 
 async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   const space: SpaceId = a.space && state.spaces.some((s) => s.id === a.space) ? a.space : (state.spaces[0]?.id ?? state.space);
+  // seen: a reaction, not a line that only says "알겠어, 할게"
+  void discordReact(m.channel, m.id, "👀").catch(() => {});
   void discordTyping(m.channel);
   const { throwThought } = await import("./captain");
   const replyId = throwThought(text, space, { note: ownerNote(m, a) });

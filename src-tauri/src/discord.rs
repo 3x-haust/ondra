@@ -180,6 +180,13 @@ pub fn owner_of(app: &Value) -> Option<String> {
     app["team"]["owner_user_id"].as_str().or(app["owner"]["id"].as_str()).map(str::to_string)
 }
 
+/// A reaction on a message (👀: "got it", without a line that only says so).
+#[tauri::command]
+pub async fn discord_react(channel: String, message: String, emoji: String) -> Result<(), String> {
+    let e: String = emoji.bytes().map(|b| format!("%{b:02X}")).collect();
+    rest(reqwest::Method::PUT, &format!("/channels/{channel}/messages/{message}/reactions/{e}/@me"), None).await.map(|_| ())
+}
+
 /// Take back what the bot said (the user asked it to: "그거 지워").
 #[tauri::command]
 pub async fn discord_delete(channel: String, message: String) -> Result<(), String> {
