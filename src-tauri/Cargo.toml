@@ -36,8 +36,11 @@ fastembed = { version = "=4.9.1", default-features = false, features = ["ort-dow
 portable-pty = "0.9"
 
 [profile.release]
-codegen-units = 1
-lto = true
+# thin LTO over 16 units, kept between builds: a release where only the page changed relinks in
+# ~25 s instead of ~90 s (fat LTO, one unit), for ~2 MB more in the gzipped update
+codegen-units = 16
+lto = "thin"
+incremental = true
 opt-level = "s"
 panic = "abort"
 # full `strip = true` leaves dylibs that macOS 27's dyld refuses to load
