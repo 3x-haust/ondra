@@ -163,8 +163,15 @@ function cells(x, y, values, o) {
   });
   return __g(x, y, values.length * s, s * 0.8);
 }
-/** a quiet frame around a part of the board, its name at its top-left */
+/** a quiet frame around a part of the board, its name at its top-left: panel(x, y, w, h, name), or panel(shapes, name) around shapes already placed */
 function panel(x, y, w, h, name, o) {
+  if (x && typeof x === "object") {
+    const gs = (Array.isArray(x) ? x : [x]).filter(__isG), label = y;
+    if (!gs.length) return undefined;
+    const L = Math.min(...gs.map((g) => g.left)) - 14, T = Math.min(...gs.map((g) => g.top)) - (label ? 34 : 14);
+    const R = Math.max(...gs.map((g) => g.right)) + 14, B = Math.max(...gs.map((g) => g.bottom)) + 14;
+    return panel(L, T, R - L, B - T, label, w);
+  }
   o = o || {};
   const g = box(x, y, w, h, Object.assign({ color: "quiet", dash: true, bare: true }, o, { label: undefined }));
   if (name) text(__n(x) + 12, __n(y) + 16, name, { size: 13, color: "quiet", bold: true });
