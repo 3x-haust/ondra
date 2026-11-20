@@ -4,7 +4,7 @@ description: >
   Ondra (온드라) itself, the app this runs in: what an Ondra feature, button or screen is
   and where it lives (온드라 기능, 온드라 설정, 이 화면, 내 차례, 캔버스, 결과물), changing
   Ondra's settings for the user (에이전트 설정, 디스코드 에이전트, 디스코드 연결, 테마, 동시
-  작업, 기본 권한, 워크트리), the Discord agent's own rules for this user (멘션 없이 듣기, 이
+  작업, 기본 권한, 워크트리), the Discord agent's own ways for this user (멘션 없이 듣기, 이
   채널에선 조용히), and a feature or bug for Ondra (온드라 기능 추가, Ondra feature
   request, Ondra bug) turned into a short proposal and, when they say so, a pull request to
   3x-haust/ondra.
@@ -67,35 +67,29 @@ The Discord agent ("에이전트 설정해줘", "디스코드 연결해줘"):
    `{"agent.on": true}` last. `agent.ownerId` can stay empty: the bot's owner is the user.
 5. Read again: say it is connected, or why not (a wrong token, the intent off).
 
-How the Discord agent listens, the user's own way ("멘션 안 해도 들어", "이 채널에선 조용히
-있어", "민수 말은 다 받아", "매번 답하지 말고 보다가 끼어들어"): not a setting and not a PR, but their own rules file, on their Mac only.
-It is `agent/rules.js` in Ondra's data folder (`~/Library/Application Support/dev.3xhaust.ondra/`;
-a message from Discord names the exact path). Ondra asks its `listen(message, ctx)` for every
-message the agent sees: `true` takes it as if called, `false` leaves it even if called, `"watch"`
-looks on and lets the agent pick (mostly nothing, now and then an emoji reaction, a line when it
-has something to add; talk only, never work, the user's words too), anything else is the usual
-way (a DM, a mention, a reply to it, its name, a question of its waiting there). Others' lines
-it watches keep to where others are answered (Settings › 에이전트).
-- `message`: `id`, `channel`, `guild` (null in a DM), `author` {`id`, `name`, `bot`}, `content`,
-  `mentions` (ids), `reply_to` (the id of whom it answers), `files`, `at`.
-- `ctx`: `owner` (it is the user's), `called` (what the usual way decided), `name`, `me` (its
-  id), `recent` (the channel's lines before this one, oldest first: `who`, `name`, `text`, `at`,
-  `me` on its own, `owner` on the user's), `now` (ms, like `at`).
-- Plain JavaScript in a worker: no imports, no app, no files. It throws or takes over a second:
-  the usual way. A change counts from the next message, nothing to restart.
-Read the file first and keep the rules already in it; one `listen`, each rule a commented `if`.
-Rules are read top to bottom, so the narrower one goes first. Say in one line what it does now.
-For example, the user's line right after it spoke, and the rest of a server channel watched:
+How the Discord agent is, the user's own way ("멘션 안 해도 들어", "이 채널에선 조용히 있어",
+"민수 말은 다 받아", "매번 답하지 말고 보다가 끼어들어", "민수한텐 존댓말"): not a setting and not a
+PR, but its own ways file, plain lines it keeps itself, on their Mac only: `agent/AGENT.md` in
+Ondra's data folder (`~/Library/Application Support/dev.3xhaust.ondra/`; a message from Discord
+names the exact path and says what is in it now). Read it first, keep what is there, one short
+line per way in the user's words (a channel or person by name and id), drop one they take back,
+and say in a line what it does now. It counts from the next message, nothing to restart.
+- Empty or missing: the usual way only (a DM, a mention, a reply to it, its name, a question of
+  its waiting there).
+- With anything in it, the agent also looks on at every message not for it (others' only where
+  others are answered, Settings › 에이전트), and by those lines picks: let it pass, an emoji
+  reaction, a line of its own, or take it as if called (the user's words become a request).
+  Each look is a quick model call, so keep the file to what was asked.
+- The lines also go to its talk with others and to its own chat, so "민수한텐 존댓말" or "#공지에선
+  말하지 마" work there too. Its voice stays in Settings › 에이전트 › 말투.
 
-```js
-function listen(message, ctx) {
-  // 방금 내가 말한 채널에서 5분 안에 주인이 이어 말하면 멘션 없어도 받는다
-  const last = ctx.recent[ctx.recent.length - 1];
-  if (ctx.owner && last?.me && ctx.now - last.at < 5 * 60_000) return true;
-  // 서버 채널에서 나를 부르지 않은 말은 보고만 있다가 알아서 끼어들거나 공감 리액션만 한다
-  if (message.guild && !ctx.called) return "watch";
-}
+```md
+- 내가 방금 말한 채널에서 5분 안에 주인이 이어서 하는 말은 나한테 하는 말로 받아
+- 서버에서 나를 안 부른 말은 보고만 있다가, 할 말 있을 때만 끼어들고 아니면 공감 리액션만 하거나 넘어가
 ```
+
+A wish these can't express (a new kind of thing to do, not when or how to talk) is a feature:
+the steps below, asking first.
 
 ## A feature they want, or a bug in Ondra
 

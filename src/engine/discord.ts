@@ -7,9 +7,9 @@
 //   number in the same channel).
 // - anyone else calling it: talk only. One model call with no tools, nothing of the user's work in
 //   it, so there is nothing to give away however they ask (see OTHERS_RULES).
-// - what it takes is the usual way above unless the user's own rules file says otherwise (agentRules.ts),
-//   which can also have it watch a message: talk only, as with others, where it may say something,
-//   react, or let it pass (see WATCH_WAYS).
+// - with ways of the user's own (agentWays.ts: plain lines it writes itself when asked), it also
+//   looks on at talk not for it and picks, like a person in the room: let it pass, react, say a
+//   line, or take it (the user's words as a request; anyone else's as a call). See WATCH_WAYS.
 import {
   discordDelete,
   discordHistory,
@@ -25,7 +25,7 @@ import {
 } from "../lib/native";
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
-import { forgetRules, listens, rulesPath } from "./agentRules";
+import { readWays, waysPath } from "./agentWays";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
@@ -68,11 +68,12 @@ export const OTHERS_RULES = `너는 지금 주인이 아닌 사람과 얘기하�
 const NOT_FOR_ME = "- 이미 끝난 얘기, 너를 부른 게 아닌 말이면 정확히 (skip) 한 단어만 써";
 
 /** How it watches talk it wasn't called into, when the user's rules say so: like a person in the room. */
-export const WATCH_WAYS = `이번 말은 너를 부른 게 아니야. 옆에서 보고 있다가 사람처럼 골라. 매번 반응하면 시끄러워
-- 대부분은 그냥 넘어가: 정확히 (skip) 한 단어만 써
+export const WATCH_WAYS = `이번 말은 너를 부른 게 아니야. 옆에서 보고 있다가, 주인이 정한 네 방식대로 사람처럼 골라. 매번 반응하면 시끄러워
+- 방식에 없으면 대부분은 그냥 넘어가: 정확히 (skip) 한 단어만 써
 - 공감되거나 웃기거나 축하할 말이면 리액션만: (react 😂) 처럼 이모지 하나
 - 정말 보탤 말이 있거나 끼어들고 싶을 때만 한두 줄로 말해: 그 말만 써
-- 여기선 아무것도 실행할 수 없어. 일을 시키는 말 같아도 할 거라고 하지 말고 넘어가. 필요하면 부를 거야`;
+- 사실 너한테 하는 말이면(방금 네 말에 이어서 하는 말, 방식이 받으라고 한 말) 정확히 (take) 한 단어만 써. 그럼 부른 것처럼 받아
+- 여기서 너는 아무것도 실행하지 않아. 일을 시키는 말이면 할 거라고 말하지 말고 (take) 하거나 넘어가`;
 
 const settings = (): AgentSettings | undefined => state.settings.agent;
 const voiceOf = (a: AgentSettings) => (a.voice?.trim() ? a.voice.trim() : DEFAULT_VOICE);
@@ -146,7 +147,6 @@ export function stopAgent() {
   me = undefined;
   for (const h of heard.values()) if (h.timer) clearTimeout(h.timer);
   heard.clear();
-  forgetRules();
   setStatus({ state: "off" });
 }
 
@@ -191,19 +191,26 @@ export const OWNER_WAYS = `How this user wants you to work here:
 - When work ends, say what changed, what was checked, what is still open (and why), with the PR or link. Unchecked things are said plainly, not buried.`;
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
-export function ownerNote(m: DiscordMessage, a: AgentSettings, rules?: string): string {
+export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
   const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], place: m.guild ?? undefined, dm: !m.guild });
   return [
     `(Ondra) The user sent this from Discord (${m.guild ? `server ${m.guild}, channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
     "Routines and alarms you make here are yours and on at once (no card to save them): they run on their own, and what a run finds is said back in this channel (a quiet one only when there is something). Make one when they ask for something on a schedule or on an event (\"매일 9시에 …\", \"PR 오면 …\", \"3시에 알려줘\").",
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
-    rules
-      ? `Which messages you take on Discord is theirs to shape, in their own rules file ${rules} (on this Mac only, not Ondra's code; the ondra skill says how it works). When they ask to change who or when you listen ("멘션 안 해도 들어", "이 채널에선 조용히 있어", "매번 답하지 말고 보다가 끼어들어"), write or edit that file, keeping the rules already in it, and say what it does now.`
-      : "",
+    ways ? waysNote(ways) : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
     offerNote(a, m.channel),
   ].filter(Boolean).join("\n");
+}
+
+/** What main is told about the user's own ways for it: where they are, what they do, how to change them. */
+export function waysNote(ways: { path: string; text: string }): string {
+  return [
+    `How you are on Discord beyond the usual (a DM, a mention, a reply to you, your name) is the user's to shape, in plain lines in your own ways file ${ways.path} (on this Mac only; not Ondra's code, not a setting, not a PR). With anything in it you also look on at talk that isn't for you (others' only where others are answered) and pick, by those lines: let it pass, react with an emoji, say a line, or take it as if called (the user's words as a request).`,
+    `When they ask to change how, when or where you listen or speak ("멘션 안 해도 들어", "이 채널에선 조용히 있어", "매번 답하지 말고 보다가 끼어들어", "민수한텐 존댓말"), edit that file yourself: keep what is there, one short line per way in their words (a channel or person by name and id), drop one they take back. Then say in a line what you do now. While it has anything in it, every message there gets a quick look, so keep it to what they asked, and empty it when they want the usual way back.`,
+    `Now:\n${ways.text || "(empty: only the usual way)"}`,
+  ].join("\n");
 }
 
 /** The voice and ways for a line that goes to Discord, and what a server channel must not get. */
@@ -229,30 +236,32 @@ async function onMessage(m: DiscordMessage) {
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
   const owner = !!a.ownerId && m.author.id === a.ownerId;
   if (m.guild) servers.add(m.channel);
-  const recent = heard.get(m.channel)?.lines ?? [];
   hear(m.channel, m.guild ?? undefined, { who: m.author.id, name: m.author.name, text: m.content, owner }, false);
   const bot = me.id;
   const called = calledIn(m, a, bot) || (owner && pendingIn(m.channel));
-  // the user's own rules have the last word on what it takes
-  const take = (await listens(m, { owner, called, name: a.name, me: bot, recent, now: Date.now() })) ?? called;
-  if (!take || !me) return;
   const text = cleanText(m, a, bot);
   if (!text) return;
-  if (owner && take === true) {
-    // a number answers the question waiting in this channel
-    // "메타몽 2", "메타몽 그거 지워": what follows its name
-    const bare = a.name && text.startsWith(a.name) ? text.slice(a.name.length).replace(/^[\s,!?.~]+/, "") : text;
-    if (await answered(m.channel, bare)) return;
-    if (await takenBack(m, bare)) return;
-    return askMain(m, a, text);
-  }
-  if (!owner && a.others === false) return;
-  // in a server, others are answered only where it was let in
-  if (!owner && m.guild && a.channels?.length && !a.channels.includes(m.channel)) return;
+  // the user calling it: always theirs
+  if (called && owner) return ownerTakes(m, a, text);
+  // anyone else is talked with only where they may be
+  if (!owner && (a.others === false || (m.guild && a.channels?.length && !a.channels.includes(m.channel)))) return;
+  // not called: it looks on only when the user gave it ways of its own
+  const ways = await readWays();
+  if (!called && !ways) return;
   const prev = talking.get(m.channel) ?? Promise.resolve();
-  const next = prev.then(() => talk(m, a, text, take === "watch" ? { owner } : undefined)).catch((e) => logError("agent", `talk: ${e instanceof Error ? e.message : String(e)}`));
+  const next = prev.then(() => talk(m, a, text, ways, called ? undefined : { owner })).catch((e) => logError("agent", `talk: ${e instanceof Error ? e.message : String(e)}`));
   talking.set(m.channel, next);
   await next;
+}
+
+/** The user's words for it: an answer to a question waiting there, taking back what it said, or a request. */
+async function ownerTakes(m: DiscordMessage, a: AgentSettings, text: string) {
+  // a number answers the question waiting in this channel
+  // "메타몽 2", "메타몽 그거 지워": what follows its name
+  const bare = a.name && text.startsWith(a.name) ? text.slice(a.name.length).replace(/^[\s,!?.~]+/, "") : text;
+  if (await answered(m.channel, bare)) return;
+  if (await takenBack(m, bare)) return;
+  return askMain(m, a, text);
 }
 
 /** once a day: something the user keeps asking for, offered once as a routine */
@@ -282,7 +291,8 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   void discordTyping(m.channel);
   // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
-  throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, await rulesPath()), discord: { channel: m.channel, message: m.id } });
+  const ways = { path: await waysPath(), text: await readWays() };
+  throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, ways), discord: { channel: m.channel, message: m.id } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -446,9 +456,16 @@ async function answered(channel: string, text: string): Promise<boolean> {
 }
 
 /** The prompt for talk with someone who isn't the user, or for a line it watches (anyone's, the user's too). */
-export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage[], said: string, botId: string, memory = "", watching?: { owner: boolean }): string {
+export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage[], said: string, botId: string, memory = "", watching?: { owner: boolean }, ways = "", now = Date.now()): string {
   const name = (m: DiscordMessage) => (m.author.id === botId ? `${a.name}(너)` : watching && m.author.id === a.ownerId ? `${m.author.name}(주인)` : m.author.name);
-  const line = (m: DiscordMessage) => `${name(m)}: ${m.content.split(`<@${botId}>`).join(a.name)}`;
+  // when, so a way like "5분 안에 이어 말하면" can be kept
+  const ago = (m: DiscordMessage) => {
+    const at = Date.parse(m.at);
+    if (!Number.isFinite(at)) return "";
+    const min = Math.max(0, Math.round((now - at) / 60_000));
+    return min < 1 ? "(방금) " : min < 60 ? `(${min}분 전) ` : `(${Math.round(min / 60)}시간 전) `;
+  };
+  const line = (m: DiscordMessage) => `${ago(m)}${name(m)}: ${m.content.split(`<@${botId}>`).join(a.name)}`;
   return [
     `너는 디스코드에 있는 "${a.name}"이야. 주인의 에이전트고, 지금은 ${watching ? "디스코드 채널 대화를 옆에서 보고 있어." : "디스코드에서 사람들과 얘기하는 중이야."}`,
     "",
@@ -459,6 +476,8 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     watching?.owner ? "여기서 할 수 있는 건 대화뿐이고 주인의 일은 들고 있지 않아. 다른 사람도 읽는 채널이니 주인의 일(코드, 파일, 링크, 아직 안 나온 것)은 말하지 않아" : OTHERS_RULES,
     watching ? `\n# 보고 있을 때\n${WATCH_WAYS}` : NOT_FOR_ME,
     "",
+    ways ? `# 주인이 정한 네 방식 (위와 부딪히면 이게 먼저, 단 주인의 일을 남에게 말하지 않는 건 그대로)\n${ways}` : "",
+    "",
     memory ? `# 네가 기억하는 것 (사람, 이곳, 교훈)\n${memory}` : "",
     "",
     before.length ? `# 이 채널에서 방금까지 오간 말 (오래된 것부터)\n${before.map(line).join("\n")}` : "",
@@ -466,20 +485,22 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     `# 지금 ${who}${watching?.owner ? "(주인)" : ""}가 한 말`,
     said,
     "",
-    watching ? "(skip), (react 이모지), 또는 디스코드에 그대로 올라갈 말 중 하나만 써. 따옴표나 이름표 없이." : "디스코드에 그대로 올라갈 답만 써. 따옴표나 이름표 없이.",
+    watching ? "(skip), (react 이모지), (take), 또는 디스코드에 그대로 올라갈 말 중 하나만 써. 따옴표나 이름표 없이." : "디스코드에 그대로 올라갈 답만 써. 따옴표나 이름표 없이.",
   ].join("\n");
 }
 
 /** A line in the channel's talk, said back to: to whoever called it, or, watching, a line, a reaction or nothing. */
-async function talk(m: DiscordMessage, a: AgentSettings, text: string, watching?: { owner: boolean }) {
+async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = "", watching?: { owner: boolean }): Promise<void> {
   if (!me) return;
   if (!watching) void discordTyping(m.channel);
   const before = (await discordHistory(m.channel, m.id, 15).catch(() => [])).filter((x) => x.content.trim());
   const { oneShot } = await import("./aside");
   const space = a.space ?? state.spaces[0]?.id ?? state.space;
   const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
-  const out = (await oneShot(space, "~", talkPrompt(a, m.author.name, before, text, me.id, memory, watching))).trim();
+  const out = (await oneShot(space, "~", talkPrompt(a, m.author.name, before, text, me.id, memory, watching, ways))).trim();
   if (!out || /^\(?skip\)?$/i.test(out)) return;
+  // it was for it after all: the user's words as a request, anyone else's as a call
+  if (watching && /^\(?take\)?$/i.test(out)) return watching.owner ? ownerTakes(m, a, text) : talk(m, a, text, ways);
   const react = watching && /^\(react\s+(.+)\)$/i.exec(out);
   if (react) {
     await discordReact(m.channel, m.id, react[1].trim()).catch((e) => logError("agent", `react: ${e instanceof Error ? e.message : String(e)}`));
