@@ -151,6 +151,23 @@ describe("what a job leaves unchecked comes with why", () => {
     expect(held()).toHaveLength(1);
   });
 
+  it("an unticked item on the checklist sent with the done counts as unchecked too", async () => {
+    const done = { type: "done", summary: "녹음은 잘 돼요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] };
+    const list = { type: "checklist", items: [{ label: "개발판 녹음", done: true }, { label: "스피커로 나오는 상대방 목소리 녹음", done: false }] };
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n === 1) say(emit, `확인했어요.\n${block(list, done)}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(held()).toHaveLength(1));
+    expect(held()[0]).toContain("스피커로 나오는 상대방 목소리 녹음");
+    expect(held()[0]).not.toContain("개발판 녹음");
+    expect(state.tasks[0].status).not.toBe("done");
+  });
+
   it("with something unchecked and no question from the job, Ondra asks: finish as is or keep checking", async () => {
     const done = { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "스피커 소리 녹음", why: "방 안 대화가 섞여요" }] };
     await harness((agent, n, emit) => {
