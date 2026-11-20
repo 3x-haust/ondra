@@ -3,7 +3,8 @@
 // Ondra ships only the asking, so each user's agent listens their own way without a setting per wish.
 //
 // The file defines `listen(message, ctx)`, asked for every message the agent sees:
-//   true: take it, as if it was called · false: leave it, even if it was · anything else: the usual way.
+//   true: take it, as if it was called · false: leave it, even if it was · "watch": look on, and say
+//   something, react, or let it pass, as it sees fit · anything else: the usual way.
 // It runs in a worker, with nothing of the app in reach. A missing file, a rule that throws, or one
 // that doesn't answer within WAIT_MS leaves the usual way.
 import { engineInfo, fsRead, type DiscordMessage } from "../lib/native";
@@ -25,6 +26,9 @@ export type ListenCtx = {
   now: number;
 };
 
+/** What a rule can say about a message: take it, leave it, or watch it. */
+export type Take = boolean | "watch";
+
 const WAIT_MS = 1000;
 
 let dir: Promise<string> | undefined;
@@ -35,7 +39,7 @@ export const rulesPath = () => (dir ??= engineInfo().then((i) => `${i.dataDir.re
 const ASK = `
 self.onmessage = (e) => {
   const { id, message, ctx } = e.data;
-  const reply = (out, error) => postMessage({ id, out: typeof out === "boolean" ? out : undefined, error });
+  const reply = (out, error) => postMessage({ id, out: typeof out === "boolean" || out === "watch" ? out : undefined, error });
   try {
     Promise.resolve(typeof listen === "function" ? listen(message, ctx) : undefined).then((out) => reply(out), (err) => reply(undefined, String((err && err.message) || err)));
   } catch (err) {
@@ -43,7 +47,7 @@ self.onmessage = (e) => {
   }
 };`;
 
-type Said = { id: number; out?: boolean; error?: string };
+type Said = { id: number; out?: Take; error?: string };
 let loaded: { text: string; worker: Worker; url: string; broken: boolean } | undefined;
 const waiting = new Map<number, (said: Said | undefined) => void>();
 let seq = 0;
@@ -72,8 +76,8 @@ export function forgetRules() {
   loaded = undefined;
 }
 
-/** What the user's rules say about this message: true take it, false leave it, undefined the usual way. */
-export async function listens(message: DiscordMessage, ctx: ListenCtx): Promise<boolean | undefined> {
+/** What the user's rules say about this message: true take it, false leave it, "watch" watch it, undefined the usual way. */
+export async function listens(message: DiscordMessage, ctx: ListenCtx): Promise<Take | undefined> {
   const text = await fsRead(await rulesPath()).then((f) => f.text ?? "", () => "");
   if (!text.trim()) {
     forgetRules();

@@ -25,13 +25,19 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
+import { askedLine, askPrompt, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
 
 /** what a user keeps in their own rules file: their line right after it spoke in a channel is for it */
 const FOLLOW_UP = `function listen(message, ctx) {
   if (!ctx.owner || ctx.called) return;
   const last = ctx.recent[ctx.recent.length - 1];
   if (last && last.me && ctx.now - last.at < 5 * 60_000) return true;
+}`;
+/** and the rest of a server channel's talk it watches: a line, a reaction, or nothing, as it sees fit */
+const WATCH_REST = `function listen(message, ctx) {
+  const last = ctx.recent[ctx.recent.length - 1];
+  if (ctx.owner && last?.me && ctx.now - last.at < 5 * 60_000) return true;
+  if (message.guild && !ctx.called) return "watch";
 }`;
 const rules = { text: undefined as string | undefined };
 /** a page's Worker, run here: the script it is made from, with its own self and postMessage */
@@ -98,6 +104,17 @@ describe("talk with others", () => {
     expect(p).toContain("메타몽(너): 안녕");
     expect(p).not.toContain("비밀 데스크탑");
     expect(OTHERS_RULES).toContain("주인 계정이 직접 한 말");
+    expect(p).toContain("너를 부른 게 아닌 말이면");
+  });
+
+  it("watching, it may let it pass, react or chime in, and isn't told to skip what wasn't for it", () => {
+    const p = talkPrompt(agent, "성윤", [msg({ author: { id: OWNER, name: "성윤", bot: false }, content: "오늘 배포 끝" })], "드디어 퇴근", BOT, "", { owner: true });
+    expect(p).toContain(WATCH_WAYS);
+    expect(p).toContain("성윤(주인): 오늘 배포 끝");
+    expect(p).toContain("(react 이모지)");
+    expect(p).not.toContain("너를 부른 게 아닌 말이면");
+    expect(p).not.toContain(OTHERS_RULES);
+    expect(talkPrompt(agent, "민수", [], "ㅇㅇ", BOT, "", { owner: false })).toContain(OTHERS_RULES);
   });
 });
 
@@ -253,6 +270,42 @@ describe("the whole way round", () => {
     emit({ kind: "message", message: msg({ id: "m5", author: owner, content: "저녁 뭐 먹지" }) });
     await settle();
     expect(said.thrown).toHaveLength(0);
+  });
+
+  it("a rule that watches: talk not for it gets nothing, a reaction or a line, never main; a call still gets an answer", async () => {
+    rules.text = WATCH_REST;
+    await ready();
+    said.answer = "(skip)";
+    emit({ kind: "message", message: msg({ id: "m1", author: owner, content: "점심 뭐 먹지" }) });
+    await vi.waitFor(() => expect(said.prompts).toHaveLength(1));
+    expect(said.prompts[0]).toContain(WATCH_WAYS);
+    await settle();
+    said.answer = "(react 😂)";
+    emit({ kind: "message", message: msg({ id: "m2", content: "어제 배포하다 키보드 부서짐 ㅋㅋ" }) });
+    await vi.waitFor(() => expect(native.discordReact).toHaveBeenCalledWith("c1", "m2", "😂"));
+    said.answer = "그거 나도 있었음";
+    emit({ kind: "message", message: msg({ id: "m3", author: owner, content: "배포 끝나면 꼭 뭔가 터짐" }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "그거 나도 있었음", undefined));
+    expect(native.discordSend).toHaveBeenCalledTimes(1);
+    expect(native.discordTyping).not.toHaveBeenCalled();
+    expect(said.thrown).toHaveLength(0);
+    // right after it spoke, the user's next line is still taken, and a call still gets main
+    emit({ kind: "message", message: msg({ id: "m4", author: owner, content: "ㅇㅇ 맞아" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    emit({ kind: "message", message: msg({ id: "m5", author: owner, content: "메타몽 로그 봐줘" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.prompts).toHaveLength(3);
+  });
+
+  it("watching others keeps to where they may be answered", async () => {
+    rules.text = WATCH_REST;
+    setState("settings", "agent", "others", false);
+    said.answer = "(react 👍)";
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m1", content: "나 취업했어" }) });
+    await settle();
+    expect(said.prompts).toHaveLength(0);
+    expect(native.discordReact).not.toHaveBeenCalled();
   });
 
   it("a rule can also keep it quiet when called, and a broken one leaves the usual way", async () => {
