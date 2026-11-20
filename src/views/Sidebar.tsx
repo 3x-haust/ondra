@@ -17,7 +17,7 @@ import { revealOn } from "../engine/far";
 import { expand } from "../engine/rpc";
 import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry } from "../ui/taskMenu";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, openTask, setHoverTask, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, view } from "../state/ui";
+import { goMain, hoverTask, openTask, hoverOn, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, view } from "../state/ui";
 import { hideHostProject, showHostProject } from "../engine/hosts";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
@@ -175,8 +175,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
         onClick={(e) => (e.altKey || e.metaKey ? void openInSplit(face().id) : openTask(face().id))}
         onPointerDown={(e) => startTaskDrag(e, t().id)}
-        onMouseEnter={() => setHoverTask(props.kid ? t().parentId! : t().id)}
-        onMouseLeave={() => setHoverTask(null)}
+        {...hoverOn(() => (props.kid ? t().parentId! : t().id))}
         onContextMenu={(e) => {
           e.preventDefault();
           openTaskMenu(t().id, e);
