@@ -102,6 +102,9 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.settings-inner .set-note.bad {
+  color: var(--bad-ink);
+}
 .settings-inner .set-row .btn.sm,
 .settings-inner .set-group-title .btn.sm {
   height: 28px;

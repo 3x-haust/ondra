@@ -47,7 +47,9 @@ export function AgentSettings() {
       <PageHead tab="agent" />
       <GroupTitle title={t("디스코드")} />
       <div class="set-group">
-        <Row title={t("디스코드에서 쓰기")} desc={statusLine()}>
+        <Row title={t("디스코드에서 쓰기")}>
+          {/* where it stands is state, not a description: next to the switch, and only when there is one */}
+          <Show when={status().state !== "off"}><span class="set-note" classList={{ bad: status().state === "stopped" }}>{statusLine()}</span></Show>
           <Switch_ on={a().on} set={(on) => (hasToken() ? turn(on) : toast(t("먼저 봇 토큰을 넣어 주세요")))} label={t("디스코드에서 쓰기")} />
         </Row>
         <Row title={t("봇 토큰")} desc={hasToken() ? t("키체인에 있어요. 바꾸려면 새 토큰을 넣어요") : t("Discord 개발자 포털 › Bot에서 복사해요. MESSAGE CONTENT INTENT를 켜 주세요")}>

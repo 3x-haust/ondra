@@ -675,6 +675,8 @@ export const discordTyping = (channel: string) => call<void>("discord_typing", {
 export const discordHistory = (channel: string, before?: string, limit?: number) => call<DiscordMessage[]>("discord_history", { channel, before, limit }, []);
 /** the token goes to the keychain; empty removes it. It never comes back to the page. */
 export const discordTokenSet = (token: string) => call<void>("discord_token_set", { token });
+/** a saved secret (by name) becomes the bot token, natively; the value never comes here */
+export const discordTokenFromSecret = (name: string) => call<void>("discord_token_from_secret", { name });
 export const discordTokenHas = () => call<boolean>("discord_token_has", undefined, false);
 
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */

@@ -116,6 +116,14 @@ pub fn vault_set(item: &str, value: &str) -> Result<(), String> {
     debug_assert!(item.starts_with('@'));
     store::set(item, value)
 }
+/// A saved secret's value (global `NAME` or a project's `<project id>/NAME`), for Ondra's own use
+/// in this process (moving it to the Discord token); never for the page or a model.
+pub fn saved_value(account: &str) -> Option<String> {
+    if account.starts_with('@') || account.trim().is_empty() {
+        return None;
+    }
+    store::get(account)
+}
 pub fn vault_delete(item: &str) -> Result<(), String> {
     debug_assert!(item.starts_with('@'));
     store::delete(item)

@@ -3,7 +3,7 @@
 // name (skills/pet-maker).
 import { createResource, createSignal, For, Show } from "solid-js";
 import { fileSrc, petDelete, petExport, petImport, petList, pickFiles, revealPath } from "../lib/native";
-import { MAX_PETS, PET_SIZE, petConfig, pickPet, wearPet } from "../engine/pet";
+import { PET_SIZE, petConfig, pickPet, wearPet } from "../engine/pet";
 import { BUILTIN, parseSpec, type PetSpec } from "../pet/spec";
 import { setState, state } from "../state/store";
 import { goMain, toast } from "../state/ui";
@@ -120,7 +120,6 @@ export function PetSettings() {
       </div>
 
       <GroupTitle title={t("펫 고르기")} />
-      <p class="pet-list-hint">{t("눌러서 화면에 띄우거나 내려요. 여러 마리를 같이 띄울 수 있어요 (최대 {n}마리)", { n: MAX_PETS })}</p>
       <div class="pet-list" role="group" aria-label={t("펫 고르기")}>
         <For each={pets() ?? [BUILTIN]}>
           {(p) => {

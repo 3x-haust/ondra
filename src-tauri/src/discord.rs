@@ -147,6 +147,14 @@ pub fn discord_token_set(token: String) -> Result<(), String> {
     crate::secrets::vault_set(TOKEN_ITEM, t)
 }
 
+/// Use a saved secret (Settings › 시크릿, by name) as the bot token: the value moves here, natively,
+/// so an agent that set it up for the user never sees it.
+#[tauri::command]
+pub fn discord_token_from_secret(name: String) -> Result<(), String> {
+    let v = crate::secrets::saved_value(name.trim()).filter(|v| !v.trim().is_empty()).ok_or_else(|| format!("시크릿 {}이(가) 없어요", name.trim()))?;
+    crate::secrets::vault_set(TOKEN_ITEM, v.trim())
+}
+
 #[tauri::command]
 pub fn discord_token_has() -> bool {
     token().is_ok()
