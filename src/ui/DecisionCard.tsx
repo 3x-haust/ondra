@@ -41,8 +41,9 @@ const inOwnProject = (x: { project?: string }, v: View) => {
 
 /** `crumb: false`: the task's row is already in sight right above (a project's task strip), so no crumb.
  *  `dock`: Main's form, attached above the input: the question on one line, its answers as buttons under it,
- *  opened in place when there is more to read. `keys: false`: another card on screen takes the number keys. */
-export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: boolean; dock?: boolean; keys?: boolean }) {
+ *  opened in place when there is more to read. `keys: false`: another card on screen takes the number keys.
+ *  `ownBelow`: the input right below is where your own answer goes (a job's thread), so the card has no line for it. */
+export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: boolean; dock?: boolean; keys?: boolean; ownBelow?: boolean }) {
   const t = () => taskById(props.d.taskId);
   // what to choose from: the pictures sent with the question, else what the job
   // said and showed since the user last spoke (the reasoning behind the question)
@@ -82,7 +83,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
   };
   // one action answers: a click on a choice, or its number. Your own words are the one answer that
   // needs a second step (writing them); the arrows only move the highlight, Enter answers it
-  const own_ = () => !props.d.ui;
+  const own_ = () => !props.d.ui && !props.ownBelow;
   const n = () => props.d.options.length;
   const count = () => n() + (own_() ? 1 : 0);
   const [hi, setHi] = createSignal(-1);
