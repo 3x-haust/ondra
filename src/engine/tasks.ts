@@ -487,7 +487,17 @@ export function mergeCards(before: Handoff | undefined, after: Handoff): Handoff
   };
 }
 
+/** The unticked items of the checklists sent alongside a done, not already in its unverified list. */
+export function openChecks(blocks: any[], listed: { what: string }[]): string[] {
+  const said = listed.map((u) => u.what.trim());
+  return blocks
+    .filter((b) => b?.type === "checklist" && Array.isArray(b.items))
+    .flatMap((b) => b.items.filter((i: any) => i && i.done === false && String(i.label ?? "").trim()).map((i: any) => String(i.label).trim()))
+    .filter((l: string, i: number, all: string[]) => all.indexOf(l) === i && !said.some((w) => w.includes(l) || l.includes(w)));
+}
+
 function applyBlocks(t: Task, items: any[], run: Run) {
+  const sent = items;
   for (const b of items) {
     if (!b || typeof b !== "object" || typeof b.type !== "string") continue;
     switch (b.type) {
@@ -579,7 +589,8 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         if (b.result) t.result = String(b.result).slice(0, 8000);
         const items: Evidence[] = Array.isArray(b.evidence) ? b.evidence.filter((e: any) => e && e.ref).map((e: any) => ({ kind: String(e.kind ?? "file"), ref: String(e.ref), ok: e.ok !== false, note: e.note ? String(e.note) : undefined })) : [];
         const listed = readUnverified(b.unverified);
-        const unverified = listed.map(uncheckedLine);
+        // a checklist it sent with this done, with items left unticked: those weren't checked either
+        const unverified = [...listed.map(uncheckedLine), ...openChecks(sent, listed)];
         run.bare = unreasoned(listed).map((u) => u.what);
         // a later done replaces what it proves again (same kind + ref)
         run.evidence = [...(run.evidence ?? []).filter((o) => !items.some((n) => n.kind === o.kind && n.ref === o.ref)), ...items];
