@@ -18,6 +18,7 @@ import "./styles/reverse.css";
 import "./styles/panes.css";
 import "./styles/changes.css";
 import App from "./App";
+import { keepStrayKeysOut } from "./lib/strayKeys";
 import { Capture } from "./views/Capture";
 import { VizGallery } from "./views/VizGallery";
 import { Pet } from "./pet/Pet";
@@ -31,6 +32,9 @@ document.documentElement.classList.toggle("pet-window", isPet);
 // every chart kind with its examples, for checking them side by side (?gallery)
 const isGallery = new URLSearchParams(location.search).has("gallery");
 render(() => (isCapture ? <Capture /> : isPet ? <Pet /> : isGallery ? <VizGallery /> : <App />), document.getElementById("root") as HTMLElement);
+
+// the characters macOS gives → and the other function keys never end up in a text field as □
+keepStrayKeysOut();
 
 // text boxes grow with what's typed (WebKit without field-sizing)
 if (!CSS.supports("field-sizing", "content")) {
