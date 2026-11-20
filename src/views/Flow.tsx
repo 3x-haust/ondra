@@ -4,7 +4,7 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { kidsOf as childrenOf, state, taskById, tasksShown } from "../state/store";
 import type { Task } from "../state/types";
-import { goMain, hoverTask, openTask, setHoverTask, view } from "../state/ui";
+import { goMain, hoverTask, openTask, hoverOn, view } from "../state/ui";
 import { ago, compact, now } from "../ui/bits";
 import { line, plain } from "../ui/ForkCard";
 import { Icon } from "../ui/Icon";
@@ -209,8 +209,7 @@ export function Flow() {
               classList={{ wrapped: (placed().get(r.k)?.h ?? 0) > r.base, kid: r.kid, on: openId() === r.t.id, hot: hoverTask() === r.t.id, past: ended(r.t), you: !r.kid && bucket(r.t) === "you" }}
               style={{ top: `${placed().get(r.k)?.y ?? 0}px`, "min-height": `${r.base}px`, "padding-left": `${r.kid ? GUTTER + 12 : GUTTER}px` }}
               onClick={() => openTask(r.t.id)}
-              onMouseEnter={() => setHoverTask(r.kid ? r.t.parentId! : r.t.id)}
-              onMouseLeave={() => setHoverTask(null)}
+              {...hoverOn(() => (r.kid ? r.t.parentId! : r.t.id))}
               title={r.t.title}
             >
               <span

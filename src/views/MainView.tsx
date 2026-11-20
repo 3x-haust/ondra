@@ -19,7 +19,7 @@ import { splitProjectId } from "../state/mirror";
 import { jobShot, resultOfTask } from "../engine/results";
 import { expand, tilde } from "../engine/rpc";
 import type { CaptainMessage, Decision, Status, Task } from "../state/types";
-import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, setHoverTask, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, view, type Draft, type View, previewFile } from "../state/ui";
+import { closePane, focusId, focusPane, hoverTask, inPane, jumpMsg, layout, newTaskOpen, openPanel, openTask, paneCount, paneDraft, paneState, panelOpen, hoverOn, setJumpMsg, setNewTaskOpen, setPaneDraft, setPaneView, setView, splitPane, toast, view, type Draft, type View, previewFile } from "../state/ui";
 import { usePane, usePaneFocused, useView } from "../state/panes";
 import { chatKey, editMain, inChat, mainDraft, mainThought, resetMain, STEP_MARK, stopMain, throwThought, warmMain } from "../engine/captain";
 import { addMemory } from "../engine/memory";
@@ -162,8 +162,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
             class={`job-row tone-${meta().tone}`}
             classList={{ active: props.active, past: !props.live }}
             onClick={open}
-            onMouseEnter={() => setHoverTask(x().id)}
-            onMouseLeave={() => setHoverTask(null)}
+            {...hoverOn(() => x().id)}
             title={props.relayed ? `${t("{task}에 전달했어요", { task: x().title })}` : x().title}
           >
             <Glyph t={x()} />
