@@ -977,13 +977,18 @@ function gitNote(t: Task): string[] {
  */
 const PLAYBOOK: Record<string, string> = { fix: "Bug fix", hotfix: "Bug fix", bugfix: "Bug fix", feat: "Feature", refactor: "Refactoring", perf: "Performance" };
 
+/** The coding-playbooks playbook a job follows (from its branch), none for a small job or a new app. */
+export function playbookOf(t: Pick<Task, "size" | "fresh" | "branch" | "worktree">): string | undefined {
+  if (t.fresh || t.size === "small") return undefined;
+  return PLAYBOOK[(t.worktree?.branch ?? t.branch ?? "").split("/")[0].toLowerCase()];
+}
+
 export function rigorNote(t: Pick<Task, "size" | "fresh" | "branch" | "worktree">): string[] {
   if (t.fresh)
     return ["New app from nothing: build the skeleton plainly first, no playbook; once it runs, make its check skill (app-check) and prove the first screens with it."];
   if (t.size === "small")
     return ["Size: small. Make the change, check it with the cheapest check there is (a type check, the test next to it, a look if a dev server is already up), and finish: no playbook, no check skill made for this, no plan check or review. Name in the report anything you didn't check."];
-  const kind = (t.worktree?.branch ?? t.branch ?? "").split("/")[0].toLowerCase();
-  const book = PLAYBOOK[kind];
+  const book = playbookOf(t);
   const lines = book
     ? [`This is ${book === "Bug fix" ? "a bug fix" : book === "Feature" ? "a feature" : book === "Refactoring" ? "a refactoring" : "performance work"}: read the coding-playbooks skill and follow its ${book} playbook. Its steps are your plan's steps; one you skip stays in the plan with "skip":"why".`]
     : [];
