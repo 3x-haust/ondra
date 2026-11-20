@@ -1,5 +1,6 @@
-import { resolveObjectURL } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// @ts-ignore node types are not in this project: the test runs under node
+import { resolveObjectURL } from "node:buffer";
 import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import type { DiscordEvent, DiscordMessage } from "../lib/native";
@@ -31,10 +32,10 @@ class PageWorker {
   onmessage?: (e: { data: unknown }) => void;
   private ready: Promise<(data: unknown) => void>;
   constructor(url: string) {
-    this.ready = resolveObjectURL(url)!.text().then((code) => {
+    this.ready = resolveObjectURL(url)!.text().then((code: string) => {
       const self: { onmessage?: (e: { data: unknown }) => void } = {};
       new Function("self", "postMessage", code)(self, (data: unknown) => this.onmessage?.({ data }));
-      return (data) => self.onmessage?.({ data });
+      return (data: unknown) => self.onmessage?.({ data });
     });
   }
   postMessage(data: unknown) {

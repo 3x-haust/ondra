@@ -7,6 +7,7 @@
 //   number in the same channel).
 // - anyone else calling it: talk only. One model call with no tools, nothing of the user's work in
 //   it, so there is nothing to give away however they ask (see OTHERS_RULES).
+// - what it takes is the usual way above unless the user's own rules file says otherwise (agentRules.ts).
 import {
   discordDelete,
   discordHistory,
@@ -22,6 +23,7 @@ import {
 } from "../lib/native";
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
+import { forgetRules, listens, rulesPath } from "./agentRules";
 import { setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
 
@@ -126,6 +128,7 @@ export function stopAgent() {
   me = undefined;
   for (const h of heard.values()) if (h.timer) clearTimeout(h.timer);
   heard.clear();
+  forgetRules();
   setStatus({ state: "off" });
 }
 
@@ -170,12 +173,15 @@ export const OWNER_WAYS = `How this user wants you to work here:
 - When work ends, say what changed, what was checked, what is still open (and why), with the PR or link. Unchecked things are said plainly, not buried.`;
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
-export function ownerNote(m: DiscordMessage, a: AgentSettings): string {
+export function ownerNote(m: DiscordMessage, a: AgentSettings, rules?: string): string {
   const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], place: m.guild ?? undefined, dm: !m.guild });
   return [
     `(Ondra) The user sent this from Discord (${m.guild ? `server ${m.guild}, channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
+    rules
+      ? `Which messages you take on Discord is theirs to shape, in their own rules file ${rules} (on this Mac only, not Ondra's code; the ondra skill says how it works). When they ask to change who or when you listen ("멘션 안 해도 들어", "이 채널에선 조용히 있어"), write or edit that file, keeping the rules already in it, and say what it does now.`
+      : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
   ].filter(Boolean).join("\n");
 }
@@ -203,9 +209,14 @@ async function onMessage(m: DiscordMessage) {
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
   const owner = !!a.ownerId && m.author.id === a.ownerId;
   if (m.guild) servers.add(m.channel);
+  const recent = heard.get(m.channel)?.lines ?? [];
   hear(m.channel, m.guild ?? undefined, { who: m.author.id, name: m.author.name, text: m.content, owner }, false);
-  if (!calledIn(m, a, me.id) && !(owner && pendingIn(m.channel))) return;
-  const text = cleanText(m, a, me.id);
+  const bot = me.id;
+  const called = calledIn(m, a, bot) || (owner && pendingIn(m.channel));
+  // the user's own rules have the last word on what it takes
+  const rule = await listens(m, { owner, called, name: a.name, me: bot, recent, now: Date.now() });
+  if (!(rule ?? called) || !me) return;
+  const text = cleanText(m, a, bot);
   if (!text) return;
   if (owner) {
     // a number answers the question waiting in this channel
@@ -230,7 +241,7 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   void discordReact(m.channel, m.id, "👀").catch(() => {});
   void discordTyping(m.channel);
   const { throwThought } = await import("./captain");
-  const replyId = throwThought(text, space, { note: ownerNote(m, a) });
+  const replyId = throwThought(text, space, { note: ownerNote(m, a, await rulesPath()) });
   if (replyId) replies.set(replyId, { channel: m.channel, message: m.id });
 }
 
@@ -352,7 +363,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string) {
 function hear(channel: string, guild: string | undefined, line: Heard, mine: boolean) {
   if (!line.text.trim()) return;
   const h = heard.get(channel) ?? { lines: [], guild, spoke: false };
-  h.lines = [...h.lines, line].slice(-40);
+  h.lines = [...h.lines, { ...line, at: Date.now() }].slice(-40);
   h.guild ??= guild;
   if (mine) h.spoke = true;
   if (h.timer) clearTimeout(h.timer);
