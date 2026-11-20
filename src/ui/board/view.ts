@@ -3,7 +3,7 @@
 // it. A board already seen is shown whole.
 // Plain DOM (no Solid) so a reply that is still streaming can move the same board
 // into its re-rendered text and keep drawing where it was.
-import { parseBoard, type Board, type Mark, type Tone } from "./parse";
+import { headings, labelSize, parseBoard, type Board, type Mark, type Tone } from "./parse";
 import { completePart, engineReady, isProgram, loadEngine, runProgram } from "./program";
 import { short } from "./names";
 import { box, head, polyline, ring, swipe, type Pt } from "./sketch";
@@ -73,7 +73,7 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
       if (f) g.appendChild(f);
       pen(box(m.x, m.y, m.w, m.h), 2 * (m.w + m.h), m.bare ? 1.2 : undefined);
       if (f) pieces.push({ e: f, ms: 260, kind: "fade" });
-      if (m.label) words(m.x + m.w / 2, m.y + m.h / 2, m.label, m.size ?? Math.max(13, Math.min(20, m.h * 0.34)), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
+      if (m.label) words(m.x + m.w / 2, m.labelY ?? m.y + m.h / 2, m.label, labelSize(m), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
       break;
     }
     case "circle": {
@@ -342,7 +342,8 @@ export class BoardView {
     }
     if (b.title) this.svg.setAttribute("aria-label", b.title);
     let added = false;
-    b.marks.forEach((m, i) => {
+    const marks = headings(b.marks);
+    marks.forEach((m, i) => {
       const key = JSON.stringify(m);
       const old = this.drawn[i];
       if (old?.key === key) return;

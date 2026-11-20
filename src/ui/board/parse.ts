@@ -24,8 +24,8 @@ export const MATERIALS: Material[] = ["steel", "wood", "glass", "gold", "copper"
 /** `color`: a checked #hex, used in place of the tone */
 type Common = { step: number; tone: Tone; color?: string; dash?: boolean };
 export type Mark =
-  /** size: the label's; bare: an outline only */
-  | (Common & { kind: "box"; x: number; y: number; w: number; h: number; label?: string; fill?: boolean; bare?: boolean; size?: number })
+  /** size: the label's; bare: an outline only; labelY: where its label sits when not in its middle (see headings) */
+  | (Common & { kind: "box"; x: number; y: number; w: number; h: number; label?: string; fill?: boolean; bare?: boolean; size?: number; labelY?: number })
   | (Common & { kind: "circle"; x: number; y: number; r: number; label?: string; fill?: boolean; size?: number })
   | (Common & { kind: "line" | "arrow" | "curve"; pts: [number, number][]; label?: string; head?: boolean; width?: number })
   | (Common & { kind: "text"; x: number; y: number; text: string; size: number; bold?: boolean; align?: "middle" | "end" })
@@ -79,6 +79,37 @@ export function words(line: string): string[] | undefined {
 
 const isNum = (w: string) => /^-?(\d+\.?\d*|\.\d+)$/.test(w);
 const quoted = (w: string) => w.startsWith('"');
+
+/** the size a box's label is drawn at */
+export const labelSize = (m: { h: number; size?: number }) => m.size ?? Math.max(13, Math.min(20, m.h * 0.34));
+
+/**
+ * A labelled box with other shapes inside it is a frame around them: its label names
+ * them from above, in the room over the first of them, not from its middle where they sit.
+ */
+export function headings(marks: Mark[]): Mark[] {
+  // where each shape that could sit in a frame is: its middle, and its top edge
+  const spots = marks.map((m): [number, number, number] | undefined => {
+    switch (m.kind) {
+      case "box": return [m.x + m.w / 2, m.y + m.h / 2, m.y];
+      case "circle":
+      case "dot": return [m.x, m.y, m.y - m.r];
+      case "text": return [m.x, m.y, m.y - m.size * 0.6];
+      default: return undefined;
+    }
+  });
+  return marks.map((b) => {
+    if (b.kind !== "box" || !b.label) return b;
+    let first = Infinity;
+    marks.forEach((m, i) => {
+      const s = spots[i];
+      if (m === b || !s || (m.kind === "box" && m.w * m.h >= b.w * b.h)) return;
+      if (s[0] > b.x && s[0] < b.x + b.w && s[1] > b.y && s[1] < b.y + b.h) first = Math.min(first, s[2]);
+    });
+    if (first === Infinity) return b;
+    return { ...b, labelY: b.y + Math.max((first - b.y) / 2, labelSize(b) / 2 + 6) };
+  });
+}
 
 export function parseBoard(src: string): Board {
   const b: Board = { w: 800, h: 450, steps: [], marks: [], parts: [], problems: [] };
