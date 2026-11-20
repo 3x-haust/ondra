@@ -520,6 +520,7 @@ pub fn run() {
             discord::discord_history,
             discord::discord_token_set,
             discord::discord_token_has,
+            discord::discord_token_from_secret,
             secrets::secret_list,
             secrets::secret_set,
             secrets::secret_delete,
