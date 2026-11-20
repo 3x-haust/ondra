@@ -30,7 +30,7 @@ import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
-import { handoffPrompt, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
+import { handoffPrompt, playbookOf, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
 import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 
 const KIND_IDS: unknown[] = KINDS.map((k) => k.id);
@@ -1534,11 +1534,17 @@ function handlers(id: string, run: Run) {
           run.quietTools = (run.quietTools ?? 0) + 1;
           const job = taskById(id);
           const plan = job?.plan ?? [];
-          if (run.streaming && !job?.parentId && run.quietTools >= PLAN_QUIET && Date.now() - (run.planMovedAt ?? 0) >= PLAN_QUIET_MS && (run.planNudges ?? 0) < PLAN_NUDGES && plan.some((s) => s.state !== "done")) {
+          // a fork that never sent a plan is asked for one the same way (not a small job: it owes none)
+          const none = !plan.length && !!job && job.size !== "small";
+          if (run.streaming && !job?.parentId && run.quietTools >= PLAN_QUIET && Date.now() - (run.planMovedAt ?? 0) >= PLAN_QUIET_MS && (run.planNudges ?? 0) < PLAN_NUDGES && (none || plan.some((s) => s.state !== "done"))) {
             run.quietTools = 0;
             run.planMovedAt = Date.now();
             run.planNudges = (run.planNudges ?? 0) + 1;
-            void request(agentOf(id), { type: "steer", message: `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${planText(plan).join("\n")}\nSend a now block with the step you are on (the step you were on before it counts as done; one you never were on needs {"text":"…","done":true} or {"text":"…","skip":"why"} in a plan block), or a new plan if it changed.` }).catch(() => {});
+            const book = job && playbookOf(job);
+            const message = none
+              ? `(Ondra) You haven't sent a plan yet. Send a plan block now ({"type":"plan","steps":[…]}, the steps you already did as {"text":"…","done":true}), then a now block with the step you are on.${book ? ` This is ${book} work: the coding-playbooks ${book} playbook's steps are your steps; one you skip stays with "skip":"why".` : ""}`
+              : `(Ondra) Your to-do list hasn't moved for a while. Current list:\n${planText(plan).join("\n")}\nSend a now block with the step you are on (the step you were on before it counts as done; one you never were on needs {"text":"…","done":true} or {"text":"…","skip":"why"} in a plan block), or a new plan if it changed.`;
+            void request(agentOf(id), { type: "steer", message }).catch(() => {});
           }
           // a job booted or shut down a phone: the hub and the sidebar show it now
           if (done?.kind === "tool" && done.tool.name === "device") void refreshDevices();
@@ -2153,6 +2159,12 @@ function owedReasons(t: Task, run: Run, said: string): { needs: string[]; lines:
   if (t.size === "small") return { needs: [], lines: [] };
   const needs: string[] = [];
   const lines: string[] = [];
+  // a playbook's steps are checked through the plan: with no plan, none of them ever was
+  const book = playbookOf(t);
+  if (book && !t.plan.length) {
+    needs.push("계획");
+    lines.push(`- 이 일은 ${book} 플레이북대로 하기로 했는데 계획을 한 번도 보내지 않았어요(plan 블록). 그 플레이북의 단계를 plan 블록으로 보내 줘: 한 단계는 {"text":"…","done":true}, 안 하기로 한 단계는 {"text":"…","skip":"이유"}. 빠뜨린 단계가 있으면 지금 하고 보내 줘.`);
+  }
   const open = unexplained(t.plan);
   if (open.length) {
     needs.push("건너뛴 단계");
