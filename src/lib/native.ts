@@ -682,6 +682,13 @@ export const discordHistory = (channel: string, before?: string, limit?: number)
 export const discordTokenSet = (token: string) => call<void>("discord_token_set", { token });
 /** a saved secret (by name) becomes the bot token, natively; the value never comes here */
 export const discordTokenFromSecret = (name: string) => call<void>("discord_token_from_secret", { name });
+export type DiscordChannel = { id: string; name: string; kind: string; category?: string | null; topic?: string | null; position?: number };
+export const discordGuilds = () => call<{ id: string; name: string }[]>("discord_guilds");
+export const discordChannels = (guild: string) => call<DiscordChannel[]>("discord_channels", { guild });
+/** `only`: user ids that alone may see it (the bot is added): a private channel */
+export const discordChannelCreate = (guild: string, name: string, o: { kind?: "text" | "category"; category?: string; topic?: string; only?: string[] } = {}) =>
+  call<DiscordChannel>("discord_channel_create", { guild, name, kind: o.kind, category: o.category, topic: o.topic, only: o.only });
+export const discordChannelDelete = (channel: string) => call<void>("discord_channel_delete", { channel });
 export const discordTokenHas = () => call<boolean>("discord_token_has", undefined, false);
 
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */

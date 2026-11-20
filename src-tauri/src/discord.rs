@@ -201,6 +201,74 @@ pub async fn discord_delete(channel: String, message: String) -> Result<(), Stri
     rest(reqwest::Method::DELETE, &format!("/channels/{channel}/messages/{message}"), None).await.map(|_| ())
 }
 
+// ── the server itself, for the agent's own hands (engine/discordHands.ts): which servers it is
+// in, their channels, and making or removing a channel. Needs the bot's Manage Channels permission.
+
+/// A channel as the agent sees it: id, name, kind, the category it is under, its topic.
+pub fn channel_brief(v: &Value) -> Value {
+    let kind = match v["type"].as_u64() {
+        Some(0) => "text",
+        Some(2) => "voice",
+        Some(4) => "category",
+        Some(5) => "announcement",
+        Some(13) => "stage",
+        Some(15) => "forum",
+        _ => "other",
+    };
+    json!({ "id": v["id"], "name": v["name"], "kind": kind, "category": v["parent_id"], "topic": v["topic"], "position": v["position"] })
+}
+
+#[tauri::command]
+pub async fn discord_guilds() -> Result<Vec<Value>, String> {
+    let got = rest(reqwest::Method::GET, "/users/@me/guilds", None).await?;
+    Ok(got.as_array().map(|a| a.iter().map(|g| json!({ "id": g["id"], "name": g["name"] })).collect()).unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn discord_channels(guild: String) -> Result<Vec<Value>, String> {
+    let got = rest(reqwest::Method::GET, &format!("/guilds/{guild}/channels"), None).await?;
+    let mut list: Vec<Value> = got.as_array().map(|a| a.iter().map(channel_brief).collect()).unwrap_or_default();
+    list.sort_by_key(|c| c["position"].as_i64().unwrap_or(0));
+    Ok(list)
+}
+
+/// See, send, read history, react: what a member of a private channel gets.
+const MEMBER: u64 = (1 << 10) | (1 << 11) | (1 << 16) | (1 << 6);
+
+/// The body that makes a channel. `only`: user ids that alone may see it (the bot is added), so
+/// work posted there stays between the user and the agent.
+pub fn channel_body(guild: &str, name: &str, kind: &str, category: Option<&str>, topic: Option<&str>, only: &[String], bot: &str) -> Value {
+    let mut body = json!({ "name": name, "type": if kind == "category" { 4 } else { 0 } });
+    if let Some(c) = category.filter(|c| !c.is_empty()) {
+        body["parent_id"] = json!(c);
+    }
+    if let Some(t) = topic.filter(|t| !t.is_empty()) {
+        body["topic"] = json!(t);
+    }
+    if !only.is_empty() {
+        let mut over = vec![json!({ "id": guild, "type": 0, "deny": (1u64 << 10).to_string(), "allow": "0" })];
+        for id in only.iter().map(String::as_str).chain([bot]) {
+            over.push(json!({ "id": id, "type": 1, "allow": MEMBER.to_string(), "deny": "0" }));
+        }
+        body["permission_overwrites"] = json!(over);
+    }
+    body
+}
+
+#[tauri::command]
+pub async fn discord_channel_create(guild: String, name: String, kind: Option<String>, category: Option<String>, topic: Option<String>, only: Option<Vec<String>>) -> Result<Value, String> {
+    let only = only.unwrap_or_default();
+    let bot = if only.is_empty() { String::new() } else { rest(reqwest::Method::GET, "/users/@me", None).await?["id"].as_str().unwrap_or_default().to_string() };
+    let body = channel_body(&guild, &name, kind.as_deref().unwrap_or("text"), category.as_deref(), topic.as_deref(), &only, &bot);
+    let made = rest(reqwest::Method::POST, &format!("/guilds/{guild}/channels"), Some(body)).await?;
+    Ok(channel_brief(&made))
+}
+
+#[tauri::command]
+pub async fn discord_channel_delete(channel: String) -> Result<(), String> {
+    rest(reqwest::Method::DELETE, &format!("/channels/{channel}"), None).await.map(|_| ())
+}
+
 /// "… is typing" in a channel (lasts about 10 seconds)
 #[tauri::command]
 pub async fn discord_typing(channel: String) -> Result<(), String> {
@@ -388,6 +456,23 @@ async fn once(tell: &(dyn Fn(Value) + Send + Sync), token: &str, session: &mut S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_private_channel_is_seen_by_the_user_and_the_bot_only() {
+        let b = super::channel_body("g1", "메타몽-작업", "text", Some("cat"), Some("일하는 곳"), &["u1".to_string()], "bot");
+        assert_eq!(b["type"], 0);
+        assert_eq!(b["parent_id"], "cat");
+        let over = b["permission_overwrites"].as_array().unwrap();
+        assert_eq!(over[0]["id"], "g1");
+        assert_eq!(over[0]["deny"], "1024");
+        let ids: Vec<&str> = over[1..].iter().map(|o| o["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["u1", "bot"]);
+        assert!(over[1]["allow"].as_str().unwrap().parse::<u64>().unwrap() & 1024 != 0);
+        let open = super::channel_body("g1", "잡담", "category", None, None, &[], "");
+        assert_eq!(open["type"], 4);
+        assert!(open.get("permission_overwrites").is_none());
+        assert_eq!(super::channel_brief(&serde_json::json!({"id":"1","name":"a","type":4}))["kind"], "category");
+    }
+
     use super::*;
 
     /// Against the real gateway: `DISCORD_TOKEN=… cargo test --lib discord::tests::live -- --ignored`

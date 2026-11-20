@@ -16,7 +16,7 @@ vi.mock("./captain", () => ({
 }));
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { calledIn, cleanText, DEFAULT_VOICE, OTHERS_RULES, ownerNote, questionText, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
+import { calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, questionText, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted } from "./discord";
 
 const BOT = "999";
 const OWNER = "111";
@@ -173,6 +173,27 @@ describe("the whole way round", () => {
     emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d5", "a"));
     expect(said.thrown).toHaveLength(1);
+  });
+
+  it("remembers a quiet channel's talk in its own memory, and reads it the next time", async () => {
+    said.answer = "ㅋㅋ 반가워요";
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m3", content: "메타몽 안녕 나 백엔드 하는 민수야" }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅋㅋ 반가워요", "m3"));
+    said.answer = '[{"kind":"person","who":"222","text":"백엔드 개발자 민수, 반말로 다가옴"}]';
+    await digest("c1");
+    expect(said.prompts[1]).toContain("지나가던사람[222]: 메타몽 안녕 나 백엔드 하는 민수야");
+    expect(state.agentNotes?.[0]).toMatchObject({ who: "222", text: "백엔드 개발자 민수, 반말로 다가옴" });
+    expect(state.memory).toHaveLength(0);
+    said.answer = "오 민수님";
+    emit({ kind: "message", message: msg({ id: "m4", content: "메타몽 나 기억해?" }) });
+    await vi.waitFor(() => expect(said.prompts).toHaveLength(3));
+    expect(said.prompts[2]).toContain("백엔드 개발자 민수");
+    // the user's own words from there: main hears it too, and that the server is its to act on
+    emit({ kind: "message", message: msg({ id: "m5", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 민수한테 인사해줘", mentions: ["222"] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].note).toContain("백엔드 개발자 민수");
+    expect(said.thrown[0].note).toContain("discord tool");
   });
 
   it("with no owner set, the bot's owner is taken as the user", async () => {
