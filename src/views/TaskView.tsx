@@ -15,7 +15,7 @@ import { expand, isAlive } from "../engine/rpc";
 import { nowText } from "../engine/describe";
 import { farError, farMemAdd, HostCtx, listFiles, sendFiles } from "../engine/far";
 import { discarded, endTime, pausedAt, planCount, taskDiff, workedMs } from "../state/progress";
-import { rawStats, prOf, renameTask, finishTask, markRead, stopTask, resumeTask, startTask, setTaskAccount, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell } from "../engine/tasks";
+import { rawStats, prOf, renameTask, finishTask, markRead, stopTask, resumeTask, startTask, setTaskAccount, setTaskModel, setTaskPermission, steerQueued, dropQueued, editQueued, moveQueued, tell, decide } from "../engine/tasks";
 import { agoIn, compact, IssueTag, now, statusLabel, taskTitle } from "../ui/bits";
 import { DecisionCard } from "../ui/DecisionCard";
 import { Composer } from "../ui/Composer";
@@ -301,6 +301,8 @@ export function TaskView(props: { id: string }) {
     <Show when={t()} fallback={<div class="pane-empty">{tr("삭제된 작업")}</div>}>
       {(task) => {
         const decision = () => decisionFor(task().id);
+        /** the question the input answers: one that takes words (an engine dialog's choices don't) */
+        const answering = () => ((d) => (d && !d.ui ? d : undefined))(decision());
         const bg = () => task().shells.filter((s) => !s.endedAt && (s.background || task().status !== "running"));
         createEffect(on(() => task().unread, (u) => u && markRead(task().id)));
         const ready = () => task().worktree?.state === "open" && (task().status === "done" || task().status === "paused" || task().status === "failed");
@@ -480,7 +482,7 @@ export function TaskView(props: { id: string }) {
               agentId={task().id}
               footer={
                 <>
-                  <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} /></div>}</Show>
+                  <Show when={decision()}>{(d) => <div class="thread-ask"><DecisionCard d={d()} showTask={false} ownBelow /></div>}</Show>
                 </>
               }
             />
@@ -536,10 +538,11 @@ export function TaskView(props: { id: string }) {
                     { name: "settings", desc: tr("설정 열기"), keys: shortcutHint("settings"), icon: "gear", run: () => setView({ name: "settings" }) },
                     ...skillCommands(() => ({ task: task().id, space: task().space }), task().host ? { host: task().host!, task: task().id } : undefined),
                   ]}
-                  placeholder={task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
+                  placeholder={answering() ? tr("다른 답 입력") : task().status === "running" ? tr("작업 중에 말하기") : task().status === "queued" || task().status === "waiting" ? tr("메시지 보내기|input") : tr("이어서 말하기")}
                   left={<PermissionPicker value={task().permission ?? "auto"} onChange={(p) => void setTaskPermission(task().id, p)} />}
-                  onSend={(m) => tell(task().id, m, { now: true })}
-                  onQueue={task().status === "running" ? (m) => tell(task().id, m) : undefined}
+                  // a question waiting: what is typed here is the answer to it (the card's "다른 답")
+                  onSend={(m) => (answering() ? void decide(answering()!.id, m) : tell(task().id, m, { now: true }))}
+                  onQueue={answering() ? (m) => void decide(answering()!.id, m) : task().status === "running" ? (m) => tell(task().id, m) : undefined}
                   running={task().status === "running"}
                   onStop={() => stopTask(task().id)}
                   right={

@@ -418,6 +418,7 @@ export default {
   "바뀐 파일 {n}개를 {home}에 합칠까요?": "Merge the {n} changed files into {home}?",
   "합치기": "Merge",
   "원래 폴더의 지금 브랜치에 합쳐요": "Into the original folder's current branch",
+  "다른 답 입력": "Type another answer",
   "확인 못 한 게 {n}개 있어요. 어떻게 할까요?": "{n} things were left unchecked. What now?",
   "더 확인해 줘": "Keep checking",
   "할 수 있는 건 확인하고, 필요한 건 물어봐요": "Checks what it can and asks for what it needs",
