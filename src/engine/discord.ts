@@ -24,6 +24,7 @@ import {
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { forgetRules, listens, rulesPath } from "./agentRules";
+import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
 
@@ -115,7 +116,7 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(postQuestions, 3000);
+  sweep ??= setInterval(() => (postQuestions(), void scout()), 3000);
   setStatus({ state: "connecting" });
   try {
     await discordStart();
@@ -191,6 +192,7 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, rules?: string): 
       ? `Which messages you take on Discord is theirs to shape, in their own rules file ${rules} (on this Mac only, not Ondra's code; the ondra skill says how it works). When they ask to change who or when you listen ("멘션 안 해도 들어", "이 채널에선 조용히 있어"), write or edit that file, keeping the rules already in it, and say what it does now.`
       : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
+    offerNote(a, m.channel),
   ].filter(Boolean).join("\n");
 }
 
@@ -243,6 +245,26 @@ async function onMessage(m: DiscordMessage) {
   await next;
 }
 
+/** once a day: something the user keeps asking for, offered once as a routine */
+async function scout() {
+  const a = settings();
+  if (!a?.on || !me || (a.scoutAt && Date.now() - a.scoutAt < 86_400_000)) return;
+  const { oneShot } = await import("./aside");
+  const space = agentSpace(a);
+  await maybeScout({
+    a,
+    space,
+    voice: voiceOf(a),
+    ask: (prompt) => oneShot(space, "~", prompt),
+    say: async (channel, text) => {
+      const ids = await discordSend(channel, text);
+      keepSaid(channel, ids);
+      if (ids.length) hearMine(channel, text);
+    },
+    set: setAgent,
+  });
+}
+
 async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   const space = agentSpace(a);
   // seen: a reaction, not a line that only says "알겠어, 할게"
@@ -251,6 +273,8 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
   throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, await rulesPath()), discord: { channel: m.channel, message: m.id } });
+  // an offer is answered by their next words there (the note above carried it)
+  if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
 
 /** main's message as a chat line: its reply, its answers, and a question with numbered choices
