@@ -34,7 +34,7 @@ function patchRoutine(id: string, patch: Partial<Routine>) {
   setState("routines", (list) => (list ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
 }
 
-type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled" | "alarm">>;
+type RoutineDraft = Pick<Routine, "space" | "title" | "prompt" | "when" | "mode"> & Partial<Pick<Routine, "project" | "quiet" | "host" | "hostSpace" | "model" | "accountId" | "draft" | "from" | "enabled" | "alarm" | "agent">>;
 
 /** A new routine (a draft from the chat waits for the user to save it). Returns its id. */
 export function addRoutine(d: RoutineDraft, now = Date.now()): string {
@@ -51,6 +51,7 @@ export function addRoutine(d: RoutineDraft, now = Date.now()): string {
     enabled: d.enabled ?? !d.draft,
     draft: d.draft,
     ...(d.alarm ? { alarm: true } : {}),
+    ...(d.agent ? { agent: d.agent } : {}),
     host: d.host,
     hostSpace: d.hostSpace,
     model: d.model,
@@ -151,6 +152,8 @@ export function runRoutine(id: string, o: { now?: number; happened?: string; man
       hostSpace: r.hostSpace,
       ...(last && finished(last) ? { follows: last.id } : {}),
       routine: id,
+      // the agent's routine: its runs are the agent's work, and report to its channel
+      ...(r.agent ? { agent: r.agent } : {}),
     });
   }
   // runs of a routine are marked so the line and the page can find them (a carried-on one too)
@@ -191,6 +194,13 @@ export function ringAlarm(id: string, now = Date.now()): string | undefined {
   const snoozed = r.snoozeAt !== undefined && r.snoozeAt <= now;
   const dueAt = own ? r.nextAt! : snoozed ? r.snoozeAt! : now;
   const late = now - dueAt > ALARM_LATE;
+  // the agent's alarm rings on Discord, where it was set
+  if (r.agent?.channel) {
+    const channel = r.agent.channel;
+    void import("./discord").then((d) => d.sayOnDiscord(channel, r.prompt)).catch(() => {});
+    patchRoutine(r.id, { lastAt: now, lastStatus: "done", lastError: undefined, runs: r.runs + 1, snoozeAt: undefined, ...(own ? { nextAt: r.when.kind === "once" ? undefined : nextRun(r.when, now), ...(r.when.kind === "once" ? { enabled: false } : {}) } : {}) });
+    return undefined;
+  }
   // the chat it was set in (main's when that project is gone)
   const project = r.project && projectById(r.project) ? r.project : undefined;
   const m: CaptainMessage = {

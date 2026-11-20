@@ -2751,3 +2751,6 @@
   color: var(--accent-text);
   font-weight: 600;
 }
+.agent-view .agent-routines {
+  max-width: 760px;
+}

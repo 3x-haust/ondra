@@ -4,7 +4,7 @@ import { createSignal } from "solid-js";
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
-import { addRoutine, routineById } from "./routines";
+import { addRoutine, routineById, saidNothing } from "./routines";
 import { parseWhen } from "./routineTime";
 import { t as tr } from "../i18n";
 import { logError, logInfo, logWarn } from "../lib/log";
@@ -46,6 +46,9 @@ export { AGENT_CHAT };
 export const isAgentChat = (key: string) => pj(key) === AGENT_CHAT;
 /** the project a chat belongs to (none for main and for the agent's chat) */
 const pid = (key: string) => (isAgentChat(key) ? undefined : pj(key));
+/** a run of the agent's routine that has something to say: its chat speaks about it (no one asked
+ *  in a chat for it). A quiet routine's run with nothing to report stays quiet. */
+const agentRun = (t: Task): { project: string } | undefined => (t.routine && routineById(t.routine)?.agent && !(routineById(t.routine)?.quiet && saidNothing(t)) ? { project: AGENT_CHAT } : undefined);
 /** the Discord channel the agent's chat was last spoken to from: where the work it starts reports */
 const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
 // a project added from another Mac has its own chat here too (its jobs run there)
@@ -173,13 +176,19 @@ export { userParked } from "./jobs";
  * main, which carries on (next job, or a question). The chat's row for the job
  * already shows what came out, so main adds only what needs the user.
  */
+/** The chat a job's end goes to: the one that started it (the project chat it was handed to, for
+ *  the user's work; the agent's chat, for the agent's), or the agent's chat for a run of its
+ *  routine with something to say. None: nobody in a chat asked for it. */
+export function endChat(t: Task): { project?: string } | undefined {
+  const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
+  return t.agent ? (owners.find((m) => m.project === AGENT_CHAT) ?? agentRun(t)) : (owners.find((m) => m.project && m.project !== AGENT_CHAT) ?? owners[0]);
+}
+
 function jobEnded(t: Task) {
   if (t.parentId || t.answer) return;
   void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
-  const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
-  // the agent's work reports to the agent's chat; the user's, to the project chat it was handed to
-  const from = t.agent ? owners.find((m) => m.project === AGENT_CHAT) : (owners.find((m) => m.project && m.project !== AGENT_CHAT) ?? owners[0]);
+  const from = endChat(t);
   if (!from) return;
   // its own result, kept now: the chat's row for it opens this (the agent's work isn't in 결과물)
   if (!t.agent) keepJobResult(t);
@@ -1339,8 +1348,10 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         mode: r.mode === "fresh" ? "fresh" : "continue",
         quiet: r.quiet !== false,
         project: project?.id,
-        draft: true,
+        // asked for on Discord there's no card to save it from: the agent's routine is on at once
+        draft: !isAgentChat(space),
         from: "chat",
+        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
       });
       out.push({ kind: "routine", routineId: id });
     } else if (r?.kind === "alarm" && (r.text || r.task)) {
@@ -1351,7 +1362,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         continue;
       }
       const text = String(r.text ?? r.task).trim().slice(0, 300);
-      const id = addRoutine({ space: sp(space), title: text.slice(0, 80), prompt: text, when, mode: "fresh", quiet: false, project: projectOf(space)?.id, alarm: true, from: "chat" });
+      const id = addRoutine({ space: sp(space), title: text.slice(0, 80), prompt: text, when, mode: "fresh", quiet: false, project: projectOf(space)?.id, alarm: true, from: "chat", ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}) });
       out.push({ kind: "routine", routineId: id, alarm: true });
     }
   }
