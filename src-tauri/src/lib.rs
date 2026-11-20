@@ -545,6 +545,8 @@ pub fn run() {
             git::git_commit,
             git::git_push,
             git::git_pr,
+            git::git_on_github,
+            git::git_sync_home,
             git::gh_pr_state,
             git::gh_pr_view,
             git::gh_issues,

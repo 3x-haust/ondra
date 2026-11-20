@@ -19,7 +19,7 @@ import { closePlan, moveTo, nextPlan, openAsked, planText, unexplained } from ".
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Size, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState, gitOnGithub, gitSyncHome } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
@@ -1040,15 +1040,18 @@ async function askMerge(id: string, why?: string) {
   const c = await gitChanges(w.path, w.base).catch(() => null);
   if (!c?.isRepo || !c.files.length) return;
   const home = homeDir(t).split("/").filter(Boolean).pop() ?? homeDir(t);
+  // on GitHub: the user's own folder is never merged into, only kept up to date (syncHome)
+  const github = await gitOnGithub(homeDir(t)).catch(() => false);
+  if (taskById(id)?.worktree?.state !== "open" || state.decisions.some((x) => x.taskId === id)) return;
   const d: Decision = {
     id: uid("d"),
     taskId: id,
     at: Date.now(),
     kind: "merge",
-    question: `${why ? `${why} · ` : ""}${tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })}`,
+    question: `${why ? `${why} · ` : ""}${github ? tr("바뀐 파일 {n}개를 PR로 올릴까요?", { n: c.files.length }) : tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })}`,
     options: [
       { id: "pr", label: tr("PR로 올리기"), primary: true, note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
-      { id: "merge", label: tr("합치기"), note: tr("원래 폴더의 지금 브랜치에 합쳐요") },
+      ...(github ? [] : [{ id: "merge", label: tr("합치기"), note: tr("원래 폴더의 지금 브랜치에 합쳐요") }]),
       { id: "discard", label: tr("버리기"), note: tr("이 작업이 바꾼 것을 지워요") },
     ],
     context: [],
@@ -1099,6 +1102,20 @@ export function noteLandAnswer(t: Task, pick: "merge" | "pr" | "discard", now = 
   return addMemory(text, "project", { space: t.space, project: folder, kind: "decision", key: "land", importance: 4, by: "agent", source: "ondra", taskId: t.id });
 }
 
+const PR_ASK = "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.";
+
+/**
+ * A job's PR was merged on GitHub: the user's own folder of that project moves up to it, when
+ * that is a fast-forward of a clean default branch (gitSyncHome); else it is left as it is.
+ */
+export async function syncHome(t: Task) {
+  const home = homeDir(t);
+  if (!(await gitOnGithub(home).catch(() => false))) return;
+  const r = await gitSyncHome(home, await gitEnv(t)).catch((e) => ({ state: "skipped", branch: "", note: String(e) }) as const);
+  logInfo("land", `${t.id} home ${home}: ${r.state} ${r.branch} ${r.note}`);
+  if (r.state === "updated") updateTask(t.id, (x) => push(x, { kind: "note", text: "원래 폴더를 GitHub 최신으로 맞췄어요" }));
+}
+
 /** The job's own say on its branch, then the question if it is still open. */
 export async function landBranch(id: string, land?: "merge" | "discard" | "fix") {
   const t = taskById(id);
@@ -1106,6 +1123,11 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix")
   if (land === "discard") return discardTask(id);
   if (land === "fix" && !fixLands(t))
     return askMerge(id, state.settings.autoMergeFixes === false ? undefined : t.unverified?.length ? tr("확인 못 한 게 있어요") : tr("테스트·빌드를 돌린 기록이 없어요"));
+  if ((land === "merge" || land === "fix") && (await gitOnGithub(homeDir(t)).catch(() => false))) {
+    // the project lives on GitHub: what lands without asking goes up as a PR, the user's folder is left alone
+    updateTask(id, (x) => push(x, { kind: "note", text: land === "fix" ? "확인된 수정이라 묻지 않고 PR로 올려요" : "묻지 않고 PR로 올려요" }));
+    return void (await tell(id, PR_ASK, { by: "ondra", shown: tr("PR로 올리기") }));
+  }
   if (land === "fix") updateTask(id, (x) => push(x, { kind: "note", text: "확인된 수정이라 묻지 않고 합쳐요" }));
   if (land === "merge" || land === "fix") {
     const why = await mergeWhy(id);
@@ -2376,6 +2398,7 @@ async function dropEmptyBranch(id: string) {
     const pr = into ? undefined : prOf(t);
     if (pr && prMerged(await ghPrState(pr.url, env).catch(() => ""))) into = `PR #${pr.n}`;
     if (!into) return;
+    if (prOf(t)) void syncHome(t);
     // through a PR the branch stays, and anything left in the folder is saved on it
     const left = await dropWorktree(t, !!pr, env);
     updateTask(id, (x) => {
@@ -3164,8 +3187,7 @@ export async function decide(decisionId: string, optionId: string) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
     noteLandAnswer(t, optionId);
     if (optionId === "discard") return void (await discardTask(t.id));
-    if (optionId === "pr")
-      return void (await tell(t.id, "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.", { shown: label }));
+    if (optionId === "pr") return void (await tell(t.id, PR_ASK, { shown: label }));
     const why = await mergeWhy(t.id);
     if (why !== undefined) await tell(t.id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;

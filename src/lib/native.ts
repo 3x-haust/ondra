@@ -387,6 +387,11 @@ export const ghIssues = (cwd: string, search: string, env: Env = []) =>
 export const ghIssue = (cwd: string, number: number, env: Env = []) =>
   call<string>("gh_issue", { cwd, number, env }, JSON.stringify({ number, title: "로그인 후 대시보드로 가지 않아요", state: "OPEN", body: "로그인하면 `/login`에 그대로 머물러요.\n\n- 크롬, 사파리 둘 다\n- 새로고침하면 대시보드로 가요", labels: [{ name: "bug", color: "d73a4a" }], assignees: [], author: { login: "mina" }, url: `https://github.com/acme/web/issues/${number}`, comments: [] }));
 export const ghPrView = (url: string, env: Env = []) => call<string>("gh_pr_view", { url, env }, "");
+/** the folder's origin is on GitHub: its work lands through PRs, and the folder is kept as GitHub has it */
+export const gitOnGithub = (cwd: string) => call<boolean>("git_on_github", { cwd }, false);
+export type Synced = { state: "updated" | "current" | "skipped"; branch: string; note: string };
+/** fast-forward the user's folder to origin's default branch, only when it is on it, clean and behind */
+export const gitSyncHome = (cwd: string, env: Env = []) => call<Synced>("git_sync_home", { cwd, env }, { state: "current", branch: "main", note: "" });
 export const gitPr = (cwd: string, title: string, body: string, env: Env = []) => call<string>("git_pr", { cwd, title, body, env }, "https://github.com/acme/app/pull/42");
 /** A system notice. An alarm rings (`sound`); with a `tag`, a click on it comes back as "notify:click" with the tag. */
 export const notify = (title: string, body: string, o: { sound?: boolean; tag?: string } = {}) => call<void>("notify", { title, body, sound: o.sound ?? null, tag: o.tag ?? null });

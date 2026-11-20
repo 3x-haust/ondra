@@ -416,6 +416,7 @@ export default {
   "이 모델은 도구를 못 써요 · 대화만 하도록 다시 시작해요": "This model can't use tools · starting again in chat-only mode",
   "도구 사용 여부가 달라서 다음 메시지부터 이 모델로 바꿔요": "This model differs in tool use, so it takes over from the next message",
   "바뀐 파일 {n}개를 {home}에 합칠까요?": "Merge the {n} changed files into {home}?",
+  "바뀐 파일 {n}개를 PR로 올릴까요?": "Open a PR with the {n} changed files?",
   "합치기": "Merge",
   "원래 폴더의 지금 브랜치에 합쳐요": "Into the original folder's current branch",
   "다른 답 입력": "Type another answer",

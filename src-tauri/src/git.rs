@@ -391,6 +391,59 @@ mod tests {
         assert!(m.changes.patch.contains("rename from old.txt"));
         let _ = std::fs::remove_dir_all(&root);
     }
+
+    #[test]
+    fn sync_home_only_fast_forwards_a_clean_default_branch() {
+        let root = std::env::temp_dir().join(format!("git-sync-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let p = |n: &str| root.join(n).display().to_string();
+        let r = root.display().to_string();
+        sh(&r, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+        for who in ["home", "other"] {
+            sh(&r, &["clone", "-q", &p("origin.git"), who]);
+            sh(&p(who), &["config", "user.email", "t@t"]);
+            sh(&p(who), &["config", "user.name", "t"]);
+            sh(&p(who), &["config", "commit.gpgsign", "false"]);
+        }
+        let commit = |who: &str, file: &str| {
+            std::fs::write(root.join(who).join(file), file).unwrap();
+            sh(&p(who), &["add", "-A"]);
+            sh(&p(who), &["commit", "-q", "-m", file]);
+        };
+        commit("other", "a.txt");
+        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        sh(&p("home"), &["fetch", "-q"]);
+        sh(&p("home"), &["checkout", "-q", "main"]);
+        let home = p("home");
+        assert_eq!(super::sync_home(&home, &[]).unwrap().state, "current");
+
+        // merged on GitHub: the folder moves up
+        commit("other", "b.txt");
+        commit("other", "c.txt");
+        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        let s = super::sync_home(&home, &[]).unwrap();
+        assert_eq!((s.state.as_str(), s.note.as_str()), ("updated", "2"));
+        assert!(root.join("home/c.txt").exists());
+
+        // a change the user is making: left alone
+        commit("other", "d.txt");
+        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        std::fs::write(root.join("home/a.txt"), "mine").unwrap();
+        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "uncommitted changes");
+        assert!(!root.join("home/d.txt").exists());
+        sh(&home, &["checkout", "-q", "--", "a.txt"]);
+
+        // their own commit not on GitHub: no merge commit made
+        commit("home", "mine.txt");
+        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "local commits not on origin");
+        sh(&home, &["reset", "-q", "--hard", "origin/main"]);
+
+        // another branch checked out: left alone
+        sh(&home, &["checkout", "-q", "-b", "feature"]);
+        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "on feature, not main");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
 
 /// Run a command in `cwd` with the space's environment and return stdout, or the
@@ -436,6 +489,60 @@ pub async fn git_pr(cwd: String, title: String, body: String, env: Option<Vec<(S
     let _ = git_push(cwd.clone(), env.clone()).await?;
     run(&cwd, "gh", &["pr", "create", "--title", &title, "--body", &body], &env.unwrap_or_default())
         .map(|out| out.lines().last().unwrap_or("").to_string())
+}
+
+/// The folder's `origin` is on GitHub: its work lands through PRs, and Ondra keeps the folder
+/// itself as GitHub has it instead of merging into it.
+#[tauri::command]
+pub async fn git_on_github(cwd: String) -> bool {
+    git(&cwd, &["remote", "get-url", "origin"]).is_some_and(|u| u.contains("github.com"))
+}
+
+/// What `sync_home` did with the user's own folder.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Synced {
+    /// "updated" (moved to origin's latest), "current" (already there) or "skipped"
+    pub state: String,
+    pub branch: String,
+    /// updated: the commits it moved past; skipped: why
+    pub note: String,
+}
+
+/// Bring the user's folder to origin's latest default branch, only where that can't lose or
+/// mix anything: the folder is on that branch, nothing tracked is changed, and its own commits
+/// are all on origin already (a fast-forward). Otherwise it is left as it is.
+pub fn sync_home(cwd: &str, env: &[(String, String)]) -> Result<Synced, String> {
+    let branch = run(cwd, "git", &["rev-parse", "--abbrev-ref", "HEAD"], env)?;
+    let main = run(cwd, "git", &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], env)
+        .ok()
+        .and_then(|r| r.strip_prefix("origin/").map(str::to_string))
+        .or_else(|| ["main", "master"].iter().find(|b| git(cwd, &["rev-parse", "--verify", "-q", &format!("refs/remotes/origin/{b}")]).is_some()).map(|b| b.to_string()))
+        .ok_or("no default branch on origin")?;
+    let skip = |note: &str| Ok(Synced { state: "skipped".into(), branch: branch.clone(), note: note.into() });
+    if branch != main {
+        return skip(&format!("on {branch}, not {main}"));
+    }
+    if !run(cwd, "git", &["status", "--porcelain", "--untracked-files=no"], env)?.is_empty() {
+        return skip("uncommitted changes");
+    }
+    run(cwd, "git", &["fetch", "-q", "origin", &main], env)?;
+    let before = run(cwd, "git", &["rev-parse", "HEAD"], env)?;
+    let target = format!("origin/{main}");
+    if run(cwd, "git", &["merge", "--ff-only", "-q", &target], env).is_err() {
+        return skip("local commits not on origin");
+    }
+    let after = run(cwd, "git", &["rev-parse", "HEAD"], env)?;
+    if before == after {
+        return Ok(Synced { state: "current".into(), branch, note: String::new() });
+    }
+    let n = run(cwd, "git", &["rev-list", "--count", &format!("{before}..{after}")], env).unwrap_or_default();
+    Ok(Synced { state: "updated".into(), branch, note: n })
+}
+
+#[tauri::command]
+pub async fn git_sync_home(cwd: String, env: Option<Vec<(String, String)>>) -> Result<Synced, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_home(&cwd, &env.unwrap_or_default())).await.map_err(|e| e.to_string())?
 }
 
 /// A pull request as the job's space sees it, for watching: its state, checks,
