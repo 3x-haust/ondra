@@ -53,21 +53,35 @@ after of the reproduction.
 
 ## Feature
 
-1. **Read how the area works now**: the code it touches, its callers, how the
-   neighbours solve the same kind of problem.
-2. **Name the data shape first.** State as one value with named cases (a
+1. **See how others already did it**, for a new feature its user will see or
+   use (a screen, a flow, a setting the app doesn't have yet). Pick two or
+   three products that solved the same problem for their users, rivals or not
+   (a ranking: an investing app, a language-learning app, a fitness app), and
+   read how on public pages: help articles, release notes, product blogs,
+   store screenshots, with web_search and web_fetch, no sign-ins. A few
+   minutes and about five pages, no report or PDF; this is not deep-research.
+   Then write three lines in your message, each a point to take or to avoid
+   with its link; they shape the plan, come back in the report, and their
+   pages go in done as `link` evidence. Skip it, with the reason, for work no
+   user sees (an API, CI, a lint), more of what a screen already does, or a
+   design or references the user already gave.
+2. **Read how the area works now**: the code it touches, its callers, how the
+   neighbours solve the same kind of problem. Where others' way and this
+   app's way differ, this app's way wins unless the user asked otherwise.
+3. **Name the data shape first.** State as one value with named cases (a
    status, a union, a small state machine), not booleans that must agree
    (`done` + `overdue` can say "done but overdue"). Derive what can be
    computed (overdue from the date) instead of storing it. A table or registry
    instead of an if/else chain that grows a branch per feature.
-3. **Plan check** when there are several parts or open design choices: the
+4. **Plan check** when there are several parts or open design choices: the
    `plan_review` subagent from your instructions, before building.
-4. **Build it** in small pieces, each ending in a check (type check, the test
+5. **Build it** in small pieces, each ending in a check (type check, the test
    beside it) before the next.
-5. **Use it** on the surface the user will (the check skill), with proof.
-6. **Commit in small, ordered commits**, then the PR below if the task wants one.
+6. **Use it** on the surface the user will (the check skill), with proof.
+7. **Commit in small, ordered commits**, then the PR below if the task wants one.
 
-Report: what you built, the choice you made and why, what you left out.
+Report: what you built, the choice you made and why (with the outside points
+that led to it), what you left out.
 
 ## Refactoring
 
@@ -77,7 +91,7 @@ find is split out, not mixed in.
 1. **Pin the behaviour first**: a characterization test, a snapshot, or a
    script that records today's output, before anything moves. A type check is
    not a pin.
-2. **Name the shape the code is missing** (as in Feature step 2). Plain code
+2. **Name the shape the code is missing** (as in Feature step 3). Plain code
    whose shape is already clear and local stays; a reshape must delete branches
    or impossible states, not add layers.
 3. **Remove before you add**: dead code, wrappers with one caller, adapters

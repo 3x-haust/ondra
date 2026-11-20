@@ -62,6 +62,18 @@ describe("checks that fit what the user asked", () => {
     expect(web).toContain("For the chosen design built into the product, not for concepts or temporary UI.");
   });
 
+  it("a new feature starts from a short look at how others did it, not a research report", () => {
+    const skill = flat(bundledSkills["../../skills/coding-playbooks/SKILL.md"]);
+    const feature = skill.slice(skill.indexOf("## Feature"), skill.indexOf("## Refactoring"));
+    expect(feature).toMatch(/1\. \*\*See how others already did it\*\*, for a new feature its user will see or use .* 2\. \*\*Read how the area works now\*\*/);
+    expect(feature).toContain("no report or PDF; this is not deep-research");
+    expect(feature).toContain("three lines in your message, each a point to take or to avoid with its link");
+    expect(feature).toContain("Skip it, with the reason, for work no user sees");
+    expect(feature).toContain("this app's way wins unless the user asked otherwise");
+    expect(skill).toContain("(as in Feature step 3)");
+    expect(skill.slice(skill.indexOf("## Bug fix"), skill.indexOf("## Feature"))).not.toContain("others already did it");
+  });
+
   it("reviews only risky changes, and plan readers don't add what wasn't asked", () => {
     expect(flat(TASK_SYSTEM)).toContain("not test seams or research scripts");
     expect(PLAN_FIX).toContain("사용자가 요청하지 않은 보장·상태·검사·안전장치");
