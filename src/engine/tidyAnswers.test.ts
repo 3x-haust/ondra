@@ -3,6 +3,7 @@ import { setState, state } from "../state/store";
 import type { Entry, Memory, Task } from "../state/types";
 import { applyPlan, CHECK_SEEN, checkAsk, checkReason, growChecks, jobMaterial, jobsShown, MIN_ANSWERS, MIN_EVIDENCE, tidyPrompt, wantsCheck, type Plan } from "./tidy";
 import * as tasks from "./tasks";
+import { addMemory } from "./memory";
 
 const H = 3_600_000;
 const DAY = 24 * H;
@@ -125,6 +126,24 @@ describe("the way up widens", () => {
     expect(state.memory.find((m) => m.id === "a")!.seen).toBe(2);
     // and now it is worth a check
     expect(wantsCheck(state.memory.find((m) => m.id === "a")!)).toBe(true);
+  });
+
+  it("a note file read again is not the user saying it again", () => {
+    // the same Claude Code memory file read twice, worded a little differently each time
+    const file = "~/.claude/projects/ondra/memory/ondra-cu-bench.md";
+    const a = piece({ id: "a", text: "Ondra 작업에서는 ~/.codex/auth.json 내용을 절대 출력하지 말아요.", from: file });
+    const b = piece({ id: "b", text: "~/.codex/auth.json의 내용은 절대 출력하지 않아야 해요.", from: file });
+    reset([a, b]);
+    run({ merge: [{ keep: "a", drop: ["b"] }] }, []);
+    expect(state.memory.find((m) => m.id === "b")).toMatchObject({ echoOf: "a" });
+    expect(state.memory.find((m) => m.id === "a")!.seen ?? 1).toBe(1);
+    expect(wantsCheck(state.memory.find((m) => m.id === "a")!)).toBe(false);
+    // the same words read again from the file: not counted either
+    addMemory(a.text, "project", { space: "work", project: "~/Work/acme", from: file, by: "user", quiet: true });
+    expect(state.memory.find((m) => m.id === "a")!.seen ?? 1).toBe(1);
+    // said in a chat, though, it is said again
+    addMemory(a.text, "project", { space: "work", project: "~/Work/acme", by: "user" });
+    expect(state.memory.find((m) => m.id === "a")!.seen).toBe(2);
   });
 
   it(`a lesson found in ${MIN_EVIDENCE}+ jobs is worth a check too, asked as trouble seen again`, () => {
