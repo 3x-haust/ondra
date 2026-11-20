@@ -420,7 +420,8 @@ export interface Decision {
   ui?: { requestId: string; method: "select" | "confirm" | "input" };
   /** "stalled": the task stopped without saying it was done. */
   /** "merge": the job finished with changes on its branch; the user says what becomes of them. */
-  kind: "ask" | "stalled" | "merge";
+  /** "unchecked": the job said done with something left unchecked and didn't ask about it. */
+  kind: "ask" | "stalled" | "merge" | "unchecked";
 }
 
 export type Route =

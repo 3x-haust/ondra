@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { startRpc } from "./rpc";
-import { blocking, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask } from "./tasks";
+import { blocking, decide, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Total fix",
@@ -122,14 +122,55 @@ describe("what a job leaves unchecked comes with why", () => {
     expect(backs()[0]).toContain("지금 하고 evidence에 넣어 줘");
   });
 
-  it("finishes when each unverified item says what blocked it", async () => {
-    await finish(
-      { entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
-      { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "실제 결제 화면", why: "사용자 계정 로그인이 필요해요" }] },
-    );
-    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+  const held = () => sent("t:job", "prompt").filter((m) => m.includes("Don't finish yet"));
+  const ask = (question: string, ...options: string[]) => "```blocks\n" + JSON.stringify({ type: "ask", question, options: options.map((label) => ({ label })) }) + "\n```";
+
+  it("with something unchecked, doesn't finish: it asks the user first, and finishes once they answered", async () => {
+    const done = { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "실제 결제 화면", why: "사용자 계정 로그인이 필요해요" }] };
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n === 1) say(emit, `고쳤어요.\n${block(done)}`);
+      if (n === 2) say(emit, ask("결제 화면은 로그인이 필요해서 못 봤어요. 어떻게 할까요?", "직접 확인할게요", "확인 없이 끝내기"));
+      if (n === 3) say(emit, `알겠어요.\n${block(done)}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
+    await startTask("job", true);
+
+    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "ask")).toBe(true));
+    expect(held()).toHaveLength(1);
+    expect(held()[0]).toContain("실제 결제 화면 — 사용자 계정 로그인이 필요해요");
     expect(backs()).toHaveLength(0);
+    expect(state.tasks[0].status).not.toBe("done");
+
+    const q = state.decisions.find((d) => d.kind === "ask")!;
+    await decide(q.id, q.options[1].id);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
     expect(state.tasks[0].unverified).toEqual(["실제 결제 화면 — 사용자 계정 로그인이 필요해요"]);
+    expect(held()).toHaveLength(1);
+  });
+
+  it("with something unchecked and no question from the job, Ondra asks: finish as is or keep checking", async () => {
+    const done = { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "스피커 소리 녹음", why: "방 안 대화가 섞여요" }] };
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n <= 2) say(emit, `고쳤어요.\n${block(done)}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
+    await startTask("job", true);
+
+    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
+    const d = state.decisions.find((x) => x.kind === "unchecked")!;
+    expect(d.question).toContain("스피커 소리 녹음 — 방 안 대화가 섞여요");
+    expect(d.options.map((o) => o.id)).toEqual(["check", "finish"]);
+    expect(state.tasks[0].status).toBe("waiting");
+
+    await decide(d.id, "finish");
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(state.tasks[0].unverified).toEqual(["스피커 소리 녹음 — 방 안 대화가 섞여요"]);
   });
 
   it("sends back a plan step left open, and lets a skip with its reason through", async () => {
@@ -153,7 +194,8 @@ describe("what a job leaves unchecked comes with why", () => {
     vi.restoreAllMocks();
     setState(reconcile(freshState()));
     await finish({ branch: "fix/total", size: "small", entries }, { ...done, unverified: ["화면"] });
-    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    // a small job owes no reproduction; what it left unchecked is still asked about before it ends
+    await vi.waitFor(() => expect(sent("t:job", "prompt").some((m) => m.includes("Don't finish yet"))).toBe(true));
     expect(backs()).toHaveLength(0);
   });
 
