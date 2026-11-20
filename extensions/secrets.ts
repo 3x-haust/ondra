@@ -7,11 +7,14 @@
 //   [secret:NAME] before the model sees it;
 // - values in the job folder's .env files whose key looks secret are hidden the same way, so
 //   `cat .env` or reading it shows the keys but not the values;
+// - the tokens in Codex's login file (~/.codex/auth.json, or $CODEX_HOME/auth.json) are hidden the
+//   same way, so reading that file never puts the user's Codex credentials in a job's history;
 // - each command that uses a secret, and each result something was hidden from, is logged to
 //   <data dir>/secrets-audit.jsonl (names and the job, never values).
 // This keeps values out of the model's context and the job's history; a command written to
 // leak a value on purpose in some other encoding is not something text matching can stop.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -56,6 +59,30 @@ export function dotenvSecrets(text: string, file: string): Secret[] {
     out.push({ name: `${file}:${m[1]}`, value });
   }
   return out;
+}
+
+/** Keys of a JSON credentials file that hold one (or the account it logs in); narrower than SECRET_KEY so "auth_mode": "chatgpt" stays shown. */
+const JSON_SECRET_KEY = /(KEY|SECRET|TOKEN|PASSW|PRIVATE|CREDENTIAL|ACCOUNT_ID)/i;
+
+/** String values under secret-looking keys anywhere in a JSON credentials file (tokens, API keys). */
+export function jsonSecrets(text: string, file: string): Secret[] {
+  const out: Secret[] = [];
+  const walk = (v: unknown, key: string) => {
+    if (typeof v === "string") {
+      if (v.length >= MIN_LEN && JSON_SECRET_KEY.test(key)) out.push({ name: `${file}:${key}`, value: v });
+    } else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, k);
+  };
+  try {
+    walk(JSON.parse(text), "");
+  } catch {
+    /* not JSON: nothing to take */
+  }
+  return out;
+}
+
+/** Codex's login file: $CODEX_HOME/auth.json, else ~/.codex/auth.json. */
+export function codexAuthPath(env: NodeJS.ProcessEnv): string {
+  return join(env.CODEX_HOME || join(env.HOME || homedir(), ".codex"), "auth.json");
 }
 
 /** The secrets from Ondra: the names it says it set, with their values from this environment. */
@@ -169,6 +196,27 @@ export default function (pi: ExtensionAPI) {
     return secrets;
   };
 
+  // Codex's tokens: read again when the file changes (a token refresh rewrites it)
+  const codexPath = codexAuthPath(process.env);
+  let codex = { stamp: -1, secrets: [] as Secret[] };
+  const codexSecrets = (): Secret[] => {
+    let stamp = 0;
+    try {
+      stamp = statSync(codexPath).mtimeMs;
+    } catch {
+      /* no Codex login */
+    }
+    if (stamp === codex.stamp) return codex.secrets;
+    let secrets: Secret[] = [];
+    try {
+      if (stamp) secrets = jsonSecrets(readFileSync(codexPath, "utf8"), "codex/auth.json");
+    } catch {
+      /* unreadable now: tried again on the next change */
+    }
+    codex = { stamp, secrets };
+    return secrets;
+  };
+
   const log = (entry: Record<string, unknown>) => {
     if (!audit) return;
     try {
@@ -185,7 +233,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("tool_call", (event, ctx) => {
     // memory outlives the job and goes to other jobs: a value in it is refused, the name is fine
     if (event.toolName === "memory_save") {
-      const r = redact(JSON.stringify(event.input ?? {}), [...own, ...folderSecrets(ctx?.cwd ?? process.cwd())]);
+      const r = redact(JSON.stringify(event.input ?? {}), [...own, ...codexSecrets(), ...folderSecrets(ctx?.cwd ?? process.cwd())]);
       if (r.hits.length) {
         log({ kind: "refused", tool: event.toolName, names: r.hits });
         return { block: true, reason: `This holds the value of ${r.hits.join(", ")}. Memory keeps the name and what it is for, never the value: write \`NAME\` instead and save again.` };
@@ -198,7 +246,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("tool_result", (event, ctx) => {
-    const secrets = [...own, ...folderSecrets(ctx.cwd)];
+    const secrets = [...own, ...codexSecrets(), ...folderSecrets(ctx.cwd)];
     if (!secrets.length || !event.content?.length) return;
     const hits = new Set<string>();
     const content = event.content.map((c) => {
