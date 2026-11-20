@@ -337,6 +337,27 @@
   padding: var(--s-14) var(--s-16) var(--s-4);
   min-height: 48px;
 }
+/* a /command that will run, in its own colour: the input's words go clear and a copy over it draws them */
+.composer textarea.has-cmd,
+.composer textarea.has-cmd::selection {
+  color: transparent;
+}
+.composer textarea.has-cmd {
+  caret-color: var(--ink);
+}
+.cmirror {
+  position: absolute;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+.cmirror .cmd-mark {
+  color: var(--accent);
+}
 .msg-user {
   padding: var(--s-8) var(--s-12);
   border-radius: var(--r-2xl);

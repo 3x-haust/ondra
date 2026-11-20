@@ -5,7 +5,7 @@
 // attached with + or dropped on the window.
 // Enter sends (never mid-IME), Shift+Enter is a new line; while a task works, Enter puts the
 // words in now and Cmd+Enter queues them for after.
-import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { logInfo } from "../lib/log";
 import { COMMANDS, pick, track } from "../lib/telemetry";
 import { clipboardFiles, fileSrc, fsRead, inTauri, pickFiles, savePaste } from "../lib/native";
@@ -24,6 +24,10 @@ import { isPastedText, longPaste } from "./paste";
 import { t } from "../i18n";
 import { cancelDictation, DictateLive, dictating, VoiceButton } from "./VoiceButton";
 import { insertWords } from "./dictation";
+import { commandMarks } from "./commandMarks";
+
+/** what the copy behind the input takes from it, so its words fall on the same places */
+const MIRRORED = ["font-family", "font-size", "font-weight", "font-style", "font-stretch", "line-height", "font-feature-settings", "font-variation-settings", "letter-spacing", "word-spacing", "text-indent", "text-transform", "tab-size", "padding-top", "padding-right", "padding-bottom", "padding-left"];
 
 /** A /command that ran, for the log a feedback report carries: its name, not what followed (a skill's own name stays out). */
 const ran = (name: string) => {
@@ -149,6 +153,32 @@ export function Composer(props: {
   popDown?: boolean;
 }) {
   const [text, setText] = createSignal("");
+  // the /commands sending will run, coloured as they are typed: a textarea draws all its words in
+  // one colour, so while there is one its words go clear and a copy laid over it draws them
+  const marks = createMemo(() => commandMarks(text(), props.commands ?? []));
+  const pieces = () => {
+    const v = text();
+    const out: { s: string; cmd?: boolean }[] = [];
+    let at = 0;
+    for (const [a, b] of marks()) out.push({ s: v.slice(at, a) }, { s: v.slice(a, b), cmd: true }), (at = b);
+    // a last empty line takes room only with something on it
+    out.push({ s: `${v.slice(at)} ` });
+    return out;
+  };
+  let mirror: HTMLDivElement | undefined;
+  const fitMirror = () => {
+    if (!mirror || !el) return;
+    const cs = getComputedStyle(el);
+    for (const k of MIRRORED) mirror.style.setProperty(k, cs.getPropertyValue(k));
+    Object.assign(mirror.style, {
+      top: `${el.offsetTop + el.clientTop}px`,
+      left: `${el.offsetLeft + el.clientLeft}px`,
+      width: `${el.clientWidth}px`,
+      height: `${el.clientHeight}px`,
+    });
+    mirror.scrollTop = el.scrollTop;
+  };
+  createEffect(() => marks().length && (text(), requestAnimationFrame(fitMirror)));
   const [plusOpen, setPlusOpen] = usePop();
   const plusItems = (): PlusItem[] => [
     {
@@ -281,6 +311,7 @@ export function Composer(props: {
     const ro = new ResizeObserver(([e]) => {
       const now = Math.round(e.contentRect.width);
       if (now !== w) (w = now), grow();
+      fitMirror();
     });
     queueMicrotask(() => el && ro.observe(el));
     onCleanup(() => ro.disconnect());
@@ -730,8 +761,15 @@ export function Composer(props: {
             </For>
           </div>
         </Show>
+        <Show when={marks().length}>
+          <div class="cmirror" ref={mirror} aria-hidden="true">
+            <For each={pieces()}>{(p) => (p.cmd ? <span class="cmd-mark">{p.s}</span> : p.s)}</For>
+          </div>
+        </Show>
         <textarea
           id={props.id}
+          classList={{ "has-cmd": marks().length > 0 }}
+          onScroll={() => mirror && (mirror.scrollTop = el.scrollTop)}
           ref={(r) => {
             el = r;
             // a pane beside the focused one doesn't take the cursor when it opens
