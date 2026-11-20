@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { fixLands, LAND_STREAK, landBranch, noteLandAnswer } from "./tasks";
+import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, syncHome } from "./tasks";
 import { landHabit, taskPrompt } from "./prompts";
 
 const job = (over: Partial<Task> = {}): Task => ({
@@ -130,5 +130,51 @@ describe("the git note", () => {
     expect(text).toContain("The user's words and the project's memory come first");
     setState("settings", "autoMergeFixes", false);
     expect(taskPrompt(job({ status: "running" }))).not.toContain('"kind":"fix"');
+  });
+});
+
+describe("a project on GitHub", () => {
+  beforeEach(() => {
+    vi.spyOn(native, "gitOnGithub").mockResolvedValue(true);
+  });
+
+  it("is asked PR or discard only: the user's own folder is never merged into", async () => {
+    setState("tasks", [job()]);
+    await landBranch("job");
+    const d = state.decisions[0];
+    expect(d?.question).toContain("PR로 올릴까요");
+    expect(d?.options.map((o) => o.id)).toEqual(["pr", "discard"]);
+  });
+
+  it("a checked fix goes up as a PR without asking, and nothing is merged locally", async () => {
+    const merge = vi.spyOn(native, "worktreeMerge");
+    setState("tasks", [job({ entries: [passed] })]);
+    await landBranch("job", "fix").catch(() => {});
+    expect(merge).not.toHaveBeenCalled();
+    expect(state.decisions).toHaveLength(0);
+    expect(state.tasks[0].worktree?.state).toBe("open");
+    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "확인된 수정이라 묻지 않고 PR로 올려요")).toBe(true);
+  });
+
+  it("once its PR is merged the local main is brought up to GitHub's latest, and said so only when it moved", async () => {
+    const sync = vi.spyOn(native, "gitSyncHome").mockResolvedValue({ state: "updated", branch: "main", note: "3" });
+    setState("tasks", [job()]);
+    await syncHome(state.tasks[0]);
+    expect(sync).toHaveBeenCalledWith("/repo", []);
+    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "로컬 main을 GitHub 최신으로 맞췄어요")).toBe(true);
+    sync.mockResolvedValue({ state: "skipped", branch: "main", note: "local commits not on origin" });
+    setState("tasks", [job()]);
+    await syncHome(state.tasks[0]);
+    expect(state.tasks[0].entries).toHaveLength(0);
+  });
+
+  it("a folder not on GitHub is left to the merge question as before", async () => {
+    vi.spyOn(native, "gitOnGithub").mockResolvedValue(false);
+    const sync = vi.spyOn(native, "gitSyncHome");
+    setState("tasks", [job()]);
+    await landBranch("job");
+    expect(state.decisions[0]?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
+    await syncHome(state.tasks[0]);
+    expect(sync).not.toHaveBeenCalled();
   });
 });
