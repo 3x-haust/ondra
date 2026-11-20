@@ -5,9 +5,6 @@ import { discordTokenHas, discordTokenSet } from "../lib/native";
 import { state } from "../state/store";
 import { toast } from "../state/ui";
 import { DEFAULT_VOICE, onAgentStatus, setAgent, startAgent, stopAgent, type AgentStatus } from "../engine/discord";
-import { forgetNote } from "../engine/agentMemory";
-import type { AgentNote } from "../state/types";
-import { Icon } from "../ui/Icon";
 import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
 import { t } from "../i18n";
 
@@ -44,12 +41,6 @@ export function AgentSettings() {
     return t("꺼져 있어요");
   };
   const channels = () => (a().channels ?? []).join(", ");
-  // people first, then places, then lessons; newest first in each
-  const notes = () => {
-    const order = { person: 0, place: 1, lesson: 2 } as const;
-    return [...(state.agentNotes ?? [])].sort((x, y) => order[x.kind] - order[y.kind] || (y.updatedAt ?? y.at) - (x.updatedAt ?? x.at));
-  };
-  const noteLabel = (n: AgentNote) => (n.kind === "person" ? `${n.name ?? n.who}${n.dm ? ` · ${t("DM")}` : ""}` : n.kind === "place" ? t("이곳") : t("교훈"));
 
   return (
     <>
@@ -108,22 +99,6 @@ export function AgentSettings() {
         </div>
       </div>
 
-      <GroupTitle title={t("기억")} />
-      <div class="set-group agent-notes">
-        <For each={notes()} fallback={<div class="set-row"><span class="set-note">{t("아직 기억한 게 없어요")}</span></div>}>
-          {(n) => (
-            <div class="set-row agent-note" data-set={t("기억")}>
-              <div class="set-label">
-                <b>{noteLabel(n)}</b>
-                <span class="agent-note-text selectable">{n.text}</span>
-              </div>
-              <button class="icon-btn xs" title={t("잊기")} aria-label={t("잊기")} onClick={() => forgetNote(n.id)}>
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          )}
-        </For>
-      </div>
     </>
   );
 }

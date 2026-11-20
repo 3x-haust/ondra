@@ -264,6 +264,9 @@ export interface Task {
   follows?: string;
   /** started by this routine (one run) */
   routine?: string;
+  /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
+   *  and its end and questions go back to `channel` on Discord */
+  agent?: { channel?: string };
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */
@@ -422,6 +425,8 @@ export interface Decision {
   /** "merge": the job finished with changes on its branch; the user says what becomes of them. */
   /** "unchecked": the job said done with something left unchecked and didn't ask about it. */
   kind: "ask" | "stalled" | "merge" | "unchecked";
+  /** asked on Discord by the agent, in this channel (so it goes once, and a reply there answers it) */
+  posted?: string;
 }
 
 export type Route =
@@ -467,6 +472,8 @@ export interface CaptainMessage {
   steps?: string[];
   /** how long the answer took, from the request to the reply */
   took?: number;
+  /** in the agent's chat: the Discord message the user's words came from (its reply goes there) */
+  discord?: { channel: string; message: string };
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson";

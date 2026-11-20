@@ -24,7 +24,7 @@ import {
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { forgetRules, listens, rulesPath } from "./agentRules";
-import { setState, state, taskById } from "../state/store";
+import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
 
 /**
@@ -68,10 +68,6 @@ const voiceOf = (a: AgentSettings) => (a.voice?.trim() ? a.voice.trim() : DEFAUL
 
 /** the bot's own id and name, once connected */
 let me: { id: string; name: string } | undefined;
-/** main's reply id → the Discord message it answers */
-const replies = new Map<string, { channel: string; message: string }>();
-/** a job main started from Discord → the channel its end and questions go to */
-const origin = new Map<string, string>();
 /** channels that are in a server (others read them), as seen in messages */
 const servers = new Set<string>();
 /** per channel: what was said lately, for the memory pass once it goes quiet (and who is around) */
@@ -79,8 +75,13 @@ const heard = new Map<string, { lines: Heard[]; guild?: string; spoke: boolean; 
 /** how long a channel stays quiet before the memory pass reads it */
 export const QUIET_MS = 10 * 60_000;
 
-/** questions already posted (decision id → channel), so each goes once */
-const posted = new Map<string, string>();
+/** questions asked on Discord, kept on the question itself (so a restart doesn't ask again) */
+const posted = {
+  get: (id: string) => state.decisions.find((d) => d.id === id)?.posted,
+  has: (id: string) => !!state.decisions.find((d) => d.id === id)?.posted,
+  set: (id: string, channel: string) => setState("decisions", (d) => d.id === id, "posted", channel),
+  delete: (id: string) => setState("decisions", (d) => d.id === id, "posted", undefined),
+};
 /** per channel: what it said there, newest last (for "그거 지워") */
 const said = new Map<string, string[]>();
 const keepSaid = (channel: string, ids: string[]) => said.set(channel, [...(said.get(channel) ?? []), ...ids].slice(-50));
@@ -205,7 +206,7 @@ function chatRules(a: AgentSettings, server: boolean): string[] {
 }
 
 /** A job started from Discord ended: main's line about it goes back there, so it is written the same way. */
-export function endNote(t: { id: string; parentId?: string }, a: AgentSettings | undefined = settings(), from = origin.get(t.id) ?? (t.parentId ? origin.get(t.parentId) : undefined)): string | undefined {
+export function endNote(t: { id: string; parentId?: string }, a: AgentSettings | undefined = settings(), from = channelOf(t.id)): string | undefined {
   if (!a?.on || !from) return undefined;
   return [`(Ondra) This work was asked from Discord: your reply line about it is posted there as "${a.name}", as the one who did it. Write it as a chat message in this voice:`, ...chatRules(a, servers.has(from))].filter(Boolean).join("\n");
 }
@@ -246,9 +247,9 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   // seen: a reaction, not a line that only says "알겠어, 할게"
   void discordReact(m.channel, m.id, "👀").catch(() => {});
   void discordTyping(m.channel);
+  // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
-  const replyId = throwThought(text, space, { note: ownerNote(m, a, await rulesPath()) });
-  if (replyId) replies.set(replyId, { channel: m.channel, message: m.id });
+  throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, await rulesPath()), discord: { channel: m.channel, message: m.id } });
 }
 
 /** main's message as a chat line: its reply, its answers, and a question with numbered choices
@@ -321,13 +322,13 @@ export function pickPrompt(d: Decision, text: string): string {
 }
 async function mainSaid(replyId: string) {
   const msg = state.captain.find((x) => x.id === replyId);
-  if (!msg) return;
-  const from = replies.get(replyId);
-  // a job main ended up starting from here: its end and its questions come back here too
-  const channel = from?.channel ?? (msg.after ? origin.get(msg.after) : undefined);
+  // the agent's own chat only: main's words never go to Discord
+  if (!msg || msg.project !== AGENT_CHAT) return;
+  // what it answers: the user's Discord message just before it, or the job whose end it is about
+  const chat = state.captain.filter((x) => x.space === msg.space && x.project === msg.project);
+  const asked = msg.after ? undefined : chat.slice(0, chat.indexOf(msg)).reverse().find((x) => x.from === "me")?.discord;
+  const channel = asked?.channel ?? (msg.after ? channelOf(msg.after) : undefined);
   if (!channel) return;
-  replies.delete(replyId);
-  for (const r of msg.routes ?? []) if (r.kind === "new") origin.set(r.taskId, channel);
   const asks: Record<string, string> = {};
   for (const r of msg.routes ?? []) {
     if (r.kind !== "ask") continue;
@@ -337,9 +338,15 @@ async function mainSaid(replyId: string) {
   }
   const text = sayOf(msg, asks);
   if (!text) return;
-  const ids = await discordSend(channel, text, from?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
+  const ids = await discordSend(channel, text, asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
+}
+
+/** the Discord channel a job of the agent reports to (its own, or the job it is under) */
+export function channelOf(taskId: string): string | undefined {
+  const t = taskById(taskId);
+  return t?.agent?.channel ?? (t?.parentId ? taskById(t.parentId)?.agent?.channel : undefined);
 }
 
 /** a job started from Discord asked something: post it there once */
@@ -347,7 +354,7 @@ function postQuestions() {
   for (const d of state.decisions) {
     if (posted.has(d.id) || d.ui) continue;
     const t = taskById(d.taskId);
-    const channel = origin.get(d.taskId) ?? (t?.parentId ? origin.get(t.parentId) : undefined);
+    const channel = channelOf(d.taskId);
     if (!channel) continue;
     posted.set(d.id, channel);
     void askedLine(d, settings(), t?.title)

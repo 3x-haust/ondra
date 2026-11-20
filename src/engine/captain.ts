@@ -14,7 +14,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { accountById, addProject, allDecisions, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { AGENT_CHAT, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -40,9 +40,17 @@ const base = (key: string) => key.replace(/^sim\d*:/, "");
 const isSim = (key: string) => /^sim\d*:/.test(key);
 const sp = (key: string) => base(key).split("~")[0] as SpaceId;
 const pj = (key: string) => base(key).split("~")[1] as string | undefined;
+/** The Discord agent's own chat ("home~@agent"): a chat like main, with its own session, whose
+ *  jobs are the agent's (Task.agent) and stay out of the user's main, projects and 내 차례. */
+export { AGENT_CHAT };
+export const isAgentChat = (key: string) => pj(key) === AGENT_CHAT;
+/** the project a chat belongs to (none for main and for the agent's chat) */
+const pid = (key: string) => (isAgentChat(key) ? undefined : pj(key));
+/** the Discord channel the agent's chat was last spoken to from: where the work it starts reports */
+const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
 // a project added from another Mac has its own chat here too (its jobs run there)
 const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
-  pj(key) ? (worlds.get(key)?.projects ?? projectsShown(sp(key))).find((p) => p.id === pj(key) && p.space === sp(key)) : undefined;
+  pid(key) ? (worlds.get(key)?.projects ?? projectsShown(sp(key))).find((p) => p.id === pid(key) && p.space === sp(key)) : undefined;
 /** the folder main runs in: a project's, unless it is another Mac's (or made up): then the space's */
 const localFolder = (key: string) => {
   const p = projectOf(key);
@@ -142,15 +150,15 @@ function addThought(key: string, delta: string) {
 }
 
 /** Send a request. Returns the id of the reply message to watch (empty if nothing was sent). */
-export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string } = {}): string {
+export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: string; isolate?: boolean; project?: string; note?: string; discord?: CaptainMessage["discord"] } = {}): string {
   const t = text.trim();
   if (!t) return "";
   track("message_sent", { where: "main" });
   const project = opts.project || undefined;
   const space = chatKey(spaceId, project);
-  const me: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t };
+  const me: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t, ...(opts.discord ? { discord: opts.discord } : {}) };
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
-  setState("captain", (list) => [...list.slice(-300), me, reply]);
+  setState("captain", (list) => trimChats([...list, me, reply]));
   followUps.set(space, 0);
   // `note`: for the model only (the chat shows the user's words)
   queues.set(space, [...(queues.get(space) ?? []), { text: opts.note ? `${t}\n\n${opts.note}` : t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
@@ -170,10 +178,11 @@ function jobEnded(t: Task) {
   void digestJob(t);
   // the chat that owns it gets the result: the project's chat when main handed the work down
   const owners = state.captain.filter((m) => m.space === t.space && (m.routes ?? []).some((r) => r.kind === "new" && r.taskId === t.id));
-  const from = owners.find((m) => m.project) ?? owners[0];
+  // the agent's work reports to the agent's chat; the user's, to the project chat it was handed to
+  const from = t.agent ? owners.find((m) => m.project === AGENT_CHAT) : (owners.find((m) => m.project && m.project !== AGENT_CHAT) ?? owners[0]);
   if (!from) return;
-  // its own result, kept now: the chat's row for it opens this
-  keepJobResult(t);
+  // its own result, kept now: the chat's row for it opens this (the agent's work isn't in 결과물)
+  if (!t.agent) keepJobResult(t);
   const space = chatKey(t.space, from.project);
   const handed = from.project ? requestsOf(space).find((q) => q.jobs.has(t.id))?.ask : undefined;
   const n = (followUps.get(space) ?? 0) + 1;
@@ -205,7 +214,7 @@ function jobEnded(t: Task) {
     ...[...endNotes].map((fn) => fn(t)),
   ].filter(Boolean).join("\n");
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
-  setState("captain", (list) => [...list.slice(-300), reply]);
+  setState("captain", (list) => trimChats([...list, reply]));
   queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "fork" }]);
   void pump(space);
 }
@@ -334,14 +343,14 @@ export function requestsOf(space: string): { ask: CaptainMessage; msgs: CaptainM
 function handDown(spaceId: SpaceId, projectId: string, request: string, taskIds: string[]) {
   const ask: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "me", via: "main", text: request };
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project: projectId, from: "captain", relay: true, routes: taskIds.map((taskId) => ({ kind: "new" as const, taskId })) };
-  setState("captain", (list) => [...list.slice(-300), ask, reply]);
+  setState("captain", (list) => trimChats([...list, ask, reply]));
 }
 
 /** this chat message started the job or relayed to it (the chat shows it as the job's row) */
 const handsTo = (m: CaptainMessage, id: string) => (m.routes ?? []).some((r) => (r.kind === "new" || r.kind === "append") && r.taskId === id);
 
 function reportUp(space: string) {
-  const projectId = pj(space);
+  const projectId = pid(space);
   if (!projectId) return;
   const reqs = requestsOf(space);
   const latest = reqs[reqs.length - 1];
@@ -378,7 +387,7 @@ function reportUp(space: string) {
     ].filter(Boolean).join("\n");
     const main = chatKey(sp(space));
     const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: sp(space), from: "captain", pending: true, up: projectId };
-    setState("captain", (list) => [...list.slice(-300), reply]);
+    setState("captain", (list) => trimChats([...list, reply]));
     queues.set(main, [...(queues.get(main) ?? []), { text, replyId: reply.id, event: "project" }]);
     void pump(main);
   }
@@ -427,16 +436,17 @@ async function pump(space: string) {
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
-        keepResult(next.replyId);
+        // 결과물 is the user's: the agent's chat keeps none there
+        if (!isAgentChat(space)) keepResult(next.replyId);
         if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
-        if (pj(space)) reportUp(space);
+        if (pid(space)) reportUp(space);
       } catch (e) {
         logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
         setDraft(space, "");
         if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
         // the project couldn't answer: main still gets what the jobs reported
-        if (pj(space)) reportUp(space);
+        if (pid(space)) reportUp(space);
       }
     }
   } finally {
@@ -952,7 +962,8 @@ export function nowLine(now = Date.now()): string {
 function context(space: string, text: string, cwd?: string, event?: Event): string {
   const sent = sentOf.get(space) ?? { recap: true };
   const w = worlds.get(space);
-  const mine = (w ? w.tasks : tasksShown(sp(space))).filter((t) => !pj(space) || t.project === pj(space));
+  // the agent's chat sees its own work; main and the projects never see it
+  const mine = (w ? w.tasks : tasksShown(sp(space))).filter((t) => (isAgentChat(space) ? !!t.agent : !t.agent && (!pid(space) || t.project === pid(space))));
   const tasks = mine.filter((t) => !t.parentId && !t.answer && (t.status !== "done" || (t.finishedAt ?? 0) > Date.now() - 86_400_000));
   const topics = [...new Set(mine.map((t) => t.topic))];
   const forks = [
@@ -1021,11 +1032,11 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
     : "";
   if (model && model !== sent.model) out.push("", `# You${sent.model ? " (changed)" : ""}`, model);
   // a project chat: where the project stands, as its jobs left it
-  const notes = pj(space) ? (notesOf.get(space) ?? "") : "";
+  const notes = pid(space) ? (notesOf.get(space) ?? "") : "";
   if (notes && notes !== sent.notes) out.push("", `# Project notes${sent.notes ? " (updated)" : ""} (left by this project's jobs: where it stands, what is left)`, notes.slice(0, 8000));
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
-  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pj(space) ? FORK_REPORT : FORK_ENDED);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
   else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
@@ -1046,7 +1057,7 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
   const t0 = Date.now();
   let watch: ReturnType<typeof setInterval> | undefined;
   try {
-    await Promise.all([prepareQuery(text), refreshRepos(sp(space)), pj(space) ? readNotes(pj(space)!).then((n) => void notesOf.set(space, n)) : undefined]);
+    await Promise.all([prepareQuery(text), refreshRepos(sp(space)), pid(space) ? readNotes(pid(space)!).then((n) => void notesOf.set(space, n)) : undefined]);
     turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
     heardAt.set(space, Date.now());
     watch = setInterval(() => watchCommands(space), 5_000);
@@ -1292,11 +1303,12 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
           ]),
         ],
         follows: from?.id,
+        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
       });
       if (still) handOn(still, id);
       if (r.key) byKey.set(String(r.key), id);
       out.push({ kind: "new", taskId: id });
-      if (proj && !projectOf(space)) handed.set(proj.id, [...(handed.get(proj.id) ?? []), id]);
+      if (proj && !projectOf(space) && !isAgentChat(space)) handed.set(proj.id, [...(handed.get(proj.id) ?? []), id]);
     } else if (r?.kind === "remember" && r.text && state.settings.learn) {
       const scope = r.scope === "global" || r.scope === "project" ? r.scope : "space";
       // project memory is filed by folder (that's how jobs find it)

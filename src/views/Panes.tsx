@@ -8,6 +8,7 @@ import { equalizePanes, focusPane, layout, paneEl, setPaneRoom, setSplitNeed, se
 import { PaneCtx, usePane } from "../state/panes";
 import { drag, needs, setAlone, setZoneAt, zone, type Zone } from "./PaneControls";
 import { MainView } from "./MainView";
+import { AgentView } from "./AgentView";
 import { Canvas } from "./Canvas";
 import { MemoryView } from "./Memory";
 import { ResultsView } from "./Results";
@@ -45,7 +46,11 @@ function Body() {
         <Show when={is("devices")} fallback={
           <Show when={is("memory")} fallback={
             <Show when={is("results")} fallback={
-              <Show when={is("changes")} fallback={<Slide from={-1} first={isFirst}><MainView /></Slide>}>
+              <Show when={is("changes")} fallback={
+                <Show when={is("agent")} fallback={<Slide from={-1} first={isFirst}><MainView /></Slide>}>
+                  <Slide from={-1} first={isFirst}><AgentView /></Slide>
+                </Show>
+              }>
                 <Slide from={1} first={isFirst}><ChangesView /></Slide>
               </Show>
             }>

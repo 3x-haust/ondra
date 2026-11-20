@@ -19,4 +19,4 @@ export function bucket(t: Task): Bucket {
 }
 /** needs you: a reply, a failure to look at, or a merge (내 차례). One the user put away (보관) doesn't:
  *  the count, ⌘. and the click on 내 차례 with one waiting all go by this. */
-export const needsYou = (t: Task) => !t.archived && (bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review");
+export const needsYou = (t: Task) => !t.archived && !t.agent && (bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review");

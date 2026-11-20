@@ -11,7 +11,7 @@
 // closed or the Mac slept rings once when it can, marked late.
 import { createEffect, createRoot, on } from "solid-js";
 import { ghWatch, notify, spaceEnv } from "../lib/native";
-import { projectById, setState, spaceById, state, taskById, uid } from "../state/store";
+import { projectById, setState, spaceById, state, taskById, trimChats, uid } from "../state/store";
 import type { CaptainMessage, Routine, RoutineWhen, SpaceId, Task } from "../state/types";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
@@ -202,7 +202,7 @@ export function ringAlarm(id: string, now = Date.now()): string | undefined {
     relay: true,
     routes: [{ kind: "alarm", routineId: r.id, text: r.prompt, due: dueAt, ...(late ? { late: true } : {}) }],
   };
-  setState("captain", (list) => [...list.slice(-300), m]);
+  setState("captain", (list) => trimChats([...list, m]));
   const once = r.when.kind === "once";
   patchRoutine(r.id, {
     lastAt: now,

@@ -324,4 +324,8 @@ export default {
   // links
   "{name}에서 열기": "Open in {name}",
   "이 페이지를 기본 브라우저에서 열기": "Open this page in default browser",
+  "연결하는 중": "Connecting",
+  "에이전트 설정": "Agent settings",
+  "디스코드에서 {name}에게 말을 걸면 여기에 남아요": "Talk to {name} on Discord and it shows here",
+  "물어보는 중 {n}개": "{n} asking",
 } satisfies Record<string, string>;

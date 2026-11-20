@@ -22,7 +22,7 @@ const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 const ID = "ondra.telemetry.id";
 
 // ───────────────────────── what may be sent ─────────────────────────
-export const VIEWS = ["main", "task", "board", "devices", "memory", "results", "changes", "settings"] as const;
+export const VIEWS = ["main", "task", "board", "devices", "memory", "results", "changes", "settings", "agent"] as const;
 export const PANEL_TABS = ["new", "flow", "side", "artifacts", "changes", "pr", "files", "terminal", "browser", "overview", "preview", "reverse", "issues"] as const;
 export const KINDS = ["job", "subagent", "review", "answer"] as const;
 const PROVIDERS = ["anthropic", "openai", "openai-codex", "google", "openrouter", "xai", "groq", "mistral", "deepseek", "github-copilot", "bedrock", "vertex", "azure", "ollama", "other", "none"] as const;

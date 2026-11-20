@@ -81,9 +81,9 @@ function fill(text: string) {
 // ───────────── pieces
 
 /** A reply main wrote on its own (a job ended, a project reported back), not to something the user said. */
-const onItsOwn = (m: CaptainMessage) => !!(m.after || m.up);
+export const onItsOwn = (m: CaptainMessage) => !!(m.after || m.up);
 /** the jobs a reply handed work to (started or relayed to), once each, in order */
-function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
+export function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
   const out: { taskId: string; relayed: boolean }[] = [];
   for (const r of m.routes ?? []) {
     if ((r.kind !== "new" && r.kind !== "append") || out.some((x) => x.taskId === r.taskId)) continue;
@@ -92,7 +92,7 @@ function handed(m: CaptainMessage): { taskId: string; relayed: boolean }[] {
   return out;
 }
 /** something of this reply shows in the chat (main reacting to a job's end may add nothing: the job's row says it) */
-const shows = (m: CaptainMessage) =>
+export const shows = (m: CaptainMessage) =>
   !!m.error || !!m.reply?.trim() || (m.routes ?? []).some((r) => r.kind === "new" || r.kind === "append" || r.kind === "stop" || r.kind === "remember" || r.kind === "routine" || r.kind === "alarm" || (r.kind === "answer" && (!!r.text.trim() || r.blocks.length > 0)));
 
 /** What a job is on while it runs: what it last said it is doing, else its to-do step, else its status line. */
@@ -292,7 +292,7 @@ function Worked(props: { m: CaptainMessage }) {
   );
 }
 
-function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined; full?: boolean }) {
+export function Reply(props: { m: CaptainMessage; retry: () => void; active?: string; lastRow: (taskId: string) => string | undefined; full?: boolean }) {
   const routes = () => props.m.routes ?? [];
   const rows = () => handed(props.m);
   const copyText = () => [props.m.reply, ...routes().map((r) => (r.kind === "answer" ? r.text : ""))].filter(Boolean).join("\n\n");
@@ -451,7 +451,7 @@ function Hero(props: { project?: string; composer: JSX.Element; asks: Decision[]
 
 /** What the jobs of this chat are asking, attached above the input: answered here, no need to open the job,
  *  and the newest messages stay in sight above it. The first takes the number keys. */
-function AskDock(props: { list: Decision[] }) {
+export function AskDock(props: { list: Decision[] }) {
   return (
     <Show when={props.list.length}>
       <div class="ask-dock">
@@ -780,7 +780,7 @@ export function MainView() {
     const out: Answered[] = [];
     if (project()) return out;
     for (const t of tasksShown(state.space)) {
-      if (t.space !== state.space || (project() && t.project !== project()!.id)) continue;
+      if (t.space !== state.space || t.agent || (project() && t.project !== project()!.id)) continue;
       for (const e of t.entries) {
         if (e.kind !== "user") continue;
         const a = answerOf(e.text);
@@ -1057,7 +1057,7 @@ function ProjectStrip(props: { project: string; all?: boolean }) {
 }
 
 /** Task rows in the sidebar's look; a click opens one. */
-function ProjectTasks(props: { list: Task[] }) {
+export function ProjectTasks(props: { list: Task[] }) {
   const list = () => props.list;
   return (
     <Show when={list().length} fallback={<p class="proj-tasks-empty">{t("작업 없음")}</p>}>

@@ -157,3 +157,34 @@ describe("which project new work joins", () => {
     expect(taskById((out[0] as { taskId: string }).taskId)!.project).toBe("p-pebble");
   });
 });
+
+describe("the Discord agent's own chat", () => {
+  beforeEach(() => {
+    setState("projects", [{ id: "ondra", space: "home", name: "ondra", folder: "/p/ondra" }]);
+    // the user's words came from a Discord channel
+    setState("captain", [{ id: "u1", at: 1, space: "home", project: "@agent", from: "me", text: "ondra 탭 고쳐줘", discord: { channel: "c9", message: "m1" } }]);
+  });
+
+  it("its work is the agent's, reports to that channel, and is never handed to the project's chat", async () => {
+    const out = await applyRoutes("home~@agent", [{ kind: "new", title: "탭 고치기", task: "panel tabs" }], "ondra 탭 고쳐줘");
+    const made = taskById((out[0] as { taskId: string }).taskId)!;
+    expect(made.agent).toEqual({ channel: "c9" });
+    // it may work in the project's folder, but the project's chat hears nothing of it
+    expect(state.captain.filter((m) => m.project === "ondra")).toHaveLength(0);
+  });
+
+  it("what carries it on stays the agent's", async () => {
+    const out = await applyRoutes("home~@agent", [{ kind: "new", title: "탭 고치기", task: "panel tabs" }], "ondra 탭 고쳐줘");
+    const first = (out[0] as { taskId: string }).taskId;
+    setState("tasks", (t) => t.id === first, "status", "done");
+    const next = await applyRoutes("home", [{ kind: "new", title: "이어서", task: "more", from: first }], "더 해줘");
+    expect(taskById((next[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9" });
+  });
+
+  it("main's work isn't the agent's", async () => {
+    const out = await applyRoutes("home", [{ kind: "new", title: "탭 고치기", task: "panel tabs" }], "ondra 탭 고쳐줘");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.agent).toBeUndefined();
+    // (main does hand it to the project's chat: what the agent's chat must not do)
+    expect(state.captain.filter((m) => m.project === "ondra").length).toBeGreaterThan(0);
+  });
+});

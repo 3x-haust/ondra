@@ -99,7 +99,7 @@ const [ranks, setRanks] = createSignal<Record<string, number>>({});
 const rankOf = (t: Task) => ranks()[t.id] ?? RANK[tone(t)];
 const snapRanks = (space: string) => {
   for (const k in laneCol) delete laneCol[k];
-  setRanks(Object.fromEntries(tasksShown(space as Task["space"]).filter((t) => !t.parentId).map((t) => [t.id, RANK[tone(t)]])));
+  setRanks(Object.fromEntries(tasksShown(space as Task["space"]).filter((t) => !t.parentId && !t.agent).map((t) => [t.id, RANK[tone(t)]])));
 };
 /** which of two columns each lane went to (kept like the ranks, so lanes don't swap columns as work moves on) */
 const laneCol: Record<string, number> = {};
@@ -122,7 +122,8 @@ const [twoCols, setTwoCols] = createSignal(false);
  * project sit at the top of what they lead to, so a lane that grows only grows downward.
  */
 function layout(space: string, open: string[], k = untrack(sizeAt), two = untrack(twoCols)): { nodes: Node[]; edges: Edge[] } {
-  const roots = tasksShown(space as Task["space"]).filter((t) => !t.parentId && !t.answer && !t.archived);
+  // the Discord agent's work is in its own tab
+  const roots = tasksShown(space as Task["space"]).filter((t) => !t.parentId && !t.answer && !t.archived && !t.agent);
   const projects: (Project | { id: string; name: string; folder: string })[] = [...projectsShown(space as Task["space"])];
   if (roots.some((t) => !t.project || !projects.some((p) => p.id === t.project))) projects.push({ id: "_", name: "프로젝트 없음", folder: spaceById(space as Task["space"]).folder });
   const jobsOf = (p: { id: string }) =>
@@ -706,7 +707,7 @@ function SubCard(props: { n: Node }) {
 
 function ProjCard(props: { n: Node; space: string }) {
   const p = () => props.n.project!;
-  const jobs = createMemo(() => tasksShown(props.space as Task["space"]).filter((x) => !x.parentId && !x.answer && !x.archived && (p().id === "_" ? !x.project : x.project === p().id)));
+  const jobs = createMemo(() => tasksShown(props.space as Task["space"]).filter((x) => !x.parentId && !x.answer && !x.archived && !x.agent && (p().id === "_" ? !x.project : x.project === p().id)));
   const counts = createMemo(() => {
     const n: Record<string, number> = {};
     for (const x of jobs()) {

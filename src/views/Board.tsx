@@ -153,7 +153,7 @@ export function NewTask(props: { project?: () => string | undefined }) {
 export function Board(props: { embedded?: boolean } = {}) {
   const roots = createMemo(() =>
     tasksShown(state.space)
-      .filter((x) => !x.parentId && !x.answer && !x.archived && x.space === state.space)
+      .filter((x) => !x.parentId && !x.answer && !x.archived && !x.agent && x.space === state.space)
       .sort((a, b) => (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)),
   );
   const old = (x: Task) => stateOf(x) === "done" && (x.finishedAt ?? x.createdAt) < now() - DAY;

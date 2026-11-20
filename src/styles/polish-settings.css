@@ -1466,16 +1466,3 @@
   white-space: nowrap;
 }
 
-/* Settings › 에이전트 › 기억: a card per line, its text under the name, ✕ to forget it */
-.settings-inner .agent-note .set-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.settings-inner .agent-note-text {
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}

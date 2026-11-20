@@ -9,7 +9,7 @@ import { MacBar } from "../ui/MacBar";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
-import { addProject, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
+import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
@@ -462,6 +462,10 @@ export function Sidebar() {
   const needs = createMemo(() => every().filter(needsYou).length);
   const boardLive = () => every().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
+  // the agent: on, or something of it here
+  const agentShown = () => !!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space);
+  const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");
+  const agentAsks = () => agentDecisions().filter((d) => taskById(d.taskId)?.space === state.space).length;
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
   const addFolder = async () => {
     const dir = await pickFolder(tr("프로젝트 폴더 선택"));
@@ -533,6 +537,16 @@ export function Sidebar() {
           <span class="sb-title">{tr("결과물")}</span>
           <kbd class="sb-kbd">{shortcutHint("results")}</kbd>
         </button>
+        {/* the Discord agent's own place: its talk and work are there, not in main or the projects */}
+        <Show when={agentShown()}>
+          <button class="sb-row sb-main" classList={{ on: view().name === "agent" }} onClick={() => setView({ name: "agent" })}>
+            <Icon name="pet" size={16} class="sb-main-ic" />
+            <span class="sb-title">{state.settings.agent?.name || tr("에이전트")}</span>
+            <Show when={agentAsks()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}>
+              <span class="sb-live sb-agent-ask" title={tr("물어보는 중 {n}개", { n: agentAsks() })}>{agentAsks()}</span>
+            </Show>
+          </button>
+        </Show>
         {/* tasks anywhere in this space that need a reply or a merge: a row of its own, not under one section */}
         {/* the row stays when nothing waits (greyed, no count), so nothing below it moves */}
           <button

@@ -8,7 +8,7 @@ import { bindingSource } from "../lib/shortcuts";
 import { inTauri, onEvent, stateFlushed, stateLoad, stateSaveParts } from "../lib/native";
 import { fixture } from "./fixture";
 import { debounce, permissionOf, Saver, unpackTask } from "./persist";
-import type { Account, AppState, Decision, SpaceId, Task } from "./types";
+import type { Account, AppState, CaptainMessage, Decision, SpaceId, Task } from "./types";
 
 /**
  * ↑ history per space. It used to be one list for every space: each old line goes
@@ -225,7 +225,13 @@ export const allTasks = (): Task[] => [...state.tasks, ...mirroredTasks()];
 export const queueWith = (t: Task): Task[] =>
   (t.host ? mirroredTasks().filter((x) => x.host === t.host) : state.tasks).filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
 /** every question waiting on the user: this Mac's and those of the other Macs' jobs */
-export const allDecisions = (): Decision[] => [...state.decisions, ...mirroredDecisions()];
+export const allDecisions = (): Decision[] => [...state.decisions, ...mirroredDecisions()].filter((d) => !agentWork(taskById(d.taskId)));
+/** the Discord agent's own chat, as a chat's project id ("home~@agent"; engine/captain.ts) */
+export const AGENT_CHAT = "@agent";
+/** the Discord agent's work (it, or the job it is under): shown in the 에이전트 tab only */
+export const agentWork = (t: Task | undefined): boolean => !!t && (!!t.agent || (!!t.parentId && !!taskById(t.parentId)?.agent));
+/** the questions of the agent's work, for the 에이전트 tab */
+export const agentDecisions = (): Decision[] => state.decisions.filter((d) => agentWork(taskById(d.taskId)));
 /** compare folders in "~/…" form (macOS home) */
 const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */
@@ -294,8 +300,22 @@ export const taskById = (id: string) => index().byId.get(id);
 /** a task's subagents, in the order they were made (the tasks list's order) */
 export const kidsOf = (id: string): Task[] => index().kids.get(id) ?? none;
 
+/** the chat messages kept: the last 300 of each chat (main, each project's, the agent's), so a busy
+ *  chat never pushes another's history out */
+export function trimChats(list: CaptainMessage[], keep = 300): CaptainMessage[] {
+  const seen = new Map<string, number>();
+  const out: CaptainMessage[] = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const k = `${list[i].space}~${list[i].project ?? ""}`;
+    const n = (seen.get(k) ?? 0) + 1;
+    seen.set(k, n);
+    if (n <= keep) out.push(list[i]);
+  }
+  return out.length === list.length ? list : out.reverse();
+}
+
 /** a job of the list: not a subagent, a quick answer or archived */
-export const listed = (t: Task) => !t.parentId && !t.answer && !t.archived;
+export const listed = (t: Task) => !t.parentId && !t.answer && !t.archived && !t.agent;
 /** the job a follow-up carries on (one started by answering it, say "merge it"), when that one is in
  *  the same list: the follow-up is part of its line, shown under it and named by it */
 export function carriedOn(t: Task): Task | undefined {
