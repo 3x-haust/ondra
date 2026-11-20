@@ -17,12 +17,15 @@ describe("main skill discovery", () => {
   it.each([true, false])("loads skill search with lazy core available: %s", async (lazy) => {
     vi.spyOn(native, "workerExtensions").mockResolvedValue([
       ...(lazy ? ["/extensions/lazy-core.ts"] : []),
-      "/extensions/web.ts", "/extensions/skills.ts", "/extensions/unrelated.ts",
+      "/extensions/web.ts", "/extensions/skills.ts", "/extensions/secrets.ts", "/extensions/unrelated.ts",
     ]);
 
     const args = await mainTools();
 
-    expect(args.flatMap((arg, i) => arg === "--extension" ? [args[i + 1]] : [])).toContain("/extensions/skills.ts");
+    const loaded = args.flatMap((arg, i) => arg === "--extension" ? [args[i + 1]] : []);
+    expect(loaded).toContain("/extensions/skills.ts");
+    // main reads files too: Codex's tokens and other secrets stay hidden there as in jobs
+    expect(loaded).toContain("/extensions/secrets.ts");
     expect(args).not.toContain("/extensions/unrelated.ts");
   });
 

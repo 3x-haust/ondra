@@ -58,4 +58,35 @@ describe("drawing helpers", () => {
     expect((out.board.marks[out.board.marks.length - 1] as any).text).toBe("20");
     expect(out.board.marks.filter((m) => m.kind === "text").map((m: any) => m.text)).toContain("60%");
   });
+
+  it("names a box that holds other shapes above them, not across them", async () => {
+    const { loadEngine, runProgram } = await import("./program");
+    const { headings } = await import("./parse");
+    await loadEngine();
+    const out = runProgram(
+      'const f = box(0, 0, 226, 130, { label: "바깥 살펴보기" })\n' +
+      'row(f.x + 13, f.y + 53, ["토스증권", "로빈후드", "듀오링고"], { down: true, size: 14 })\n' +
+      'box(300, 0, 120, 50, { label: "혼자" })\n',
+    )!;
+    const [frame, first, , , alone] = headings(out.board.marks) as any[];
+    // its 20px name ends above the first tag inside it
+    expect(frame.labelY + 10).toBeLessThanOrEqual(first.y);
+    expect(alone.labelY).toBeUndefined();
+  });
+
+  it("frames shapes already placed, with room for the frame's name above them", async () => {
+    const { loadEngine, runProgram } = await import("./program");
+    await loadEngine();
+    const out = runProgram('const r = row(100, 100, ["토스증권", "듀오링고"], { down: true })\nconst p = panel(r, "바깥 살펴보기")\nchip(p.x, p.bottom + 20, "다음")\n')!;
+    const [a, b, frame, name, next] = out.board.marks as any[];
+    for (const c of [a, b]) {
+      expect(c.x).toBeGreaterThan(frame.x);
+      expect(c.y + c.h).toBeLessThan(frame.y + frame.h);
+      expect(c.x + c.w).toBeLessThan(frame.x + frame.w);
+    }
+    expect(name).toMatchObject({ kind: "text", text: "바깥 살펴보기" });
+    expect(name.y + name.size / 2).toBeLessThan(a.y);
+    expect(name.y - name.size / 2).toBeGreaterThan(frame.y);
+    expect(next.y).toBe(frame.y + frame.h + 20);
+  });
 });
