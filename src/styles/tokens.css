@@ -27,6 +27,7 @@
   --accent-press: var(--accent-hover);
   --accent-text: var(--accent);
   --merged: #8250df;
+  --skill: #8250df;
   --primary: var(--accent);
   --primary-ink: var(--accent-ink);
   --focus: rgba(31, 111, 216, 0.35);
@@ -177,6 +178,7 @@
   --accent-press: var(--accent-hover);
   --accent-text: var(--accent);
   --merged: #a371f7;
+  --skill: #a371f7;
   --scrim: rgba(0, 0, 0, 0.6);
   --primary: var(--accent);
   --primary-ink: var(--accent-ink);
@@ -232,6 +234,7 @@
     --accent-press: var(--accent-hover);
     --accent-text: var(--accent);
     --merged: #a371f7;
+    --skill: #a371f7;
     --scrim: rgba(0, 0, 0, 0.6);
     --primary: var(--accent);
     --primary-ink: var(--accent-ink);

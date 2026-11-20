@@ -158,9 +158,9 @@ export function Composer(props: {
   const marks = createMemo(() => commandMarks(text(), props.commands ?? []));
   const pieces = () => {
     const v = text();
-    const out: { s: string; cmd?: boolean }[] = [];
+    const out: { s: string; kind?: "cmd" | "skill" }[] = [];
     let at = 0;
-    for (const [a, b] of marks()) out.push({ s: v.slice(at, a) }, { s: v.slice(a, b), cmd: true }), (at = b);
+    for (const [a, b, kind] of marks()) out.push({ s: v.slice(at, a) }, { s: v.slice(a, b), kind }), (at = b);
     // a last empty line takes room only with something on it
     out.push({ s: `${v.slice(at)} ` });
     return out;
@@ -763,7 +763,7 @@ export function Composer(props: {
         </Show>
         <Show when={marks().length}>
           <div class="cmirror" ref={mirror} aria-hidden="true">
-            <For each={pieces()}>{(p) => (p.cmd ? <span class="cmd-mark">{p.s}</span> : p.s)}</For>
+            <For each={pieces()}>{(p) => (p.kind ? <span class="cmd-mark" classList={{ skill: p.kind === "skill" }}>{p.s}</span> : p.s)}</For>
           </div>
         </Show>
         <textarea

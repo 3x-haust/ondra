@@ -358,6 +358,9 @@
 .cmirror .cmd-mark {
   color: var(--accent);
 }
+.cmirror .cmd-mark.skill {
+  color: var(--skill);
+}
 .msg-user {
   padding: var(--s-8) var(--s-12);
   border-radius: var(--r-2xl);
