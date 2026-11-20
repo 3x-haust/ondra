@@ -5,9 +5,9 @@ const commands = [{ name: "btw" }, { name: "new" }, { name: "skill:deep-research
 
 describe("commandMarks", () => {
   it("marks a known command opening the message, not the words after it", () => {
-    expect(commandMarks("/btw 그럼 그", commands)).toEqual([[0, 4]]);
-    expect(commandMarks("/btw", commands)).toEqual([[0, 4]]);
-    expect(commandMarks("  /new\n일", commands)).toEqual([[2, 6]]);
+    expect(commandMarks("/btw 그럼 그", commands)).toEqual([[0, 4, "cmd"]]);
+    expect(commandMarks("/btw", commands)).toEqual([[0, 4, "cmd"]]);
+    expect(commandMarks("  /new\n일", commands)).toEqual([[2, 6, "cmd"]]);
   });
   it("leaves a word that is not a whole known command", () => {
     expect(commandMarks("/bt", commands)).toEqual([]);
@@ -15,12 +15,12 @@ describe("commandMarks", () => {
     expect(commandMarks("그럼 /btw", commands)).toEqual([]);
     expect(commandMarks("/", commands)).toEqual([]);
   });
-  it("marks skills named anywhere, once each place", () => {
+  it("marks skills named anywhere as skills, once each place", () => {
     expect(commandMarks("이거 /skill:deep-research 로 하고 /skill:qa", commands)).toEqual([
-      [3, 23],
-      [29, 38],
+      [3, 23, "skill"],
+      [29, 38, "skill"],
     ]);
-    expect(commandMarks("/skill:qa 해줘", commands)).toEqual([[0, 9]]);
+    expect(commandMarks("/skill:qa 해줘", commands)).toEqual([[0, 9, "skill"]]);
     expect(commandMarks("이거 /skill:nope", commands)).toEqual([]);
   });
 });
