@@ -2754,3 +2754,24 @@
 .agent-view .agent-routines {
   max-width: 760px;
 }
+.agent-view .agent-ways {
+  max-width: 760px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.agent-view .agent-ways b {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.agent-view .agent-ways-text {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.agent-view .agent-ways .agent-empty {
+  margin: 6px 0 0;
+}

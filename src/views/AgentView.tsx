@@ -2,10 +2,11 @@
 // What it was told on Discord and what it said, the work it did, what it is asking, and what it
 // remembers. View only: the user talks to it on Discord. None of this is in main, the projects,
 // 내 차례 or 결과물; work memory is shared.
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createMemo, createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { AGENT_CHAT, chatKey, inChat } from "../engine/captain";
 import { onAgentStatus, type AgentStatus } from "../engine/discord";
 import { forgetNote } from "../engine/agentMemory";
+import { readWays } from "../engine/agentWays";
 import { agentDecisions, state } from "../state/store";
 import { setView } from "../state/ui";
 import type { AgentNote, CaptainMessage } from "../state/types";
@@ -124,6 +125,7 @@ export function AgentView() {
 
       <Show when={part() === "memory"}>
         <div class="agent-part">
+          <WaysCard />
           <Show when={notes().length} fallback={<p class="agent-empty">{t("아직 기억한 게 없어요")}</p>}>
             <div class="agent-notes">
               <For each={notes()}>
@@ -142,6 +144,22 @@ export function AgentView() {
             </div>
           </Show>
         </div>
+      </Show>
+    </div>
+  );
+}
+
+/** The user's own ways for it (agent/AGENT.md), as it keeps them: changed by saying so on Discord. */
+function WaysCard() {
+  // read on open, and again now and then while open: it changes when told on Discord
+  const [ways, { refetch }] = createResource(readWays);
+  const tick = setInterval(() => void refetch(), 10_000);
+  onCleanup(() => clearInterval(tick));
+  return (
+    <div class="agent-ways">
+      <b>{t("내 방식")}</b>
+      <Show when={ways()} fallback={<p class="agent-empty">{t("디스코드에서 \"멘션 안 해도 들어\", \"보다가 끼어들어\"처럼 말하면 여기에 적어 두고 그대로 해요")}</p>}>
+        <p class="agent-ways-text selectable">{ways()}</p>
       </Show>
     </div>
   );
