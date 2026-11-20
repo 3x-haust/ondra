@@ -24,6 +24,7 @@ mod engine;
 pub mod focus;
 mod keychain;
 mod secrets;
+mod discord;
 mod providers;
 mod git;
 mod import;
@@ -509,6 +510,15 @@ pub fn run() {
             dictate::dictate_stop,
             dictate::dictate_cancel,
             tools::worker_env,
+            discord::discord_start,
+            discord::discord_stop,
+            discord::discord_send,
+            discord::discord_typing,
+            discord::discord_delete,
+            discord::discord_owner,
+            discord::discord_history,
+            discord::discord_token_set,
+            discord::discord_token_has,
             secrets::secret_list,
             secrets::secret_set,
             secrets::secret_delete,

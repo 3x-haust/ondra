@@ -642,6 +642,40 @@ export const onUpdateProgress = (f: (p: { version: string; percent: number }) =>
 /** PNG bytes onto the system clipboard (the web view refuses images after an await). */
 export const copyImage = (bytes: number[]) => call<void>("copy_image", { bytes });
 export const saveDownload = (bytes: number[], name: string) => call<string>("save_download", { bytes, name }, `~/Downloads/${name}`);
+/** The agent on Discord (src-tauri/src/discord.rs): a message the bot saw. */
+export interface DiscordMessage {
+  id: string;
+  channel: string;
+  /** none in a DM */
+  guild?: string | null;
+  author: { id: string; name: string; bot: boolean };
+  content: string;
+  mentions: string[];
+  /** the author of the message this one replies to */
+  reply_to?: string | null;
+  /** the message this one replies to */
+  reply_msg?: string | null;
+  files: string[];
+  at: string;
+}
+export type DiscordEvent =
+  | { kind: "ready"; id: string; name: string }
+  | { kind: "resumed" }
+  | { kind: "reconnecting"; in: number }
+  | { kind: "stopped"; why: string }
+  | { kind: "message"; message: DiscordMessage };
+export const discordStart = () => call<void>("discord_start");
+export const discordStop = () => call<void>("discord_stop", undefined, undefined);
+export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });
+/** the user id that owns the bot's application (the user, when they made the bot) */
+export const discordOwner = () => call<string | null>("discord_owner", undefined, null);
+export const discordDelete = (channel: string, message: string) => call<void>("discord_delete", { channel, message });
+export const discordTyping = (channel: string) => call<void>("discord_typing", { channel }, undefined);
+export const discordHistory = (channel: string, before?: string, limit?: number) => call<DiscordMessage[]>("discord_history", { channel, before, limit }, []);
+/** the token goes to the keychain; empty removes it. It never comes back to the page. */
+export const discordTokenSet = (token: string) => call<void>("discord_token_set", { token });
+export const discordTokenHas = () => call<boolean>("discord_token_has", undefined, false);
+
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
 export interface SavedSecrets {
   global: string[];

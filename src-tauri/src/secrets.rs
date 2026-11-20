@@ -106,6 +106,21 @@ fn write_saved(app: &AppHandle, saved: &Saved) -> Result<(), String> {
     std::fs::write(&path, json).map_err(|e| format!("시크릿 목록을 저장하지 못했어요: {e}"))
 }
 
+/// Ondra's own items in the vault (the Discord bot token): an account no secret name can be
+/// (`@…`), so none is ever put in a job's environment or listed in Settings › 시크릿.
+pub fn vault_get(item: &str) -> Option<String> {
+    debug_assert!(item.starts_with('@'));
+    store::get(item)
+}
+pub fn vault_set(item: &str, value: &str) -> Result<(), String> {
+    debug_assert!(item.starts_with('@'));
+    store::set(item, value)
+}
+pub fn vault_delete(item: &str) -> Result<(), String> {
+    debug_assert!(item.starts_with('@'));
+    store::delete(item)
+}
+
 fn account(project: Option<&str>, name: &str) -> String {
     match project {
         Some(p) => format!("{p}/{name}"),
