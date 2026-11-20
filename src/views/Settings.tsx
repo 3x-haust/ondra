@@ -76,13 +76,13 @@ export function Switch_(props: { on: boolean; set: (on: boolean) => void; label?
   return <button class="switch" classList={{ on: props.on }} role="switch" aria-checked={props.on} aria-label={props.label} onClick={() => props.set(!props.on)}><i /></button>;
 }
 
-/** One setting: its name, one plain line on what it does under it, its control at the right. */
+/** One setting: its name, its control at the right (`desc` shows on hover). */
 export function Row(props: { title: string; desc?: string; children?: any }) {
+  // the name alone: what it does is on hover, not a line under every setting
   return (
-    <div class="set-row" classList={{ two: !!props.desc }} data-set={props.title}>
-      <div class="set-label">
+    <div class="set-row" data-set={props.title}>
+      <div class="set-label" title={props.desc || undefined}>
         <b>{props.title}</b>
-        <Show when={props.desc}><span class="set-sub">{props.desc}</span></Show>
       </div>
       <div class="set-value">{props.children}</div>
     </div>
@@ -366,7 +366,7 @@ function UpdateRow() {
       <img class="about-icon" src={appIcon} alt="" />
       <div class="set-label">
         <b>{`${appName()} ${version() ?? appVersion}${isBeta(version() ?? appVersion) ? ` ${t("베타")}` : ""}`}</b>
-        <span class="set-sub" title={checkedAt() ? ago(checkedAt()) : undefined}>{note() || t("새 버전은 알아서 받아요")}</span>
+        <Show when={note()}><span class="set-sub" title={checkedAt() ? ago(checkedAt()) : undefined}>{note()}</span></Show>
       </div>
       <div class="set-value">
       <button class="btn ghost sm" onClick={() => setNotesFor(available() ?? version() ?? "")}>{t("릴리스 노트")}</button>

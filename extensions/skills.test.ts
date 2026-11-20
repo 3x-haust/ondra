@@ -85,6 +85,11 @@ describe("skill matching", () => {
     ["구조 설명해줘", "code-map"],
     ["아키텍처 지도 그려줘", "code-map"],
     ["explain this codebase", "code-map"],
+    ["에이전트 설정해줘", "ondra"],
+    ["디스코드 에이전트 연결해줘", "ondra"],
+    ["온드라 기능 추가하고 싶어", "ondra"],
+    ["온드라에서 내 차례가 뭐야", "ondra"],
+    ["Ondra bug: the canvas is empty", "ondra"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
     expect(skillHint(bundled, query)).toContain(`- ${skill}:`);
