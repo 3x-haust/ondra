@@ -1105,15 +1105,15 @@ export function noteLandAnswer(t: Task, pick: "merge" | "pr" | "discard", now = 
 const PR_ASK = "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.";
 
 /**
- * A job's PR was merged on GitHub: the user's own folder of that project moves up to it, when
- * that is a fast-forward of a clean default branch (gitSyncHome); else it is left as it is.
+ * A job's PR was merged on GitHub (its worktree is gone by then): the user's local main of that
+ * project becomes GitHub's latest, as a fast-forward only (gitSyncHome), checked out or not.
  */
 export async function syncHome(t: Task) {
   const home = homeDir(t);
   if (!(await gitOnGithub(home).catch(() => false))) return;
   const r = await gitSyncHome(home, await gitEnv(t)).catch((e) => ({ state: "skipped", branch: "", note: String(e) }) as const);
   logInfo("land", `${t.id} home ${home}: ${r.state} ${r.branch} ${r.note}`);
-  if (r.state === "updated") updateTask(t.id, (x) => push(x, { kind: "note", text: "원래 폴더를 GitHub 최신으로 맞췄어요" }));
+  if (r.state === "updated") updateTask(t.id, (x) => push(x, { kind: "note", text: r.branch === "main" ? "로컬 main을 GitHub 최신으로 맞췄어요" : "로컬 기본 브랜치를 GitHub 최신으로 맞췄어요" }));
 }
 
 /** The job's own say on its branch, then the question if it is still open. */

@@ -393,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_home_only_fast_forwards_a_clean_default_branch() {
+    fn sync_home_moves_main_up_without_touching_the_users_work() {
         let root = std::env::temp_dir().join(format!("git-sync-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
@@ -406,42 +406,54 @@ mod tests {
             sh(&p(who), &["config", "user.name", "t"]);
             sh(&p(who), &["config", "commit.gpgsign", "false"]);
         }
-        let commit = |who: &str, file: &str| {
-            std::fs::write(root.join(who).join(file), file).unwrap();
+        let commit = |who: &str, file: &str, text: &str| {
+            std::fs::write(root.join(who).join(file), text).unwrap();
             sh(&p(who), &["add", "-A"]);
             sh(&p(who), &["commit", "-q", "-m", file]);
         };
-        commit("other", "a.txt");
-        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
-        sh(&p("home"), &["fetch", "-q"]);
-        sh(&p("home"), &["checkout", "-q", "main"]);
+        let merged_on_github = |file: &str| {
+            commit("other", file, file);
+            sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        };
+        merged_on_github("a.txt");
         let home = p("home");
+        sh(&home, &["fetch", "-q"]);
+        sh(&home, &["checkout", "-q", "main"]);
         assert_eq!(super::sync_home(&home, &[]).unwrap().state, "current");
 
-        // merged on GitHub: the folder moves up
-        commit("other", "b.txt");
-        commit("other", "c.txt");
-        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        // on main: it moves up
+        merged_on_github("b.txt");
+        merged_on_github("c.txt");
         let s = super::sync_home(&home, &[]).unwrap();
         assert_eq!((s.state.as_str(), s.note.as_str()), ("updated", "2"));
         assert!(root.join("home/c.txt").exists());
 
-        // a change the user is making: left alone
-        commit("other", "d.txt");
-        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        // a change the user is making elsewhere: it moves up, their change stays
         std::fs::write(root.join("home/a.txt"), "mine").unwrap();
-        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "uncommitted changes");
-        assert!(!root.join("home/d.txt").exists());
+        merged_on_github("d.txt");
+        assert_eq!(super::sync_home(&home, &[]).unwrap().state, "updated");
+        assert_eq!(std::fs::read_to_string(root.join("home/a.txt")).unwrap(), "mine");
+        // …and one in the way: left as it is
+        commit("other", "a.txt", "theirs");
+        sh(&p("other"), &["push", "-q", "origin", "HEAD:main"]);
+        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "uncommitted changes in the way");
+        assert_eq!(std::fs::read_to_string(root.join("home/a.txt")).unwrap(), "mine");
         sh(&home, &["checkout", "-q", "--", "a.txt"]);
+        sh(&home, &["merge", "-q", "--ff-only", "origin/main"]);
 
-        // their own commit not on GitHub: no merge commit made
-        commit("home", "mine.txt");
-        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "local commits not on origin");
-        sh(&home, &["reset", "-q", "--hard", "origin/main"]);
-
-        // another branch checked out: left alone
+        // another branch checked out: main moves up, the working tree doesn't
         sh(&home, &["checkout", "-q", "-b", "feature"]);
-        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "on feature, not main");
+        merged_on_github("e.txt");
+        let s = super::sync_home(&home, &[]).unwrap();
+        assert_eq!((s.state.as_str(), s.branch.as_str()), ("updated", "main"));
+        assert!(!root.join("home/e.txt").exists());
+        assert_eq!(super::git(&home, &["rev-parse", "main"]), super::git(&home, &["rev-parse", "origin/main"]));
+
+        // their main has a commit of its own: no merge commit made
+        sh(&home, &["checkout", "-q", "main"]);
+        commit("home", "mine.txt", "mine");
+        merged_on_github("f.txt");
+        assert_eq!(super::sync_home(&home, &[]).unwrap().note, "local commits not on origin");
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -509,9 +521,10 @@ pub struct Synced {
     pub note: String,
 }
 
-/// Bring the user's folder to origin's latest default branch, only where that can't lose or
-/// mix anything: the folder is on that branch, nothing tracked is changed, and its own commits
-/// are all on origin already (a fast-forward). Otherwise it is left as it is.
+/// After a job's PR is merged: the user's local default branch (main) becomes origin's latest,
+/// always as a fast-forward, so nothing of theirs is lost or mixed. Checked out: merged
+/// fast-forward in place (git itself refuses when an uncommitted change is in the way). Another
+/// branch checked out: only the `main` ref moves, the working tree stays as it is.
 pub fn sync_home(cwd: &str, env: &[(String, String)]) -> Result<Synced, String> {
     let branch = run(cwd, "git", &["rev-parse", "--abbrev-ref", "HEAD"], env)?;
     let main = run(cwd, "git", &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], env)
@@ -519,25 +532,31 @@ pub fn sync_home(cwd: &str, env: &[(String, String)]) -> Result<Synced, String> 
         .and_then(|r| r.strip_prefix("origin/").map(str::to_string))
         .or_else(|| ["main", "master"].iter().find(|b| git(cwd, &["rev-parse", "--verify", "-q", &format!("refs/remotes/origin/{b}")]).is_some()).map(|b| b.to_string()))
         .ok_or("no default branch on origin")?;
-    let skip = |note: &str| Ok(Synced { state: "skipped".into(), branch: branch.clone(), note: note.into() });
-    if branch != main {
-        return skip(&format!("on {branch}, not {main}"));
+    let local = format!("refs/heads/{main}");
+    let before = git(cwd, &["rev-parse", "--verify", "-q", &local]).map(|s| s.trim().to_string()).unwrap_or_default();
+    let skip = |note: String| Ok(Synced { state: "skipped".into(), branch: main.clone(), note });
+    if branch == main {
+        run(cwd, "git", &["fetch", "-q", "origin", &main], env)?;
+        let target = format!("origin/{main}");
+        if run(cwd, "git", &["merge", "--ff-only", "-q", &target], env).is_err() {
+            // behind origin and still refused: an uncommitted change is in the way
+            let behind = run(cwd, "git", &["merge-base", "--is-ancestor", "HEAD", &target], env).is_ok();
+            return skip(if behind { "uncommitted changes in the way".into() } else { "local commits not on origin".into() });
+        }
+    } else if before.is_empty() {
+        // no local main yet: nothing to keep up to date
+        run(cwd, "git", &["fetch", "-q", "origin", &main], env)?;
+        return Ok(Synced { state: "current".into(), branch: main, note: String::new() });
+    } else if run(cwd, "git", &["fetch", "-q", "origin", &format!("{main}:{main}")], env).is_err() {
+        // a non-fast-forward is refused: their main has commits of its own
+        return skip("local commits not on origin".into());
     }
-    if !run(cwd, "git", &["status", "--porcelain", "--untracked-files=no"], env)?.is_empty() {
-        return skip("uncommitted changes");
-    }
-    run(cwd, "git", &["fetch", "-q", "origin", &main], env)?;
-    let before = run(cwd, "git", &["rev-parse", "HEAD"], env)?;
-    let target = format!("origin/{main}");
-    if run(cwd, "git", &["merge", "--ff-only", "-q", &target], env).is_err() {
-        return skip("local commits not on origin");
-    }
-    let after = run(cwd, "git", &["rev-parse", "HEAD"], env)?;
+    let after = run(cwd, "git", &["rev-parse", &local], env)?;
     if before == after {
-        return Ok(Synced { state: "current".into(), branch, note: String::new() });
+        return Ok(Synced { state: "current".into(), branch: main, note: String::new() });
     }
     let n = run(cwd, "git", &["rev-list", "--count", &format!("{before}..{after}")], env).unwrap_or_default();
-    Ok(Synced { state: "updated".into(), branch, note: n })
+    Ok(Synced { state: "updated".into(), branch: main, note: n })
 }
 
 #[tauri::command]

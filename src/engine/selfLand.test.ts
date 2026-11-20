@@ -156,13 +156,13 @@ describe("a project on GitHub", () => {
     expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "확인된 수정이라 묻지 않고 PR로 올려요")).toBe(true);
   });
 
-  it("once its PR is merged the folder is brought up to GitHub's latest, and said so only when it moved", async () => {
+  it("once its PR is merged the local main is brought up to GitHub's latest, and said so only when it moved", async () => {
     const sync = vi.spyOn(native, "gitSyncHome").mockResolvedValue({ state: "updated", branch: "main", note: "3" });
     setState("tasks", [job()]);
     await syncHome(state.tasks[0]);
     expect(sync).toHaveBeenCalledWith("/repo", []);
-    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "원래 폴더를 GitHub 최신으로 맞췄어요")).toBe(true);
-    sync.mockResolvedValue({ state: "skipped", branch: "feature", note: "on feature, not main" });
+    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "로컬 main을 GitHub 최신으로 맞췄어요")).toBe(true);
+    sync.mockResolvedValue({ state: "skipped", branch: "main", note: "local commits not on origin" });
     setState("tasks", [job()]);
     await syncHome(state.tasks[0]);
     expect(state.tasks[0].entries).toHaveLength(0);
