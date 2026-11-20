@@ -32,6 +32,7 @@ import {
 } from "../lib/native";
 import { RemoteSettings } from "./RemoteSettings";
 import { PetSettings } from "./PetSettings";
+import { AgentSettings } from "./AgentSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -1116,6 +1117,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: strin
   { id: "general", label: "일반", icon: "gear", desc: "화면, 새 작업, 작업 방식을 정해요", group: "" },
   { id: "accounts", label: "계정과 워크스페이스", icon: "key", desc: "워크스페이스마다 쓸 AI 계정과 모델을 연결해요", group: "" },
   { id: "remote", label: "연결", icon: "monitor", desc: "다른 Mac의 프로젝트를 여기서 써요. 오가는 내용은 끝까지 암호화돼요.", group: "" },
+  { id: "agent", label: "에이전트", icon: "message", desc: "디스코드에서 내 말로 일을 받고, 다른 사람과는 대화해요", group: "" },
   { id: "pet", label: "펫", icon: "pet", desc: "화면을 돌아다니며 작업 소식을 알려 주는 펫을 고르고 만들어요", group: "" },
   { id: "agent-tools", label: "도구", icon: "tools", desc: "작업이 쓸 수 있는 도구를 켜고 꺼요", group: "에이전트|group" },
   { id: "skills", label: "스킬", icon: "skill", desc: "작업이 필요할 때 꺼내 쓰는 방법 모음이에요", group: "에이전트|group" },
@@ -1136,6 +1138,7 @@ const FINDABLE: [SettingsTab, string][] = [
   ["general", "익명 사용 통계 보내기"],
   ["pet", "화면에 펫 띄우기"], ["pet", "펫 고르기"], ["pet", "펫 크기"], ["pet", "새 펫 만들기"],
   ["tools", "손쉬운 사용"], ["tools", "화면 기록"],
+  ["agent", "디스코드에서 쓰기"], ["agent", "봇 토큰"], ["agent", "말투와 성격"],
   ["remote", "다른 Mac에서 이 Mac 쓰기"], ["remote", "잠자기 방지"], ["remote", "연결 링크"],
 ];
 
@@ -1285,6 +1288,7 @@ export function SettingsPage(props: { onBack: () => void }) {
             <Match when={settingsTab() === "secrets"}><SecretsSettings /></Match>
             <Match when={settingsTab() === "routines"}><RoutinesSettings /></Match>
             <Match when={settingsTab() === "pet"}><PetSettings /></Match>
+            <Match when={settingsTab() === "agent"}><AgentSettings /></Match>
             <Match when={settingsTab() === "skills"}><SkillsTab /></Match>
             <Match when={settingsTab() === "hooks"}><HooksTab /></Match>
             <Match when={settingsTab() === "tools"}><Permissions /></Match>

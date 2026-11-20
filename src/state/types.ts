@@ -715,6 +715,26 @@ export interface Settings {
   telemetry?: boolean;
   /** Settings › 단축키: shortcut id → "cmd+shift+KeyD" or "none" (unbound); a missing id keeps its default */
   keybindings?: Record<string, string>;
+  /** Settings › 에이전트: Ondra on Discord (engine/discord.ts) */
+  agent?: AgentSettings;
+}
+
+/** Ondra as an agent on Discord: the user's requests there go to main, anyone else only gets talk. */
+export interface AgentSettings {
+  /** connected (the bot token is in the keychain) */
+  on: boolean;
+  /** what people call it; a message with this name in it is for it */
+  name: string;
+  /** the user's own Discord user id: only their words are requests (main's) */
+  ownerId?: string;
+  /** how it talks and what it is like; empty = the default voice */
+  voice?: string;
+  /** channels it answers others in; empty = wherever it is called */
+  channels?: string[];
+  /** the workspace the user's requests go to; missing = the first one */
+  space?: SpaceId;
+  /** others may talk with it (talk only, no work); missing = on */
+  others?: boolean;
 }
 
 export interface AppState {

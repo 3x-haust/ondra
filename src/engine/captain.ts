@@ -401,6 +401,13 @@ export function startRelaySweep() {
   sweeping = setInterval(sweep, 60_000);
 }
 
+/** told the id of each of main's replies once it is written (or failed): the agent on Discord passes them on */
+const saidHooks = new Set<(replyId: string) => void>();
+export function onMainSaid(fn: (replyId: string) => void): () => void {
+  saidHooks.add(fn);
+  return () => saidHooks.delete(fn);
+}
+
 async function pump(space: string) {
   if (busy.has(space)) return;
   busy.add(space);
@@ -413,11 +420,13 @@ async function pump(space: string) {
         setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
         keepResult(next.replyId);
+        if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
         if (pj(space)) reportUp(space);
       } catch (e) {
         logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
         setDraft(space, "");
+        if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
         // the project couldn't answer: main still gets what the jobs reported
         if (pj(space)) reportUp(space);
       }
