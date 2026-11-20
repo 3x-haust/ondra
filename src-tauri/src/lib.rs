@@ -390,8 +390,9 @@ pub fn run() {
                 let _ = window.hide();
                 dictate::stop_all();
             }
-            // Mission Control / Stage Manager narrowing the window it puts back on stage is undone
+            // Mission Control / Stage Manager moving or narrowing the window it puts back on stage is undone
             ("main", WindowEvent::Resized(_) | WindowEvent::Moved(_)) => winsize::on_change(window.app_handle()),
+            ("main", WindowEvent::Focused(focused)) => winsize::on_focus(window.app_handle(), *focused),
             // The quick input behaves like Spotlight: it goes away when focus leaves.
             ("capture", WindowEvent::Focused(false)) => {
                 let _ = window.hide();

@@ -246,11 +246,13 @@ export function applyPlan(plan: Plan, list: Memory[], seen: Seen) {
       const d = live(id);
       if (!d || d.id === keep.id || d.invalidAt) continue;
       // the user said it again in other words: their words both stay (never merged away), but it
-      // counts as said again on the one kept, once, so a rule repeated in new words still grows
+      // counts as said again on the one kept, once, so a rule repeated in new words still grows.
+      // A piece read from a note file (`from`) is not saying it again: the same file read twice,
+      // or a rule written down in two notes, was never a correction the user had to repeat.
       if (userOwned(d)) {
         if (d.echoOf === keep.id) continue;
         setState("memory", (m) => m.id === d.id, { echoOf: keep.id });
-        setState("memory", (m) => m.id === keep.id, (m) => ({ seen: (m.seen ?? 1) + 1, updatedAt: Math.max(now, m.updatedAt ?? 0) }));
+        if (!d.from) setState("memory", (m) => m.id === keep.id, (m) => ({ seen: (m.seen ?? 1) + 1, updatedAt: Math.max(now, m.updatedAt ?? 0) }));
         continue;
       }
       retireMemory(d.id, keep.id, "같은 기억과 합쳤어요");

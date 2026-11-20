@@ -283,6 +283,11 @@ export function addMemory(text: string, scope: Memory["scope"], opts: AddOpts = 
     const tk = new Set(tokens(t));
     const same = opts.key ? live.find((m) => m.key === opts.key) : undefined;
     const dup = (same && norm(same.text) === norm(t) ? same : undefined) ?? live.find((m) => norm(m.text) === norm(t) || overlap(tk, new Set(tokens(m.text))).j >= 0.75);
+    if (dup && opts.from) {
+      // a note file read again (it changed): what it already said is not the user saying it again
+      ids.push(dup.id);
+      continue;
+    }
     if (dup) {
       // the same thing again: counted, not stored twice (Honcho times_derived)
       setState("memory", (m) => m.id === dup.id, (m) => ({
