@@ -29,22 +29,9 @@ import { Fold } from "../ui/Fold";
 import { archiveTask, togglePin } from "../engine/tasks";
 import { t as tr } from "../i18n";
 
-type Bucket = "you" | "failed" | "review" | "work" | "done";
-
-/** What a job needs from you. A subagent waiting on you pulls its job up.
- *  Failed is its own bucket: never counted or shown as 응답 필요. */
-export function bucket(t: Task): Bucket {
-  // its changes were thrown away: nothing left to do or look at
-  if (discarded(t)) return "done";
-  const kids = kidsOf(t.id);
-  if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
-  // a subagent that failed under a job that has finished anyway needs nothing from you
-  if (t.status === "failed" || (t.status !== "done" && kids.some((k) => k.status === "failed"))) return "failed";
-  if (t.status === "done") return t.worktree?.state === "open" ? "review" : "done";
-  return "work";
-}
-/** needs you: a reply, a failure to look at, or a merge (내 차례) */
-const needsYou = (t: Task) => bucket(t) === "you" || bucket(t) === "failed" || bucket(t) === "review";
+// what a job needs from you (bucket) and 내 차례 (needsYou) live in state/needs.ts, where tests reach them
+export { bucket, needsYou } from "../state/needs";
+import { bucket, needsYou, type Bucket } from "../state/needs";
 
 /** Jobs of a space, most urgent first (the order ⌘⇧[ ] walks). */
 function forkOrder(space: string): Task[] {
@@ -325,7 +312,7 @@ function NeedsMenu() {
     window.removeEventListener("blur", close);
     window.removeEventListener("keydown", esc, true);
   });
-  const list = () => forkOrder(state.space).filter((t) => !t.archived && needsYou(t));
+  const list = () => forkOrder(state.space).filter(needsYou);
   const where = (t: Task) => projectsShown(state.space).find((p) => p.id === t.project)?.name;
   createEffect(() => needsMenu() && !list().length && close());
   return (
@@ -746,7 +733,7 @@ export function Sidebar() {
 
 /** Shown in a header while the sidebar is folded away. */
 export function SidebarToggle() {
-  const waiting = () => forkOrder(state.space).filter((t) => bucket(t) === "you" || bucket(t) === "failed").length;
+  const waiting = () => forkOrder(state.space).filter((t) => !t.archived && (bucket(t) === "you" || bucket(t) === "failed")).length;
   return (
     <Show when={sidebarAway()}>
       <UpdateButton />
