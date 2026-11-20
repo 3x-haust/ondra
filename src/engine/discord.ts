@@ -63,6 +63,8 @@ let me: { id: string; name: string } | undefined;
 const replies = new Map<string, { channel: string; message: string }>();
 /** a job main started from Discord → the channel its end and questions go to */
 const origin = new Map<string, string>();
+/** channels that are in a server (others read them), as seen in messages */
+const servers = new Set<string>();
 /** questions already posted (decision id → channel), so each goes once */
 const posted = new Map<string, string>();
 /** per channel: what it said there, newest last (for "그거 지워") */
@@ -94,8 +96,9 @@ export async function startAgent() {
   if (!a?.on) return stopAgent();
   if (!unlisten) unlisten = await onEvent<DiscordEvent>("discord", (ev) => void onDiscord(ev));
   if (!unhook) {
-    const { onMainSaid } = await import("./captain");
-    unhook = onMainSaid((id) => void mainSaid(id));
+    const { onMainSaid, onJobEndNote } = await import("./captain");
+    const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
+    unhook = () => off.forEach((f) => f());
   }
   sweep ??= setInterval(postQuestions, 3000);
   setStatus({ state: "connecting" });
@@ -152,6 +155,7 @@ export function cleanText(m: DiscordMessage, a: AgentSettings, botId: string): s
  * "~게 이거 너무 많이 쓰는 거 아닌가". Their words outrank the usual asking.
  */
 export const OWNER_WAYS = `How this user wants you to work here:
+- You are the agent yourself, the one doing the work, not a relay to it: jobs are your own hands. Say what you are doing in the first person ("orbit 이슈 잡는 중, PR 나오면 말해줄게", "다 고쳤어"), never that you sent, handed or dispatched it ("잡으러 보냈어", "작업에 맡겼어", "작업이 끝났대"), and never name jobs, forks, tasks, workers, main or Ondra as someone else doing it.
 - Do it. Ask first only before what can't be undone: deleting, merging, pushing to a default branch, kicking or banning, cancelling, spending money. Creating, sending, changing settings, starting work: just do it.
 - Their explicit words outrank your defaults: if they told you to do something your rules would skip, do it.
 - Answer with the result, not a plan to get it. No "~할게/~볼게" acknowledgements (you already reacted 👀); one forward-looking line at most, only when work you started will really report back.
@@ -161,19 +165,33 @@ export const OWNER_WAYS = `How this user wants you to work here:
 export function ownerNote(m: DiscordMessage, a: AgentSettings): string {
   return [
     `(Ondra) The user sent this from Discord (${m.guild ? `channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
+    ...chatRules(a, !!m.guild),
+  ].filter(Boolean).join("\n");
+}
+
+/** The voice and ways for a line that goes to Discord, and what a server channel must not get. */
+function chatRules(a: AgentSettings, server: boolean): string[] {
+  return [
     voiceOf(a),
     OWNER_WAYS,
     "Route work as usual. No tables, no headings; a link as a plain URL.",
-    m.guild
+    server
       ? "This is a server channel others read too: no private details in the reply (file paths, keys, private links, screenshots, unreleased work, session lists). If the answer needs them, say it's in Ondra or ask them to DM you."
       : "",
-  ].filter(Boolean).join("\n");
+  ];
+}
+
+/** A job started from Discord ended: main's line about it goes back there, so it is written the same way. */
+export function endNote(t: { id: string; parentId?: string }, a: AgentSettings | undefined = settings(), from = origin.get(t.id) ?? (t.parentId ? origin.get(t.parentId) : undefined)): string | undefined {
+  if (!a?.on || !from) return undefined;
+  return [`(Ondra) This work was asked from Discord: your reply line about it is posted there as "${a.name}", as the one who did it. Write it as a chat message in this voice:`, ...chatRules(a, servers.has(from))].filter(Boolean).join("\n");
 }
 
 async function onMessage(m: DiscordMessage) {
   const a = settings();
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
   const owner = !!a.ownerId && m.author.id === a.ownerId;
+  if (m.guild) servers.add(m.channel);
   if (!calledIn(m, a, me.id) && !(owner && pendingIn(m.channel))) return;
   const text = cleanText(m, a, me.id);
   if (!text) return;

@@ -5,13 +5,14 @@ import type { DiscordEvent, DiscordMessage } from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision } from "../state/types";
 
-const said = vi.hoisted(() => ({ hook: undefined as undefined | ((id: string) => void), thrown: [] as { text: string; space: string; note?: string }[], prompts: [] as string[], answer: "" }));
+const said = vi.hoisted(() => ({ hook: undefined as undefined | ((id: string) => void), endNote: undefined as undefined | ((t: { id: string; parentId?: string }) => string | undefined), thrown: [] as { text: string; space: string; note?: string }[], prompts: [] as string[], answer: "" }));
 vi.mock("./captain", () => ({
   throwThought: (text: string, space: string, opts: { note?: string } = {}) => {
     said.thrown.push({ text, space, note: opts.note });
     return `reply${said.thrown.length}`;
   },
   onMainSaid: (fn: (id: string) => void) => ((said.hook = fn), () => (said.hook = undefined)),
+  onJobEndNote: (fn: (t: { id: string }) => string | undefined) => ((said.endNote = fn), () => (said.endNote = undefined)),
 }));
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
@@ -118,10 +119,18 @@ describe("the whole way round", () => {
     expect(said.thrown[0].text).toBe("메타몽 로그인 버그 고쳐줘");
     expect(said.thrown[0].note).toContain("Discord");
     expect(said.thrown[0].note).toContain("Ask first only before what can't be undone");
+    // it is the one doing the work, not a relay that sends it somewhere
+    expect(said.thrown[0].note).toContain("You are the agent yourself, the one doing the work, not a relay");
+    expect(said.thrown[0].note).toContain("잡으러 보냈어");
     expect(native.discordReact).toHaveBeenCalledWith("c1", "m9", "👀");
     setState("captain", [{ id: "reply1", at: 1, space: "home", from: "captain", reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] }]);
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", "m9"));
+    // the job it started ends: main hears to write about it as the agent, in its voice and as the one who did it
+    expect(said.endNote?.({ id: "t7" })).toContain("as the one who did it");
+    expect(said.endNote?.({ id: "t7" })).toContain(DEFAULT_VOICE);
+    expect(said.endNote?.({ id: "t7" })).toContain("server channel others read");
+    expect(said.endNote?.({ id: "other" })).toBeUndefined();
     // the job it started ends: main's words about it come back to the same channel
     setState("captain", (l) => [...l, { id: "reply2", at: 2, space: "home", from: "captain", after: "t7", reply: "다 고쳤어 PR #12" }]);
     said.hook?.("reply2");
