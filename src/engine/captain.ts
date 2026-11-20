@@ -202,6 +202,7 @@ function jobEnded(t: Task) {
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
     ),
+    ...[...endNotes].map((fn) => fn(t)),
   ].filter(Boolean).join("\n");
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
   setState("captain", (list) => [...list.slice(-300), reply]);
@@ -402,6 +403,13 @@ export function startRelaySweep() {
 }
 
 /** told the id of each of main's replies once it is written (or failed): the agent on Discord passes them on */
+/** A note for main with a job's end, from whoever started that job elsewhere (the Discord agent). */
+const endNotes = new Set<(t: Task) => string | undefined>();
+export function onJobEndNote(fn: (t: Task) => string | undefined): () => void {
+  endNotes.add(fn);
+  return () => endNotes.delete(fn);
+}
+
 const saidHooks = new Set<(replyId: string) => void>();
 export function onMainSaid(fn: (replyId: string) => void): () => void {
   saidHooks.add(fn);
