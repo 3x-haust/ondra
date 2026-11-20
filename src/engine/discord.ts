@@ -31,15 +31,21 @@ import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/
  * What it is like when the user hasn't said otherwise. Kept short on purpose: a "be funny" section
  * makes a bot that performs jokes; the rhythm and the don'ts make one that talks like a person.
  */
-export const DEFAULT_VOICE = `디스코드에 사람이 치는 것처럼, 한국어 원어민 리듬으로 말해.
-- 짧게. 한두 줄이 기본이고, 할 말이 많아도 보고서처럼 쓰지 마. 마침표는 거의 안 찍어
-- 리듬: 사실 한 줄, 필요하면 가벼운 한마디. 웃기려고 애쓰지 말고 실제 있었던 일에서 나오는 농담만. 같은 드립 반복, 억지 밈, 이모지 도배 금지
-- 고객센터·약관 말투 금지("~하는 것이 가능합니다", "해당", "진행하겠습니다", "도움이 필요하시면"). "아 그거?" 하면 될 걸 설명문으로 늘이지 마
-- 영어 문장에 한글만 입힌 번역투 금지. 한국 사람이 실제로 하는 말로. 영어 단어는 원래 그렇게 부를 때만, 코드 이름은 \`백틱\`
-- 장난은 받아 주고, 비판엔 아픈 건 아프다고 하되 사실로 답해. 틀렸으면 바로 "정정" 하고 고쳐
-- 모르면 모른다고 해. 안 한 일을 했다고, 안 정해진 일을 올 것처럼 말하지 마(기대만 키우는 떡밥 금지)
-- 한 일은 구체적으로: 뭘 했고 어디서 보는지(PR 번호, 링크). "~할게", "~볼게" 같은 약속으로 끝내지 말고, 끝에 "더 필요한 거 있으면 말해" 같은 인사도 붙이지 마
-- 주인에게는 반말. 다른 사람에게는 편한 해요체로 시작하고, 상대가 반말로 친하게 오면 맞춰도 돼`;
+export const DEFAULT_VOICE = `넌 주인이랑 오래 같이 일한 개발자 친구야. 디스코드에서 그냥 사람처럼 말해. 일 얘기도 카톡하듯 툭툭, 생각나는 대로 짧게. 정리해서 보고하는 비서가 아니라 옆자리 동료야.
+말 끝은 자연스럽게 흐려도 되고, 마침표는 잘 안 찍고, ㅋㅋ ㅇㅇ ㄱㄱ 같은 것도 그냥 써. 모르면 모른다, 틀렸으면 "아 그거 내가 잘못 봤네" 하고 바로 고쳐. 했다고 하는 건 진짜 한 것만.
+주인한테는 반말, 처음 보는 사람한텐 편한 해요체였다가 상대가 반말이면 맞춰.
+
+이런 느낌이야 (그대로 따라 하지 말고 결만):
+주인: 이슈 올라온 거 좀 봐봐
+너: ㅇㅇ 보는 중
+너: 로그인 풀리던 거 고침 ㅋㅋ 토큰 만료를 아예 안 보고 있었음. PR 올려놨어
+너: 다른 하나는 버그가 아니라 기능 요청이라 손 안 댔어. 머지는 해도 돼?
+주인: ㄱㄱ 그것도 해
+너: 머지함. 근데 그건 해보니까 OS에서 막아놔서 깔끔하게는 안 돼. 그냥 이슈에 이유 적고 닫을까
+주인: 왜 아직 릴리즈 안 됨?
+너: 아 공증에서 걸림. 이 맥에 인증서가 없더라. 일단 공증 없이 낼까 아님 인증서 깔고 다시 할까
+주인: 이거 왜 이럼
+너: 아 내가 잘못 건드렸네 ㅈㅅ 지금 고쳤어, 다시 해봐`;
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -245,26 +251,74 @@ async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   if (replyId) replies.set(replyId, { channel: m.channel, message: m.id });
 }
 
-/** main's message as a chat line: its reply, its answers, and a question with numbered choices */
-export function sayOf(msg: CaptainMessage): string {
+/** main's message as a chat line: its reply, its answers, and a question with numbered choices
+ *  (as `asks` has it said, else plainly) */
+export function sayOf(msg: CaptainMessage, asks: Record<string, string> = {}): string {
+  // (a question its reply already asked comes as "")
   if (msg.error) return `앗 답을 못 만들었어: ${msg.error}`;
   const lines = [msg.reply?.trim() ?? ""];
   for (const r of msg.routes ?? []) {
     if (r.kind === "answer" && r.text.trim() && !sameStart(r.text, msg.reply)) lines.push(r.text.trim());
     if (r.kind === "ask") {
       const d = state.decisions.find((x) => x.id === r.decisionId);
-      if (d) lines.push(questionText(d));
+      if (d) lines.push(asks[d.id] ?? plainAsk(d));
     }
   }
   return lines.filter(Boolean).join("\n\n");
 }
 const sameStart = (a: string, b?: string) => !!b && a.trim().startsWith(b.trim());
 
-export function questionText(d: Decision): string {
-  const opts = d.options.map((o, i) => `${i + 1}. ${o.label}${o.primary ? " (추천)" : ""}`);
-  return [d.question, ...opts, "번호로 답해 줘"].join("\n");
+/** The prompt that turns a question (a job's, written for the app, often formal) into the agent asking it in chat. */
+export function askPrompt(a: AgentSettings, d: Decision, about?: string, said?: string): string {
+  return [
+    `너는 디스코드에 있는 "${a.name}"이야. 하던 일 중에 주인한테 물어볼 게 생겼어. 아래는 앱 화면용으로 딱딱하게 적힌 질문인데, 이걸 네가 디스코드에서 주인한테 그냥 묻는 말로 써.`,
+    "",
+    "# 너는 이렇게 말해",
+    voiceOf(a),
+    "",
+    said ? `# 방금 네가 이 채널에 한 말 (바로 이어서 보내는 거야. 여기서 이미 물어봤으면 (skip) 만 써)\n${said}\n` : "",
+    about ? `# 하던 일\n${about}\n` : "",
+    `# 앱용 질문\n${d.question}`,
+    `# 고를 수 있는 것\n${d.options.map((o) => `- ${o.label}${o.primary ? " (이게 낫다고 봄)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
+    "",
+    "디스코드에 올라갈 말만 써.",
+  ].filter((l) => l !== "").join("\n");
 }
 
+/** what came back is something to post */
+export const chatty = (out: string) => !!out && out.length <= 800;
+
+/** A question as the agent asks it in chat, in its voice; "" when what it said already asks it;
+ *  the question with its choices in a line when that fails. */
+export async function askedLine(d: Decision, a: AgentSettings | undefined = settings(), about?: string, said?: string): Promise<string> {
+  if (a) {
+    try {
+      const { oneShot } = await import("./aside");
+      const out = (await oneShot(agentSpace(a), "~", askPrompt(a, d, about, said))).trim();
+      if (said && /^\(?skip\)?$/i.test(out)) return "";
+      if (chatty(out)) return out;
+    } catch (e) {
+      logError("agent", `ask line: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return plainAsk(d, about);
+}
+
+/** the question with its choices in one line, for when it can't be said in the agent's voice */
+const plainAsk = (d: Decision, about?: string) => `${about ? `${about}: ` : ""}${d.question} (${d.options.map((o) => o.label).join(" / ")})`;
+
+/** The prompt that reads the user's words as one of a waiting question's choices, or none. */
+export function pickPrompt(d: Decision, text: string): string {
+  return [
+    "주인이 디스코드에서 질문에 이렇게 답했어. 어느 선택지를 고른 건지 id 하나만 써. 질문에 대한 답이 아니거나, 어느 것인지 확실하지 않거나, 선택지에 없는 걸 원하면 none.",
+    "",
+    `# 질문\n${d.question}`,
+    "",
+    `# 선택지\n${d.options.map((o, i) => `${o.id}: ${o.label} (${i + 1}번)`).join("\n")}`,
+    "",
+    `# 주인의 답\n${text}`,
+  ].join("\n");
+}
 async function mainSaid(replyId: string) {
   const msg = state.captain.find((x) => x.id === replyId);
   if (!msg) return;
@@ -274,8 +328,14 @@ async function mainSaid(replyId: string) {
   if (!channel) return;
   replies.delete(replyId);
   for (const r of msg.routes ?? []) if (r.kind === "new") origin.set(r.taskId, channel);
-  for (const r of msg.routes ?? []) if (r.kind === "ask") posted.set(r.decisionId, channel);
-  const text = sayOf(msg);
+  const asks: Record<string, string> = {};
+  for (const r of msg.routes ?? []) {
+    if (r.kind !== "ask") continue;
+    posted.set(r.decisionId, channel);
+    const d = state.decisions.find((x) => x.id === r.decisionId);
+    if (d) asks[d.id] = await askedLine(d, settings(), undefined, sayOf({ ...msg, routes: msg.routes?.filter((x) => x.kind !== "ask") }));
+  }
+  const text = sayOf(msg, asks);
   if (!text) return;
   const ids = await discordSend(channel, text, from?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   keepSaid(channel, ids);
@@ -290,8 +350,9 @@ function postQuestions() {
     const channel = origin.get(d.taskId) ?? (t?.parentId ? origin.get(t.parentId) : undefined);
     if (!channel) continue;
     posted.set(d.id, channel);
-    const title = t ? `[${t.title}] ` : "";
-    void discordSend(channel, title + questionText(d)).then((ids) => keepSaid(channel, ids), () => posted.delete(d.id));
+    void askedLine(d, settings(), t?.title)
+      .then((text) => discordSend(channel, text).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
+      .catch(() => posted.delete(d.id));
   }
 }
 
@@ -309,13 +370,23 @@ async function takenBack(m: DiscordMessage, text: string): Promise<boolean> {
   return true;
 }
 
-/** "2" (or "2번") in a channel with a question waiting: that choice */
+/** The user's words in a channel with a question waiting, when they answer it ("그냥 끝내", "2"): that choice. */
 async function answered(channel: string, text: string): Promise<boolean> {
-  const n = /^\s*(\d{1,2})\s*번?\s*$/.exec(text);
-  if (!n) return false;
   const d = [...state.decisions].reverse().find((x) => posted.get(x.id) === channel);
-  const o = d?.options[Number(n[1]) - 1];
-  if (!d || !o) return false;
+  if (!d || !text.trim()) return false;
+  const n = /^\s*(\d{1,2})\s*번?\s*$/.exec(text);
+  let o = n ? d.options[Number(n[1]) - 1] : undefined;
+  if (!n && text.length <= 200) {
+    try {
+      const { oneShot } = await import("./aside");
+      const a = settings();
+      const id = (await oneShot(a ? agentSpace(a) : state.space, "~", pickPrompt(d, text))).trim().replace(/[`"'.\s]/g, "");
+      o = d.options.find((x) => x.id === id);
+    } catch (e) {
+      logError("agent", `reading an answer: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (!o) return false;
   const { decide } = await import("./tasks");
   await decide(d.id, o.id);
   posted.delete(d.id);
