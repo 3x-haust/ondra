@@ -216,6 +216,23 @@ describe("what a job leaves unchecked comes with why", () => {
     expect(backs()).toHaveLength(0);
   });
 
+  it("sends back a playbook job that never sent a plan, but not one with no playbook", async () => {
+    // a feat/ job was told its playbook's steps are its plan's steps; with no plan nothing was ever checked
+    const entries = [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")];
+    const done = { type: "done", summary: "팀 화면을 만들었어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] };
+    await finish({ branch: "feat/team", entries }, done);
+    await vi.waitFor(() => expect(backs()).toHaveLength(1));
+    expect(backs()[0]).toContain("계획을 한 번도 보내지 않았어요");
+    expect(backs()[0]).toContain("Feature");
+
+    pauseTask("job");
+    vi.restoreAllMocks();
+    setState(reconcile(freshState()));
+    await finish({ entries }, done);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(backs()).toHaveLength(0);
+  });
+
   it("sends back a cause given with no footing", async () => {
     await finish(
       { entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] },
@@ -278,6 +295,24 @@ describe("plan reminder", () => {
     await vi.waitFor(() => expect(reminders("t:job")).toHaveLength(PLAN_NUDGES));
     await new Promise((r) => setTimeout(r, 10));
     expect(reminders("t:job")).toHaveLength(PLAN_NUDGES);
+  });
+
+  it("asks a fork that never sent a plan for one, once its quiet stretch is long", async () => {
+    const now = vi.spyOn(Date, "now");
+    let clock = Date.now();
+    now.mockImplementation(() => clock);
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job" || n !== 1) return;
+      emit({ type: "agent_start" });
+      say(emit, "PC 코드를 먼저 볼게요.");
+      clock += PLAN_QUIET_MS;
+      bashCalls(emit, PLAN_QUIET);
+    });
+    setState("tasks", [job({ branch: "feat/team" })]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(sent("t:job", "steer").some((m) => m.includes("haven't sent a plan"))).toBe(true));
+    const m = sent("t:job", "steer").find((x) => x.includes("haven't sent a plan"))!;
+    expect(m).toContain("Feature");
   });
 
   it("never reminds a subagent", async () => {
