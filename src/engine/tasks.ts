@@ -69,6 +69,8 @@ interface Run {
   replanCalls?: number;
   /** said done with steps the user asked for still open: sent back once */
   askedGate?: boolean;
+  /** when it was told to ask the user about what it left unchecked, instead of finishing */
+  uncheckedAt?: number;
   /** loop guard: each command's last result and how many file edits had happened by then */
   ran?: Map<string, { ok: boolean; edits: number }>;
   edits?: number;
@@ -1034,8 +1036,8 @@ async function askMerge(id: string, why?: string) {
     kind: "merge",
     question: `${why ? `${why} · ` : ""}${tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })}`,
     options: [
-      { id: "merge", label: tr("합치기"), primary: true, note: tr("원래 폴더의 지금 브랜치에 합쳐요") },
-      { id: "pr", label: tr("PR로 올리기"), note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
+      { id: "pr", label: tr("PR로 올리기"), primary: true, note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
+      { id: "merge", label: tr("합치기"), note: tr("원래 폴더의 지금 브랜치에 합쳐요") },
       { id: "discard", label: tr("버리기"), note: tr("이 작업이 바꾼 것을 지워요") },
     ],
     context: [],
@@ -1828,6 +1830,8 @@ async function settle(id: string, run: Run) {
       }
       return;
     }
+    // something left unchecked: not done yet. The user hears about it first, as a question
+    if (!t.parentId && !t.handedOn && (await uncheckedHeld(id, t, run, agent))) return;
     // the done after a send-back only covers the missing proof; the first one says what the job did
     finish(id, run.firstDone ?? run.done, run);
     return;
@@ -2223,6 +2227,75 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
     "안 해 본 걸 했다고 하지 말고, 못 한 건 unverified에 적은 뒤 다시 done으로 끝내 줘.",
   ];
   return { label: `${needs.join(" · ")}`, ask: lines.filter(Boolean).join("\n") };
+}
+
+/** what the job could not check (with why), as the user is told it */
+const uncheckedOf = (run: Run) => (run.unverified ?? []).filter(Boolean);
+
+/** what the job is told when it said done with something unchecked */
+export const uncheckedAsk = (open: string[]) =>
+  [
+    "(Ondra) Don't finish yet: you left these unchecked:",
+    ...open.map((u) => `- ${u}`),
+    "For each one you can still check here with your tools, check it now and put it in evidence.",
+    "For the rest, ask the user now with an ask block: say plainly what you couldn't check and why, and what you need from them to check it (a device, an account, their hand, a sound played in the room…). Give choices such as: they check it themselves and tell you, they give you what you need, or leave it unchecked and finish. Then end your turn and wait for the answer.",
+    "Once they have answered, do what they chose, then send done (whatever is still unchecked stays in unverified).",
+  ].join("\n");
+
+/**
+ * A done with something left unchecked: it doesn't end there. The job is told once to check
+ * what it can and ask the user about the rest; if it says done again without asking, Ondra asks.
+ * Once the user has answered (anything said after that point), the done goes through.
+ * Returns true when the job was held back.
+ */
+async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Promise<boolean> {
+  const open = uncheckedOf(run);
+  if (!open.length) return false;
+  const since = run.uncheckedAt;
+  // the user's own words since (typed, an answer to its question, or relayed from main), not another job's or Ondra's
+  if (since !== undefined && (taskById(id)?.entries ?? t.entries).some((e) => e.kind === "user" && (!e.by || e.by === "main") && e.at >= since)) return false;
+  const summary = run.done;
+  run.firstDone ??= summary;
+  run.done = undefined;
+  if (since === undefined) {
+    run.uncheckedAt = Date.now();
+    updateTask(id, (x) => {
+      x.saidDone = undefined;
+      x.now = "확인 못 한 걸 물어보는 중";
+      push(x, { kind: "note", text: `확인 못 한 게 있어 끝내지 않아요 · ${open.length}개` });
+    });
+    try {
+      run.turnStart = Date.now();
+      await request(agent, { type: "prompt", message: uncheckedAsk(open) });
+      return true;
+    } catch {
+      // the job is gone: Ondra asks itself
+    }
+  }
+  askUnchecked(id, open);
+  return true;
+}
+
+/** Ondra's own question about what was left unchecked: finish as is, or keep checking */
+function askUnchecked(id: string, open: string[]) {
+  const d: Decision = {
+    id: uid("d"),
+    taskId: id,
+    at: Date.now(),
+    kind: "unchecked",
+    question: tr("확인 못 한 게 {n}개 있어요. 어떻게 할까요?", { n: open.length }) + "\n" + open.map((u) => `· ${u}`).join("\n"),
+    options: [
+      { id: "check", label: tr("더 확인해 줘"), note: tr("할 수 있는 건 확인하고, 필요한 건 물어봐요") },
+      { id: "finish", label: tr("이대로 끝내기"), note: tr("확인 못 한 건 그대로 남겨요") },
+    ],
+    context: [],
+  };
+  setState("decisions", (list) => [...list.filter((x) => x.taskId !== id), d]);
+  updateTask(id, (x) => {
+    x.status = "waiting";
+    x.unread = true;
+    x.now = tr("확인 못 한 게 있어요");
+  });
 }
 
 function finish(id: string, summary: string, run?: Run) {
@@ -3084,6 +3157,28 @@ export async function decide(decisionId: string, optionId: string) {
       return void (await tell(t.id, "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.", { shown: label }));
     const why = await mergeWhy(t.id);
     if (why !== undefined) await tell(t.id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
+    return;
+  }
+  if (d.kind === "unchecked") {
+    const run = runs.get(t.id);
+    if (optionId === "finish") {
+      updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question.split("\n")[0]}" → ${label}` }));
+      const open = d.question.split("\n").slice(1).map((l) => l.replace(/^· /, ""));
+      if (run) finish(t.id, run.firstDone ?? lastReport(t) ?? "완료", run);
+      else {
+        finish(t.id, lastReport(t) ?? "완료");
+        updateTask(t.id, (x) => (x.unverified = open.length ? open : x.unverified));
+      }
+      return;
+    }
+    if (optionId === "check") {
+      await tell(t.id, "Check what you still can with your tools now. For anything you can't, ask the user with an ask block what you need from them, and wait. Then send done.", { shown: label });
+      // "keep checking" isn't an answer about what stays unchecked: the next done is held again
+      if (run) run.uncheckedAt = Date.now() + 1;
+      return;
+    }
+    // their own words: what they said goes to the job, and the next done goes through
+    await tell(t.id, `"${d.question.split("\n")[0]}" → ${label}`, { shown: label });
     return;
   }
   if (d.kind === "stalled" && optionId === "finish") {

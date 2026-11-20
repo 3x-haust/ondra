@@ -60,12 +60,13 @@ describe("the merge question", () => {
     vi.spyOn(native, "worktreeLanded").mockResolvedValue(null as never);
   });
 
-  it("is asked of a finished job that still holds changes, with merge, PR and discard", async () => {
+  it("is asked of a finished job that still holds changes, with a PR recommended, then merge and discard", async () => {
     setState("tasks", [job({ finishedAt: Date.now() })]);
     await sweepLanded();
     const d = state.decisions.find((x) => x.taskId === "job");
     expect(d?.kind).toBe("merge");
-    expect(d?.options.map((o) => o.id)).toEqual(["merge", "pr", "discard"]);
+    expect(d?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
+    expect(d?.options.filter((o) => o.primary).map((o) => o.id)).toEqual(["pr"]);
     // asked once, not again on the next sweep
     await sweepLanded();
     expect(state.decisions.filter((x) => x.taskId === "job")).toHaveLength(1);
