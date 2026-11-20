@@ -647,6 +647,22 @@ export interface Skill {
   space?: SpaceId;
 }
 
+/** A piece of the Discord agent's memory: a person's card (per Discord user; `dm` = learned in a DM,
+ *  used only in DMs with them), a place's card (a server or DM-less channel), or a lesson. */
+export interface AgentNote {
+  id: string;
+  kind: "person" | "place" | "lesson";
+  /** person: their Discord user id */
+  who?: string;
+  name?: string;
+  dm?: boolean;
+  /** place: the server (guild) id */
+  place?: string;
+  text: string;
+  at: number;
+  updatedAt?: number;
+}
+
 export interface Settings {
   slots: { light: number; heavy: number };
   /** "provider/id" for the captain; empty = the account's model */
@@ -765,6 +781,8 @@ export interface AppState {
   memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number; /** conflicts with the user's own pieces it asked about */ held?: number };
   /** 확인 필요: learned pieces that contradict the user's own, waiting for the user */
   memoryConflicts?: MemoryConflict[];
+  /** the Discord agent's own memory (engine/agentMemory.ts), apart from the work memory */
+  agentNotes?: AgentNote[];
   /** what the user picked when a job asked what becomes of its branch, by project folder (newest last, capped) */
   landAnswers?: { folder: string; pick: "merge" | "pr" | "discard"; at: number }[];
   /** skill refinement: changes proposed to skills from jobs that went badly (newest last, capped) */

@@ -37,7 +37,7 @@ projects, jobs and subagents as a live map), **메모리**, **결과물** (every
 | `/feedback` | Send feedback with recent logs to Ondra's maintainers |
 | Pet | A desktop pet; `/pet 피카츄` makes one |
 | 다른 Mac | Run jobs on another of the user's Macs (Settings › 연결), end-to-end encrypted |
-| 에이전트 | Ondra on Discord: the user's words there go to main; others only get talk |
+| 에이전트 | Ondra on Discord, as itself (main is the agent, not a relay): the user's words there are main's; others only get talk. Its own memory (people, the server, lessons; Settings › 에이전트 › 기억) is apart from the work memory. Main acts on the server with the `discord` tool (servers, channels, make or remove one, post) |
 
 Settings tabs: 일반 (theme, size, language, links, default model and permission, parallel jobs,
 worktrees, PR review follow-up, GitHub push/PR, auto memory, job browser preview, job sound,

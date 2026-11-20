@@ -517,7 +517,7 @@ const sigOf = new Map<string, string>();
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts")).flatMap((e) => ["--extension", e]);
+  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts") || e.endsWith("/discord.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];

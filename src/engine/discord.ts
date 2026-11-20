@@ -21,6 +21,7 @@ import {
   type DiscordMessage,
 } from "../lib/native";
 import { logError, logInfo } from "../lib/log";
+import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
 
@@ -65,6 +66,11 @@ const replies = new Map<string, { channel: string; message: string }>();
 const origin = new Map<string, string>();
 /** channels that are in a server (others read them), as seen in messages */
 const servers = new Set<string>();
+/** per channel: what was said lately, for the memory pass once it goes quiet (and who is around) */
+const heard = new Map<string, { lines: Heard[]; guild?: string; spoke: boolean; timer?: ReturnType<typeof setTimeout> }>();
+/** how long a channel stays quiet before the memory pass reads it */
+export const QUIET_MS = 10 * 60_000;
+
 /** questions already posted (decision id → channel), so each goes once */
 const posted = new Map<string, string>();
 /** per channel: what it said there, newest last (for "그거 지워") */
@@ -118,6 +124,8 @@ export function stopAgent() {
   if (sweep) clearInterval(sweep);
   sweep = undefined;
   me = undefined;
+  for (const h of heard.values()) if (h.timer) clearTimeout(h.timer);
+  heard.clear();
   setStatus({ state: "off" });
 }
 
@@ -163,9 +171,12 @@ export const OWNER_WAYS = `How this user wants you to work here:
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings): string {
+  const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], place: m.guild ?? undefined, dm: !m.guild });
   return [
-    `(Ondra) The user sent this from Discord (${m.guild ? `channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
+    `(Ondra) The user sent this from Discord (${m.guild ? `server ${m.guild}, channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
+    "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
+    known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -192,6 +203,7 @@ async function onMessage(m: DiscordMessage) {
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
   const owner = !!a.ownerId && m.author.id === a.ownerId;
   if (m.guild) servers.add(m.channel);
+  hear(m.channel, m.guild ?? undefined, { who: m.author.id, name: m.author.name, text: m.content, owner }, false);
   if (!calledIn(m, a, me.id) && !(owner && pendingIn(m.channel))) return;
   const text = cleanText(m, a, me.id);
   if (!text) return;
@@ -213,7 +225,7 @@ async function onMessage(m: DiscordMessage) {
 }
 
 async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
-  const space: SpaceId = a.space && state.spaces.some((s) => s.id === a.space) ? a.space : (state.spaces[0]?.id ?? state.space);
+  const space = agentSpace(a);
   // seen: a reaction, not a line that only says "알겠어, 할게"
   void discordReact(m.channel, m.id, "👀").catch(() => {});
   void discordTyping(m.channel);
@@ -256,6 +268,7 @@ async function mainSaid(replyId: string) {
   if (!text) return;
   const ids = await discordSend(channel, text, from?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   keepSaid(channel, ids);
+  if (ids.length) hearMine(channel, text);
 }
 
 /** a job started from Discord asked something: post it there once */
@@ -299,7 +312,7 @@ async function answered(channel: string, text: string): Promise<boolean> {
 }
 
 /** The prompt for talk with someone who isn't the user. */
-export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage[], said: string, botId: string): string {
+export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage[], said: string, botId: string, memory = ""): string {
   const line = (m: DiscordMessage) => `${m.author.id === botId ? `${a.name}(너)` : m.author.name}: ${m.content.split(`<@${botId}>`).join(a.name)}`;
   return [
     `너는 디스코드에 있는 "${a.name}"이야. 주인의 에이전트고, 지금은 디스코드에서 사람들과 얘기하는 중이야.`,
@@ -309,6 +322,8 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     "",
     "# 지킬 것",
     OTHERS_RULES,
+    "",
+    memory ? `# 네가 기억하는 것 (사람, 이곳, 교훈)\n${memory}` : "",
     "",
     before.length ? `# 이 채널에서 방금까지 오간 말 (오래된 것부터)\n${before.map(line).join("\n")}` : "",
     "",
@@ -325,10 +340,47 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string) {
   const before = (await discordHistory(m.channel, m.id, 15).catch(() => [])).filter((x) => x.content.trim());
   const { oneShot } = await import("./aside");
   const space = a.space ?? state.spaces[0]?.id ?? state.space;
-  const out = (await oneShot(space, "~", talkPrompt(a, m.author.name, before, text, me.id))).trim();
+  const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
+  const out = (await oneShot(space, "~", talkPrompt(a, m.author.name, before, text, me.id, memory))).trim();
   if (!out || /^\(?skip\)?$/i.test(out)) return;
   keepSaid(m.channel, await discordSend(m.channel, out, m.id));
+  hearMine(m.channel, out);
 }
+
+// ── memory: a channel's talk is read once it goes quiet, if the agent took part in it
+
+function hear(channel: string, guild: string | undefined, line: Heard, mine: boolean) {
+  if (!line.text.trim()) return;
+  const h = heard.get(channel) ?? { lines: [], guild, spoke: false };
+  h.lines = [...h.lines, line].slice(-40);
+  h.guild ??= guild;
+  if (mine) h.spoke = true;
+  if (h.timer) clearTimeout(h.timer);
+  if (h.spoke) h.timer = setTimeout(() => void digest(channel), QUIET_MS);
+  heard.set(channel, h);
+}
+const hearMine = (channel: string, text: string) => hear(channel, undefined, { who: me?.id ?? "", name: settings()?.name ?? "", text, me: true }, true);
+
+/** The memory pass over a quiet channel: what lasts goes into the agent memory, apart from the work memory. */
+export async function digest(channel: string) {
+  const a = settings();
+  const h = heard.get(channel);
+  if (!a?.on || !h?.spoke) return;
+  heard.set(channel, { lines: [], guild: h.guild, spoke: false });
+  const people = Object.fromEntries(h.lines.filter((l) => !l.me).map((l) => [l.who, l.name]));
+  if (!Object.keys(people).length) return;
+  const dm = !h.guild;
+  try {
+    const { oneShot } = await import("./aside");
+    const out = await oneShot(agentSpace(a), "~", digestPrompt(a, h.lines, { place: h.guild, dm }));
+    const n = applyDigest(out, { place: h.guild, dm, people });
+    if (n) logInfo("agent", `memory: ${n} from ${channel}`);
+  } catch (e) {
+    logError("agent", `memory pass: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+const agentSpace = (a: AgentSettings): SpaceId => (a.space && state.spaces.some((s) => s.id === a.space) ? a.space : (state.spaces[0]?.id ?? state.space));
 
 /** Settings › 에이전트 */
 export function setAgent(patch: Partial<AgentSettings>) {
