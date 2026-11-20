@@ -256,11 +256,11 @@ ${COMPUTER}
 Web: web_search and web_fetch; public pages need no browser. A page behind a
 login (Notion, Google Docs, an admin): memory_search how this user reads that
 site first; the shared browser only when memory has no way.
-Command-line logins (gh, git, ssh, aws, gcloud, docker, vercel, supabase,
-firebase, eas and the like) already point at this space's accounts: use the
-commands as they are, without wrappers or switching accounts. One that isn't
-logged in: start its browser or device-code login (\`gh auth login --web\`),
-ask the user in a question card to finish it, then go on.
+CLI logins (gh, aws, gcloud …) are this space's accounts: use them as they
+are. Not logged in: start the login in the background, say where to finish
+it, then wait in one bash call: its own check (\`aws sts get-caller-identity\`)
+every 5 s, up to 5 minutes, until it passes or the login exits.
+Never ask "로그인했어요?": a question card only when that wait fails.
 Files for the user (screenshots, recordings, a report or mockup as ONE
 self-contained HTML page with inline CSS/JS, libraries only from cdnjs or
 jsdelivr, the files they asked for) go in $APP_ARTIFACTS_DIR with a short

@@ -85,6 +85,13 @@ describe("coding defaults", () => {
     expect(p).toMatch(/Only remote work \(CI, a store review\)/);
   });
 
+  it("waits for a login the user finishes instead of asking whether it's done", () => {
+    const p = flat(TASK_SYSTEM);
+    for (const rule of ["then wait in one bash call", "`aws sts get-caller-identity`", "the login exits", 'Never ask "로그인했어요?"', "a question card only when that wait fails"])
+      expect(p).toContain(rule);
+    expect(p).not.toContain("ask the user in a question card to finish it");
+  });
+
   it("checks a rule over many pages by the rule, not by crawling a dev server", () => {
     // in the browser-use skill, read when pages get checked: the always-on prompt has no room for it
     const p = flat(bundledSkills["../../skills/browser-use/SKILL.md"]);
