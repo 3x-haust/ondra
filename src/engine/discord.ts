@@ -185,6 +185,7 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, rules?: string): 
   return [
     `(Ondra) The user sent this from Discord (${m.guild ? `server ${m.guild}, channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
+    "Routines and alarms you make here are yours and on at once (no card to save them): they run on their own, and what a run finds is said back in this channel (a quiet one only when there is something). Make one when they ask for something on a schedule or on an event (\"매일 9시에 …\", \"PR 오면 …\", \"3시에 알려줘\").",
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
     rules
       ? `Which messages you take on Discord is theirs to shape, in their own rules file ${rules} (on this Mac only, not Ondra's code; the ondra skill says how it works). When they ask to change who or when you listen ("멘션 안 해도 들어", "이 채널에선 조용히 있어"), write or edit that file, keeping the rules already in it, and say what it does now.`
@@ -347,6 +348,16 @@ async function mainSaid(replyId: string) {
 export function channelOf(taskId: string): string | undefined {
   const t = taskById(taskId);
   return t?.agent?.channel ?? (t?.parentId ? taskById(t.parentId)?.agent?.channel : undefined);
+}
+
+/** An alarm the agent was asked for rings: said in that channel, to the user (a mention pings them). */
+export async function sayOnDiscord(channel: string, text: string) {
+  const a = settings();
+  if (!a?.on || !text.trim()) return;
+  const line = `${a.ownerId ? `<@${a.ownerId}> ` : ""}⏰ ${text.trim()}`;
+  const ids = await discordSend(channel, line).catch((e) => (logError("agent", `alarm: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
+  keepSaid(channel, ids);
+  if (ids.length) hearMine(channel, line);
 }
 
 /** a job started from Discord asked something: post it there once */

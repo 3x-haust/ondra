@@ -14,10 +14,11 @@ import { Icon } from "../ui/Icon";
 import { keepBottom } from "../ui/stick";
 import { AskDock, handed, onItsOwn, ProjectTasks, Reply, shows } from "./MainView";
 import { PaneControls } from "./PaneControls";
+import { RoutineRow } from "./Routines";
 import { SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 
-type Part = "talk" | "work" | "memory";
+type Part = "talk" | "work" | "routines" | "memory";
 const [part, setPart] = createSignal<Part>("talk");
 
 /** the agent's chat in a space */
@@ -49,8 +50,10 @@ export function AgentView() {
     if (s.state === "stopped") return t("멈춤");
     return t("꺼짐");
   };
-  const count = (p: Part) => (p === "talk" ? asks().length : p === "work" ? jobs().filter((x) => x.status === "running" || x.status === "waiting").length : notes().length);
-  const parts: [Part, string][] = [["talk", "대화"], ["work", "작업"], ["memory", "기억"]];
+  // its routines: made on Discord, their runs report there
+  const routines = () => (state.routines ?? []).filter((r) => r.agent && r.space === state.space && !r.draft);
+  const count = (p: Part) => (p === "talk" ? asks().length : p === "work" ? jobs().filter((x) => x.status === "running" || x.status === "waiting").length : p === "routines" ? routines().filter((r) => r.enabled).length : notes().length);
+  const parts: [Part, string][] = [["talk", "대화"], ["work", "작업"], ["routines", "루틴"], ["memory", "기억"]];
 
   return (
     <div class="view agent-view">
@@ -106,6 +109,16 @@ export function AgentView() {
       <Show when={part() === "work"}>
         <div class="agent-part">
           <ProjectTasks list={jobs()} />
+        </div>
+      </Show>
+
+      <Show when={part() === "routines"}>
+        <div class="agent-part">
+          <Show when={routines().length} fallback={<p class="agent-empty">{t("디스코드에서 \"매일 9시에 PR 정리해서 알려줘\"처럼 말하면 루틴이 생겨요")}</p>}>
+            <div class="set-group agent-routines">
+              <For each={routines()}>{(r) => <RoutineRow r={r} />}</For>
+            </div>
+          </Show>
         </div>
       </Show>
 

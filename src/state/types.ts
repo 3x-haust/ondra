@@ -869,6 +869,9 @@ export interface Routine {
   since?: number;
   /** from the chat message that proposed it */
   from?: string;
+  /** the Discord agent's: made there, its runs are the agent's work and what they find goes to
+   *  `channel` on Discord (an alarm rings there) */
+  agent?: { channel?: string };
 }
 
 export interface PrWatch {

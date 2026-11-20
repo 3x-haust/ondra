@@ -328,4 +328,5 @@ export default {
   "에이전트 설정": "Agent settings",
   "디스코드에서 {name}에게 말을 걸면 여기에 남아요": "Talk to {name} on Discord and it shows here",
   "물어보는 중 {n}개": "{n} asking",
+  "디스코드에서 \"매일 9시에 PR 정리해서 알려줘\"처럼 말하면 루틴이 생겨요": "Say something like \"sum up the PRs at 9 every day\" on Discord and a routine shows up here",
 } satisfies Record<string, string>;

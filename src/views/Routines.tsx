@@ -147,7 +147,7 @@ function Editor(props: { r: Routine; onDone: () => void }) {
 }
 
 /** One routine's row: on/off, name, when · where · next, and its actions. */
-function RoutineRow(props: { r: Routine }) {
+export function RoutineRow(props: { r: Routine }) {
   const r = () => props.r;
   const [confirm, setConfirm] = createSignal(false);
   const where = () => (r().project ? (projectById(r().project)?.name ?? t("지운 프로젝트")) : "");
@@ -186,7 +186,8 @@ function RoutineRow(props: { r: Routine }) {
 }
 
 export function RoutinesSettings() {
-  const list = () => [...routinesIn(state.space), ...(state.routines ?? []).filter((r) => r.space === state.space && r.draft && editing() === r.id)];
+  // the Discord agent's are in its tab
+  const list = () => [...routinesIn(state.space).filter((r) => !r.agent), ...(state.routines ?? []).filter((r) => r.space === state.space && r.draft && !r.agent && editing() === r.id)];
   const add = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, mode: "continue", draft: true }));
   const addAlarm = () => setEditing(addRoutine({ space: state.space, title: "", prompt: "", when: { kind: "once", at: Date.now() + 3_600_000 }, mode: "fresh", quiet: false, alarm: true, draft: true }));
   return (

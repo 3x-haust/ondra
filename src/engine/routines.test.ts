@@ -327,3 +327,58 @@ describe("alarms", () => {
     expect(nowLine(at(2026, 11, 13, 9, 5))).toBe("2026-11-13 Fri 09:05");
   });
 });
+
+describe("the Discord agent's routines", () => {
+  beforeEach(() => {
+    setState(reconcile(freshState()));
+    setState("spaces", [{ id: "home", label: "개인", folder: "~", rules: "" }]);
+    setState("projects", [{ id: "p-app", space: "home", name: "app", folder: "/repo/app" }] as never);
+    setState("captain", [{ id: "u1", at: 1, space: "home", project: "@agent", from: "me", text: "평일 9시마다 PR 정리해서 알려줘", discord: { channel: "c9", message: "m1" } }]);
+    vi.spyOn(native, "agentSend").mockResolvedValue(undefined as never);
+  });
+  afterEach(() => {
+    for (const t of state.tasks) markDead(agentOf(t.id));
+    vi.restoreAllMocks();
+  });
+
+  it("asked for on Discord, it is on at once (no card to save it from), and is the agent's", async () => {
+    const out = await applyRoutes("home~@agent", [{ kind: "routine", title: "아침 정리", task: "어제 머지된 PR 요약", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, project: "app" }], "평일 9시마다 PR 정리해서 알려줘");
+    const r = routineById((out[0] as { routineId: string }).routineId)!;
+    expect(r).toMatchObject({ draft: false, enabled: true, agent: { channel: "c9" } });
+    // its run is the agent's work, and reports to that channel
+    const id = runRoutine(r.id, { manual: true })!;
+    expect(taskById(id)!.agent).toEqual({ channel: "c9" });
+    // main's is still a card to save
+    const mine = await applyRoutes("home", [{ kind: "routine", title: "아침 정리", task: "요약", when: { kind: "daily", time: "09:00" } }], "매일 9시에 요약해줘");
+    expect(routineById((mine[0] as { routineId: string }).routineId)).toMatchObject({ draft: true });
+    expect(routineById((mine[0] as { routineId: string }).routineId)!.agent).toBeUndefined();
+  });
+
+  it("a run that found something is told in the agent's chat; a quiet one with nothing stays quiet", async () => {
+    const { endChat } = await import("./captain");
+    const r = routineById(addRoutine({ space: "home", title: "감시", prompt: "에러 로그 보기", when: { kind: "every", minutes: 60 }, mode: "fresh", quiet: true, agent: { channel: "c9" } }))!;
+    const id = runRoutine(r.id, { manual: true })!;
+    setState("tasks", (t) => t.id === id, { status: "done", summary: "에러 3개 새로 생김" } as never);
+    expect(endChat(taskById(id)!)).toEqual({ project: "@agent" });
+    setState("tasks", (t) => t.id === id, { summary: NOTHING } as never);
+    expect(endChat(taskById(id)!)).toBeUndefined();
+    // the user's own routine run still reports to no chat (its notice is the app's)
+    const own = routineById(addRoutine({ space: "home", title: "내 것", prompt: "x", when: { kind: "every", minutes: 60 }, mode: "fresh", quiet: false }))!;
+    const ownId = runRoutine(own.id, { manual: true })!;
+    setState("tasks", (t) => t.id === ownId, { status: "done", summary: "했어요" } as never);
+    expect(endChat(taskById(ownId)!)).toBeUndefined();
+  });
+
+  it("an alarm set on Discord rings there, to the user, with no chat line", async () => {
+    setState("settings", "agent", { on: true, name: "메타몽", ownerId: "111" });
+    const send = vi.spyOn(native, "discordSend").mockResolvedValue(["x"]);
+    const out = await applyRoutes("home~@agent", [{ kind: "alarm", text: "회의 들어가기", when: { kind: "once", in: 10 } }], "10분 뒤에 회의 알려줘");
+    const r = routineById((out[0] as { routineId: string }).routineId)!;
+    expect(r.agent).toEqual({ channel: "c9" });
+    const before = state.captain.length;
+    ringAlarm(r.id, r.nextAt! + 1);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("c9", "<@111> ⏰ 회의 들어가기"));
+    expect(state.captain.length).toBe(before);
+    expect(routineById(r.id)).toMatchObject({ runs: 1, enabled: false });
+  });
+});
