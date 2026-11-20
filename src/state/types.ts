@@ -758,6 +758,12 @@ export interface AgentSettings {
   space?: SpaceId;
   /** others may talk with it (talk only, no work); missing = on */
   others?: boolean;
+  /** when it last looked over the user's requests for one to make a routine of (agentScout.ts) */
+  scoutAt?: number;
+  /** what it already offered to make a routine of (a short key each), so it asks once */
+  suggested?: string[];
+  /** the routine it offered and hasn't heard back on: the user's next words in that channel may say yes */
+  offer?: { channel: string; at: number; say: string; title: string; task: string; when: unknown };
 }
 
 export interface AppState {
