@@ -203,6 +203,9 @@ Make it explain, not decorate:
 - One flow (left→right or top→down) on a few columns kept in variables; place each
   shape from the ones before it (every shape returns {x,y,w,h,cx,cy,left,right,top,bottom});
   room between things; 3–5 steps.
+- Nothing overlaps. A frame holding things is drawn after them, panel(shapes, "이름"),
+  so it fits them, and what comes next is placed from its bottom or right. A side
+  branch stays out of the next column: end it before that column's left (measure its words).
 - Colour carries meaning: accent for what this step is about, quiet for context.
   Quantities get real-looking values (bars, cells, a number), not "많음".
 Functions, one call per line, canvas 800 wide, y down, cropped to what you draw:
@@ -211,7 +214,7 @@ Functions, one call per line, canvas 800 wide, y down, cropped to what you draw:
   connect(a, b, o) an arrow edge to edge between shapes or [x, y] points ({bend: 30} curves it, {label})
   label(x, y, "글", target, o) a note with a thin leader to a shape or point
   bars(x, y, [["이름", 0.62], …], {pick: 0, w}) chances or amounts   cells(x, y, [0.8, -0.2, …]) a vector
-  panel(x, y, w, h, "이름") a frame around a part   measure("글", size) its width
+  panel([shapes], "이름", o) a frame around shapes already drawn, its name above them   measure("글", size) its width
   box(x, y, w, h, o) circle(x, y, r, o) ellipse(cx, cy, rx, ry, o) poly([[x, y], …], o) path("M… C… Z", o)
   line / arrow(x1, y1, x2, y2, o) pen([[x, y], …], o) a smooth stroke arc(cx, cy, r, fromDeg, toDeg, o)
   text(x, y, "글", o) highlight(x, y, w, h) dot(x, y, o)
