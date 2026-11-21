@@ -212,6 +212,20 @@ process.stdin.on("data", c => {
     await session.stop();
   });
 
+  it("never raises the target window over the user's, whatever the action is called", async () => {
+    const { path, log } = recordingHelper();
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Test");
+    for (const name of ["Raise", "AXRaise", " Raise "]) {
+      await expect(session.act({ kind: "action", ref: 3, name })).rejects.toThrow("in front of the user's");
+    }
+    await expect(session.act({ kind: "action", ref: 3, name: "Increment" })).resolves.toBeDefined();
+    expect(acts(log).map(a => a.action)).toEqual(["AXIncrement"]);
+    await session.stop();
+  });
+
   it("clicks fall back to a pointer click, and an app that comes forward or the user's own input is not a failure", async () => {
     const { path, log } = recordingHelper();
     const helper = new ComputerHostHelper(process.execPath, [path]);
