@@ -2,7 +2,7 @@
 // in tally.mjs adds up.
 import { describe, expect, it } from "vitest";
 import { META, caseProblems as mainCaseProblems, loadCases as loadMainCases } from "./main-cases.mjs";
-import { jobCaseProblems, loadJobCases } from "./job-cases.mjs";
+import { jobCaseProblems, loadJobCases, vmOnly } from "./job-cases.mjs";
 import { EXPECT_KEYS, check } from "./main-sim-check.mjs";
 import { lint } from "./main-sim-lint.mjs";
 import { compare, fisher, headline, tally } from "./tally.mjs";
@@ -16,6 +16,14 @@ describe("case files", () => {
   it("job cases: the same", () => {
     const bad = loadJobCases().flatMap((c) => jobCaseProblems(c).map((p) => `${c.name}: ${p}`));
     expect(bad).toEqual([]);
+  });
+
+  it("computer-use cases run only inside a macOS VM", () => {
+    const cases = loadJobCases();
+    const cu = cases.filter((c) => c.kind === "computer").map((c) => c.name);
+    expect(cu.length).toBeGreaterThan(0);
+    expect(vmOnly(cases, false)).toEqual({ run: cases.filter((c) => c.kind !== "computer"), held: cu });
+    expect(vmOnly(cases, true)).toEqual({ run: cases, held: [] });
   });
 
   it("catches what would make a case pass without checking", () => {

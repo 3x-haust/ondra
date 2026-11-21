@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DATA, app as bridge } from "./devbridge.mjs";
-import { loadJobCases } from "./job-cases.mjs";
+import { inMacVm, loadJobCases, vmOnly } from "./job-cases.mjs";
 import { headline, runMeta, tally } from "./tally.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +29,9 @@ const argv = process.argv.slice(2);
 const repeat = Number(argv[argv.indexOf("--repeat") + 1]) || 1;
 const note = argv.includes("--note") ? argv[argv.indexOf("--note") + 1] : "";
 const names = argv.filter((a, i) => !a.startsWith("--") && !["--repeat", "--note"].includes(argv[i - 1]));
-const cases = loadJobCases(names);
+const { run: cases, held } = vmOnly(loadJobCases(names), inMacVm());
+if (held.length) console.error(`held back ${held.join(", ")}: computer-use cases run only inside a macOS VM (kern.hv_vmm_present=1), never on this Mac`);
+if (!cases.length) process.exit(1);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // short calls, polled: a minute of retries rides out an app restart
