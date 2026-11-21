@@ -435,7 +435,10 @@ export class ComputerHostSession {
       case "action": {
         const name = String(action.name ?? "").trim();
         if (!/^(AX)?[A-Za-z]{2,40}$/.test(name)) throw new Error("action needs the name of an action the element lists");
-        return { kind: "press-action", ref: ref(), action: name.startsWith("AX") ? name : `AX${name}` };
+        const ax = name.startsWith("AX") ? name : `AX${name}`;
+        // raising puts the target window over the user's: the app is driven where it is
+        if (ax === "AXRaise") throw new Error("Raise would bring the window in front of the user's; act on it where it is (click, set-value, action)");
+        return { kind: "press-action", ref: ref(), action: ax };
       }
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
       case "menu": {

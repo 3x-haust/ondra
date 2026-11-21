@@ -47,7 +47,7 @@ const step = {
     text: { type: "string", description: "type: text to insert at ref, or into the focused field when ref is omitted" },
     key: { type: "string", description: "press: a letter, digit or punctuation (- = [ ] ; ' , . / `), return, escape, tab, space, delete, forwarddelete, home, end, pageup, pagedown, an arrow or f1–f12" },
     modifiers: { type: "array", items: { type: "string", enum: ["cmd", "ctrl", "alt", "shift"] }, maxItems: 4, uniqueItems: true },
-    name: { type: "string", description: "action: one of the element's actions=… (Increment, Decrement, Confirm, Pick, Raise, Cancel)" },
+    name: { type: "string", description: "action: one of the element's actions=… (Increment, Decrement, Confirm, Pick, Cancel)" },
     direction: { type: "string", enum: ["up", "down", "left", "right"], description: "scroll direction" },
     amount: { type: "integer", minimum: 1, maximum: 50, description: "scroll: lines, default 3" },
     x: { type: "integer", minimum: 0, description: "click-at/scroll: pixel x in the latest look image" },
