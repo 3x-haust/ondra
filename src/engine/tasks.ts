@@ -519,6 +519,12 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         }
         break;
       case "ask": {
+        if (t.self) {
+          // nobody is asked in a job Ondra started by itself: it decides
+          push(t, { kind: "note", text: "자동 검사라 묻지 않고 스스로 정해요" });
+          void tell(t.id, SELF_DECIDES, { by: "ondra", shown: tr("묻지 않고 정하기") });
+          break;
+        }
         const d: Decision = {
           id: uid("d"),
           taskId: t.id,
@@ -1043,6 +1049,7 @@ async function askMerge(id: string, why?: string) {
   const home = homeDir(t).split("/").filter(Boolean).pop() ?? homeDir(t);
   // on GitHub: the user's own folder is never merged into, only kept up to date (syncHome)
   const github = await gitOnGithub(homeDir(t)).catch(() => false);
+  if (t.self) return selfLands(id, github);
   if (taskById(id)?.worktree?.state !== "open" || state.decisions.some((x) => x.taskId === id)) return;
   const d: Decision = {
     id: uid("d"),
@@ -1059,6 +1066,15 @@ async function askMerge(id: string, why?: string) {
   };
   setState("decisions", (list) => [...list.filter((x) => x.taskId !== id), d]);
   updateTask(id, (x) => (x.unread = true));
+}
+
+/** A job Ondra started by itself is never asked about: on GitHub it goes up as a PR (someone reviews
+ *  it there), elsewhere its branch stays as it is; either is said once in its record. */
+async function selfLands(id: string, github: boolean) {
+  const note = github ? "자동 검사라 묻지 않고 PR로 올려요" : "자동 검사라 묻지 않고 브랜치로 남겨 둬요";
+  if (taskById(id)?.entries.some((e) => e.kind === "note" && e.text === note)) return;
+  updateTask(id, (x) => push(x, { kind: "note", text: note }));
+  if (github) await tell(id, PR_ASK, { by: "ondra", shown: tr("PR로 올리기") });
 }
 
 /** The last done's evidence has a test or build the app saw run and pass in the session (not the job's word). */
@@ -1103,6 +1119,10 @@ export function noteLandAnswer(t: Task, pick: "merge" | "pr" | "discard", now = 
   return addMemory(text, "project", { space: t.space, project: folder, kind: "decision", key: "land", importance: 4, by: "agent", source: "ondra", taskId: t.id });
 }
 
+/** what a job Ondra started by itself is told when it asks the user something */
+export const SELF_DECIDES =
+  "(Ondra) Ondra started this job by itself, so nobody is asked here: the user doesn't know about it. Decide yourself from the rule and the code; when it isn't clear, change nothing and say why with done. What you couldn't check goes in unverified.";
+
 const PR_ASK = "Push your branch and open a pull request for it (follow the project's memory for the base branch, account and PR rules), then send done with the PR link.";
 
 /**
@@ -1122,6 +1142,7 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix")
   const t = taskById(id);
   if (!t || t.worktree?.state !== "open") return;
   if (land === "discard") return discardTask(id);
+  if (land === "fix" && !fixLands(t) && t.self) return askMerge(id);
   if (land === "fix" && !fixLands(t))
     return askMerge(id, state.settings.autoMergeFixes === false ? undefined : t.unverified?.length ? tr("확인 못 한 게 있어요") : tr("테스트·빌드를 돌린 기록이 없어요"));
   if ((land === "merge" || land === "fix") && (await gitOnGithub(homeDir(t)).catch(() => false))) {
@@ -2295,11 +2316,19 @@ export const uncheckedAsk = (open: string[]) =>
  * Returns true when the job was held back.
  */
 async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Promise<boolean> {
-  const open = uncheckedOf(run);
+  const now = taskById(id) ?? t;
+  // what the user already said to leave as is (an earlier turn, worded a little differently now) isn't asked again
+  const ok = new Set((now.uncheckedOk ?? []).map(uncheckedKey));
+  const open = uncheckedOf(run).filter((u) => !ok.has(uncheckedKey(u)));
   if (!open.length) return false;
+  // a job Ondra started by itself: the user never asked for it, so nobody is asked; it stays in the record
+  if (now.self) return false;
   const since = run.uncheckedAt;
   // the user's own words since (typed, an answer to its question, or relayed from main), not another job's or Ondra's
-  if (since !== undefined && (taskById(id)?.entries ?? t.entries).some((e) => e.kind === "user" && (!e.by || e.by === "main") && e.at >= since)) return false;
+  if (since !== undefined && now.entries.some((e) => e.kind === "user" && (!e.by || e.by === "main") && e.at >= since)) {
+    leftAsIs(id, open);
+    return false;
+  }
   const summary = run.done;
   run.firstDone ??= summary;
   run.done = undefined;
@@ -2320,6 +2349,15 @@ async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Prom
   }
   askUnchecked(id, open);
   return true;
+}
+
+/** an unchecked item by what it is, not how it was worded this time ("X — why" or "X (why)") */
+export const uncheckedKey = (u: string) =>
+  u.split(/ — | - | \(|: /)[0].replace(/[\s\p{P}\p{S}]/gu, "").toLowerCase().slice(0, 40);
+
+/** the user answered about these: they stay unchecked, and aren't asked about again */
+function leftAsIs(id: string, open: string[]) {
+  updateTask(id, (x) => (x.uncheckedOk = [...new Set([...(x.uncheckedOk ?? []), ...open])].slice(-20)));
 }
 
 /** Ondra's own question about what was left unchecked: finish as is, or keep checking */
@@ -2585,6 +2623,8 @@ export function createTask(f: {
   from?: Task["from"];
   /** a run of this routine */
   routine?: string;
+  /** Ondra started it by itself (a rule made into a check): it never asks the user */
+  self?: Task["self"];
   /** the Discord agent's work (else the job it carries on decides) */
   agent?: Task["agent"];
 }): string {
@@ -2633,6 +2673,7 @@ export function createTask(f: {
     permission: state.settings.permission ?? "auto",
     ...(f.from ? { from: f.from } : {}),
     ...(f.routine ? { routine: f.routine } : {}),
+    ...(f.self ? { self: f.self } : {}),
     ...((f.agent ?? prev?.agent) ? { agent: f.agent ?? prev!.agent } : {}),
   };
   // a project of another Mac: the job is made and run there; here it shows until that Mac's copy comes
@@ -3213,6 +3254,7 @@ export async function decide(decisionId: string, optionId: string) {
     if (optionId === "finish") {
       updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question.split("\n")[0]}" → ${label}` }));
       const open = d.question.split("\n").slice(1).map((l) => l.replace(/^· /, ""));
+      leftAsIs(t.id, open);
       if (run) finish(t.id, run.firstDone ?? lastReport(t) ?? "완료", run);
       else {
         finish(t.id, lastReport(t) ?? "완료");

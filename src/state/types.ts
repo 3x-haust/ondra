@@ -264,6 +264,11 @@ export interface Task {
   follows?: string;
   /** started by this routine (one run) */
   routine?: string;
+  /** Ondra started it by itself from memory (a rule the user had to say twice, made into a check):
+   *  the user didn't ask for it, so it never asks them anything */
+  self?: "check";
+  /** what it left unchecked that the user already said to leave as is: not asked about again */
+  uncheckedOk?: string[];
   /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
    *  and its end and questions go back to `channel` on Discord */
   agent?: { channel?: string };
