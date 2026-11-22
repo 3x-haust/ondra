@@ -98,3 +98,20 @@ describe("what the answer says it saw", () => {
     expect(resultLine("")).toBeUndefined();
   });
 });
+
+describe("command evidence written another way", () => {
+  it("matches the same run named through a folder variable, a temp path, or with its output piped", async () => {
+    const t = job([bash('cd /var/folders/ab/T/scratch/repro && node run.mjs 2>&1 | tail -5'), bash('"$APP_SCRATCH_DIR/repro/check.sh" --strict')]);
+    const [a, b] = await checkEvidence(t, [
+      { kind: "repro", ref: 'cd "$APP_SCRATCH_DIR/repro" && node run.mjs' },
+      { kind: "test", ref: "/private/tmp/x/repro/check.sh --strict" },
+    ]);
+    expect(a.check).toBe("ran");
+    expect(b.check).toBe("ran");
+  });
+
+  it("still finds no run for a different command", async () => {
+    const [e] = await checkEvidence(job([bash("cd /repo && node run.mjs")]), [{ kind: "test", ref: "node other.mjs" }]);
+    expect(e.check).toBe("no-run");
+  });
+});
