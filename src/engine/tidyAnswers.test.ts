@@ -90,6 +90,9 @@ describe("a rule said again becomes a check", () => {
     expect(made).toHaveLength(1);
     expect(made[0]).toMatchObject({ space: "work", project: "acme", cwd: "~/Work/acme", ask: checkAsk(rule) });
     expect(made[0].ask).toContain('{"type":"merge","kind":"fix"}');
+    // the user doesn't know about it and is never asked
+    expect(made[0].self).toBe("check");
+    expect(made[0].ask).toContain("nobody is asked");
     expect(state.memory.find((m) => m.id === "r1")?.checkTask).toBe("t1");
     // the first is still running: the second rule waits
     expect(await growChecks(undefined, now)).toBe(0);

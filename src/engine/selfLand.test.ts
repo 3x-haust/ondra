@@ -156,6 +156,13 @@ describe("a project on GitHub", () => {
     expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "확인된 수정이라 묻지 않고 PR로 올려요")).toBe(true);
   });
 
+  it("a check Ondra started by itself goes up as a PR without asking, even with something left unchecked", async () => {
+    setState("tasks", [job({ self: "check", entries: [passed], unverified: ["실행 중인 앱 화면"] })]);
+    await landBranch("job", "fix").catch(() => {});
+    expect(state.decisions).toHaveLength(0);
+    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "자동 검사라 묻지 않고 PR로 올려요")).toBe(true);
+  });
+
   it("once its PR is merged the local main is brought up to GitHub's latest, and said so only when it moved", async () => {
     const sync = vi.spyOn(native, "gitSyncHome").mockResolvedValue({ state: "updated", branch: "main", note: "3" });
     setState("tasks", [job()]);
@@ -166,6 +173,16 @@ describe("a project on GitHub", () => {
     setState("tasks", [job()]);
     await syncHome(state.tasks[0]);
     expect(state.tasks[0].entries).toHaveLength(0);
+  });
+
+  it("a check Ondra started by itself in a folder not on GitHub is not asked about: its branch stays as it is", async () => {
+    vi.spyOn(native, "gitOnGithub").mockResolvedValue(false);
+    setState("tasks", [job({ self: "check", entries: [passed], unverified: ["실행 중인 앱 화면"] })]);
+    await landBranch("job", "fix");
+    await landBranch("job");
+    expect(state.decisions).toHaveLength(0);
+    expect(state.tasks[0].worktree?.state).toBe("open");
+    expect(state.tasks[0].entries.filter((e) => e.kind === "note" && e.text === "자동 검사라 묻지 않고 브랜치로 남겨 둬요")).toHaveLength(1);
   });
 
   it("a folder not on GitHub is left to the merge question as before", async () => {
