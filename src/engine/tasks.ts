@@ -19,7 +19,7 @@ import { closePlan, moveTo, nextPlan, openAsked, planText, unexplained } from ".
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Size, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState, gitOnGithub, gitSyncHome } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState, gitOnGithub, gitSyncHome, ghWatch } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
@@ -986,8 +986,12 @@ async function isolate(id: string): Promise<boolean> {
     const w = await worktreeCreate(cwd, dest, branch, env).catch((e) =>
       taken(e) ? worktreeCreate(cwd, dest, `${branch}-${Date.now().toString(36).slice(-5)}`, env) : Promise.reject(e),
     );
+    // what the original folder had checked out: where "합치기" would put it back
+    const at = (await gitChanges(w.repo).catch(() => null))?.branch;
+    // a detached checkout has no branch to go back to
+    const from = at && at !== "HEAD" ? at : undefined;
     updateTask(id, (x) => {
-      x.worktree = { ...w, state: "open" };
+      x.worktree = { ...w, state: "open", ...(from ? { from } : {}) };
       x.cwd = w.sub ? `${w.path}/${w.sub}` : w.path;
       push(x, { kind: "note", text: `작업 전용 브랜치 ${w.branch}에서 시작해요` });
     });
@@ -1068,16 +1072,23 @@ async function askMerge(id: string, why?: string) {
   // on GitHub: the user's own folder is never merged into, only kept up to date (syncHome)
   const github = await gitOnGithub(homeDir(t)).catch(() => false);
   if (t.self) return selfLands(id, github);
+  const into = github ? null : await homeBranch(t);
   if (taskById(id)?.worktree?.state !== "open" || state.decisions.some((x) => x.taskId === id)) return;
   const d: Decision = {
     id: uid("d"),
     taskId: id,
     at: Date.now(),
     kind: "merge",
-    question: `${why ? `${why} · ` : ""}${github ? tr("바뀐 파일 {n}개를 PR로 올릴까요?", { n: c.files.length }) : tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })}`,
+    question: `${why ? `${why} · ` : ""}${
+      github
+        ? tr("바뀐 파일 {n}개를 PR로 올릴까요?", { n: c.files.length })
+        : into
+          ? tr("바뀐 파일 {n}개를 {home}의 {branch} 브랜치에 합칠까요?", { n: c.files.length, home, branch: into })
+          : tr("바뀐 파일 {n}개를 {home}에 합칠까요?", { n: c.files.length, home })
+    }`,
     options: [
       { id: "pr", label: tr("PR로 올리기"), primary: true, note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
-      ...(github ? [] : [{ id: "merge", label: tr("합치기"), note: tr("원래 폴더의 지금 브랜치에 합쳐요") }]),
+      ...(github ? [] : [{ id: "merge", label: tr("합치기"), note: into ? tr("원래 폴더의 지금 브랜치({branch})에 합쳐요", { branch: into }) : tr("원래 폴더의 지금 브랜치에 합쳐요") }]),
       { id: "discard", label: tr("버리기"), note: tr("이 작업이 바꾼 것을 지워요") },
     ],
     context: [],
@@ -1094,6 +1105,12 @@ async function selfLands(id: string, github: boolean) {
   updateTask(id, (x) => push(x, { kind: "note", text: note }));
   if (github) await tell(id, PR_ASK, { by: "ondra", shown: tr("PR로 올리기") });
 }
+
+/** the branch the original folder has checked out now: where a local merge goes */
+const homeBranch = async (t: Task): Promise<string | null> => {
+  const b = t.worktree ? (await gitChanges(t.worktree.repo).catch(() => null))?.branch : null;
+  return b && b !== "HEAD" ? b : null;
+};
 
 /** The last done's evidence has a test or build the app saw run and pass in the session (not the job's word). */
 const ranChecks = (t: Pick<Task, "entries">) => {
@@ -1167,6 +1184,12 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix")
     // the project lives on GitHub: what lands without asking goes up as a PR, the user's folder is left alone
     updateTask(id, (x) => push(x, { kind: "note", text: land === "fix" ? "확인된 수정이라 묻지 않고 PR로 올려요" : "묻지 않고 PR로 올려요" }));
     return void (await tell(id, PR_ASK, { by: "ondra", shown: tr("PR로 올리기") }));
+  }
+  // the original folder moved to another branch since the job started: not merged there without a word
+  if (land === "merge" || land === "fix") {
+    const from = t.worktree?.from;
+    const now = from ? await homeBranch(t) : null;
+    if (from && now && now !== from) return askMerge(id, tr("원래 폴더가 지금 {now} 브랜치예요 ({from}에서 시작했어요)", { now, from }));
   }
   if (land === "fix") updateTask(id, (x) => push(x, { kind: "note", text: "확인된 수정이라 묻지 않고 합쳐요" }));
   if (land === "merge" || land === "fix") {
@@ -1620,7 +1643,8 @@ function handlers(id: string, run: Run) {
           run.compacting = false;
           break;
         case "auto_retry_start":
-          updateTask(id, (t) => push(t, { kind: "note", text: `재시도 ${ev.attempt ?? ""}/${ev.maxAttempts ?? ""}` }));
+          // waiting on a dropped connection: its note says so already, the engine's retries would only pile up under it
+          if (!run.netTries) updateTask(id, (t) => push(t, { kind: "note", text: `재시도 ${ev.attempt ?? ""}/${ev.maxAttempts ?? ""}` }));
           break;
         case "extension_ui_request":
           if (["select", "confirm", "input"].includes(ev.method)) uiDecision(id, ev);
@@ -3284,8 +3308,10 @@ function requeue(t: Task) {
  * "릴리즈할까요?" answered 8 hours later started a release of what another job had released
  * meanwhile, an empty 1.5.0 the same as 1.4.18.
  */
-function staleAnswerNote(askedAt: number, space: string, project: string | undefined, now = Date.now()): string | undefined {
+export async function staleAnswerNote(askedAt: number, space: string, project: string | undefined, now = Date.now()): Promise<string | undefined> {
   if (now - askedAt < 30 * 60_000) return undefined;
+  // a release made outside Ondra's jobs (by hand, another tool) is on GitHub only
+  const released = await releasesSince(askedAt, space, project);
   const mins = Math.round((now - askedAt) / 60_000);
   const ago = mins < 120 ? `${mins} minutes` : `${Math.round(mins / 60)} hours`;
   const since = state.tasks
@@ -3294,8 +3320,24 @@ function staleAnswerNote(askedAt: number, space: string, project: string | undef
   return [
     `(Ondra) This answers a question you asked ${ago} ago.${since.length ? " Jobs that ended since:" : ""}`,
     ...since,
+    ...(released.length ? ["Releases published on GitHub since you asked:", ...released] : []),
     "Check what it would do is still to do (the latest release, the branch, these jobs) before routing it; if it was done meanwhile, say so in one line instead of doing it again.",
   ].join("\n");
+}
+
+/** the project's GitHub releases published after `at`, one line each */
+async function releasesSince(at: number, space: string, project: string | undefined): Promise<string[]> {
+  const p = project ? projectById(project, space as Task["space"]) : undefined;
+  if (!p?.folder || !(await gitOnGithub(expand(p.folder)).catch(() => false))) return [];
+  try {
+    const env = await spaceEnv(spaceById(space as Task["space"])).catch((): Env => []);
+    const list = JSON.parse(await ghWatch(expand(p.folder), "release", "", env)) as { tagName?: string; name?: string; publishedAt?: string; isDraft?: boolean }[];
+    return list
+      .filter((r) => !r.isDraft && r.publishedAt && Date.parse(r.publishedAt) > at)
+      .map((r) => `- ${r.tagName}${r.name && r.name !== r.tagName ? ` (${r.name})` : ""} at ${r.publishedAt}`);
+  } catch {
+    return [];
+  }
 }
 
 export async function decide(decisionId: string, optionId: string) {
@@ -3313,7 +3355,7 @@ export async function decide(decisionId: string, optionId: string) {
     const [space, project] = d.taskId.slice(5).split("~");
     const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
     const { throwThought } = await import("./captain");
-    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note: staleAnswerNote(d.at, space, project) });
+    void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note: await staleAnswerNote(d.at, space, project) });
     return;
   }
   const t = taskById(d.taskId);

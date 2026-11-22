@@ -324,6 +324,8 @@ export interface Worktree {
   branch: string;
   /** Commit it started from. */
   base: string;
+  /** the branch the original folder had checked out when it started (what it would merge back into) */
+  from?: string;
   /** Folder relative to the repo top the task was asked in. */
   sub: string;
   state: "open" | "merged" | "discarded";
