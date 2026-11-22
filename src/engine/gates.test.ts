@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { startRpc } from "./rpc";
-import { blocking, decide, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask } from "./tasks";
+import { blocking, decide, endOrphanKids, pauseTask, PLAN_NUDGES, PLAN_QUIET, PLAN_QUIET_MS, startTask, tell } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Total fix",
@@ -381,5 +381,106 @@ describe("plan reminder", () => {
     await vi.waitFor(() => expect(sent("t:kid", "prompt")).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 20));
     expect(reminders("t:kid")).toHaveLength(0);
+  });
+});
+
+describe("fewer turns before done", () => {
+  const ran = (at: number, cmd: string): Entry => tool(`b${at}`, at, "bash", cmd);
+  const edited = () => [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")];
+  const play = async (turns: Record<number, string>, over: Partial<Task> = {}) => {
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (turns[n]) say(emit, turns[n]);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ entries: edited(), ...over })]);
+    await startTask("job", true);
+  };
+  const prompts = () => sent("t:job", "prompt");
+  const done = (extra: object = {}) => block({ type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], ...extra });
+
+  it("asks about what it left unchecked in the same send-back as the missing proof, not in a turn of its own", async () => {
+    const unverified = [{ what: "결제 단계", why: "로그인이 필요해요" }];
+    await play({
+      1: `고쳤어요. 브라우저에서 직접 눌러 봤어요.\n${done({ unverified })}`,
+      2: `고쳤어요.\n${done({ unverified })}`,
+    });
+    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
+    expect(prompts()).toHaveLength(2);
+    expect(prompts()[1]).toContain("끝내기 전에");
+    expect(prompts()[1]).toContain("Don't finish yet");
+  });
+
+  it("a soft miss sends it back once; the second time it is written down in its record, not argued again", async () => {
+    const claim = "브라우저에서 직접 눌러 봤어요.";
+    await play({ 1: `고쳤어요. ${claim}\n${done()}`, 2: `고쳤어요. ${claim}\n${done()}` });
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(prompts()).toHaveLength(2);
+    expect(state.decisions).toHaveLength(0);
+    expect(state.tasks[0].unverified?.join("\n")).toContain("뒷받침되지 않는");
+  });
+
+  it("doesn't ask again after the user answered, even when the job was restarted in between", async () => {
+    const unverified = [{ what: "결제 화면", why: "로그인이 필요해요" }];
+    await play({
+      1: `고쳤어요.\n${done({ unverified })}`,
+      2: "```blocks\n" + JSON.stringify({ type: "ask", question: "결제 화면은 못 봤어요. 어떻게 할까요?", options: [{ label: "확인 없이 끝내기" }] }) + "\n```",
+      3: `알겠어요.\n${done({ unverified })}`,
+    });
+    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "ask")).toBe(true));
+    // the session went away while it waited (a restart): the answer starts a new run
+    pauseTask("job");
+    await tell("job", "확인 없이 끝내기");
+    await startTask("job", true);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(prompts().filter((m) => m.includes("Don't finish yet"))).toHaveLength(1);
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("sends back an answer that slipped into English for a user who writes Korean", async () => {
+    await play(
+      { 1: `I fixed the total and the tests pass now in every case.\n${done()}`, 2: `합계를 고쳤어요.\n${done()}` },
+      { entries: [{ id: "u1", at: 0, kind: "user", text: "합계 고쳐 줘" }, ...edited()] },
+    );
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(prompts()[1]).toContain("한국어로 다시");
+    expect(state.tasks[0].entries.some((e) => e.kind === "note" && e.text === "확인 필요 · 언어")).toBe(true);
+  });
+
+  it("doesn't send back for the plan's last step left open: the done is that step", async () => {
+    const plan = [{ text: "고치기", state: "done" as const }, { text: "결과 보고", state: "todo" as const }];
+    await play({ 1: `고쳤어요.\n${done()}` }, { plan });
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(prompts()).toHaveLength(1);
+  });
+
+  it("the summary is the latest piece of work's report, not one from before the user's new words", async () => {
+    const said = (pr: string) => block({ type: "done", summary: `PR ${pr}를 열었어요`, evidence: [{ kind: "test", ref: "pnpm test", ok: true }] });
+    await play({
+      // sent back once (a soft miss): the first done is kept as the summary of that work
+      1: `PR #685를 열었어요. 브라우저에서 직접 눌러 봤어요.\n${said("#685")}`,
+      // then it asks something and waits, its session still there
+      2: "```blocks\n" + JSON.stringify({ type: "ask", question: "색은 이대로 둘까요?", options: [{ label: "네" }] }) + "\n```",
+      3: `PR #686을 열었어요.\n${said("#686")}`,
+    });
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("waiting"));
+    await tell("job", "스킬은 다른 색으로");
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(state.tasks[0].summary).toBe("PR #686를 열었어요");
+  });
+});
+
+describe("subagents of a job that ended", () => {
+  it("end with it instead of staying paused forever, also ones left from before", async () => {
+    const kid = (id: string, status: Task["status"]): Task => job({ id, parentId: "job", status, title: id });
+    setState("tasks", [job({ status: "done" }), kid("k1", "paused"), kid("k2", "waiting"), job({ id: "live", status: "running" }), { ...kid("k3", "paused"), parentId: "live" }]);
+    endOrphanKids();
+    const by = (id: string) => state.tasks.find((t) => t.id === id)!;
+    expect(by("k1").status).toBe("done");
+    expect(by("k2").status).toBe("done");
+    expect(by("k1").entries.some((e) => e.kind === "note" && e.text === "작업이 끝나서 멈췄어요")).toBe(true);
+    // a paused subagent of a job still going is left alone
+    expect(by("k3").status).toBe("paused");
   });
 });
