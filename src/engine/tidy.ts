@@ -526,6 +526,7 @@ export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0
     "- Add one line to the rule list in AGENTS.md (or CLAUDE.md, whichever the repo has; make the list if there is none): the rule, then what holds it (the lint rule's name, the test file).",
     "- A rule a machine can't check (taste, wording, how or when to ask, commit or deploy, anything outside the code): change nothing and say why in one line with done.",
     '- This is a check, not a change anyone sees: once it is in and proven, send {"type":"merge","kind":"fix"} with your done.',
+    "- Ondra started this by itself and the user doesn't know about it, so nobody is asked: no ask block. Decide yourself; when it isn't clear, change nothing and say why with done. What you couldn't check goes in unverified.",
   ].join("\n");
 
 /**
@@ -558,6 +559,7 @@ export async function growChecks(only?: SpaceId, now = Date.now()): Promise<numb
       ask: checkAsk(m.text, checkReason(m, now), sourcesOf(m).length),
       display: tr("같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}", { rule: m.text }),
       weight: "light",
+      self: "check",
     });
     setState("memory", (x) => x.id === m.id, { checkTask: id });
     return 1;
