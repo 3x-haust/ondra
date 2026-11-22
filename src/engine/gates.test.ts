@@ -190,6 +190,60 @@ describe("what a job leaves unchecked comes with why", () => {
     expect(state.tasks[0].unverified).toEqual(["스피커 소리 녹음 — 방 안 대화가 섞여요"]);
   });
 
+  it("doesn't ask again in a later turn about what the user already said to leave unchecked, only about something new", async () => {
+    const done = (...unverified: unknown[]) => ({ type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified });
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n <= 2) say(emit, `고쳤어요.\n${block(done({ what: "스피커 소리 녹음", why: "방 안 대화가 섞여요" }))}`);
+      // the next turn the job words it a little differently, as it did in the app
+      if (n === 3) say(emit, `PR을 열었어요.\n${block(done("스피커 소리 녹음 — 사용자가 확인 없이 마무리하기로 했어요"))}`);
+      if (n === 4) say(emit, `다시 올렸어요.\n${block(done("스피커 소리 녹음 — 사용자가 확인 없이 마무리하기로 했어요", { what: "결제 화면", why: "로그인이 필요해요" }))}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
+    await decide(state.decisions.find((x) => x.kind === "unchecked")!.id, "finish");
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(held()).toHaveLength(1);
+
+    const { tell } = await import("./tasks");
+    // a finished job goes back in line with the words; the scheduler starts it again
+    await tell("job", "PR로 올려 줘");
+    await startTask("job", true);
+    await vi.waitFor(() => expect(sent("t:job", "prompt").length).toBeGreaterThanOrEqual(3));
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(held()).toHaveLength(1);
+    expect(state.decisions).toHaveLength(0);
+
+    await tell("job", "한 번 더 올려 줘");
+    await startTask("job", true);
+    await vi.waitFor(() => expect(held()).toHaveLength(2));
+    expect(held()[1]).toContain("결제 화면");
+    expect(held()[1]).not.toContain("스피커 소리 녹음");
+  });
+
+  it("a job Ondra started by itself from memory never asks: what it couldn't check stays in its record and it finishes", async () => {
+    const done = { type: "done", summary: "검사를 넣었어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "실행 중인 앱 화면", why: "개발 앱을 띄우지 않기로 했어요" }] };
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (n === 1) say(emit, ask("실제 앱 화면 확인을 어떻게 할까요?", "직접 확인할게요", "확인 없이 마무리"));
+      if (n === 2) say(emit, `넣었어요.\n${block(done)}`);
+      emit({ type: "agent_settled" });
+    });
+    setState("tasks", [job({ self: "check", entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
+    await startTask("job", true);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(state.decisions).toHaveLength(0);
+    expect(held()).toHaveLength(0);
+    const told = vi.mocked(native.agentSend).mock.calls.map(([, c]) => `${c.type} ${String((c as { message?: string }).message)}`);
+    // told once, in the turn it asked (steered in, as the ask comes while it is still going)
+    expect(told.filter((m) => m.includes("nobody is asked"))).toHaveLength(1);
+    expect(state.tasks[0].unverified).toEqual(["실행 중인 앱 화면 — 개발 앱을 띄우지 않기로 했어요"]);
+  });
+
   it("sends back a plan step left open, and lets a skip with its reason through", async () => {
     const plan = [{ text: "원인 찾기", state: "done" as const }, { text: "회귀 테스트", state: "todo" as const }, { text: "고치기", state: "done" as const }];
     await finish(
