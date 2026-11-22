@@ -133,6 +133,31 @@ describe("the git note", () => {
   });
 });
 
+describe("a folder not on GitHub", () => {
+  // the original folder's checkout: on another branch than the job started from
+  const checkout = (branch: string) =>
+    vi.spyOn(native, "gitChanges").mockImplementation(async (cwd: string, base?: string) =>
+      (base ? { isRepo: true, branch: "fix/login", files: [{ path: "src/a.ts", add: 3, del: 1 }] } : { isRepo: true, branch, files: [] }) as never,
+    );
+
+  it("names the branch it would merge into", async () => {
+    checkout("main");
+    setState("tasks", [job({ worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
+    await landBranch("job");
+    expect(state.decisions[0]?.question).toContain("main 브랜치에 합칠까요");
+  });
+
+  it("doesn't merge a checked fix by itself into another branch than the one it started from: it asks, and says so", async () => {
+    checkout("docs/readme-kicks");
+    const merge = vi.spyOn(native, "worktreeMerge");
+    setState("tasks", [job({ entries: [passed], worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
+    await landBranch("job", "fix");
+    expect(merge).not.toHaveBeenCalled();
+    expect(state.tasks[0].worktree?.state).toBe("open");
+    expect(state.decisions[0]?.question).toMatch(/^원래 폴더가 지금 docs\/readme-kicks 브랜치예요 \(main에서 시작했어요\) · /);
+  });
+});
+
 describe("a project on GitHub", () => {
   beforeEach(() => {
     vi.spyOn(native, "gitOnGithub").mockResolvedValue(true);
