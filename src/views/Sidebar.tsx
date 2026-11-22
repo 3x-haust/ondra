@@ -9,6 +9,7 @@ import { MacBar } from "../ui/MacBar";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
+import { foldLabel, stale } from "../state/fold";
 import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
@@ -84,6 +85,7 @@ const lineOf = (t: Task) => [t, ...followUps(t)];
 /** how long a finished job stays in the list */
 const DONE_FOR = 10 * 60_000;
 const ended = (t: Task) => (t.status === "done" && t.worktree?.state !== "open") || discarded(t);
+
 
 export type GlyphKind = "failed" | "waiting" | "inreview" | "running" | "paused" | "queued" | "done" | "discarded";
 /** The status glyph's shape (st-icon classes): what the row needs, not only its own status.
@@ -416,12 +418,7 @@ const [doneOpen, setDoneOpen] = createSignal<Record<string, boolean>>({});
 function DoneFold(props: { id: string; tasks: Task[] }) {
   const has = () => props.tasks.some((t) => t.id === openRoot());
   const open = () => doneOpen()[props.id] ?? has();
-  const label = () => {
-    const gone = props.tasks.filter(discarded).length;
-    const n = props.tasks.length - gone;
-    if (n && gone) return tr("완료 {n}개 · 버림 {m}개", { n, m: gone });
-    return n ? tr("완료 {n}개", { n }) : tr("버림 {n}개", { n: gone });
-  };
+  const label = () => foldLabel(props.tasks);
   return (
     <Show when={props.tasks.length}>
       <button class="sb-older" classList={{ open: open() }} aria-expanded={open()} onClick={() => setDoneOpen((m) => ({ ...m, [props.id]: !open() }))}>
@@ -452,7 +449,8 @@ export function Sidebar() {
   const archived = createMemo(() => tasksShown(state.space).filter((t) => !t.parentId && t.archived).sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)));
   // finished (and merged) jobs fold away under their group after a few minutes; opening one
   // doesn't move it back up: it shows where it is, in its group's done fold
-  const old = (t: Task) => lineOf(t).every((x) => !x.pinned && ended(x) && (x.finishedAt ?? x.createdAt) < soon() - DONE_FOR);
+  // a job paused and left for days folds away with them: nothing will pick it up by itself
+  const old = (t: Task) => lineOf(t).every((x) => stale(x, soon()) || (!x.pinned && ended(x) && (x.finishedAt ?? x.createdAt) < soon() - DONE_FOR));
   const shown = createMemo(() => roots().filter((t) => !old(t)));
   const filed = (t: Task) => !!t.project && projectsShown(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)

@@ -269,6 +269,8 @@ export interface Task {
   self?: "check";
   /** what it left unchecked that the user already said to leave as is: not asked about again */
   uncheckedOk?: string[];
+  /** what it was last held back to ask the user about, and when: the user's words after that answer it */
+  uncheckedAsked?: { at: number; items: string[] };
   /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
    *  and its end and questions go back to `channel` on Discord */
   agent?: { channel?: string };
