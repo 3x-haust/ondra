@@ -282,6 +282,9 @@ export default {
   "메모리 정리 · {parts}": "Memory tidied · {parts}",
   "정리할 메모리가 없어요": "Nothing to tidy",
   "규칙을 자동 검사로 · {rule}": "Rule into a check · {rule}",
+  "바뀐 파일 {n}개를 {home}의 {branch} 브랜치에 합칠까요?": "Merge the {n} changed files into {branch} in {home}?",
+  "원래 폴더의 지금 브랜치({branch})에 합쳐요": "Merges into the folder's current branch ({branch})",
+  "원래 폴더가 지금 {now} 브랜치예요 ({from}에서 시작했어요)": "The folder is on {now} now (it started from {from})",
   "자동 검사": "Automatic checks",
   "같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}": "Making this rule an automatic check so it needn't be said again: {rule}",
 

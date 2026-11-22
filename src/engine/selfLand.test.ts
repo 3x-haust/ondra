@@ -136,7 +136,7 @@ describe("the git note", () => {
 describe("a folder not on GitHub", () => {
   // the original folder's checkout: on another branch than the job started from
   const checkout = (branch: string) =>
-    vi.spyOn(native, "gitChanges").mockImplementation(async (cwd: string, base?: string) =>
+    vi.spyOn(native, "gitChanges").mockImplementation(async (_: string, base?: string) =>
       (base ? { isRepo: true, branch: "fix/login", files: [{ path: "src/a.ts", add: 3, del: 1 }] } : { isRepo: true, branch, files: [] }) as never,
     );
 
