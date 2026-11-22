@@ -31,7 +31,7 @@ import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { canUseTools, connModel, isDirect, toolsRefused } from "./connections";
 import { handoffPrompt, playbookOf, relatedMemory, relatedQuery, taskPrompt, taskSystem } from "./prompts";
-import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
+import { clearStderr, engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request as rpcRequest, stderrOf } from "./rpc";
 
 const KIND_IDS: unknown[] = KINDS.map((k) => k.id);
 
@@ -83,6 +83,8 @@ interface Run {
   /** done/evidence handed in; checked once before finishing */
   evidence?: Evidence[];
   unverified?: string[];
+  /** softer misses written down instead of a second send-back: in the job's record, not asked about */
+  noted?: string[];
   /** unverified items given with no real reason they couldn't be done here */
   bare?: string[];
   /** already sent back once for missing review/evidence */
@@ -380,9 +382,25 @@ const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 export { closePlan, nextPlan } from "./plan";
 
 /** a sentence of English prose shown to a user who writes Korean */
-export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
+/** the user writes Korean in this job (the first words it was given) */
+const writesKorean = (t: Pick<Task, "entries"> | undefined) => {
   const said = t?.entries.find((e) => e.kind === "user");
-  if (!said || !("text" in said) || !/[\uac00-\ud7a3]/.test(String(said.text))) return false;
+  return !!said && "text" in said && /[\uac00-\ud7a3]/.test(String(said.text));
+};
+
+/**
+ * Ondra's own words to a job ("(Ondra) …") are English. In a long run with many of them a job
+ * drifts into answering in English; each one says which language the user reads.
+ */
+function request(agent: string, command: Record<string, unknown>, timeoutMs?: number) {
+  const msg = command.message;
+  if (agent.startsWith("t:") && typeof msg === "string" && msg.startsWith("(Ondra)") && writesKorean(taskById(agent.slice(2))))
+    command = { ...command, message: `${msg}\n(What the user reads stays in Korean.)` };
+  return rpcRequest(agent, command, timeoutMs);
+}
+
+export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
+  if (!writesKorean(t)) return false;
   const prose = text.replace(/```[\s\S]*?```/g, "").replace(/`[^`]*`/g, "").trim();
   if (prose.length < 20 || /[\uac00-\ud7a3]/.test(prose)) return false;
   return (prose.match(/[A-Za-z]+/g) ?? []).length >= 4;
@@ -1872,27 +1890,31 @@ async function settle(id: string, run: Run) {
     }
     // every done gets its proof checked and shown, also one that changed nothing (a look, a capture)
     const checked = await markEvidence(t, run);
-    const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run, checked);
+    const missing = (run.gates ?? 0) >= 2 || t.parentId || t.handedOn ? null : await proofMissing(t, run, checked, (run.gates ?? 0) >= 1);
     if (missing) {
       run.gates = (run.gates ?? 0) + 1;
       const summary = run.done;
       run.firstDone ??= summary;
       run.done = undefined;
+      // what it left unchecked is asked about in the same send-back, not in a turn of its own after it
+      const open = run.uncheckedAt === undefined ? stillUnchecked(id, run, t) : [];
+      if (open.length) run.uncheckedAt = Date.now();
       updateTask(id, (x) => {
         x.saidDone = undefined;
         x.now = "증거를 채우는 중";
+        if (open.length) x.uncheckedAsked = { at: run.uncheckedAt!, items: open };
         push(x, { kind: "note", text: `확인 필요 · ${missing.label}` });
       });
       try {
         run.turnStart = Date.now();
-        await request(agent, { type: "prompt", message: missing.ask });
+        await request(agent, { type: "prompt", message: open.length ? `${missing.ask}\n\n${uncheckedAsk(open)}` : missing.ask });
       } catch {
         finish(id, run.firstDone ?? summary, run);
       }
       return;
     }
     // something left unchecked: not done yet. The user hears about it first, as a question
-    if (!t.parentId && !t.handedOn && (await uncheckedHeld(id, t, run, agent))) return;
+    if (await uncheckedHeld(id, t, run, agent)) return;
     // the done after a send-back only covers the missing proof; the first one says what the job did
     finish(id, run.firstDone ?? run.done, run);
     return;
@@ -2176,6 +2198,18 @@ async function markEvidence(t: Task, run: Run): Promise<Evidence[]> {
  * plan step it skipped or left open, a reason for each thing it lists as not checked, a
  * footing for the cause it names. Small jobs (a wording, a colour) owe none of it.
  */
+/**
+ * A step left open that the done itself settles: the plan's last step (its report, the PR, the
+ * release is what the done says), or any step once the user spoke after the plan last moved
+ * (they may have turned the work: "끝내", "릴리스는 하지 마"). Sending it back for those only
+ * costs a turn that says "done".
+ */
+function settledBy(t: Task, run: Run, step: string): boolean {
+  const steps = t.plan.filter((s) => !s.user);
+  if (steps.length > 1 && steps[steps.length - 1].text === step && unexplained(t.plan).length === 1) return true;
+  return userSaidSince(t, run.planMovedAt ?? Number.MAX_SAFE_INTEGER);
+}
+
 function owedReasons(t: Task, run: Run, said: string): { needs: string[]; lines: string[] } {
   if (t.size === "small") return { needs: [], lines: [] };
   const needs: string[] = [];
@@ -2186,7 +2220,7 @@ function owedReasons(t: Task, run: Run, said: string): { needs: string[]; lines:
     needs.push("계획");
     lines.push(`- 이 일은 ${book} 플레이북대로 하기로 했는데 계획을 한 번도 보내지 않았어요(plan 블록). 그 플레이북의 단계를 plan 블록으로 보내 줘: 한 단계는 {"text":"…","done":true}, 안 하기로 한 단계는 {"text":"…","skip":"이유"}. 빠뜨린 단계가 있으면 지금 하고 보내 줘.`);
   }
-  const open = unexplained(t.plan);
+  const open = unexplained(t.plan).filter((s) => !settledBy(t, run, s));
   if (open.length) {
     needs.push("건너뛴 단계");
     lines.push(`- 계획에서 이유 없이 지나치거나 남긴 단계가 있어요: ${open.map((s) => `«${s}»`).join(", ")}. 한 단계면 지금 하고, 이미 했으면 plan 블록에서 {"text":"…","done":true}로, 안 하기로 했으면 {"text":"…","skip":"이유"}로 다시 보내 줘. 말없이 지우지 마.`);
@@ -2222,6 +2256,16 @@ function reproOwed(t: Task, checked: Evidence[], unverified: string[]): string |
   return null;
 }
 
+/** its branch still changes code (against where it started); unknown counts as yes */
+async function keptCode(t: Task, codeFiles: Set<string>): Promise<boolean> {
+  const w = t.worktree?.state === "open" ? t.worktree : undefined;
+  if (!w?.base) return true;
+  const c = await gitChanges(w.path, w.base).catch(() => null);
+  if (!c?.isRepo) return true;
+  const mine = [...codeFiles].map((p) => expand(p));
+  return c.files.some((f) => mine.some((p) => p === f.path || p.endsWith(`/${f.path}`)));
+}
+
 /** debug output, code left commented out and fix-later notes the job's own changes add */
 async function leftoversOwed(t: Task, codeFiles: Set<string>): Promise<string[]> {
   if (t.size === "small" || !codeFiles.size) return [];
@@ -2232,18 +2276,48 @@ async function leftoversOwed(t: Task, codeFiles: Set<string>): Promise<string[]>
   return leftovers(c.patch, (f) => mine.some((p) => p === f || p.endsWith(`/${f}`)));
 }
 
-async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ label: string; ask: string } | null> {
+/** what sends a job back only once: the second time it is written down as unchecked instead */
+const SOFT = new Set(["확인 안 한 말", "재현", "계획", "건너뛴 단계", "확인 못 한 이유", "원인 근거", "확인 안 한 라벨", "언어"]);
+const SOFT_NOTE: Record<string, string> = {
+  "확인 안 한 말": "답에서 확인했다고 한 말 중 이 세션 기록으로 뒷받침되지 않는 게 있어요",
+  재현: "고치기 전·후 재현 기록이 없어요",
+  계획: "플레이북 계획을 보내지 않았어요",
+  "건너뛴 단계": "계획에서 이유 없이 남은 단계가 있어요",
+  "확인 못 한 이유": "확인 못 한 항목 중 이유가 없는 게 있어요",
+  언어: "답의 일부가 영어로 쓰였어요",
+  "원인 근거": "원인에 근거 라벨이 없어요",
+  "확인 안 한 라벨": "(확인함)을 붙였지만 돌린 기록이 없는 말이 있어요",
+};
+
+async function proofMissing(t: Task, run: Run, checked: Evidence[], again = false): Promise<{ label: string; ask: string } | null> {
+  const r = await proofMissingAll(t, run, checked);
+  if (!r || !again) return r;
+  // sent back once already: a second turn only for what really doesn't hold (no proof, a review,
+  // leftovers); the softer misses are written down where the user sees them, not argued again
+  const hard = r.needs.filter((n) => !SOFT.has(n));
+  const soft = r.needs.filter((n) => SOFT.has(n) && SOFT_NOTE[n]);
+  if (soft.length) run.noted = [...new Set([...(run.noted ?? []), ...soft.map((n) => SOFT_NOTE[n])])];
+  return hard.length ? { label: hard.join(" · "), ask: r.ask } : null;
+}
+
+async function proofMissingAll(t: Task, run: Run, checked: Evidence[]): Promise<{ label: string; ask: string; needs: string[] } | null> {
   // "done" that still promises the work for later
   if (promisesLater(run.done ?? ""))
     return {
+      needs: ["남은 작업 있음"],
       label: "남은 작업 있음",
       ask: "끝냈다고 했는데 요약이 앞으로 할 일이에요. 그 일을 지금 끝내고 done으로 끝내 줘. 지금 할 수 없으면 무엇이 막혔는지 사용자에게 묻거나, 못 한 걸 unverified에 적고 요약은 실제로 한 것만 적어 줘.",
     };
   const said = [run.done ?? "", lastText(t)].join("\n");
   const owed = owedReasons(t, run, said);
+  // the answer slipped into English for a user who writes Korean
+  if (notTheirLanguage(run.done ?? "", t) || notTheirLanguage(lastText(t), t)) {
+    owed.needs.push("언어");
+    owed.lines.push("- 답이 영어예요. 사용자는 한국어로 써요: 같은 내용을 한국어로 다시 써서 done으로 보내 줘.");
+  }
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
   // looked things up, answered: nothing to prove but its reasons
-  if (!wrote.length) return owed.needs.length ? { label: owed.needs.join(" · "), ask: ["끝내기 전에 빠진 게 있어요.", ...owed.lines, "안 해 본 걸 했다고 하지 말고, 고친 뒤 다시 done으로 끝내 줘."].join("\n") } : null;
+  if (!wrote.length) return owed.needs.length ? { needs: owed.needs, label: owed.needs.join(" · "), ask: ["끝내기 전에 빠진 게 있어요.", ...owed.lines, "안 해 본 걸 했다고 하지 말고, 고친 뒤 다시 done으로 끝내 줘."].join("\n") } : null;
   // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)
   const code = (p: string) => isCodeFile(p, t) && !/\.html?$/i.test(p);
   const changed = wrote.some((e) => e.kind === "tool" && code((e.tool.detail ?? "").split("\n")[0]));
@@ -2269,7 +2343,8 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
   // a cause left as a guess: the fix can't be called checked (and doesn't merge on its own)
   if (changed && causeFooting(said) === "guess" && !(run.unverified ?? []).some((u) => u.startsWith("원인을 확인하지 못했어요")))
     run.unverified = [...(run.unverified ?? []), "원인을 확인하지 못했어요 — 보고에서 원인이 (추측)이에요"];
-  const repro = changed && !out ? reproOwed(t, checked, run.unverified ?? []) : null;
+  // the work ended with its code changes taken back (the user chose not to make it): nothing to reproduce
+  const repro = changed && !out && (await keptCode(t, codeFiles)) ? reproOwed(t, checked, run.unverified ?? []) : null;
   const left = changed ? await leftoversOwed(t, codeFiles) : [];
   const needs = [changed && !reviewed && "리뷰", unresolved && "리뷰 지적", !proven && "증거", bad.length && "증거 안 맞음", claim && "확인 안 한 말", repro && "재현", left.length && "남은 디버그·임시 코드", ...owed.needs].filter(Boolean) as string[];
   if (!needs.length) return null;
@@ -2293,7 +2368,7 @@ async function proofMissing(t: Task, run: Run, checked: Evidence[]): Promise<{ l
     ...owed.lines,
     "안 해 본 걸 했다고 하지 말고, 못 한 건 unverified에 적은 뒤 다시 done으로 끝내 줘.",
   ];
-  return { label: `${needs.join(" · ")}`, ask: lines.filter(Boolean).join("\n") };
+  return { needs, label: `${needs.join(" · ")}`, ask: lines.filter(Boolean).join("\n") };
 }
 
 /** what the job could not check (with why), as the user is told it */
@@ -2316,19 +2391,9 @@ export const uncheckedAsk = (open: string[]) =>
  * Returns true when the job was held back.
  */
 async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Promise<boolean> {
-  const now = taskById(id) ?? t;
-  // what the user already said to leave as is (an earlier turn, worded a little differently now) isn't asked again
-  const ok = new Set((now.uncheckedOk ?? []).map(uncheckedKey));
-  const open = uncheckedOf(run).filter((u) => !ok.has(uncheckedKey(u)));
+  const open = stillUnchecked(id, run, t);
   if (!open.length) return false;
-  // a job Ondra started by itself: the user never asked for it, so nobody is asked; it stays in the record
-  if (now.self) return false;
   const since = run.uncheckedAt;
-  // the user's own words since (typed, an answer to its question, or relayed from main), not another job's or Ondra's
-  if (since !== undefined && now.entries.some((e) => e.kind === "user" && (!e.by || e.by === "main") && e.at >= since)) {
-    leftAsIs(id, open);
-    return false;
-  }
   const summary = run.done;
   run.firstDone ??= summary;
   run.done = undefined;
@@ -2336,6 +2401,7 @@ async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Prom
     run.uncheckedAt = Date.now();
     updateTask(id, (x) => {
       x.saidDone = undefined;
+      x.uncheckedAsked = { at: run.uncheckedAt!, items: open };
       x.now = "확인 못 한 걸 물어보는 중";
       push(x, { kind: "note", text: `확인 못 한 게 있어 끝내지 않아요 · ${open.length}개` });
     });
@@ -2348,7 +2414,30 @@ async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Prom
     }
   }
   askUnchecked(id, open);
+  updateTask(id, (x) => (x.uncheckedAsked = { at: Date.now(), items: open }));
   return true;
+}
+
+/** the user's own words since `at` (typed, an answer to a question, or relayed from main), not another job's or Ondra's */
+const userSaidSince = (t: Pick<Task, "entries">, at: number) => t.entries.some((e) => e.kind === "user" && (!e.by || e.by === "main") && e.at >= at);
+
+/**
+ * What the done leaves unchecked that the user still has to hear about. Kept on the job, not the
+ * run: once the user answered a hold (in this turn or an earlier one, however the job words the
+ * item now), what was asked stays answered. Nothing for a job Ondra started by itself: nobody is
+ * asked there, it stays in the record.
+ */
+function stillUnchecked(id: string, run: Run, t?: Task): string[] {
+  let now = taskById(id) ?? t;
+  if (!now || now.self || now.parentId || now.handedOn) return [];
+  const asked = now.uncheckedAsked;
+  if (asked && userSaidSince(now, asked.at)) {
+    leftAsIs(id, asked.items);
+    updateTask(id, (x) => (x.uncheckedAsked = undefined));
+    now = taskById(id) ?? now;
+  }
+  const ok = new Set((now.uncheckedOk ?? []).map(uncheckedKey));
+  return uncheckedOf(run).filter((u) => !ok.has(uncheckedKey(u)));
 }
 
 /** an unchecked item by what it is, not how it was worded this time ("X — why" or "X (why)") */
@@ -2391,7 +2480,7 @@ function finish(id: string, summary: string, run?: Run) {
   // and running ones stop (a review that runs after its job ended is wasted)
   for (const k of activeKids(id)) {
     if (k.status === "queued" && !k.entries.some((e) => e.kind === "tool")) removeTask(k.id);
-    else pauseTask(k.id);
+    else endKid(k.id);
   }
   runs.delete(id);
   agentKill(agentOf(id));
@@ -2410,14 +2499,14 @@ function finish(id: string, summary: string, run?: Run) {
     const proven = (run?.evidence ?? []).filter((e) => e.ok !== false && !e.why).length;
     // what still doesn't hold after the job was sent back is listed, not hidden
     const broken = (run?.evidence ?? []).filter((e) => e.why).map((e) => `${e.ref} · ${e.why}`);
-    const open = [...(run?.unverified ?? []), ...broken];
+    const open = [...(run?.unverified ?? []), ...(run?.noted ?? []), ...broken];
     t.unverified = run && !t.parentId ? (open.length ? open : proven ? undefined : ["증거 없이 끝났어요"]) : undefined;
     t.finishedAt = Date.now();
     closeOpen(t);
     const leg = t.legs[t.legs.length - 1];
     if (leg && !leg.endedAt) leg.endedAt = Date.now();
   });
-  for (const k of activeKids(id)) pauseTask(k.id);
+  for (const k of activeKids(id)) endKid(k.id);
   const t = taskById(id);
   if (t?.parentId) {
     releaseBrowser(id);
@@ -3087,6 +3176,12 @@ export async function tell(id: string, message: string, opts: { now?: boolean; s
   });
   if (isAlive(agent) && (t.status === "running" || t.status === "waiting")) {
     const run = runs.get(id);
+    // the user's words start a new piece of work: its done is what the job says next, with its own
+    // send-backs (the first done of before would stay as the job's summary)
+    if (run && (!opts.by || opts.by === "main")) {
+      run.firstDone = undefined;
+      run.gates = 0;
+    }
     setState("decisions", (list) => list.filter((d) => !(d.taskId === id && !d.ui)));
     updateTask(id, (x) => {
       x.status = "running";
@@ -3266,6 +3361,7 @@ export async function decide(decisionId: string, optionId: string) {
       await tell(t.id, "Check what you still can with your tools now. For anything you can't, ask the user with an ask block what you need from them, and wait. Then send done.", { shown: label });
       // "keep checking" isn't an answer about what stays unchecked: the next done is held again
       if (run) run.uncheckedAt = Date.now() + 1;
+      updateTask(t.id, (x) => x.uncheckedAsked && (x.uncheckedAsked = { ...x.uncheckedAsked, at: Date.now() + 1 }));
       return;
     }
     // their own words: what they said goes to the job, and the next done goes through
@@ -3344,6 +3440,40 @@ export function pauseTask(id: string) {
   for (const k of activeKids(id)) {
     pauseTask(k.id);
     updateTask(k.id, (x) => (x.pausedBy = id));
+  }
+}
+
+/**
+ * A subagent whose job ended: stopped for good. Paused, it stayed in the list for weeks with
+ * nothing that would ever resume it (its job was over).
+ */
+function endKid(id: string) {
+  runs.delete(id);
+  agentKill(agentOf(id));
+  markDead(agentOf(id));
+  setLive(id, "");
+  updateTask(id, (x) => {
+    const now = Date.now();
+    x.status = "done";
+    x.pausedBy = undefined;
+    x.summary ||= "작업이 끝나서 멈췄어요";
+    x.now = x.summary;
+    x.finishedAt = now;
+    closeOpen(x);
+    push(x, { kind: "note", text: "작업이 끝나서 멈췄어요" });
+    const leg = x.legs[x.legs.length - 1];
+    if (leg && !leg.endedAt) leg.endedAt = now;
+  });
+  for (const k of childrenOf(id).filter((k) => k.status !== "done" && k.status !== "failed")) endKid(k.id);
+}
+
+/** subagents left paused (or waiting) under a job that has ended: they end too */
+export function endOrphanKids() {
+  const over = (t: Task | undefined): boolean => !t || t.status === "done" || t.status === "failed" || !!t.archived;
+  for (const k of state.tasks.filter((k) => k.parentId && (k.status === "paused" || k.status === "waiting" || k.status === "queued"))) {
+    let top = taskById(k.parentId!);
+    while (top?.parentId && !over(top)) top = taskById(top.parentId);
+    if (over(taskById(k.parentId!)) || over(top)) endKid(k.id);
   }
 }
 
@@ -3487,6 +3617,7 @@ export function setTaskAccount(id: string, accountId: string) {
 /** Start queued work in priority order while slots are free (both spaces share one Mac). */
 export function schedule() {
   if (!inTauri || !loaded() || !engine.checked || !engine.ready) return;
+  endOrphanKids();
   // subagents run beside their fork (up to 4 at once per fork), outside the slots
   for (const p of state.tasks.filter((t) => !t.parentId && (t.status === "running" || t.status === "waiting"))) {
     const kids = childrenOf(p.id);
@@ -3506,7 +3637,7 @@ export function schedule() {
     if (p && k.pausedBy === p.id && p.status === "queued") continue;
     // a review of a job that has ended has no one to report to
     if (k.review && (!p || p.status === "done" || p.status === "failed")) {
-      pauseTask(k.id);
+      endKid(k.id);
       continue;
     }
     void startTask(k.id, !k.legs[k.legs.length - 1].endedAt);

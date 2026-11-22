@@ -44,14 +44,40 @@ function lastCodeEdit(t: Task): number {
   return -1;
 }
 
+/**
+ * The parts of a command that say what it ran, written the same however the job wrote it down:
+ * no `cd …`, no output plumbing (`2>&1 | tail -6`), quotes dropped, and a path by its last part
+ * (the job may name `$APP_SCRATCH_DIR/repro/run.sh` in its evidence and have run
+ * `/var/folders/…/repro/run.sh`, or the other way round).
+ */
+export function commandCore(cmd: string): string[] {
+  return norm(cmd.replace(/^\$\s+/, ""))
+    .replace(/["']/g, "")
+    .replace(/\s*\d?>&\d|\s*\d?>\s*\/dev\/null/g, "")
+    .split(/\s*(?:&&|\|\||;|\|)\s*/)
+    .map((seg) => seg.trim())
+    .filter((seg) => seg && !/^(cd|tail|head|grep|rg|cat|tee|wc|sed|awk|sort|less|true|echo)\b/.test(seg))
+    .map((seg) =>
+      seg
+        .split(/\s+/)
+        .map((w) => (w.includes("/") ? (w.replace(/\/+$/, "").split("/").pop() ?? w) : /^\$\{?\w+\}?$/.test(w) ? "$" : w))
+        .join(" "),
+    );
+}
+
 function ranCommand(t: Task, ref: string): { at: number; ok: boolean; shellId?: string } | null {
   const want = norm(ref.replace(/^\$\s*/, ""));
   if (want.length < 2) return null;
+  const core = commandCore(ref);
   for (let i = t.entries.length - 1; i >= 0; i--) {
     const x = toolAt(t.entries[i]);
     if (!x || (x.kind !== "bash" && x.kind !== "test")) continue;
-    const cmd = norm(x.detail ?? x.target ?? "");
+    const raw = x.detail ?? x.target ?? "";
+    const cmd = norm(raw);
     if (cmd.includes(want) || (cmd.length > 4 && want.includes(cmd))) return { at: i, ok: x.ok !== false, shellId: x.shellId };
+    // the same command written another way (another folder variable, its output piped elsewhere)
+    const ran = commandCore(raw);
+    if (core.length && core.join(" ").length >= 4 && core.every((c) => ran.includes(c))) return { at: i, ok: x.ok !== false, shellId: x.shellId };
   }
   return null;
 }

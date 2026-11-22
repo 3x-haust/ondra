@@ -48,6 +48,7 @@ export default {
   "완료 {n}개": "{n} done",
   "버림 {n}개": "{n} discarded",
   "완료 {n}개 · 버림 {m}개": "{n} done · {m} discarded",
+  "멈춤 {n}개": "{n} paused",
   "보관함 {n}개": "{n} archived",
   "설정": "Settings",
   "이어진 작업 {n}개": "{n} follow-up|{n} follow-ups",
