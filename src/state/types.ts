@@ -331,6 +331,8 @@ export interface Worktree {
   state: "open" | "merged" | "discarded";
   /** the job (as the user or the project's memory said) leaves the branch as it is: nothing to merge, nothing asked */
   kept?: boolean;
+  /** the job's pull request (its url): the merge is on GitHub, so nothing waits on the user here */
+  pr?: string;
   /** Branch it was merged into. */
   into?: string;
   /** the folder stayed: another job was still working in it (one that had handed this branch on and

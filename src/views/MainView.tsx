@@ -1,4 +1,5 @@
 // Main: the conversation with the one who splits your requests into jobs.
+import { awaitsMerge } from "../state/needs";
 import { AlarmLine, RoutineCard } from "./Routines";
 import { feedbackCommands } from "../ui/Feedback";
 import { nowText, stepParts, type StepKind } from "../engine/describe";
@@ -1096,7 +1097,7 @@ type Req = { id: string; text: string; tasks: Task[]; state: "ask" | "live" | "r
 type ReqState = Status | "inreview" | "merged" | "discarded";
 const REQ_WORD: Record<ReqState, string> = { ...statusLabel, inreview: "병합 필요", merged: "병합됨", discarded: "버림" };
 const reqState = (t: Task): ReqState =>
-  discarded(t) ? "discarded" : t.status === "done" ? (t.worktree?.state === "open" ? "inreview" : t.worktree?.state === "merged" ? "merged" : "done") : t.status;
+  discarded(t) ? "discarded" : t.status === "done" ? (awaitsMerge(t) ? "inreview" : t.worktree?.state === "merged" ? "merged" : "done") : t.status;
 
 /**
  * What the requests in this chat are doing, one line each, above the chat: the
