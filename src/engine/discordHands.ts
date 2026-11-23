@@ -1,9 +1,10 @@
 // The Discord agent's own hands on the server, for its chat (extensions/discord.ts → bridge op
 // "discord"): which servers it is in, their channels, making or removing a channel, saying
-// something in one. The agent's chat is Ondra's main with its own session, so a request like
+// something in one, reading a channel's recent messages and deleting messages. The agent's chat is Ondra's main with its own session, so a request like
 // "필요없는 채널 지우고 채널 하나 만들어서 거기서 일해" is its own work with these.
-import { discordChannelCreate, discordChannelDelete, discordChannels, discordGuilds, discordSend } from "../lib/native";
+import { discordChannelCreate, discordChannelDelete, discordChannels, discordDelete, discordGuilds, discordHistory, discordSend } from "../lib/native";
 import { state } from "../state/store";
+import { botUserId } from "./discord";
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -53,6 +54,42 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       if (!channel || !text) return { error: "channel and text are needed" };
       return { sent: await discordSend(channel, text) };
     }
+    case "read": {
+      const channel = str(a.channel);
+      if (!channel) return { error: "channel is empty" };
+      const limit = typeof a.limit === "number" ? a.limit : undefined;
+      const me = botUserId();
+      const list = await discordHistory(channel, str(a.before) || undefined, limit);
+      return {
+        messages: list.map((m) => ({
+          id: m.id,
+          at: m.at,
+          from: m.author.name,
+          fromId: m.author.id,
+          ...(me && m.author.id === me ? { you: true } : {}),
+          ...(m.reply_msg ? { replyTo: m.reply_msg } : {}),
+          text: m.content,
+          ...(m.files.length ? { files: m.files.length } : {}),
+        })),
+      };
+    }
+    case "delete_messages": {
+      const channel = str(a.channel);
+      const ids = (Array.isArray(a.messages) ? a.messages : [a.message]).map(str).filter(Boolean);
+      if (!channel || !ids.length) return { error: "channel and message (or messages) are needed" };
+      if (ids.length > 100) return { error: "at most 100 messages at a time" };
+      const done: string[] = [];
+      const failed: Record<string, string> = {};
+      for (const id of ids) {
+        try {
+          await discordDelete(channel, id);
+          done.push(id);
+        } catch (e) {
+          failed[id] = e instanceof Error ? e.message : String(e);
+        }
+      }
+      return { deleted: done, ...(Object.keys(failed).length ? { failed } : {}) };
+    }
   }
-  return { error: `unknown action ${action}: servers, channels, create, delete, send` };
+  return { error: `unknown action ${action}: servers, channels, create, delete, send, read, delete_messages` };
 }

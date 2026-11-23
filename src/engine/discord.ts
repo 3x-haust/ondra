@@ -77,6 +77,8 @@ const voiceOf = (a: AgentSettings) => (a.voice?.trim() ? a.voice.trim() : DEFAUL
 
 /** the bot's own id and name, once connected */
 let me: { id: string; name: string } | undefined;
+/** the bot's own user id while connected (its messages in a channel are the ones it said) */
+export const botUserId = () => me?.id;
 /** channels that are in a server (others read them), as seen in messages */
 const servers = new Set<string>();
 /** per channel: what was said lately, for the memory pass once it goes quiet (and who is around) */
@@ -202,7 +204,7 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: st
     ...chatRules(a, !!m.guild),
     "Routines and alarms you make here are yours and on at once (no card to save them): they run on their own, and what a run finds is said back in this channel (a quiet one only when there is something). Make one when they ask for something on a schedule or on an event (\"매일 9시에 …\", \"PR 오면 …\", \"3시에 알려줘\").",
     WORK_IN_OPEN,
-    "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
+    "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one, reading a channel's recent messages, deleting messages): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
     ways ? waysNote(ways) : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
     offerNote(a, m.channel),
