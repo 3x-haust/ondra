@@ -5,6 +5,7 @@ import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, syncHome } from "./tasks";
 import { landHabit, taskPrompt } from "./prompts";
+import { bucket } from "../state/needs";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Fix login",
@@ -218,5 +219,49 @@ describe("a project on GitHub", () => {
     expect(state.decisions[0]?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
     await syncHome(state.tasks[0]);
     expect(sync).not.toHaveBeenCalled();
+  });
+});
+
+describe("what becomes of the branch is the job's to settle", () => {
+  const told = () => state.tasks[0].inbox.join("\n");
+
+  it("the git note has it settle by memory and the repo, and ask with options that fit when they don't", () => {
+    const text = taskPrompt(job({ status: "running" }));
+    expect(text).not.toContain("Ondra asks the user whether to merge");
+    expect(text).toContain("ask the user yourself");
+    expect(text).toContain('{"type":"keep"}');
+  });
+
+  it("a job that ended with changes and settled nothing is sent back once to settle it, not asked a set question", async () => {
+    vi.spyOn(native, "gitOnGithub").mockResolvedValue(true);
+    setState("tasks", [job()]);
+    await landBranch("job");
+    expect(state.decisions).toHaveLength(0);
+    expect(told()).toMatch(/nothing settled what becomes of them/);
+    expect(told()).toMatch(/on GitHub/);
+    // it ends again without settling: then the question, so the branch isn't forgotten
+    await landBranch("job");
+    expect(state.decisions[0]?.kind).toBe("merge");
+  });
+
+  it("is sent back again once the user has spoken since", async () => {
+    setState("tasks", [job()]);
+    await landBranch("job");
+    setState("tasks", 0, "entries", (l) => [...l, { id: "u", at: Date.now() + 10, kind: "user", text: "다른 것도 고쳐줘" } as Entry]);
+    setState("tasks", 0, "inbox", []);
+    await landBranch("job");
+    expect(state.decisions).toHaveLength(0);
+    expect(told()).toMatch(/nothing settled/);
+  });
+
+  it("keep: the branch stays as it is, nothing asked, and it no longer waits for a merge", async () => {
+    setState("tasks", [job()]);
+    await landBranch("job", "keep");
+    const t = state.tasks[0];
+    expect(state.decisions).toHaveLength(0);
+    expect(t.inbox).toHaveLength(0);
+    expect(t.worktree?.state).toBe("open");
+    expect(t.worktree?.kept).toBe(true);
+    expect(bucket(t)).toBe("done");
   });
 });
