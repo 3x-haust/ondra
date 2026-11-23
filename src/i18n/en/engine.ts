@@ -191,6 +191,7 @@ export default {
   "작업 전용 브랜치 {b}에서 시작해요": "Started on its own branch {b}",
   "워크트리 정리 · 변경은 PR에 있어요": "Worktree removed · changes are in the PR",
   "확인된 수정이라 묻지 않고 합쳐요": "A checked fix, so it's merged without asking",
+  "브랜치를 그대로 남겨 뒀어요": "Left the branch as it is",
   "확인된 수정이라 묻지 않고 PR로 올려요": "A checked fix, so it goes up as a PR without asking",
   "묻지 않고 PR로 올려요": "Going up as a PR without asking",
   "로컬 main을 GitHub 최신으로 맞췄어요": "Brought the local main up to GitHub's latest",
