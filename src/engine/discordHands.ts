@@ -1,17 +1,14 @@
-// The Discord agent's own hands on the server, for its chat (extensions/discord.ts → bridge op
-// "discord"): which servers it is in, their channels, making or removing a channel, saying
-// something in one. The agent's chat is Ondra's main with its own session, so a request like
-// "필요없는 채널 지우고 채널 하나 만들어서 거기서 일해" is its own work with these.
-import { discordChannelCreate, discordChannelDelete, discordChannels, discordGuilds, discordSend } from "../lib/native";
+// Discord primitives for the agent's own chat and jobs (extensions/discord.ts → bridge op
+// "discord"). The caller chooses the action and its arguments; authorization lives here.
+import { discordChannelCreate, discordChannelDelete, discordChannels, discordDelete, discordGuilds, discordHistory, discordReact, discordSend, discordSendFile, discordTyping, discordUnreact } from "../lib/native";
 import { state } from "../state/store";
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 export async function discordHands(worker: string | undefined, a: Args): Promise<unknown> {
-  // a job doesn't speak on the user's server, and nothing runs while the agent is off;
-  // the agent's own chat only ("captain:home~@agent"): the user's main in the app never posts to Discord
-  if (!worker?.startsWith("captain:") || !worker.endsWith("~@agent")) return { error: "only the Discord agent's own chat can use its hands" };
+  const allowed = worker?.startsWith("captain:") ? worker.endsWith("~@agent") : !!worker && !!state.tasks.find((t) => t.id === worker)?.agent;
+  if (!allowed) return { error: "only the Discord agent's own chat and jobs can use its hands" };
   const agent = state.settings.agent;
   if (!agent?.on) return { error: "the Discord agent is off (Settings › 에이전트)" };
   const action = str(a.action);
@@ -51,8 +48,43 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       const channel = str(a.channel);
       const text = str(a.text);
       if (!channel || !text) return { error: "channel and text are needed" };
-      return { sent: await discordSend(channel, text) };
+      return { sent: await discordSend(channel, text, str(a.reply_to) || undefined) };
+    }
+    case "history": {
+      const channel = str(a.channel);
+      if (!channel) return { error: "channel is needed" };
+      const limit = a.limit;
+      if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 50)) return { error: "limit must be an integer from 1 to 50" };
+      return { messages: await discordHistory(channel, str(a.before) || undefined, limit) };
+    }
+    case "react":
+    case "unreact": {
+      const channel = str(a.channel);
+      const message = str(a.message);
+      const emoji = str(a.emoji);
+      if (!channel || !message || !emoji) return { error: "channel, message and emoji are needed" };
+      await (action === "react" ? discordReact : discordUnreact)(channel, message, emoji);
+      return { ok: true };
+    }
+    case "delete_message": {
+      const channel = str(a.channel);
+      const message = str(a.message);
+      if (!channel || !message) return { error: "channel and message are needed" };
+      await discordDelete(channel, message);
+      return { ok: true };
+    }
+    case "send_file": {
+      const channel = str(a.channel);
+      const path = str(a.path);
+      if (!channel || !path) return { error: "channel and path are needed" };
+      return { sent: await discordSendFile(channel, path, typeof a.text === "string" ? a.text : undefined) };
+    }
+    case "typing": {
+      const channel = str(a.channel);
+      if (!channel) return { error: "channel is needed" };
+      await discordTyping(channel);
+      return { ok: true };
     }
   }
-  return { error: `unknown action ${action}: servers, channels, create, delete, send` };
+  return { error: `unknown action ${action}: servers, channels, create, delete, send, history, react, unreact, delete_message, send_file, typing` };
 }

@@ -9,7 +9,7 @@
 //   job_read       → one of them in depth
 //   job_tell       → a message to one of them (queued, delivered, answered, resumed, carried on)
 //   settings_read / settings_write → the settings the user could switch themselves (engine/appSettings.ts)
-//   discord        → the Discord agent's hands: servers, channels, make or remove one, the work channel (main only)
+//   discord        → Discord primitives for the agent's own chat and jobs
 // Calls arrive as `bridge:call` {id, call:{op, worker, args}} and are answered
 // with bridge_reply. The worker id is the job's id: a job only sees its own memory.
 // Main (`captain:<space>[~<project>]`) may use the job ops for its chat's space; memory stays a job's.
@@ -69,7 +69,7 @@ export async function handle(c: Call): Promise<unknown> {
   const t = c.worker ? taskById(c.worker) : undefined;
   const a = c.args ?? {};
   if (c.op?.startsWith("job")) return jobOp(c.op, c.worker, a);
-  // the Discord agent's hands on the server (main only, engine/discordHands.ts)
+  // Discord capability and access checks live in engine/discordHands.ts.
   if (c.op === "discord") return (await import("./discordHands")).discordHands(c.worker, a);
   // the app's settings, for the user (the ondra skill): main or a job, never another Mac's worker
   if (c.op === "settings_read" || c.op === "settings_write") {
