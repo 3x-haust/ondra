@@ -46,6 +46,23 @@ describe("code review by several models together (Settings › 코드 리뷰)", 
     expect(lensKids(job, "x").map((k) => k.extra.model)).toEqual(["anthropic/claude-opus-5-5", "anthropic/claude-opus-5-5"]);
   });
 
+  it("each workspace has its own list, on its own accounts; one without a list goes by the shared one", () => {
+    setState("settings", "reviewers", [opus]);
+    setState("settings", "reviewersBySpace", { work: [{ account: "far", model: "openai-codex/gpt-6-astra" }] });
+    const workJob = { ...job, space: "work", accountId: "far" };
+    expect(lensKids(workJob, "x").map((k) => [k.extra.accountId, k.extra.model])).toEqual([
+      ["far", "openai-codex/gpt-6-astra"],
+      ["far", "openai-codex/gpt-6-astra"],
+    ]);
+    // home has no list of its own: the shared one
+    expect(lensKids(job, "x").map((k) => k.extra.model)).toEqual(["anthropic/claude-opus-5-5", "anthropic/claude-opus-5-5"]);
+    // an empty list of its own is "the job's own model", not the shared one
+    setState("settings", "reviewersBySpace", { work: [], home: [astra] });
+    expect(lensKids(workJob, "x")).toHaveLength(2);
+    for (const k of lensKids(workJob, "x")) expect(k.extra.model).toBeUndefined();
+    expect(lensKids(job, "x")[0].extra.model).toBe("openai-codex/gpt-6-astra");
+  });
+
   const kid = (lens: "design" | "code", model: string, result: string, status: Task["status"] = "done"): Task => ({ ...job, id: `${lens}-${model}`, parentId: "job", review: true, lens, pair: "p", status, result, model });
 
   it("the result: each lens with each model's findings, where models agree, where they differ", () => {

@@ -2,7 +2,7 @@
 // (설계 검토 and 코드 검토, the code-review skill). The job gets one combined
 // result once both are over; a lens that failed is named, it doesn't block.
 import { state, uid } from "../state/store";
-import type { Reviewer, Task } from "../state/types";
+import type { Reviewer, SpaceId, Task } from "../state/types";
 
 export const CROSSCHECK = "교차 검토";
 
@@ -70,10 +70,17 @@ export const shortModel = (m?: string) => (m ? m.split("/").pop()! : "");
  * the change through both lenses (none set: the job's own model). Each gets the job's requirement,
  * its lens and the memory the job was given.
  */
+/** the models that review a change in this workspace: its own list, else the shared one */
+export function reviewersFor(space: SpaceId): Reviewer[] {
+  const own = state.settings.reviewersBySpace?.[space];
+  if (Array.isArray(own)) return own;
+  return Array.isArray(state.settings.reviewers) ? state.settings.reviewers : [];
+}
+
 export function lensKids(job: Task, ask: string): { title: string; ask: string; extra: Partial<Task> }[] {
   const pair = uid("x");
   const what = ask.replace(/^\s*use the code-review skill[.:]?\s*/i, "").trim() || ask;
-  const set = Array.isArray(state.settings.reviewers) ? state.settings.reviewers : [];
+  const set = reviewersFor(job.space);
   const seen = new Set<string>();
   const places = set
     .map((r) => placeOf(job, r))

@@ -105,6 +105,12 @@ there is one (타입 검사, 미들웨어, 로그인 모달, 개발 서버, not 
 "Dev 서버"), put a code name in backticks (\`useLoginGate\`), and never start a
 line with a capitalised English word.`;
 
+/** Ondra's plain writing for what the user reads: the core of ASD-STE100 (Simplified Technical English), part of
+ *  making what an AI says easy to follow (with pictures). Not the 메타몽 Discord voice, not code or repo text. */
+const PLAIN = `Plain writing (ASD-STE100) for what the user reads: one idea per sentence,
+about 20 words at most, active voice, one instruction per step, one word per
+thing (glossary terms first), common words, a needed term explained once.`;
+
 const COMPUTER = `Mac apps: the computer tool, through the computer-use skill. It runs in the
 background on this Mac (the app's accessibility tree, actions sent to that
 app's window), so the user's cursor and front app stay as they are.
@@ -207,8 +213,9 @@ Put one JSON object per line in a \`\`\`blocks fence:
   {"type":"diff","path":"src/a.ts","ref":"/abs/src/a.ts:40","note":"왜","hunks":[{"at":40,"lines":["-old"," same","+new"]}]} (1–3 hunks),
   {"type":"table","columns":[…],"rows":[[…]]}, {"type":"scope","in":[{label,note}],"out":[…]},
   {"type":"shot","path":"/abs/a.png","caption":"…"}, {"type":"link","kind":"pr|doc|url","title":"…","ref":"URL"}
-- a diagram or chart only when it answers a question faster than a sentence,
-  at most one per report; its types and rules are in the visual-report skill.
+- a picture, unasked, whenever the result relates two or more things (a cause
+  across places, before/after, what calls what, options): one per report; its
+  types and rules are in the visual-report skill.
   Never invent numbers. Explaining how something works or what a real thing is
   made of: a \`\`\`board drawn stroke by stroke (2D or a 3D model), format in visual-report.
 "now", "summary" and plan steps show as one-line status: in the user's
@@ -219,6 +226,7 @@ can read them.
 
 # Language
 ${LANGUAGE}
+${PLAIN}
 
 # Asking
 Before anything that leaves this machine or is hard to undo (git push, merge,
@@ -744,8 +752,11 @@ that, not just the words.
 - Fill gaps from context, not questions: the open forks, the project in
   view, memory and the last few messages usually settle it.
 
+# Plain words
+${PLAIN}
+
 # Pictures (the user reads pictures, not paragraphs)
-Explain with pictures by default: whenever an answer relates two or more
+Explain with pictures by default, without being asked: whenever an answer relates two or more
 things, it is a picture with a line of prose, not a table or paragraphs.
 Plain text is for an answer that fits in a sentence or two.
 A work report is usually files + evidence (+ tests if you ran any) and at most
@@ -1170,5 +1181,5 @@ export function writesLikeTeammate(t: Pick<Task, "agent" | "parentId">): string 
 export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
   if (!t.agent || t.parentId || t.agent.quiet) return "";
   const name = state.settings.agent?.name || "메타몽";
-  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there.`;
+  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there. Blocks don't show on Discord: when a picture explains it better (a flow, before/after, a chart), make it an image (an SVG or small HTML page in $APP_ARTIFACTS_DIR, screenshot to PNG with the browser tool) and put ![](its path) in your words; it goes up as a picture.`;
 }

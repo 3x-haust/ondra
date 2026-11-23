@@ -5,6 +5,7 @@
 import { discordTokenFromSecret, discordTokenHas } from "../lib/native";
 import { setState, state } from "../state/store";
 import type { Permission } from "../state/types";
+import { reviewersFor } from "./crosscheck";
 
 type Kind = { type: "bool" } | { type: "int"; min: number; max: number } | { type: "enum"; of: string[] } | { type: "text"; max: number } | { type: "list"; max: number };
 interface Entry {
@@ -29,16 +30,17 @@ export const SETTINGS: Record<string, Entry> = {
     where: "일반 › 코드 리뷰 › 함께 리뷰할 모델 (\"provider/id\" of logged-in accounts, e.g. [\"openai-codex/gpt-6-astra\", \"anthropic/claude-opus-5-5\"]; each reads the change and the findings are merged; [] = the job's own model)",
     kind: { type: "list", max: 3 },
     missing: [],
-    get: () => (state.settings.reviewers ?? []).map((r) => r.model || `${r.account} (default)`),
+    get: () => reviewersFor(state.space).map((r) => r.model || `${r.account} (default)`),
     set: (v: string[]) => {
       const list = (v ?? []).map((m) => String(m).trim()).filter(Boolean);
       const out = list.map((model) => {
         const provider = model.split("/")[0];
-        const acct = state.accounts.find((a) => a.space === state.space && a.providers.includes(provider)) ?? state.accounts.find((a) => a.providers.includes(provider));
-        if (!acct) throw new Error(`no account logged in to ${provider}`);
+        // this workspace's own accounts: another workspace's login isn't used for its work
+        const acct = state.accounts.find((a) => a.space === state.space && a.providers.includes(provider));
+        if (!acct) throw new Error(`no account logged in to ${provider} in this workspace`);
         return { account: acct.id, model };
       });
-      setState("settings", "reviewers", out);
+      setState("settings", "reviewersBySpace", (m) => ({ ...(m ?? {}), [state.space]: out }));
     },
   },
   theme: { where: "일반 › 테마", kind: { type: "enum", of: ["system", "dark", "light"] }, get: () => state.settings.theme, set: (v: "system" | "dark" | "light") => setState("settings", "theme", v) },

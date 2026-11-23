@@ -1,9 +1,11 @@
-// Settings › 코드 리뷰: the models that review a change together. Each reads it through both lenses
-// (설계 검토, 코드 검토) and the job gets their findings merged: where they agree first, where they
-// differ checked once. None set: the job's own model, as before.
-import { For, Show } from "solid-js";
+// Settings › 코드 리뷰: the models that review a change together, per workspace (each on that
+// workspace's own accounts). Each reads it through both lenses (설계 검토, 코드 검토) and the job
+// gets their findings merged: where they agree first, where they differ checked once. None set:
+// the job's own model, as before.
+import { createSignal, For, Show } from "solid-js";
 import { setState, state } from "../state/store";
-import type { Reviewer } from "../state/types";
+import type { Reviewer, SpaceId } from "../state/types";
+import { reviewersFor } from "../engine/crosscheck";
 import { accountName } from "../ui/AccountPicker";
 import { ModelPicker } from "../ui/ModelPicker";
 import { Icon } from "../ui/Icon";
@@ -13,12 +15,12 @@ import { t } from "../i18n";
 /** at most this many models on one review (each runs both lenses) */
 const MAX = 3;
 
-/** accounts with models, this workspace's first */
-const accounts = () => state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
-
 export function ReviewSettings() {
-  const list = () => (Array.isArray(state.settings.reviewers) ? state.settings.reviewers : []);
-  const save = (next: Reviewer[]) => setState("settings", "reviewers", next);
+  const [space, setSpace] = createSignal<SpaceId>(state.space);
+  // the workspace's own accounts that have models
+  const accounts = () => state.accounts.filter((a) => a.space === space() && a.providers.length > 0);
+  const list = () => reviewersFor(space());
+  const save = (next: Reviewer[]) => setState("settings", "reviewersBySpace", (m) => ({ ...(m ?? {}), [space()]: next }));
   const at = (i: number, r: Reviewer) => save(list().map((x, j) => (j === i ? r : x)));
   const add = () => {
     // the next account not used yet, on its own model
@@ -30,6 +32,13 @@ export function ReviewSettings() {
     <>
       <GroupTitle title={t("코드 리뷰")} />
       <div class="set-group">
+        <Show when={state.spaces.length > 1}>
+          <Row title={t("워크스페이스")}>
+            <div class="seg">
+              <For each={state.spaces}>{(s) => <button classList={{ on: space() === s.id }} onClick={() => setSpace(s.id)}>{s.label}</button>}</For>
+            </div>
+          </Row>
+        </Show>
         <Show
           when={list().length}
           fallback={
@@ -51,6 +60,10 @@ export function ReviewSettings() {
                       if (a) at(i(), { account: a.id, model: a.model || "" });
                     }}
                   >
+                    {/* one from another workspace (set before lists were per workspace) still shows what it is */}
+                    <Show when={!accounts().some((a) => a.id === r.account)}>
+                      <option value={r.account}>{accountName(state.accounts.find((a) => a.id === r.account) ?? { id: r.account, label: r.account } as never, true)}</option>
+                    </Show>
                     <For each={accounts()}>{(a) => <option value={a.id}>{accountName(a, true)}</option>}</For>
                   </select>
                   <ModelPicker accountId={r.account} model={r.model} thinking={r.thinking ?? ""} onChange={(m, e) => at(i(), { account: r.account, model: m, ...(e ? { thinking: e } : {}) })} />
