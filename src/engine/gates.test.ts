@@ -168,7 +168,7 @@ describe("what a job leaves unchecked comes with why", () => {
     expect(state.tasks[0].status).not.toBe("done");
   });
 
-  it("with something unchecked and no question from the job, Ondra asks: finish as is or keep checking", async () => {
+  it("with something unchecked and no question from the job, the second done goes through: asking is the job's call, nothing set is asked", async () => {
     const done = { type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }], unverified: [{ what: "스피커 소리 녹음", why: "방 안 대화가 섞여요" }] };
     await harness((agent, n, emit) => {
       if (agent !== "t:job") return;
@@ -179,14 +179,12 @@ describe("what a job leaves unchecked comes with why", () => {
     setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
     await startTask("job", true);
 
-    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
-    const d = state.decisions.find((x) => x.kind === "unchecked")!;
-    expect(d.question).toContain("스피커 소리 녹음 — 방 안 대화가 섞여요");
-    expect(d.options.map((o) => o.id)).toEqual(["check", "finish"]);
-    expect(state.tasks[0].status).toBe("waiting");
-
-    await decide(d.id, "finish");
     await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(held()).toHaveLength(1);
+    // checking what it can is asked of it; asking the user is left to it
+    expect(held()[0]).toContain("check it now");
+    expect(held()[0]).not.toMatch(/ask the user now/);
+    expect(state.decisions).toHaveLength(0);
     expect(state.tasks[0].unverified).toEqual(["스피커 소리 녹음 — 방 안 대화가 섞여요"]);
   });
 
@@ -203,8 +201,6 @@ describe("what a job leaves unchecked comes with why", () => {
     });
     setState("tasks", [job({ entries: [tool("e1", 1, "edit", "/workspace/example/src/total.ts"), ran(2, "pnpm test")] })]);
     await startTask("job", true);
-    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
-    await decide(state.decisions.find((x) => x.kind === "unchecked")!.id, "finish");
     await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
     expect(held()).toHaveLength(1);
 
@@ -406,7 +402,8 @@ describe("fewer turns before done", () => {
       1: `고쳤어요. 브라우저에서 직접 눌러 봤어요.\n${done({ unverified })}`,
       2: `고쳤어요.\n${done({ unverified })}`,
     });
-    await vi.waitFor(() => expect(state.decisions.some((d) => d.kind === "unchecked")).toBe(true));
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(state.decisions).toHaveLength(0);
     expect(prompts()).toHaveLength(2);
     expect(prompts()[1]).toContain("끝내기 전에");
     expect(prompts()[1]).toContain("Don't finish yet");
