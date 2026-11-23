@@ -1466,3 +1466,91 @@
   white-space: nowrap;
 }
 
+
+/* ───────── settings › 에이전트: its account-like head row, where its work goes, the channels it talks in */
+.settings-inner .ag-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+}
+.settings-inner .ag-status.bad {
+  color: var(--bad);
+}
+.settings-inner .ag-where {
+  display: inline-flex;
+  gap: var(--s-6);
+}
+.settings-inner .ag-where .select {
+  width: 104px;
+}
+.settings-inner .ag-where .select + .select {
+  width: 140px;
+}
+/* the default row has no remove button: keep its selects lined up with the ones below */
+.settings-inner .ag-gap {
+  width: 28px;
+  flex: none;
+}
+.settings-inner .ag-hash {
+  color: var(--ink-3);
+  font-size: var(--fs-lg);
+  font-weight: 500;
+}
+.settings-inner .ag-add {
+  position: relative;
+  cursor: pointer;
+}
+.settings-inner .ag-add select,
+.settings-inner .ag-chip-add select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.settings-inner .ag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--s-6);
+  max-width: 420px;
+}
+.settings-inner .ag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: 26px;
+  padding: 0 var(--s-6) 0 var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.settings-inner .ag-chip-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--ink-3);
+}
+.settings-inner .ag-chip-x:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.settings-inner .ag-chip-add {
+  position: relative;
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+  border-style: dashed;
+  cursor: pointer;
+}
+.settings-inner .ag-chip-add:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.settings-inner .ag-id {
+  width: 160px;
+}
