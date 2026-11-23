@@ -454,11 +454,22 @@ pub struct Synced {
     pub added: Vec<String>,
 }
 
+/// Runs keychain work away from the main thread: a read can wait on macOS's access question for as
+/// long as the user takes (a dev build is asked on every rebuild), and on the main thread every
+/// window stops answering until then.
+pub async fn off_main<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())
+}
+
 /// Takes the keys, tokens and passwords this Mac's projects already keep in their .env files
 /// into the keychain as each project's secrets (the files stay as they are). Runs when Settings ›
 /// 시크릿 opens; values never leave this process.
 #[tauri::command]
-pub fn secret_sync(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synced, String> {
+pub async fn secret_sync(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synced, String> {
+    off_main(move || sync_secrets(app, projects)).await?
+}
+
+fn sync_secrets(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synced, String> {
     // a vault that can't be opened (denied, locked) changes nothing
     store::check()?;
     let mut saved = read_saved(&app);
@@ -498,7 +509,19 @@ pub fn secret_list(app: AppHandle) -> Saved {
 /// Saves (or replaces) one secret. The value goes to the keychain and, for a project when asked,
 /// its `.env`; nowhere else.
 #[tauri::command]
-pub fn secret_set(
+pub async fn secret_set(
+    app: AppHandle,
+    name: String,
+    value: String,
+    project: Option<String>,
+    folder: Option<String>,
+    write_dotenv: Option<bool>,
+    add_ignore: Option<bool>,
+) -> Result<Saved, String> {
+    off_main(move || set_secret(app, name, value, project, folder, write_dotenv, add_ignore)).await?
+}
+
+fn set_secret(
     app: AppHandle,
     name: String,
     value: String,
@@ -547,7 +570,11 @@ pub fn secret_set(
 
 /// Removes one secret; for a project, also its `.env` line when that line still holds the value.
 #[tauri::command]
-pub fn secret_delete(app: AppHandle, name: String, project: Option<String>, folder: Option<String>) -> Result<Saved, String> {
+pub async fn secret_delete(app: AppHandle, name: String, project: Option<String>, folder: Option<String>) -> Result<Saved, String> {
+    off_main(move || delete_secret(app, name, project, folder)).await?
+}
+
+fn delete_secret(app: AppHandle, name: String, project: Option<String>, folder: Option<String>) -> Result<Saved, String> {
     let project = project.filter(|p| !p.is_empty());
     let acct = account(project.as_deref(), &name);
     if let (Some(_), Some(folder)) = (&project, folder.as_deref().filter(|f| !f.is_empty())) {
@@ -623,7 +650,11 @@ pub fn group_by_value(places: Vec<Place>, value: impl Fn(&Place) -> Option<Strin
 /// Every saved secret (global and every project's), those with the same value together. Values
 /// are compared here and never sent.
 #[tauri::command]
-pub fn secret_overview(app: AppHandle) -> Vec<Group> {
+pub async fn secret_overview(app: AppHandle) -> Result<Vec<Group>, String> {
+    off_main(move || overview(app)).await
+}
+
+fn overview(app: AppHandle) -> Vec<Group> {
     let saved = read_saved(&app);
     let mut places: Vec<Place> = saved.global.iter().map(|n| Place { project: None, item: n.clone() }).collect();
     for (p, items) in &saved.projects {

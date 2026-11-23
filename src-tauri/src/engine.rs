@@ -336,10 +336,22 @@ fn tail_chars(s: &str, n: usize) -> String {
     if count <= n { s.to_string() } else { s.chars().skip(count - n).collect() }
 }
 
+/// Starts are taken one at a time, as on the main thread: a restart ends the process it replaces.
+static SPAWNING: Mutex<()> = Mutex::new(());
+
+/// Off the main thread: a job's saved secrets are read from the keychain here (see `secrets::off_main`).
 #[tauri::command]
-pub fn agent_spawn(
+pub async fn agent_spawn(app: AppHandle, id: String, cwd: String, args: Vec<String>, env: Vec<(String, String)>) -> Result<(), String> {
+    crate::secrets::off_main(move || {
+        let _one = SPAWNING.lock().unwrap_or_else(|e| e.into_inner());
+        spawn_engine(app.clone(), &app.state::<Engine>(), id, cwd, args, env)
+    })
+    .await?
+}
+
+fn spawn_engine(
     app: AppHandle,
-    engine: State<'_, Engine>,
+    engine: &Engine,
     id: String,
     cwd: String,
     args: Vec<String>,
