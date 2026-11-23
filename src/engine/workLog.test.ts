@@ -100,7 +100,7 @@ describe("the agent's work, in the open", () => {
     expect(sent[0][1]).not.toContain("/Users/lyu");
   });
 
-  it("in the channel it picked; when that's another, the end points there from where it was asked", async () => {
+  it("in the channel it picked; the asking channel gets no stock end line (the agent's own end line goes there)", async () => {
     setState("tasks", [job({ agent: { channel: "general", room: "orbit" } })]);
     await workTick(1000);
     add("t1", entry({ kind: "text", text: "orbit 버그 보는 중" }));
@@ -109,11 +109,8 @@ describe("the agent's work, in the open", () => {
     expect(sent).toEqual([["orbit", "orbit 버그 보는 중"]]);
     setState("tasks", (t) => t.id === "t1", "status", "done");
     await workTick(7000);
-    expect(sent[sent.length - 1]).toEqual(["general", "끝남, <#orbit> 봐"]);
-    // said once: later ticks don't pick the ended job up again
     await workTick(10000);
-    await workTick(13000);
-    expect(sent.filter(([c]) => c === "general")).toHaveLength(1);
+    expect(sent.filter(([c]) => c === "general")).toEqual([]);
   });
 
   it("work asked in the app never goes up, and quiet work only has its start and end lines (said by the agent)", async () => {
