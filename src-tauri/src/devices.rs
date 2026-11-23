@@ -517,6 +517,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn jobs_share_one_xcode_cache_that_doesnt_care_which_folder_builds() {
+        let root = std::env::temp_dir().join(format!("ondra-xc-{}", std::process::id()));
+        let file = xcode_cache_in(&root, None).unwrap();
+        let body = std::fs::read_to_string(&file).unwrap();
+        for s in ["COMPILATION_CACHE_ENABLE_CACHING = YES", "SWIFT_ENABLE_PREFIX_MAPPING = YES", "CLANG_ENABLE_PREFIX_MAPPING = YES", "COMPILATION_CACHE_LIMIT_SIZE"] {
+            assert!(body.contains(s), "{s}");
+        }
+        assert!(body.contains(&format!("COMPILATION_CACHE_CAS_PATH = {}", root.join("cas").display())));
+        // the user's own xcconfig for every build stays theirs
+        assert_eq!(xcode_cache_in(&root, Some("/x/mine.xcconfig".into())), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn the_tools_own_devices_stay_out_of_the_hub_and_a_snapshot_boot_goes_by_its_job() {
         assert!(internal("ondra-template-iPhone-17-iOS-26-3") && internal("ondra-base-Pixel_9"));
         assert!(!internal("ondra-tmwabc123") && !internal("Pixel_9"));
