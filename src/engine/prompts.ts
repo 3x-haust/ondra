@@ -10,6 +10,7 @@ import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
 import { forModel } from "./modelPrompts";
 import { planText } from "./plan";
+import { voiceGist } from "./agentVoice";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -1162,5 +1163,6 @@ export function taskSystem(t: Task, notes?: string, model?: string): string[] {
 /** A job of the Discord agent working in the open: what it writes between steps is read there live. */
 export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
   if (!t.agent || t.parentId || t.agent.quiet) return "";
-  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. Write it like thinking aloud while you work, in Korean 반말, short ("이거부터 읽어볼게", "아 잠깐, 이미 역순으로 돌고 있네", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there.`;
+  const name = state.settings.agent?.name || "메타몽";
+  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there.`;
 }

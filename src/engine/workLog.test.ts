@@ -5,6 +5,7 @@ import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { resetWorkLog, stepLine, testLine, workTick } from "./workLog";
 import { inOpenNote } from "./prompts";
+import { voiceGist } from "./agentVoice";
 
 const job = (o: Partial<Task> = {}): Task =>
   ({ id: "t1", space: "home", title: "탭 고치기", topic: "ondra", ask: "", cwd: "/p", status: "running", entries: [], shells: [], createdAt: 0, ...o }) as unknown as Task;
@@ -119,7 +120,13 @@ describe("the agent's work, in the open", () => {
     expect(typing).toEqual([]);
     expect(inOpenNote({ agent: { channel: "c1", quiet: true } })).toBe("");
     expect(inOpenNote({})).toBe("");
-    expect(inOpenNote({ agent: { channel: "c1" } })).toContain("반말");
+    // in the agent's own voice (its gist, not the whole of it), as the same one
+    expect(inOpenNote({ agent: { channel: "c1" } })).toContain(voiceGist());
+    setState("settings", "agent", { on: true, name: "몽이", voice: "넌 시니컬한 고양이야. 짧게 툭툭.\n\n예시는 길게 길게 길게" });
+    const mine = inOpenNote({ agent: { channel: "c1" } });
+    expect(mine).toContain("몽이");
+    expect(mine).toContain("넌 시니컬한 고양이야. 짧게 툭툭.");
+    expect(mine).not.toContain("예시는");
     expect(inOpenNote({ agent: { channel: "c1" }, parentId: "t1" })).toBe("");
   });
 
