@@ -195,6 +195,13 @@ pub async fn discord_react(channel: String, message: String, emoji: String) -> R
     rest(reqwest::Method::PUT, &format!("/channels/{channel}/messages/{message}/reactions/{e}/@me"), None).await.map(|_| ())
 }
 
+/// Its own reaction taken off (👀 once the message is answered).
+#[tauri::command]
+pub async fn discord_unreact(channel: String, message: String, emoji: String) -> Result<(), String> {
+    let e: String = emoji.bytes().map(|b| format!("%{b:02X}")).collect();
+    rest(reqwest::Method::DELETE, &format!("/channels/{channel}/messages/{message}/reactions/{e}/@me"), None).await.map(|_| ())
+}
+
 /// Take back what the bot said (the user asked it to: "그거 지워").
 #[tauri::command]
 pub async fn discord_delete(channel: String, message: String) -> Result<(), String> {
