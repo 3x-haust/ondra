@@ -4,7 +4,7 @@ import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { resetWorkLog, stepLine, testLine, workTick } from "./workLog";
-import { inOpenNote } from "./prompts";
+import { inOpenNote, writesLikeTeammate } from "./prompts";
 import { voiceGist } from "./agentVoice";
 
 const job = (o: Partial<Task> = {}): Task =>
@@ -92,6 +92,7 @@ describe("the agent's work, in the open", () => {
     setState("tasks", (t) => t.id === "t1", "shells", [{ id: "s1", command: "cat .env", startedAt: 1, endedAt: 2, ok: true, tail: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuv\nlots of output" }]);
     add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "cat .env", detail: "cat .env", shellId: "s1", ok: true, endedAt: 3 } }));
     add("t1", entry({ kind: "text", text: "키가 sk-abcdefghijklmnopqrstuv 이거네, /Users/lyu/secret 에 있음" }));
+    add("t1", entry({ kind: "tool", tool: { name: "ls", kind: "search", target: "x", ok: true, endedAt: 3 } }));
     await workTick(4000);
     expect(sent).toHaveLength(1);
     expect(sent[0][1]).not.toContain("abcdefghijklmnop");
@@ -103,11 +104,16 @@ describe("the agent's work, in the open", () => {
     setState("tasks", [job({ agent: { channel: "general", room: "orbit" } })]);
     await workTick(1000);
     add("t1", entry({ kind: "text", text: "orbit 버그 보는 중" }));
+    add("t1", entry({ kind: "tool", tool: { name: "ls", kind: "search", target: "x", ok: true, endedAt: 3 } }));
     await workTick(4000);
     expect(sent).toEqual([["orbit", "orbit 버그 보는 중"]]);
     setState("tasks", (t) => t.id === "t1", "status", "done");
     await workTick(7000);
     expect(sent[sent.length - 1]).toEqual(["general", "끝남, <#orbit> 봐"]);
+    // said once: later ticks don't pick the ended job up again
+    await workTick(10000);
+    await workTick(13000);
+    expect(sent.filter(([c]) => c === "general")).toHaveLength(1);
   });
 
   it("work asked in the app never goes up, and quiet work only has its start and end lines (said by the agent)", async () => {
@@ -128,6 +134,30 @@ describe("the agent's work, in the open", () => {
     expect(mine).toContain("넌 시니컬한 고양이야. 짧게 툭툭.");
     expect(mine).not.toContain("예시는");
     expect(inOpenNote({ agent: { channel: "c1" }, parentId: "t1" })).toBe("");
+    // what it posts on GitHub: for the agent's own work only
+    expect(writesLikeTeammate({ agent: { channel: "c1", quiet: true } })).toContain("teammate");
+    expect(writesLikeTeammate({})).toBe("");
+  });
+
+  it("its closing report is left to the agent's end line; pictures in its words go up as pictures", async () => {
+    setState("tasks", [job({ agent: { channel: "c1" } })]);
+    await workTick(1000);
+    add("t1", entry({ kind: "text", text: "고쳤으니 찍어볼게 ![](~/Library/Application Support/x/before.png)" }));
+    add("t1", entry({ kind: "tool", tool: { name: "ls", kind: "search", target: "x", ok: true, endedAt: 3 } }));
+    add("t1", entry({ kind: "text", text: "**원인** 매분 0초에만 그렸어요.\n\n![](/tmp/after.png)" }));
+    setState("tasks", (t) => t.id === "t1", "status", "done");
+    await workTick(4000);
+    expect(sent).toEqual([["c1", "고쳤으니 찍어볼게"]]);
+    expect(files.map(([, p]) => p)).toEqual([expect.stringMatching(/\/Library\/Application Support\/x\/before\.png$/), "/tmp/after.png"]);
+  });
+
+  it("two jobs in one channel: each batch says whose it is", async () => {
+    setState("tasks", [job({ agent: { channel: "c1" } }), job({ id: "t2", title: "메뉴 막대 초", agent: { channel: "c1" } })]);
+    await workTick(1000);
+    add("t2", entry({ kind: "text", text: "초 표시 보는 중" }));
+    add("t2", entry({ kind: "tool", tool: { name: "ls", kind: "search", target: "x", ok: true, endedAt: 3 } }));
+    await workTick(4000);
+    expect(sent).toEqual([["c1", "-# 메뉴 막대 초\n초 표시 보는 중"]]);
   });
 
   it("what came before Ondra was watching isn't replayed", async () => {
