@@ -23,6 +23,12 @@ Keep it quick:
   not one call per tap. Each call is a turn of yours; the device is the fast part.
 - No rebuild for a JS/TS change: with Metro running (React Native, Expo), `metro reload`
   shows it in seconds. Reinstall or rebuild only after a native or dependency change.
+- A native build is quicker than it looks: every job's `xcodebuild` shares one compilation
+  cache (set for you through `XCODE_XCCONFIG_FILE`), so a fresh worktree reuses what earlier
+  jobs compiled. Don't clear it to "be safe"; an incremental build in the same
+  `-derivedDataPath` is quicker still.
+- Expo Go installed once stays on later devices: an `install` of the same version says it's
+  already there.
 - A path you'll check again after a change: record it once (`open <app> --relaunch
   --save-script=$APP_ARTIFACTS_DIR/flows/<name>.ad`, the steps, a `wait` on the end
   screen, `session save-script`), then rerun it with `replay <file>` in one call.
