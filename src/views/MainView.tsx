@@ -5,6 +5,7 @@ import { nowText, stepParts, type StepKind } from "../engine/describe";
 import { skillAsk } from "../ui/Aside";
 import { holdScroll, keepBottom, toBottomSent } from "../ui/stick";
 import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
+import { answeredIn, type Answered } from "../state/answered";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
 import { chooseAccount, createTask, finishTask, NO_ACCOUNT } from "../engine/tasks";
@@ -775,22 +776,15 @@ export function MainView() {
     });
   /** questions of this chat's tasks already answered: one quiet line each where the card was.
    *  Not in a project's chat: each job's own result shows there under its row, and the answers are in it. */
-  const answered = createMemo(() => {
-    const out: Answered[] = [];
-    if (project()) return out;
-    for (const t of tasksShown(state.space)) {
-      if (t.space !== state.space || t.agent || (project() && t.project !== project()!.id)) continue;
-      for (const e of t.entries) {
-        if (e.kind !== "user") continue;
-        const a = answerOf(e.text);
-        if (!a) continue;
-        let x = answeredSeen.get(e.id);
-        if (!x || x.a !== a.a) answeredSeen.set(e.id, (x = { id: e.id, at: e.at, taskId: t.id, ...a }));
-        out.push(x);
-      }
-    }
-    return out;
-  });
+  const answered = createMemo((): Answered[] =>
+    project()
+      ? []
+      : answeredIn(
+          tasksShown(state.space).filter((t) => t.space === state.space),
+          // the root lists its own jobs only; cleared, it starts over
+          { filed: new Set(projectsShown(state.space).map((p) => p.id)), after: state.chatCleared?.[key()] ?? 0 },
+        ),
+  );
   /** the conversation in order: messages, and the answered questions between them */
   const timeline = createMemo(() => {
     const list: (CaptainMessage | Answered)[] = [...msgs()];
@@ -1078,9 +1072,6 @@ export function ProjectTasks(props: { list: Task[] }) {
   );
 }
 
-/** A task's question answered (in Main or in the task), as Main shows it afterwards. */
-type Answered = { id: string; at: number; taskId: string; q: string; a: string };
-const answeredSeen = new Map<string, Answered>();
 
 /** "4월 회고 초안 · 초안으로 저장": the task (opens it) and what was answered; the question on hover.
  *  A follow-up goes by the job its line started from, as the sidebar files it */

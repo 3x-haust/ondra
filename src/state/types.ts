@@ -805,6 +805,8 @@ export interface AppState {
   memoryConflicts?: MemoryConflict[];
   /** the Discord agent's own memory (engine/agentMemory.ts), apart from the work memory */
   agentNotes?: AgentNote[];
+  /** when each chat (its key) was last cleared: what came before it is not shown there again */
+  chatCleared?: Record<string, number>;
   /** what the user picked when a job asked what becomes of its branch, by project folder (newest last, capped) */
   landAnswers?: { folder: string; pick: "merge" | "pr" | "discard"; at: number }[];
   /** skill refinement: changes proposed to skills from jobs that went badly (newest last, capped) */
