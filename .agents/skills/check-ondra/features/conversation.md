@@ -42,3 +42,7 @@ the check app open on the agent's 대화 tab for the matching input and turn.
   separate.
 - Deletion, kicking, banning and channel removal are not part of this harmless
   pass and require explicit authorization.
+- A reaction-only turn ends with an empty route. The agent view must show no
+  error for it; an error there means the empty route was treated as a failure.
+- A message that does not name the bot goes to the watch path, not to the
+  agent chat sessions. Look for its result in Discord itself.

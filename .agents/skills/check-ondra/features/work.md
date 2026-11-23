@@ -43,3 +43,8 @@ content. Open the agent's 작업 or 루틴 tab for the corresponding state.
   prove an actual merge or deletion, and does not authorize either.
 - Routine drafts and agent-created main questions may not be visible in all
   views. Report the observed limitation rather than dismissing a stuck flow.
+- The job may ask and report in Discord itself with the discord tool. The agent
+  then reads history and stays quiet instead of repeating it. Count the
+  question and the report once, from whoever posted them.
+- The job's first entry carries the channel's recent talk. A PR link in that
+  talk can be shown as the job's PR. Check the job's PR before trusting it.

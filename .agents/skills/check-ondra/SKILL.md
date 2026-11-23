@@ -5,10 +5,10 @@ description: Check Ondra's real macOS app and Discord agent with an isolated deb
 
 # Check Ondra
 
-This is a draft procedure. Isolated launch, connection, owner-input receipt and
-main-chat tool execution have been exercised. The Discord conversation and work
-journeys still need a complete live pass; do not treat this map as a passing QA
-record.
+One live pass covered isolated launch, connection, owner input, reaction,
+reply, grouped messages, a job question and its answer, the job's own
+completion report, a one-time alarm, a personal-way change and a routine
+draft that was later enabled. Another person's conversation was not covered.
 
 Use a separate debug app, not the installed app's data. The installed app may
 keep running, but only one Discord gateway may use the bot token. Ask before
@@ -38,6 +38,20 @@ approves a merge, release, purchase or permission change.
    CARGO_TARGET_DIR="$SCRATCH/target" pnpm tauri build --debug --bundles app \
      --config '{"productName":"Ondra Check","identifier":"dev.3xhaust.ondra.check-RUN","build":{"beforeBuildCommand":"pnpm build"},"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}'
    ```
+
+   Give `productName` the run name too (`Ondra Check RUN`) when another job may
+   also run an `Ondra Check`: the background copy that `computer start` makes is
+   kept under the product name, so two builds with the same name replace each
+   other's copy.
+
+   The debug app looks for the engine in `src-tauri/resources/engine` of the
+   checkout it was built from. Without it the app reports `엔진 파일이 앱에
+   없습니다`. Link the verified engine resources there for the run, and remove
+   the link afterwards; never commit it.
+
+   Every rebuild changes the ad-hoc signature. The first keychain read of the
+   bot token then waits for the user's keychain approval. A product fix found
+   during the pass needs that approval before it can be rerun on Discord.
 
    The app is `$SCRATCH/target/debug/bundle/macos/Ondra Check.app`. Its data is
    `~/Library/Application Support/dev.3xhaust.ondra.check-RUN`. The unique bundle
@@ -97,12 +111,18 @@ Native read-only calls can inspect the effects of real actions.
 
 Discord messages must come from its real signed-in client, as the user would
 send them. Use the authorized server and channel only. Do not send through a
-bot API and claim it tested the owner-input path. In Ondra, `computer` can drive
-the native Discord app and `browser-use` can drive the signed-in web client.
-The check app must remain running while Discord is driven: stopping the
-computer session that launched the check app also closes it. Use a separate
-operator/session for Discord, or the browser. Outside Ondra, a person can drive
-both apps while the debug bridge observes the check app.
+bot API and claim it tested the owner-input path. In Ondra, `computer` drives
+the native Discord app. A Discord window that was already open ignores
+background clicks, shortcuts and Enter. With the user's permission, quit it
+first so that `computer start` opens a background copy (`background:chromium`);
+that copy sends typed text with `return`. The check app must remain running
+while Discord is driven: stopping the computer session that launched the check
+app also closes it. Keep the check app in your own session and give each
+Discord round to a short subagent that sends its messages, records the
+results and stops. A subagent that only waits for you never returns. Outside
+Ondra, a person can drive both apps while the debug bridge observes the check
+app. Read the isolated app's agent sessions
+(`sessions/captain-home-@agent/`) for the model's tool calls and routes.
 
 Start with [the feature map](features/README.md). Use one unique marker per
 check. Observe before retrying a send: a timeout is an unknown outcome, not
