@@ -1,4 +1,4 @@
-// The quiet "✓ 작업 · 답" lines in the root main chat: questions its jobs asked that were answered.
+// The quiet "✓ 작업 · 답" lines in the main chat: questions its jobs asked that were answered.
 import type { Task } from "./types";
 
 /** An answered question as the task stores it (`"question" → answer`), or undefined for any other message. */
@@ -12,14 +12,14 @@ export type Answered = { id: string; at: number; taskId: string; q: string; a: s
 const seen = new Map<string, Answered>();
 
 /**
- * The answers to show: only the root chat's own jobs (a job filed under a project shows in that
- * project's chat; one whose project is gone counts as the root's), not subagents or the Discord
- * agent's, and nothing from before the chat was last cleared (`after`).
+ * The answers to show: the workspace's jobs (not the Discord agent's), and nothing from before
+ * the chat was last cleared (`after`): the lines come from the jobs' own threads, so clearing
+ * the chat's messages alone would leave them.
  */
-export function answeredIn(tasks: Task[], o: { filed: Set<string>; after: number }): Answered[] {
+export function answeredIn(tasks: Task[], o: { after: number }): Answered[] {
   const out: Answered[] = [];
   for (const t of tasks) {
-    if (t.parentId || t.agent || (t.project && o.filed.has(t.project))) continue;
+    if (t.agent) continue;
     for (const e of t.entries) {
       if (e.kind !== "user" || e.at <= o.after) continue;
       const a = answerOf(e.text);

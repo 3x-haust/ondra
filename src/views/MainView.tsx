@@ -781,8 +781,8 @@ export function MainView() {
       ? []
       : answeredIn(
           tasksShown(state.space).filter((t) => t.space === state.space),
-          // the root lists its own jobs only; cleared, it starts over
-          { filed: new Set(projectsShown(state.space).map((p) => p.id)), after: state.chatCleared?.[key()] ?? 0 },
+          // cleared, it starts over
+          { after: state.chatCleared?.[key()] ?? 0 },
         ),
   );
   /** the conversation in order: messages, and the answered questions between them */
