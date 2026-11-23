@@ -271,6 +271,8 @@ export interface Task {
   uncheckedOk?: string[];
   /** what it was last held back to ask the user about, and when: the user's words after that answer it */
   uncheckedAsked?: { at: number; items: string[] };
+  /** when the job was sent back to settle what becomes of its branch itself (once per thing the user said) */
+  landNudged?: number;
   /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
    *  and its end and questions go back to `channel` on Discord */
   agent?: { channel?: string };
@@ -329,6 +331,8 @@ export interface Worktree {
   /** Folder relative to the repo top the task was asked in. */
   sub: string;
   state: "open" | "merged" | "discarded";
+  /** the job (as the user or the project's memory said) leaves the branch as it is: nothing to merge, nothing asked */
+  kept?: boolean;
   /** Branch it was merged into. */
   into?: string;
   /** the folder stayed: another job was still working in it (one that had handed this branch on and

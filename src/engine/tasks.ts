@@ -44,7 +44,7 @@ interface Run {
   asked: boolean;
   /** what the job said becomes of its branch at the end ({"type":"merge"} / {"type":"discard"});
    *  "fix" = {"type":"merge","kind":"fix"}: a bug or performance fix, merged only when all of it was checked */
-  land?: "merge" | "discard" | "fix";
+  land?: "merge" | "discard" | "fix" | "keep";
   error?: string;
   turnStart: number;
   /** time spent generating (between assistant message start and end) this turn */
@@ -601,6 +601,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
       // the branch's fate, when the user (or a memory rule) already said: done after the turn
       case "merge":
       case "discard":
+      case "keep":
         run.land = b.type === "merge" && b.kind === "fix" ? "fix" : b.type;
         break;
       case "handoff":
@@ -1070,7 +1071,7 @@ const mergeFailed = (why: string, home: string) =>
 async function askMerge(id: string, why?: string) {
   const t = taskById(id);
   const w = t?.worktree;
-  if (!t || t.parentId || !w || w.state !== "open" || t.status !== "done" || prOf(t)) return;
+  if (!t || t.parentId || !w || w.state !== "open" || w.kept || t.status !== "done" || prOf(t)) return;
   if (state.decisions.some((d) => d.taskId === id)) return;
   const c = await gitChanges(w.path, w.base).catch(() => null);
   if (!c?.isRepo || !c.files.length) return;
@@ -1179,10 +1180,17 @@ export async function syncHome(t: Task) {
 }
 
 /** The job's own say on its branch, then the question if it is still open. */
-export async function landBranch(id: string, land?: "merge" | "discard" | "fix") {
+export async function landBranch(id: string, land?: "merge" | "discard" | "fix" | "keep") {
   const t = taskById(id);
   if (!t || t.worktree?.state !== "open") return;
   if (land === "discard") return discardTask(id);
+  if (land === "keep") {
+    updateTask(id, (x) => {
+      if (x.worktree) x.worktree.kept = true;
+      push(x, { kind: "note", text: "브랜치를 그대로 남겨 뒀어요" });
+    });
+    return;
+  }
   if (land === "fix" && !fixLands(t) && t.self) return askMerge(id);
   if (land === "fix" && !fixLands(t))
     return askMerge(id, state.settings.autoMergeFixes === false ? undefined : t.unverified?.length ? tr("확인 못 한 게 있어요") : tr("테스트·빌드를 돌린 기록이 없어요"));
@@ -1203,7 +1211,32 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix")
     if (why !== undefined) await tell(id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;
   }
-  await askMerge(id);
+  await settleLand(id);
+}
+
+/** what a job that ended with changes and settled nothing about them is told: settle it, or ask */
+export const landSettle = (n: number, github: boolean) =>
+  `(Ondra) Your branch still has ${n} changed file${n === 1 ? "" : "s"} and nothing settled what becomes of them. ` +
+  "Settle it now from the user's words and the project's memory (how work lands here: a PR, merging it, a release after it, a local merge, an account or base branch) " +
+  `and from how the repo stands (${github ? "its origin is on GitHub: the user's folder is never merged into, work goes up as a PR" : "not on GitHub: a merge goes into the original folder's current branch"}; a PR or release already open). ` +
+  "When they settle it, do it. When they don't, ask the user yourself with an ask block whose options fit this work and this repo, the one they lean to first and recommended, then do what was picked. " +
+  'End with {"type":"merge"}, {"type":"discard"} or {"type":"keep"} when that is what it came to (a PR you opened needs none).';
+
+/**
+ * A job ended with changes and said nothing of them: it is sent back once to settle it itself
+ * (the project's memory and the repo say more than a set question can), asking the user its own
+ * question when they don't. Ended again without settling it: Ondra's question, so the branch isn't lost.
+ */
+async function settleLand(id: string) {
+  const t = taskById(id);
+  const w = t?.worktree;
+  if (!t || t.parentId || t.self || !w || w.state !== "open" || w.kept || t.status !== "done" || prOf(t)) return askMerge(id);
+  if (t.landNudged !== undefined && !userSaidSince(t, t.landNudged)) return askMerge(id);
+  const c = await gitChanges(w.path, w.base).catch(() => null);
+  if (!c?.isRepo || !c.files.length) return;
+  const github = await gitOnGithub(homeDir(t)).catch(() => false);
+  updateTask(id, (x) => (x.landNudged = Date.now()));
+  await tell(id, landSettle(c.files.length, github), { by: "ondra", shown: tr("바뀐 것을 어떻게 할지 정해요") });
 }
 
 /** Throw the task's changes away (worktree and branch). */

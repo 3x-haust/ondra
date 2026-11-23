@@ -14,7 +14,7 @@ export function bucket(t: Task): Bucket {
   if (t.status === "waiting" || kids.some((k) => k.status === "waiting")) return "you";
   // a subagent that failed under a job that has finished anyway needs nothing from you
   if (t.status === "failed" || (t.status !== "done" && kids.some((k) => k.status === "failed"))) return "failed";
-  if (t.status === "done") return t.worktree?.state === "open" ? "review" : "done";
+  if (t.status === "done") return t.worktree?.state === "open" && !t.worktree.kept ? "review" : "done";
   return "work";
 }
 /** needs you: a reply, a failure to look at, or a merge (내 차례). One the user put away (보관) doesn't:

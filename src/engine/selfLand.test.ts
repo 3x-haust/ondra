@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, syncHome } from "./tasks";
+import { fixLands, LAND_STREAK, landBranch, landSettle, noteLandAnswer, syncHome } from "./tasks";
 import { landHabit, taskPrompt } from "./prompts";
 import { bucket } from "../state/needs";
 
@@ -143,7 +143,7 @@ describe("a folder not on GitHub", () => {
 
   it("names the branch it would merge into", async () => {
     checkout("main");
-    setState("tasks", [job({ worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
+    setState("tasks", [job({ landNudged: 0, worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
     await landBranch("job");
     expect(state.decisions[0]?.question).toContain("main 브랜치에 합칠까요");
   });
@@ -165,7 +165,7 @@ describe("a project on GitHub", () => {
   });
 
   it("is asked PR or discard only: the user's own folder is never merged into", async () => {
-    setState("tasks", [job()]);
+    setState("tasks", [job({ landNudged: 0 })]);
     await landBranch("job");
     const d = state.decisions[0];
     expect(d?.question).toContain("PR로 올릴까요");
@@ -214,7 +214,7 @@ describe("a project on GitHub", () => {
   it("a folder not on GitHub is left to the merge question as before", async () => {
     vi.spyOn(native, "gitOnGithub").mockResolvedValue(false);
     const sync = vi.spyOn(native, "gitSyncHome");
-    setState("tasks", [job()]);
+    setState("tasks", [job({ landNudged: 0 })]);
     await landBranch("job");
     expect(state.decisions[0]?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
     await syncHome(state.tasks[0]);
@@ -223,7 +223,7 @@ describe("a project on GitHub", () => {
 });
 
 describe("what becomes of the branch is the job's to settle", () => {
-  const told = () => state.tasks[0].inbox.join("\n");
+  const told = () => state.tasks[0].entries.filter((e) => e.kind === "user" && e.by === "ondra").map((e) => (e as { text: string }).text).join("\n");
 
   it("the git note has it settle by memory and the repo, and ask with options that fit when they don't", () => {
     const text = taskPrompt(job({ status: "running" }));
@@ -237,9 +237,12 @@ describe("what becomes of the branch is the job's to settle", () => {
     setState("tasks", [job()]);
     await landBranch("job");
     expect(state.decisions).toHaveLength(0);
-    expect(told()).toMatch(/nothing settled what becomes of them/);
-    expect(told()).toMatch(/on GitHub/);
+    expect(told()).toBe("바뀐 것을 어떻게 할지 정해요");
+    expect(landSettle(1, true)).toMatch(/nothing settled what becomes of them/);
+    expect(landSettle(1, true)).toMatch(/on GitHub/);
+    expect(landSettle(2, false)).toMatch(/not on GitHub/);
     // it ends again without settling: then the question, so the branch isn't forgotten
+    setState("tasks", 0, "status", "done");
     await landBranch("job");
     expect(state.decisions[0]?.kind).toBe("merge");
   });
@@ -248,10 +251,10 @@ describe("what becomes of the branch is the job's to settle", () => {
     setState("tasks", [job()]);
     await landBranch("job");
     setState("tasks", 0, "entries", (l) => [...l, { id: "u", at: Date.now() + 10, kind: "user", text: "다른 것도 고쳐줘" } as Entry]);
-    setState("tasks", 0, "inbox", []);
+    setState("tasks", 0, "status", "done");
     await landBranch("job");
     expect(state.decisions).toHaveLength(0);
-    expect(told()).toMatch(/nothing settled/);
+    expect(told().split("\n")).toHaveLength(2);
   });
 
   it("keep: the branch stays as it is, nothing asked, and it no longer waits for a merge", async () => {
