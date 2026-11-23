@@ -6,6 +6,7 @@ import { state } from "../state/store";
 import { toast } from "../state/ui";
 import { DEFAULT_VOICE, onAgentStatus, setAgent, startAgent, stopAgent, type AgentStatus } from "../engine/discord";
 import { GroupTitle, PageHead, Row, Switch_ } from "./Settings";
+import { AgentPlaces } from "./AgentPlaces";
 import { t } from "../i18n";
 
 export function AgentSettings() {
@@ -90,6 +91,8 @@ export function AgentSettings() {
           <input class="input" aria-label={t("대화할 채널")} value={channels()} onChange={(e) => setAgent({ channels: e.currentTarget.value.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean) })} />
         </Row>
       </div>
+
+      <AgentPlaces />
 
       <GroupTitle title={t("말투와 성격")} />
       <div class="set-group">

@@ -365,7 +365,7 @@ async function withPictures(text: string, urls: string[]): Promise<string> {
 /** the lines said in a row, as one request; answered at the last of them */
 async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const m = ms[ms.length - 1];
-  const space = agentSpace(a);
+  const space = agentSpace(a, m.channel);
   void discordTyping(m.channel);
   // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
@@ -636,7 +636,12 @@ export async function digest(channel: string) {
   }
 }
 
-const agentSpace = (a: AgentSettings): SpaceId => (a.space && state.spaces.some((s) => s.id === a.space) ? a.space : (state.spaces[0]?.id ?? state.space));
+/** the workspace its work goes to: the one set for that channel, else the agent's, else the first */
+export const agentSpace = (a: AgentSettings, channel?: string): SpaceId => {
+  const known = (id?: string) => !!id && state.spaces.some((s) => s.id === id);
+  const place = channel ? a.places?.find((p) => p.channel === channel)?.space : undefined;
+  return known(place) ? place! : known(a.space) ? a.space! : (state.spaces[0]?.id ?? state.space);
+};
 
 /** Settings › 에이전트 */
 export function setAgent(patch: Partial<AgentSettings>) {

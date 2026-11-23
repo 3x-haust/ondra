@@ -773,6 +773,15 @@ export interface Reviewer {
 }
 
 /** Ondra as an agent on Discord: the user's requests there go to main, anyone else only gets talk. */
+/** where the agent's work from one Discord channel goes: a workspace and, in it, an account */
+export interface AgentPlace {
+  channel: string;
+  /** shown in Settings, e.g. "#orbit · 작업방" */
+  label?: string;
+  space?: SpaceId;
+  account?: string;
+}
+
 export interface AgentSettings {
   /** connected (the bot token is in the keychain) */
   on: boolean;
@@ -790,6 +799,8 @@ export interface AgentSettings {
   others?: boolean;
   /** the AI account it talks and works on (an account id of its workspace); missing or "auto" = the workspace's choice */
   account?: string;
+  /** per Discord channel: the workspace and account its requests there go to (the ones above elsewhere) */
+  places?: AgentPlace[];
   /** when it last looked over the user's requests for one to make a routine of (agentScout.ts) */
   scoutAt?: number;
   /** what it already offered to make a routine of (a short key each), so it asks once */
