@@ -508,9 +508,10 @@ fn sync_secrets(app: AppHandle, projects: Vec<(String, String)>) -> Result<Synce
 // ───────────────── commands
 
 /// The saved names (never the values): global, and per project id.
+/// Under the same lock as the writes, so it never reads secrets.json while one rewrites it.
 #[tauri::command]
-pub fn secret_list(app: AppHandle) -> Saved {
-    read_saved(&app)
+pub async fn secret_list(app: AppHandle) -> Result<Saved, String> {
+    off_main(move || read_saved(&app)).await
 }
 
 /// Saves (or replaces) one secret. The value goes to the keychain and, for a project when asked,

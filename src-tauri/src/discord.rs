@@ -398,8 +398,8 @@ pub fn discord_stop() {
 }
 
 #[tauri::command]
-pub fn discord_start(app: AppHandle) -> Result<(), String> {
-    let token = token()?;
+pub async fn discord_start(app: AppHandle) -> Result<(), String> {
+    let token = crate::secrets::off_main(token).await??;
     discord_stop();
     let handle = tauri::async_runtime::spawn(async move { hold(app, token).await });
     *RUN.lock().unwrap() = Some(handle);
