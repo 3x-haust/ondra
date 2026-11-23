@@ -15,7 +15,7 @@ import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
 import { openImage } from "./Lightbox";
-import { dropToken, listLine, putToken, tokenAt } from "./imageTokens";
+import { dropToken, eraseToken, listLine, putToken, tokenAt, tokensIn } from "./imageTokens";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
@@ -783,6 +783,9 @@ export function Composer(props: {
           title={`${t("메시지")} ${shortcutHint("focusInput")}`.trim()}
           onInput={(e) => {
             setText(e.currentTarget.value);
+            // a picture whose "[Image #n]" was taken out of the words (cut, a selection typed over) goes too
+            const named = tokensIn(e.currentTarget.value);
+            for (const [path, n] of nums()) if (!named.has(n)) remove(path);
             grow();
             void refresh();
             props.onTyping?.();
@@ -851,6 +854,21 @@ export function Composer(props: {
               return;
             }
             if (ignoredKey(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+            // an "[Image #n]" and its picture are one piece: backspace (or delete) takes both
+            if ((e.key === "Backspace" || e.key === "Delete") && !e.isComposing) {
+              const cut = eraseToken(el.value, el.selectionStart, el.selectionEnd, e.key === "Backspace");
+              const pic = cut && [...nums()].find(([, x]) => x === cut.n)?.[0];
+              if (cut && pic) {
+                e.preventDefault();
+                el.value = cut.text;
+                setText(cut.text);
+                el.setSelectionRange(cut.caret, cut.caret);
+                remove(pic);
+                grow();
+                void refresh();
+                return;
+              }
+            }
             if (e.key === "Escape" && !pick() && noModifiers(e)) {
               e.preventDefault();
               e.stopPropagation();
