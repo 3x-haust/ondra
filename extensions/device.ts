@@ -21,7 +21,8 @@ import { Type } from "typebox";
 
 type Platform = "ios" | "android";
 /** clone: the AVD made for this job (deleted with it) */
-type Mine = { platform: Platform; udid?: string; serial?: string; name: string; made: boolean; clone?: string };
+/** baked: host apps already in the template or snapshot it came from (an install of one is skipped) */
+type Mine = { platform: Platform; udid?: string; serial?: string; name: string; made: boolean; clone?: string; baked?: string[] };
 
 const WORKER = process.env.APP_WORKER_ID || `job${process.pid}`;
 const SESSION = `ondra-${WORKER}`.slice(0, 60);
@@ -83,7 +84,38 @@ export function pickPhone(names: string[]): string | undefined {
 }
 
 /** the tool's own devices: iOS templates and Android snapshot bases, never a job's to drive */
-export const internal = (name: string) => /^ondra-(template|base)-/.test(name);
+export const internal = (name: string) => /^ondra-(template|base|spare)-/.test(name);
+
+// A spare: after a job gets its iOS device, the next one is cloned and booted with its runner
+// started (the slow part of a new device), and waits for the next job, which takes it by
+// renaming it. Untaken, it deletes itself after a while; its runner is kept warm meanwhile.
+const SPARE_MINUTES = 15;
+const spareStem = (tpl: string) => tpl.replace(/^ondra-template-/, "ondra-spare-");
+export const spareName = (tpl: string, n: number) => `${spareStem(tpl)}-${n}`;
+export const spareOf = (tpl: string, names: string[]) => names.filter((n) => n.startsWith(`${spareStem(tpl)}-`) && /^\d+$/.test(n.slice(spareStem(tpl).length + 1)));
+/** commands that don't drive the screen don't wait for the runner to start */
+export const needsRunner = (args: string[]) => !["install", "reinstall", "uninstall", "apps"].includes(args[0]);
+const q = (s: string) => `"${s.replace(/(["\\$`])/g, "\\$1")}"`;
+/** the spare's life, detached from the job: clone, boot, start the runner, keep it warm, and go unless taken */
+export function spareScript(o: { template: string; name: string; minutes: number; delay?: number }): string {
+  const name = q(o.name);
+  return [
+    ...(o.delay ? [`sleep ${Math.round(o.delay)}`] : []),
+    `U=$(xcrun simctl clone ${q(o.template)} ${name} | tail -1) || exit 0`,
+    `xcrun simctl boot "$U" && xcrun simctl bootstatus "$U" -b >/dev/null 2>&1 || { xcrun simctl delete "$U"; exit 0; }`,
+    `agent-device prepare ios-runner --platform ios --udid "$U" --session ${name} --timeout 420000 >/dev/null 2>&1`,
+    `agent-device open com.apple.Preferences --platform ios --udid "$U" --session ${name} >/dev/null 2>&1`,
+    `end=$(( $(date +%s) + ${o.minutes} * 60 )); n=0`,
+    `while [ "$(date +%s)" -lt "$end" ]; do`,
+    `  sleep 30; n=$((n + 1))`,
+    // taken by a job (renamed): it's the job's now
+    `  xcrun simctl list devices | grep -q "${o.name} (" || exit 0`,
+    `  [ $((n % 8)) -eq 0 ] && agent-device snapshot --session ${name} >/dev/null 2>&1`,
+    `done`,
+    `xcrun simctl list devices | grep -q "${o.name} (" || exit 0`,
+    `agent-device close --session ${name} >/dev/null 2>&1; xcrun simctl shutdown "$U"; xcrun simctl delete "$U"`,
+  ].join("\n");
+}
 /** the iOS template for a device type and runtime (booted once, then shut down: clones of it boot in seconds) */
 export const templateName = (kind: string, runtime: string) =>
   `ondra-template-${kind}-${runtime.split(".").pop() ?? runtime}`.replace(/[^\w.-]+/g, "-").slice(0, 60);
@@ -123,21 +155,33 @@ export async function runSteps(lines: string[], exec: (args: string[]) => Promis
 }
 
 /** Only one process at a time makes a template or a snapshot base (other jobs wait, then use it). */
+/** a lock whose owner is gone (a job stopped, the app quit), or one ten minutes old */
+export const staleLock = (l: { pid?: number; ageMs: number }, alive: (pid: number) => boolean) => l.ageMs > 600_000 || (l.pid !== undefined && !alive(l.pid));
+const alivePid = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
 async function locked<T>(key: string, work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   const dir = join(tmpdir(), `ondra-device-${key.replace(/[^\w.-]/g, "-")}.lock`);
   for (let i = 0; i < 300; i++) {
     try {
       mkdirSync(dir);
       try {
+        writeFileSync(join(dir, "pid"), String(process.pid));
         return await work();
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      // a lock left by a process that died: older than ten minutes
       try {
-        if (Date.now() - statSync(dir).mtimeMs > 600_000) rmSync(dir, { recursive: true, force: true });
+        const pid = Number(readFileSync(join(dir, "pid"), "utf8")) || undefined;
+        if (staleLock({ pid, ageMs: Date.now() - statSync(dir).mtimeMs }, alivePid)) rmSync(dir, { recursive: true, force: true });
       } catch {
         /* gone already */
       }
@@ -151,6 +195,8 @@ async function locked<T>(key: string, work: () => Promise<T>, signal?: AbortSign
 // The device this job made, kept on disk so a job resumed after an app restart
 // gets it back instead of asking to use "someone else's" device.
 const OWNED = join(ARTIFACTS, ".device.json");
+/** the runner starting in the background after a start without an app */
+let warming: Promise<unknown> | undefined;
 let mine: Mine | undefined = (() => {
   try {
     return JSON.parse(readFileSync(OWNED, "utf8")) as Mine;
@@ -197,6 +243,65 @@ async function iosMake(model: string | undefined, signal?: AbortSignal): Promise
   return { platform: "ios", udid, name, made: true };
 }
 
+// Host apps (Expo Go): installed once, they go into the template / snapshot, so the next job's
+// device has them already. Only host shells: a job's own build is never shared with other jobs.
+const HOSTS: Record<Platform, string[]> = { ios: ["host.exp.Exponent"], android: ["host.exp.exponent"] };
+export const bakeable = (platform: Platform, id: string) => HOSTS[platform].includes(id);
+type Baked = { key: string; path: string; platform: Platform };
+export const alreadyBaked = (baked: string[] | undefined, key: string) => !!baked?.includes(key);
+export const missingBakes = (apps: Baked[], platform: Platform, have: string[] | undefined) => apps.filter((a) => a.platform === platform && !have?.includes(a.key));
+const BAKES = join(process.env.HOME || tmpdir(), "Library/Caches/ondra-device/bakes.json");
+type BakeFile = { apps: Baked[]; into: Record<string, string[]> };
+const bakes = (): BakeFile => {
+  try {
+    const f = JSON.parse(readFileSync(BAKES, "utf8")) as BakeFile;
+    // an app moved or deleted since isn't wanted any more
+    return { apps: (f.apps ?? []).filter((a) => existsSync(a.path)), into: f.into ?? {} };
+  } catch {
+    return { apps: [], into: {} };
+  }
+};
+const saveBakes = (f: BakeFile) => {
+  try {
+    mkdirSync(join(BAKES, ".."), { recursive: true });
+    writeFileSync(BAKES, JSON.stringify(f));
+  } catch {
+    /* best effort */
+  }
+};
+/** an app bundle or apk by what it is: "<id>@<version>" (iOS from its Info.plist; Android: the package and the file's size and time) */
+async function appKey(platform: Platform, path: string, device?: Mine): Promise<string | undefined> {
+  if (platform === "ios") {
+    const plist = join(path, "Info.plist");
+    const id = (await run("plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist])).out.trim();
+    const v = (await run("plutil", ["-extract", "CFBundleVersion", "raw", "-o", "-", plist])).out.trim();
+    return id && !/error/i.test(id) ? `${id}@${v}` : undefined;
+  }
+  if (!device?.serial) return undefined;
+  for (const id of HOSTS.android) {
+    const has = await run(ADB, ["-s", device.serial, "shell", "pm", "path", id], { timeout: 10_000 });
+    if (has.ok && has.out.includes("package:")) {
+      try {
+        const st = statSync(path);
+        return `${id}@${st.size}-${Math.round(st.mtimeMs)}`;
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
+}
+/** After an install went in: a host app is remembered, to be baked into the next template / snapshot. */
+async function noteInstall(device: Mine, path: string) {
+  const key = await appKey(device.platform, path, device);
+  if (!key || !bakeable(device.platform, key.split("@")[0])) return;
+  const f = bakes();
+  if (f.apps.some((a) => a.key === key)) return;
+  // a newer version of the same app replaces the older
+  f.apps = [...f.apps.filter((a) => a.platform !== device.platform || a.key.split("@")[0] !== key.split("@")[0]), { key, path, platform: device.platform }];
+  saveBakes(f);
+}
+
 /** iOS devices by name: udid and state */
 async function simByName(name: string): Promise<{ udid: string; state: string } | undefined> {
   const l = await run("xcrun", ["simctl", "list", "devices", "-j"]);
@@ -222,11 +327,14 @@ async function iosClone(name: string, kind: string, runtime: string, signal?: Ab
       if (!made.ok || !udid || !/^[0-9A-F-]{36}$/i.test(udid)) return undefined;
       await run("xcrun", ["simctl", "boot", udid], { signal });
       const ok = (await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 240_000, signal })).ok;
-      // agent-device's runner goes in once here, so a clone opens an app in seconds instead of installing it again
+      // agent-device's runner goes in once here (and starts once: its first start on a device is the slow one)
       if (ok) {
-        const prep = `${tpl}-prep`.slice(0, 60);
-        await run("agent-device", ["open", "com.apple.Preferences", "--platform", "ios", "--udid", udid, "--session", prep, "--timeout", "420000"], { signal, timeout: 450_000 });
-        await run("agent-device", ["close", "--session", prep], { timeout: 30_000 });
+        await run("agent-device", ["prepare", "ios-runner", "--platform", "ios", "--udid", udid, "--session", `${tpl}-prep`.slice(0, 60), "--timeout", "420000"], { signal, timeout: 450_000 });
+        // a new template has nothing baked in yet, whatever an old one of that name had
+        const f = bakes();
+        delete f.into[tpl];
+        saveBakes(f);
+        await bakeIos(tpl, udid, signal);
       }
       await run("xcrun", ["simctl", "shutdown", udid], { timeout: 60_000 });
       if (!ok) {
@@ -236,6 +344,20 @@ async function iosClone(name: string, kind: string, runtime: string, signal?: Ab
       return { udid, state: "Shutdown" };
     }, signal).catch(() => undefined);
   if (!t || t.state !== "Shutdown") return undefined;
+  // host apps installed since it was made: baked in now, once
+  if (missingBakes(bakes().apps, "ios", bakes().into[tpl]).length)
+    await locked(tpl, async () => {
+      if (!missingBakes(bakes().apps, "ios", bakes().into[tpl]).length) return;
+      await run("xcrun", ["simctl", "boot", t!.udid], { signal });
+      if ((await run("xcrun", ["simctl", "bootstatus", t!.udid, "-b"], { timeout: 240_000, signal })).ok) await bakeIos(tpl, t!.udid, signal);
+      await run("xcrun", ["simctl", "shutdown", t!.udid], { timeout: 60_000 });
+    }, signal).catch(() => undefined);
+  const baked = bakes().into[tpl];
+  // a spare already booted with its runner warm: taken at once
+  const taken = await takeSpare(tpl, name, signal);
+  // after a cold start the job's own runner starts first: two at once took 84s instead of 35s
+  void makeSpare(tpl, t.udid, taken ? 0 : 150);
+  if (taken) return { platform: "ios", udid: taken, name, made: true, baked };
   const c = await run("xcrun", ["simctl", "clone", t.udid, name], { signal, timeout: 60_000 });
   const udid = c.out.split("\n").pop()?.trim();
   if (!c.ok || !udid || !/^[0-9A-F-]{36}$/i.test(udid)) return undefined;
@@ -245,7 +367,48 @@ async function iosClone(name: string, kind: string, runtime: string, signal?: Ab
     await run("xcrun", ["simctl", "delete", udid]);
     return undefined;
   }
-  return { platform: "ios", udid, name, made: true };
+  return { platform: "ios", udid, name, made: true, baked };
+}
+
+/** iOS devices of the Mac: name, udid, state */
+async function sims(): Promise<{ name: string; udid: string; state: string }[]> {
+  try {
+    return Object.values(JSON.parse((await run("xcrun", ["simctl", "list", "devices", "-j"])).out).devices as Record<string, { name: string; udid: string; state: string }[]>).flat();
+  } catch {
+    return [];
+  }
+}
+
+/** Take a booted spare of this template for the job (renamed to the job's device); spares left shut down (a restart) go. */
+async function takeSpare(tpl: string, name: string, signal?: AbortSignal): Promise<string | undefined> {
+  return locked(`${tpl}-spare`, async () => {
+    const all = await sims();
+    const spares = all.filter((d) => spareOf(tpl, [d.name]).length);
+    for (const d of spares.filter((x) => x.state !== "Booted")) await run("xcrun", ["simctl", "delete", d.udid]);
+    const s = spares.find((x) => x.state === "Booted");
+    if (!s) return undefined;
+    // its own session lets go of the device (the runner stays warm), then it's the job's
+    await run("agent-device", ["close", "--session", s.name], { timeout: 30_000 });
+    return (await run("xcrun", ["simctl", "rename", s.udid, name])).ok ? s.udid : undefined;
+  }, signal).catch(() => undefined);
+}
+
+/** One spare per template, made in the background for the next job (nothing when one is already there or on its way). */
+async function makeSpare(tpl: string, template: string, delay: number) {
+  if (process.env.ONDRA_DEVICE_SPARE === "0") return;
+  if (spareOf(tpl, (await sims()).map((d) => d.name)).length) return;
+  const { spawn } = await import("node:child_process");
+  spawn("sh", ["-c", spareScript({ template, name: spareName(tpl, Date.now() % 1_000_000), minutes: SPARE_MINUTES, delay })], { detached: true, stdio: "ignore", env: process.env }).unref();
+}
+
+/** Install the host apps the template lacks (it is booted), and note them as in it. */
+async function bakeIos(tpl: string, udid: string, signal?: AbortSignal) {
+  const f = bakes();
+  const done = [...(f.into[tpl] ?? [])];
+  for (const a of missingBakes(f.apps, "ios", done)) if ((await run("xcrun", ["simctl", "install", udid, a.path], { signal, timeout: 300_000 })).ok) done.push(a.key);
+  const now = bakes();
+  now.into[tpl] = done;
+  saveBakes(now);
 }
 
 async function runningAvds(signal?: AbortSignal): Promise<{ lines: string[]; busy: Map<string, string> }> {
@@ -289,19 +452,36 @@ export function dropAvd(name: string, home = AVD_HOME) {
 }
 
 /** Boot an AVD headless and wait until Android is up. `args`: how (a read-only snapshot boot instead of a plain or fresh one). */
+/** emulator ports in use, from `adb devices` lines (emulator-5554 → 5554) */
+export const portsIn = (lines: string[]) => new Set(lines.map((l) => /^emulator-(\d+)\s/.exec(l)?.[1]).filter(Boolean).map(Number));
+/** an even console port 5554–5680 none has (skip: how many free ones to pass over, after one turned out taken) */
+export function freePort(used: Set<number>, skip = 0): number | undefined {
+  for (let p = 5554; p <= 5680; p += 2) if (!used.has(p) && skip-- <= 0) return p;
+  return undefined;
+}
+
 async function androidBoot(avd: string, fresh: boolean, before: Set<string>, signal?: AbortSignal, args?: string[]): Promise<string | undefined> {
   const { spawn } = await import("node:child_process");
-  // headless with plain -gpu auto, the emulator draws in software on the CPU (several
-  // cores at all times); auto-no-window draws on the Mac's GPU
-  spawn(EMULATOR, args ?? ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
-  for (let i = 0; i < 120; i++) {
-    if (signal?.aborted) return undefined;
-    await new Promise((r) => setTimeout(r, 2000));
-    const now = await run(ADB, ["devices"]);
-    const serial = now.out.split("\n").map((l) => l.split(/\s+/)).find(([s, st]) => s?.startsWith("emulator-") && st === "device" && !before.has(s))?.[0];
-    if (!serial) continue;
-    const booted = await run(ADB, ["-s", serial, "shell", "getprop", "sys.boot_completed"], { timeout: 5000 });
-    if (booted.out.trim() === "1") return serial;
+  // its own port, so it's told apart from one still going away (which would hand it the same serial)
+  const used = portsIn([...before].map((s) => `${s} `));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const port = freePort(used, attempt);
+    if (!port) return undefined;
+    const serial = `emulator-${port}`;
+    // headless with plain -gpu auto, the emulator draws in software on the CPU (several
+    // cores at all times); auto-no-window draws on the Mac's GPU
+    const child = spawn(EMULATOR, [...(args ?? ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]), "-port", String(port)], { detached: true, stdio: "ignore" });
+    // an emulator that quits at once (a broken system image, a bad snapshot, its port taken) isn't waited on for minutes
+    let gone = false;
+    child.on("exit", () => (gone = true));
+    child.unref();
+    for (let i = 0; i < 120 && !gone; i++) {
+      if (signal?.aborted) return undefined;
+      await new Promise((r) => setTimeout(r, i < 10 ? 500 : 2000));
+      const booted = await run(ADB, ["-s", serial, "shell", "getprop", "sys.boot_completed"], { timeout: 5000 });
+      if (booted.out.trim() === "1") return serial;
+    }
+    if (!gone) return undefined;
   }
   return undefined;
 }
@@ -310,20 +490,35 @@ async function androidBoot(avd: string, fresh: boolean, before: Set<string>, sig
 async function snapshotBase(avd: string, signal?: AbortSignal): Promise<string | undefined> {
   const base = baseAvdName(avd);
   const has = () => existsSync(join(AVD_HOME, `${base}.avd`, "snapshots", SNAPSHOT));
-  if (has()) return base;
+  const ready = () => has() && !missingBakes(bakes().apps, "android", bakes().into[base]).length;
+  if (ready()) return base;
   return locked(base, async () => {
-    if (has()) return base;
-    dropAvd(base);
-    if (!cloneAvd(avd, base)) return undefined;
+    if (ready()) return base;
+    // made once (a copy cold-booted with its data wiped), or booted from its snapshot to bake host apps in
+    const fresh = !has();
+    if (fresh) {
+      dropAvd(base);
+      if (!cloneAvd(avd, base)) return undefined;
+      const f = bakes();
+      delete f.into[base];
+      saveBakes(f);
+    }
     const { lines } = await runningAvds(signal);
-    const serial = await androidBoot(base, true, new Set(lines.map((l) => l.split(/\s+/)[0])), signal, ["-avd", base, "-wipe-data", "-no-snapshot-load", "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]);
-    if (!serial) return dropAvd(base), undefined;
+    const how = fresh ? ["-wipe-data", "-no-snapshot-load"] : ["-snapshot", SNAPSHOT];
+    const serial = await androidBoot(base, fresh, new Set(lines.map((l) => l.split(/\s+/)[0])), signal, ["-avd", base, ...how, "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]);
+    if (!serial) return fresh ? (dropAvd(base), undefined) : base;
     // let it settle before the snapshot: a snapshot taken mid-start comes back busy every time
-    await new Promise((r) => setTimeout(r, 8000));
+    if (fresh) await new Promise((r) => setTimeout(r, 8000));
+    const f = bakes();
+    const done = [...(f.into[base] ?? [])];
+    for (const a of missingBakes(f.apps, "android", done)) if ((await run(ADB, ["-s", serial, "install", "-r", a.path], { signal, timeout: 300_000 })).ok) done.push(a.key);
     const saved = await run(ADB, ["-s", serial, "emu", "avd", "snapshot", "save", SNAPSHOT], { timeout: 120_000 });
     await run(ADB, ["-s", serial, "emu", "kill"], { timeout: 15_000 });
     for (let i = 0; i < 20 && (await run(ADB, ["-s", serial, "get-state"], { timeout: 3000 })).ok; i++) await new Promise((r) => setTimeout(r, 500));
-    if (!saved.ok || !has()) return dropAvd(base), undefined;
+    if (!saved.ok || !has()) return fresh ? (dropAvd(base), undefined) : base;
+    const now = bakes();
+    now.into[base] = done;
+    saveBakes(now);
     return base;
   }, signal).catch(() => undefined);
 }
@@ -341,7 +536,7 @@ async function androidMake(model: string | undefined, signal?: AbortSignal): Pro
   if (snap) {
     const { lines } = await runningAvds(signal);
     const serial = await androidBoot(snap, false, new Set(lines.map((l) => l.split(/\s+/)[0])), signal, readOnlyBoot(snap));
-    if (serial) return { platform: "android", serial, name: snap, made: true };
+    if (serial) return { platform: "android", serial, name: snap, made: true, baked: bakes().into[snap] };
     if (signal?.aborted) return "cancelled";
   }
   const name = cloneAvd(base, `ondra-${WORKER}`.replace(/[^\w.-]/g, "-").slice(0, 48));
@@ -350,7 +545,7 @@ async function androidMake(model: string | undefined, signal?: AbortSignal): Pro
   const serial = await androidBoot(name, true, new Set(lines.map((l) => l.split(/\s+/)[0])), signal);
   if (!serial) {
     dropAvd(name);
-    return signal?.aborted ? "cancelled" : "Emulator didn't boot in 4 minutes.";
+    return signal?.aborted ? "cancelled" : "The emulator didn't start (it quit at once or took over 4 minutes; `emulator -avd <name>` says why).";
   }
   return { platform: "android", serial, name, made: true, clone: name };
 }
@@ -382,7 +577,7 @@ async function allowed(platform: Platform, which: string, signal?: AbortSignal):
   if (avds.includes(which)) {
     const serial = await androidBoot(which, false, new Set(lines.map((l) => l.split(/\s+/)[0])), signal);
     // booted for this job: shut down again when it's done (the AVD itself stays)
-    return serial ? { platform, serial, name: which, made: true } : "Emulator didn't boot in 4 minutes.";
+    return serial ? { platform, serial, name: which, made: true } : "The emulator didn't start (it quit at once or took over 4 minutes; `emulator -avd <name>` says why).";
   }
   return { platform, serial: which, name: which, made: false };
 }
@@ -425,17 +620,35 @@ export default function (pi: any) {
         const got = p.device ? await allowed(platform, p.device, signal) : platform === "ios" ? await iosMake(p.model, signal) : await androidMake(p.model, signal);
         if (typeof got === "string") return text(got);
         own(got);
-        if (!p.app) return text(`Device ready: ${got.name} (${got.platform} ${got.udid ?? got.serial}). Open an app with do 'open <app> --foreground'.`, { device: got });
+        if (!p.app) {
+          // its runner starts while you build or install (its first start on a device is the slow part); the next command waits for it
+          if (got.platform === "ios") warming = run("agent-device", ["prepare", "ios-runner", "--platform", "ios", "--udid", got.udid!, "--session", SESSION, "--timeout", "420000"], { timeout: 450_000 });
+          const has = got.baked?.length ? ` Already on it: ${got.baked.map((k) => k.split("@")[0]).join(", ")}.` : "";
+          return text(`Device ready: ${got.name} (${got.platform} ${got.udid ?? got.serial}).${has} Open an app with do 'open <app> --foreground'.`, { device: got });
+        }
         // the first open on a Mac builds agent-device's runner once (minutes); later opens take seconds
         const r = await run("agent-device", ["open", p.app, "--foreground", "--timeout", "420000", "--session", SESSION, ...target(got)], { signal, timeout: 450_000 });
         return text(`Device: ${got.name} (${got.platform})\n${cut(r.out)}`, { device: got, ok: r.ok });
       }
       if (!mine) return text("No device yet. Call device with action=start first.");
+      const warm = async () => {
+        if (!warming) return;
+        await warming.catch(() => undefined);
+        warming = undefined;
+      };
       if (p.action === "do") {
         const m = mine;
-        const exec = (args: string[]) => {
+        const exec = async (args: string[]) => {
+          // a host app the device's template already has: nothing to install
+          if (args[0] === "install" && args[1] && m.baked?.length) {
+            const key = await appKey(m.platform, args[1], m);
+            if (key && alreadyBaked(m.baked, key)) return { ok: true, out: `${key.split("@")[0]} is already installed on this device (same version).` };
+          }
+          if (needsRunner(args)) await warm();
           const withTarget = ["open", "apps", "install", "reinstall", "uninstall", "install-from-source", "replay", "test"].includes(args[0]) ? target(m) : [];
-          return run("agent-device", [...args, "--session", SESSION, ...withTarget], { signal, timeout: 180_000 });
+          const r = await run("agent-device", [...args, "--session", SESSION, ...withTarget], { signal, timeout: 180_000 });
+          if (r.ok && args[0] === "install" && args[1]) await noteInstall(m, args[1]).catch(() => undefined);
+          return r;
         };
         // several steps in one call: one model turn instead of one per tap
         const lines: string[] = Array.isArray(p.steps) && p.steps.length ? p.steps.map(String) : [String(p.cmd ?? "")];
@@ -449,6 +662,7 @@ export default function (pi: any) {
         return text(cut(r.text), { ok: r.ok });
       }
       if (p.action === "look") {
+        await warm();
         mkdirSync(ARTIFACTS, { recursive: true });
         const file = join(ARTIFACTS, `${String(p.name || `screen-${Date.now()}`).replace(/[^\w.-]+/g, "-").replace(/\.png$/, "")}.png`);
         const r = await run("agent-device", ["screenshot", file, "--session", SESSION], { signal, timeout: 60_000 });
