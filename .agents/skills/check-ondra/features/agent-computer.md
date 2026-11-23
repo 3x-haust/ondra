@@ -1,84 +1,43 @@
-# Agent cards and secure computer
+# Secure computer
 
-**Draft; native support and agent routing have not been driven.** The initial
-host pass stopped at Secrets navigation without the required native permissions;
-no inner job computer session or secure target was reached. The outer app's
-successful start does not prove the bundled tool or helper's secure behavior.
-Every held secure action requires fresh in-app confirmation, not a model assertion.
+The bundled `computer` tool in a job: `fill-secret` puts a saved secret into a
+password field by name, and ref-based actions run on approval screens. Each
+held action needs a new card (area 2).
 
 ## What it has
 
-- `agent-dock` / `agent-job`: configured agent sidebar name, `대화` / `작업`
-  tabs, agent-level dock and real agent-owned job thread.
-- `secure-fill`: `act` → `{kind:"fill-secret",ref,secret}`; name only, no value.
-- `secure-approval`: supported ref-based AX actions on sensitive surfaces.
-- `secure-target`: list exact running-app targets, select returned opaque ref,
-  resume original app; changed targets must reject held actions.
-- `secure-redaction`: no plaintext in observations; sensitive captures refused,
-  including after resume. Delivery does not establish login success.
+- `secure-fill`: `act {kind:"fill-secret", ref, secret:"<NAME>"}` →
+  `done (secure-ax), password replacement accepted; its contents were not read back`.
+- `secure-limits`: menus, keys and coordinates on a sensitive screen →
+  `SECURE_ACTION_UNSUPPORTED`. Use refs.
+- `secure-target`: `targets {app:<bundle id>}` lists windows and sheets with
+  opaque refs; `target {ref}` picks one; `resume` goes back to the app's
+  window. `targets` needs a running session (`start` first) and a bundle ID
+  when the name is ambiguous (`AMBIGUOUS_APP`).
+- `agent-routing` (not driven): agent conversation and agent-owned jobs need
+  an authorized Discord agent; not part of this pass.
 
 ## How a user gets there
 
-- `agent-conversation`: existing authorized agent row → role tab `대화`.
-- `agent-work`: same row → `작업` → observed agent-owned job title.
-- `native-in-app`: genuine UI-submitted job/main request → real computer
-  `start` → observed disposable secure field/surface → confirmation.
-- `native-background-agent`: requesting session alive → `targets` with exact
-  running app name → `target` with returned ref → `resume` / `stop`.
+A job the user starts (area 2, step 1) whose request names the app, the field
+and the saved secret name.
 
 ## Checking it
 
-### Agent entries: gated
+1. Open the target: Keychain Access → select `로그인` in the sidebar →
+   `항목 추가` → `계속`. The `새로운 암호 항목` sheet has a passwordfield.
+   With menus blocked on sensitive screens, the job cannot open this sheet
+   itself; open it with the outer `computer` session and leave it open.
+2. Tell the job: `start` the running app, `targets` with
+   `com.apple.keychainaccess`, `target` the sheet, `fill-secret` the dummy,
+   then `취소`, `resume`, `stop`. Never `추가`.
+3. Deny the first fill card (expect `APPROVAL_DENIED`, the sheet unchanged),
+   allow the retry (expect `secure-ax ... accepted`), allow `취소`.
+4. Search the session files for the dummy value: no match.
 
-This pass does not authorize Discord messages, connecting bots, importing bot
-credentials or workflow changes. Without an existing authorized live agent
-request, mark both agent entries blocked. Never synthesize `@agent`, state or
-RPC. If a separately authorized request exists, open its configured-name row
-and actual `대화` tab, use area 2's scoped card action, then check a real job
-under `작업`. Require that agent-level card absent from normal main/project
-and `내 차례`. An ordinary job pass does not prove agent routing.
+## Last run
 
-### Native secure flow: target discovery pending
+Host: every step above as expected; the sheet was cancelled, nothing added.
 
-Require permissions, authorized account and area 1's dummy. First observe an
-existing native app's disposable field/dialog; record app path, window, field
-label and safe cancellation route. **No target has been established yet.** Do
-not build a target app/harness, use the user's unrelated approval window, or
-grant real system access merely to get coverage.
-
-1. Have a real job use this build's computer tool to `start` that app, then
-   `observe {full:true}`. Record opened path/PID, background preservation and
-   redacted current refs. The outer operator must not run the helper directly.
-2. Request `act {input:{kind:"fill-secret",ref,secret}}`, using live ref and
-   saved name only. Refuse on the actual Ondra card; require `APPROVAL_DENIED`
-   and no delivered operation. Observe before a new request.
-3. On a fresh request allow it; require the actual delivery result. Never read
-   the value back, count masked characters or claim successful login. If AX
-   replacement is refused, report that target's limitation; no key/paste/CDP
-   fallback. The modified helper must not answer its own host's approval UI.
-4. For an existing disposable approval window, use `targets`, returned `target`
-   ref and observation. Each supported ref-based action needs a new card.
-   Use safe cancel where possible; a permission-changing final button needs
-   approval of that specific side effect, not generic test permission.
-5. Safely dismiss a disposable target while its card waits, through an approved
-   native path, then answer the held card. Require target-changed refusal and
-   no action on another window. Without safe dismissal leave this unverified.
-6. Request `look` after sensitive observation and after `resume`; require
-   refusal and no new PNG in the job artifacts. Do not bypass with a desktop
-   screenshot. Retain redacted outcomes only.
-7. End that job's computer session with `stop`. Record real foreground/cursor
-   preservation outcomes, not mocked flags. Outer app/session cleanup follows
-   SKILL.md. Keep inner and outer sessions distinct.
-
-## Gotchas
-
-The installed outer tool can drive the development Ondra but cannot prove the
-new bundled helper's contract by itself. A settings password input is not proof
-of native secure AX support. Host manual permission never enables VM-only
-computer evals. Follow the installed computer-use foreground restrictions and
-the new tool's explicit confirmation contract; never reinterpret a refusal as
-a fallback opportunity. Capture refusal persists for the sensitive session.
-
-Sources: `src/views/AgentView.tsx`, `Sidebar.tsx`, `src/state/store.ts`,
-`src/engine/extensionUi.ts`, `src/ui/DecisionCard.tsx`, `extensions/computer.ts`,
-`extensions/lib/computer-host.ts`, `tests/extensions/computer-secure-input.test.ts`.
+Sources: `extensions/computer.ts`, `extensions/lib/computer-host.ts`,
+`src-tauri/helpers/cuhost.swift`, `tests/extensions/computer-secure-input.test.ts`.
