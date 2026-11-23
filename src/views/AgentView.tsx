@@ -3,7 +3,7 @@
 // remembers. View only: the user talks to it on Discord. None of this is in main, the projects,
 // 내 차례 or 결과물; work memory is shared.
 import { createMemo, createResource, createSignal, For, onCleanup, Show } from "solid-js";
-import { AGENT_CHAT, chatKey, inChat } from "../engine/captain";
+import { AGENT_CHAT, chatKey, isAgentChat } from "../engine/captain";
 import { onAgentStatus, type AgentStatus } from "../engine/discord";
 import { forgetNote } from "../engine/agentMemory";
 import { readWays } from "../engine/agentWays";
@@ -31,9 +31,9 @@ export function AgentView() {
   const a = () => state.settings.agent ?? { on: false, name: "메타몽" };
   const [status, setStatus] = createSignal<AgentStatus>({ state: "off" });
   onCleanup(onAgentStatus(setStatus));
-  const msgs = () => state.captain.filter((m) => inChat(m, agentKey()));
+  const msgs = () => state.captain.filter((m) => m.space === state.space && isAgentChat(chatKey(m.space, m.project)));
   const jobs = createMemo(() => agentJobs());
-  const asks = () => agentDecisions().filter((d) => state.tasks.find((x) => x.id === d.taskId)?.space === state.space);
+  const asks = () => agentDecisions(state.space);
   const lastRow = createMemo(() => {
     const at = new Map<string, string>();
     for (const m of msgs()) for (const r of handed(m)) at.set(r.taskId, m.id);

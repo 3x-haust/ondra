@@ -283,7 +283,9 @@ export class ComputerHostHelper {
     const id = String(++this.seq);
     return new Promise<HostResult>((resolve, reject) => {
       this.pending = { id, resolve, reject };
-      const onAbort = () => { if (this.pending?.id === id) { this.pending = undefined; reject(new Error("Aborted")); } };
+      // Keep the slot until its reply arrives; a cancelled request must not consume
+      // the next request's response or let an approval overtake an unfinished act.
+      const onAbort = () => { if (this.pending?.id === id) reject(new Error("Aborted")); };
       signal?.addEventListener("abort", onAbort, { once: true });
       this.child!.stdin.write(JSON.stringify({ id, op, ...params }) + "\n");
     });
@@ -298,9 +300,10 @@ export const RELEASE_WAIT_MS = 8000;
 
 /** One app in one background host session. */
 export type HostAction = { kind: string; ref?: unknown; epoch?: string } & Record<string, unknown>;
+export type HostConfirm = (summary: string, signal?: AbortSignal) => Promise<boolean>;
 
 export class ComputerHostSession {
-  private pid?: number;
+  private target?: { kind: "app"; pid: number } | { kind: "approval"; pid: number; home: number };
   private readonly obs = new HostObservation();
   private started = false;
   private stopped = false;
@@ -324,11 +327,43 @@ export class ComputerHostSession {
     if (launched.backgroundPreserved === false && launched.userInput !== true) throw new Error("Launch changed the foreground: the app came to the front as it started, so it cannot be used in the background. Start it once more at most; if it does this again, report it as not verifiable here");
     const pid = launched.pid;
     if (typeof pid !== "number") throw new Error("Host launch returned no pid");
-    this.pid = pid;
+    this.target = { kind: "app", pid };
     const observed = await this.observe(true, signal).catch(e => ({ observationError: (e as Error).message }));
     const menus = Array.isArray(launched.menus) ? launched.menus.filter((m): m is string => typeof m === "string").slice(0, 14) : [];
     return { pid, ...(typeof launched.path === "string" ? { path: launched.path } : {}), ...(typeof launched.mode === "string" ? { mode: launched.mode } : {}), ...(menus.length ? { menus } : {}),
       ...("kind" in (observed as object) ? { observation: observed } : observed) };
+  }
+
+  /** List exact running-app windows, then select one of that listing's opaque refs.
+   *  The original app stays alive until stop, including when the target is another pid. */
+  async targets(app: string, signal?: AbortSignal): Promise<HostResult> {
+    return this.guard(() => this.helper.request("targets", { app }, signal));
+  }
+
+  async selectTarget(ref: string, signal?: AbortSignal): Promise<HostResult> {
+    return this.guard(async () => {
+      const home = this.target?.kind === "approval" ? this.target.home : this.requirePid();
+      const r = await this.helper.request("target", { ref }, signal);
+      if (typeof r.pid !== "number") throw new Error("Host target returned no pid");
+      this.target = { kind: "approval", pid: r.pid, home };
+      this.pressedAway = undefined;
+      this.obs.reset();
+      const { changed: _, ...observation } = this.obs.accept(r.tree, true);
+      return { observation };
+    });
+  }
+
+  async resume(signal?: AbortSignal): Promise<HostResult> {
+    return this.guard(async () => {
+      const home = this.target?.kind === "approval" ? this.target.home : this.requirePid();
+      await this.helper.request("resume", {}, signal);
+      this.target = { kind: "app", pid: home };
+      this.pressedAway = undefined;
+      this.obs.reset();
+      const r = await this.helper.request("observe", { pid: home, full: true }, signal);
+      const { changed: _, ...observation } = this.obs.accept(r.tree, true);
+      return { observation };
+    });
   }
 
   /** Which screen the app is on, from the last observation (for the user's step line). */
@@ -355,8 +390,8 @@ export class ComputerHostSession {
   }
 
   /** One action, then re-observe, in a single helper round trip. Refuses to proceed if the action moved the foreground. */
-  async act(action: HostAction, signal?: AbortSignal): Promise<HostResult> {
-    return this.guard(() => this.once(action, true, signal));
+  async act(action: HostAction, signal?: AbortSignal, confirm?: HostConfirm): Promise<HostResult> {
+    return this.guard(() => this.once(action, true, signal, confirm));
   }
 
   /**
@@ -364,12 +399,12 @@ export class ComputerHostSession {
    * against the screen as it is at that step, and the first failure stops the rest. Returns
    * what each step did and the screen once, as a change from what the model last saw.
    */
-  async steps(actions: HostAction[], signal?: AbortSignal): Promise<HostResult> {
+  async steps(actions: HostAction[], signal?: AbortSignal, confirm?: HostConfirm): Promise<HostResult> {
     return this.guard(async () => {
       const done: Record<string, unknown>[] = [];
       for (let i = 0; i < actions.length; i++) {
         try {
-          const r = await this.once(actions[i], i === actions.length - 1, signal);
+          const r = await this.once(actions[i], i === actions.length - 1, signal, confirm);
           const { observation, observationError, ...step } = r;
           done.push(step);
           if (i === actions.length - 1) return { steps: done, ...(observation ? { observation } : { observationError }) };
@@ -385,12 +420,27 @@ export class ComputerHostSession {
     });
   }
 
-  private async once(action: HostAction, show: boolean, signal?: AbortSignal): Promise<HostResult> {
+  private async once(action: HostAction, show: boolean, signal?: AbortSignal, confirm?: HostConfirm): Promise<HostResult> {
     const translated = this.translate(action);
     const ref = action.ref ?? (isRecord(action.from) ? action.from.ref : undefined);
     const label = ref !== undefined ? this.obs.label(String(ref)) : undefined;
     const button = action.kind === "click" && ref !== undefined && this.obs.isButton(String(ref)) ? label : undefined;
-    const r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
+    const prepared = await this.helper.request("prepare", { pid: this.requirePid(), action: translated }, signal);
+    let r: HostResult;
+    if (prepared.required === true || action.kind === "fill-secret") {
+      try {
+        if (typeof prepared.approval !== "string" || typeof prepared.summary !== "string") throw new Error("Missing secure confirmation target");
+        if (!confirm) throw new Error("APPROVAL_UNAVAILABLE: confirm this action in the app; nothing was sent");
+        if (await confirm(prepared.summary, signal) !== true) throw new Error("APPROVAL_DENIED: nothing was sent");
+        if (signal?.aborted || this.stopped) throw new Error("Computer operation cancelled");
+        // The helper executes the held action, not new parameters supplied after approval.
+        r = await this.helper.request("commit-approval", { approval: prepared.approval }, signal);
+      } finally {
+        await this.helper.request("cancel-approval").catch(() => undefined);
+      }
+    } else {
+      r = await this.helper.request("act", { pid: this.requirePid(), action: translated }, signal);
+    }
     // the user's own mouse or keys moved things: theirs, not the action's
     if (r.backgroundPreserved === false && r.userInput !== true) {
       this.obs.invalidate();
@@ -408,7 +458,7 @@ export class ComputerHostSession {
       if (button && seen.changed && !this.obs.hasButton(button)) this.pressedAway = button;
     }
     // Delivery is not success: an unchanged tree after the action means it probably did nothing.
-    const effect = seen ? (seen.changed ? "changed" : "no_change") : "unknown";
+    const effect = action.kind === "fill-secret" ? "delivered" : seen ? (seen.changed ? "changed" : "no_change") : "unknown";
     const observation = seen && show ? (({ changed: _, ...snap }) => snap)(seen) : undefined;
     return {
       kind: action.kind, ...(ref !== undefined ? { ref: String(ref).replace(/^\[|\]$/g, "") } : {}),
@@ -439,6 +489,13 @@ export class ComputerHostSession {
         // raising puts the target window over the user's: the app is driven where it is
         if (ax === "AXRaise") throw new Error("Raise would bring the window in front of the user's; act on it where it is (click, set-value, action)");
         return { kind: "press-action", ref: ref(), action: ax };
+      }
+      case "fill-secret": {
+        if (Object.keys(action).some(k => !["kind", "ref", "secret"].includes(k)) ||
+            typeof action.secret !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(action.secret)) {
+          throw new Error("fill-secret takes only ref and a saved secret name, never text or value");
+        }
+        return { kind: "fill-secret", ref: ref(), secret: action.secret };
       }
       case "set-value": return { kind: "set-value", ref: ref(), value: String(action.value ?? "") };
       case "menu": {
@@ -480,10 +537,11 @@ export class ComputerHostSession {
     // it opened is quit, the user's own app is hidden again. The wait outlasts the helper's own
     // worst case, so it is not cut off midway; even if it were, the helper's exit path ends
     // whatever it still holds.
-    if (this.pid !== undefined) {
+    if (this.target !== undefined) {
+      const pid = this.target.kind === "approval" ? this.target.home : this.target.pid;
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
-        this.helper.request("release", { pid: this.pid }).catch(() => undefined),
+        this.helper.request("release", { pid }).catch(() => undefined),
         new Promise((r) => { timer = setTimeout(r, RELEASE_WAIT_MS); }),
       ]);
       clearTimeout(timer);
@@ -495,8 +553,8 @@ export class ComputerHostSession {
   resetObservations(): void { this.obs.invalidate(); }
 
   private requirePid(): number {
-    if (this.pid === undefined || this.stopped) throw new Error("No active host session");
-    return this.pid;
+    if (!this.target || this.stopped) throw new Error("No active host session");
+    return this.target.pid;
   }
   private async guard<T>(work: () => Promise<T>): Promise<T> {
     if (this.busy) throw new Error("Host session operation already in progress");

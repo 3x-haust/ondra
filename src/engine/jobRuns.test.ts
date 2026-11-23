@@ -70,6 +70,86 @@ async function handsOff() {
   await tick();
 }
 
+describe("extension confirmation cards", () => {
+  const ask = () => emit({ type: "extension_ui_request", id: "secure-input", method: "confirm", title: "보안 입력", message: "로그인 창", timeout: 1000 });
+
+  it("answers the live request once without prompting the model", async () => {
+    await working([job()]);
+    ask();
+    const d = state.decisions[0];
+    expect(d.ui).toEqual({ requestId: "secure-input", method: "confirm" });
+    await decide(d.id, "yes");
+    await decide(d.id, "yes");
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "secure-input", confirmed: true }],
+    ]);
+    expect(sent("prompt")).toHaveLength(1);
+  });
+
+  it("removes a paused request and never answers it on the replacement engine", async () => {
+    await working([job()]);
+    ask();
+    const id = state.decisions[0].id;
+    pauseTask("job");
+    expect(state.decisions).toHaveLength(0);
+    resumeTask("job");
+    await startTask("job");
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+  });
+
+  it("drops a request when the tool ends without an answer", async () => {
+    await working([job()]);
+    ask();
+    const id = state.decisions[0].id;
+    emit({ type: "tool_execution_end", toolCallId: "computer", result: {} });
+    expect(state.decisions).toHaveLength(0);
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+  });
+
+  it("keeps a pending confirmation while another parallel tool finishes", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "computer", toolName: "computer", args: {} });
+    emit({ type: "tool_execution_start", toolCallId: "read", toolName: "read", args: {} });
+    ask();
+    const id = state.decisions[0].id;
+    emit({ type: "tool_execution_end", toolCallId: "read", toolName: "read", result: {} });
+    expect(state.decisions.map((d) => d.id)).toEqual([id]);
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toHaveLength(1);
+  });
+
+  it.each([
+    ["select", "선택", { value: "선택" }],
+    ["input", "cancel", { cancelled: true }],
+    ["confirm", "no", { confirmed: false }],
+  ])("preserves the existing %s reply", async (method, option, reply) => {
+    await working([job()]);
+    emit({ type: "extension_ui_request", id: "existing", method, options: ["선택"] });
+    await decide(state.decisions[0].id, option as string);
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "existing", ...reply as object }],
+    ]);
+  });
+
+  it("expires the card without turning a late answer into a user message", async () => {
+    await working([job()]);
+    vi.useFakeTimers();
+    try {
+      ask();
+      const id = state.decisions[0].id;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(state.decisions).toHaveLength(0);
+      await decide(id, "yes");
+      expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+      expect(sent("prompt")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("another job's message while the job works", () => {
   it("is not wrapped as the user's words", async () => {
     await working([job(), kid({ status: "done" })]);

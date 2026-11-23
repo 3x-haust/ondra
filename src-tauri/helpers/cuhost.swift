@@ -20,8 +20,8 @@
 //     that way fall back to the real app launched hidden (not one the user already runs);
 //   - records the frontmost app, its front window id and mouse position BEFORE and
 //     AFTER every action and reports them, so the caller can verify nothing moved;
-//   - refuses event input while the user is working in the target app, and never
-//     reads or types into password fields.
+//   - refuses event input while the user is working in the target app; passwords
+//     are AX replacements from saved secrets only after an in-app confirmation.
 // When an app ignores an AX action, the helper clicks the element with pointer
 // events addressed to its window; when an app brings itself forward on a click, the
 // helper hands the front straight back to the user's app. It never falls back to
@@ -58,8 +58,30 @@ func jsonLine(_ obj: [String: Any]) -> String {
     let data = try! JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
     return String(data: data, encoding: .utf8)!
 }
+let secretNames = Set((ProcessInfo.processInfo.environment["ONDRA_SECRET_NAMES"] ?? "").split(separator: ",").map(String.init))
+let secretValues = secretNames.compactMap { ProcessInfo.processInfo.environment[$0] }.filter { !$0.isEmpty }.sorted { $0.count > $1.count }
+let secretPattern: NSRegularExpression? = {
+    guard !secretValues.isEmpty else { return nil }
+    do { return try NSRegularExpression(pattern: secretValues.map(NSRegularExpression.escapedPattern).joined(separator: "|")) }
+    catch { exit(1) } // no observation may leave a helper whose redaction could not start
+}()
+func redacted(_ text: String) -> String {
+    secretPattern?.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "[redacted]") ?? text
+}
+func privateOutput(_ value: Any, key: String = "") -> Any {
+    // These are generated protocol identifiers, not app text. Keep refs resolvable even
+    // for a one-character password; all human-readable fields go through redaction.
+    if let text = value as? String {
+        return ["id", "ref", "approval", "role", "subrole", "kind", "via", "code", "mimeType", "data"].contains(key) ? text : redacted(text)
+    }
+    if let dict = value as? [String: Any] {
+        return Dictionary(uniqueKeysWithValues: dict.map { ($0.key, privateOutput($0.value, key: $0.key)) })
+    }
+    if let list = value as? [Any] { return list.map { privateOutput($0, key: key) } }
+    return value
+}
 func emit(_ obj: [String: Any]) {
-    FileHandle.standardOutput.write((jsonLine(obj) + "\n").data(using: .utf8)!)
+    FileHandle.standardOutput.write((jsonLine(privateOutput(obj) as! [String: Any]) + "\n").data(using: .utf8)!)
 }
 func ok(_ id: Any?, _ result: [String: Any]) -> [String: Any] {
     ["version": 1, "id": id ?? NSNull(), "ok": true, "result": result]
@@ -205,15 +227,18 @@ struct Attrs {
 
 func readAttrs(_ el: AXUIElement) -> Attrs {
     var out = Attrs()
+    // Determine the role before the batch: secure values and selections never leave AX.
+    let secure = elementIsSecure(el)
+    let batch = secure ? kBatch.map { [kAXValueAttribute, kAXSelectedTextAttribute].contains($0) ? kAXRoleAttribute : $0 } : kBatch
     var raw: CFArray?
-    guard AXUIElementCopyMultipleAttributeValues(el, kBatch as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw) == .success,
+    guard AXUIElementCopyMultipleAttributeValues(el, batch as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw) == .success,
           let vals = raw as? [AnyObject], vals.count == kBatch.count else {
         // Fall back to single reads (some apps do not implement the batched call).
         out.role = axString(el, kAXRoleAttribute) ?? "AXUnknown"
         out.subrole = axString(el, kAXSubroleAttribute); out.title = axString(el, kAXTitleAttribute)
         out.desc = axString(el, kAXDescriptionAttribute); out.placeholder = axString(el, kAXPlaceholderValueAttribute)
         var v: CFTypeRef?
-        if AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &v) == .success { out.value = v }
+        if !secure, AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &v) == .success { out.value = v }
         out.enabled = axBool(el, kAXEnabledAttribute); out.focused = axBool(el, kAXFocusedAttribute)
         out.ident = axString(el, kAXIdentifierAttribute); out.children = axChildren(el); out.frame = axFrame(el)
         return out
@@ -227,11 +252,11 @@ func readAttrs(_ el: AXUIElement) -> Attrs {
     }
     out.role = (get(0) as? String) ?? "AXUnknown"
     out.subrole = get(1) as? String; out.title = get(2) as? String; out.desc = get(3) as? String
-    out.placeholder = get(4) as? String; out.value = get(5)
+    out.placeholder = get(4) as? String; out.value = secure ? nil : get(5)
     out.enabled = (get(6) as? NSNumber)?.boolValue; out.focused = (get(7) as? NSNumber)?.boolValue
     out.ident = get(8) as? String; out.children = (get(9) as? [AXUIElement]) ?? []
     out.frame = frameFrom(get(10), get(11))
-    out.selection = get(12) as? String
+    out.selection = secure ? nil : get(12) as? String
     return out
 }
 
@@ -245,17 +270,26 @@ func elementNode(_ el: AXUIElement, key parentKey: String, map: AXMap, depth: In
     map.store(id, el)
     var node: [String: Any] = ["id": id, "role": a.role]
     let secure = isSecure(role: a.role, subrole: a.subrole)
+    if [a.title, a.desc, a.placeholder].compactMap({ $0 }).contains(where: { redacted($0) != $0 }) { capturesRestricted = true }
+    if a.role == "AXWindow", axBool(el, kAXModalAttribute) == true { node["modal"] = true }
     if let sub = a.subrole, !sub.isEmpty { node["subrole"] = sub }
-    if let t = a.title, !t.isEmpty { node["title"] = t }
-    if let d = a.desc, !d.isEmpty { node["desc"] = d }
-    if let ph = a.placeholder, !ph.isEmpty { node["placeholder"] = ph }
+    if let t = a.title, !t.isEmpty { node["title"] = redacted(t) }
+    if let d = a.desc, !d.isEmpty { node["desc"] = redacted(d) }
+    if let ph = a.placeholder, !ph.isEmpty { node["placeholder"] = redacted(ph) }
     if secure {
         node["secure"] = true // never read or return a password value
     } else if let v = a.value {
-        if let s = v as? String { if !s.isEmpty { node["value"] = s.count > 6000 ? String(s.prefix(6000)) : s } }
+        if let raw = v as? String {
+            if redacted(raw) != raw { capturesRestricted = true }
+            let s = redacted(raw)
+            if !s.isEmpty { node["value"] = s.count > 6000 ? String(s.prefix(6000)) : s }
+        }
         else if let n = v as? NSNumber { node["value"] = n.stringValue }
     }
-    if !secure, let sel = a.selection, !sel.isEmpty { node["selection"] = sel.count > 200 ? String(sel.prefix(200)) + "…" : sel }
+    if !secure, let raw = a.selection, !raw.isEmpty {
+        let sel = redacted(raw)
+        node["selection"] = sel.count > 200 ? String(sel.prefix(200)) + "…" : sel
+    }
     if a.enabled == false { node["enabled"] = false }
     if a.focused == true { node["focused"] = true }
     let actions = axActions(el).filter { $0 != kAXShowMenuAction }
@@ -264,7 +298,7 @@ func elementNode(_ el: AXUIElement, key parentKey: String, map: AXMap, depth: In
     // Children are clipped to the nearest scroll area / list that contains them.
     var childClip = clip
     if kClipRoles.contains(a.role), let f = a.frame, f.width > 0, f.height > 0 { childClip = clip.intersection(f) }
-    if depth < maxDepth {
+    if depth < maxDepth && !secure {
         var kids: [[String: Any]] = []
         var offscreen = 0
         for (i, child) in a.children.enumerated() {
@@ -285,6 +319,13 @@ func elementNode(_ el: AXUIElement, key parentKey: String, map: AXMap, depth: In
 }
 
 func keyWindowElement(forPid pid: pid_t) -> AXUIElement? {
+    if let target = selectedTarget, target.pid == pid {
+        return targetIsLive(target) ? target.window : nil
+    }
+    return appKeyWindow(pid)
+}
+
+func appKeyWindow(_ pid: pid_t) -> AXUIElement? {
     let app = AXUIElementCreateApplication(pid)
     var win: CFTypeRef?
     for attr in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
@@ -323,7 +364,10 @@ func observeTree(pid: pid_t, map: AXMap) -> [String: Any]? {
         var count = 0
         let a = readAttrs(window)
         let clip = a.frame ?? CGRect(x: -1e6, y: -1e6, width: 2e6, height: 2e6)
-        return elementNode(window, key: "w", map: map, depth: 0, maxDepth: 60, clip: clip, count: &count, limit: 4000, pre: a)
+        let root = selectedTarget?.pid == pid ? selectedTarget!.root : window
+        let tree = elementNode(root, key: "w", map: map, depth: 0, maxDepth: 60, clip: clip, count: &count, limit: 4000)
+        if let tree = tree, sensitiveTree(tree) || securityProcess(pid) { capturesRestricted = true }
+        return tree
     }
     var tree = build()
     // A web view (WebKit, Electron) fills in its page only after the first request reaches its
@@ -402,7 +446,7 @@ func captureKeyWindowPNG(pid: pid_t, completion: @escaping (Data?, [String: Any]
                              "windowID": Int(target.windowID), "matchedTree": matched != nil, "staged": staged,
                              "frame": ["x": Double(f.minX), "y": Double(f.minY), "width": Double(f.width), "height": Double(f.height)]])
         } catch {
-            FileHandle.standardError.write("capture error: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write(redacted("capture error: \(error)\n").data(using: .utf8)!)
             completion(nil, nil)
         }
     }
@@ -890,8 +934,49 @@ func resolvePoint(_ spec: [String: Any], pid: pid_t, map: AXMap) throws -> (CGPo
             EventWindow(id: look.windowID, frame: look.frame))
 }
 
-func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [String: Any] {
+func performAction(pid: pid_t, action: [String: Any], map: AXMap, approved: Bool = false) throws -> [String: Any] {
     guard let kind = action["kind"] as? String else { throw ActError.message("BAD_ACTION", "missing kind") }
+    let sensitive = selectedTarget != nil || kind == "fill-secret" || securityProcess(pid) || observeTree(pid: pid, map: AXMap()).map(sensitiveTree) == true
+    if sensitive && !approved { throw ActError.message("APPROVAL_REQUIRED", "this target needs a fresh user confirmation") }
+    if sensitive {
+        guard let ref = action["ref"] as? String, let el = map.element(ref),
+              ["press-action", "set-value", "fill-secret"].contains(kind) else {
+            throw ActError.message("SECURE_ACTION_UNSUPPORTED", "use an element ref with click, action, set-value or fill-secret; keys, menus and coordinates are not sent to approval windows")
+        }
+        if userActive(in: pid) { throw ActError.message("USER_ACTIVE", "the user is working in this app; nothing was sent") }
+        if kind == "fill-secret" {
+            guard elementIsSecure(el) else { throw ActError.message("NOT_SECURE_FIELD", "fill-secret requires a password field") }
+            guard let name = action["secret"] as? String, secretNames.contains(name),
+                  let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else {
+                throw ActError.message("SECRET_UNAVAILABLE", "save a nonempty secret in Settings before filling this field")
+            }
+            capturesRestricted = true
+            guard AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, value as CFTypeRef) == .success else {
+                throw ActError.message("SECURE_INPUT_UNSUPPORTED", "the app refused secure AX replacement; enter it yourself (no keyboard or clipboard fallback)")
+            }
+            return ["via": "secure-ax"]
+        }
+        if kind == "press-action" {
+            let name = action["action"] as? String ?? kAXPressAction
+            guard name != kAXRaiseAction, action["pointer"] as? Bool != true,
+                  (action["count"] as? Int ?? 1) == 1, action["button"] as? String != "right",
+                  axActions(el).contains(name) else { throw ActError.message("SECURE_ACTION_UNSUPPORTED", "use an accessibility action listed on this element; pointer fallback is disabled") }
+            guard AXUIElementPerformAction(el, name as CFString) == .success else { throw ActError.message("AX_ACTION_FAILED", "the approval control refused its accessibility action") }
+            return ["via": "ax"]
+        }
+        guard !elementIsSecure(el) else { throw ActError.message("SECURE_FIELD", "use fill-secret with a saved secret name") }
+        guard let value = action["value"] as? String, axSettable(el, kAXValueAttribute),
+              AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, value as CFTypeRef) == .success else {
+            throw ActError.message("AX_SET_FAILED", "the approval field refused its value")
+        }
+        return ["via": "ax"]
+    }
+    if ["type", "press", "menu"].contains(kind), let focused = focusedElement(pid: pid), elementIsSecure(focused) {
+        throw ActError.message("SECURE_FIELD", "use fill-secret with a saved secret name; keys and paste are not sent to password fields")
+    }
+    if kind == "type", action["ref"] == nil, focusedElement(pid: pid) == nil {
+        throw ActError.message("FOCUS_UNVERIFIED", "cannot check whether the focused field is secure; use a field ref")
+    }
     func elementFor() throws -> AXUIElement {
         guard let id = action["ref"] as? String, let el = map.element(id) else {
             throw ActError.message("STALE_REF", "unknown or stale element ref")
@@ -1705,7 +1790,7 @@ func localizedAppNames(_ app: URL) -> [String?] {
 //     is held back by ondra-bgguard.dylib, injected when the app can't enforce it away.
 
 func dbgLog(_ m: String) {
-    if ProcessInfo.processInfo.environment["ONDRA_CU_DEBUG"] != nil { FileHandle.standardError.write("cu: \(m)\n".data(using: .utf8)!) }
+    if ProcessInfo.processInfo.environment["ONDRA_CU_DEBUG"] != nil { FileHandle.standardError.write(redacted("cu: \(m)\n").data(using: .utf8)!) }
 }
 
 enum AppKind: String { case native, chromium, sandboxed, fallback }
@@ -2456,9 +2541,53 @@ func hideAllAgain() {
 
 let map = AXMap()
 
+struct ApprovalTarget {
+    let pid: pid_t
+    let window: AXUIElement
+    let root: AXUIElement
+}
+struct PendingApproval {
+    let id: String
+    let target: ApprovalTarget
+    let element: AXUIElement
+    let action: [String: Any]
+    let tree: String
+}
+var selectedTarget: ApprovalTarget?
+var targetChoices: [String: ApprovalTarget] = [:]
+var pendingApproval: PendingApproval?
+// A reveal toggle can put a password anywhere in the window. Once a sensitive
+// screen is observed, this helper returns no more pixels, including after resume.
+var capturesRestricted = false
+
+func appWindows(_ pid: pid_t) -> [AXUIElement] {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXWindowsAttribute as CFString, &value) == .success else { return [] }
+    return value as? [AXUIElement] ?? []
+}
+func containsElement(_ root: AXUIElement, _ el: AXUIElement, depth: Int = 0) -> Bool {
+    if CFEqual(root, el) { return true }
+    return depth < 60 && axChildren(root).contains { containsElement($0, el, depth: depth + 1) }
+}
+func targetIsLive(_ target: ApprovalTarget) -> Bool {
+    appWindows(target.pid).contains { CFEqual($0, target.window) } && containsElement(target.window, target.root)
+}
+func securityProcess(_ pid: pid_t) -> Bool {
+    // Non-regular agents with windows must be explicitly confirmed, even when
+    // started through the ordinary app path rather than selected as an approval.
+    if bgApp(pid) != nil { return false }
+    return NSRunningApplication(processIdentifier: pid)?.activationPolicy != .regular
+}
+func sensitiveTree(_ tree: [String: Any]) -> Bool {
+    tree["secure"] as? Bool == true || tree["modal"] as? Bool == true || ["AXSheet", "AXDialog", "AXSystemDialog"].contains(tree["role"] as? String ?? "") ||
+        ["AXDialog", "AXSystemDialog"].contains(tree["subrole"] as? String ?? "") ||
+        (tree["children"] as? [[String: Any]] ?? []).contains(where: sensitiveTree)
+}
+
 func handle(_ req: [String: Any]) -> [String: Any] {
     let id = req["id"]
     guard let op = req["op"] as? String else { return fail(id, "BAD_REQUEST", "missing op") }
+    if !["commit-approval", "prepare"].contains(op) { pendingApproval = nil }
     // release answers without it: reading the user's app over AX can be slow when it is busy
     let before: [String: Any] = op == "release" ? ["frontmostPid": NSWorkspace.shared.frontmostApplication.map { Int($0.processIdentifier) } ?? -1] : environment()
 
@@ -2555,6 +2684,74 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             return ok(id, result)
         }
         return fail(id, "LAUNCH_FAILED", launchErr ?? "launch failed")
+    case "targets":
+        targetChoices.removeAll()
+        guard let name = req["app"] as? String else { return fail(id, "BAD_REQUEST", "missing app name or bundle ID") }
+        let matches = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == name || $0.localizedName == name || $0.bundleURL?.path == name
+        }
+        guard matches.count == 1, let app = matches.first else { return fail(id, "AMBIGUOUS_APP", "name exactly one running app by bundle ID; no app was launched") }
+        var choices: [[String: Any]] = []
+        for window in appWindows(app.processIdentifier) {
+            // Sheets are selected as their own AX root; every operation uses that root.
+            let sheets = axChildren(window).filter { axString($0, kAXRoleAttribute) == "AXSheet" }
+            for root in sheets.isEmpty ? [window] : sheets {
+                let ref = UUID().uuidString
+                targetChoices[ref] = ApprovalTarget(pid: app.processIdentifier, window: window, root: root)
+                choices.append(["ref": ref, "pid": Int(app.processIdentifier), "app": app.bundleIdentifier ?? name,
+                                "title": axString(root, kAXTitleAttribute) ?? axString(window, kAXTitleAttribute) ?? "",
+                                "role": axString(root, kAXRoleAttribute) ?? "AXWindow"])
+            }
+        }
+        return ok(id, ["targets": choices])
+    case "target":
+        guard let ref = req["ref"] as? String, let target = targetChoices[ref], targetIsLive(target) else {
+            return fail(id, "STALE_TARGET", "list approval targets again; the chosen window is gone")
+        }
+        selectedTarget = target
+        capturesRestricted = true
+        targetChoices.removeAll()
+        lastLook.removeAll()
+        map.clear()
+        guard let tree = observeTree(pid: target.pid, map: map) else { return fail(id, "NO_WINDOW", "approval target is no longer accessible") }
+        return ok(id, ["pid": Int(target.pid), "tree": tree, "sensitive": true])
+    case "resume":
+        selectedTarget = nil
+        targetChoices.removeAll()
+        lastLook.removeAll()
+        map.clear()
+        return ok(id, ["resumed": true])
+    case "prepare":
+        pendingApproval = nil
+        guard let pidN = req["pid"] as? Int, let action = req["action"] as? [String: Any], let kind = action["kind"] as? String else {
+            return fail(id, "BAD_REQUEST", "missing pid or action")
+        }
+        let pid = pid_t(pidN)
+        let oldElement = (action["ref"] as? String).flatMap { map.element($0) }
+        guard let window = keyWindowElement(forPid: pid), let tree = observeTree(pid: pid, map: map) else { return fail(id, "NO_WINDOW", "target has no accessible window") }
+        let sensitive = selectedTarget != nil || kind == "fill-secret" || securityProcess(pid) || sensitiveTree(tree)
+        guard sensitive else { return ok(id, ["required": false]) }
+        capturesRestricted = true
+        guard ["fill-secret", "press-action", "set-value"].contains(kind), let ref = action["ref"] as? String,
+              let el = map.element(ref), let old = oldElement, CFEqual(old, el) else {
+            return fail(id, "SECURE_ACTION_UNSUPPORTED", "use a current element ref with click, action, set-value or fill-secret; keys, menus and coordinates are not supported on approval screens")
+        }
+        if kind == "fill-secret" {
+            guard elementIsSecure(el) else { return fail(id, "NOT_SECURE_FIELD", "fill-secret requires a password field") }
+            guard let name = action["secret"] as? String, secretNames.contains(name),
+                  let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else { return fail(id, "SECRET_UNAVAILABLE", "save a nonempty secret in Settings before filling this field") }
+        }
+        let target = selectedTarget ?? ApprovalTarget(pid: pid, window: window, root: window)
+        let approval = UUID().uuidString
+        pendingApproval = PendingApproval(id: approval, target: target, element: el, action: action, tree: jsonLine(tree))
+        let app = NSRunningApplication(processIdentifier: pid)
+        let summary = [app?.bundleIdentifier ?? app?.localizedName ?? "App", axString(target.root, kAXTitleAttribute) ?? axString(window, kAXTitleAttribute) ?? "",
+                       axString(el, kAXTitleAttribute) ?? axString(el, kAXDescriptionAttribute) ?? "", kind,
+                       action["action"] as? String ?? "", action["secret"] as? String ?? "", action["value"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        return ok(id, ["required": true, "approval": approval, "summary": summary, "sensitive": true])
+    case "cancel-approval":
+        pendingApproval = nil
+        return ok(id, ["cancelled": true])
     case "observe":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
         guard let tree = observeTree(pid: pid_t(pidN), map: map) else {
@@ -2563,6 +2760,10 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         return ok(id, ["tree": tree, "env": environment()])
     case "look":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
+        _ = observeTree(pid: pid_t(pidN), map: map)
+        guard !capturesRestricted, selectedTarget == nil, !securityProcess(pid_t(pidN)) else {
+            return fail(id, "SECURE_CAPTURE_REFUSED", "pixels are disabled after a sensitive screen; use the redacted accessibility observation")
+        }
         guard #available(macOS 14.0, *) else { return fail(id, "UNSUPPORTED_OS", "window capture needs macOS 14+") }
         let sem = DispatchSemaphore(value: 0)
         var png: Data?; var meta: [String: Any]?
@@ -2571,6 +2772,8 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         sem.wait()
         hideAgain(pid_t(pidN))
         guard let data = png, let m = meta else { return fail(id, "CAPTURE_FAILED", "window capture failed (Screen Recording permission?)") }
+        _ = observeTree(pid: pid_t(pidN), map: map)
+        guard !capturesRestricted else { return fail(id, "SECURE_CAPTURE_REFUSED", "a sensitive screen appeared during capture; no image was returned") }
         if let f = m["frame"] as? [String: Double], let wid = m["windowID"] as? Int, let w = m["width"] as? Int, let h = m["height"] as? Int {
             lastLook[pid_t(pidN)] = LookFrame(frame: CGRect(x: f["x"]!, y: f["y"]!, width: f["width"]!, height: f["height"]!),
                                               windowID: CGWindowID(wid), width: w, height: h)
@@ -2580,8 +2783,22 @@ func handle(_ req: [String: Any]) -> [String: Any] {
                        "frame": m["frame"] ?? NSNull(), "matchedTree": m["matchedTree"] ?? false,
                        "staged": m["staged"] ?? false,
                        "env": environment()])
-    case "act":
-        guard let pidN = req["pid"] as? Int, let action = req["action"] as? [String: Any] else {
+    case "act", "commit-approval":
+        var approved = false
+        var request = req
+        if op == "commit-approval" {
+            let held = pendingApproval
+            pendingApproval = nil
+            guard let held = held, req["approval"] as? String == held.id, targetIsLive(held.target),
+                  let current = keyWindowElement(forPid: held.target.pid), CFEqual(current, held.target.window),
+                  let tree = observeTree(pid: held.target.pid, map: map), jsonLine(tree) == held.tree,
+                  let ref = held.action["ref"] as? String, let el = map.element(ref), CFEqual(el, held.element) else {
+                return fail(id, "APPROVAL_TARGET_CHANGED", "the confirmed window or control changed; observe and confirm again")
+            }
+            request = ["pid": Int(held.target.pid), "action": held.action]
+            approved = true
+        }
+        guard let pidN = request["pid"] as? Int, let action = request["action"] as? [String: Any] else {
             return fail(id, "BAD_REQUEST", "missing pid or action")
         }
         let t0 = nowMs()
@@ -2590,7 +2807,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         axNotifications = 0
         var info: [String: Any] = [:]
         let aboveBefore = pidsAboveFront()
-        do { info = try performAction(pid: pid_t(pidN), action: action, map: map) }
+        do { info = try performAction(pid: pid_t(pidN), action: action, map: map, approved: approved) }
         catch ActError.message(let code, let msg) { _ = keepUserWindowOnTop(pid_t(pidN), aboveBefore); return fail(id, code, msg) }
         catch { return fail(id, "ACT_FAILED", "\(error)") }
         var raised = keepUserWindowOnTop(pid_t(pidN), aboveBefore)
@@ -2625,6 +2842,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         if !backgroundPreserved(before, after), userInputSince(seconds: (nowMs() - t0) / 1000) { extra["userInput"] = true }
         var result: [String: Any] = ["actionMs": actMs, "settleMs": settleMs, "env": after, "envBefore": before,
                                       "backgroundPreserved": backgroundPreserved(before, after)]
+        if capturesRestricted { result["sensitive"] = true }
         for (k, v) in extra { result[k] = v }
         for (k, v) in info { result[k] = v }
         if let tree = tree { result["tree"] = tree } else { result["treeError"] = "NO_WINDOW" }
@@ -2963,7 +3181,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--windows") {
                          "bounds": ["x": Double(pos.x), "y": Double(pos.y), "width": Double(size.width), "height": Double(size.height)]])
         }
     }
-    print(jsonLine(["windows": wins]))
+    emit(["windows": wins])
     exit(0)
 }
 if CommandLine.arguments.contains("--displays") {

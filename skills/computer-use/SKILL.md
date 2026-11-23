@@ -131,9 +131,37 @@ exact step and go on with what you can do meanwhile; otherwise report the limit,
 naming each try and what the observation showed.
 
 If an action returns `USER_ACTIVE`, the user is working in that app: nothing was
-sent. Wait, observe, keep their changes, then continue. Password fields are
-refused (`SECURE_FIELD`): ask the user to fill them. `FOCUS_UNVERIFIED` means
-focus did not land on the field, so nothing was typed.
+sent. Wait, observe, keep their changes, then continue. Ordinary typing and
+`set-value` refuse password fields (`SECURE_FIELD`). Use `fill-secret` with the
+field's ref and the **name** of a secret saved in Settings › Secrets, never its
+value. The user confirms that exact action in the app, even with full tool
+permissions. `FOCUS_UNVERIFIED` means focus could not be checked, so nothing was typed.
+
+### Secure input and approval windows
+
+- `act {input: {kind: "fill-secret", ref: 12, secret: "LOGIN_PASSWORD"}}` replaces
+  a secure field through AX only. The helper reads the saved value internally;
+  it never reads the field back. Delivery does not prove login succeeded.
+- Native sheets, modal dialogs, secure fields and background approval agents
+  require a fresh in-app confirmation for each action, including in an ordinary
+  app session or a batch. Only ref-based AX `click`/`action`, `set-value` for a
+  non-password field, and `fill-secret` are supported there. No keys, menus,
+  coordinates, pointer fallback or clipboard paste. If AX is refused, ask the
+  user to do that step; do not switch to ordinary typing or bring it forward.
+- An approval in another running app: `targets {app: "exact bundle ID or name"}`
+  lists its windows and sheets without launching it. `target {ref: "…"}` uses
+  the opaque target ref from that list (not an element number). The original
+  app stays alive. `resume` returns to it; `stop` releases it at the end. List
+  again if the chosen window disappears; target refs expire on a new listing
+  or selection. Do not stop the requesting app to reach its approval window.
+- Refusal, cancellation, a missing confirmation UI or a changed window/control
+  sends nothing. Observe before asking again. The user answers the card inside
+  Ondra; never copy its details or secret names into a public channel.
+- After a sensitive screen is observed, `look` is disabled for the rest of that
+  helper session, including after `resume`. No PNG is saved or posted. Use the
+  redacted AX tree; do not restart to evade capture restrictions. Custom UI that
+  does not expose secure fields or native dialog semantics is not a supported
+  approval surface.
 
 Reuse an unchanged observation instead of re-capturing. Return changed structured
 text when it is enough, and include an image only when it is needed for the next
@@ -177,7 +205,8 @@ for a capture and hides it again.
 The host app that runs the helper needs **Accessibility** (to read the tree and
 act) and, for `look`, **Screen Recording** (to capture a window). If an action
 reports that a permission is missing, tell the user the exact step and continue
-with what you can verify. Do not click permission dialogs yourself.
+with what you can verify. Permission dialogs use the confirmed AX-only flow
+above; if macOS refuses it, the user must complete that step.
 
 ## Other surfaces
 

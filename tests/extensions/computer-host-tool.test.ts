@@ -112,7 +112,7 @@ describe("computer tool — host background mode", () => {
   it("registers a deferred sequential tool without spawning the helper", () => {
     const { tool } = load();
     expect(tool).toMatchObject({ name: "computer", exposure: "deferred", executionMode: "sequential" });
-    expect(tool.parameters.properties.action.enum).toEqual(["start", "observe", "look", "act", "stop"]);
+    expect(tool.parameters.properties.action.enum).toEqual(["start", "observe", "look", "act", "targets", "target", "resume", "stop"]);
     expect(tool.description).not.toMatch(/guest|isolated/i);
   });
 

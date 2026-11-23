@@ -84,7 +84,8 @@ frontmost app, key window and mouse position before and after every action and
 returns whether they changed; the tool refuses to continue if they did, rather
 than forging focus events to hide the change (see `computer-use-host.md`). It
 never activates an app, warps the cursor or posts global events. `act` re-observes
-in the **same call**, so one step is one round trip instead of two. The
+in the **same call**. Each step first prepares its target; a sensitive step also
+waits for an in-app confirmation before the helper executes the held action. The
 TypeScript side is `extensions/lib/computer-host.ts`; the tool is available when
 `ONDRA_COMPUTER_HOST=1`, which the app sets whenever the helper is bundled.
 `ONDRA_COMPUTER_EVALUATION_MODE=forced-full` makes every observation and image
@@ -100,6 +101,46 @@ The **host app** (Ondra) needs, in System Settings → Privacy & Security:
 - **Screen Recording** — only for `look` (window capture).
 Grant them to Ondra; the helper inherits them. The tool reports a missing
 permission rather than failing silently.
+
+### Secure input and approval
+
+`fill-secret {ref, secret}` takes a password-field ref and a saved secret **name**
+from Settings, not its value. The helper resolves `ONDRA_SECRET_NAMES` and reads
+the value from its environment only for the AX replacement. A fresh in-app
+confirmation names the app, window, control and action. Full tool permissions do
+not bypass it. Secure AX writes have no keyboard or clipboard fallback: when
+macOS refuses one, the user must enter the password. A successful replacement
+means delivery, not successful authentication.
+
+The helper requires confirmation on native sheets, dialogs, modal windows,
+windows with secure fields, and non-regular background agents. This applies to
+ordinary app sessions and each batch step too. These surfaces accept only
+ref-based accessibility actions and value writes. Keys, menus, coordinates and
+pointer fallback are refused. Custom UI without accessible secure-field or
+native dialog semantics is not a supported approval surface.
+
+To reach an approval owned by another app without closing the requesting app:
+
+1. `targets {app}` lists windows/sheets of one exactly named running app (bundle
+   ID, display name or existing app path). It never launches that app.
+2. `target {ref}` selects an opaque ref from that listing. A ref belongs to that
+   listing only, and expires on the next listing or selection. Observation and
+   actions share the selected AX window/sheet root.
+3. `resume` returns to the original app. Only the final `stop` releases it.
+
+Before confirmation the helper holds one action and its actual AX window and
+control references. Execution consumes that request once and checks identity
+and the observed contents again. Refusal, cancellation, missing UI or a changed
+target sends no input. Job and captain confirmations use the existing cards;
+agent cards remain in the agent area and are not posted to Discord.
+
+Secure values and selections are not read. Registered secrets, including short
+ones, are removed from human-readable helper output before truncation. Secure
+children are omitted. A reveal button can expose a password outside its field,
+so after a sensitive observation the helper refuses all captures until it ends,
+including after `resume`. No sensitive PNG reaches artifacts or automatic
+Discord image posting. Use redacted observations instead of restarting to
+capture that screen.
 
 ### Measured (on the user's Mac, 2026‑11‑08, macOS 26 / arm64)
 
@@ -143,6 +184,6 @@ helper on the same apps.
 - **Apps that need their window drawn**: a hidden app is shown for a moment for each
   capture and each pointer or key event. An app whose AX tree empties while hidden
   can only be driven with those (each shows it briefly).
-- Fully offscreen/minimized windows and multi-window targeting are minimal (the AX
-  key window).
+- Ordinary app sessions use the AX key window. Explicit approval targeting uses
+  an existing window/sheet; it does not unminimize, activate or reopen it.
 
