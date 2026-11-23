@@ -1554,3 +1554,11 @@
 .settings-inner .ag-id {
   width: 160px;
 }
+
+/* 코드 리뷰: like the account list; its model pickers open past the group's edge */
+.settings-inner .rv-list {
+  overflow: visible;
+}
+.settings-inner .rv-list > :last-child {
+  border-bottom: 0;
+}
