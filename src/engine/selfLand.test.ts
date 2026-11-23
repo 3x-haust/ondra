@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, syncHome } from "./tasks";
+import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, sweepLanded, syncHome } from "./tasks";
 import { landHabit, taskPrompt } from "./prompts";
 import { bucket } from "../state/needs";
 
@@ -253,5 +253,29 @@ describe("what becomes of the branch is the job's to settle", () => {
     expect(t.worktree?.state).toBe("open");
     expect(t.worktree?.kept).toBe(true);
     expect(bucket(t)).toBe("done");
+  });
+});
+
+describe("a job that opened its own pull request", () => {
+  const withPr = (): Entry => ({ id: "r", at: 4, kind: "text", text: "PR을 올렸어요: https://github.com/o/app/pull/214" }) as never;
+
+  it("is left on GitHub: its worktree says so, nothing is merged or asked", async () => {
+    const merge = vi.spyOn(native, "worktreeMerge");
+    setState("tasks", [job({ entries: [withPr()] })]);
+    await landBranch("job");
+    const t = state.tasks[0];
+    expect(t.worktree?.state).toBe("open");
+    expect(t.worktree?.pr).toBe("https://github.com/o/app/pull/214");
+    expect(merge).not.toHaveBeenCalled();
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("one that finished before this is marked at the next sweep", async () => {
+    vi.spyOn(native, "worktreeLanded").mockResolvedValue(null as never);
+    vi.spyOn(native, "ghPrState").mockResolvedValue(JSON.stringify({ pr: { state: "OPEN" } }));
+    setState("tasks", [job({ entries: [withPr()], finishedAt: Date.now() })]);
+    await sweepLanded();
+    expect(state.tasks[0].worktree?.pr).toBe("https://github.com/o/app/pull/214");
+    expect(state.decisions).toHaveLength(0);
   });
 });
