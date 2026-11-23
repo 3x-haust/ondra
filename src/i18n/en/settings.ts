@@ -678,5 +678,6 @@ export default {
   "함께 리뷰할 모델": "Models that review together",
   "여러 모델이 같은 변경을 리뷰하고, 결과를 합쳐서 고쳐요": "Several models review the same change; their findings are merged and fixed",
   "모델 추가": "Add a model",
+  "설계 검토 · 코드 검토": "Design review · code review",
   "빼기": "Remove",
 } satisfies Record<string, string>;
