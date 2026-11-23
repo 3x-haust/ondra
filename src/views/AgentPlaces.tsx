@@ -16,8 +16,9 @@ type Room = { id: string; label: string };
 /** the text channels of every server the bot is in, "#name · server" */
 async function rooms(): Promise<Room[]> {
   const out: Room[] = [];
-  for (const g of await discordGuilds().catch(() => [])) {
-    for (const c of await discordChannels(g.id).catch(() => [])) if (c.kind === "text") out.push({ id: c.id, label: `#${c.name} · ${g.name}` });
+  // outside the app (or a failed call) there are none, not an error
+  for (const g of (await discordGuilds().catch(() => [])) ?? []) {
+    for (const c of (await discordChannels(g.id).catch(() => [])) ?? []) if (c.kind === "text") out.push({ id: c.id, label: `#${c.name} · ${g.name}` });
   }
   return out;
 }
