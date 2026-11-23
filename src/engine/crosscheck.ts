@@ -52,27 +52,41 @@ export const isPlan = (k: Task) => k.lens === "scope" || k.lens === "fit";
 const setOf = (group: Task[]) => (group.some(isPlan) ? PLAN_LENSES : LENSES);
 
 /**
- * The model a lens runs on (Settings › 코드 리뷰): its account when that is of the job's workspace,
- * else one of this workspace with the same provider; nothing that fits keeps the job's own.
+ * Where one reviewer of Settings › 코드 리뷰 runs: its account when that is of the job's workspace,
+ * else one of this workspace with the same provider; none that fits: left out.
  */
-function reviewerFor(job: Task, r?: Reviewer): Partial<Task> {
-  if (!r?.account && !r?.model) return {};
-  // no model picked: that account's own
+function placeOf(job: Task, r: Reviewer): Partial<Task> | undefined {
   const provider = r.model ? r.model.split("/")[0] : state.accounts.find((a) => a.id === r.account)?.providers[0];
   const here = state.accounts.filter((a) => a.space === job.space);
   const acct = here.find((a) => a.id === r.account) ?? (provider ? here.find((a) => a.providers.includes(provider)) : undefined);
-  return acct ? { accountId: acct.id, model: r.model || undefined, ...(r.thinking ? { thinking: r.thinking } : {}) } : {};
+  return acct ? { accountId: acct.id, ...(r.model ? { model: r.model } : {}), ...(r.thinking ? { thinking: r.thinking } : {}) } : undefined;
 }
 
-/** The two lens subagents one review block starts: the job's requirement, each with its lens, its model and the memory the job was given. */
+/** a model's short name, "gpt-6-astra" */
+export const shortModel = (m?: string) => (m ? m.split("/").pop()! : "");
+
+/**
+ * The subagents one review block starts, as one review: each model of Settings › 코드 리뷰 reads
+ * the change through both lenses (none set: the job's own model). Each gets the job's requirement,
+ * its lens and the memory the job was given.
+ */
 export function lensKids(job: Task, ask: string): { title: string; ask: string; extra: Partial<Task> }[] {
   const pair = uid("x");
   const what = ask.replace(/^\s*use the code-review skill[.:]?\s*/i, "").trim() || ask;
-  return LENSES.map((l) => ({
-    title: l.title,
-    ask: `${l.how}\n\n${what}`,
-    extra: { lens: l.lens, pair, memorySnapshot: job.memorySnapshot ?? [], ...reviewerFor(job, state.settings.reviewers?.[l.lens]) },
-  }));
+  const set = Array.isArray(state.settings.reviewers) ? state.settings.reviewers : [];
+  const seen = new Set<string>();
+  const places = set
+    .map((r) => placeOf(job, r))
+    .filter((p): p is Partial<Task> => !!p && !seen.has(`${p.accountId}|${p.model}`) && !!seen.add(`${p.accountId}|${p.model}`))
+    .slice(0, 3);
+  const many = places.length > 1;
+  return (places.length ? places : [{}]).flatMap((p) =>
+    LENSES.map((l) => ({
+      title: many || p.model ? `${l.title} · ${shortModel(p.model ?? state.accounts.find((a) => a.id === p.accountId)?.model)}`.replace(/ · $/, "") : l.title,
+      ask: `${l.how}${many ? " Other models review the same change through the same lens; the job merges what you all find, so just write yours." : ""}\n\n${what}`,
+      extra: { lens: l.lens, pair, memorySnapshot: job.memorySnapshot ?? [], ...p },
+    })),
+  );
 }
 
 const active = (x: Task) => x.status === "queued" || x.status === "running" || x.status === "waiting";
@@ -90,15 +104,24 @@ export function reviewSettled(kids: Task[]): boolean {
 
 const missing = (k?: Task) => (!k ? "시작 안 됨" : k.status === "failed" ? `실패 — ${k.error ?? "알 수 없는 오류"}` : k.status === "done" ? "" : "끝나지 않음");
 
-/** What each lens found, one section per lens; a lens that didn't finish says so. */
+const said = (k?: Task) => {
+  const why = missing(k);
+  return why ? `(빠졌어요: ${why})` : (k!.result ?? k!.summary ?? "(적은 게 없어요)").trim();
+};
+
+/** the models that read a code review (one each, in order); a plan review or one model: one */
+const modelsOf = (group: Task[]) => (group.some(isPlan) ? [] : [...new Set(group.map((k) => k.model ?? ""))]);
+
+/** What each lens found, one section per lens (and in it, one per model when several read it); a lens or model that didn't finish says so. */
 export function lensText(group: Task[]): string {
   if (group.length === 1 && !group[0].pair) return group[0].result ?? group[0].summary ?? "";
+  const models = modelsOf(group);
   return setOf(group).map((l) => {
+    if (models.length > 1)
+      return [`# ${l.title}`, ...models.map((m) => `## ${shortModel(m) || "작업 모델"}\n${said(group.find((x) => x.lens === l.lens && (x.model ?? "") === m))}`)].join("\n");
     const k = group.find((x) => x.lens === l.lens);
-    const why = missing(k);
-    // which model read it: two lenses on two models see different things
-    const by = k?.model && !isPlan(k) ? ` · ${k.model.split("/").pop()}` : "";
-    return `# ${l.title}${by}\n${why ? `(빠졌어요: ${why})` : (k!.result ?? k!.summary ?? "(적은 게 없어요)").trim()}`;
+    const by = k?.model && !isPlan(k) ? ` · ${shortModel(k.model)}` : "";
+    return `# ${l.title}${by}\n${said(k)}`;
   }).join("\n\n");
 }
 
@@ -114,9 +137,38 @@ function findingsIn(text: string): Finding[] {
   return out;
 }
 
+const near = (a: Finding, b: Finding) => a.path === b.path && (a.line == null || b.line == null || Math.abs(a.line - b.line) <= 3);
+const at = (f: Finding) => `\`${f.path}${f.line ? `:${f.line}` : ""}\``;
+
+/**
+ * Several models on one review: the places two or more of them flagged (the surest findings), and the
+ * places they rated differently (one calls it P1/P2, another a different level). Each model's
+ * findings are both its lenses'.
+ */
+export function acrossModels(group: Task[]): { agree: string[]; split: string[] } {
+  const by = modelsOf(group).map((m) => ({
+    m: shortModel(m) || "작업 모델",
+    f: findingsIn(group.filter((k) => (k.model ?? "") === m && k.status === "done").map((k) => k.result ?? "").join("\n")),
+  }));
+  const agree = new Set<string>();
+  const split = new Set<string>();
+  const taken = new Set<string>();
+  for (let i = 0; i < by.length; i++)
+    for (const a of by[i].f) {
+      if (taken.has(`${i}|${at(a)}`)) continue;
+      const others = by.flatMap((o, j) => (j === i ? [] : o.f.filter((b) => near(a, b)).slice(0, 1).map((b) => ({ m: o.m, b, j }))));
+      if (!others.length) continue;
+      others.forEach((o) => taken.add(`${o.j}|${at(o.b)}`));
+      const line = `- ${at(a)} — ${[`${by[i].m} P${a.p}`, ...others.map((o) => `${o.m} P${o.b.p}`)].join(" · ")}`;
+      const ps = [a.p, ...others.map((o) => o.b.p)];
+      if (ps.every((p) => p === a.p)) agree.add(line);
+      else if (Math.min(...ps) <= 2) split.add(line);
+    }
+  return { agree: [...agree], split: [...split] };
+}
+
 /** The same place, judged differently: one lens calls it P1/P2, the other a different level. */
 export function disagreements(design: string, code: string): string[] {
-  const near = (a: Finding, b: Finding) => a.path === b.path && (a.line == null || b.line == null || Math.abs(a.line - b.line) <= 3);
   const out = new Set<string>();
   for (const d of findingsIn(design))
     for (const c of findingsIn(code))
@@ -140,18 +192,25 @@ export function crosscheckMessage(group: Task[], memory: { lines: string[]; spli
     const why = LENSES.map((l) => `${l.title}: ${missing(group.find((x) => x.lens === l.lens))}`).join(" · ");
     return `${CROSSCHECK}가 두 관점 모두 실패했어요 (${why}). 리뷰를 한 번 다시 띄워도 돼요.`;
   }
-  const text = (lens: string) => group.find((k) => k.lens === lens && k.status === "done")?.result ?? "";
-  const both = done.length === LENSES.length;
+  const text = (lens: string) => done.filter((k) => k.lens === lens).map((k) => k.result ?? "").join("\n");
+  const both = LENSES.every((l) => done.some((k) => k.lens === l.lens));
   const split = both ? [...disagreements(text("design"), text("code")), ...memory.split] : [];
   const gone = LENSES.filter((l) => !done.some((k) => k.lens === l.lens)).map((l) => l.title);
+  const models = modelsOf(group);
+  const across = models.length > 1 ? acrossModels(group) : undefined;
   return [
-    `${CROSSCHECK} 결과가 왔어요 (${LENSES.map((l) => l.title).join(" · ")}):`,
+    `${CROSSCHECK} 결과가 왔어요 (${LENSES.map((l) => l.title).join(" · ")}${models.length > 1 ? `, ${models.map((m) => shortModel(m) || "작업 모델").join(" · ")}` : ""}):`,
     "",
     lensText(group),
     ...(both ? ["", "# 두 검토가 갈리는 곳", ...(split.length ? split : ["- 같은 곳을 다르게 본 지적은 없어요."])] : []),
+    ...(across?.agree.length ? ["", "# 여러 모델이 같이 짚은 곳", ...across.agree] : []),
+    ...(across?.split.length ? ["", "# 모델끼리 갈리는 곳", ...across.split] : []),
     ...(memory.lines.length ? ["", "# 메모리 확인", ...memory.lines] : []),
     "",
     ...(gone.length ? [`${gone.join(", ")}는 빠졌어요: 다시 띄우지 말고 done의 unverified에 "${gone.join(", ")} 빠짐"이라고 적어.`] : []),
+    ...(across
+      ? ["여러 모델의 결과를 하나로 합쳐: 같은 문제는 한 번만 고치고, 여러 모델이 같이 짚은 곳부터 봐. 한 모델만 짚은 P1·P2와 모델끼리 갈리는 곳은 리뷰를 다시 띄우지 말고 그 지점만 직접 확인해서 정해."]
+      : []),
     ...(both
       ? ["두 검토가 갈리는 곳은 리뷰를 다시 띄우지 말고, 그 지점 하나만 직접 확인해서(그 코드 한 곳 읽기, 그 테스트 하나 돌리기) 증거가 맞는 쪽으로 정해. 두 검토가 같은 문제를 짚었으면 한 번만 고쳐."]
       : []),

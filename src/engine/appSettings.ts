@@ -24,28 +24,23 @@ const setAgent = async (patch: Record<string, unknown>) => {
   if ("on" in patch) void (patch.on ? startAgent() : stopAgent());
 };
 
-/** a review lens's model as one word: "provider/id", or "same" (the job's own) */
-const reviewer = (lens: "design" | "code"): Entry => ({
-  where: `일반 › 코드 리뷰 › ${lens === "design" ? "설계" : "코드"} 검토 모델 ("provider/id" of a logged-in account, e.g. openai-codex/gpt-6-astra; same = the job's own model)`,
-  kind: { type: "text", max: 120 },
-  missing: "same",
-  get: () => state.settings.reviewers?.[lens]?.model || (state.settings.reviewers?.[lens] ? "account default" : "same"),
-  set: (v: string) => {
-    const model = String(v).trim();
-    const acct = model && model !== "same" ? state.accounts.find((a) => a.space === state.space && a.providers.includes(model.split("/")[0])) ?? state.accounts.find((a) => a.providers.includes(model.split("/")[0])) : undefined;
-    if (model && model !== "same" && !acct) throw new Error(`no account logged in to ${model.split("/")[0]}`);
-    setState("settings", "reviewers", (now) => {
-      const next = { ...(now ?? {}) };
-      if (acct) next[lens] = { account: acct.id, model };
-      else delete next[lens];
-      return next;
-    });
-  },
-});
-
 export const SETTINGS: Record<string, Entry> = {
-  "review.design": reviewer("design"),
-  "review.code": reviewer("code"),
+  "review.models": {
+    where: "일반 › 코드 리뷰 › 함께 리뷰할 모델 (\"provider/id\" of logged-in accounts, e.g. [\"openai-codex/gpt-6-astra\", \"anthropic/claude-opus-5-5\"]; each reads the change and the findings are merged; [] = the job's own model)",
+    kind: { type: "list", max: 3 },
+    missing: [],
+    get: () => (state.settings.reviewers ?? []).map((r) => r.model || `${r.account} (default)`),
+    set: (v: string[]) => {
+      const list = (v ?? []).map((m) => String(m).trim()).filter(Boolean);
+      const out = list.map((model) => {
+        const provider = model.split("/")[0];
+        const acct = state.accounts.find((a) => a.space === state.space && a.providers.includes(provider)) ?? state.accounts.find((a) => a.providers.includes(provider));
+        if (!acct) throw new Error(`no account logged in to ${provider}`);
+        return { account: acct.id, model };
+      });
+      setState("settings", "reviewers", out);
+    },
+  },
   theme: { where: "일반 › 테마", kind: { type: "enum", of: ["system", "dark", "light"] }, get: () => state.settings.theme, set: (v: "system" | "dark" | "light") => setState("settings", "theme", v) },
   language: { where: "일반 › 언어", kind: { type: "enum", of: ["system", "ko", "en"] }, get: () => state.settings.language ?? "system", set: (v: "system" | "ko" | "en") => setState("settings", "language", v) },
   links: { where: "일반 › 링크 열기", kind: { type: "enum", of: ["inside", "outside"] }, get: () => state.settings.links ?? "inside", set: (v: "inside" | "outside") => setState("settings", "links", v) },

@@ -1,67 +1,74 @@
-// Settings › 코드 리뷰: the model each review lens runs on. Two lenses read a change side by side
-// (설계 검토, 코드 검토); on two different models one doesn't fixate where the other looks away.
+// Settings › 코드 리뷰: the models that review a change together. Each reads it through both lenses
+// (설계 검토, 코드 검토) and the job gets their findings merged: where they agree first, where they
+// differ checked once. None set: the job's own model, as before.
 import { For, Show } from "solid-js";
 import { setState, state } from "../state/store";
 import type { Reviewer } from "../state/types";
 import { accountName } from "../ui/AccountPicker";
 import { ModelPicker } from "../ui/ModelPicker";
+import { Icon } from "../ui/Icon";
 import { GroupTitle, Row } from "./Settings";
 import { t } from "../i18n";
 
-const LENSES = [
-  { id: "design", title: "설계 검토 모델", desc: "기획한 대로 만들었는지, 전체 설계를 봐요" },
-  { id: "code", title: "코드 검토 모델", desc: "한 줄씩 보며 버그와 위험한 곳을 찾아요" },
-] as const;
+/** at most this many models on one review (each runs both lenses) */
+const MAX = 3;
 
 /** accounts with models, this workspace's first */
 const accounts = () => state.accounts.filter((a) => a.providers.length > 0).sort((x, y) => Number(y.space === state.space) - Number(x.space === state.space));
 
 export function ReviewSettings() {
-  const set = (lens: "design" | "code", r: Reviewer | undefined) =>
-    setState("settings", "reviewers", (now) => {
-      const next = { ...(now ?? {}) };
-      if (r) next[lens] = r;
-      else delete next[lens];
-      return next;
-    });
+  const list = () => (Array.isArray(state.settings.reviewers) ? state.settings.reviewers : []);
+  const save = (next: Reviewer[]) => setState("settings", "reviewers", next);
+  const at = (i: number, r: Reviewer) => save(list().map((x, j) => (j === i ? r : x)));
+  const add = () => {
+    // the next account not used yet, on its own model
+    const used = new Set(list().map((r) => r.account));
+    const a = accounts().find((x) => !used.has(x.id)) ?? accounts()[0];
+    if (a) save([...list(), { account: a.id, model: a.model || "" }]);
+  };
   return (
     <>
       <GroupTitle title={t("코드 리뷰")} />
       <div class="set-group">
-        <For each={LENSES}>
-          {(l) => {
-            const cur = () => state.settings.reviewers?.[l.id];
-            return (
-              <Row title={t(l.title)} desc={t(l.desc)}>
+        <Show
+          when={list().length}
+          fallback={
+            <Row title={t("함께 리뷰할 모델")} desc={t("여러 모델이 같은 변경을 리뷰하고, 결과를 합쳐서 고쳐요")}>
+              <span class="set-quiet">{t("작업과 같은 모델")}</span>
+            </Row>
+          }
+        >
+          <For each={list()}>
+            {(r, i) => (
+              <Row title={i() ? "" : t("함께 리뷰할 모델")} desc={i() ? undefined : t("여러 모델이 같은 변경을 리뷰하고, 결과를 합쳐서 고쳐요")}>
                 <div class="set-inline">
                   <select
                     class="select"
-                    aria-label={t(l.title)}
-                    value={cur()?.account ?? ""}
+                    aria-label={t("AI 계정")}
+                    value={r.account}
                     onChange={(e) => {
-                      const id = e.currentTarget.value;
-                      const a = state.accounts.find((x) => x.id === id);
-                      set(l.id, a ? { account: a.id, model: a.model || "" } : undefined);
+                      const a = state.accounts.find((x) => x.id === e.currentTarget.value);
+                      if (a) at(i(), { account: a.id, model: a.model || "" });
                     }}
                   >
-                    <option value="">{t("작업과 같은 모델")}</option>
                     <For each={accounts()}>{(a) => <option value={a.id}>{accountName(a, true)}</option>}</For>
                   </select>
-                  <Show when={cur()}>
-                    {(r) => (
-                      <ModelPicker
-                        accountId={r().account}
-                        model={r().model}
-                        thinking={r().thinking ?? ""}
-                        onChange={(m, e) => set(l.id, { account: r().account, model: m, ...(e ? { thinking: e } : {}) })}
-                      />
-                    )}
-                  </Show>
+                  <ModelPicker accountId={r.account} model={r.model} thinking={r.thinking ?? ""} onChange={(m, e) => at(i(), { account: r.account, model: m, ...(e ? { thinking: e } : {}) })} />
+                  <button class="icon-btn sm" title={t("빼기")} aria-label={t("빼기")} onClick={() => save(list().filter((_, j) => j !== i()))}>
+                    <Icon name="x" size={14} />
+                  </button>
                 </div>
               </Row>
-            );
-          }}
-        </For>
+            )}
+          </For>
+        </Show>
+        <Show when={list().length < MAX && accounts().length}>
+          <Row title="">
+            <button class="btn ghost sm" onClick={add}>
+              {t("모델 추가")}
+            </button>
+          </Row>
+        </Show>
       </div>
     </>
   );

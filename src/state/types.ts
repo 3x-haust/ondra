@@ -758,11 +758,11 @@ export interface Settings {
   keybindings?: Record<string, string>;
   /** Settings › 에이전트: Ondra on Discord (engine/discord.ts) */
   agent?: AgentSettings;
-  /** Settings › 코드 리뷰: the model each review lens runs on (unset: the job's own) */
-  reviewers?: { design?: Reviewer; code?: Reviewer };
+  /** Settings › 코드 리뷰: the models that review a change together, their findings merged (none: the job's own) */
+  reviewers?: Reviewer[];
 }
 
-/** a review lens's model: an account and its "provider/id" */
+/** a model of Settings › 코드 리뷰: an account and its "provider/id" (empty: the account's own) */
 export interface Reviewer {
   account: string;
   model: string;

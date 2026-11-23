@@ -2136,3 +2136,7 @@ button.st-sh:hover { text-decoration: underline; }
   align-items: center;
   gap: var(--s-6);
 }
+.set-quiet {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}

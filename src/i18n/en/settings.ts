@@ -661,9 +661,9 @@ export default {
   "연결이 멈췄어요": "The connection stopped",
   "꺼져 있어요": "Off",
   "코드 리뷰": "Code review",
-  "설계 검토 모델": "Design review model",
-  "코드 검토 모델": "Code review model",
-  "기획한 대로 만들었는지, 전체 설계를 봐요": "Checks it was built as planned, and the design as a whole",
-  "한 줄씩 보며 버그와 위험한 곳을 찾아요": "Reads it line by line for bugs and risky spots",
   "작업과 같은 모델": "Same model as the job",
+  "함께 리뷰할 모델": "Models that review together",
+  "여러 모델이 같은 변경을 리뷰하고, 결과를 합쳐서 고쳐요": "Several models review the same change; their findings are merged and fixed",
+  "모델 추가": "Add a model",
+  "빼기": "Remove",
 } satisfies Record<string, string>;
