@@ -50,3 +50,29 @@ export function putToken(text: string, at: number, end: number, n: number): { te
   const tok = `${before && !/\s$/.test(before) ? " " : ""}${imageToken(n)}${/^\s/.test(after) ? "" : " "}`;
   return { text: before + tok + after, caret: before.length + tok.length };
 }
+
+/** the pictures the words still name, by number */
+export function tokensIn(text: string): Set<number> {
+  return new Set([...text.matchAll(TOKEN)].map((m) => Number(m[1])));
+}
+
+/**
+ * Backspace right after a token (or inside it), or Delete right before it: the whole token goes as
+ * one piece, with the space it brought, and the picture with it (`n`). Null: not on a token, or a
+ * selection; the key does what it always does.
+ */
+export function eraseToken(text: string, start: number, end: number, back: boolean): { text: string; caret: number; n: number } | null {
+  if (start !== end) return null;
+  for (const m of text.matchAll(TOKEN)) {
+    const a = m.index!;
+    const b = a + m[0].length;
+    if (back ? start > a && start <= b : start >= a && start < b) {
+      let before = text.slice(0, a);
+      let after = text.slice(b);
+      if (after.startsWith(" ")) after = after.slice(1);
+      else if (before.endsWith(" ")) before = before.slice(0, -1);
+      return { text: before + after, caret: before.length, n: Number(m[1]) };
+    }
+  }
+  return null;
+}
