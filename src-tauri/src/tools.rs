@@ -302,6 +302,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         env.push(("ANDROID_HOME".into(), sdk.clone()));
         env.push(("ANDROID_SDK_ROOT".into(), sdk));
     }
+    if let Some(xc) = crate::devices::xcode_cache() {
+        env.push(("XCODE_XCCONFIG_FILE".into(), xc.display().to_string()));
+    }
     env.push(("APP_WORKER_ID".into(), worker_id.clone()));
     env.extend(crate::bridge::env());
     env.push(("ONDRA_HOOKS_FILE".into(), hooks_file(&app).display().to_string()));

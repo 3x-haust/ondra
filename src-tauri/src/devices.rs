@@ -43,6 +43,31 @@ pub const LEAN: [&str; 5] = ["-no-window", "-gpu", "auto-no-window", "-no-audio"
 /// asked otherwise. Its screen shows in the device hub instead of a separate app
 /// on the user's desktop. Everything else links to the real SDK, so builds and
 /// adb work as before.
+/// Xcode's compilation cache, one for every job's builds (XCODE_XCCONFIG_FILE). Its keys don't
+/// carry the folder (prefix maps), so a build in a job's fresh worktree reuses what any job
+/// compiled before: Orbit's Debug build went from 43s to 19s. Older Xcodes ignore the settings.
+pub fn xcode_cache() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    // no spaces in it (Application Support has one): the path goes to the compilers as is
+    xcode_cache_in(&PathBuf::from(home).join("Library/Caches/dev.3xhaust.ondra/xcode"), std::env::var("XCODE_XCCONFIG_FILE").ok())
+}
+
+fn xcode_cache_in(dir: &std::path::Path, theirs: Option<String>) -> Option<PathBuf> {
+    if theirs.is_some_and(|t| !t.is_empty()) {
+        return None;
+    }
+    let file = dir.join("jobs.xcconfig");
+    let body = format!(
+        "// Ondra: jobs' builds share one compilation cache\nCOMPILATION_CACHE_ENABLE_CACHING = YES\nCOMPILATION_CACHE_CAS_PATH = {}\nCOMPILATION_CACHE_LIMIT_SIZE = 21474836480\nSWIFT_ENABLE_PREFIX_MAPPING = YES\nSWIFT_ENABLE_PROJECT_PREFIX_MAPPING = YES\nCLANG_ENABLE_PREFIX_MAPPING = YES\nCLANG_ENABLE_PROJECT_PREFIX_MAPPING = YES\n",
+        dir.join("cas").display()
+    );
+    if std::fs::read_to_string(&file).ok().as_deref() != Some(body.as_str()) {
+        std::fs::create_dir_all(dir).ok()?;
+        std::fs::write(&file, body).ok()?;
+    }
+    Some(file)
+}
+
 pub fn job_sdk(data: &std::path::Path) -> Option<PathBuf> {
     let real = sdk();
     let real_emu = real.join("emulator/emulator");
