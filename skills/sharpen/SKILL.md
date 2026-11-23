@@ -167,6 +167,22 @@ Each ticket: what it does, its 완료 기준 (from the spec), and **blocked by**
 (the tickets that must be done first). The first ticket should be usable by
 itself.
 
+Blocked by is how a house is built: walls first, then the electrician and the
+plumber at the same time, since both need the walls but not each other. Mark
+only real dependencies (it needs the other's code, data or screen); "it would
+be tidier after" isn't one. Whatever has nothing blocking it runs at once.
+
+Show the tickets like this, and ask whether the size and order are right:
+
+```
+1. 매일 반복 하나만 끝까지 — Blocked by: 없음
+2. 매주, 매월 반복 추가 — Blocked by: 1
+3. 완료하면 다음 회차 생성 — Blocked by: 1
+4. 밀린 회차 하나로 합치기 — Blocked by: 3
+```
+
+When 1 is done, 2 and 3 start together; 4 waits for 3.
+
 ## Where specs and tickets live
 
 Two ways; the project decides, once:
@@ -186,9 +202,10 @@ decision. Never ask again.
 
 ## The agreement gate (합의 끝)
 
-Show the spec's 목표 and the ticket list (one line each, with what blocks
-what), and ask once: "이대로 시작할까요?", recommending "네, 병렬로 시작". Until
-they say yes, nothing is built.
+Show the spec's 목표 and the ticket list (as above), and ask once: "쪼갠 크기와
+먼저 할 일이 맞나요?", recommending "네, 이대로 시작". A correction (merge two,
+split one, another order) redraws the list and asks again. Until they say yes,
+nothing is built.
 
 ## 04 PARALLEL
 
