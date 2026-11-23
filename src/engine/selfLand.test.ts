@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { fixLands, LAND_STREAK, landBranch, landSettle, noteLandAnswer, syncHome } from "./tasks";
+import { fixLands, LAND_STREAK, landBranch, noteLandAnswer, syncHome } from "./tasks";
 import { landHabit, taskPrompt } from "./prompts";
 import { bucket } from "../state/needs";
 
@@ -143,8 +143,9 @@ describe("a folder not on GitHub", () => {
 
   it("names the branch it would merge into", async () => {
     checkout("main");
-    setState("tasks", [job({ landNudged: 0, worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
-    await landBranch("job");
+    setState("settings", "autoMergeFixes", false);
+    setState("tasks", [job({ worktree: { state: "open", repo: "/repo", path: "/repo/.ondra/job", branch: "fix/login", base: "abc", sub: "", from: "main" } })]);
+    await landBranch("job", "fix");
     expect(state.decisions[0]?.question).toContain("main 브랜치에 합칠까요");
   });
 
@@ -165,8 +166,9 @@ describe("a project on GitHub", () => {
   });
 
   it("is asked PR or discard only: the user's own folder is never merged into", async () => {
-    setState("tasks", [job({ landNudged: 0 })]);
-    await landBranch("job");
+    setState("settings", "autoMergeFixes", false);
+    setState("tasks", [job()]);
+    await landBranch("job", "fix");
     const d = state.decisions[0];
     expect(d?.question).toContain("PR로 올릴까요");
     expect(d?.options.map((o) => o.id)).toEqual(["pr", "discard"]);
@@ -211,11 +213,12 @@ describe("a project on GitHub", () => {
     expect(state.tasks[0].entries.filter((e) => e.kind === "note" && e.text === "자동 검사라 묻지 않고 브랜치로 남겨 둬요")).toHaveLength(1);
   });
 
-  it("a folder not on GitHub is left to the merge question as before", async () => {
+  it("a folder not on GitHub gets the local merge among the options", async () => {
     vi.spyOn(native, "gitOnGithub").mockResolvedValue(false);
     const sync = vi.spyOn(native, "gitSyncHome");
-    setState("tasks", [job({ landNudged: 0 })]);
-    await landBranch("job");
+    setState("settings", "autoMergeFixes", false);
+    setState("tasks", [job()]);
+    await landBranch("job", "fix");
     expect(state.decisions[0]?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
     await syncHome(state.tasks[0]);
     expect(sync).not.toHaveBeenCalled();
@@ -232,29 +235,13 @@ describe("what becomes of the branch is the job's to settle", () => {
     expect(text).toContain('{"type":"keep"}');
   });
 
-  it("a job that ended with changes and settled nothing is sent back once to settle it, not asked a set question", async () => {
+  it("a job that ended with changes and settled nothing: no set question and no send-back, it's the user's to say", async () => {
     vi.spyOn(native, "gitOnGithub").mockResolvedValue(true);
     setState("tasks", [job()]);
     await landBranch("job");
     expect(state.decisions).toHaveLength(0);
-    expect(told()).toBe("바뀐 것을 어떻게 할지 정해요");
-    expect(landSettle(1, true)).toMatch(/nothing settled what becomes of them/);
-    expect(landSettle(1, true)).toMatch(/on GitHub/);
-    expect(landSettle(2, false)).toMatch(/not on GitHub/);
-    // it ends again without settling: then the question, so the branch isn't forgotten
-    setState("tasks", 0, "status", "done");
-    await landBranch("job");
-    expect(state.decisions[0]?.kind).toBe("merge");
-  });
-
-  it("is sent back again once the user has spoken since", async () => {
-    setState("tasks", [job()]);
-    await landBranch("job");
-    setState("tasks", 0, "entries", (l) => [...l, { id: "u", at: Date.now() + 10, kind: "user", text: "다른 것도 고쳐줘" } as Entry]);
-    setState("tasks", 0, "status", "done");
-    await landBranch("job");
-    expect(state.decisions).toHaveLength(0);
-    expect(told().split("\n")).toHaveLength(2);
+    expect(told()).toBe("");
+    expect(state.tasks[0].status).toBe("done");
   });
 
   it("keep: the branch stays as it is, nothing asked, and it no longer waits for a merge", async () => {

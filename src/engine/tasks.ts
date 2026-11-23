@@ -1211,32 +1211,9 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix" 
     if (why !== undefined) await tell(id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;
   }
-  await settleLand(id);
-}
-
-/** what a job that ended with changes and settled nothing about them is told: settle it, or ask */
-export const landSettle = (n: number, github: boolean) =>
-  `(Ondra) Your branch still has ${n} changed file${n === 1 ? "" : "s"} and nothing settled what becomes of them. ` +
-  "Settle it now from the user's words and the project's memory (how work lands here: a PR, merging it, a release after it, a local merge, an account or base branch) " +
-  `and from how the repo stands (${github ? "its origin is on GitHub: the user's folder is never merged into, work goes up as a PR" : "not on GitHub: a merge goes into the original folder's current branch"}; a PR or release already open). ` +
-  "When they settle it, do it. When they don't, ask the user yourself with an ask block whose options fit this work and this repo, the one they lean to first and recommended, then do what was picked. " +
-  'End with {"type":"merge"}, {"type":"discard"} or {"type":"keep"} when that is what it came to (a PR you opened needs none).';
-
-/**
- * A job ended with changes and said nothing of them: it is sent back once to settle it itself
- * (the project's memory and the repo say more than a set question can), asking the user its own
- * question when they don't. Ended again without settling it: Ondra's question, so the branch isn't lost.
- */
-async function settleLand(id: string) {
-  const t = taskById(id);
-  const w = t?.worktree;
-  if (!t || t.parentId || t.self || !w || w.state !== "open" || w.kept || t.status !== "done" || prOf(t)) return askMerge(id);
-  if (t.landNudged !== undefined && !userSaidSince(t, t.landNudged)) return askMerge(id);
-  const c = await gitChanges(w.path, w.base).catch(() => null);
-  if (!c?.isRepo || !c.files.length) return;
-  const github = await gitOnGithub(homeDir(t)).catch(() => false);
-  updateTask(id, (x) => (x.landNudged = Date.now()));
-  await tell(id, landSettle(c.files.length, github), { by: "ondra", shown: tr("바뀐 것을 어떻게 할지 정해요") });
+  // nothing said of it: the job's to settle (its git note), the user's to say; nothing set is asked here.
+  // A job Ondra started by itself still goes up as a PR or stays a branch (selfLands).
+  if (t.self) await askMerge(id);
 }
 
 /** Throw the task's changes away (worktree and branch). */
@@ -2632,8 +2609,9 @@ const prMerged = (raw: string) => {
 export async function sweepLanded() {
   for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) {
     await dropEmptyBranch(t.id);
-    // one that finished lately and still holds changes (from before this was asked): asked now
-    if (Date.now() - (taskById(t.id)?.finishedAt ?? 0) < 7 * DAY) await askMerge(t.id);
+    // what becomes of one still holding changes is its own and the user's to say (landBranch), not asked
+    // here; one Ondra started by itself still goes up as a PR or stays a branch
+    if (taskById(t.id)?.self && Date.now() - (taskById(t.id)?.finishedAt ?? 0) < 7 * DAY) await askMerge(t.id);
   }
 }
 

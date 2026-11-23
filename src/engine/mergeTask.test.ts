@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { decide, mergeTask, sweepLanded } from "./tasks";
+import { decide, landBranch, mergeTask, sweepLanded } from "./tasks";
 
 const job = (over: Partial<Task> = {}): Task => ({
   id: "job", space: "home", topic: "Example", title: "Fix login",
@@ -60,15 +60,27 @@ describe("the merge question", () => {
     vi.spyOn(native, "worktreeLanded").mockResolvedValue(null as never);
   });
 
-  it("is asked of a finished job that still holds changes, with a PR recommended, then merge and discard", async () => {
+  // the question is Ondra's only where merging by itself isn't safe (here: the user turned off fixes merging by themselves)
+  const ask = async () => {
+    setState("settings", "autoMergeFixes", false);
+    await landBranch("job", "fix");
+  };
+
+  it("nothing set is asked of a finished job that still holds changes: the job settles it, or the user says", async () => {
     setState("tasks", [job({ finishedAt: Date.now() })]);
     await sweepLanded();
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("when asked, has a PR recommended, then merge and discard", async () => {
+    setState("tasks", [job({ finishedAt: Date.now() })]);
+    await ask();
     const d = state.decisions.find((x) => x.taskId === "job");
     expect(d?.kind).toBe("merge");
     expect(d?.options.map((o) => o.id)).toEqual(["pr", "merge", "discard"]);
     expect(d?.options.filter((o) => o.primary).map((o) => o.id)).toEqual(["pr"]);
-    // asked once, not again on the next sweep
-    await sweepLanded();
+    // asked once, not again
+    await ask();
     expect(state.decisions.filter((x) => x.taskId === "job")).toHaveLength(1);
   });
 
@@ -81,13 +93,13 @@ describe("the merge question", () => {
 
   it("merges or throws the work away on the answer", async () => {
     setState("tasks", [job({ finishedAt: Date.now() })]);
-    await sweepLanded();
+    await ask();
     await decide(state.decisions[0].id, "merge");
     expect(state.tasks[0].worktree?.state).toBe("merged");
 
     setState("tasks", [job({ finishedAt: Date.now() })]);
     setState("decisions", []);
-    await sweepLanded();
+    await ask();
     await decide(state.decisions[0].id, "discard");
     expect(state.tasks[0].worktree?.state).toBe("discarded");
   });
