@@ -276,6 +276,20 @@ describe("the whole way round", () => {
   });
 
   const owner = { id: OWNER, name: "성윤", bot: false };
+
+  it("every request starts fresh, so the channel's last lines come with it", async () => {
+    vi.spyOn(native, "discordHistory").mockResolvedValue([
+      msg({ id: "h1", author: { id: BOT, name: "메타몽", bot: true }, content: "이제 연달아 보내면 묶어서 답할게", at: new Date().toISOString() }),
+      msg({ id: "h2", author: owner, content: "ㅇ", at: new Date().toISOString() }),
+    ]);
+    await ready();
+    emit({ kind: "message", message: msg({ id: "m9", author: owner, content: "메타몽 대답을 해야지" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    const note = said.thrown[0].note ?? "";
+    expect(note).toContain("<recent-talk>");
+    expect(note).toContain("메타몽(너): 이제 연달아 보내면 묶어서 답할게");
+    expect(note).toContain("성윤(주인): ㅇ");
+  });
   const settle = () => new Promise((r) => setTimeout(r, 20));
   const asked = async () => {
     await ready();

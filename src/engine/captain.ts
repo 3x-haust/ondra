@@ -494,7 +494,11 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
       }
       // the provider's policy check turned it down: something earlier in this session can keep tripping it
       // on every later message (each resends it all), so once, a fresh session without the old talk
-      if (attempt === 0 && isRefusal(msg) && (await freshSession(space))) continue;
+      if (attempt === 0 && isRefusal(msg) && (await freshSession(space))) {
+        // the channel's recent talk that came along may be what tripped it: once more without it
+        text = text.replace(/<recent-talk>[\s\S]*?<\/recent-talk>/g, "(left out)");
+        continue;
+      }
       // the account hit its limit: 자동 sits it out and main sends again on one with room, in a fresh
       // session that gets the recent chat as text (moving the session itself re-sends it all uncached)
       const acc = accountOf.get(space);
