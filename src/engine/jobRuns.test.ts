@@ -98,6 +98,32 @@ describe("extension confirmation cards", () => {
     expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
   });
 
+  it("never prompts a job paused while its engine was still starting", async () => {
+    setState("tasks", [job()]);
+    let started!: () => void;
+    vi.mocked(native.agentSpawn).mockImplementationOnce(() => new Promise<void>((r) => (started = r)));
+    const starting = startTask("job");
+    await vi.waitFor(() => expect(started).toBeTypeOf("function"));
+    pauseTask("job");
+    started();
+    await starting;
+    expect(sent("prompt")).toEqual([]);
+    expect(task("job").status).toBe("paused");
+  });
+
+  it("keeps a job paused when its engine start was refused for that pause", async () => {
+    setState("tasks", [job()]);
+    let refuse!: (e: Error) => void;
+    vi.mocked(native.agentSpawn).mockImplementationOnce(() => new Promise<void>((_, no) => (refuse = no)));
+    const starting = startTask("job");
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    pauseTask("job");
+    refuse(new Error("stopped before it started"));
+    await starting;
+    expect(task("job").status).toBe("paused");
+    expect(task("job").error).toBeUndefined();
+  });
+
   it("drops a request when the tool ends without an answer", async () => {
     await working([job()]);
     ask();

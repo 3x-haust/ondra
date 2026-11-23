@@ -1411,6 +1411,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);
+    // paused or ended while the engine was starting (it may wait on a keychain question): the
+    // stop came first, so this engine goes too and is never prompted
+    if (runs.get(id) !== run) return agentKill(agent);
     logInfo("engine", `${id} engine started (${model || "account model"}, ${resume ? "resumed" : "new session"}${talkOnly ? ", no tools" : ""}${t.worktree ? ", worktree" : ""})`);
     markAlive(agent);
     const fresh = taskById(id)!;
@@ -1451,6 +1454,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     markTaken(owed.kids);
     await request(agent, { type: "prompt", message });
   } catch (e) {
+    // a start refused because the job was stopped meanwhile is that stop, not a failure
+    if (runs.get(id) !== run) return;
     fail(id, e instanceof Error ? e.message : String(e));
   }
 }

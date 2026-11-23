@@ -340,8 +340,20 @@ fn tail_chars(s: &str, n: usize) -> String {
 /// (see `secrets::off_main`), and a restart ends the process it replaces.
 #[tauri::command]
 pub async fn agent_spawn(app: AppHandle, id: String, cwd: String, args: Vec<String>, env: Vec<(String, String)>) -> Result<(), String> {
-    crate::secrets::off_main(move || spawn_engine(app.clone(), &app.state::<Engine>(), id, cwd, args, env)).await?
+    // a kill sent while this start waits (on the main thread it came after the start) wins
+    let kills = |id: &str| KILLS.lock().unwrap().as_ref().and_then(|k| k.get(id).copied()).unwrap_or(0);
+    let asked = kills(&id);
+    crate::secrets::off_main(move || {
+        if kills(&id) != asked {
+            return Err("시작하기 전에 멈췄어요".to_string());
+        }
+        spawn_engine(app.clone(), &app.state::<Engine>(), id, cwd, args, env)
+    })
+    .await?
 }
+
+/// How many times each id was killed, so a start that waited past a kill doesn't run.
+static KILLS: Mutex<Option<HashMap<String, u64>>> = Mutex::new(None);
 
 fn spawn_engine(
     app: AppHandle,
@@ -464,6 +476,7 @@ pub fn agent_send(engine: State<'_, Engine>, id: String, command: Value) -> Resu
 
 #[tauri::command]
 pub fn agent_kill(engine: State<'_, Engine>, id: String) {
+    *KILLS.lock().unwrap().get_or_insert_with(HashMap::new).entry(id.clone()).or_default() += 1;
     if let Some(mut p) = engine.procs.lock().unwrap().remove(&id) {
         p.terminate();
     }
