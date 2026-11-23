@@ -318,6 +318,7 @@ export default {
   "{cmd} 실패": "{cmd} failed",
   "이 계정에서 쓸 수 없는 모델 · {m}": "Model not available on this account · {m}",
   "사용 한도 도달 · {msg}": "Usage limit reached · {msg}",
+  "모델 제공사의 정책 검사에 걸려서 답을 못 했어요 · 말을 바꿔서 다시 보내 주세요": "The model provider's policy check turned this down · try saying it another way",
   "로그인이 필요해요 · 설정 › 계정": "Sign in needed · Settings › Accounts",
   "연결된 계정이 없어요 · 설정 › 계정": "No account connected · Settings › Accounts",
 } satisfies Record<string, string>;
