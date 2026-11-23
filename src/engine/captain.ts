@@ -1150,6 +1150,9 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     if (reply) return { reply, routes: [] };
     // a job's end that needs nothing from the user: its row in the chat already says it
     if (event) return { reply: "", routes: [] };
+    // the agent chat posts nothing itself: a route with nothing to say means it acted through the
+    // discord tool or chose to stay quiet
+    if (isAgentChat(space) && objs.length) return { reply: "", routes: [] };
     throw new Error("응답이 비어 있어요");
   }
   return { reply, routes };
