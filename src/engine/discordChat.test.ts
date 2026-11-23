@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function setup() {
+async function setup(route = '{"reply":"다 고쳤어","routes":[]}') {
   vi.useFakeTimers();
   const events = new Map<string, (payload: unknown) => void>();
   vi.spyOn(native, "onEvent").mockImplementation(async (name, fn) => {
@@ -26,7 +26,7 @@ async function setup() {
     const emit = (ev: unknown) => events.get("agent:event")?.({ id, ev });
     emit({ id: command.id, type: "response", success: true, data: {} });
     if (command.type === "prompt") {
-      emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: '```route\n{"reply":"다 고쳤어","routes":[]}\n```' }] } });
+      emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "```route\n" + route + "\n```" }] } });
       emit({ type: "agent_settled" });
     }
   });
@@ -63,6 +63,14 @@ it("loads live ways for user and app-event turns without copying model replies t
   expect(prompts()[1]).toContain("# App event (not a user message or permission)");
   expect(prompts()[1]).not.toContain("Don't retell it");
   expect(state.captain.filter((m) => m.from === "me")).toHaveLength(1);
+  expect(native.discordSend).not.toHaveBeenCalled();
+});
+
+it("takes a turn that only acted through the discord tool as the agent's choice, not an empty answer", async () => {
+  await setup('{"reply":"","routes":[{"kind":"answer","text":""}]}');
+  const id = throwThought("이 메시지엔 리액션만 달아", "home", { project: "@agent", discord: { channel: "c1", message: "m1" } });
+  await vi.waitFor(() => expect(state.captain.find((m) => m.id === id)?.pending).toBe(false));
+  expect(state.captain.find((m) => m.id === id)?.error).toBeUndefined();
   expect(native.discordSend).not.toHaveBeenCalled();
 });
 
