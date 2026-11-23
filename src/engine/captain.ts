@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { clearExtensionUi, extensionUi } from "./extensionUi";
 // The dispatcher (internally "captain"). Every request goes here first and
 // comes back as routes: answer now, add to a running task, start new tasks, or
 // remember. The chat is kept as text in the app; the engine session under it is
@@ -15,7 +16,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { AGENT_CHAT, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { AGENT_CHAT, isAgentChat, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -43,8 +44,7 @@ const sp = (key: string) => base(key).split("~")[0] as SpaceId;
 const pj = (key: string) => base(key).split("~")[1] as string | undefined;
 /** The Discord agent's own chat ("home~@agent"): a chat like main, with its own session, whose
  *  jobs are the agent's (Task.agent) and stay out of the user's main, projects and 내 차례. */
-export { AGENT_CHAT };
-export const isAgentChat = (key: string) => pj(key) === AGENT_CHAT;
+export { AGENT_CHAT, isAgentChat };
 /** the project a chat belongs to (none for main and for the agent's chat) */
 const pid = (key: string) => (isAgentChat(key) ? undefined : pj(key));
 /** a run of the agent's routine that has something to say: its chat speaks about it (no one asked
@@ -607,6 +607,7 @@ async function restartStale(space: string, skills: string): Promise<boolean> {
   const agent = agentOf(space);
   if (!isAlive(agent) || !attached.has(space) || !sigOf.has(space)) return false;
   if ((await startSig(folderOf(space), skills, space)) === sigOf.get(space)) return false;
+  clearExtensionUi(`main:${space}`);
   const gone = new Promise<void>((done) => {
     listen(agent, { event() {}, exit: () => done() });
     setTimeout(done, 3000);
@@ -738,6 +739,7 @@ const autoMain = (space: string) => !(isAgentChat(space) && agentAccount(sp(spac
 const freshNext = new Set<string>();
 /** Stop main to start it again on another account, in a fresh session. */
 async function moveMain(space: string) {
+  clearExtensionUi(`main:${space}`);
   const agent = agentOf(space);
   // its exit has to land before the new engine listens, or it would mark that one dead
   const gone = new Promise<void>((done) => {
@@ -766,8 +768,10 @@ async function ensureCaptain(space: string) {
   const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "", isAgentChat(space) ? agentAccount(sp(space), agentChannel(space)) : undefined) ?? (worlds.has(space) ? state.accounts[0] : undefined);
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
+  const ui = extensionUi(`main:${space}`, agent, () => attached.has(space));
   listen(agent, {
     event(ev) {
+      ui.event(ev);
       if (ev.type === "message_start" && ev.message?.role === "assistant") {
         texts.set(space, "");
         const g = genOf.get(space) ?? { ms: 0 };
@@ -802,6 +806,7 @@ async function ensureCaptain(space: string) {
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
     exit() {
+      ui.close();
       attached.delete(space);
       markDead(agent);
       const tail = stderrOf(agent).split("\n").filter(Boolean).pop();
@@ -864,6 +869,7 @@ async function ensureCaptain(space: string) {
 /** Throw the engine session away (the chat itself stays as text). Next message starts small. */
 /** A new session for this chat with nothing of the old one carried over (not even a recap). */
 async function freshSession(space: string): Promise<boolean> {
+  clearExtensionUi(`main:${space}`);
   const agent = agentOf(space);
   sentOf.set(space, { recap: false });
   if (!isAlive(agent)) return false;
@@ -886,6 +892,7 @@ async function clearSession(space: string) {
     return;
   }
   try {
+    clearExtensionUi(`main:${space}`);
     await request(agent, { type: "new_session" }, 8000);
     statsOf.delete(space);
     sentOf.set(space, { recap: true });
@@ -903,6 +910,7 @@ async function clearSession(space: string) {
 export async function resetMain(spaceId: SpaceId, project?: string) {
   const space = chatKey(spaceId, project);
   const agent = agentOf(space);
+  clearExtensionUi(`main:${space}`);
   // Kill and wait until its exit has come through: a late exit would mark the
   // new engine dead, and a spawn that ran first would be the one killed.
   if (isAlive(agent)) {
@@ -1433,6 +1441,7 @@ export async function editMain(messageId: string, text: string) {
   setState("captain", (all) => all.filter((x) => !later.has(x.id)));
   const agent = agentOf(space);
   if (isAlive(agent) && attached.has(space) && m.text) {
+    clearExtensionUi(`main:${space}`);
     const ok = await forkAt(agent, `# Message\n${m.text}`);
     // not in this session any more (it was cleared): start clean from the text instead
     if (!ok) await request(agent, { type: "new_session" }, 8000).catch(() => {});
@@ -1446,6 +1455,7 @@ export async function editMain(messageId: string, text: string) {
 
 /** Stop main's current reply. */
 export async function stopMain(space: string) {
+  clearExtensionUi(`main:${space}`);
   const agent = agentOf(space);
   if (!isAlive(agent)) return;
   try {

@@ -146,25 +146,31 @@ async fn rest(method: reqwest::Method, path: &str, body: Option<Value>) -> Resul
 }
 
 #[tauri::command]
-pub fn discord_token_set(token: String) -> Result<(), String> {
-    let t = token.trim();
-    if t.is_empty() {
-        return crate::secrets::vault_delete(TOKEN_ITEM);
-    }
-    crate::secrets::vault_set(TOKEN_ITEM, t)
+pub async fn discord_token_set(token: String) -> Result<(), String> {
+    crate::secrets::off_main(move || {
+        let t = token.trim();
+        if t.is_empty() {
+            return crate::secrets::vault_delete(TOKEN_ITEM);
+        }
+        crate::secrets::vault_set(TOKEN_ITEM, t)
+    })
+    .await?
 }
 
 /// Use a saved secret (Settings › 시크릿, by name) as the bot token: the value moves here, natively,
 /// so an agent that set it up for the user never sees it.
 #[tauri::command]
-pub fn discord_token_from_secret(name: String) -> Result<(), String> {
-    let v = crate::secrets::saved_value(name.trim()).filter(|v| !v.trim().is_empty()).ok_or_else(|| format!("시크릿 {}이(가) 없어요", name.trim()))?;
-    crate::secrets::vault_set(TOKEN_ITEM, v.trim())
+pub async fn discord_token_from_secret(name: String) -> Result<(), String> {
+    crate::secrets::off_main(move || {
+        let v = crate::secrets::saved_value(name.trim()).filter(|v| !v.trim().is_empty()).ok_or_else(|| format!("시크릿 {}이(가) 없어요", name.trim()))?;
+        crate::secrets::vault_set(TOKEN_ITEM, v.trim())
+    })
+    .await?
 }
 
 #[tauri::command]
-pub fn discord_token_has() -> bool {
-    token().is_ok()
+pub async fn discord_token_has() -> bool {
+    crate::secrets::off_main(|| token().is_ok()).await.unwrap_or(false)
 }
 
 /// Send `text` to a channel, as a reply to `reply_to` when given; the ids of what was sent.
@@ -392,8 +398,8 @@ pub fn discord_stop() {
 }
 
 #[tauri::command]
-pub fn discord_start(app: AppHandle) -> Result<(), String> {
-    let token = token()?;
+pub async fn discord_start(app: AppHandle) -> Result<(), String> {
+    let token = crate::secrets::off_main(token).await??;
     discord_stop();
     let handle = tauri::async_runtime::spawn(async move { hold(app, token).await });
     *RUN.lock().unwrap() = Some(handle);

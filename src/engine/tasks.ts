@@ -2,6 +2,7 @@
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
 import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
+import { answerExtensionUi, clearExtensionUi, extensionUi } from "./extensionUi";
 import { far, farDecide, markFarRead, startFar } from "./hosts";
 import { hostOfTask, mirroredDecision, splitProjectId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
@@ -20,7 +21,7 @@ import { closePlan, moveTo, nextPlan, openAsked, planText, unexplained } from ".
 import type { Account, Block, Decision, Entry, Evidence, Handoff, Permission, Priority, PrWatch, Shell, Size, Task, TokenStats, ToolCall, Usage, Weight } from "../state/types";
 import { setLive, toast } from "../state/ui";
 import { allowedDevices, refreshDevices } from "../state/devices";
-import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentSend, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState, gitOnGithub, gitSyncHome, ghWatch } from "../lib/native";
+import { inTauri, jobDevicesRelease, accountDirPath, agentKill, agentStopCommand, agentSpawn, browserCheck, browserRelease, type Env, gitChanges, spaceEnv, workerEnv, workerExtensions, worktreeCreate, worktreeLanded, worktreeMerge, worktreeRemove, fsRead, ghPrState, gitOnGithub, gitSyncHome, ghWatch } from "../lib/native";
 import { canWake, hasNews, parseSnap, prNews, wakeText, type PrNews } from "./prWatch";
 import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
@@ -1410,6 +1411,9 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
       ...(resume ? ["--continue"] : []),
     ];
     await agentSpawn(agent, cwd, args, env);
+    // paused or ended while the engine was starting (it may wait on a keychain question): the
+    // stop came first, so this engine goes too and is never prompted
+    if (runs.get(id) !== run) return agentKill(agent);
     logInfo("engine", `${id} engine started (${model || "account model"}, ${resume ? "resumed" : "new session"}${talkOnly ? ", no tools" : ""}${t.worktree ? ", worktree" : ""})`);
     markAlive(agent);
     const fresh = taskById(id)!;
@@ -1450,6 +1454,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     markTaken(owed.kids);
     await request(agent, { type: "prompt", message });
   } catch (e) {
+    // a start refused because the job was stopped meanwhile is that stop, not a failure
+    if (runs.get(id) !== run) return;
     fail(id, e instanceof Error ? e.message : String(e));
   }
 }
@@ -1502,6 +1508,7 @@ function releaseDevicesSoon(ms = DEVICE_GRACE_MS) {
 }
 
 function fail(id: string, message: string) {
+  clearExtensionUi(id);
   logError("task", `${id} failed: ${message}`);
   // a folder left for it (it ran in a branch it had handed on) can go now
   setTimeout(() => void sweepWorktrees(), 0);
@@ -1530,10 +1537,12 @@ function fail(id: string, message: string) {
 
 function handlers(id: string, run: Run) {
   const agent = agentOf(id);
+  const ui = extensionUi(id, agent, () => runs.get(id) === run);
   return {
     event(ev: any) {
       if (runs.get(id) !== run) return;
       run.heardAt = Date.now();
+      ui.event(ev);
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;
@@ -1711,9 +1720,6 @@ function handlers(id: string, run: Run) {
           // waiting on a dropped connection: its note says so already, the engine's retries would only pile up under it
           if (!run.netTries) updateTask(id, (t) => push(t, { kind: "note", text: `재시도 ${ev.attempt ?? ""}/${ev.maxAttempts ?? ""}` }));
           break;
-        case "extension_ui_request":
-          if (["select", "confirm", "input"].includes(ev.method)) uiDecision(id, ev);
-          break;
         case "agent_settled":
           run.streaming = false;
           run.ended = true;
@@ -1734,6 +1740,7 @@ function handlers(id: string, run: Run) {
       }
     },
     exit(code: number | null) {
+      ui.close();
       markDead(agent);
       const t = taskById(id);
       // the app quitting took it down: it stays running and picks up again when the app opens
@@ -1753,33 +1760,6 @@ function handlers(id: string, run: Run) {
       }
     },
   };
-}
-
-function uiDecision(id: string, ev: any) {
-  const options =
-    ev.method === "confirm"
-      ? [
-          { id: "yes", label: "허용", primary: true },
-          { id: "no", label: "거부" },
-        ]
-      : ev.method === "select"
-        ? (ev.options ?? []).map((o: string, i: number) => ({ id: o, label: o, primary: i === 0 }))
-        : [{ id: "cancel", label: "취소" }];
-  const d: Decision = {
-    id: uid("d"),
-    taskId: id,
-    at: Date.now(),
-    kind: "ask",
-    question: [ev.title, ev.message].filter(Boolean).join(" — ") || "확인 필요",
-    options,
-    context: [],
-    ui: { requestId: ev.id, method: ev.method },
-  };
-  setState("decisions", (list) => [...list, d]);
-  updateTask(id, (t) => {
-    t.status = "waiting";
-    t.unread = true;
-  });
 }
 
 /**
@@ -2162,6 +2142,7 @@ export function cardFromThread(t: Task): Handoff {
  * session starts its cache over wherever it runs, so this move costs nothing.
  */
 async function newSession(id: string, run: Run, card: Handoff, to?: string) {
+  clearExtensionUi(id);
   const agent = agentOf(id);
   run.longNudges = 0;
   run.limitAsked = false;
@@ -2539,6 +2520,7 @@ function leftAsIs(id: string, open: string[]) {
 
 
 function finish(id: string, summary: string, run?: Run) {
+  clearExtensionUi(id);
   // it worked in a finished job's branch folder: the branch (and its merge) ends up here
   claimBranch(id);
   // a folder left for it (it ran in a branch it had handed on) can go now
@@ -3397,6 +3379,13 @@ export async function decide(decisionId: string, optionId: string) {
   }
   track("decision_answered", { waited_s: Math.max(0, Math.round((Date.now() - d.at) / 1000)) });
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
+  if (d.ui) {
+    if (await answerExtensionUi(d, optionId)) {
+      const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
+      updateTask(d.taskId, (t) => push(t, { kind: "user", text: label }));
+    }
+    return;
+  }
   if (d.round && (await answerInRound(d, optionId))) return;
   // main asked it: the answer goes back to main as the user's message
   if (d.taskId.startsWith("main:")) {
@@ -3408,23 +3397,7 @@ export async function decide(decisionId: string, optionId: string) {
   }
   const t = taskById(d.taskId);
   if (!t) return;
-  const agent = agentOf(t.id);
   const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
-
-  if (d.ui && isAlive(agent)) {
-    const reply =
-      d.ui.method === "confirm"
-        ? { type: "extension_ui_response", id: d.ui.requestId, confirmed: optionId === "yes" }
-        : d.ui.method === "select"
-          ? { type: "extension_ui_response", id: d.ui.requestId, value: optionId }
-          : { type: "extension_ui_response", id: d.ui.requestId, cancelled: true };
-    updateTask(t.id, (x) => {
-      x.status = "running";
-      push(x, { kind: "user", text: label });
-    });
-    void agentSend(agent, reply);
-    return;
-  }
   if (d.kind === "merge" && optionId === "merge-pr") {
     const pr = prOf(t);
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
@@ -3561,6 +3534,7 @@ const meansStop = (text: string) => /멈춰|멈추|멈춤|그만|중지|중단|�
 
 export function pauseTask(id: string) {
   { const r = far(id, "pauseTask", [id]); if (r) return r as never; }
+  clearExtensionUi(id);
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
@@ -3583,6 +3557,7 @@ export function pauseTask(id: string) {
  * nothing that would ever resume it (its job was over).
  */
 function endKid(id: string) {
+  clearExtensionUi(id);
   runs.delete(id);
   agentKill(agentOf(id));
   markDead(agentOf(id));
@@ -3668,6 +3643,7 @@ export const finishTask = (id: string) => {
 
 export function removeTask(id: string) {
   { const r = far(id, "removeTask", [id]); if (r) return r as never; }
+  clearExtensionUi(id);
   for (const k of childrenOf(id)) removeTask(k.id);
   releaseBrowser(id);
   const gone = taskById(id);
@@ -3881,6 +3857,7 @@ export async function editTurn(id: string, entryId: string, text: string) {
   const at = t.entries.findIndex((e) => e.id === entryId);
   const old = t.entries[at];
   if (at < 0 || old.kind !== "user") return;
+  clearExtensionUi(id);
   const first = !t.entries.slice(0, at).some((e) => e.kind === "user");
   const agent = agentOf(id);
   const run = runs.get(id);

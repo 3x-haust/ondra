@@ -48,6 +48,16 @@ describe("the Discord agent's work", () => {
     expect(agentDecisions().map((d) => d.id)).toEqual(["d2", "d3"]);
   });
 
+  it("keeps main agent questions, including channel chats, out of the user's turn", () => {
+    setState("decisions", ["main:home", "main:home~@agent", "main:home~@agent:12345", "main:work~@agent:67890"].map((taskId, i) => ({
+      id: `d${i}`, taskId, at: 1, kind: "ask", question: "?", context: [], options: [],
+    })));
+    expect(allDecisions().map((d) => d.id)).toEqual(["d0"]);
+    expect(agentDecisions().map((d) => d.id)).toEqual(["d1", "d2", "d3"]);
+    expect(agentDecisions("home").map((d) => d.id)).toEqual(["d1", "d2"]);
+    expect(agentDecisions("work").map((d) => d.id)).toEqual(["d3"]);
+  });
+
   it("a busy chat keeps its last messages without pushing another chat's out", () => {
     const m = (id: string, project?: string): CaptainMessage => ({ id, at: 1, space: "home", project, from: "me", text: id });
     const list = [m("main-old"), ...Array.from({ length: 5 }, (_, i) => m(`a${i}`, "@agent"))];

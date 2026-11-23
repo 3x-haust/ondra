@@ -225,13 +225,18 @@ export const allTasks = (): Task[] => [...state.tasks, ...mirroredTasks()];
 export const queueWith = (t: Task): Task[] =>
   (t.host ? mirroredTasks().filter((x) => x.host === t.host) : state.tasks).filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
 /** every question waiting on the user: this Mac's and those of the other Macs' jobs */
-export const allDecisions = (): Decision[] => [...state.decisions, ...mirroredDecisions()].filter((d) => !agentWork(taskById(d.taskId)));
+export const allDecisions = (): Decision[] => [...state.decisions, ...mirroredDecisions()].filter((d) => !agentDecision(d));
 /** the Discord agent's own chat, as a chat's project id ("home~@agent"; engine/captain.ts) */
 export const AGENT_CHAT = "@agent";
+export const isAgentChat = (key: string) => {
+  const project = key.replace(/^sim\d*:/, "").split("~")[1];
+  return project === AGENT_CHAT || !!project?.startsWith(`${AGENT_CHAT}:`);
+};
 /** the Discord agent's work (it, or the job it is under): shown in the 에이전트 tab only */
 export const agentWork = (t: Task | undefined): boolean => !!t && (!!t.agent || (!!t.parentId && !!taskById(t.parentId)?.agent));
 /** the questions of the agent's work, for the 에이전트 tab */
-export const agentDecisions = (): Decision[] => state.decisions.filter((d) => agentWork(taskById(d.taskId)));
+const agentDecision = (d: Decision) => d.taskId.startsWith("main:") ? isAgentChat(d.taskId.slice(5)) : agentWork(taskById(d.taskId));
+export const agentDecisions = (space?: SpaceId): Decision[] => state.decisions.filter((d) => agentDecision(d) && (!space || (d.taskId.startsWith("main:") ? d.taskId.slice(5).split("~")[0] : taskById(d.taskId)?.space) === space));
 /** compare folders in "~/…" form (macOS home) */
 const norm = (d: string) => d.replace(/^\/Users\/[^/]+(?=\/|$)/, "~").replace(/\/+$/, "");
 /** the project whose folder holds this folder (deepest wins) */

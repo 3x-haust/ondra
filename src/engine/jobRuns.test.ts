@@ -70,6 +70,133 @@ async function handsOff() {
   await tick();
 }
 
+describe("extension confirmation cards", () => {
+  const ask = () => emit({ type: "extension_ui_request", id: "secure-input", method: "confirm", title: "보안 입력", message: "로그인 창", timeout: 1000 });
+
+  it("answers the live request once without prompting the model", async () => {
+    await working([job()]);
+    ask();
+    const d = state.decisions[0];
+    expect(d.ui).toEqual({ requestId: "secure-input", method: "confirm" });
+    await decide(d.id, "yes");
+    await decide(d.id, "yes");
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "secure-input", confirmed: true }],
+    ]);
+    expect(sent("prompt")).toHaveLength(1);
+  });
+
+  it("removes a paused request and never answers it on the replacement engine", async () => {
+    await working([job()]);
+    ask();
+    const id = state.decisions[0].id;
+    pauseTask("job");
+    expect(state.decisions).toHaveLength(0);
+    resumeTask("job");
+    await startTask("job");
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+  });
+
+  it("never prompts a job paused while its engine was still starting", async () => {
+    setState("tasks", [job()]);
+    let started!: () => void;
+    vi.mocked(native.agentSpawn).mockImplementationOnce(() => new Promise<void>((r) => (started = r)));
+    const starting = startTask("job");
+    await vi.waitFor(() => expect(started).toBeTypeOf("function"));
+    pauseTask("job");
+    started();
+    await starting;
+    expect(sent("prompt")).toEqual([]);
+    expect(task("job").status).toBe("paused");
+  });
+
+  it("keeps a job paused when its engine start was refused for that pause", async () => {
+    setState("tasks", [job()]);
+    let refuse!: (e: Error) => void;
+    vi.mocked(native.agentSpawn).mockImplementationOnce(() => new Promise<void>((_, no) => (refuse = no)));
+    const starting = startTask("job");
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    pauseTask("job");
+    refuse(new Error("stopped before it started"));
+    await starting;
+    expect(task("job").status).toBe("paused");
+    expect(task("job").error).toBeUndefined();
+  });
+
+  it("drops a request when the tool ends without an answer", async () => {
+    await working([job()]);
+    ask();
+    const id = state.decisions[0].id;
+    emit({ type: "tool_execution_end", toolCallId: "computer", result: {} });
+    expect(state.decisions).toHaveLength(0);
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+  });
+
+  it("keeps a pending confirmation while another parallel tool finishes", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "computer", toolName: "computer", args: {} });
+    emit({ type: "tool_execution_start", toolCallId: "read", toolName: "read", args: {} });
+    ask();
+    const id = state.decisions[0].id;
+    emit({ type: "tool_execution_end", toolCallId: "read", toolName: "read", result: {} });
+    expect(state.decisions.map((d) => d.id)).toEqual([id]);
+    await decide(id, "yes");
+    expect(calls().filter((c) => c.type === "extension_ui_response")).toHaveLength(1);
+  });
+
+  it("removes only the cancelled request while parallel tools and cards remain", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "computer", toolName: "computer", args: {} });
+    emit({ type: "tool_execution_start", toolCallId: "read", toolName: "read", args: {} });
+    ask();
+    const cancelled = state.decisions[0].id;
+    emit({ type: "extension_ui_request", id: "other", method: "confirm", title: "다른 확인" });
+    const other = state.decisions[1].id;
+    emit({ type: "extension_ui_cancel", id: "secure-input" });
+    emit({ type: "tool_execution_end", toolCallId: "computer", result: {} });
+    expect(state.decisions.map(d => d.id)).toEqual([other]);
+    await decide(cancelled, "yes");
+    expect(calls().filter(c => c.type === "extension_ui_response")).toEqual([]);
+    emit({ type: "extension_ui_cancel", id: "unknown" });
+    expect(state.decisions.map(d => d.id)).toEqual([other]);
+    await decide(other, "no");
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "other", confirmed: false }],
+    ]);
+  });
+
+  it.each([
+    ["select", "선택", { value: "선택" }],
+    ["input", "cancel", { cancelled: true }],
+    ["confirm", "no", { confirmed: false }],
+  ])("preserves the existing %s reply", async (method, option, reply) => {
+    await working([job()]);
+    emit({ type: "extension_ui_request", id: "existing", method, options: ["선택"] });
+    await decide(state.decisions[0].id, option as string);
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "existing", ...reply as object }],
+    ]);
+  });
+
+  it("expires the card without turning a late answer into a user message", async () => {
+    await working([job()]);
+    vi.useFakeTimers();
+    try {
+      ask();
+      const id = state.decisions[0].id;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(state.decisions).toHaveLength(0);
+      await decide(id, "yes");
+      expect(calls().filter((c) => c.type === "extension_ui_response")).toEqual([]);
+      expect(sent("prompt")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("another job's message while the job works", () => {
   it("is not wrapped as the user's words", async () => {
     await working([job(), kid({ status: "done" })]);

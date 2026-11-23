@@ -280,6 +280,7 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
     // The engine's computer extension spawns it on `start`; no VM guest is involved.
     if let Some(cuhost) = sidecar("ondra-cuhost") {
         env.push(("ONDRA_COMPUTER_HOST".into(), "1".into()));
+        env.push(("ONDRA_COMPUTER_HOST_APP_PID".into(), std::process::id().to_string()));
         env.push(("ONDRA_COMPUTER_HOST_BIN".into(), cuhost.display().to_string()));
         // The guard is injected into an app the helper opens in the background so the app
         // cannot make itself a Dock app or come to the front. It ships beside the helper

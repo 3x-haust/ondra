@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { envelope, backgroundPreserved, HostObservation, HostHelperError, ComputerHostHelper, ComputerHostSession, type HostNode } from "../../extensions/lib/computer-host";
 
 const env = (pid: number, win = "W", x = 1, y = 2) => ({ frontmostApp: "app", frontmostPid: pid, frontmostKeyWindow: win, mouse: { x, y } });
@@ -128,6 +128,20 @@ process.stdin.on("data", c => {
     const r = await helper.request("frontmost");
     expect(r.echoed).toBe("frontmost");
     await expect(helper.request("boom")).rejects.toBeInstanceOf(HostHelperError);
+    helper.stop();
+  });
+
+  it("does not let a cancelled request's late reply consume the next approval response", async () => {
+    const helper = new ComputerHostHelper(process.execPath, [fakeHelper()]);
+    helper.start();
+    const controller = new AbortController();
+    const pending = helper.request("frontmost", {}, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow("Aborted");
+    await expect(helper.request("prepare")).rejects.toThrow("busy");
+    await vi.waitFor(async () => {
+      expect((await helper.request("frontmost")).echoed).toBe("frontmost");
+    });
     helper.stop();
   });
 });
