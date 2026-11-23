@@ -48,6 +48,8 @@ describe("skill matching", () => {
   it.each([
     ["이 앱 바이너리를 분석해줘", "reverse-engineering"],
     ["경쟁사 리서치해서 정리해줘", "deep-research"],
+    ["반복 할 일 기능 만들기 전에 인터뷰해줘", "sharpen"],
+    ["grill me on this plan", "sharpen"],
     ["피그마 그대로 만들어줘", "mimikyu"],
     ["웹 디자인 방향을 잡아줘", "web-design"],
     ["디자인 토큰과 디자인 규칙을 정리해줘", "web-design"],

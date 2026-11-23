@@ -22,6 +22,7 @@ export default {
   "사실": "Fact",
   "방법": "How-to",
   "배운 점": "Lesson",
+  "용어": "Term",
   "켜진 기기 없음": "No devices on",
   "함수": "Function",
   "찾음": "Searched",
