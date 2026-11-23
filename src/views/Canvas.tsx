@@ -4,6 +4,7 @@
 // doing; it shows it: the tool it is using right now moves, the strip under it
 // is the rhythm of its last steps, the bar is its plan, the split is its diff.
 // Cards can be dragged; where you put them is kept.
+import { awaitsMerge } from "../state/needs";
 import { describeBrowser, describeCommand, nowText } from "../engine/describe";
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 type P = { x: number; y: number };
@@ -85,7 +86,7 @@ function tone(t: Task): string {
   if (t.status === "running" || kids.some((k) => k.status === "running")) return "live";
   if (t.status === "paused") return "paused";
   if (t.status === "queued") return "idle";
-  if (t.status === "done" && t.worktree?.state === "open") return "review";
+  if (awaitsMerge(t)) return "review";
   return "done";
 }
 

@@ -1179,11 +1179,20 @@ export async function syncHome(t: Task) {
   if (r.state === "updated") updateTask(t.id, (x) => push(x, { kind: "note", text: r.branch === "main" ? "로컬 main을 GitHub 최신으로 맞췄어요" : "로컬 기본 브랜치를 GitHub 최신으로 맞췄어요" }));
 }
 
+/** The job put its branch in a pull request: the merge is GitHub's now (cleaned up when it's
+ *  merged there), so the job isn't 병합 필요. */
+function markPr(id: string) {
+  const t = taskById(id);
+  const pr = t && !t.parentId && t.worktree?.state === "open" && !t.worktree.pr ? prOf(t) : undefined;
+  if (pr) updateTask(id, (x) => x.worktree && (x.worktree.pr = pr.url));
+}
+
 /** The job's own say on its branch, then the question if it is still open. */
 export async function landBranch(id: string, land?: "merge" | "discard" | "fix" | "keep") {
   const t = taskById(id);
   if (!t || t.worktree?.state !== "open") return;
   if (land === "discard") return discardTask(id);
+  markPr(id);
   if (land === "keep") {
     updateTask(id, (x) => {
       if (x.worktree) x.worktree.kept = true;
@@ -2586,6 +2595,7 @@ const prMerged = (raw: string) => {
 /** Finished jobs whose branch has landed since (merged on GitHub later, or before this check existed). */
 export async function sweepLanded() {
   for (const t of state.tasks.filter((x) => x.status === "done" && x.worktree?.state === "open" && !x.parentId)) {
+    markPr(t.id);
     await dropEmptyBranch(t.id);
     // what becomes of one still holding changes is its own and the user's to say (landBranch), not asked
     // here; one Ondra started by itself still goes up as a PR or stays a branch

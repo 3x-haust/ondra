@@ -1,6 +1,7 @@
 // The board: every task of the workspace at a glance, as columns by state or
 // by project. Cards act in place: pause, start now, merge, and "메시지" sends a
 // change to a task without opening it, so several can be steered one after another.
+import { awaitsMerge } from "../state/needs";
 import { nowText } from "../engine/describe";
 import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import { decisionFor, projectsShown, kidsOf, state, tasksShown } from "../state/store";
@@ -53,7 +54,7 @@ function stateOf(task: Task): string {
   if (task.status === "running") return "running";
   if (task.status === "paused") return "paused";
   if (task.status === "queued") return "queued";
-  if (task.status === "done" && task.worktree?.state === "open") return "review";
+  if (awaitsMerge(task)) return "review";
   return "done";
 }
 

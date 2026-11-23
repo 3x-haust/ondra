@@ -1,5 +1,6 @@
 // Small pieces the memory tree and side share: badges on a piece, outcome of a
 // finished job, dates, where a cited file is on disk.
+import { awaitsMerge } from "../state/needs";
 import { Show } from "solid-js";
 import { expand } from "../engine/rpc";
 import { userOwned } from "../engine/memory";
@@ -20,7 +21,7 @@ export function outcomeOf(e: JournalEntry): Outcome {
   const task = state.tasks.find((x) => x.id === e.taskId);
   if (task && discarded(task)) return "discarded";
   if (e.outcome !== "done") return e.outcome;
-  return task?.status === "done" && task.worktree?.state === "open" ? "review" : "done";
+  return task && awaitsMerge(task) ? "review" : "done";
 }
 
 export { agoIn } from "../ui/bits";

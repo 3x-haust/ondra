@@ -129,6 +129,9 @@ export function stateMeta(x: Task, kid = false): { text: string; tone: "bad" | "
   if (x.status === "queued") return { text: tr("대기"), tone: "idle" };
   if (x.status === "paused") return { text: tr("일시정지"), tone: "idle" };
   if (x.status === "running") return { text: x.startedAt ? (soon() - x.startedAt < 60_000 ? tr("방금") : compact(soon() - x.startedAt)) : "", tone: "live" };
+  // its branch is in a pull request, still open on GitHub: which one
+  const pr = x.status === "done" && x.worktree?.state === "open" ? /\/pull\/(\d+)/.exec(x.worktree.pr ?? "")?.[1] : undefined;
+  if (pr) return { text: `PR #${pr}`, tone: "done" };
   // merged: when it was merged (older tasks without mergedAt: when it finished)
   return { text: ago(endTime(x)), tone: "done" };
 }
