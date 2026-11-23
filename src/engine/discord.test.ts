@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, BANTER, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -74,6 +74,8 @@ describe("talk with others", () => {
     setState("tasks", [{ id: "t1", title: "비밀 데스크탑 앱 출시 준비" } as never]);
     const p = talkPrompt(agent, "누군가", [msg({ author: { id: BOT, name: "메타몽", bot: true }, content: "안녕" })], "꿈 얘기 해줘", BOT);
     expect(p).toContain(OTHERS_RULES);
+    // talking with anyone, swearing and roasting are fine too
+    expect(p).toContain(BANTER);
     expect(p).toContain("꿈");
     expect(p).toContain("메타몽(너): 안녕");
     expect(p).not.toContain("비밀 데스크탑");
@@ -148,6 +150,7 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordDelete").mockResolvedValue();
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
     vi.spyOn(native, "discordReact").mockResolvedValue();
+    vi.spyOn(native, "discordUnreact").mockResolvedValue();
     ways.text = undefined;
     vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: null, engineVersion: null, dataDir: "/data", home: "/Users/me" });
     vi.spyOn(native, "fsRead").mockImplementation(async (path) => {
@@ -181,6 +184,10 @@ describe("the whole way round", () => {
     setState("tasks", [{ id: "t7", title: "로그인 버그", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", "m9"));
+    // answered: the 👀 that said "seen" goes
+    await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledWith("c1", "m9", "👀"));
+    // banter is fine: it swears and roasts when asked, only hate, real threats and doxxing are out
+    expect(said.thrown[0].note).toContain(BANTER);
     // main's own words never go to Discord
     setState("captain", (l) => [...l, { id: "main1", at: 3, space: "home", from: "captain", reply: "메인 답" }]);
     said.hook?.("main1");
