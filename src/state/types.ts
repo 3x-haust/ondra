@@ -485,8 +485,9 @@ export interface CaptainMessage {
   steps?: string[];
   /** how long the answer took, from the request to the reply */
   took?: number;
-  /** in the agent's chat: the Discord message the user's words came from (its reply goes there) */
-  discord?: { channel: string; message: string };
+  /** in the agent's chat: the Discord message the user's words came from (its reply goes there),
+   *  and the ones said just before it that were taken with it */
+  discord?: { channel: string; message: string; also?: string[] };
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson";

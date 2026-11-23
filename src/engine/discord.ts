@@ -15,6 +15,7 @@ import {
   discordHistory,
   discordOwner,
   discordReact,
+  discordUnreact,
   discordSend,
   discordStart,
   discordStop,
@@ -74,6 +75,12 @@ export const WATCH_WAYS = `이번 말은 너를 부른 게 아니야. 옆에서 
 - 정말 보탤 말이 있거나 끼어들고 싶을 때만 한두 줄로 말해: 그 말만 써
 - 사실 너한테 하는 말이면(방금 네 말에 이어서 하는 말, 방식이 받으라고 한 말) 정확히 (take) 한 단어만 써. 그럼 부른 것처럼 받아
 - 여기서 너는 아무것도 실행하지 않아. 일을 시키는 말이면 할 거라고 말하지 말고 (take) 하거나 넘어가`;
+
+/**
+ * It's a friend in a group chat, not a customer-service bot: the user wants it to swear and roast
+ * when asked ("민정원 욕해줘" got "욕은 패스"). Holds whatever voice is set; only what hurts for real is out.
+ */
+export const BANTER = `욕, 비속어, 친구 놀리기·디스·드립은 괜찮아. 시키면 빼거나 "욕은 패스" 하지 말고 친구끼리 하듯 세게 해도 돼(설교, 경고, 순화 금지). 안 하는 건 셋뿐: 인종·성별·장애·성적 지향 같은 걸로 비하하는 혐오 표현, 진짜로 해치겠다는 위협, 남의 개인정보 폭로`;
 
 const settings = (): AgentSettings | undefined => state.settings.agent;
 const voiceOf = (a: AgentSettings) => (a.voice?.trim() ? a.voice.trim() : DEFAULT_VOICE);
@@ -147,6 +154,8 @@ export function stopAgent() {
   me = undefined;
   for (const h of heard.values()) if (h.timer) clearTimeout(h.timer);
   heard.clear();
+  for (const b of bursts.values()) clearTimeout(b.timer);
+  bursts.clear();
   setStatus({ state: "off" });
 }
 
@@ -217,6 +226,7 @@ export function waysNote(ways: { path: string; text: string }): string {
 function chatRules(a: AgentSettings, server: boolean): string[] {
   return [
     voiceOf(a),
+    BANTER,
     OWNER_WAYS,
     "Route work as usual. No tables, no headings; a link as a plain URL.",
     server
@@ -284,15 +294,40 @@ async function scout() {
   });
 }
 
-async function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
-  const space = agentSpace(a);
+/**
+ * How long it waits for more before it answers: people say one thing in a few lines ("아니",
+ * "주인 말 들어야지", "장난하냐"), and each answered on its own reads like a bot.
+ */
+export const BURST = { ms: 2500 };
+/** per channel and person: the lines said in a row, waiting to go as one */
+const bursts = new Map<string, { ms: DiscordMessage[]; texts: string[]; timer?: ReturnType<typeof setTimeout> }>();
+
+function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   // seen: a reaction, not a line that only says "알겠어, 할게"
   void discordReact(m.channel, m.id, "👀").catch(() => {});
+  void discordTyping(m.channel);
+  const key = `${m.channel}|${m.author.id}`;
+  const b = bursts.get(key) ?? { ms: [], texts: [] };
+  clearTimeout(b.timer);
+  b.ms.push(m);
+  b.texts.push(text);
+  b.timer = setTimeout(() => {
+    bursts.delete(key);
+    void askNow(b.ms, settings() ?? a, b.texts.join("\n")).catch((e) => logError("agent", `ask: ${e instanceof Error ? e.message : String(e)}`));
+  }, BURST.ms);
+  bursts.set(key, b);
+}
+
+/** the lines said in a row, as one request; answered at the last of them */
+async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
+  const m = ms[ms.length - 1];
+  const space = agentSpace(a);
   void discordTyping(m.channel);
   // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
   const ways = { path: await waysPath(), text: await readWays() };
-  throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, ways), discord: { channel: m.channel, message: m.id } });
+  const also = ms.slice(0, -1).map((x) => x.id);
+  throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, ways), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -374,6 +409,10 @@ async function mainSaid(replyId: string) {
   const asked = msg.after ? undefined : chat.slice(0, chat.indexOf(msg)).reverse().find((x) => x.from === "me")?.discord;
   const channel = asked?.channel ?? (msg.after ? channelOf(msg.after) : undefined);
   if (!channel) return;
+  // answered (or nothing to say): the 👀 that said "seen" goes
+  const seen = () => {
+    if (asked) for (const id of [...(asked.also ?? []), asked.message]) void discordUnreact(asked.channel, id, "👀").catch(() => {});
+  };
   const asks: Record<string, string> = {};
   for (const r of msg.routes ?? []) {
     if (r.kind !== "ask") continue;
@@ -382,8 +421,9 @@ async function mainSaid(replyId: string) {
     if (d) asks[d.id] = await askedLine(d, settings(), undefined, sayOf({ ...msg, routes: msg.routes?.filter((x) => x.kind !== "ask") }));
   }
   const text = sayOf(msg, asks);
-  if (!text) return;
+  if (!text) return seen();
   const ids = await discordSend(channel, text, asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
+  seen();
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
 }
@@ -471,6 +511,7 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     "",
     "# 말투",
     voiceOf(a),
+    BANTER,
     "",
     "# 지킬 것",
     watching?.owner ? "여기서 할 수 있는 건 대화뿐이고 주인의 일은 들고 있지 않아. 다른 사람도 읽는 채널이니 주인의 일(코드, 파일, 링크, 아직 안 나온 것)은 말하지 않아" : OTHERS_RULES,
