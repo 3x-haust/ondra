@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { reconcile } from "solid-js/store";
 import { agentDecisions, allDecisions, freshState, listed, setState, state, trimChats } from "./store";
 import type { CaptainMessage, Task } from "./types";
-import { needsYou } from "./needs";
+import { awaitsMerge, bucket, needsYou } from "./needs";
 
 const job = (id: string, over: Partial<Task> = {}): Task => ({
   id, space: "home", topic: "", title: id, ask: "", cwd: "/repo", status: "waiting",
@@ -54,5 +54,19 @@ describe("the Discord agent's work", () => {
     const kept = trimChats(list, 3);
     expect(kept.map((x) => x.id)).toEqual(["main-old", "a2", "a3", "a4"]);
     expect(trimChats(kept, 3)).toBe(kept);
+  });
+});
+
+describe("a job whose branch went into a pull request", () => {
+  beforeEach(() => setState(reconcile(freshState())));
+  const wt = { state: "open" as const, repo: "/r", path: "/r/w", branch: "feat/x", base: "b", sub: "" };
+
+  it("isn't 병합 필요: the merge is on GitHub, and Ondra cleans up when it's merged there", () => {
+    const open = job("a", { status: "done", worktree: wt });
+    const pr = job("b", { status: "done", worktree: { ...wt, pr: "https://github.com/o/r/pull/214" } });
+    expect(awaitsMerge(open)).toBe(true);
+    expect(awaitsMerge(pr)).toBe(false);
+    expect(needsYou(pr)).toBe(false);
+    expect(bucket(pr)).toBe("done");
   });
 });
