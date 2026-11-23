@@ -1,3 +1,4 @@
 # Rules
 
 - Never print the contents of `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`): its tokens are replaced by `[secret:codex/auth.json:…]` in every tool result and refused in memory by `extensions/secrets.ts` (`codexSecrets`), loaded in jobs and in main; held by `extensions/secrets.test.ts` and `src/engine/captainSkills.test.ts`.
+- Computer use never brings the target app or window in front of the user, and its eval cases run only inside a macOS VM: `extensions/lib/computer-host.ts` and `src-tauri/helpers/cuhost.swift` refuse `AXRaise`, and the helper may activate or raise only in `giveFrontBack`/`keepUserWindowOnTop` (the user's own app, given back); held by `tests/extensions/cuhost-front.test.ts` and `tests/extensions/computer-host.test.ts`. `evals/run.mjs` holds back `kind: "computer"` cases unless `kern.hv_vmm_present` is 1 (`vmOnly` in `evals/job-cases.mjs`, held by `evals/cases.test.mjs`).

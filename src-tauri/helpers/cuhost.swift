@@ -906,6 +906,8 @@ func performAction(pid: pid_t, action: [String: Any], map: AXMap) throws -> [Str
     case "press-action": // AX action by name, no events at all (preferred)
         let el = try elementFor()
         let name = (action["action"] as? String) ?? kAXPressAction
+        // raising lifts the target window over the user's: never, whoever asks
+        if name == kAXRaiseAction { throw ActError.message("RAISE_REFUSED", "AXRaise would bring the window in front of the user's; act on it where it is") }
         let count = max(1, min(2, (action["count"] as? Int) ?? 1))
         let right = (action["button"] as? String) == "right"
         let forcePointer = (action["pointer"] as? Bool) ?? false
