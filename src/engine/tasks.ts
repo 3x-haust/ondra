@@ -1079,8 +1079,11 @@ const mergeFailed = (why: string, home: string) =>
 async function askMerge(id: string, why?: string) {
   const t = taskById(id);
   const w = t?.worktree;
-  if (!t || t.parentId || !w || w.state !== "open" || w.kept || t.status !== "done" || prOf(t)) return;
+  if (!t || t.parentId || !w || w.kept || t.status !== "done") return;
   if (state.decisions.some((d) => d.taskId === id)) return;
+  const pr = prOf(t);
+  if (pr) return askMergePr(id, pr);
+  if (w.state !== "open") return;
   const c = await gitChanges(w.path, w.base).catch(() => null);
   if (!c?.isRepo || !c.files.length) return;
   const home = homeDir(t).split("/").filter(Boolean).pop() ?? homeDir(t);
@@ -1105,6 +1108,35 @@ async function askMerge(id: string, why?: string) {
       { id: "pr", label: tr("PR로 올리기"), primary: true, note: tr("브랜치를 올리고 풀 리퀘스트를 열어요") },
       ...(github ? [] : [{ id: "merge", label: tr("합치기"), note: into ? tr("원래 폴더의 지금 브랜치({branch})에 합쳐요", { branch: into }) : tr("원래 폴더의 지금 브랜치에 합쳐요") }]),
       { id: "discard", label: tr("버리기"), note: tr("이 작업이 바꾼 것을 지워요") },
+    ],
+    context: [],
+  };
+  setState("decisions", (list) => [...list.filter((x) => x.taskId !== id), d]);
+  updateTask(id, (x) => (x.unread = true));
+}
+
+/** A job's pull request still open on GitHub: whether to merge it is asked, not left as a badge.
+ *  Its job merges it when told to (it knows the repo's way). */
+async function askMergePr(id: string, pr: { url: string; n: string }) {
+  const t = taskById(id);
+  if (!t) return;
+  let open = false;
+  try {
+    open = JSON.parse(await ghPrState(pr.url, await gitEnv(t))).pr?.state === "OPEN";
+  } catch {
+    open = false;
+  }
+  const now = taskById(id);
+  if (!open || !now || now.worktree?.kept || state.decisions.some((x) => x.taskId === id)) return;
+  const d: Decision = {
+    id: uid("d"),
+    taskId: id,
+    at: Date.now(),
+    kind: "merge",
+    question: tr("PR #{n} 머지할까요?", { n: pr.n }),
+    options: [
+      { id: "merge-pr", label: tr("머지하기"), primary: true, note: tr("GitHub에서 PR을 합치고 브랜치를 지워요") },
+      { id: "keep", label: tr("그대로 두기"), note: tr("PR을 열어 둔 채로 둬요") },
     ],
     context: [],
   };
@@ -1228,9 +1260,9 @@ export async function landBranch(id: string, land?: "merge" | "discard" | "fix" 
     if (why !== undefined) await tell(id, mergeFailed(why, homeDir(t)), { by: "ondra", shown: tr("병합하지 못했어요") });
     return;
   }
-  // nothing said of it: the job's to settle (its git note), the user's to say; nothing set is asked here.
-  // A job Ondra started by itself still goes up as a PR or stays a branch (selfLands).
-  if (t.self) await askMerge(id);
+  // nothing settled by the job: asked (a PR it opened: merge it?; a branch: PR, merge or discard), so
+  // 병합 필요 never sits there as a badge alone. A job Ondra started by itself still goes up as a PR first.
+  await askMerge(id);
 }
 
 /** Throw the task's changes away (worktree and branch). */
@@ -1239,7 +1271,7 @@ export function prOf(t: Task): { url: string; n: string } | undefined {
   const re = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)/g;
   for (let i = t.entries.length - 1; i >= 0; i--) {
     const e = t.entries[i];
-    const text = e.kind === "tool" ? `${e.tool.target} ${e.tool.detail ?? ""}` : "text" in e ? String(e.text ?? "") : "";
+    const text = e.kind === "tool" ? `${e.tool.target} ${e.tool.detail ?? ""}` : e.kind === "block" ? JSON.stringify(e.block) : "text" in e ? String(e.text ?? "") : "";
     const all = [...text.matchAll(re)];
     if (all.length) {
       const m = all[all.length - 1];
@@ -2607,7 +2639,8 @@ export async function sweepLanded() {
     await dropEmptyBranch(t.id);
     // what becomes of one still holding changes is its own and the user's to say (landBranch), not asked
     // here; one Ondra started by itself still goes up as a PR or stays a branch
-    if (taskById(t.id)?.self && Date.now() - (taskById(t.id)?.finishedAt ?? 0) < 7 * DAY) await askMerge(t.id);
+    const n = taskById(t.id);
+    if (n && (n.self || n.worktree?.pr) && Date.now() - (n.finishedAt ?? 0) < 7 * DAY) await askMerge(t.id);
   }
 }
 
@@ -3390,6 +3423,18 @@ export async function decide(decisionId: string, optionId: string) {
       push(x, { kind: "user", text: label });
     });
     void agentSend(agent, reply);
+    return;
+  }
+  if (d.kind === "merge" && optionId === "merge-pr") {
+    const pr = prOf(t);
+    updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
+    return void (await tell(t.id, `Merge your pull request ${pr?.url ?? ""} now, the repo's way (else a squash merge that deletes the branch), then send done in one line.`, { by: "ondra", shown: label }));
+  }
+  if (d.kind === "merge" && optionId === "keep") {
+    updateTask(t.id, (x) => {
+      if (x.worktree) x.worktree.kept = true;
+      push(x, { kind: "user", text: `"${d.question}" → ${label}` });
+    });
     return;
   }
   if (d.kind === "merge" && (optionId === "merge" || optionId === "pr" || optionId === "discard")) {

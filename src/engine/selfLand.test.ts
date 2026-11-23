@@ -235,11 +235,12 @@ describe("what becomes of the branch is the job's to settle", () => {
     expect(text).toContain('{"type":"keep"}');
   });
 
-  it("a job that ended with changes and settled nothing: no set question and no send-back, it's the user's to say", async () => {
+  it("a job that ended with changes and settled nothing: asked, not left as a 병합 필요 badge alone; nothing sent back", async () => {
     vi.spyOn(native, "gitOnGithub").mockResolvedValue(true);
     setState("tasks", [job()]);
     await landBranch("job");
-    expect(state.decisions).toHaveLength(0);
+    expect(state.decisions[0]?.kind).toBe("merge");
+    expect(state.decisions[0]?.question).toMatch(/PR로 올릴까요/);
     expect(told()).toBe("");
     expect(state.tasks[0].status).toBe("done");
   });
@@ -259,7 +260,7 @@ describe("what becomes of the branch is the job's to settle", () => {
 describe("a job that opened its own pull request", () => {
   const withPr = (): Entry => ({ id: "r", at: 4, kind: "text", text: "PR을 올렸어요: https://github.com/o/app/pull/214" }) as never;
 
-  it("is left on GitHub: its worktree says so, nothing is merged or asked", async () => {
+  it("is left on GitHub: its worktree says so, nothing is merged here", async () => {
     const merge = vi.spyOn(native, "worktreeMerge");
     setState("tasks", [job({ entries: [withPr()] })]);
     await landBranch("job");
@@ -270,12 +271,43 @@ describe("a job that opened its own pull request", () => {
     expect(state.decisions).toHaveLength(0);
   });
 
-  it("one that finished before this is marked at the next sweep", async () => {
+  it("one that finished before this is marked at the next sweep, and asked about while its PR is open", async () => {
     vi.spyOn(native, "worktreeLanded").mockResolvedValue(null as never);
     vi.spyOn(native, "ghPrState").mockResolvedValue(JSON.stringify({ pr: { state: "OPEN" } }));
     setState("tasks", [job({ entries: [withPr()], finishedAt: Date.now() })]);
     await sweepLanded();
     expect(state.tasks[0].worktree?.pr).toBe("https://github.com/o/app/pull/214");
+    expect(state.decisions[0]?.question).toBe("PR #214 머지할까요?");
+  });
+
+  it("its PR named only in a link block counts, and an open one is asked about: merge or leave it", async () => {
+    vi.spyOn(native, "ghPrState").mockResolvedValue(JSON.stringify({ pr: { state: "OPEN" } }));
+    const link = { id: "l", at: 4, kind: "block", block: { type: "link", kind: "pr", title: "릴리스 노트 형식 검사", ref: "https://github.com/o/app/pull/749" } } as never;
+    setState("tasks", [job({ entries: [link] })]);
+    await landBranch("job");
+    const t = state.tasks[0];
+    expect(t.worktree?.pr).toBe("https://github.com/o/app/pull/749");
+    expect(bucket(t)).toBe("done");
+    const d = state.decisions[0];
+    expect(d.question).toBe("PR #749 머지할까요?");
+    expect(d.options.map((o) => o.id)).toEqual(["merge-pr", "keep"]);
+  });
+
+  it("a merged or closed PR is not asked about", async () => {
+    vi.spyOn(native, "ghPrState").mockResolvedValue(JSON.stringify({ pr: { state: "MERGED" } }));
+    setState("tasks", [job({ entries: [withPr()] })]);
+    await landBranch("job");
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("merge: the job is told to merge its PR; leave it: kept, never asked again", async () => {
+    vi.spyOn(native, "ghPrState").mockResolvedValue(JSON.stringify({ pr: { state: "OPEN" } }));
+    const { decide } = await import("./tasks");
+    setState("tasks", [job({ entries: [withPr()] })]);
+    await landBranch("job");
+    await decide(state.decisions[0].id, "keep");
+    expect(state.tasks[0].worktree?.kept).toBe(true);
+    await landBranch("job");
     expect(state.decisions).toHaveLength(0);
   });
 });
