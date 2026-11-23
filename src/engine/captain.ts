@@ -27,7 +27,7 @@ import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { digestJob } from "./digest";
 import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
-import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
+import { engine, expand, explain, isAlive, isModelError, isRefusal, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
 import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
@@ -449,6 +449,7 @@ async function pump(space: string) {
       try {
         isolateOf.set(space, next.isolate);
         answering.set(space, next.replyId ?? "");
+        if (isAgentChat(space)) await freshSession(space);
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
@@ -491,6 +492,9 @@ async function routeWithRetry(space: string, text: string, cwd?: string, event?:
           continue;
         }
       }
+      // the provider's policy check turned it down: something earlier in this session can keep tripping it
+      // on every later message (each resends it all), so once, a fresh session without the old talk
+      if (attempt === 0 && isRefusal(msg) && (await freshSession(space))) continue;
       // the account hit its limit: 자동 sits it out and main sends again on one with room, in a fresh
       // session that gets the recent chat as text (moving the session itself re-sends it all uncached)
       const acc = accountOf.get(space);
@@ -808,7 +812,8 @@ async function ensureCaptain(space: string) {
   // so a fresh session with a text recap is cheaper.
   const lastAt = Math.max(0, ...state.captain.filter((m) => inChat(m, space) && m.from === "captain" && !m.pending && !m.error && !m.relay).map((m) => m.at));
   const fresh = freshNext.delete(space);
-  const resume = !fresh && !isSim(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
+  // the Discord agent starts every request fresh, with its memory only (like a job), never the old talk
+  const resume = !fresh && !isSim(space) && !isAgentChat(space) && Date.now() - lastAt < IDLE_CLEAR_MS;
   const args = [
     "--session-dir",
     sessionDir(space),
@@ -853,6 +858,22 @@ async function ensureCaptain(space: string) {
 }
 
 /** Throw the engine session away (the chat itself stays as text). Next message starts small. */
+/** A new session for this chat with nothing of the old one carried over (not even a recap). */
+async function freshSession(space: string): Promise<boolean> {
+  const agent = agentOf(space);
+  sentOf.set(space, { recap: false });
+  if (!isAlive(agent)) return false;
+  try {
+    await request(agent, { type: "new_session" }, 8000);
+    statsOf.delete(space);
+    sentOf.set(space, { recap: false });
+    keepSent(space, undefined);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function clearSession(space: string) {
   const agent = agentOf(space);
   if (!isAlive(agent)) return;

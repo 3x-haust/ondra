@@ -29,6 +29,7 @@ import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { readWays, waysPath } from "./agentWays";
 import { workTick } from "./workLog";
+import { isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
@@ -586,7 +587,9 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const { oneShot } = await import("./aside");
   const space = a.space ?? state.spaces[0]?.id ?? state.space;
   const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
-  const out = (await oneShot(space, "~", talkPrompt(a, m.author.name, before, text, me.id, memory, watching, ways))).trim();
+  const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways));
+  // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
+  const out = (await say(before).catch((e) => (before.length && isRefusal(e instanceof Error ? e.message : String(e)) ? say([]) : Promise.reject(e)))).trim();
   if (!out || /^\(?skip\)?$/i.test(out)) return;
   // it was for it after all: the user's words as a request, anyone else's as a call
   if (watching && /^\(?take\)?$/i.test(out)) return watching.owner ? ownerTakes(m, a, text) : talk(m, a, text, ways);

@@ -135,11 +135,15 @@ const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n).rep
 export function explain(message: string): string {
   const m = message.match(/'([^']+)' model is not supported/i);
   if (m) return t("이 계정에서 쓸 수 없는 모델 · {m}", { m: m[1] });
+  if (isRefusal(message)) return t("모델 제공사의 정책 검사에 걸려서 답을 못 했어요 · 말을 바꿔서 다시 보내 주세요");
   if (/rate limit|usage limit|429|quota/i.test(message)) return t("사용 한도 도달 · {msg}", { msg: clip(providerSays(message), 140) });
   if (/unauthori[sz]ed|invalid.*token|401|403|log ?in/i.test(message)) return t("로그인이 필요해요 · 설정 › 계정");
   if (/no (api key|credentials)|not configured/i.test(message)) return t("연결된 계정이 없어요 · 설정 › 계정");
   return message.replace(/\s+/g, " ").slice(0, 220);
 }
+
+/** the provider's policy check turned the request down (what was sent, not the account) */
+export const isRefusal = (message: string) => /blocked as it seems to violate|violat\w* (our|anthropic's|the) (usage polic|terms)/i.test(message);
 
 export const isModelError = (message: string) =>
   /model is not supported|model_not_found|does not exist|not available|unknown model|no access to model/i.test(message);
