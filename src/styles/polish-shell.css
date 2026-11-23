@@ -198,6 +198,12 @@
   box-shadow: none;
   color: var(--accent-text);
 }
+/* a finished subagent or follow-up: no mark of its own (the job's row has the check) */
+.app .sidebar .sb-glyph-none {
+  flex: none;
+  background: none;
+  box-shadow: none;
+}
 /* finished, waiting to be merged: the check in an open ring */
 .app .sidebar .sb-glyph.done.unmerged,
 .palette .st-icon.done.unmerged,
@@ -1455,13 +1461,19 @@
   width: 100%;
   height: 100%;
 }
+/* whole pixels: 1.5px bars and a % height landed on half pixels, one bar drawn thinner and off centre */
 .st-icon.paused > .pz::before,
 .st-icon.paused > .pz::after {
   content: "";
-  width: 1.5px;
-  height: 38%;
+  flex: none;
+  width: 2px;
+  height: 8px;
   border-radius: 1px;
   background: var(--ink-3);
+}
+.st-icon.sm.paused > .pz::before,
+.st-icon.sm.paused > .pz::after {
+  height: 6px;
 }
 /* discarded: a muted trash, no disc and no ring (never a check) */
 .st-icon.discarded.discarded {

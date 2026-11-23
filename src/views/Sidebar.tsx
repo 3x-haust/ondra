@@ -184,7 +184,10 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         }}
         title={tip()}
       >
-        <Glyph t={face()} />
+        {/* done shows on the job's own row only: a subagent or follow-up under it that finished keeps a blank slot */}
+        <Show when={!((props.kid || props.follow) && glyphOf(face()) === "done")} fallback={<span class="sb-glyph sb-glyph-none" aria-hidden="true" />}>
+          <Glyph t={face()} />
+        </Show>
         <Show when={!props.kid && routineOf(t())}><Icon name="repeat" size={12} class="sb-rt" /></Show>
         <span class="sb-title">{taskTitle(t())}</span>
         <Show when={!props.kid && nested()}>
