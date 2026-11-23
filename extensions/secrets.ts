@@ -15,7 +15,7 @@
 // leak a value on purpose in some other encoding is not something text matching can stop.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 /** Shorter values are too likely to be ordinary text ("dev", "8080") to hide everywhere. */
@@ -140,8 +140,10 @@ const SKIP_DIRS = new Set(["node_modules", "target", "dist", "build", "out", "ve
 const MAX_DEPTH = 6;
 const MAX_DIRS = 4000;
 
-/** Every .env file in `root` and the folders under it, as paths from `root`. */
+/** Project .env files; home and filesystem roots only contribute their own files. */
 export function envFilesUnder(root: string): string[] {
+  const base = resolve(root);
+  const recursive = base !== resolve(homedir()) && base !== dirname(base);
   const out: string[] = [];
   const queue: [string, number][] = [["", 0]];
   let seen = 0;
@@ -156,7 +158,7 @@ export function envFilesUnder(root: string): string[] {
     for (const e of entries) {
       const path = rel ? `${rel}/${e.name}` : e.name;
       if (e.isFile() && ENV_FILE.test(e.name) && !EXAMPLE.test(e.name)) out.push(path);
-      else if (e.isDirectory() && !e.isSymbolicLink() && !e.name.startsWith(".") && !SKIP_DIRS.has(e.name) && depth + 1 < MAX_DEPTH && seen < MAX_DIRS) {
+      else if (recursive && e.isDirectory() && !e.isSymbolicLink() && !e.name.startsWith(".") && !SKIP_DIRS.has(e.name) && depth + 1 < MAX_DEPTH && seen < MAX_DIRS) {
         seen++;
         queue.push([path, depth + 1]);
       }
