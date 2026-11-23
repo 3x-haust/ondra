@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { baseAvdName, internal, readOnlyBoot, runSteps, stepArgs, templateName } from "./device";
+import { baseAvdName, internal, pickPhone, readOnlyBoot, runSteps, stepArgs, templateName } from "./device";
 
 describe("steps in one call", () => {
   it("runs them in order on the job's session and stops at the first that fails", async () => {
@@ -37,6 +37,14 @@ describe("fast devices", () => {
   it("an iOS template per device type and runtime, named so nothing else takes it", () => {
     expect(templateName("iPhone 17", "com.apple.CoreSimulator.SimRuntime.iOS-26-3")).toBe("ondra-template-iPhone-17-iOS-26-3");
     expect(baseAvdName("Pixel_9_API_36")).toBe("ondra-base-Pixel_9_API_36");
+  });
+
+  it("picks the newest iPhone whichever way the runtime lists them, plain before Pro", () => {
+    const newestFirst = ["iPhone 18 Pro", "iPhone 18 Pro Max", "iPhone 17 Pro", "iPhone 17e", "iPhone Air", "iPhone 17", "iPhone 11"];
+    expect(pickPhone(newestFirst)).toBe("iPhone 18 Pro");
+    expect(pickPhone([...newestFirst].reverse())).toBe("iPhone 18 Pro");
+    expect(pickPhone(["iPhone 17 Pro", "iPhone 17", "iPhone 16"])).toBe("iPhone 17");
+    expect(pickPhone(["iPhone Air"])).toBe("iPhone Air");
   });
 
   it("templates and snapshot bases are the tool's own: no job drives them by name", () => {

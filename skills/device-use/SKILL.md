@@ -14,8 +14,20 @@ metadata:
 # Device use
 
 Prefer the `device` tool (start → do → look → stop): it does all of this for you
-and keeps the job on its own device (an Android one is a fresh copy of an AVD,
-with no app data or logins from anywhere else). **Call `stop` before your final answer**,
+and keeps the job on its own device, clean every time (no app data or logins from
+anywhere else), and fast: an iOS device is a clone of a template that has booted
+once and an Android one a clean snapshot booted read-only, so `start` takes seconds.
+
+Keep it quick:
+- A path you know goes in one call: `do` with `steps` (fill, fill, press, wait),
+  not one call per tap. Each call is a turn of yours; the device is the fast part.
+- No rebuild for a JS/TS change: with Metro running (React Native, Expo), `metro reload`
+  shows it in seconds. Reinstall or rebuild only after a native or dependency change.
+- A path you'll check again after a change: record it once (`open <app> --relaunch
+  --save-script=$APP_ARTIFACTS_DIR/flows/<name>.ad`, the steps, a `wait` on the end
+  screen, `session save-script`), then rerun it with `replay <file>` in one call.
+- Read the snapshot and the `--settle` diff; `look` (a picture) only for what the text
+  can't show. **Call `stop` before your final answer**,
 every time, unless the user asked to keep the device: a device left running
 holds memory and CPU on the user's Mac. Use the commands below only if that tool is missing.
 

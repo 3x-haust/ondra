@@ -107,6 +107,21 @@ fn chrono_like(s: &str) -> Option<i64> {
     Some(((days * 86400) + d[3] * 3600 + d[4] * 60 + d[5]) * 1000)
 }
 
+/// The device tool's own: an iOS template (clones of it boot in seconds) or an Android snapshot
+/// base (jobs boot it read-only). Never shown in the hub or offered to a job by name.
+fn internal(name: &str) -> bool {
+    name.starts_with("ondra-template-") || name.starts_with("ondra-base-")
+}
+
+/// The job running the emulator on `serial` (its .device.json under artifacts/<job>/), as the
+/// device tool names a job's own device: ondra-<job>.
+fn job_on(root: &std::path::Path, serial: &str) -> Option<String> {
+    std::fs::read_dir(root).ok()?.flatten().find_map(|e| {
+        let m: Owned = serde_json::from_str(&std::fs::read_to_string(e.path().join(".device.json")).ok()?).ok()?;
+        (m.serial.as_deref() == Some(serial)).then(|| format!("ondra-{}", e.file_name().to_string_lossy()))
+    })
+}
+
 fn ios() -> Vec<Device> {
     let Some(json) = out(Command::new("xcrun").args(["simctl", "list", "devices", "-j"])) else { return vec![] };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) else { return vec![] };
@@ -116,7 +131,7 @@ fn ios() -> Vec<Device> {
             // com.apple.CoreSimulator.SimRuntime.iOS-26-3 → iOS 26.3
             let rt = runtime.rsplit('.').next().unwrap_or(runtime).replacen('-', " ", 1).replace('-', ".");
             for d in devs.as_array().into_iter().flatten() {
-                if d["isAvailable"].as_bool() == Some(false) {
+                if d["isAvailable"].as_bool() == Some(false) || internal(d["name"].as_str().unwrap_or_default()) {
                     continue;
                 }
                 list.push(Device {
@@ -154,7 +169,7 @@ fn avd_of(serial: &str, key: &str, model: &str, live: &[String]) -> String {
     }
 }
 
-fn android() -> Vec<Device> {
+fn android(root: &std::path::Path) -> Vec<Device> {
     let mut list: Vec<Device> = vec![];
     // what runs now: emulators (with their AVD name) and phones
     let mut running: Vec<(String, String, String)> = vec![]; // (serial, avd or model, kind)
@@ -176,7 +191,7 @@ fn android() -> Vec<Device> {
         }
     }
     if let Some(txt) = out(Command::new(emulator()).arg("-list-avds")) {
-        for avd in txt.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("INFO")) {
+        for avd in txt.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("INFO") && !internal(l)) {
             let run = running.iter().find(|r| r.2 == "emulator" && r.1 == avd);
             list.push(Device {
                 id: avd.into(),
@@ -189,6 +204,19 @@ fn android() -> Vec<Device> {
                 last_used: None,
             });
         }
+    }
+    // a job's emulator booted read-only from a snapshot base: one each, named for its job
+    for (serial, avd, _) in running.iter().filter(|r| r.2 == "emulator" && internal(&r.1)) {
+        list.push(Device {
+            id: serial.clone(),
+            name: job_on(root, serial).unwrap_or_else(|| avd.clone()),
+            platform: "android".into(),
+            kind: "emulator".into(),
+            runtime: "Android 에뮬레이터".into(),
+            booted: true,
+            serial: Some(serial.clone()),
+            last_used: None,
+        });
     }
     for (serial, model, kind) in running.iter().filter(|r| r.2 == "phone") {
         list.push(Device {
@@ -206,9 +234,10 @@ fn android() -> Vec<Device> {
 }
 
 #[tauri::command]
-pub async fn devices_list() -> Vec<Device> {
+pub async fn devices_list(app: AppHandle) -> Vec<Device> {
+    let root = crate::engine::data_dir(&app).join("artifacts");
     let a = tauri::async_runtime::spawn_blocking(ios);
-    let b = tauri::async_runtime::spawn_blocking(android);
+    let b = tauri::async_runtime::spawn_blocking(move || android(&root));
     let mut all = a.await.unwrap_or_default();
     all.extend(b.await.unwrap_or_default());
     all
@@ -486,6 +515,18 @@ pub async fn device_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tools_own_devices_stay_out_of_the_hub_and_a_snapshot_boot_goes_by_its_job() {
+        assert!(internal("ondra-template-iPhone-17-iOS-26-3") && internal("ondra-base-Pixel_9"));
+        assert!(!internal("ondra-tmwabc123") && !internal("Pixel_9"));
+        let root = std::env::temp_dir().join(format!("ondra-jobon-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("tmwjob1")).unwrap();
+        std::fs::write(root.join("tmwjob1/.device.json"), r#"{"platform":"android","serial":"emulator-5556","name":"ondra-base-Pixel_9","made":true}"#).unwrap();
+        assert_eq!(job_on(&root, "emulator-5556").as_deref(), Some("ondra-tmwjob1"));
+        assert_eq!(job_on(&root, "emulator-5558"), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn a_job_emulator_boots_without_a_window() {
