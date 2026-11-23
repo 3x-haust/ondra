@@ -379,7 +379,12 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   // every request starts fresh: what was just said there comes along, the way a person scrolls up
   const before = me ? await discordHistory(m.channel, ms[0].id, RECENT).catch(() => [] as DiscordMessage[]) : [];
   const recent = recentTalk(a, (before ?? []).filter((x) => x.content.trim()), me?.id ?? "");
-  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
+  // a question of its work still open there: their words may be about that one
+  const open = [...state.decisions].reverse().find((x) => posted.get(x.id) === m.channel);
+  const asking = open
+    ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
+    : "";
+  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -414,7 +419,7 @@ export function askPrompt(a: AgentSettings, d: Decision, about?: string, said?: 
     `# 앱용 질문\n${d.question}`,
     `# 고를 수 있는 것\n${d.options.map((o) => `- ${o.label}${o.primary ? " (이게 낫다고 봄)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
     "",
-    "디스코드에 올라갈 말만 써.",
+    "상황은 쉬운 말로 한두 문장(용어 대신 주인한테 무슨 일이 생기는지). 고를 건 번호 목록 말고 말 속에서 \"A 할까, B 할까?\"처럼, 네가 낫다고 보는 쪽 먼저. 디스코드에 올라갈 말만 써.",
   ].filter((l) => l !== "").join("\n");
 }
 

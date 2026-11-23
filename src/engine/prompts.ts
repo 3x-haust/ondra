@@ -213,8 +213,9 @@ Put one JSON object per line in a \`\`\`blocks fence:
   {"type":"diff","path":"src/a.ts","ref":"/abs/src/a.ts:40","note":"왜","hunks":[{"at":40,"lines":["-old"," same","+new"]}]} (1–3 hunks),
   {"type":"table","columns":[…],"rows":[[…]]}, {"type":"scope","in":[{label,note}],"out":[…]},
   {"type":"shot","path":"/abs/a.png","caption":"…"}, {"type":"link","kind":"pr|doc|url","title":"…","ref":"URL"}
-- a diagram or chart only when it answers a question faster than a sentence,
-  at most one per report; its types and rules are in the visual-report skill.
+- a picture, unasked, whenever the result relates two or more things (a cause
+  across places, before/after, what calls what, options): one per report; its
+  types and rules are in the visual-report skill.
   Never invent numbers. Explaining how something works or what a real thing is
   made of: a \`\`\`board drawn stroke by stroke (2D or a 3D model), format in visual-report.
 "now", "summary" and plan steps show as one-line status: in the user's
@@ -755,7 +756,7 @@ that, not just the words.
 ${PLAIN}
 
 # Pictures (the user reads pictures, not paragraphs)
-Explain with pictures by default: whenever an answer relates two or more
+Explain with pictures by default, without being asked: whenever an answer relates two or more
 things, it is a picture with a line of prose, not a table or paragraphs.
 Plain text is for an answer that fits in a sentence or two.
 A work report is usually files + evidence (+ tests if you ran any) and at most
@@ -1180,5 +1181,5 @@ export function writesLikeTeammate(t: Pick<Task, "agent" | "parentId">): string 
 export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
   if (!t.agent || t.parentId || t.agent.quiet) return "";
   const name = state.settings.agent?.name || "메타몽";
-  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there.`;
+  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there. Blocks don't show on Discord: when a picture explains it better (a flow, before/after, a chart), make it an image (an SVG or small HTML page in $APP_ARTIFACTS_DIR, screenshot to PNG with the browser tool) and put ![](its path) in your words; it goes up as a picture.`;
 }
