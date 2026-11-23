@@ -173,6 +173,13 @@ describe("the Discord agent's own chat", () => {
     expect(state.captain.filter((m) => m.project === "ondra")).toHaveLength(0);
   });
 
+  it("works where it chose to (the project's channel), quiet or without pictures when it says so", async () => {
+    const out = await applyRoutes("home~@agent", [{ kind: "new", title: "탭 고치기", task: "panel tabs", room: "<#123456789>", quiet: true, shots: false }], "ondra 탭 고쳐줘");
+    expect(taskById((out[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9", room: "123456789", quiet: true, shots: false });
+    const plain = await applyRoutes("home~@agent", [{ kind: "new", title: "또", task: "more", room: "general" }], "또");
+    expect(taskById((plain[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9" });
+  });
+
   it("what carries it on stays the agent's", async () => {
     const out = await applyRoutes("home~@agent", [{ kind: "new", title: "탭 고치기", task: "panel tabs" }], "ondra 탭 고쳐줘");
     const first = (out[0] as { taskId: string }).taskId;

@@ -51,6 +51,12 @@ const pid = (key: string) => (isAgentChat(key) ? undefined : pj(key));
  *  in a chat for it). A quiet routine's run with nothing to report stays quiet. */
 const agentRun = (t: Task): { project: string } | undefined => (t.routine && routineById(t.routine)?.agent && !(routineById(t.routine)?.quiet && saidNothing(t)) ? { project: AGENT_CHAT } : undefined);
 /** the Discord channel the agent's chat was last spoken to from: where the work it starts reports */
+// where the agent's work shows on Discord while it runs, as it chose on the route (workLog.ts)
+const inOpen = (r: any): { room?: string; quiet?: boolean; shots?: boolean } => ({
+  ...(typeof r?.room === "string" && /^\d{5,}$/.test(r.room.replace(/^<#|>$/g, "")) ? { room: r.room.replace(/^<#|>$/g, "") } : {}),
+  ...(r?.quiet === true ? { quiet: true } : {}),
+  ...(r?.shots === false ? { shots: false } : {}),
+});
 const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
 // a project added from another Mac has its own chat here too (its jobs run there)
 const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
@@ -1324,7 +1330,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
           ]),
         ],
         follows: from?.id,
-        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
+        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
       });
       if (still) handOn(still, id);
       if (r.key) byKey.set(String(r.key), id);

@@ -673,6 +673,8 @@ export type DiscordEvent =
 export const discordStart = () => call<void>("discord_start");
 export const discordStop = () => call<void>("discord_stop", undefined, undefined);
 export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });
+/** a picture from this Mac (a screenshot the work took) posted in a channel, with an optional line */
+export const discordSendFile = (channel: string, path: string, text?: string) => call<string[]>("discord_send_file", { channel, path, text });
 /** the user id that owns the bot's application (the user, when they made the bot) */
 export const discordOwner = () => call<string | null>("discord_owner", undefined, null);
 export const discordReact = (channel: string, message: string, emoji: string) => call<void>("discord_react", { channel, message, emoji });
