@@ -24,7 +24,28 @@ const setAgent = async (patch: Record<string, unknown>) => {
   if ("on" in patch) void (patch.on ? startAgent() : stopAgent());
 };
 
+/** a review lens's model as one word: "provider/id", or "same" (the job's own) */
+const reviewer = (lens: "design" | "code"): Entry => ({
+  where: `일반 › 코드 리뷰 › ${lens === "design" ? "설계" : "코드"} 검토 모델 ("provider/id" of a logged-in account, e.g. openai-codex/gpt-6-astra; same = the job's own model)`,
+  kind: { type: "text", max: 120 },
+  missing: "same",
+  get: () => state.settings.reviewers?.[lens]?.model || (state.settings.reviewers?.[lens] ? "account default" : "same"),
+  set: (v: string) => {
+    const model = String(v).trim();
+    const acct = model && model !== "same" ? state.accounts.find((a) => a.space === state.space && a.providers.includes(model.split("/")[0])) ?? state.accounts.find((a) => a.providers.includes(model.split("/")[0])) : undefined;
+    if (model && model !== "same" && !acct) throw new Error(`no account logged in to ${model.split("/")[0]}`);
+    setState("settings", "reviewers", (now) => {
+      const next = { ...(now ?? {}) };
+      if (acct) next[lens] = { account: acct.id, model };
+      else delete next[lens];
+      return next;
+    });
+  },
+});
+
 export const SETTINGS: Record<string, Entry> = {
+  "review.design": reviewer("design"),
+  "review.code": reviewer("code"),
   theme: { where: "일반 › 테마", kind: { type: "enum", of: ["system", "dark", "light"] }, get: () => state.settings.theme, set: (v: "system" | "dark" | "light") => setState("settings", "theme", v) },
   language: { where: "일반 › 언어", kind: { type: "enum", of: ["system", "ko", "en"] }, get: () => state.settings.language ?? "system", set: (v: "system" | "ko" | "en") => setState("settings", "language", v) },
   links: { where: "일반 › 링크 열기", kind: { type: "enum", of: ["inside", "outside"] }, get: () => state.settings.links ?? "inside", set: (v: "inside" | "outside") => setState("settings", "links", v) },
@@ -116,7 +137,12 @@ export async function writeSettings(changes: Record<string, unknown>): Promise<R
       continue;
     }
     const before = SETTINGS[key].get();
-    await SETTINGS[key].set(c.value as never);
+    try {
+      await SETTINGS[key].set(c.value as never);
+    } catch (e) {
+      out[key] = { changed: false, error: e instanceof Error ? e.message : String(e) };
+      continue;
+    }
     out[key] = { changed: true, was: before, now: SETTINGS[key].get() };
   }
   return out;

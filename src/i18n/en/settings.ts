@@ -660,4 +660,10 @@ export default {
   "연결하는 중이에요": "Connecting",
   "연결이 멈췄어요": "The connection stopped",
   "꺼져 있어요": "Off",
+  "코드 리뷰": "Code review",
+  "설계 검토 모델": "Design review model",
+  "코드 검토 모델": "Code review model",
+  "기획한 대로 만들었는지, 전체 설계를 봐요": "Checks it was built as planned, and the design as a whole",
+  "한 줄씩 보며 버그와 위험한 곳을 찾아요": "Reads it line by line for bugs and risky spots",
+  "작업과 같은 모델": "Same model as the job",
 } satisfies Record<string, string>;

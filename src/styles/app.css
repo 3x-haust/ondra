@@ -2129,3 +2129,10 @@ button.st-sh:hover { text-decoration: underline; }
   height: 7px;
   flex: none;
 }
+
+/* Settings › 코드 리뷰: an account, then its model, on one line */
+.set-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+}

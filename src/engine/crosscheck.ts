@@ -2,7 +2,7 @@
 // (설계 검토 and 코드 검토, the code-review skill). The job gets one combined
 // result once both are over; a lens that failed is named, it doesn't block.
 import { state, uid } from "../state/store";
-import type { Task } from "../state/types";
+import type { Reviewer, Task } from "../state/types";
 
 export const CROSSCHECK = "교차 검토";
 
@@ -51,11 +51,28 @@ export function planKids(ask: string): { title: string; ask: string; extra: Part
 export const isPlan = (k: Task) => k.lens === "scope" || k.lens === "fit";
 const setOf = (group: Task[]) => (group.some(isPlan) ? PLAN_LENSES : LENSES);
 
-/** The two lens subagents one review block starts: the job's requirement, each with its lens and the memory the job was given. */
+/**
+ * The model a lens runs on (Settings › 코드 리뷰): its account when that is of the job's workspace,
+ * else one of this workspace with the same provider; nothing that fits keeps the job's own.
+ */
+function reviewerFor(job: Task, r?: Reviewer): Partial<Task> {
+  if (!r?.account && !r?.model) return {};
+  // no model picked: that account's own
+  const provider = r.model ? r.model.split("/")[0] : state.accounts.find((a) => a.id === r.account)?.providers[0];
+  const here = state.accounts.filter((a) => a.space === job.space);
+  const acct = here.find((a) => a.id === r.account) ?? (provider ? here.find((a) => a.providers.includes(provider)) : undefined);
+  return acct ? { accountId: acct.id, model: r.model || undefined, ...(r.thinking ? { thinking: r.thinking } : {}) } : {};
+}
+
+/** The two lens subagents one review block starts: the job's requirement, each with its lens, its model and the memory the job was given. */
 export function lensKids(job: Task, ask: string): { title: string; ask: string; extra: Partial<Task> }[] {
   const pair = uid("x");
   const what = ask.replace(/^\s*use the code-review skill[.:]?\s*/i, "").trim() || ask;
-  return LENSES.map((l) => ({ title: l.title, ask: `${l.how}\n\n${what}`, extra: { lens: l.lens, pair, memorySnapshot: job.memorySnapshot ?? [] } }));
+  return LENSES.map((l) => ({
+    title: l.title,
+    ask: `${l.how}\n\n${what}`,
+    extra: { lens: l.lens, pair, memorySnapshot: job.memorySnapshot ?? [], ...reviewerFor(job, state.settings.reviewers?.[l.lens]) },
+  }));
 }
 
 const active = (x: Task) => x.status === "queued" || x.status === "running" || x.status === "waiting";
@@ -79,7 +96,9 @@ export function lensText(group: Task[]): string {
   return setOf(group).map((l) => {
     const k = group.find((x) => x.lens === l.lens);
     const why = missing(k);
-    return `# ${l.title}\n${why ? `(빠졌어요: ${why})` : (k!.result ?? k!.summary ?? "(적은 게 없어요)").trim()}`;
+    // which model read it: two lenses on two models see different things
+    const by = k?.model && !isPlan(k) ? ` · ${k.model.split("/").pop()}` : "";
+    return `# ${l.title}${by}\n${why ? `(빠졌어요: ${why})` : (k!.result ?? k!.summary ?? "(적은 게 없어요)").trim()}`;
   }).join("\n\n");
 }
 

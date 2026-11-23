@@ -37,7 +37,7 @@ describe("code review by other models (Settings › 코드 리뷰)", () => {
   });
 
   it("each lens's section says which model read it", () => {
-    const kid = (lens: string, model: string): Task => ({ ...job, id: lens, parentId: "job", review: true, lens, pair: "p", status: "done", result: "- P2 `a.ts:1` — x", model });
+    const kid = (lens: "design" | "code", model: string): Task => ({ ...job, id: lens, parentId: "job", review: true, lens, pair: "p", status: "done", result: "- P2 `a.ts:1` — x", model });
     const text = lensText([kid("design", "openai-codex/gpt-6-astra"), kid("code", "anthropic/claude-opus-5-5")]);
     expect(text).toContain("# 설계 검토 · gpt-6-astra");
     expect(text).toContain("# 코드 검토 · claude-opus-5-5");
