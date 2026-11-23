@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { alreadyBaked, bakeable, baseAvdName, internal, missingBakes, pickPhone, readOnlyBoot, runSteps, stepArgs, templateName } from "./device";
+import { alreadyBaked, bakeable, baseAvdName, internal, missingBakes, needsRunner, pickPhone, readOnlyBoot, runSteps, spareName, spareOf, spareScript, stepArgs, templateName } from "./device";
 
 describe("steps in one call", () => {
   it("runs them in order on the job's session and stops at the first that fails", async () => {
@@ -83,5 +83,30 @@ describe("host apps baked into the device", () => {
     expect(missingBakes(apps, "ios", ["host.exp.Exponent@2.33.1"])).toEqual([]);
     expect(missingBakes(apps, "ios", []).map((a) => a.key)).toEqual(["host.exp.Exponent@2.33.1"]);
     expect(missingBakes(apps, "android", undefined).map((a) => a.key)).toEqual(["host.exp.exponent@1"]);
+  });
+});
+
+describe("a spare device waiting for the next job", () => {
+  it("is the tool's own until a job takes it, and is named for its template", () => {
+    expect(spareName("ondra-template-iPhone-18-Pro-iOS-27-0", 123)).toBe("ondra-spare-iPhone-18-Pro-iOS-27-0-123");
+    expect(internal("ondra-spare-iPhone-18-Pro-iOS-27-0-123")).toBe(true);
+    expect(spareOf("ondra-template-iPhone-18-Pro-iOS-27-0", ["ondra-spare-iPhone-18-Pro-iOS-27-0-9", "ondra-spare-iPhone-17-iOS-27-0-3", "Pixel"])).toEqual(["ondra-spare-iPhone-18-Pro-iOS-27-0-9"]);
+  });
+
+  it("the script keeps its runner warm, and deletes the device unless a job renamed it", () => {
+    const sh = spareScript({ template: "TPL-UDID", name: "ondra-spare-x-1", minutes: 15 });
+    expect(sh).toContain('simctl clone "TPL-UDID" "ondra-spare-x-1"');
+    expect(sh).toContain("prepare ios-runner");
+    expect(sh).toMatch(/snapshot .*--session/);
+    // taken by a job (renamed): left alone
+    expect(sh).toContain('grep -q "ondra-spare-x-1 ("');
+    expect(sh).toContain("simctl delete");
+  });
+
+  it("commands that don't need the runner don't wait for it", () => {
+    expect(needsRunner(["install", "/a.app"])).toBe(false);
+    expect(needsRunner(["uninstall", "x"])).toBe(false);
+    expect(needsRunner(["press", "@e1"])).toBe(true);
+    expect(needsRunner(["open", "x"])).toBe(true);
   });
 });
