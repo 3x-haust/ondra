@@ -584,7 +584,7 @@ export async function mainToolArgs(accountId: string | undefined): Promise<strin
 }
 /** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
 const wantedAccount = (space: string): string | undefined => {
-  const own = isAgentChat(space) ? agentAccount(sp(space)) : undefined;
+  const own = isAgentChat(space) ? agentAccount(sp(space), agentChannel(space)) : undefined;
   if (own) return own;
   const pick = state.accountPick?.[sp(space)];
   if (pick && pick !== "auto" && accountById(pick)?.space === sp(space)) return pick;
@@ -759,7 +759,7 @@ async function ensureCaptain(space: string) {
   if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
   // a simulation in a space this app has no account for (an empty dev app for evals) runs on any account
-  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "", isAgentChat(space) ? agentAccount(sp(space)) : undefined) ?? (worlds.has(space) ? state.accounts[0] : undefined);
+  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "", isAgentChat(space) ? agentAccount(sp(space), agentChannel(space)) : undefined) ?? (worlds.has(space) ? state.accounts[0] : undefined);
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   listen(agent, {

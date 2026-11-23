@@ -42,3 +42,39 @@ describe("the Discord agent's own AI account", () => {
     expect(checked("agent.account", "w1").ok).toBe(false);
   });
 });
+
+describe("per Discord channel", () => {
+  it("work asked in a channel set to its own workspace and account runs there; other channels go by the usual", async () => {
+    setState("spaces", [{ id: "home", label: "개인" } as never, { id: "work", label: "회사" } as never]);
+    setState("settings", "agent", {
+      on: true,
+      name: "메타몽",
+      account: "a2",
+      places: [
+        { channel: "c-work", space: "work", account: "w1" },
+        { channel: "c-side", account: "a1" },
+      ],
+    });
+    // its own workspace, its own account there
+    expect(agentAccount("work", "c-work")).toBe("w1");
+    // the agent's usual workspace, another account than the usual one
+    expect(agentAccount("home", "c-side")).toBe("a1");
+    // a channel not listed: the usual
+    expect(agentAccount("home", "c-else")).toBe("a2");
+    const job = createTask({ space: "work", title: "회사 일", topic: "x", ask: "x", agent: { channel: "c-work" } });
+    expect(state.tasks.find((t) => t.id === job)?.accountId).toBe("w1");
+    const side = createTask({ space: "home", title: "사이드", topic: "x", ask: "x", agent: { channel: "c-side" } });
+    expect(state.tasks.find((t) => t.id === side)?.accountId).toBe("a1");
+
+    const { agentSpace } = await import("./discord");
+    const a = state.settings.agent!;
+    expect(agentSpace(a, "c-work")).toBe("work");
+    expect(agentSpace(a, "c-side")).toBe("home");
+    expect(agentSpace(a, "c-else")).toBe("home");
+  });
+
+  it("a channel set to a workspace without an account picked follows that workspace's choice", () => {
+    setState("settings", "agent", { on: true, name: "메타몽", account: "a2", places: [{ channel: "c-work", space: "work" }] });
+    expect(agentAccount("work", "c-work")).toBeUndefined();
+  });
+});

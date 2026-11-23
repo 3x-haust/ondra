@@ -158,8 +158,11 @@ const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite:
  * when that account is nearly out of its plan window. A running job never moves.
  */
 /** the account picked for the Discord agent in this workspace, if one is and it is still there */
-export function agentAccount(space: Task["space"]): string | undefined {
-  const id = state.settings.agent?.account;
+export function agentAccount(space: Task["space"], channel?: string): string | undefined {
+  const a = state.settings.agent;
+  const place = channel ? a?.places?.find((p) => p.channel === channel) : undefined;
+  // a channel set to its own workspace has its own account there (or that workspace's choice)
+  const id = place?.space ? place.account : (place?.account ?? a?.account);
   return id && id !== "auto" && loggedIn(space).some((a) => a.id === id) ? id : undefined;
 }
 
@@ -2776,7 +2779,7 @@ export function createTask(f: {
     ...(f.size && f.size !== "normal" ? { size: f.size } : {}),
     ...(f.fresh ? { fresh: true } : {}),
     // the Discord agent's work runs on its own account when one is picked for it
-    accountId: f.accountId ?? ((f.agent ?? prev?.agent) ? agentAccount(f.space) : undefined) ?? chooseAccount(f.space, topic),
+    accountId: f.accountId ?? ((f.agent ?? prev?.agent) ? agentAccount(f.space, (f.agent ?? prev?.agent)?.channel) : undefined) ?? chooseAccount(f.space, topic),
     ...(f.accountPinned ? { accountPinned: true } : {}),
     createdAt: Date.now(),
     now: "대기 중",

@@ -38,21 +38,8 @@ import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/
  * What it is like when the user hasn't said otherwise. Kept short on purpose: a "be funny" section
  * makes a bot that performs jokes; the rhythm and the don'ts make one that talks like a person.
  */
-export const DEFAULT_VOICE = `넌 주인이랑 오래 같이 일한 개발자 친구야. 디스코드에서 그냥 사람처럼 말해. 일 얘기도 카톡하듯 툭툭, 생각나는 대로 짧게. 정리해서 보고하는 비서가 아니라 옆자리 동료야.
-말 끝은 자연스럽게 흐려도 되고, 마침표는 잘 안 찍고, ㅋㅋ ㅇㅇ ㄱㄱ 같은 것도 그냥 써. 모르면 모른다, 틀렸으면 "아 그거 내가 잘못 봤네" 하고 바로 고쳐. 했다고 하는 건 진짜 한 것만.
-주인한테는 반말, 처음 보는 사람한텐 편한 해요체였다가 상대가 반말이면 맞춰.
-
-이런 느낌이야 (그대로 따라 하지 말고 결만):
-주인: 이슈 올라온 거 좀 봐봐
-너: ㅇㅇ 보는 중
-너: 로그인 풀리던 거 고침 ㅋㅋ 토큰 만료를 아예 안 보고 있었음. PR 올려놨어
-너: 다른 하나는 버그가 아니라 기능 요청이라 손 안 댔어. 머지는 해도 돼?
-주인: ㄱㄱ 그것도 해
-너: 머지함. 근데 그건 해보니까 OS에서 막아놔서 깔끔하게는 안 돼. 그냥 이슈에 이유 적고 닫을까
-주인: 왜 아직 릴리즈 안 됨?
-너: 아 공증에서 걸림. 이 맥에 인증서가 없더라. 일단 공증 없이 낼까 아님 인증서 깔고 다시 할까
-주인: 이거 왜 이럼
-너: 아 내가 잘못 건드렸네 ㅈㅅ 지금 고쳤어, 다시 해봐`;
+export { DEFAULT_VOICE } from "./agentVoice";
+import { DEFAULT_VOICE } from "./agentVoice";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -365,7 +352,7 @@ async function withPictures(text: string, urls: string[]): Promise<string> {
 /** the lines said in a row, as one request; answered at the last of them */
 async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const m = ms[ms.length - 1];
-  const space = agentSpace(a);
+  const space = agentSpace(a, m.channel);
   void discordTyping(m.channel);
   // its own chat, not the user's main: what it does stays in the 에이전트 tab
   const { throwThought } = await import("./captain");
@@ -636,7 +623,12 @@ export async function digest(channel: string) {
   }
 }
 
-const agentSpace = (a: AgentSettings): SpaceId => (a.space && state.spaces.some((s) => s.id === a.space) ? a.space : (state.spaces[0]?.id ?? state.space));
+/** the workspace its work goes to: the one set for that channel, else the agent's, else the first */
+export const agentSpace = (a: AgentSettings, channel?: string): SpaceId => {
+  const known = (id?: string) => !!id && state.spaces.some((s) => s.id === id);
+  const place = channel ? a.places?.find((p) => p.channel === channel)?.space : undefined;
+  return known(place) ? place! : known(a.space) ? a.space! : (state.spaces[0]?.id ?? state.space);
+};
 
 /** Settings › 에이전트 */
 export function setAgent(patch: Partial<AgentSettings>) {
