@@ -10,19 +10,17 @@ const job = (id: string, over: Partial<Task> = {}): Task => ({
 });
 
 describe("answered questions in main", () => {
-  const filed = new Set(["yomates"]);
-
-  it("lists only the root chat's own jobs, not a project's (those show in the project's chat)", () => {
-    const out = answeredIn([job("root"), job("proj", { project: "yomates" }), job("gone", { project: "removed" })], { filed, after: 0 });
-    expect(out.map((a) => a.taskId)).toEqual(["root", "gone"]);
+  it("lists every job of the workspace, a project's too", () => {
+    const out = answeredIn([job("root"), job("proj", { project: "yomates" })], { after: 0 });
+    expect(out.map((a) => a.taskId)).toEqual(["root", "proj"]);
   });
 
   it("drops what was answered before the chat was cleared", () => {
-    expect(answeredIn([job("root")], { filed, after: 100 })).toEqual([]);
-    expect(answeredIn([job("root")], { filed, after: 99 })).toHaveLength(1);
+    expect(answeredIn([job("root")], { after: 100 })).toEqual([]);
+    expect(answeredIn([job("root")], { after: 99 })).toHaveLength(1);
   });
 
-  it("leaves out subagents and the Discord agent's jobs", () => {
-    expect(answeredIn([job("kid", { parentId: "root" }), job("bot", { agent: {} })], { filed, after: 0 })).toEqual([]);
+  it("leaves out the Discord agent's jobs", () => {
+    expect(answeredIn([job("bot", { agent: {} })], { after: 0 })).toEqual([]);
   });
 });
