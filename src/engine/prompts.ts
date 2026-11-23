@@ -1157,7 +1157,13 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", inOpenNote(t)].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
+}
+
+/** What the Discord agent's jobs post on GitHub reads like a teammate wrote it, not a generated report. */
+export function writesLikeTeammate(t: Pick<Task, "agent" | "parentId">): string {
+  if (!t.agent || t.parentId) return "";
+  return `Issues, PRs and comments you write read like a teammate wrote them: the repo's own template if it has one, else a few plain sentences (what was wrong, what changed, how you checked it, anything you couldn't check), in the language the repo uses. No stock sections (Summary, Changes, Scope, Impact, Checks, Not verified), no filler or emoji, and don't copy the shape of earlier generated PRs.`;
 }
 
 /** A job of the Discord agent working in the open: what it writes between steps is read there live. */

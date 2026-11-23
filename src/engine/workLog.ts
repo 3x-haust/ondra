@@ -5,11 +5,14 @@
 // this only carries it. Jobs from the app never get here (no Task.agent).
 import { discordSend, discordSendFile, discordTyping } from "../lib/native";
 import { redact } from "../lib/log";
+import { expand } from "./rpc";
 import { state } from "../state/store";
 import type { Entry, Shell, Task, ToolCall } from "../state/types";
 
-type Watch = { seen: Set<string>; ended: Set<string>; kids: Set<string>; typingAt: number; busy?: boolean };
+type Watch = { seen: Set<string>; ended: Set<string>; kids: Set<string>; typingAt: number; busy?: boolean; pictures?: string[] };
 const watching = new Map<string, Watch>();
+/** jobs already let go: an ended job is relayed to its end once, never picked up again */
+const done = new Set<string>();
 let since: number | undefined;
 
 /** "… is typing" lasts about 10 s: kept up while it works */
@@ -26,9 +29,14 @@ export async function workTick(now = Date.now()) {
   since ??= now;
   const jobs = state.tasks.filter((t) => t.agent && !t.parentId && !t.agent.quiet && roomOf(t));
   for (const t of jobs) {
+    if (done.has(t.id)) continue;
     let w = watching.get(t.id);
     if (!w) {
-      if (ended(t) && !((t.entries[t.entries.length - 1]?.at ?? 0) >= since)) continue;
+      // ended before it was ever watched (before a restart, or quiet then): nothing to say
+      if (ended(t)) {
+        done.add(t.id);
+        continue;
+      }
       w = { seen: new Set(), ended: new Set(), kids: new Set(), typingAt: -Infinity };
       // what happened before Ondra was watching (a restart mid-job) isn't replayed
       for (const e of t.entries) if (e.at < since) w.seen.add(e.id), w.ended.add(e.id);
@@ -42,7 +50,7 @@ export async function workTick(now = Date.now()) {
     } finally {
       w.busy = false;
     }
-    if (ended(t)) watching.delete(t.id);
+    if (ended(t)) watching.delete(t.id), done.add(t.id);
   }
   // a job gone from the list (deleted) stops being watched
   for (const id of watching.keys()) if (!state.tasks.some((t) => t.id === id)) watching.delete(id);
@@ -60,12 +68,17 @@ async function relay(t: Task, w: Watch, now: number) {
       if (t.agent?.shots !== false && !/\/attachments\//.test(e.tool.image)) shots.push(e.tool.image);
     }
   }
+  if (t.agent?.shots !== false) shots.push(...(w.pictures ?? []));
+  w.pictures = [];
   for (const k of kidsOf(t.id)) {
     if (w.kids.has(k.id) || !ended(k)) continue;
     w.kids.add(k.id);
     lines.push(kidEnd(k));
   }
-  const text = lines.join("\n").slice(0, MAX_LINE * 2);
+  // two jobs in one channel: each batch says whose it is, in small print
+  const shared = [...watching.keys()].some((id) => id !== t.id && (() => { const o = state.tasks.find((x) => x.id === id); return !!o && roomOf(o) === room && !ended(o); })());
+  const body = lines.join("\n").slice(0, MAX_LINE * 2);
+  const text = body && shared ? `-# ${t.title}\n${body}` : body;
   if (text) await discordSend(room, text).catch(() => {});
   for (const p of shots.slice(0, 4)) await discordSendFile(room, p).catch(() => {});
   if (ended(t)) {
@@ -83,8 +96,13 @@ async function relay(t: Task, w: Watch, now: number) {
 function lineOf(t: Task, e: Entry, w: Watch): string | undefined {
   if (e.kind === "text") {
     if (w.seen.has(e.id)) return;
+    // what it says before its next step; its last words (the report at the end) are left to the agent's own end line
+    if (!t.entries.slice(t.entries.indexOf(e) + 1).some((x) => x.kind === "tool")) {
+      if (ended(t)) stripPictures(e.text, w), w.seen.add(e.id);
+      return;
+    }
     w.seen.add(e.id);
-    const s = out(e.text);
+    const s = out(stripPictures(e.text, w));
     return s ? s.slice(0, MAX_LINE) : undefined;
   }
   if (e.kind === "spawn") {
@@ -115,6 +133,14 @@ function kidEnd(k: Task): string {
   const said = [...k.entries].reverse().find((e) => e.kind === "text");
   const first = said?.kind === "text" ? out(said.text).split("\n").find((l) => l.trim()) : undefined;
   return `${k.title} ${k.status === "failed" ? "실패" : "끝"}${first ? `: ${first.slice(0, 160)}` : ""}`;
+}
+
+/** markdown pictures in its words (![](~/…/shot.png)) go up as pictures, not as their path */
+function stripPictures(text: string, w: Watch): string {
+  return text.replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => {
+    (w.pictures ??= []).push(expand(p));
+    return "";
+  });
 }
 
 /** the skill a read opens (…/<name>/SKILL.md) */
@@ -167,5 +193,6 @@ function why(tail: string): string {
 /** for tests: forget what was watched */
 export function resetWorkLog() {
   watching.clear();
+  done.clear();
   since = undefined;
 }
