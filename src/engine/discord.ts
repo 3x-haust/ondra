@@ -28,9 +28,7 @@ import {
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { readWays, waysPath } from "./agentWays";
-import { workTick } from "./workLog";
 import { isRefusal } from "./rpc";
-import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
 
@@ -124,7 +122,7 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(() => (postQuestions(), void scout(), void workTick()), 3000);
+  sweep ??= setInterval(() => postQuestions(), 3000);
   setStatus({ state: "connecting" });
   try {
     await discordStart();
@@ -205,7 +203,6 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: st
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
     ways ? waysNote(ways) : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
-    offerNote(a, m.channel),
   ].filter(Boolean).join("\n");
 }
 
@@ -269,26 +266,6 @@ async function ownerTakes(m: DiscordMessage, a: AgentSettings, text: string) {
   if (await answered(m.channel, bare)) return;
   if (await takenBack(m, bare)) return;
   return askMain(m, a, text);
-}
-
-/** once a day: something the user keeps asking for, offered once as a routine */
-async function scout() {
-  const a = settings();
-  if (!a?.on || !me || (a.scoutAt && Date.now() - a.scoutAt < 86_400_000)) return;
-  const { oneShot } = await import("./aside");
-  const space = agentSpace(a);
-  await maybeScout({
-    a,
-    space,
-    voice: voiceOf(a),
-    ask: (prompt) => oneShot(space, "~", prompt),
-    say: async (channel, text) => {
-      const ids = await discordSend(channel, text);
-      keepSaid(channel, ids);
-      if (ids.length) hearMine(channel, text);
-    },
-    set: setAgent,
-  });
 }
 
 /**
@@ -385,8 +362,6 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
   throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
-  // an offer is answered by their next words there (the note above carried it)
-  if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
 
 /** main's message as a chat line: its reply, its answers, and a question with numbered choices
