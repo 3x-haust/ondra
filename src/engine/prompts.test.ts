@@ -115,7 +115,7 @@ describe("coding defaults", () => {
 
   it("keeps the always-on worker prompts small", () => {
     // ~4 chars a token: 8.1k tokens before, 5.4k after; the catalog of pictures lives in the visual-report skill
-    expect(TASK_SYSTEM.length).toBeLessThan(23_000);
+    expect(TASK_SYSTEM.length).toBeLessThan(23_300); // + plain writing (ASD-STE100)
     expect(SUB_SYSTEM.length).toBeLessThan(8_100); // + stack-diagram, logo-design, app-check routes
     for (const type of ["arch", "er", "deps", "classes", "trace", "states"]) {
       expect(TASK_SYSTEM).not.toContain(`{"type":"${type}"`);

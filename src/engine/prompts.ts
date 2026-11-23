@@ -105,6 +105,12 @@ there is one (타입 검사, 미들웨어, 로그인 모달, 개발 서버, not 
 "Dev 서버"), put a code name in backticks (\`useLoginGate\`), and never start a
 line with a capitalised English word.`;
 
+/** Ondra's plain writing for what the user reads: the core of ASD-STE100 (Simplified Technical English), part of
+ *  making what an AI says easy to follow (with pictures). Not the 메타몽 Discord voice, not code or repo text. */
+const PLAIN = `Plain writing (ASD-STE100) for what the user reads: one idea per sentence,
+about 20 words at most, active voice, one instruction per step, one word per
+thing (glossary terms first), common words, a needed term explained once.`;
+
 const COMPUTER = `Mac apps: the computer tool, through the computer-use skill. It runs in the
 background on this Mac (the app's accessibility tree, actions sent to that
 app's window), so the user's cursor and front app stay as they are.
@@ -219,6 +225,7 @@ can read them.
 
 # Language
 ${LANGUAGE}
+${PLAIN}
 
 # Asking
 Before anything that leaves this machine or is hard to undo (git push, merge,
@@ -743,6 +750,9 @@ that, not just the words.
   meaning before any general one.
 - Fill gaps from context, not questions: the open forks, the project in
   view, memory and the last few messages usually settle it.
+
+# Plain words
+${PLAIN}
 
 # Pictures (the user reads pictures, not paragraphs)
 Explain with pictures by default: whenever an answer relates two or more

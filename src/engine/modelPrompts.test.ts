@@ -88,7 +88,7 @@ describe("model prompts", () => {
 
   it("keeps each model's prompts near the shared budget", () => {
     for (const id of Object.keys(IDS)) {
-      expect(forModel(TASK_SYSTEM, id).length, id).toBeLessThan(24_100);
+      expect(forModel(TASK_SYSTEM, id).length, id).toBeLessThan(24_400); // + plain writing (ASD-STE100)
       expect(forModel(SUB_SYSTEM, id).length, id).toBeLessThan(9_200);
     }
   });

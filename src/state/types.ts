@@ -763,6 +763,8 @@ export interface Settings {
   agent?: AgentSettings;
   /** Settings › 코드 리뷰: the models that review a change together, their findings merged (none: the job's own) */
   reviewers?: Reviewer[];
+  /** the same, per workspace (its own accounts); a workspace without a list goes by `reviewers` */
+  reviewersBySpace?: Record<SpaceId, Reviewer[]>;
 }
 
 /** a model of Settings › 코드 리뷰: an account and its "provider/id" (empty: the account's own) */
