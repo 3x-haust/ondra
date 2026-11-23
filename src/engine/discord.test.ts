@@ -151,6 +151,7 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
     vi.spyOn(native, "discordReact").mockResolvedValue();
     vi.spyOn(native, "discordUnreact").mockResolvedValue();
+    vi.spyOn(native, "discordSaveFile").mockImplementation(async (url) => `/data/attachments/discord/${url.split("/").pop()!.split("?")[0]}`);
     BURST.ms = 0;
     ways.text = undefined;
     vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: null, engineVersion: null, dataDir: "/data", home: "/Users/me" });
@@ -222,6 +223,24 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", "a3"));
     await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledTimes(3));
     for (const id of ["a1", "a2", "a3"]) expect(native.discordUnreact).toHaveBeenCalledWith("c1", id, "👀");
+  });
+
+  it("a picture sent with the words is saved and attached, so it is seen, not a link", async () => {
+    await ready();
+    const url = "https://cdn.discordapp.com/attachments/1/2/shot.png?ex=1&is=2&hm=3";
+    emit({ kind: "message", message: msg({ id: "p1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}>`, mentions: [BOT], files: [url] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(native.discordSaveFile).toHaveBeenCalledWith(url);
+    expect(said.thrown[0].text).toBe("메타몽\n\n첨부한 파일:\n- /data/attachments/discord/shot.png");
+    expect(said.thrown[0].text).not.toContain("cdn.discordapp.com");
+  });
+
+  it("a picture that can't be saved stays as its link", async () => {
+    vi.spyOn(native, "discordSaveFile").mockRejectedValue("404");
+    await ready();
+    emit({ kind: "message", message: msg({ id: "p2", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "이거 봐", files: ["https://cdn.discordapp.com/x.png"] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].text).toBe("이거 봐\nhttps://cdn.discordapp.com/x.png");
   });
 
   const owner = { id: OWNER, name: "성윤", bot: false };
