@@ -145,8 +145,11 @@ permissions. `FOCUS_UNVERIFIED` means focus could not be checked, so nothing was
 - Native sheets, modal dialogs, secure fields and background approval agents
   require a fresh in-app confirmation for each action, including in an ordinary
   app session or a batch. Only ref-based AX `click`/`action`, `set-value` for a
-  non-password field, and `fill-secret` are supported there. No keys, menus,
-  coordinates, pointer fallback or clipboard paste. If AX is refused, ask the
+  non-password field, and `fill-secret` are supported on secure targets. A revealed
+  password field still refuses ordinary input; hide it before `fill-secret`.
+  Ordinary dialogs also accept confirmed typing/keys with verified focus inside
+  that dialog. No menus, coordinates, pointer fallback or clipboard paste on
+  secure targets. If AX is refused, ask the
   user to do that step; do not switch to ordinary typing or bring it forward.
 - An approval in another running app: `targets {app: "exact bundle ID or name"}`
   lists its windows and sheets without launching it. `target {ref: "…"}` uses
@@ -157,11 +160,13 @@ permissions. `FOCUS_UNVERIFIED` means focus could not be checked, so nothing was
 - Refusal, cancellation, a missing confirmation UI or a changed window/control
   sends nothing. Observe before asking again. The user answers the card inside
   Ondra; never copy its details or secret names into a public channel.
-- After a sensitive screen is observed, `look` is disabled for the rest of that
-  helper session, including after `resume`. No PNG is saved or posted. Use the
+- Seeing a secure field, selected approval target, security process or secret
+  text disables `look` for the rest of that helper session, including after
+  `resume`. Ordinary sheets alone do not disable it. Incomplete inspection or a
+  mismatched capture window also refuses the image. No PNG is saved or posted. Use the
   redacted AX tree; do not restart to evade capture restrictions. Custom UI that
   does not expose secure fields or native dialog semantics is not a supported
-  approval surface.
+  approval surface. The host app cannot be controlled to answer its own cards.
 
 Reuse an unchanged observation instead of re-capturing. Return changed structured
 text when it is enough, and include an image only when it is needed for the next

@@ -114,10 +114,13 @@ means delivery, not successful authentication.
 
 The helper requires confirmation on native sheets, dialogs, modal windows,
 windows with secure fields, and non-regular background agents. This applies to
-ordinary app sessions and each batch step too. These surfaces accept only
-ref-based accessibility actions and value writes. Keys, menus, coordinates and
-pointer fallback are refused. Custom UI without accessible secure-field or
-native dialog semantics is not a supported approval surface.
+ordinary app sessions and each batch step too. Secure targets accept only
+ref-based accessibility actions and value writes; revealed password fields still
+refuse ordinary value writes. Keys, menus, coordinates and pointer fallback are
+refused on secure targets. Ordinary dialogs permit confirmed typing/keys only
+when the focused control belongs to the confirmed dialog. Custom UI without
+accessible secure-field or native dialog semantics is not a supported approval
+surface. The running host app cannot be targeted to answer its own cards.
 
 To reach an approval owned by another app without closing the requesting app:
 
@@ -137,8 +140,12 @@ agent cards remain in the agent area and are not posted to Discord.
 Secure values and selections are not read. Registered secrets, including short
 ones, are removed from human-readable helper output before truncation. Secure
 children are omitted. A reveal button can expose a password outside its field,
-so after a sensitive observation the helper refuses all captures until it ends,
-including after `resume`. No sensitive PNG reaches artifacts or automatic
+so after seeing a secure field, a selected approval target, a security process or
+secret-bearing text the helper refuses all captures until it ends, including after
+`resume`. Ordinary sheets alone do not disable future captures. Security checks
+walk the unclipped AX tree; incomplete inspection refuses input and capture.
+Capture must match the inspected window before and after; there is no largest-window
+fallback. No sensitive PNG reaches artifacts or automatic
 Discord image posting. Use redacted observations instead of restarting to
 capture that screen.
 

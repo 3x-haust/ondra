@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync, realpathSync, chmodSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, realpathSync, chmodSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,7 @@ const text = (r: any): string => r.content[0].text;
 
 // A fake ondra-cuhost: launches return a pid + env; observe returns a tiny tree;
 // act echoes backgroundPreserved and a changed tree; look returns a 1x1 PNG.
-function fakeHelperBin(): string {
+function fakeHelperBin(matchedTree: boolean | null = true): string {
   const dir = mkdtempSync(join(tmpdir(), "cuhost-tool-"));
   const path = join(dir, "fake.mjs");
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=";
@@ -29,7 +29,7 @@ process.stdin.on("data", c => { buf += c; let nl;
     if (r.op === "launch") res = { pid: 4242, ...(r.app === "Installed" ? { path: "/Applications/Installed.app" } : {}), env: ENV, backgroundPreserved: true };
     else if (r.op === "observe") res = { tree: tree("a"), env: ENV };
     else if (r.op === "act") res = { actionMs: 5, env: ENV, backgroundPreserved: true, tree: tree(r.action.kind === "set-value" ? r.action.value : "a") };
-    else if (r.op === "look") res = { image: { mimeType: "image/png", data: ${JSON.stringify(png)}, width: 1, height: 1 }, env: ENV };
+    else if (r.op === "look") res = { matchedTree: ${JSON.stringify(matchedTree)}, image: { mimeType: "image/png", data: ${JSON.stringify(png)}, width: 1, height: 1 }, env: ENV };
     else res = { env: ENV };
     process.stdout.write(JSON.stringify({ version: 1, id: r.id, ok: true, result: res }) + "\\n");
   }
@@ -69,6 +69,18 @@ describe("computer tool — host background mode", () => {
     expect(look.content[1].type).toBe("image");
     const stopped = data(await call({ action: "stop" }));
     expect(stopped.stopped).toBe(true);
+  });
+
+  it.each([false, null])("does not save or return pixels without a verified window match (%s)", async matched => {
+    vi.stubEnv("ONDRA_COMPUTER_HOST_BIN", fakeHelperBin(matched));
+    const { call } = load();
+    await call({ action: "start", app: "TextEdit" });
+    try {
+      await expect(call({ action: "look" })).rejects.toThrow("SECURE_CAPTURE_REFUSED");
+      expect(readdirSync(process.env.APP_ARTIFACTS_DIR!)).toEqual([]);
+    } finally {
+      await call({ action: "stop" });
+    }
   });
 
   it("leaves no session behind after a start that failed, so another name can be tried", async () => {

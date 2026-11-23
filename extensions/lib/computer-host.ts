@@ -380,6 +380,7 @@ export class ComputerHostSession {
   async look(signal?: AbortSignal): Promise<HostImage> {
     return this.guard(async () => {
       const r = await this.helper.request("look", { pid: this.requirePid() }, signal);
+      if (r.matchedTree !== true) throw new HostHelperError("SECURE_CAPTURE_REFUSED", "capture did not match the inspected window; no image was saved");
       const image = r.image;
       if (!isRecord(image) || image.mimeType !== "image/png" || typeof image.data !== "string") throw new Error("Malformed host image");
       const frame = isRecord(r.frame) && ["x", "y", "width", "height"].every(k => typeof (r.frame as Record<string, unknown>)[k] === "number")

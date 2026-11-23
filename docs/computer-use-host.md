@@ -82,7 +82,7 @@ Used (all public API):
   typing or pointing in the target app. **Password fields** are never read or
   typed into with keys; `fill-secret` replaces them through AX after an in-app
   confirmation, using a saved name resolved inside the helper. No paste or key
-  fallback. Ordinary typing refuses an uncheckable focus (`FOCUS_UNVERIFIED`).
+  fallback. Confirmed dialog keys require a verified focused control (`FOCUS_UNVERIFIED`).
 - Selected text in the tree (`selection`), so a selection can be verified.
 
 Ruled out:
@@ -104,8 +104,12 @@ Ruled out:
 ### Approval boundary
 
 The helper, not a model-selected mode, classifies native sheets, dialogs, modal
-windows, secure fields and non-regular agents as sensitive. These accept only
-ref-based AX writes/actions after confirmation. Unsupported custom/canvas
+windows, secure fields and non-regular agents as sensitive. Classification walks
+AX independently of the clipped display tree; incomplete inspection refuses input
+and capture. A window and its password fields remain protected after reveal.
+Secure targets accept only ref-based AX writes/actions after confirmation.
+Ordinary dialogs also permit confirmed typing/keys when focus belongs to the
+confirmed control. Unsupported custom/canvas
 approval UI is left to the user. `targets` lists an exact running app's windows
 and direct sheets; `target` selects a live AX root while the original app stays
 owned by the session. `resume` returns to that app; only `stop` releases it.
@@ -114,12 +118,19 @@ owned by the session. `resume` returns to that app; only `stop` releases it.
 and its observation. `commit-approval` consumes its opaque id and checks the
 live references with `CFEqual` and the observation contents before executing the
 held action. It cannot substitute a different action. Other requests clear the
-pending action. No persistent permit or session-wide user authorization exists.
+pending action. Password replacements compare field and ancestor identity/labels;
+other actions compare the selected dialog contents, excluding volatile focus.
+The host app's PID is excluded from launch, targets and actions so its jobs cannot
+click their own confirmation cards. No persistent permit or session-wide user
+authorization exists.
 
 The helper does not read secure values/selections or their children. Saved
 secret values, including short ones, are redacted from human-readable output.
-After a sensitive observation, captures are refused for the helper's remaining
-lifetime, even after returning to the original app: a password reveal can put
+After a secure-field observation, selected approval target, security process or
+secret-bearing text, captures are refused for the helper's remaining lifetime,
+even after returning to the original app. An ordinary sheet alone does not latch
+this restriction. Both capture checks must inspect the same window; an unreadable
+or unmatched window never falls back to another window. A password reveal can put
 text anywhere in the image, so masking only the field would be insufficient.
 This prevents PNG storage and automatic image posting, rather than relying on
 post-processing an image already exposed to the model.
