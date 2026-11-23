@@ -44,7 +44,7 @@ for await (const line of createInterface({input: process.stdin})) {
     case "act": secure = true; result = {tree: tree(), backgroundPreserved: true}; break;
     case "look": error = "SECURE_CAPTURE_REFUSED"; break;
   }
-  console.log(JSON.stringify(error ? {version: 1, id: req.id, ok: false, error: {code: error, message: "nothing returned"}} : {version: 1, id: req.id, ok: true, result}));
+  process.stdout.write(JSON.stringify(error ? {version: 1, id: req.id, ok: false, error: {code: error, message: "nothing returned"}} : {version: 1, id: req.id, ok: true, result}) + "\\n");
 }
 `);
   chmodSync(bin, 0o755);
