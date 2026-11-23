@@ -515,7 +515,8 @@
   color: var(--ink-2);
   font-weight: var(--fw-regular);
 }
-.main-view .req-head .req-tag b {
+/* the count only: the paused glyph's bars are a <b> too, and were pulled 1px off centre */
+.main-view .req-head .req-tag > b {
   margin-left: calc(var(--s-2) * -1);
   color: var(--ink);
   font-weight: var(--fw-medium);
