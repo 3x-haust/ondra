@@ -13,11 +13,7 @@ import { bareLabel, dropAsked } from "./decisionText";
 import { ProjectBadge } from "./ProjectBadge";
 import { t as tr } from "../i18n";
 
-/** An answered question as the task stores it (`"question" → answer`), or undefined for any other message. */
-export function answerOf(text: string): { q: string; a: string } | undefined {
-  const m = text.match(/^"([\s\S]+?)" → ([\s\S]+)$/);
-  return m ? { q: m[1].trim(), a: m[2].trim() } : undefined;
-}
+export { answerOf } from "../state/answered";
 
 /** A question already answered, kept in the thread where the card was: the question, then the answer. */
 export function AnsweredCard(props: { q: string; a: string }) {

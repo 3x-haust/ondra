@@ -890,6 +890,8 @@ export async function resetMain(spaceId: SpaceId, project?: string) {
   warmedAt.delete(space);
   clearTimeout(idleTimers.get(space));
   setState("captain", (l) => l.filter((m) => !inChat(m, space)));
+  // the answered-question lines come from the jobs' own threads: they go too
+  setState("chatCleared", (c) => ({ ...(c ?? {}), [space]: Date.now() }));
   await ensureCaptain(space);
   await request(agent, { type: "new_session" }, 8000);
   sentOf.set(space, { recap: false });
