@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { baseAvdName, internal, pickPhone, readOnlyBoot, runSteps, stepArgs, templateName } from "./device";
+import { alreadyBaked, bakeable, baseAvdName, internal, missingBakes, pickPhone, readOnlyBoot, runSteps, stepArgs, templateName } from "./device";
 
 describe("steps in one call", () => {
   it("runs them in order on the job's session and stops at the first that fails", async () => {
@@ -61,5 +61,27 @@ describe("fast devices", () => {
     expect(a.join(" ")).toContain("-snapshot clean");
     expect(a).toContain("-no-snapshot-save");
     expect(a).not.toContain("-wipe-data");
+  });
+});
+
+describe("host apps baked into the device", () => {
+  it("only host shells are baked (Expo Go): a job's own build never goes into a shared template", () => {
+    expect(bakeable("ios", "host.exp.Exponent")).toBe(true);
+    expect(bakeable("android", "host.exp.exponent")).toBe(true);
+    expect(bakeable("ios", "com.leviosa.yomates")).toBe(false);
+  });
+
+  it("an install of a baked app on a device made from that template is skipped", () => {
+    const keys = ["host.exp.Exponent@2.33.1"];
+    expect(alreadyBaked(keys, "host.exp.Exponent@2.33.1")).toBe(true);
+    expect(alreadyBaked(keys, "host.exp.Exponent@2.34.0")).toBe(false);
+    expect(alreadyBaked(undefined, "host.exp.Exponent@2.33.1")).toBe(false);
+  });
+
+  it("a template wants what's baked and it doesn't have yet", () => {
+    const apps = [{ key: "host.exp.Exponent@2.33.1", path: "/a/Expo Go.app", platform: "ios" as const }, { key: "host.exp.exponent@1", path: "/a/expo.apk", platform: "android" as const }];
+    expect(missingBakes(apps, "ios", ["host.exp.Exponent@2.33.1"])).toEqual([]);
+    expect(missingBakes(apps, "ios", []).map((a) => a.key)).toEqual(["host.exp.Exponent@2.33.1"]);
+    expect(missingBakes(apps, "android", undefined).map((a) => a.key)).toEqual(["host.exp.exponent@1"]);
   });
 });
