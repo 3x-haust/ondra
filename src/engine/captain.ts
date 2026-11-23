@@ -1336,7 +1336,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       });
       if (id) out.push({ kind: "remember", memoryId: id });
     } else if (r?.kind === "routine" && (r.task || r.prompt)) {
-      // a routine is only proposed here: the card in the chat saves it (or the user changes it first)
+      // what the user asked for is on at once (its card changes or drops it); one main only offers waits on its card
       const when = parseWhen(r.when);
       if (!when) {
         out.push({ kind: "answer", text: tr("루틴을 만들려면 언제 실행할지가 필요해요. 예: 매일 9시, 평일 18시, 2시간마다, 새 이슈가 오면."), blocks: [] });
@@ -1352,8 +1352,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         mode: r.mode === "fresh" ? "fresh" : "continue",
         quiet: r.quiet !== false,
         project: project?.id,
-        // asked for on Discord there's no card to save it from: the agent's routine is on at once
-        draft: !isAgentChat(space),
+        // main's call: a draft only when it offers rather than does what was asked; on Discord there's no card to save it from
+        draft: r.draft === true && !isAgentChat(space),
         from: "chat",
         ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
       });

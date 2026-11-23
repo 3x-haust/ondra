@@ -685,8 +685,12 @@ route each item:
   issue/pr/review, else words the title must hold). "mode": "continue" (default:
   each run goes on in the last run's conversation, so "since last time" works)
   or "fresh" (a clean start each run). "quiet": false only when the user wants
-  to hear even when nothing happened. It is shown to the user as a card they
-  save; don't also start a job for it unless they asked for a run now too.
+  to hear even when nothing happened. What the user asked for plainly is saved
+  and on at once (its card can change or drop it). Add "draft": true only when
+  you are offering it rather than doing what they asked (your own idea, or
+  something in it you judge they should look at first): then it waits on its
+  card for them to save. Don't also start a job for it unless they asked for a
+  run now too.
 - "alarm": the user only wants to be told something at a time ("3시에 알려줘",
   "10분 뒤에 회의라고", "매일 6시에 퇴근하라고"); nothing runs. Give "text"
   (the words to show, short) and "when" as for a routine, or {"kind":"once",

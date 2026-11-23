@@ -356,8 +356,8 @@ describe("the Discord agent's routines", () => {
     // its run is the agent's work, and reports to that channel
     const id = runRoutine(r.id, { manual: true })!;
     expect(taskById(id)!.agent).toEqual({ channel: "c9" });
-    // main's is still a card to save
-    const mine = await applyRoutes("home", [{ kind: "routine", title: "아침 정리", task: "요약", when: { kind: "daily", time: "09:00" } }], "매일 9시에 요약해줘");
+    // one main offers is a card in its chat; on Discord, even an offer is on (there's no card there)
+    const mine = await applyRoutes("home", [{ kind: "routine", draft: true, title: "아침 정리", task: "요약", when: { kind: "daily", time: "09:00" } }], "매일 9시에 요약해줘");
     expect(routineById((mine[0] as { routineId: string }).routineId)).toMatchObject({ draft: true });
     expect(routineById((mine[0] as { routineId: string }).routineId)!.agent).toBeUndefined();
   });
