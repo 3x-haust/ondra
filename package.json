@@ -1,6 +1,6 @@
 {
   "name": "ondra",
-  "version": "0.73.2",
+  "version": "0.74.0",
   "license": "MIT",
   "private": true,
   "description": "Throw tasks in; a captain splits them and agents run them in parallel.",
