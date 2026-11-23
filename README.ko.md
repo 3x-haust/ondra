@@ -16,7 +16,7 @@
 <p align="center"><sub>macOS 13 이상 · Apple silicon</sub></p>
 
 <p align="center">
-  <a href="https://3x-haust.github.io/ondra/#film"><img src="docs/assets/readme/hero-ko.webp" width="880" alt="Ondra 소개 영상의 도입부: 잔뜩 열린 에이전트 탭 대신 채팅 하나에 할 일을 적으면 Ondra가 작업 세 개로 나눠요. 누르면 전체 영상을 볼 수 있어요."></a>
+  <a href="https://3x-haust.github.io/ondra/#film"><img src="docs/assets/readme/hero-ko.avif" width="880" alt="Ondra 소개 영상의 도입부: 잔뜩 열린 에이전트 탭 대신 채팅 하나에 할 일을 적으면 Ondra가 작업 세 개로 나눠요. 누르면 전체 영상을 볼 수 있어요."></a>
 </p>
 
 <p align="center"><sub><a href="https://3x-haust.github.io/ondra/#film">전체 영상 보기 (1분 40초) ↗</a> · 영상 속 Ondra 화면은 모두 실제 앱에서 녹화했어요.</sub></p>
@@ -33,7 +33,14 @@
 
 메인이 요청을 작업으로 나누고, 작업마다 맡은 부분을 끝까지 진행해요. 캔버스에서는 메인, 프로젝트, 작업, 서브에이전트가 어떻게 이어지는지, 각 작업이 지금 뭘 하는지 볼 수 있어요.
 
+<p align="center"><img src="docs/assets/readme/kick-split-ko.avif" width="880" alt="메인에 요청 하나를 적으면 캔버스에서 작업 세 개로 나뉘어요. 로그인 리다이렉트 고치기, 설정에 다크 모드, 경쟁사 가격 조사가 각자 진행 상황을 보여 주고, 로그인 수정은 앱에서 확인한 뒤 끝나요."></p>
+
+<details>
+<summary>앱의 캔버스 화면</summary>
+
 <p align="center"><img src="docs/assets/readme/tasks-ko.jpg" width="880" alt="캔버스: 메인과 app 프로젝트, 그 아래 작업들과 각 작업의 진행 상황"></p>
+
+</details>
 
 <details>
 <summary>세션과 컨텍스트는 알아서 챙겨요</summary>
@@ -48,13 +55,27 @@
 
 의도나 취향이 필요한 순간에만 맥락과 선택지를 함께 보여줘요. 번호나 Enter를 누르거나 직접 답을 적으면 돼요. 진행 중인 작업에 들어가 방향을 바꿀 수도 있어요.
 
+<p align="center"><img src="docs/assets/readme/kick-ask-ko.avif" width="880" alt="다른 두 작업이 계속 도는 동안 다크 모드 작업만 주황색으로 바뀌어 기본값을 물어요. 1을 누르면 시스템 설정 따르기로 정해지고, 작업은 확인까지 마치고 끝나요."></p>
+
+<details>
+<summary>앱의 내 차례 화면</summary>
+
 <p align="center"><img src="docs/assets/readme/ask-ko.jpg" width="880" alt="내 차례: 다크 모드 작업이 응답을 기다리고, 캔버스에 질문과 선택지가 떠 있어요"></p>
+
+</details>
 
 ## 다 했다고 하기 전에 실제 앱에서 써 봐요
 
 앱을 바꾼 작업은 자기 앱 사본을 띄워서 바뀐 부분을 직접 써 봐요. 본 화면은 스크린샷과 로그로 남기고, 확인하지 못한 건 따로 표시해요. 프로젝트를 확인하는 방법은 한 번만 스킬로 적어 두고(`.agents/skills/check-<이름>/`), 다음 작업부터 그대로 써요.
 
+<p align="center"><img src="docs/assets/readme/kick-check-ko.avif" width="880" alt="로그인 리다이렉트를 고친 작업이 자기 앱 사본에 로그인해 대시보드까지 가 봐요. 스크린샷과 테스트 결과를 남기고, Safari는 확인 못 함으로 표시해요."></p>
+
+<details>
+<summary>앱에서 확인하는 화면</summary>
+
 <p align="center"><img src="docs/assets/readme/check-ko.jpg" width="880" alt="로그인 리다이렉트를 고친 작업이 자기 앱 사본에 로그인하고 브라우저에서 대시보드를 여는 화면"></p>
+
+</details>
 
 <details>
 <summary>결과와 함께 오는 것</summary>
@@ -120,11 +141,16 @@ GitHub 계정을 연결하면 PR 상태, 검사, 리뷰와 바뀐 파일을 작�
 
 </details>
 
+## 다른 Mac의 일도 여기서
+
+다른 Mac을 링크로 한 번 연결하면 그 Mac의 프로젝트가 사이드바에 떠요. 거기서 도는 작업은 그 Mac의 파일, 도구, 계정을 쓰고, 화면과 질문은 이 앱으로 와요. 두 Mac은 알아서 서로를 찾고, 되면 직접, 안 되면 릴레이를 거쳐 종단간 암호화로 이야기해요. [어떻게 동작하나요](docs/remote-control.md)
+
+<p align="center"><img src="docs/assets/readme/kick-remote-ko.avif" width="880" alt="MacBook의 메인에서 야간 평가를 집에 있는 Mac mini의 studio 프로젝트로 보내요. 실행은 Mac mini에서 흐르고, 질문은 MacBook으로 와서 답이 다시 넘어가고, 128개 케이스가 모두 통과해요."></p>
+
 ## 그 밖에
 
 - **메모리:** 한 번 정한 건 기억해요. 같은 질문에 같은 답을 하면 다음부터 묻지 않고, 프로젝트 규칙을 두 번 말하면 작업이 린트·테스트 같은 자동 검사로 만들어요. 취향과 배운 점을 남기거나 기존 메모를 가져올 수 있고, 자동 저장은 끌 수 있어요.
 - **루틴:** 매일 하는 일은 루틴으로 만들어요. Ondra가 켜져 있고 Mac이 깨어 있는 동안 정한 시간에 돌아요.
-- **다른 Mac:** 내 다른 Mac의 프로젝트로 작업을 돌릴 수 있어요. 화면은 이 앱에 그대로 보이고, 오가는 내용은 끝까지 암호화돼요.
 - **`/btw`:** 일하는 중에도 하던 대화를 멈추지 않고 옆에서 짧게 물어볼 수 있어요.
 - **펫:** 화면 전체에 사는 작은 펫이에요. 화면 바닥과 다른 창 위를 걷고, 창이 닫히면 떨어지고, 집어서 던질 수 있고, 아무 일 없으면 잠들어요. 작업이 끝나면 기뻐하고, 답이 필요하면 불러요. `/pet 피카츄`처럼 캐릭터 이름만 적으면 작업이 GIF를 찾아(없으면 그려서) 펫으로 만들어요.
 
@@ -231,4 +257,4 @@ brand/ docs/         브랜드와 문서
 <p align="center">
   <a href="https://github.com/3x-haust/ondra/releases">릴리스</a> · <a href="docs/TELEMETRY.md">사용 통계</a> · <a href="https://github.com/3x-haust/ondra/issues">문제 알리기</a> · <a href="LICENSE">MIT 라이선스</a>
 </p>
-<p align="center"><sub>README와 영상 속 화면은 예시 데이터를 써요. 함께 쓰는 오픈소스의 라이선스는 앱 안의 설정 › 정보 › 오픈소스 라이선스에서 볼 수 있어요.</sub></p>
+<p align="center"><sub>README와 영상 속 화면은 예시 데이터를 써요. 짧은 애니메이션은 앱 디자인으로 그린 것이고, 정지 화면과 소개 영상은 앱에서 녹화했어요. 함께 쓰는 오픈소스의 라이선스는 앱 안의 설정 › 정보 › 오픈소스 라이선스에서 볼 수 있어요.</sub></p>

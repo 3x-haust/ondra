@@ -16,7 +16,7 @@
 <p align="center"><sub>macOS 13+ · Apple silicon</sub></p>
 
 <p align="center">
-  <a href="https://3x-haust.github.io/ondra/en/#film"><img src="docs/assets/readme/hero-en.webp" width="880" alt="The opening of Ondra's intro film: one chat replaces a wall of agent tabs, and Ondra splits the request into three tasks. Click to watch the full film."></a>
+  <a href="https://3x-haust.github.io/ondra/en/#film"><img src="docs/assets/readme/hero-en.avif" width="880" alt="The opening of Ondra's intro film: one chat replaces a wall of agent tabs, and Ondra splits the request into three tasks. Click to watch the full film."></a>
 </p>
 
 <p align="center"><sub><a href="https://3x-haust.github.io/ondra/en/#film">Watch the full film (1:40) ↗</a> · Every Ondra screen in it is recorded from the app.</sub></p>
@@ -33,7 +33,14 @@ Close the tabs. Say what you want done in Main, the one conversation for all you
 
 Main turns your request into tasks that run side by side, each following its part through. The canvas shows how Main, projects, tasks and subagents connect, and what each task is doing now.
 
+<p align="center"><img src="docs/assets/readme/kick-split-en.avif" width="880" alt="One request typed into Main becomes three tasks on the canvas: fix the login redirect, dark mode in settings and competitor research. Each shows its live steps, and the login fix ends checked in the app."></p>
+
+<details>
+<summary>The canvas in the app</summary>
+
 <p align="center"><img src="docs/assets/readme/tasks-en.jpg" width="880" alt="The canvas: Main, the app project and its tasks, with each task's live progress"></p>
+
+</details>
 
 <details>
 <summary>Sessions and context are handled for you</summary>
@@ -48,13 +55,27 @@ Main turns your request into tasks that run side by side, each following its par
 
 When your intent or taste matters, the question comes with context and choices. Press its number or Enter, or write your own answer. You can also step into a running task and change its direction.
 
+<p align="center"><img src="docs/assets/readme/kick-ask-en.avif" width="880" alt="While two tasks keep running, the dark mode task turns amber and asks what dark mode should default to. Pressing 1 picks Follow the system, and the task finishes, checked."></p>
+
+<details>
+<summary>Your turn in the app</summary>
+
 <p align="center"><img src="docs/assets/readme/ask-en.jpg" width="880" alt="Your turn: the dark mode task needs a reply, and its question shows with choices on the canvas"></p>
+
+</details>
 
 ## It checks in the real app before it says done
 
 A task that changes an app starts its own copy and uses the change. What it saw is kept as screenshots and logs; what it couldn't check is marked as not checked. How to check the project is written down once as its own skill (`.agents/skills/check-<name>/`), and later tasks reuse it.
 
+<p align="center"><img src="docs/assets/readme/kick-check-en.avif" width="880" alt="A task fixing a login redirect signs in to its own copy of the app and lands on the dashboard. It keeps the screenshot and the test run, and marks Safari as not checked."></p>
+
+<details>
+<summary>The check in the app</summary>
+
 <p align="center"><img src="docs/assets/readme/check-en.jpg" width="880" alt="A task fixing a login redirect signs in to its own copy of the app and opens the dashboard in its browser"></p>
+
+</details>
 
 <details>
 <summary>What comes back with a result</summary>
@@ -120,11 +141,16 @@ Answers can draw a step-by-step board, build a 3D model you can turn, or lay out
 
 </details>
 
+## Your other Mac, right here
+
+Connect another Mac once with a link, and its projects show up in your sidebar. Tasks there run with that Mac's files, tools and accounts; they show up here like any other task, and their questions come to you here. The Macs find each other on their own and talk end-to-end encrypted, directly when they can and through a relay when they can't. [How it works](docs/remote-control.md)
+
+<p align="center"><img src="docs/assets/readme/kick-remote-en.avif" width="880" alt="From a MacBook, Main sends the nightly evals to the studio project on a Mac mini at home. The run streams on the Mac mini, its question comes to the MacBook, the answer goes back, and all 128 cases pass."></p>
+
 ## And the rest
 
 - **Memory:** decide once and it remembers. Answer the same question the same way and it stops asking; say a project rule twice and a task turns it into an automatic check, like a lint rule or a test. Keep preferences and lessons, or import existing notes; automatic saving can be turned off.
 - **Routines:** daily work becomes a routine that runs on schedule while Ondra is open and the Mac is awake.
-- **Another Mac:** run tasks on your other Mac's projects. The work shows up here, end-to-end encrypted in between.
 - **`/btw`:** ask a quick question on the side while the work runs, without interrupting it.
 - **Pet:** a little pet that lives on your whole screen. It walks along the bottom and on top of other windows, falls when a window closes, can be picked up and thrown, and dozes off when nothing happens. It cheers when a task is done and calls you when one needs an answer. Type `/pet Pikachu` (any character) and a task finds (or draws) its GIFs and turns it into your pet.
 
@@ -231,4 +257,4 @@ brand/ docs/         brand and documentation
 <p align="center">
   <a href="https://github.com/3x-haust/ondra/releases">Releases</a> · <a href="docs/TELEMETRY.md">Telemetry</a> · <a href="https://github.com/3x-haust/ondra/issues">Report an issue</a> · <a href="LICENSE">MIT License</a>
 </p>
-<p align="center"><sub>Screens in this README and the film use sample data. The licenses of the open-source software Ondra includes are in the app: Settings › About › Open-source licenses.</sub></p>
+<p align="center"><sub>Screens in this README and the film use sample data. The short animated clips are drawn in the app's design; the stills and the film are recorded from the app. The licenses of the open-source software Ondra includes are in the app: Settings › About › Open-source licenses.</sub></p>
