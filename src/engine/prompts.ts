@@ -1156,5 +1156,11 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : ""].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", inOpenNote(t)].filter(Boolean);
+}
+
+/** A job of the Discord agent working in the open: what it writes between steps is read there live. */
+export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
+  if (!t.agent || t.parentId || t.agent.quiet) return "";
+  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. Write it like thinking aloud while you work, in Korean 반말, short ("이거부터 읽어볼게", "아 잠깐, 이미 역순으로 돌고 있네", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there.`;
 }

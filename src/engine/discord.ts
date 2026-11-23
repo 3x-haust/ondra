@@ -28,6 +28,7 @@ import {
 import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { readWays, waysPath } from "./agentWays";
+import { workTick } from "./workLog";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
@@ -135,7 +136,7 @@ export async function startAgent() {
     const off = [onMainSaid((id) => void mainSaid(id)), onJobEndNote((t) => endNote(t))];
     unhook = () => off.forEach((f) => f());
   }
-  sweep ??= setInterval(() => (postQuestions(), void scout()), 3000);
+  sweep ??= setInterval(() => (postQuestions(), void scout(), void workTick()), 3000);
   setStatus({ state: "connecting" });
   try {
     await discordStart();
@@ -202,6 +203,9 @@ export const OWNER_WAYS = `How this user wants you to work here:
 - Answer with the result, not a plan to get it. No "~할게/~볼게" acknowledgements (you already reacted 👀); one forward-looking line at most, only when work you started will really report back.
 - When work ends, say what changed, what was checked, what is still open (and why), with the PR or link. Unchecked things are said plainly, not buried.`;
 
+/** How the work it starts shows on Discord: on by default, the where and whether is its own call. */
+export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps and what it does (skills, subagents, test results, commits, PRs, screenshots) shows on Discord as it happens, typing on, secrets hidden. By default that is the channel they asked in. You may pick another for it on the new route: "room" (a channel id), e.g. the project's own channel when the server keeps one per project (one under a 프로젝트 category: that is usually where its work belongs, and a missing one can be made there with the discord tool), then your line here just says where ("<#id>에서 할게"); the end is said there and a pointer comes back here. "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. Go by what the user asked or wrote in your ways, and by how their server is laid out; when it's unclear, the asking channel is fine.`;
+
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
   const known = memoryLines({ people: [...m.mentions, ...(heard.get(m.channel)?.lines ?? []).filter((h) => !h.me && h.who !== m.author.id).map((h) => h.who)], place: m.guild ?? undefined, dm: !m.guild });
@@ -209,6 +213,7 @@ export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: st
     `(Ondra) The user sent this from Discord (${m.guild ? `server ${m.guild}, channel ${m.channel}` : "a DM"}), to you as "${a.name}". Your reply line is posted there as it is, so write it as a chat message, in the user's language, in this voice (it replaces the usual tone for this reply only):`,
     ...chatRules(a, !!m.guild),
     "Routines and alarms you make here are yours and on at once (no card to save them): they run on their own, and what a run finds is said back in this channel (a quiet one only when there is something). Make one when they ask for something on a schedule or on an event (\"매일 9시에 …\", \"PR 오면 …\", \"3시에 알려줘\").",
+    WORK_IN_OPEN,
     "The server itself is yours to act on with the discord tool (its servers and channels, making or removing one, posting in one): a request like \"채널 만들어서 거기서 일하고 결과만 보고해\" is done with it and your usual work, as you see fit.",
     ways ? waysNote(ways) : "",
     known ? `What you remember from Discord (your agent memory, not the work memory):\n${known}` : "",
@@ -472,7 +477,9 @@ async function mainSaid(replyId: string) {
 /** the Discord channel a job of the agent reports to (its own, or the job it is under) */
 export function channelOf(taskId: string): string | undefined {
   const t = taskById(taskId);
-  return t?.agent?.channel ?? (t?.parentId ? taskById(t.parentId)?.agent?.channel : undefined);
+  // where it works (the project's channel it picked) before where it was asked
+  const a = t?.agent ?? (t?.parentId ? taskById(t.parentId)?.agent : undefined);
+  return a?.room || a?.channel;
 }
 
 /** An alarm the agent was asked for rings: said in that channel, to the user (a mention pings them). */

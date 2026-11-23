@@ -320,6 +320,53 @@ pub async fn discord_channel_delete(channel: String) -> Result<(), String> {
     rest(reqwest::Method::DELETE, &format!("/channels/{channel}"), None).await.map(|_| ())
 }
 
+/// A picture from this Mac posted in a channel (a screenshot the work took), with an optional line.
+/// Pictures only, up to 8 MB (what any server takes).
+#[tauri::command]
+pub async fn discord_send_file(channel: String, path: String, text: Option<String>) -> Result<Vec<String>, String> {
+    let p = std::path::Path::new(&path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("image.png").to_string();
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        _ => return Err("그림 파일만 올릴 수 있어요".into()),
+    };
+    let bytes = tokio::fs::read(p).await.map_err(|e| format!("파일을 못 읽었어요: {e}"))?;
+    if bytes.len() > 8 * 1024 * 1024 {
+        return Err("8MB가 넘어서 못 올려요".into());
+    }
+    let token = token()?;
+    let http = client()?;
+    let payload = json!({ "content": text.unwrap_or_default().chars().take(1900).collect::<String>(), "allowed_mentions": { "parse": [] } });
+    for _ in 0..3 {
+        let part = reqwest::multipart::Part::bytes(bytes.clone()).file_name(name.clone()).mime_str(mime).map_err(|e| e.to_string())?;
+        let form = reqwest::multipart::Form::new().text("payload_json", payload.to_string()).part("files[0]", part);
+        let res = http
+            .post(format!("{API}/channels/{channel}/messages"))
+            .header("Authorization", format!("Bot {token}"))
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("디스코드에 닿지 못했어요: {e}"))?;
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        if status.as_u16() == 429 {
+            let wait = serde_json::from_str::<Value>(&body).ok().and_then(|v| v["retry_after"].as_f64()).unwrap_or(1.0);
+            tokio::time::sleep(Duration::from_secs_f64(wait.min(10.0))).await;
+            continue;
+        }
+        if !status.is_success() {
+            return Err(format!("디스코드가 거절했어요 ({status})"));
+        }
+        let v: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+        return Ok(v["id"].as_str().map(|s| vec![s.to_string()]).unwrap_or_default());
+    }
+    Err("디스코드가 잠시 막았어요. 조금 뒤에 다시 해 주세요".into())
+}
+
 /// "… is typing" in a channel (lasts about 10 seconds)
 #[tauri::command]
 pub async fn discord_typing(channel: String) -> Result<(), String> {

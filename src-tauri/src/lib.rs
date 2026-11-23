@@ -513,6 +513,7 @@ pub fn run() {
             discord::discord_start,
             discord::discord_stop,
             discord::discord_send,
+            discord::discord_send_file,
             discord::discord_typing,
             discord::discord_delete,
             discord::discord_owner,

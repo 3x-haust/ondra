@@ -272,8 +272,10 @@ export interface Task {
   /** what it was last held back to ask the user about, and when: the user's words after that answer it */
   uncheckedAsked?: { at: number; items: string[] };
   /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
-   *  and its end and questions go back to `channel` on Discord */
-  agent?: { channel?: string };
+   *  and its end and questions go back to `channel` on Discord. While it works, what it says and does
+   *  shows in `room` (the asking channel unless the agent picked another, e.g. the project's), unless
+   *  the agent chose to keep it `quiet` or to leave pictures out (`shots: false`) */
+  agent?: { channel?: string; room?: string; quiet?: boolean; shots?: boolean };
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */
