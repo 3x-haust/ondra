@@ -194,10 +194,10 @@ export function ringAlarm(id: string, now = Date.now()): string | undefined {
   const snoozed = r.snoozeAt !== undefined && r.snoozeAt <= now;
   const dueAt = own ? r.nextAt! : snoozed ? r.snoozeAt! : now;
   const late = now - dueAt > ALARM_LATE;
-  // the agent's alarm rings on Discord, where it was set
+  // An alarm is context for the agent; the model chooses its message and destination.
   if (r.agent?.channel) {
     const channel = r.agent.channel;
-    void import("./discord").then((d) => d.sayOnDiscord(channel, r.prompt)).catch(() => {});
+    void import("./captain").then((c) => c.notifyChat(r.space, "@agent", `Alarm ${r.id} is due. Discord origin channel: ${channel}. Scheduled text: ${r.prompt}`));
     patchRoutine(r.id, { lastAt: now, lastStatus: "done", lastError: undefined, runs: r.runs + 1, snoozeAt: undefined, ...(own ? { nextAt: r.when.kind === "once" ? undefined : nextRun(r.when, now), ...(r.when.kind === "once" ? { enabled: false } : {}) } : {}) });
     return undefined;
   }

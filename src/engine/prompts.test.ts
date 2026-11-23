@@ -4,7 +4,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { appCheckRules, CAPTAIN_SYSTEM, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
+import { appCheckRules, CAPTAIN_SYSTEM, discordWorkNote, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem, writesLikeTeammate } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
 import { REVIEW_FIX } from "./crosscheck";
@@ -153,6 +153,32 @@ describe("coding defaults", () => {
     expect(CAPTAIN_SYSTEM).not.toContain("Split other multi-part work into small concrete steps");
     expect(TASK_SYSTEM).toContain("Review: only for a risky change");
     expect(TASK_SYSTEM).not.toContain("the completion gate requires one");
+  });
+
+  it("gives agent jobs explicit tools and personal ways instead of a forwarding promise", () => {
+    setState("settings", "agent", { on: true, name: "몽이", voice: "넌 시니컬한 고양이야.\n\n말을 짧게 해." });
+    setState("agentNotes", [
+      { id: "lesson", kind: "lesson", text: "먼저 대화를 확인해", at: 1 },
+      { id: "place", kind: "place", place: "g1", text: "이 서버에선 리액션만", at: 1 },
+      { id: "private", kind: "person", who: "u1", dm: true, text: "DM only detail", at: 1 },
+    ]);
+    const t = { ...task(), agent: { channel: "c1" } };
+    const note = discordWorkNote(t);
+    expect(note).toContain("먼저 대화를 확인해");
+    expect(note).toContain("g1");
+    expect(note).toContain("이 서버에선 리액션만");
+    expect(note).not.toContain("DM only detail");
+    expect(note).toContain("몽이");
+    expect(note).toContain("말을 짧게 해.");
+    expect(note).toContain("agent/AGENT.md");
+    expect(note).toContain("NOT posted to Discord");
+    expect(note).toContain("discord tool");
+    expect(note).toContain("c1");
+    expect(taskSystem(t)).toContain(note);
+    expect(discordWorkNote(task())).toBe("");
+    expect(discordWorkNote({ ...t, parentId: "parent" })).toBe("");
+    expect(writesLikeTeammate(t)).toContain("teammate");
+    expect(writesLikeTeammate(task())).toBe("");
   });
 
   it("keeps optional user instructions out when empty", () => {

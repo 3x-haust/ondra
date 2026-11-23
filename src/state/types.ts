@@ -271,11 +271,9 @@ export interface Task {
   uncheckedOk?: string[];
   /** what it was last held back to ask the user about, and when: the user's words after that answer it */
   uncheckedAsked?: { at: number; items: string[] };
-  /** the Discord agent's work (Settings › 에이전트): it lives in the 에이전트 tab, not the user's lists,
-   *  and its end and questions go back to `channel` on Discord. While it works, what it says and does
-   *  shows in `room` (the asking channel unless the agent picked another, e.g. the project's), unless
-   *  the agent chose to keep it `quiet` or to leave pictures out (`shots: false`) */
-  agent?: { channel?: string; room?: string; quiet?: boolean; shots?: boolean };
+  /** The Discord agent's work: kept in its own tab. `channel` records the request's origin;
+   *  outgoing actions and destinations are chosen by the model with the discord tool. */
+  agent?: { channel?: string };
   /** what its last done said, until it is finished or sent on (a restart then finishes it instead of prompting again) */
   saidDone?: string;
   /** the user turned it in a new direction: the job that took over from it */
@@ -445,7 +443,7 @@ export interface Decision {
   round?: { rest: { question: string; recommend: string; note?: string }[]; answers: { q: string; a: string }[]; n: number; total: number; recommend: string };
   /** how clear the request is so far (0–1), as the asker scored it, and by part */
   clarity?: { score: number; parts?: { label: string; score: number }[] };
-  /** asked on Discord by the agent, in this channel (so it goes once, and a reply there answers it) */
+  /** The agent chat received this question event (origin channel), so it is not queued twice. */
   posted?: string;
 }
 
@@ -453,6 +451,7 @@ export type Route =
   | { kind: "answer"; text: string; blocks: Block[]; taskId?: string }
   | { kind: "append"; taskId: string; message: string }
   | { kind: "stop"; taskId: string }
+  | { kind: "decide"; decisionId: string; optionId: string }
   | { kind: "ask"; decisionId: string; question?: string }
   | { kind: "new"; taskId: string }
   | { kind: "remember"; memoryId: string }
@@ -492,9 +491,8 @@ export interface CaptainMessage {
   steps?: string[];
   /** how long the answer took, from the request to the reply */
   took?: number;
-  /** in the agent's chat: the Discord message the user's words came from (its reply goes there),
-   *  and the ones said just before it that were taken with it */
-  discord?: { channel: string; message: string; also?: string[] };
+  /** In the agent's chat: the Discord message the user's words came from. */
+  discord?: { channel: string; message: string };
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson" | "term";
@@ -803,12 +801,6 @@ export interface AgentSettings {
   account?: string;
   /** per Discord channel: the workspace and account its requests there go to (the ones above elsewhere) */
   places?: AgentPlace[];
-  /** when it last looked over the user's requests for one to make a routine of (agentScout.ts) */
-  scoutAt?: number;
-  /** what it already offered to make a routine of (a short key each), so it asks once */
-  suggested?: string[];
-  /** the routine it offered and hasn't heard back on: the user's next words in that channel may say yes */
-  offer?: { channel: string; at: number; say: string; title: string; task: string; when: unknown };
 }
 
 export interface AppState {
@@ -922,8 +914,8 @@ export interface Routine {
   since?: number;
   /** from the chat message that proposed it */
   from?: string;
-  /** the Discord agent's: made there, its runs are the agent's work and what they find goes to
-   *  `channel` on Discord (an alarm rings there) */
+  /** The agent's routine: its runs and alarm events reach the agent chat.
+   *  `channel` records where it was requested, not a mandatory send target. */
   agent?: { channel?: string };
 }
 

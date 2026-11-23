@@ -41,6 +41,14 @@ export function memoryLines(ctx: { speaker?: string; people?: string[]; place?: 
   return out.join("\n");
 }
 
+/** Public social context for actions whose destination the model has yet to choose. */
+export function actionMemory(): string {
+  const lines = notes().filter((n) => !n.dm).map((n) =>
+    `- ${n.kind === "place" ? `server ${n.place}` : n.kind === "person" ? `person ${n.who} (${n.name ?? n.who})` : "lesson"}: ${n.text}`,
+  );
+  return lines.length ? `Your Discord memory (separate from work memory; apply each server/person note only in its own context):\n${lines.join("\n")}` : "";
+}
+
 type Op = { kind?: string; who?: string; name?: string; text?: string };
 
 /** The pass's answer: a JSON array of cards to write (a person's or the place's whole card again, or a new lesson). */

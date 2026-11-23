@@ -5,7 +5,7 @@ import { createSignal } from "solid-js";
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
 import { readClarity, readRound, roundDecision } from "./round";
-import { addRoutine, routineById, saidNothing } from "./routines";
+import { addRoutine, routineById, saidNothing, saveRoutine } from "./routines";
 import { parseWhen } from "./routineTime";
 import { t as tr } from "../i18n";
 import { logError, logInfo, logWarn } from "../lib/log";
@@ -18,7 +18,7 @@ import { prepareQuery } from "./vectors";
 import { AGENT_CHAT, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
-import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
+import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, discordHistory, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
 import { readNotes } from "./notes";
@@ -29,7 +29,7 @@ import { digestJob } from "./digest";
 import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, isRefusal, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
-import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, decide, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
@@ -50,13 +50,7 @@ const pid = (key: string) => (isAgentChat(key) ? undefined : pj(key));
 /** a run of the agent's routine that has something to say: its chat speaks about it (no one asked
  *  in a chat for it). A quiet routine's run with nothing to report stays quiet. */
 const agentRun = (t: Task): { project: string } | undefined => (t.routine && routineById(t.routine)?.agent && !(routineById(t.routine)?.quiet && saidNothing(t)) ? { project: AGENT_CHAT } : undefined);
-/** the Discord channel the agent's chat was last spoken to from: where the work it starts reports */
-// where the agent's work shows on Discord while it runs, as it chose on the route (workLog.ts)
-const inOpen = (r: any): { room?: string; quiet?: boolean; shots?: boolean } => ({
-  ...(typeof r?.room === "string" && /^\d{5,}$/.test(r.room.replace(/^<#|>$/g, "")) ? { room: r.room.replace(/^<#|>$/g, "") } : {}),
-  ...(r?.quiet === true ? { quiet: true } : {}),
-  ...(r?.shots === false ? { shots: false } : {}),
-});
+/** The origin of the agent's work, not a destination for automatic posts. */
 const agentChannel = (key: string) => [...state.captain].reverse().find((m) => inChat(m, key) && m.discord)?.discord?.channel;
 // a project added from another Mac has its own chat here too (its jobs run there)
 const projectOf = (key: string): (Pick<Project, "id" | "space" | "name" | "folder"> & { host?: string; hostName?: string }) | undefined =>
@@ -71,9 +65,9 @@ export const inChat = (m: CaptainMessage, key: string) => m.space === sp(key) &&
 // (another Mac's project is "r:<host>:<id>": every colon goes, not just the first)
 const sessionDir = (key: string) => `${engine.info.dataDir}/sessions/captain-${key.replace(/[~:]/g, "-")}`;
 const agentOf = (space: string) => `captain:${space}`;
-const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event }[]>();
+const queues = new Map<string, { text: string; replyId: string; cwd?: string; isolate?: boolean; event?: Event; onError?: () => void; discord?: CaptainMessage["discord"] }[]>();
 /** what main is told about when no user spoke: a fork it started ended, or a project it handed work to finished */
-type Event = "fork" | "project";
+type Event = "fork" | "project" | "notice";
 /** follow-ups main made on its own since the user last spoke, per chat (stops runaway chains) */
 const followUps = new Map<string, number>();
 const busy = new Set<string>();
@@ -167,11 +161,31 @@ export function throwThought(text: string, spaceId: SpaceId, opts: { cwd?: strin
   const project = opts.project || undefined;
   const space = chatKey(spaceId, project);
   const me: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "me", text: t, ...(opts.discord ? { discord: opts.discord } : {}) };
+  const textWithNote = opts.note ? `${t}\n\n${opts.note}` : t;
+  const queue = queues.get(space) ?? [];
+  const last = queue[queue.length - 1];
+  followUps.set(space, 0);
+  // Inputs already waiting from the same channel share a turn; no speaking timer or policy.
+  if (isAgentChat(space) && opts.discord && last?.discord?.channel === opts.discord.channel) {
+    last.text += `\n\n${textWithNote}`;
+    last.discord = opts.discord;
+    setState("captain", (list) => trimChats([...list, me]));
+    return last.replyId;
+  }
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
   setState("captain", (list) => trimChats([...list, me, reply]));
-  followUps.set(space, 0);
   // `note`: for the model only (the chat shows the user's words)
-  queues.set(space, [...(queues.get(space) ?? []), { text: opts.note ? `${t}\n\n${opts.note}` : t, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate }]);
+  queues.set(space, [...queue, { text: textWithNote, replyId: reply.id, cwd: opts.cwd, isolate: opts.isolate, discord: opts.discord }]);
+  void pump(space);
+  return reply.id;
+}
+
+/** Queue an app event as context, without pretending the user sent it. */
+export function notifyChat(spaceId: SpaceId, project: string, text: string, onError?: () => void): string {
+  const space = chatKey(spaceId, project);
+  const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: spaceId, project, from: "captain", pending: true };
+  setState("captain", (list) => trimChats([...list, reply]));
+  queues.set(space, [...(queues.get(space) ?? []), { text, replyId: reply.id, event: "notice", onError }]);
   void pump(space);
   return reply.id;
 }
@@ -227,7 +241,7 @@ function jobEnded(t: Task) {
     ((next) => (next.length ? `Already handed this result automatically (they build on it): ${next.map((x) => `${x.id} "${x.title}"`).join(", ")}. Don't append it to them again.` : ""))(
       state.tasks.filter((x) => x.after?.includes(t.id)),
     ),
-    ...[...endNotes].map((fn) => fn(t)),
+    t.agent ? `Discord origin channel: ${t.agent.channel ?? "not recorded"}. Work instructions:\n${t.ask}` : "",
   ].filter(Boolean).join("\n");
   const reply: CaptainMessage = { id: uid("c"), at: Date.now(), space: t.space, project: from.project, from: "captain", pending: true, after: t.id };
   setState("captain", (list) => trimChats([...list, reply]));
@@ -427,20 +441,6 @@ export function startRelaySweep() {
   sweeping = setInterval(sweep, 60_000);
 }
 
-/** told the id of each of main's replies once it is written (or failed): the agent on Discord passes them on */
-/** A note for main with a job's end, from whoever started that job elsewhere (the Discord agent). */
-const endNotes = new Set<(t: Task) => string | undefined>();
-export function onJobEndNote(fn: (t: Task) => string | undefined): () => void {
-  endNotes.add(fn);
-  return () => endNotes.delete(fn);
-}
-
-const saidHooks = new Set<(replyId: string) => void>();
-export function onMainSaid(fn: (replyId: string) => void): () => void {
-  saidHooks.add(fn);
-  return () => saidHooks.delete(fn);
-}
-
 async function pump(space: string) {
   if (busy.has(space)) return;
   busy.add(space);
@@ -450,18 +450,25 @@ async function pump(space: string) {
         isolateOf.set(space, next.isolate);
         answering.set(space, next.replyId ?? "");
         if (isAgentChat(space)) await freshSession(space);
+        if (next.discord && state.settings.agent) {
+          const { RECENT, recentTalk } = await import("./discord");
+          const history = await discordHistory(next.discord.channel, undefined, RECENT).catch((e) => {
+            logError("agent", `history: ${String(e)}`);
+            return [];
+          });
+          next.text += `\n\n${recentTalk(state.settings.agent, history, "")}`;
+        }
         const { reply, routes } = await routeWithRetry(space, next.text, next.cwd, next.event);
         setState("captain", (m) => m.id === next.replyId, (m) => ({ pending: false, routes, reply, took: Date.now() - m.at, at: Date.now() }));
         setDraft(space, "");
         // 결과물 is the user's: the agent's chat keeps none there
         if (!isAgentChat(space)) keepResult(next.replyId);
-        if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
         if (pid(space)) reportUp(space);
       } catch (e) {
         logError("main", `${space} answer failed: ${e instanceof Error ? e.message : String(e)}`);
+        next.onError?.();
         setState("captain", (m) => m.id === next.replyId, { pending: false, error: e instanceof Error ? e.message : String(e) });
         setDraft(space, "");
-        if (next.replyId) for (const fn of saidHooks) fn(next.replyId);
         // the project couldn't answer: main still gets what the jobs reported
         if (pid(space)) reportUp(space);
       }
@@ -1044,6 +1051,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (projects !== sent.projects) out.push(`# Projects in this space${sent.projects ? " (updated)" : ""} (name: folder)\n${projects}`, "");
   if (repos && repos !== sent.repos) out.push(`# Repos in this space without a project${sent.repos ? " (updated)" : ""}\n${repos}`, "");
   out.push(forksBlock(forks, sent.forks));
+  const routines = w ? [] : (state.routines ?? []).filter((r) => r.space === sp(space) && !!r.agent === isAgentChat(space));
+  if (routines.length) out.push("", "# Routines in this space (id, title, state)", ...routines.map((r) => `- ${r.id}: ${r.title} [${r.draft ? "draft" : r.enabled ? "enabled" : "paused"}]`));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   // spaces are separate; the user pointing at another one opens it for this message
   const others0 = state.spaces.filter((s) => s.id !== sp(space));
@@ -1081,7 +1090,8 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (notes && notes !== sent.notes) out.push("", `# Project notes${sent.notes ? " (updated)" : ""} (left by this project's jobs: where it stands, what is left)`, notes.slice(0, 8000));
   if (cwd) out.push("", `# Folder the user selected for this request\n${cwd}`);
   if (event === "project") out.push("", "# A project you handed work to has finished (not a user message)", text, "", PROJECT_ENDED);
-  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : FORK_ENDED);
+  else if (event === "notice") out.push("", "# App event (not a user message or permission)", text);
+  else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", isAgentChat(space) ? "Use your Discord ways to decide what to say; the app does not post this result." : pid(space) ? FORK_REPORT : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
   else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
   sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
@@ -1106,7 +1116,8 @@ async function route(space: string, text: string, cwd?: string, event?: Event): 
     turnOf.set(space, { text: event ? "a job's end (see above)" : text, calls: 0, misses: 0, nudged: false, cmds: new Map() });
     heardAt.set(space, Date.now());
     watch = setInterval(() => watchCommands(space), 5_000);
-    await request(agent, { type: "prompt", message: context(space, text, cwd, event) });
+    const own = isAgentChat(space) ? await (await import("./discord")).agentNote() : "";
+    await request(agent, { type: "prompt", message: [context(space, text, cwd, event), own].filter(Boolean).join("\n\n") });
     await done;
   } finally {
     clearInterval(watch);
@@ -1283,6 +1294,11 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id, question: d.question });
       }
+    } else if (r?.kind === "decide" && fromUser && typeof r.optionId === "string" && r.optionId.trim()) {
+      const d = state.decisions.find((x) => x.id === r.decisionId);
+      if (!d || !(d.taskId === `main:${space}` || job(d.taskId))) continue;
+      await decide(d.id, r.optionId);
+      out.push({ kind: "decide", decisionId: d.id, optionId: r.optionId });
     } else if (r?.kind === "stop" && job(r.taskId)) {
       // the user said stop: the job stops now (it can be resumed), it isn't asked to wind down
       stopTask(r.taskId);
@@ -1355,7 +1371,7 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
           ]),
         ],
         follows: from?.id,
-        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space), ...inOpen(r) } } : {}),
+        ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
       });
       if (still) handOn(still, id);
       if (r.key) byKey.set(String(r.key), id);
@@ -1374,6 +1390,11 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         replaces: piece(r.replaces),
       });
       if (id) out.push({ kind: "remember", memoryId: id });
+    } else if (r?.kind === "routine" && typeof r.routineId === "string" && typeof r.enabled === "boolean" && fromUser) {
+      const routine = routineById(r.routineId);
+      if (!routine || routine.space !== sp(space)) continue;
+      saveRoutine(routine.id, { enabled: r.enabled, ...(r.enabled ? { draft: false } : {}) });
+      out.push({ kind: "routine", routineId: routine.id });
     } else if (r?.kind === "routine" && (r.task || r.prompt)) {
       // what the user asked for is on at once (its card changes or drops it); one main only offers waits on its card
       const when = parseWhen(r.when);
@@ -1391,8 +1412,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         mode: r.mode === "fresh" ? "fresh" : "continue",
         quiet: r.quiet !== false,
         project: project?.id,
-        // main's call: a draft only when it offers rather than does what was asked; on Discord there's no card to save it from
-        draft: r.draft === true && !isAgentChat(space),
+        // The model's choice, the same in every chat.
+        draft: r.draft === true,
         from: "chat",
         ...(isAgentChat(space) ? { agent: { channel: agentChannel(space) } } : {}),
       });

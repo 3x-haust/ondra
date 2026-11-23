@@ -356,7 +356,9 @@ describe("the Discord agent's routines", () => {
     // its run is the agent's work, and reports to that channel
     const id = runRoutine(r.id, { manual: true })!;
     expect(taskById(id)!.agent).toEqual({ channel: "c9" });
-    // one main offers is a card in its chat; on Discord, even an offer is on (there's no card there)
+    // A draft stays a draft, in either chat; the model must not auto-enable an offer.
+    const offered = await applyRoutes("home~@agent", [{ kind: "routine", draft: true, title: "제안", task: "요약", when: { kind: "daily", time: "09:00" } }], "제안해줘");
+    expect(routineById((offered[0] as { routineId: string }).routineId)).toMatchObject({ draft: true, enabled: false });
     const mine = await applyRoutes("home", [{ kind: "routine", draft: true, title: "아침 정리", task: "요약", when: { kind: "daily", time: "09:00" } }], "매일 9시에 요약해줘");
     expect(routineById((mine[0] as { routineId: string }).routineId)).toMatchObject({ draft: true });
     expect(routineById((mine[0] as { routineId: string }).routineId)!.agent).toBeUndefined();
@@ -377,15 +379,18 @@ describe("the Discord agent's routines", () => {
     expect(endChat(taskById(ownId)!)).toBeUndefined();
   });
 
-  it("an alarm set on Discord rings there, to the user, with no chat line", async () => {
+  it("an alarm gives the model an event, without choosing words, mentions or a destination", async () => {
     setState("settings", "agent", { on: true, name: "메타몽", ownerId: "111" });
     const send = vi.spyOn(native, "discordSend").mockResolvedValue(["x"]);
+    const captain = await import("./captain");
+    const notice = vi.spyOn(captain, "notifyChat").mockReturnValue("notice");
     const out = await applyRoutes("home~@agent", [{ kind: "alarm", text: "회의 들어가기", when: { kind: "once", in: 10 } }], "10분 뒤에 회의 알려줘");
     const r = routineById((out[0] as { routineId: string }).routineId)!;
     expect(r.agent).toEqual({ channel: "c9" });
     const before = state.captain.length;
     ringAlarm(r.id, r.nextAt! + 1);
-    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("c9", "<@111> ⏰ 회의 들어가기"));
+    await vi.waitFor(() => expect(notice).toHaveBeenCalledWith("home", "@agent", `Alarm ${r.id} is due. Discord origin channel: c9. Scheduled text: 회의 들어가기`));
+    expect(send).not.toHaveBeenCalled();
     expect(state.captain.length).toBe(before);
     expect(routineById(r.id)).toMatchObject({ runs: 1, enabled: false });
   });

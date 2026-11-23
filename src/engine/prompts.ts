@@ -10,7 +10,8 @@ import { crosscheckLine } from "./crosscheck";
 import { engine, expand } from "./rpc";
 import { forModel } from "./modelPrompts";
 import { planText } from "./plan";
-import { voiceGist } from "./agentVoice";
+import { DEFAULT_VOICE, OWNER_WAYS } from "./agentVoice";
+import { actionMemory } from "./agentMemory";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -682,6 +683,11 @@ route each item:
   hypothesis) is research, not a loop: it ends with the answer, positive,
   negative or not enough evidence, and a short report of what was tried.
   A QA request is one fork using the qa skill; it splits by area itself.
+- "decide": the user answered an open question. Give "decisionId" and
+  "optionId" (the chosen option id, or their own answer as text). This uses
+  the question's existing handling, including question rounds and landing
+  choices. Use it instead of append for a question answer. App events are
+  not the user's answer or consent.
 - "routine": work the user wants done again and again or later by itself
   ("매일 아침 9시에 …", "평일 6시마다", "2시간마다", "내일 3시에", "새 이슈 오면
   …", "PR에 리뷰 달리면 …", "CI 깨지면 고쳐줘"). Give "title" (a few words),
@@ -702,7 +708,9 @@ route each item:
   you are offering it rather than doing what they asked (your own idea, or
   something in it you judge they should look at first): then it waits on its
   card for them to save. Don't also start a job for it unless they asked for a
-  run now too.
+  run now too. To enable an existing draft after agreement, or pause a routine,
+  use {"kind":"routine","routineId":"…","enabled":true|false}; do not
+  create a duplicate. Only change a routine in this space.
 - "alarm": the user only wants to be told something at a time ("3시에 알려줘",
   "10분 뒤에 회의라고", "매일 6시에 퇴근하라고"); nothing runs. Give "text"
   (the words to show, short) and "when" as for a routine, or {"kind":"once",
@@ -1168,7 +1176,7 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", discordWorkNote(t), writesLikeTeammate(t)].filter(Boolean);
 }
 
 /** What the Discord agent's jobs post on GitHub reads like a teammate wrote it, not a generated report. */
@@ -1177,9 +1185,16 @@ export function writesLikeTeammate(t: Pick<Task, "agent" | "parentId">): string 
   return `Issues, PRs and comments you write read like a teammate wrote them: the repo's own template if it has one, else a few plain sentences (what was wrong, what changed, how you checked it, anything you couldn't check), in the language the repo uses. No stock sections (Summary, Changes, Scope, Impact, Checks, Not verified), no filler or emoji, and don't copy the shape of earlier generated PRs.`;
 }
 
-/** A job of the Discord agent working in the open: what it writes between steps is read there live. */
-export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
-  if (!t.agent || t.parentId || t.agent.quiet) return "";
+/** Instructions for explicit Discord actions, not a job-log forwarding contract. */
+export function discordWorkNote(t: Pick<Task, "agent" | "parentId">): string {
+  if (!t.agent || t.parentId) return "";
   const name = state.settings.agent?.name || "메타몽";
-  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Keep those lines short, like thinking aloud while you work ("이거부터 읽어볼게", "맞음. 이게 진짜 버그다"), code names in backticks; say when you change direction and why. No file contents, long output or secrets there. Blocks don't show on Discord: when a picture explains it better (a flow, before/after, a chart), make it an image (an SVG or small HTML page in $APP_ARTIFACTS_DIR, screenshot to PNG with the browser tool) and put ![](its path) in your words; it goes up as a picture.`;
+  return [
+    `You are ${name}, doing this work yourself. Discord origin channel: ${t.agent.channel ?? "not recorded"}. Commentary, tool results, blocks and pictures are NOT posted to Discord. Use tool_search to load the discord tool and act explicitly.`,
+    `Read ${engine.info.dataDir}/agent/AGENT.md before speaking and when the user changes your ways. Preserve its rules; they and the user's latest words decide where, when and how you speak. Follow any channel choice in the task instructions, or read the server's channels to decide.`,
+    state.settings.agent?.voice?.trim() || DEFAULT_VOICE,
+    OWNER_WAYS,
+    actionMemory(),
+    "Say progress yourself with discord send as the work moves on. Send a picture only if you decide it belongs there, with send_file. No file contents, secrets, private paths or session lists in shared channels. At the end, report what you have already said and where so the agent chat can decide whether another message is useful.",
+  ].join("\n");
 }

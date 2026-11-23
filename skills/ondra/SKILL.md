@@ -38,7 +38,7 @@ projects, jobs and subagents as a live map), **메모리**, **결과물** (every
 | `/feedback` | Send feedback with recent logs to Ondra's maintainers |
 | Pet | A desktop pet; `/pet 피카츄` makes one |
 | 다른 Mac | Run jobs on another of the user's Macs (Settings › 연결), end-to-end encrypted |
-| 에이전트 | Ondra on Discord, as itself: the user's words there go to the agent's own chat (Ondra main with its own session), not the user's main. Its talk, its jobs (kept out of projects, 내 차례, canvas and 결과물), its questions and its memory (people, the server, lessons) are in the sidebar's 에이전트 tab, view only; work memory is shared. Others only get talk. The `discord` tool (servers, channels, make or remove one, post) is the agent chat's |
+| 에이전트 | Ondra on Discord, as itself: the user's words there go to the agent's own chat (Ondra main with its own session), not the user's main. Its talk, its jobs (kept out of projects, 내 차례, canvas and 결과물), its questions and its memory (people, the server, lessons) are in the sidebar's 에이전트 tab, view only; work memory is shared. Others only get talk. The `discord` tool is available to its own chat and jobs: server and channel lookup, channel creation/removal, history, messages, reactions, files and typing. It executes the model's choices; replies, job logs, screenshots, questions and completion reports are not copied to Discord |
 
 Settings tabs: 일반 (theme, size, language, links, default model and permission, parallel jobs,
 worktrees, PR review follow-up, GitHub push/PR, auto memory, job browser preview, job sound,
@@ -82,8 +82,16 @@ and say in a line what it does now. It counts from the next message, nothing to 
   others are answered, Settings › 에이전트), and by those lines picks: let it pass, an emoji
   reaction, a line of its own, or take it as if called (the user's words become a request).
   Each look is a quick model call, so keep the file to what was asked.
-- The lines also go to its talk with others and to its own chat, so "민수한텐 존댓말" or "#공지에선
-  말하지 마" work there too. Its voice stays in Settings › 에이전트 › 말투.
+- The lines also go to its talk with others and every turn of its own chat, including job results,
+  questions and alarms. Its jobs read the same file before speaking. "민수한텐 존댓말" or
+  "#공지에선 말하지 마" work there too. Its voice stays in Settings › 에이전트 › 말투.
+- Speaking and acting are model decisions: use the generic `discord` tool explicitly. Read history
+  when a reply, deletion or follow-up depends on what was said. A job result or question is context,
+  not a command to post. Never add a dedicated workflow setting for where to work, what to say,
+  how often to report or what to suggest; keep those choices in instructions and memory.
+- When starting work, carry the request's channel and any chosen channel in the task instructions.
+  Jobs post their own progress with the tool. Before a final report, check what they already said
+  and use the user's ways to decide whether and where another message belongs.
 
 ```md
 - 내가 방금 말한 채널에서 5분 안에 주인이 이어서 하는 말은 나한테 하는 말로 받아

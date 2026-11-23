@@ -79,6 +79,44 @@ describe("work the user ended stays ended", () => {
   });
 });
 
+describe("model-selected decisions", () => {
+  it("keeps the remaining questions instead of resuming the job after the first answer", async () => {
+    const { roundDecision } = await import("./round");
+    setState("tasks", [job("h-wait", "home", "waiting")]);
+    setState("decisions", [roundDecision({ id: "d-round", taskId: "h-wait", at: 1, context: [] }, [
+      { question: "First?", recommend: "First choice" }, { question: "Second?", recommend: "Second choice" },
+    ], [])]);
+    await applyRoutes("home~@agent", [{ kind: "decide", decisionId: "d-round", optionId: "o0" }], "첫 번째로 해");
+    expect(state.decisions.map((d) => d.question)).toEqual(["Second?"]);
+    expect(taskById("h-wait")?.status).toBe("waiting");
+  });
+
+  it("keeps a finished branch through the existing landing decision without a successor", async () => {
+    setState("tasks", [{ ...job("h-done", "home", "done"), worktree: { path: "/wt", branch: "fix/example" } } as Task]);
+    setState("decisions", [{ id: "d-keep", taskId: "h-done", at: 1, kind: "merge", question: "Keep?", options: [{ id: "keep", label: "Keep" }], context: [] }]);
+    await applyRoutes("home~@agent", [{ kind: "decide", decisionId: "d-keep", optionId: "keep" }], "남겨둬");
+    expect(state.decisions).toHaveLength(0);
+    expect(state.tasks).toHaveLength(1);
+    expect(taskById("h-done")?.worktree?.kept).toBe(true);
+  });
+
+  it("does not answer another space's decision or treat an app event as consent", async () => {
+    setState("decisions", [{ id: "d-work", taskId: "w-run", at: 1, kind: "ask", question: "Proceed?", options: [{ id: "yes", label: "Yes" }], context: [] }]);
+    expect(await applyRoutes("home", [{ kind: "decide", decisionId: "d-work", optionId: "yes" }], "yes")).toEqual([]);
+    expect(await applyRoutes("work", [{ kind: "decide", decisionId: "d-work", optionId: "yes" }], "event", undefined, false)).toEqual([]);
+    expect(state.decisions.map((d) => d.id)).toEqual(["d-work"]);
+  });
+
+  it("activates an existing routine draft without creating another routine", async () => {
+    const { addRoutine, routineById } = await import("./routines");
+    const id = addRoutine({ space: "home", title: "Daily", prompt: "Read updates", when: { kind: "daily", time: "09:00" }, mode: "fresh", draft: true, agent: { channel: "c1" } });
+    expect(await applyRoutes("work", [{ kind: "routine", routineId: id, enabled: true }], "enable")).toEqual([]);
+    await applyRoutes("home~@agent", [{ kind: "routine", routineId: id, enabled: true }], "응 만들어");
+    expect(state.routines).toHaveLength(1);
+    expect(routineById(id)).toMatchObject({ draft: false, enabled: true });
+  });
+});
+
 describe("trimEntries", () => {
   it("drops the oldest entries past the cap but keeps the user's words", () => {
     const entries = [
@@ -173,9 +211,9 @@ describe("the Discord agent's own chat", () => {
     expect(state.captain.filter((m) => m.project === "ondra")).toHaveLength(0);
   });
 
-  it("works where it chose to (the project's channel), quiet or without pictures when it says so", async () => {
+  it("keeps only origin metadata, ignoring removed Discord workflow options", async () => {
     const out = await applyRoutes("home~@agent", [{ kind: "new", title: "탭 고치기", task: "panel tabs", room: "<#123456789>", quiet: true, shots: false }], "ondra 탭 고쳐줘");
-    expect(taskById((out[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9", room: "123456789", quiet: true, shots: false });
+    expect(taskById((out[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9" });
     const plain = await applyRoutes("home~@agent", [{ kind: "new", title: "또", task: "more", room: "general" }], "또");
     expect(taskById((plain[0] as { taskId: string }).taskId)!.agent).toEqual({ channel: "c9" });
   });
