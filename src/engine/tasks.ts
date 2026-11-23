@@ -2420,42 +2420,41 @@ export const uncheckedAsk = (open: string[]) =>
     "(Ondra) Don't finish yet: you left these unchecked:",
     ...open.map((u) => `- ${u}`),
     "For each one you can still check here with your tools, check it now and put it in evidence.",
-    "For the rest, ask the user now with an ask block: say plainly what you couldn't check and why, and what you need from them to check it (a device, an account, their hand, a sound played in the room…). Give choices such as: they check it themselves and tell you, they give you what you need, or leave it unchecked and finish. Then end your turn and wait for the answer.",
-    "Once they have answered, do what they chose, then send done (whatever is still unchecked stays in unverified).",
+    "The rest is your call, from what it is and what the user and memory say: when it matters and the user can give what's needed to check it (a device, an account, their hand…), ask them with an ask block and wait; when it doesn't, or they already said, send done again with it in unverified.",
   ].join("\n");
 
 /**
- * A done with something left unchecked: it doesn't end there. The job is told once to check
- * what it can and ask the user about the rest; if it says done again without asking, Ondra asks.
- * Once the user has answered (anything said after that point), the done goes through.
+ * A done with something left unchecked: the job is sent back once to check what it can (the
+ * coding discipline); whether the user is asked about the rest is its own call. Its next done
+ * goes through, with what is still unchecked in its record: nothing set is asked.
  * Returns true when the job was held back.
  */
 async function uncheckedHeld(id: string, t: Task, run: Run, agent: string): Promise<boolean> {
   const open = stillUnchecked(id, run, t);
   if (!open.length) return false;
-  const since = run.uncheckedAt;
+  // sent back once already: this done goes through, what is still unchecked stays in its record
+  if (run.uncheckedAt !== undefined) return false;
   const summary = run.done;
   run.firstDone ??= summary;
   run.done = undefined;
-  if (since === undefined) {
+  {
     run.uncheckedAt = Date.now();
     updateTask(id, (x) => {
       x.saidDone = undefined;
       x.uncheckedAsked = { at: run.uncheckedAt!, items: open };
-      x.now = "확인 못 한 걸 물어보는 중";
-      push(x, { kind: "note", text: `확인 못 한 게 있어 끝내지 않아요 · ${open.length}개` });
+      x.now = "확인 못 한 걸 다시 보는 중";
+      push(x, { kind: "note", text: `확인 못 한 게 있어 한 번 더 봐요 · ${open.length}개` });
     });
     try {
       run.turnStart = Date.now();
       await request(agent, { type: "prompt", message: uncheckedAsk(open) });
       return true;
     } catch {
-      // the job is gone: Ondra asks itself
+      // the job is gone: its done goes through as it was
     }
   }
-  askUnchecked(id, open);
-  updateTask(id, (x) => (x.uncheckedAsked = { at: Date.now(), items: open }));
-  return true;
+  run.done = summary;
+  return false;
 }
 
 /** the user's own words since `at` (typed, an answer to a question, or relayed from main), not another job's or Ondra's */
@@ -2489,27 +2488,6 @@ function leftAsIs(id: string, open: string[]) {
   updateTask(id, (x) => (x.uncheckedOk = [...new Set([...(x.uncheckedOk ?? []), ...open])].slice(-20)));
 }
 
-/** Ondra's own question about what was left unchecked: finish as is, or keep checking */
-function askUnchecked(id: string, open: string[]) {
-  const d: Decision = {
-    id: uid("d"),
-    taskId: id,
-    at: Date.now(),
-    kind: "unchecked",
-    question: tr("확인 못 한 게 {n}개 있어요. 어떻게 할까요?", { n: open.length }) + "\n" + open.map((u) => `· ${u}`).join("\n"),
-    options: [
-      { id: "check", label: tr("더 확인해 줘"), note: tr("할 수 있는 건 확인하고, 필요한 건 물어봐요") },
-      { id: "finish", label: tr("이대로 끝내기"), note: tr("확인 못 한 건 그대로 남겨요") },
-    ],
-    context: [],
-  };
-  setState("decisions", (list) => [...list.filter((x) => x.taskId !== id), d]);
-  updateTask(id, (x) => {
-    x.status = "waiting";
-    x.unread = true;
-    x.now = tr("확인 못 한 게 있어요");
-  });
-}
 
 function finish(id: string, summary: string, run?: Run) {
   // it worked in a finished job's branch folder: the branch (and its merge) ends up here
