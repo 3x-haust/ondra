@@ -57,6 +57,8 @@ export const KINDS: { id: MemoryKind; label: string }[] = [
   { id: "fact", label: "사실" },
   { id: "procedure", label: "방법" },
   { id: "lesson", label: "배운 점" },
+  // what a word means in this project, settled with the user (the sharpen skill): code and talk use it
+  { id: "term", label: "용어" },
 ];
 export const kindLabel = (k: MemoryKind) => KINDS.find((x) => x.id === k)?.label ?? k;
 

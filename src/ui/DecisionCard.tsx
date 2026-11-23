@@ -199,6 +199,25 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
     </Show>
   );
   const Rec = () => <span class="decision-rec">{tr("추천")}</span>;
+  /** a round's place (2/4) and how unclear the request still is (the sharpen skill's score) */
+  const Meta = () => (
+    <>
+      <Show when={props.d.round && props.d.round.total > 1}>
+        <span class="decision-step">{props.d.round!.n}/{props.d.round!.total}</span>
+      </Show>
+      <Show when={props.d.clarity}>
+        {(c) => (
+          <span
+            class="decision-clarity"
+            classList={{ low: c().score >= 0.8 }}
+            title={(c().parts ?? []).map((p) => `${p.label} ${Math.round(p.score * 100)}%`).join(" · ") || undefined}
+          >
+            {tr("모호함 {n}%", { n: Math.round((1 - c().score) * 100) })}
+          </span>
+        )}
+      </Show>
+    </>
+  );
   /** your own words: one line, answered with Enter or its button */
   const OwnInput = () => (
     <>
@@ -228,6 +247,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
             <div class="decision-q">
               <Icon name={props.d.kind === "stalled" ? "pause" : "message"} size={14} />
               <span>{props.d.question}</span>
+              <Meta />
             </div>
             <Login />
             <Show when={crumb()}>{(x) => <Crumb x={x()} />}</Show>
@@ -238,6 +258,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
         <div class="decision-head" classList={{ more: more() }} onClick={(e) => more() && !(e.target as Element).closest(".decision-src") && toggle()}>
           <Icon name={props.d.kind === "stalled" ? "pause" : "message"} size={14} />
           <span class="decision-q-text">{props.d.question}</span>
+          <Meta />
           <Show when={crumb()}>{(x) => <Crumb x={x()} />}</Show>
           <Show when={more()}>
             <button class="decision-more" aria-expanded={open()} aria-label={open() ? tr("접기") : tr("펼치기")} title={open() ? tr("접기") : tr("펼치기")}>

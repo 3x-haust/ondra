@@ -2776,3 +2776,21 @@
 .agent-view .agent-ways .agent-empty {
   margin: 6px 0 0;
 }
+
+/* a round's place (2/4) and how unclear the request still is (the sharpen skill) */
+.decision .decision-step,
+.decision .decision-clarity {
+  flex: none;
+  margin-left: var(--s-6);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.decision .decision-clarity {
+  padding: 0 var(--s-4);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.decision .decision-clarity.low {
+  color: var(--accent-text);
+}

@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
 import { far, farDecide, markFarRead, startFar } from "./hosts";
 import { hostOfTask, mirroredDecision, splitProjectId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
@@ -549,11 +550,15 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           void tell(t.id, SELF_DECIDES, { by: "ondra", shown: tr("묻지 않고 정하기") });
           break;
         }
-        const d: Decision = {
+        // a round of questions (the sharpen skill): one card at a time, its recommendation the one choice
+        const round = readRound(b);
+        const clarity = readClarity(b.clarity);
+        const d: Decision = round ? roundDecision({ id: uid("d"), taskId: t.id, at: Date.now(), context: Array.isArray(b.context) ? b.context : [] }, round.qs, [], round.clarity) : {
           id: uid("d"),
           taskId: t.id,
           at: Date.now(),
           kind: "ask",
+          ...(clarity ? { clarity } : {}),
           question: String(b.question ?? "확인 필요"),
           // "label" or {label, note}: the note says what that choice means
           options: (Array.isArray(b.options) && b.options.length ? b.options : ["진행", "중단"]).slice(0, 5).map((o: any, i: number) => {
@@ -3356,6 +3361,7 @@ export async function decide(decisionId: string, optionId: string) {
   }
   track("decision_answered", { waited_s: Math.max(0, Math.round((Date.now() - d.at) / 1000)) });
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
+  if (d.round && (await answerInRound(d, optionId))) return;
   // main asked it: the answer goes back to main as the user's message
   if (d.taskId.startsWith("main:")) {
     const [space, project] = d.taskId.slice(5).split("~");
@@ -3436,6 +3442,39 @@ export async function decide(decisionId: string, optionId: string) {
     return;
   }
   await tell(t.id, `"${d.question}" → ${label}`);
+}
+
+/**
+ * One answer of a round: the next question at once (no model turn), or after the last, every
+ * answer together, to the job (or main) that asked. A typed stop word to a job is left to
+ * decide (it stops the job, as for any question): false.
+ */
+async function answerInRound(d: Decision, optionId: string): Promise<boolean> {
+  const main = d.taskId.startsWith("main:");
+  const typed = !d.options.some((o) => o.id === optionId);
+  if (!main && typed && meansStop(optionId)) return false;
+  const t = main ? undefined : taskById(d.taskId);
+  if (!main && !t) return true;
+  const step = answerRound(d, optionId);
+  const fresh = step.answers.slice(d.round!.answers.length);
+  const line = (a: { q: string; a: string }) => `"${a.q}" → ${a.a}`;
+  // each answer shows in the job's thread as it is given
+  const show = (list: typeof fresh) => t && list.length && updateTask(t.id, (x) => list.forEach((a) => push(x, { kind: "user", text: line(a) })));
+  if (step.next) {
+    show(fresh);
+    setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), step.next!]);
+    return true;
+  }
+  const text = roundText(step.answers);
+  if (main) {
+    const [space, project] = d.taskId.slice(5).split("~");
+    const { throwThought } = await import("./captain");
+    void throwThought(text, space as Task["space"], { project, note: await staleAnswerNote(d.at, space, project) });
+    return true;
+  }
+  show(fresh.slice(0, -1));
+  await tell(t!.id, text, { shown: line(fresh[fresh.length - 1]) });
+  return true;
 }
 
 /** What the job said since the user last spoke. */

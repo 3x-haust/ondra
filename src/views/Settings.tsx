@@ -33,6 +33,7 @@ import {
 import { RemoteSettings } from "./RemoteSettings";
 import { PetSettings } from "./PetSettings";
 import { AgentSettings } from "./AgentSettings";
+import { ReviewSettings } from "./ReviewSettings";
 import { askPermission } from "../lib/permissions";
 import { ago, agoIn, now } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -276,6 +277,8 @@ function General() {
           </Row>
         </Show>
       </div>
+
+      <ReviewSettings />
 
       <GroupTitle title={t("공통 지침")}>
         <span class="set-saved" classList={{ on: saved() }} aria-hidden={!saved()}>{t("저장됨")}</span>

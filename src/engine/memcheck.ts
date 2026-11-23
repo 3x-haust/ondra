@@ -5,7 +5,7 @@
 import { fsRead } from "../lib/native";
 import { homeDir, setState, state } from "../state/store";
 import type { MemoryCheck, Task } from "../state/types";
-import { LENSES } from "./crosscheck";
+import { LENSES, shortModel } from "./crosscheck";
 import { applying, core, isLive, retireMemory, userOwned } from "./memory";
 import { expand } from "./rpc";
 
@@ -59,7 +59,8 @@ export async function grounded(evidence: string | undefined, cwd: string): Promi
  */
 export async function settleMemory(job: Task, group: Task[]): Promise<{ lines: string[]; split: string[] }> {
   const shown = given(job, group);
-  const title = (k: Task) => LENSES.find((l) => l.lens === k.lens)?.title.split(" ")[0] ?? k.title;
+  const many = new Set(group.map((k) => k.model ?? "")).size > 1;
+  const title = (k: Task) => `${LENSES.find((l) => l.lens === k.lens)?.title.split(" ")[0] ?? k.title}${many && k.model ? ` · ${shortModel(k.model)}` : ""}`;
   const by = new Map<string, { k: Task; c: MemoryCheck }[]>();
   let dropped = 0;
   for (const k of group.filter((x) => x.status === "done"))

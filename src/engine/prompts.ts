@@ -533,7 +533,10 @@ route each item:
   "options": [{"label":"…","note":"what it means, one line"}] (2–4, your
   recommendation first). It shows as a card the user picks from; their pick
   comes back to you as their message. Never put such a choice in "text" or
-  a checklist instead.
+  a checklist instead. A big or vague request ("인터뷰해줘", "물어보고 해", or
+  building now would mean guessing) goes through the sharpen skill first: its
+  rounds are an "ask" with "questions": [{"question","recommend","why"}] and
+  "clarity", asked here before any fork is made.
   Releasing is such a choice. When a fork's change to an app or a library
   has landed (merged, or pushed to the main branch) in a project that ships
   versions (release tags, GitHub releases, a version in its manifest, a store
