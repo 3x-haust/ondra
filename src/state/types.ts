@@ -767,6 +767,8 @@ export interface AgentSettings {
   space?: SpaceId;
   /** others may talk with it (talk only, no work); missing = on */
   others?: boolean;
+  /** the AI account it talks and works on (an account id of its workspace); missing or "auto" = the workspace's choice */
+  account?: string;
   /** when it last looked over the user's requests for one to make a routine of (agentScout.ts) */
   scoutAt?: number;
   /** what it already offered to make a routine of (a short key each), so it asks once */

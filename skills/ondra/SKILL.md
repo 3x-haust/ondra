@@ -63,7 +63,9 @@ The Discord agent ("에이전트 설정해줘", "디스코드 연결해줘"):
    the chat. If a saved secret already looks like it (`$NAME` in a shell shows it exists, the
    secrets skill has how), use that name.
 3. `{"agent.token": "<NAME>"}`: the value moves inside the app; you never see it.
-4. Then what they asked: `agent.name`, `agent.space`, `agent.channels`, `agent.voice`; and
+4. Then what they asked: `agent.name`, `agent.space`, `agent.channels`, `agent.voice`,
+   `agent.account` (the AI account it talks and works on: an account id of its workspace, or
+   `auto`); and
    `{"agent.on": true}` last. `agent.ownerId` can stay empty: the bot's owner is the user.
 5. Read again: say it is connected, or why not (a wrong token, the intent off).
 

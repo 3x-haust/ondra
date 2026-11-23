@@ -156,6 +156,12 @@ const zero = (): TokenStats => ({ input: 0, output: 0, cacheRead: 0, cacheWrite:
  * used last — the shared system prompt and tools are cached there) and only moves
  * when that account is nearly out of its plan window. A running job never moves.
  */
+/** the account picked for the Discord agent in this workspace, if one is and it is still there */
+export function agentAccount(space: Task["space"]): string | undefined {
+  const id = state.settings.agent?.account;
+  return id && id !== "auto" && loggedIn(space).some((a) => a.id === id) ? id : undefined;
+}
+
 export function chooseAccount(space: Task["space"], topic: string): string {
   const pool = loggedIn(space);
   // never another space's account: with none here, there is none
@@ -2765,7 +2771,8 @@ export function createTask(f: {
     weight: f.weight ?? "light",
     ...(f.size && f.size !== "normal" ? { size: f.size } : {}),
     ...(f.fresh ? { fresh: true } : {}),
-    accountId: f.accountId ?? chooseAccount(f.space, topic),
+    // the Discord agent's work runs on its own account when one is picked for it
+    accountId: f.accountId ?? ((f.agent ?? prev?.agent) ? agentAccount(f.space) : undefined) ?? chooseAccount(f.space, topic),
     ...(f.accountPinned ? { accountPinned: true } : {}),
     createdAt: Date.now(),
     now: "대기 중",

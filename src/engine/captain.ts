@@ -28,7 +28,7 @@ import { digestJob } from "./digest";
 import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
-import { accountEnv, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
+import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
@@ -573,6 +573,8 @@ export async function mainToolArgs(accountId: string | undefined): Promise<strin
 }
 /** The account main should run on now: the one picked for the space (a direct connection included), else the one it runs on. */
 const wantedAccount = (space: string): string | undefined => {
+  const own = isAgentChat(space) ? agentAccount(sp(space)) : undefined;
+  if (own) return own;
   const pick = state.accountPick?.[sp(space)];
   if (pick && pick !== "auto" && accountById(pick)?.space === sp(space)) return pick;
   return accountOf.get(space);
@@ -716,7 +718,7 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
 }
 
 /** main routes on 자동 in this space */
-const autoMain = (space: string) => (state.accountPick?.[sp(space)] ?? "auto") === "auto";
+const autoMain = (space: string) => !(isAgentChat(space) && agentAccount(sp(space))) && (state.accountPick?.[sp(space)] ?? "auto") === "auto";
 /** chats whose next engine starts a fresh session (with the recent chat as text) instead of --continue */
 const freshNext = new Set<string>();
 /** Stop main to start it again on another account, in a fresh session. */
@@ -746,7 +748,7 @@ async function ensureCaptain(space: string) {
   if (isAlive(agent) && attached.has(space) && !(await restartStale(space, skills.signature))) return;
   if (!engine.checked || !engine.ready) throw new Error("엔진을 찾을 수 없습니다. 앱을 다시 설치하세요.");
   // a simulation in a space this app has no account for (an empty dev app for evals) runs on any account
-  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "") ?? (worlds.has(space) ? state.accounts[0] : undefined);
+  const acc = spaceAccount(sp(space), projectOf(space)?.name ?? "", isAgentChat(space) ? agentAccount(sp(space)) : undefined) ?? (worlds.has(space) ? state.accounts[0] : undefined);
   if (!acc) throw new Error(NO_ACCOUNT);
   accountOf.set(space, acc.id);
   listen(agent, {
