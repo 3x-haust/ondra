@@ -36,7 +36,12 @@ export function extensionUi(owner: string, agent: string, live: () => boolean): 
       if (connections.get(owner) !== ui) return;
       if (ev.type === "tool_execution_start") tools.add(ev.toolCallId);
       if (ev.type === "tool_execution_end") tools.delete(ev.toolCallId);
-      // RPC has no dialog-cancel event. Once its tools end, no dialog from them is still live.
+      if (ev.type === "extension_ui_cancel") {
+        const d = state.decisions.find(d => d.taskId === owner && pending.has(d.id) && d.ui?.requestId === ev.id);
+        if (d) drop(d.id);
+        return;
+      }
+      // End-of-turn cleanup also removes cards restored from an older engine.
       if ((ev.type === "tool_execution_end" && !tools.size) || ev.type === "agent_settled") ui.clear();
       if (ev.type !== "extension_ui_request" || !["confirm", "select", "input"].includes(ev.method)) return;
       const d: Decision = {

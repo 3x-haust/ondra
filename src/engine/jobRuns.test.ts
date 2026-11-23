@@ -120,6 +120,27 @@ describe("extension confirmation cards", () => {
     expect(calls().filter((c) => c.type === "extension_ui_response")).toHaveLength(1);
   });
 
+  it("removes only the cancelled request while parallel tools and cards remain", async () => {
+    await working([job()]);
+    emit({ type: "tool_execution_start", toolCallId: "computer", toolName: "computer", args: {} });
+    emit({ type: "tool_execution_start", toolCallId: "read", toolName: "read", args: {} });
+    ask();
+    const cancelled = state.decisions[0].id;
+    emit({ type: "extension_ui_request", id: "other", method: "confirm", title: "다른 확인" });
+    const other = state.decisions[1].id;
+    emit({ type: "extension_ui_cancel", id: "secure-input" });
+    emit({ type: "tool_execution_end", toolCallId: "computer", result: {} });
+    expect(state.decisions.map(d => d.id)).toEqual([other]);
+    await decide(cancelled, "yes");
+    expect(calls().filter(c => c.type === "extension_ui_response")).toEqual([]);
+    emit({ type: "extension_ui_cancel", id: "unknown" });
+    expect(state.decisions.map(d => d.id)).toEqual([other]);
+    await decide(other, "no");
+    expect(vi.mocked(native.agentSend).mock.calls.filter(([, c]) => c.type === "extension_ui_response")).toEqual([
+      [engineId, { type: "extension_ui_response", id: "other", confirmed: false }],
+    ]);
+  });
+
   it.each([
     ["select", "선택", { value: "선택" }],
     ["input", "cancel", { cancelled: true }],

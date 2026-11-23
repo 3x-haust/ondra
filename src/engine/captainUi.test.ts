@@ -77,6 +77,23 @@ describe("main extension confirmation cards", () => {
     expect(responses()).toEqual([]);
   });
 
+  it("drops only the cancelled request while another parallel tool is running", async () => {
+    const key = await working("@agent");
+    emit(key, { type: "tool_execution_start", toolCallId: "computer" });
+    emit(key, { type: "tool_execution_start", toolCallId: "read" });
+    ask(key);
+    const cancelled = state.decisions[0].id;
+    emit(key, { type: "extension_ui_request", id: "other", method: "confirm", title: "다른 확인" });
+    const other = state.decisions[1].id;
+    emit(key, { type: "extension_ui_cancel", id: "approval" });
+    emit(key, { type: "tool_execution_end", toolCallId: "computer" });
+    expect(state.decisions.map(d => d.id)).toEqual([other]);
+    await decide(cancelled, "yes");
+    expect(responses()).toEqual([]);
+    await decide(other, "no");
+    expect(responses()).toEqual([[`captain:${key}`, { type: "extension_ui_response", id: "other", confirmed: false }]]);
+  });
+
   it("does not answer a replacement session using the old card", async () => {
     const key = await working();
     ask(key);
