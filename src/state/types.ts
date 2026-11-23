@@ -438,6 +438,11 @@ export interface Decision {
   /** "merge": the job finished with changes on its branch; the user says what becomes of them. */
   /** "unchecked": the job said done with something left unchecked and didn't ask about it. */
   kind: "ask" | "stalled" | "merge" | "unchecked";
+  /** one of a round of questions (the sharpen skill): what's left of it, the answers so far,
+   *  which of how many this is, and its recommendation (its one choice) */
+  round?: { rest: { question: string; recommend: string; note?: string }[]; answers: { q: string; a: string }[]; n: number; total: number; recommend: string };
+  /** how clear the request is so far (0–1), as the asker scored it, and by part */
+  clarity?: { score: number; parts?: { label: string; score: number }[] };
   /** asked on Discord by the agent, in this channel (so it goes once, and a reply there answers it) */
   posted?: string;
 }
@@ -489,7 +494,7 @@ export interface CaptainMessage {
   discord?: { channel: string; message: string };
 }
 
-export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson";
+export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson" | "term";
 
 /** One small piece: a single rule, fact or decision. */
 export interface Memory {
@@ -753,6 +758,15 @@ export interface Settings {
   keybindings?: Record<string, string>;
   /** Settings › 에이전트: Ondra on Discord (engine/discord.ts) */
   agent?: AgentSettings;
+  /** Settings › 코드 리뷰: the model each review lens runs on (unset: the job's own) */
+  reviewers?: { design?: Reviewer; code?: Reviewer };
+}
+
+/** a review lens's model: an account and its "provider/id" */
+export interface Reviewer {
+  account: string;
+  model: string;
+  thinking?: string;
 }
 
 /** Ondra as an agent on Discord: the user's requests there go to main, anyone else only gets talk. */

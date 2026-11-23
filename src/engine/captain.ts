@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 // remember. The chat is kept as text in the app; the engine session under it is
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
+import { readClarity, readRound, roundDecision } from "./round";
 import { addRoutine, routineById, saidNothing } from "./routines";
 import { parseWhen } from "./routineTime";
 import { t as tr } from "../i18n";
@@ -1232,6 +1233,12 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const text = String(r.text ?? "");
       const blocks = Array.isArray(r.blocks) ? (r.blocks as Block[]) : [];
       if (text.trim() || blocks.length) out.push({ kind: "answer", text, blocks });
+    } else if (r?.kind === "ask" && readRound(r)) {
+      // a round of questions (the sharpen skill): one card at a time, the answers come back together
+      const round = readRound(r)!;
+      const d = roundDecision({ id: uid("d"), taskId: `main:${space}`, at: Date.now(), context: Array.isArray(r.context) ? (r.context as Block[]) : [] }, round.qs, [], round.clarity);
+      setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
+      out.push({ kind: "ask", decisionId: d.id, question: d.question });
     } else if (r?.kind === "ask" && typeof r.question === "string" && Array.isArray(r.options)) {
       // main's own question, as the same card a job's question gets
       const options = (r.options as unknown[])
@@ -1240,7 +1247,8 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         .filter((o) => o.label.trim())
         .map((o, i) => ({ ...o, primary: i === 0 }));
       if (options.length) {
-        const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask" };
+        const clarity = readClarity(r.clarity);
+        const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask", ...(clarity ? { clarity } : {}) };
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id, question: d.question });
       }

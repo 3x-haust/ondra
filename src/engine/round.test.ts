@@ -67,8 +67,31 @@ describe("a round of questions (the sharpen skill)", () => {
 
   it("clarity is 0–1 (a percentage is read as one), parts kept short", () => {
     expect(readClarity(62)?.score).toBe(0.62);
-    expect(readClarity({ score: 1.4 })?.score).toBe(1);
+    expect(readClarity({ score: 140 })?.score).toBe(1);
     expect(readClarity("x")).toBeUndefined();
     expect(readClarity({ score: 0.5, parts: [{ label: "목표", score: 80 }, { label: "" }] })?.parts).toEqual([{ label: "목표", score: 0.8 }]);
+  });
+});
+
+describe("answering a round", () => {
+  it("a job's round: the next card at once, each answer in its thread, all of them sent after the last", async () => {
+    const { reconcile } = await import("solid-js/store");
+    const { freshState, setState, state } = await import("../state/store");
+    const { decide } = await import("./tasks");
+    setState(reconcile(freshState()));
+    setState("tasks", [{ id: "j", space: "home", topic: "", title: "반복", ask: "", cwd: "/r", status: "waiting", priority: 2, weight: "light", accountId: "default", createdAt: 1, now: "", plan: [], legs: [], entries: [], shells: [], inbox: [] } as never]);
+    const r = readRound(block)!;
+    setState("decisions", [roundDecision({ id: "d1", taskId: "j", at: 1, context: [] }, r.qs, [])]);
+    await decide("d1", "o0");
+    expect(state.decisions.map((d) => d.question)).toEqual(["반복 종류는요?"]);
+    expect(state.tasks[0].entries.map((e) => (e as { text?: string }).text)).toEqual(['"밀린 회차는 어떻게 할까요?" → 최근 회차 하나만 남겨요']);
+    await decide(state.decisions[0].id, REST);
+    expect(state.decisions).toHaveLength(0);
+    const texts = state.tasks[0].entries.map((e) => (e as { text?: string }).text);
+    expect(texts).toEqual([
+      '"밀린 회차는 어떻게 할까요?" → 최근 회차 하나만 남겨요',
+      '"반복 종류는요?" → 매일 · 매주 (추천대로)',
+      '"완료는 무슨 뜻인가요?" → 이번 회차를 끝냄 (추천대로)',
+    ]);
   });
 });
