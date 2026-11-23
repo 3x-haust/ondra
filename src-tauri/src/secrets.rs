@@ -456,9 +456,16 @@ pub struct Synced {
 
 /// Runs keychain work away from the main thread: a read can wait on macOS's access question for as
 /// long as the user takes (a dev build is asked on every rebuild), and on the main thread every
-/// window stops answering until then.
+/// window stops answering until then. One at a time, as on the main thread: the vault and
+/// secrets.json are read, changed and written back whole.
 pub async fn off_main<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
-    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())
+    static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+        f()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Takes the keys, tokens and passwords this Mac's projects already keep in their .env files
