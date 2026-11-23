@@ -16,6 +16,7 @@ import {
   discordOwner,
   discordReact,
   discordUnreact,
+  discordSaveFile,
   discordSend,
   discordStart,
   discordStop,
@@ -318,6 +319,22 @@ function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   bursts.set(key, b);
 }
 
+/**
+ * The pictures and files sent with the words, saved and listed the way the app's own attachments
+ * are ("첨부한 파일:"), so main sees them; one that can't be saved stays as its link.
+ */
+async function withPictures(text: string, urls: string[]): Promise<string> {
+  const saved: string[] = [];
+  for (const url of urls) {
+    const path = await discordSaveFile(url).catch((e) => (logError("agent", `file: ${e instanceof Error ? e.message : String(e)}`), undefined));
+    if (!path) continue;
+    saved.push(path);
+    text = text.split(url).join("");
+  }
+  text = text.replace(/\n{2,}/g, "\n").trim();
+  return saved.length ? `${text}\n\n첨부한 파일:\n${saved.map((p) => `- ${p}`).join("\n")}`.trim() : text;
+}
+
 /** the lines said in a row, as one request; answered at the last of them */
 async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const m = ms[ms.length - 1];
@@ -327,6 +344,7 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const { throwThought } = await import("./captain");
   const ways = { path: await waysPath(), text: await readWays() };
   const also = ms.slice(0, -1).map((x) => x.id);
+  text = await withPictures(text, ms.flatMap((x) => x.files));
   throwThought(text, space, { project: AGENT_CHAT, note: ownerNote(m, a, ways), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });

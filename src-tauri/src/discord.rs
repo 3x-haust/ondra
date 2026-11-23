@@ -69,7 +69,13 @@ pub fn incoming(d: &Value) -> Option<Incoming> {
         mentions: d["mentions"].as_array().map(|a| a.iter().filter_map(|m| s(&m["id"])).collect()).unwrap_or_default(),
         reply_to: d["referenced_message"]["author"]["id"].as_str().map(str::to_string),
         reply_msg: d["message_reference"]["message_id"].as_str().or(d["referenced_message"]["id"].as_str()).map(str::to_string),
-        files: d["attachments"].as_array().map(|a| a.iter().filter_map(|f| s(&f["url"])).collect()).unwrap_or_default(),
+        // its own pictures and files, and those of a message it forwards
+        files: std::iter::once(&d["attachments"])
+            .chain(d["message_snapshots"].as_array().into_iter().flatten().map(|x| &x["message"]["attachments"]))
+            .filter_map(|a| a.as_array())
+            .flatten()
+            .filter_map(|f| s(&f["url"]))
+            .collect(),
         at: s(&d["timestamp"]).unwrap_or_default(),
     })
 }
@@ -200,6 +206,43 @@ pub async fn discord_react(channel: String, message: String, emoji: String) -> R
 pub async fn discord_unreact(channel: String, message: String, emoji: String) -> Result<(), String> {
     let e: String = emoji.bytes().map(|b| format!("%{b:02X}")).collect();
     rest(reqwest::Method::DELETE, &format!("/channels/{channel}/messages/{message}/reactions/{e}/@me"), None).await.map(|_| ())
+}
+
+/// A file on Discord's own hosts (an attachment's link), and the name it is saved under; any
+/// other link is never fetched.
+fn discord_file(url: &str) -> Option<String> {
+    let rest = url.strip_prefix("https://")?;
+    let (host, path) = rest.split_once('/')?;
+    if host != "cdn.discordapp.com" && host != "media.discordapp.net" {
+        return None;
+    }
+    let last = path.split('?').next()?.rsplit('/').next().unwrap_or("");
+    let name: String = last.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' }).take(80).collect();
+    Some(if name.trim_matches('.').is_empty() { "file".into() } else { name })
+}
+
+/// A picture or file sent to it, saved where the page's pasted pictures go, so the model
+/// reads it as a file instead of getting a link it can't open.
+#[tauri::command]
+pub async fn discord_save_file(app: AppHandle, url: String) -> Result<String, String> {
+    let name = discord_file(&url).ok_or("디스코드 파일 링크가 아니에요")?;
+    let res = client()?.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("{}", res.status()));
+    }
+    if res.content_length().unwrap_or(0) > 30 * 1024 * 1024 {
+        return Err("파일이 너무 커요".into());
+    }
+    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 30 * 1024 * 1024 {
+        return Err("파일이 너무 커요".into());
+    }
+    let dir = crate::engine::data_dir(&app).join("attachments").join("discord");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let path = dir.join(format!("{stamp}-{name}"));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Take back what the bot said (the user asked it to: "그거 지워").
@@ -515,10 +558,24 @@ mod tests {
         assert_eq!(m.reply_to.as_deref(), Some("99"));
         assert_eq!(m.reply_msg.as_deref(), Some("m0"));
         assert_eq!(m.files, vec!["https://cdn.discordapp.com/a.png"]);
+        // a forwarded message's pictures come with it
+        let fw = incoming(&json!({ "id": "m3", "channel_id": "c1", "content": "", "author": { "id": "u1", "username": "lyu" },
+            "message_snapshots": [{ "message": { "attachments": [{ "url": "https://cdn.discordapp.com/f.png" }] } }] })).unwrap();
+        assert_eq!(fw.files, vec!["https://cdn.discordapp.com/f.png"]);
         // a DM has no guild and no reply
         let dm = incoming(&json!({ "id": "m2", "channel_id": "c2", "content": "hi", "author": { "id": "u1", "username": "lyu", "bot": false } })).unwrap();
         assert_eq!((dm.guild, dm.reply_to), (None, None));
         assert!(incoming(&json!({ "id": "x" })).is_none());
+    }
+
+    #[test]
+    fn only_discords_own_file_hosts_are_fetched() {
+        assert!(discord_file("https://cdn.discordapp.com/attachments/1/2/a.png?ex=1").is_some());
+        assert!(discord_file("https://media.discordapp.net/attachments/1/2/b.jpg").is_some());
+        assert!(discord_file("https://evil.example/cdn.discordapp.com/a.png").is_none());
+        assert!(discord_file("http://cdn.discordapp.com/a.png").is_none());
+        // the saved name is the file's own, kept to safe characters
+        assert_eq!(discord_file("https://cdn.discordapp.com/attachments/1/2/스크린 샷..png?x=1").unwrap(), "_____..png");
     }
 
     #[test]

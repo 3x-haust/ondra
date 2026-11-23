@@ -518,6 +518,7 @@ pub fn run() {
             discord::discord_owner,
             discord::discord_react,
             discord::discord_unreact,
+            discord::discord_save_file,
             discord::discord_history,
             discord::discord_token_set,
             discord::discord_token_has,

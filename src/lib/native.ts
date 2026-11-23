@@ -675,6 +675,8 @@ export const discordSend = (channel: string, text: string, replyTo?: string) => 
 /** the user id that owns the bot's application (the user, when they made the bot) */
 export const discordOwner = () => call<string | null>("discord_owner", undefined, null);
 export const discordReact = (channel: string, message: string, emoji: string) => call<void>("discord_react", { channel, message, emoji });
+/** a picture or file sent on Discord, saved under attachments/discord (its path) */
+export const discordSaveFile = (url: string) => call<string>("discord_save_file", { url });
 export const discordUnreact = (channel: string, message: string, emoji: string) => call<void>("discord_unreact", { channel, message, emoji });
 export const discordDelete = (channel: string, message: string) => call<void>("discord_delete", { channel, message });
 export const discordTyping = (channel: string) => call<void>("discord_typing", { channel }, undefined);
