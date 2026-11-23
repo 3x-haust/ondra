@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, BANTER, BURST, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -151,7 +151,9 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
     vi.spyOn(native, "discordReact").mockResolvedValue();
     vi.spyOn(native, "discordUnreact").mockResolvedValue();
+    vi.spyOn(native, "discordSaveFile").mockImplementation(async (url) => `/data/attachments/discord/${url.split("/").pop()!.split("?")[0]}`);
     BURST.ms = 0;
+    TYPING.ms = 0;
     ways.text = undefined;
     vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: null, engineVersion: null, dataDir: "/data", home: "/Users/me" });
     vi.spyOn(native, "fsRead").mockImplementation(async (path) => {
@@ -184,7 +186,7 @@ describe("the whole way round", () => {
     // the job it started is the agent's, and knows where to report (captain sets this)
     setState("tasks", [{ id: "t7", title: "로그인 버그", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", "m9"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", undefined));
     // answered: the 👀 that said "seen" goes
     await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledWith("c1", "m9", "👀"));
     // banter is fine: it swears and roasts when asked, only hate, real threats and doxxing are out
@@ -219,9 +221,58 @@ describe("the whole way round", () => {
     for (const id of ["a1", "a2", "a3"]) expect(native.discordReact).toHaveBeenCalledWith("c1", id, "👀");
     setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 알겠어" });
     said.hook?.("reply1");
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", "a3"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", undefined));
     await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledTimes(3));
     for (const id of ["a1", "a2", "a3"]) expect(native.discordUnreact).toHaveBeenCalledWith("c1", id, "👀");
+  });
+
+  it("nothing said in between: a plain line; someone spoke in between: a reply to their message", async () => {
+    await ready();
+    emit({ kind: "message", message: msg({ id: "q1", author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}> 오늘 뭐함`, mentions: [BOT] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    // someone else talks before it answers
+    emit({ kind: "message", message: msg({ id: "x1", author: { id: "222", name: "정원", bot: false }, content: "ㅋㅋ" }) });
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "코딩함" });
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "코딩함", "q1"));
+  });
+
+  it("while they are still typing it waits for the rest", async () => {
+    BURST.ms = 150;
+    TYPING.ms = 500;
+    await ready();
+    const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
+    say("t1", "tq");
+    await vi.waitFor(() => expect(native.discordReact).toHaveBeenCalledWith("c1", "t1", "👀"), { interval: 5 });
+    emit({ kind: "typing", channel: "c1", user: OWNER });
+    // past the usual wait, still held
+    await new Promise((r) => setTimeout(r, 250));
+    expect(said.thrown).toHaveLength(0);
+    say("t2", "ㅅㅂ");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].text).toBe("tq\nㅅㅂ");
+    // someone else typing doesn't hold it
+    say("t3", "ㅇㅇ");
+    emit({ kind: "typing", channel: "c1", user: "222" });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+  });
+
+  it("a picture sent with the words is saved and attached, so it is seen, not a link", async () => {
+    await ready();
+    const url = "https://cdn.discordapp.com/attachments/1/2/shot.png?ex=1&is=2&hm=3";
+    emit({ kind: "message", message: msg({ id: "p1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}>`, mentions: [BOT], files: [url] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(native.discordSaveFile).toHaveBeenCalledWith(url);
+    expect(said.thrown[0].text).toBe("메타몽\n\n첨부한 파일:\n- /data/attachments/discord/shot.png");
+    expect(said.thrown[0].text).not.toContain("cdn.discordapp.com");
+  });
+
+  it("a picture that can't be saved stays as its link", async () => {
+    vi.spyOn(native, "discordSaveFile").mockRejectedValue("404");
+    await ready();
+    emit({ kind: "message", message: msg({ id: "p2", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "이거 봐", files: ["https://cdn.discordapp.com/x.png"] }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].text).toBe("이거 봐\nhttps://cdn.discordapp.com/x.png");
   });
 
   const owner = { id: OWNER, name: "성윤", bot: false };
@@ -233,7 +284,7 @@ describe("the whole way round", () => {
     // main answers in the agent's own chat, after the user's words (which keep where they came from)
     setState("captain", (l) => l.map((m) => (m.id === "reply1" ? { ...m, pending: false, reply: "Orbit 릴리즈할까?" } : m)));
     said.hook?.("reply1");
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "Orbit 릴리즈할까?", "m1"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "Orbit 릴리즈할까?", undefined));
     await settle();
     emit({ kind: "message", message: msg({ id: "m2", author: owner, content: "릴리즈해" }) });
   };
@@ -306,7 +357,7 @@ describe("the whole way round", () => {
     ways.text = "- 민수한텐 존댓말";
     said.answer = "네 안녕하세요";
     emit({ kind: "message", message: msg({ id: "m2", content: "메타몽 안녕" }) });
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "네 안녕하세요", "m2"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "네 안녕하세요", undefined));
     expect(said.prompts[0]).toContain("- 민수한텐 존댓말");
   });
 
@@ -314,7 +365,7 @@ describe("the whole way round", () => {
     said.answer = "그건 주인만 시킬 수 있어요 ㅎㅎ";
     await ready();
     emit({ kind: "message", message: msg({ id: "m3", content: "메타몽 데스크탑 앱 링크 줘" }) });
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "그건 주인만 시킬 수 있어요 ㅎㅎ", "m3"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "그건 주인만 시킬 수 있어요 ㅎㅎ", undefined));
     expect(said.thrown).toHaveLength(0);
     expect(said.prompts[0]).toContain(OTHERS_RULES);
   });
@@ -374,7 +425,7 @@ describe("the whole way round", () => {
     said.answer = "ㅋㅋ 반가워요";
     await ready();
     emit({ kind: "message", message: msg({ id: "m3", content: "메타몽 안녕 나 백엔드 하는 민수야" }) });
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅋㅋ 반가워요", "m3"));
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅋㅋ 반가워요", undefined));
     said.answer = '[{"kind":"person","who":"222","text":"백엔드 개발자 민수, 반말로 다가옴"}]';
     await digest("c1");
     expect(said.prompts[1]).toContain("지나가던사람[222]: 메타몽 안녕 나 백엔드 하는 민수야");

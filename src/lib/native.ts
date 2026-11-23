@@ -668,13 +668,16 @@ export type DiscordEvent =
   | { kind: "resumed" }
   | { kind: "reconnecting"; in: number }
   | { kind: "stopped"; why: string }
-  | { kind: "message"; message: DiscordMessage };
+  | { kind: "message"; message: DiscordMessage }
+  | { kind: "typing"; channel: string; user: string };
 export const discordStart = () => call<void>("discord_start");
 export const discordStop = () => call<void>("discord_stop", undefined, undefined);
 export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });
 /** the user id that owns the bot's application (the user, when they made the bot) */
 export const discordOwner = () => call<string | null>("discord_owner", undefined, null);
 export const discordReact = (channel: string, message: string, emoji: string) => call<void>("discord_react", { channel, message, emoji });
+/** a picture or file sent on Discord, saved under attachments/discord (its path) */
+export const discordSaveFile = (url: string) => call<string>("discord_save_file", { url });
 export const discordUnreact = (channel: string, message: string, emoji: string) => call<void>("discord_unreact", { channel, message, emoji });
 export const discordDelete = (channel: string, message: string) => call<void>("discord_delete", { channel, message });
 export const discordTyping = (channel: string) => call<void>("discord_typing", { channel }, undefined);
