@@ -81,11 +81,8 @@ async function relay(t: Task, w: Watch, now: number) {
   const text = body && shared ? `-# ${t.title}\n${body}` : body;
   if (text) await discordSend(room, text).catch(() => {});
   for (const p of shots.slice(0, 4)) await discordSendFile(room, p).catch(() => {});
-  if (ended(t)) {
-    // worked somewhere else than where it was asked: there, a line pointing to it
-    if (t.agent?.channel && t.agent.room && t.agent.room !== t.agent.channel) await discordSend(t.agent.channel, `끝남, <#${t.agent.room}> 봐`).catch(() => {});
-    return;
-  }
+  // its end, where it was asked too, is the agent's own end line (discord.ts mainSaid)
+  if (ended(t)) return;
   if (t.status === "running" && now - w.typingAt >= TYPING_EVERY) {
     w.typingAt = now;
     await discordTyping(room).catch(() => {});
