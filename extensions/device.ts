@@ -5,12 +5,17 @@
 //   do     → one agent-device command on that device ("press @e12 --settle", "fill @e3 hi")
 //   look   → screenshot the model can see (also saved as proof in the job's artifacts)
 //   stop   → close, shut down and delete what this job made
+// Fast: an iOS device is a clone of a template that has booted once (seconds, not the half
+// minute a new simulator's first boot takes); an Android one boots a clean snapshot read-only
+// (no copy, no cold boot, nothing kept); several steps go in one call (one model turn, not
+// one per tap); a look comes back small (fewer image tokens, a quicker next turn).
 // Devices the job didn't make are refused unless they belong to the job's space
 // (ONDRA_DEVICES_ALLOWED, set by the app), so the user's own simulators and the
 // other space's are never touched. An Android emulator made for a job is a fresh
 // copy of an AVD (no app data, no logins), deleted again when the job is done.
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
 
@@ -70,6 +75,79 @@ function argv(line: string): string[] {
 const cut = (s: string) => (s.length > MAX_OUT ? `${s.slice(0, MAX_OUT)}\n… (${s.length - MAX_OUT} chars cut — use find/get/is for a part of the screen)` : s);
 const text = (t: string, details: Record<string, unknown> = {}) => ({ content: [{ type: "text", text: t }], details });
 
+/** the newest iPhone a runtime supports, plain before Pro (the list's order differs between Xcode versions) */
+export function pickPhone(names: string[]): string | undefined {
+  const num = (n: string) => Number(/^iPhone (\d+)( Pro)?$/.exec(n)?.[1] ?? -1);
+  const plain = names.filter((n) => num(n) >= 0).sort((a, b) => num(b) - num(a) || a.length - b.length);
+  return plain[0] ?? names[0];
+}
+
+/** the tool's own devices: iOS templates and Android snapshot bases, never a job's to drive */
+export const internal = (name: string) => /^ondra-(template|base)-/.test(name);
+/** the iOS template for a device type and runtime (booted once, then shut down: clones of it boot in seconds) */
+export const templateName = (kind: string, runtime: string) =>
+  `ondra-template-${kind}-${runtime.split(".").pop() ?? runtime}`.replace(/[^\w.-]+/g, "-").slice(0, 60);
+/** the Android copy of an AVD that holds a clean snapshot (no app data, no logins) */
+export const baseAvdName = (avd: string) => `ondra-base-${avd}`.replace(/[^\w.-]/g, "-").slice(0, 60);
+const SNAPSHOT = "clean";
+/** a job's emulator: the clean snapshot, read-only (it boots in seconds, keeps nothing, and several jobs can share the base) */
+export const readOnlyBoot = (base: string) => ["-avd", base, "-read-only", "-snapshot", SNAPSHOT, "-no-snapshot-save", "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"];
+
+const MANAGED = ["boot", "shutdown", "proxy", "daemon", "connect", "devices"];
+const DEVICE_FLAGS = ["--session", "--udid", "--serial", "--device", "--platform"];
+/** one agent-device command line → its args on the job's device, or why not */
+export function stepArgs(line: string): string[] | string {
+  const args = argv(line).filter((a, i, all) => !DEVICE_FLAGS.includes(a) && !DEVICE_FLAGS.includes(all[i - 1]));
+  if (args[0] === "agent-device") args.shift();
+  if (!args.length) return "cmd is empty.";
+  // devices lists every device on the Mac, other spaces' too
+  if (MANAGED.includes(args[0])) return `'${args[0]}' isn't allowed here; the tool manages the device.`;
+  return args;
+}
+
+/** Several commands in one call: in order, stopping at the first that fails. Earlier steps as a line each, the last in full. */
+export async function runSteps(lines: string[], exec: (args: string[]) => Promise<{ ok: boolean; out: string }>): Promise<{ ok: boolean; text: string }> {
+  const log: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const args = stepArgs(line);
+    const r = typeof args === "string" ? { ok: false, out: args } : await exec(args);
+    const last = i === lines.length - 1;
+    if (!r.ok) {
+      log.push(`✗ ${line}`, r.out || "failed", ...lines.slice(i + 1).map((l) => `not run: ${l.trim()}`));
+      return { ok: false, text: log.join("\n") };
+    }
+    log.push(last ? `✓ ${line}\n${r.out || "ok"}` : `✓ ${line}${r.out && r.out.length < 120 && !r.out.includes("\n") ? ` · ${r.out}` : ""}`);
+  }
+  return { ok: true, text: log.join("\n") };
+}
+
+/** Only one process at a time makes a template or a snapshot base (other jobs wait, then use it). */
+async function locked<T>(key: string, work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const dir = join(tmpdir(), `ondra-device-${key.replace(/[^\w.-]/g, "-")}.lock`);
+  for (let i = 0; i < 300; i++) {
+    try {
+      mkdirSync(dir);
+      try {
+        return await work();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      // a lock left by a process that died: older than ten minutes
+      try {
+        if (Date.now() - statSync(dir).mtimeMs > 600_000) rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* gone already */
+      }
+      if (signal?.aborted) throw new Error("cancelled");
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  return work();
+}
+
 // The device this job made, kept on disk so a job resumed after an app restart
 // gets it back instead of asking to use "someone else's" device.
 const OWNED = join(ARTIFACTS, ".device.json");
@@ -102,17 +180,71 @@ async function iosMake(model: string | undefined, signal?: AbortSignal): Promise
     const ios = all.filter((r) => r.isAvailable && (r.platform === "iOS" || r.name.startsWith("iOS"))).sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))[0];
     runtime = ios?.identifier;
     const phones = (ios?.supportedDeviceTypes ?? []).filter((t) => t.name.startsWith("iPhone"));
-    if (!kind) kind = [...phones].reverse().find((t) => /^iPhone \d+( Pro)?$/.test(t.name))?.name ?? phones.at(-1)?.name;
+    if (!kind) kind = pickPhone(phones.map((t) => t.name));
   } catch {
     /* fall through */
   }
   if (!kind) return "No iPhone device type found (xcrun simctl list devicetypes).";
+  // a clone of a template that has booted once boots in seconds; a new simulator's first boot takes half a minute
+  const fast = runtime ? await iosClone(name, kind, runtime, signal) : undefined;
+  if (fast) return fast;
   const made = await run("xcrun", ["simctl", "create", name, kind, ...(runtime ? [runtime] : [])], { signal });
   const udid = made.out.split("\n").pop()?.trim();
   if (!made.ok || !udid || !/^[0-9A-F-]{36}$/i.test(udid)) return `simctl create failed: ${made.out}`;
   await run("xcrun", ["simctl", "boot", udid], { signal });
   const ready = await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 240_000, signal });
   if (!ready.ok) return `simulator didn't finish booting: ${ready.out}`;
+  return { platform: "ios", udid, name, made: true };
+}
+
+/** iOS devices by name: udid and state */
+async function simByName(name: string): Promise<{ udid: string; state: string } | undefined> {
+  const l = await run("xcrun", ["simctl", "list", "devices", "-j"]);
+  try {
+    return Object.values(JSON.parse(l.out).devices as Record<string, { name: string; udid: string; state: string; isAvailable?: boolean }[]>)
+      .flat()
+      .find((d) => d.name === name && d.isAvailable !== false);
+  } catch {
+    return undefined;
+  }
+}
+
+/** This job's device as a clone of the template (made once: created, booted, shut down). Undefined: make one the slow way. */
+async function iosClone(name: string, kind: string, runtime: string, signal?: AbortSignal): Promise<Mine | undefined> {
+  const tpl = templateName(kind, runtime);
+  let t = await simByName(tpl);
+  if (!t)
+    t = await locked(tpl, async () => {
+      const had = await simByName(tpl);
+      if (had) return had;
+      const made = await run("xcrun", ["simctl", "create", tpl, kind, runtime], { signal });
+      const udid = made.out.split("\n").pop()?.trim();
+      if (!made.ok || !udid || !/^[0-9A-F-]{36}$/i.test(udid)) return undefined;
+      await run("xcrun", ["simctl", "boot", udid], { signal });
+      const ok = (await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 240_000, signal })).ok;
+      // agent-device's runner goes in once here, so a clone opens an app in seconds instead of installing it again
+      if (ok) {
+        const prep = `${tpl}-prep`.slice(0, 60);
+        await run("agent-device", ["open", "com.apple.Preferences", "--platform", "ios", "--udid", udid, "--session", prep, "--timeout", "420000"], { signal, timeout: 450_000 });
+        await run("agent-device", ["close", "--session", prep], { timeout: 30_000 });
+      }
+      await run("xcrun", ["simctl", "shutdown", udid], { timeout: 60_000 });
+      if (!ok) {
+        await run("xcrun", ["simctl", "delete", udid]);
+        return undefined;
+      }
+      return { udid, state: "Shutdown" };
+    }, signal).catch(() => undefined);
+  if (!t || t.state !== "Shutdown") return undefined;
+  const c = await run("xcrun", ["simctl", "clone", t.udid, name], { signal, timeout: 60_000 });
+  const udid = c.out.split("\n").pop()?.trim();
+  if (!c.ok || !udid || !/^[0-9A-F-]{36}$/i.test(udid)) return undefined;
+  await run("xcrun", ["simctl", "boot", udid], { signal });
+  const ready = await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 240_000, signal });
+  if (!ready.ok) {
+    await run("xcrun", ["simctl", "delete", udid]);
+    return undefined;
+  }
   return { platform: "ios", udid, name, made: true };
 }
 
@@ -156,12 +288,12 @@ export function dropAvd(name: string, home = AVD_HOME) {
   rmSync(join(home, `${name}.ini`), { force: true });
 }
 
-/** Boot an AVD headless and wait until Android is up. */
-async function androidBoot(avd: string, fresh: boolean, before: Set<string>, signal?: AbortSignal): Promise<string | undefined> {
+/** Boot an AVD headless and wait until Android is up. `args`: how (a read-only snapshot boot instead of a plain or fresh one). */
+async function androidBoot(avd: string, fresh: boolean, before: Set<string>, signal?: AbortSignal, args?: string[]): Promise<string | undefined> {
   const { spawn } = await import("node:child_process");
   // headless with plain -gpu auto, the emulator draws in software on the CPU (several
   // cores at all times); auto-no-window draws on the Mac's GPU
-  spawn(EMULATOR, ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
+  spawn(EMULATOR, args ?? ["-avd", avd, "-no-snapshot-save", ...(fresh ? ["-wipe-data", "-no-snapshot-load"] : []), "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"], { detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 120; i++) {
     if (signal?.aborted) return undefined;
     await new Promise((r) => setTimeout(r, 2000));
@@ -174,6 +306,28 @@ async function androidBoot(avd: string, fresh: boolean, before: Set<string>, sig
   return undefined;
 }
 
+/** The snapshot base of `avd`: a copy cold-booted once with its data wiped, saved as the clean snapshot, then shut down. */
+async function snapshotBase(avd: string, signal?: AbortSignal): Promise<string | undefined> {
+  const base = baseAvdName(avd);
+  const has = () => existsSync(join(AVD_HOME, `${base}.avd`, "snapshots", SNAPSHOT));
+  if (has()) return base;
+  return locked(base, async () => {
+    if (has()) return base;
+    dropAvd(base);
+    if (!cloneAvd(avd, base)) return undefined;
+    const { lines } = await runningAvds(signal);
+    const serial = await androidBoot(base, true, new Set(lines.map((l) => l.split(/\s+/)[0])), signal, ["-avd", base, "-wipe-data", "-no-snapshot-load", "-no-window", "-gpu", "auto-no-window", "-no-audio", "-no-boot-anim"]);
+    if (!serial) return dropAvd(base), undefined;
+    // let it settle before the snapshot: a snapshot taken mid-start comes back busy every time
+    await new Promise((r) => setTimeout(r, 8000));
+    const saved = await run(ADB, ["-s", serial, "emu", "avd", "snapshot", "save", SNAPSHOT], { timeout: 120_000 });
+    await run(ADB, ["-s", serial, "emu", "kill"], { timeout: 15_000 });
+    for (let i = 0; i < 20 && (await run(ADB, ["-s", serial, "get-state"], { timeout: 3000 })).ok; i++) await new Promise((r) => setTimeout(r, 500));
+    if (!saved.ok || !has()) return dropAvd(base), undefined;
+    return base;
+  }, signal).catch(() => undefined);
+}
+
 /** A fresh emulator for this job, copied from an AVD of its space (or `model` when that one is). */
 async function androidMake(model: string | undefined, signal?: AbortSignal): Promise<Mine | string> {
   const list = await run(EMULATOR, ["-list-avds"], { signal });
@@ -182,6 +336,14 @@ async function androidMake(model: string | undefined, signal?: AbortSignal): Pro
   const mineToUse = (a: string) => !isProtected(a) && (!SCOPED || ALLOWED.includes(a));
   const base = (model && avds.includes(model) && !isProtected(model) ? model : undefined) ?? avds.find(mineToUse) ?? avds.find((a) => !isProtected(a));
   if (!base) return `No Android emulator to copy. AVDs: ${avds.join(", ") || "none"}.`;
+  // fast: the clean snapshot booted read-only (nothing copied, nothing kept); the copy below when that can't be had
+  const snap = await snapshotBase(base, signal);
+  if (snap) {
+    const { lines } = await runningAvds(signal);
+    const serial = await androidBoot(snap, false, new Set(lines.map((l) => l.split(/\s+/)[0])), signal, readOnlyBoot(snap));
+    if (serial) return { platform: "android", serial, name: snap, made: true };
+    if (signal?.aborted) return "cancelled";
+  }
   const name = cloneAvd(base, `ondra-${WORKER}`.replace(/[^\w.-]/g, "-").slice(0, 48));
   if (!name) return `Couldn't copy ${base} for this job.`;
   const { lines } = await runningAvds(signal);
@@ -195,7 +357,7 @@ async function androidMake(model: string | undefined, signal?: AbortSignal): Pro
 
 /** A device of this job's space (by name or id): used as it is, booted first when it's an AVD that's off. */
 async function allowed(platform: Platform, which: string, signal?: AbortSignal): Promise<Mine | string> {
-  if (!ALLOWED.includes(which) || isProtected(which))
+  if (!ALLOWED.includes(which) || isProtected(which) || internal(which))
     return `"${which}" isn't a device of this job's space. Call start again without device: the tool makes a fresh one for this job.`;
   if (platform === "ios") {
     const l = await run("xcrun", ["simctl", "list", "devices", "-j"]);
@@ -233,8 +395,9 @@ export default function (pi: any) {
     exposure: "deferred",
     description: [
       "Drive an iOS simulator or Android emulator. One device per job, made for this job.",
-      "action=start {platform, app?, model?}: makes and boots a fresh device, opens app (bundle id / package / URL) and returns the first snapshot with @refs.",
-      "action=do {cmd}: one agent-device command on it, without the 'agent-device' word or device flags, e.g. 'press @e12 --settle', 'press text=\"Login\" --settle', 'fill @e3 \"me@x.com\" --settle', 'scroll down --settle', 'back --settle', 'snapshot -i', 'wait text \"Done\"', 'find label Login', 'is visible @e4', 'type hello', 'alert accept', 'keyboard dismiss', 'install /path/App.app', 'open com.x.app --relaunch', 'logs', 'home'. --settle returns the UI diff: continue from it; snapshot -i only when the diff lacks the next target. Refs go stale after changes. Coordinates ('press 120 640') only when no ref exists.",
+      "action=start {platform, app?, model?}: makes and boots a fresh device (seconds: a clone of a booted-once template on iOS, a clean snapshot on Android), opens app (bundle id / package / URL) and returns the first snapshot with @refs.",
+      "action=do {steps}: several agent-device commands in one call, run in order and stopped at the first that fails (earlier ones as a line, the last in full): the way to go through a known path (fill, fill, press, wait) in one turn. {cmd}: one command, without the 'agent-device' word or device flags, e.g. 'press @e12 --settle', 'press text=\"Login\" --settle', 'fill @e3 \"me@x.com\" --settle', 'scroll down --settle', 'back --settle', 'snapshot -i', 'wait text \"Done\"', 'find label Login', 'is visible @e4', 'type hello', 'alert accept', 'keyboard dismiss', 'install /path/App.app', 'open com.x.app --relaunch', 'logs', 'home'. --settle returns the UI diff: continue from it; snapshot -i only when the diff lacks the next target. Refs go stale after changes. Coordinates ('press 120 640') only when no ref exists.",
+      "No rebuild for a change in JS/TS: with Metro (React Native, Expo) running, 'metro reload' shows it in seconds; reinstall or rebuild only after a native or dependency change. A path you'll check again after changes: record it once (open <app> --relaunch --save-script=$APP_ARTIFACTS_DIR/flows/<name>.ad, the steps, a wait on the end screen, then 'session save-script') and rerun it with 'replay <file>' in one call.",
       "action=look {name?}: screenshot you can see, saved as proof (path in result).",
       "action=stop: close the app session, shut down and delete the device this job made. Always call it before your final answer unless the user wants the device kept.",
     ].join("\n"),
@@ -249,6 +412,7 @@ export default function (pi: any) {
       model: Type.Optional(Type.String({ description: "start: iOS device type ('iPhone 17') or Android AVD name" })),
       device: Type.Optional(Type.String({ description: "start: an existing device of this space (name or id) instead of a new one" })),
       cmd: Type.Optional(Type.String({ description: "do: the agent-device command line" })),
+      steps: Type.Optional(Type.Array(Type.String(), { description: "do: several agent-device command lines, run in order in one call" })),
       name: Type.Optional(Type.String({ description: "look: file name for the proof screenshot" })),
     }),
     async execute(_id: string, p: any, signal?: AbortSignal) {
@@ -268,14 +432,21 @@ export default function (pi: any) {
       }
       if (!mine) return text("No device yet. Call device with action=start first.");
       if (p.action === "do") {
-        const args = argv(String(p.cmd ?? "")).filter((a, i, all) => !["--session", "--udid", "--serial", "--device", "--platform"].includes(a) && !["--session", "--udid", "--serial", "--device", "--platform"].includes(all[i - 1]));
-        if (args[0] === "agent-device") args.shift();
-        if (!args.length) return text("cmd is empty.");
-        // devices lists every device on the Mac, other spaces' too
-        if (["boot", "shutdown", "proxy", "daemon", "connect", "devices"].includes(args[0])) return text(`'${args[0]}' isn't allowed here; the tool manages the device.`);
-        const withTarget = ["open", "apps", "install", "reinstall", "uninstall", "install-from-source"].includes(args[0]) ? target(mine) : [];
-        const r = await run("agent-device", [...args, "--session", SESSION, ...withTarget], { signal, timeout: 180_000 });
-        return text(cut(r.out) || (r.ok ? "ok" : "failed"), { ok: r.ok });
+        const m = mine;
+        const exec = (args: string[]) => {
+          const withTarget = ["open", "apps", "install", "reinstall", "uninstall", "install-from-source", "replay", "test"].includes(args[0]) ? target(m) : [];
+          return run("agent-device", [...args, "--session", SESSION, ...withTarget], { signal, timeout: 180_000 });
+        };
+        // several steps in one call: one model turn instead of one per tap
+        const lines: string[] = Array.isArray(p.steps) && p.steps.length ? p.steps.map(String) : [String(p.cmd ?? "")];
+        if (lines.length === 1) {
+          const args = stepArgs(lines[0]);
+          if (typeof args === "string") return text(args);
+          const r = await exec(args);
+          return text(cut(r.out) || (r.ok ? "ok" : "failed"), { ok: r.ok });
+        }
+        const r = await runSteps(lines, exec);
+        return text(cut(r.text), { ok: r.ok });
       }
       if (p.action === "look") {
         mkdirSync(ARTIFACTS, { recursive: true });
@@ -286,8 +457,12 @@ export default function (pi: any) {
           const raw = mine.platform === "ios" ? await run("xcrun", ["simctl", "io", mine.udid!, "screenshot", "--type=png", file]) : await run("sh", ["-c", `"${ADB}" -s ${mine.serial} exec-out screencap -p > "${file}"`]);
           if (!existsSync(file) || statSync(file).size === 0) return text(`screenshot failed: ${r.out}\n${raw.out}`);
         }
-        const data = readFileSync(file).toString("base64");
-        return { content: [{ type: "text", text: `Saved ${file} (use it as proof: {"type":"shot","path":"${file}"}).` }, { type: "image", data, mimeType: "image/png" }], details: { path: file } };
+        // the proof stays full size; what comes back to the model is small (a phone screen is ~2600px tall)
+        const small = join(tmpdir(), `${SESSION}-look.jpg`);
+        const shrunk = await run("sips", ["-Z", "1000", "-s", "format", "jpeg", "-s", "formatOptions", "70", file, "--out", small], { timeout: 15_000 });
+        const pic = shrunk.ok && existsSync(small) ? { data: readFileSync(small).toString("base64"), mimeType: "image/jpeg" } : { data: readFileSync(file).toString("base64"), mimeType: "image/png" };
+        rmSync(small, { force: true });
+        return { content: [{ type: "text", text: `Saved ${file} (use it as proof: {"type":"shot","path":"${file}"}).` }, { type: "image", ...pic }], details: { path: file } };
       }
       if (p.action === "stop") {
         const m = mine;
