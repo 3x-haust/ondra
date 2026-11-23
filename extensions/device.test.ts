@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
-import { alreadyBaked, bakeable, baseAvdName, internal, missingBakes, needsRunner, pickPhone, readOnlyBoot, runSteps, spareName, spareOf, spareScript, stepArgs, templateName } from "./device";
+import { alreadyBaked, bakeable, baseAvdName, freePort, internal, portsIn, missingBakes, needsRunner, pickPhone, readOnlyBoot, runSteps, spareName, spareOf, spareScript, staleLock, stepArgs, templateName } from "./device";
 
 describe("steps in one call", () => {
   it("runs them in order on the job's session and stops at the first that fails", async () => {
@@ -101,6 +101,11 @@ describe("a spare device waiting for the next job", () => {
     // taken by a job (renamed): left alone
     expect(sh).toContain('grep -q "ondra-spare-x-1 ("');
     expect(sh).toContain("simctl delete");
+    expect(sh.startsWith("sleep")).toBe(false);
+  });
+
+  it("after a cold start it waits before starting its own runner, so the job's isn't slowed by two at once", () => {
+    expect(spareScript({ template: "T", name: "n", minutes: 15, delay: 120 }).startsWith("sleep 120\n")).toBe(true);
   });
 
   it("commands that don't need the runner don't wait for it", () => {
@@ -108,5 +113,28 @@ describe("a spare device waiting for the next job", () => {
     expect(needsRunner(["uninstall", "x"])).toBe(false);
     expect(needsRunner(["press", "@e1"])).toBe(true);
     expect(needsRunner(["open", "x"])).toBe(true);
+  });
+});
+
+describe("a lock left by a process that died", () => {
+  it("is taken at once when its owner is gone, not after ten minutes", () => {
+    expect(staleLock({ pid: 42, ageMs: 5_000 }, () => false)).toBe(true);
+    expect(staleLock({ pid: 42, ageMs: 5_000 }, () => true)).toBe(false);
+    expect(staleLock({ ageMs: 5_000 }, () => true)).toBe(false);
+    expect(staleLock({ pid: 42, ageMs: 700_000 }, () => true)).toBe(true);
+  });
+});
+
+describe("an emulator's port", () => {
+  it("is one no emulator has, even if one is still going away on it (its serial would be taken for the next)", () => {
+    expect(freePort(new Set())).toBe(5554);
+    expect(freePort(new Set([5554, 5556]))).toBe(5558);
+    expect(freePort(new Set([5554]), 1)).toBe(5558);
+    const all = new Set(Array.from({ length: 64 }, (_, i) => 5554 + i * 2));
+    expect(freePort(all)).toBeUndefined();
+  });
+
+  it("the ports in use come from adb's list", () => {
+    expect(portsIn(["List of devices attached", "emulator-5554\tdevice", "emulator-5560\toffline", "R5CT\tdevice", ""])).toEqual(new Set([5554, 5560]));
   });
 });

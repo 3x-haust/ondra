@@ -110,7 +110,7 @@ fn chrono_like(s: &str) -> Option<i64> {
 /// The device tool's own: an iOS template (clones of it boot in seconds) or an Android snapshot
 /// base (jobs boot it read-only). Never shown in the hub or offered to a job by name.
 fn internal(name: &str) -> bool {
-    name.starts_with("ondra-template-") || name.starts_with("ondra-base-")
+    name.starts_with("ondra-template-") || name.starts_with("ondra-base-") || name.starts_with("ondra-spare-")
 }
 
 /// The job running the emulator on `serial` (its .device.json under artifacts/<job>/), as the
