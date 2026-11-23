@@ -77,6 +77,12 @@ export function AgentSettings() {
             <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
           </select>
         </Row>
+        <Row title={t("AI 계정")} desc={t("봇이 대화하고 일할 때 쓰는 계정이에요. 자동이면 이 워크스페이스에서 고른 대로 해요")}>
+          <select class="select" aria-label={t("AI 계정")} value={a().account ?? "auto"} onChange={(e) => setAgent({ account: e.currentTarget.value === "auto" ? undefined : e.currentTarget.value })}>
+            <option value="auto">{t("자동")}</option>
+            <For each={state.accounts.filter((x) => x.space === (a().space ?? state.spaces[0]?.id))}>{(x) => <option value={x.id}>{x.label}</option>}</For>
+          </select>
+        </Row>
         <Row title={t("다른 사람과 대화")} desc={t("다른 사람이 부르면 대화만 해요. 일은 시키지 못하고, 내 일은 들고 있지 않아요")}>
           <Switch_ on={a().others !== false} set={(on) => setAgent({ others: on })} label={t("다른 사람과 대화")} />
         </Row>

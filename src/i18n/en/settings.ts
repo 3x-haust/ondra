@@ -643,6 +643,8 @@ export default {
   "내 디스코드 ID": "My Discord ID",
   "이 계정의 말만 일로 받아요. 비우면 봇을 만든 계정이에요": "Only this account's words become work. Empty: the account that made the bot",
   "일을 받을 워크스페이스": "Workspace for requests",
+  "AI 계정": "AI account",
+  "봇이 대화하고 일할 때 쓰는 계정이에요. 자동이면 이 워크스페이스에서 고른 대로 해요": "The account the bot talks and works on. Auto follows this workspace's choice",
   "다른 사람과 대화": "Talk with others",
   "다른 사람이 부르면 대화만 해요. 일은 시키지 못하고, 내 일은 들고 있지 않아요": "Others who call it can only talk: they can't give it work, and it holds none of yours",
   "대화할 채널": "Channels to talk in",

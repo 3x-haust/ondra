@@ -48,18 +48,22 @@ export const SETTINGS: Record<string, Entry> = {
   "agent.ownerId": { where: "에이전트 › 내 디스코드 ID (digits; empty = the bot's owner)", kind: { type: "text", max: 24 }, get: () => agent().ownerId ?? "", set: (v: string) => setAgent({ ownerId: v.replace(/\D/g, "") || undefined }) },
   "agent.space": { where: "에이전트 › 일을 받을 워크스페이스 (a workspace id)", kind: { type: "enum", of: [] }, get: () => agent().space ?? state.spaces[0]?.id, set: (v: string) => setAgent({ space: v }) },
   "agent.others": { where: "에이전트 › 다른 사람과 대화", kind: { type: "bool" }, missing: true, get: () => agent().others !== false, set: (v: boolean) => setAgent({ others: v }) },
+  "agent.account": { where: "에이전트 › AI 계정 (an account id of its workspace, or auto = the workspace's choice)", kind: { type: "enum", of: [] }, missing: "auto", get: () => agent().account ?? "auto", set: (v: string) => setAgent({ account: v === "auto" ? undefined : v }) },
   "agent.channels": { where: "에이전트 › 대화할 채널 (channel ids; empty = wherever it's called)", kind: { type: "list", max: 20 }, get: () => agent().channels ?? [], set: (v: string[]) => setAgent({ channels: v }) },
   "agent.voice": { where: "에이전트 › 말투와 성격 (empty = the default voice)", kind: { type: "text", max: 4000 }, get: () => agent().voice ?? "", set: (v: string) => setAgent({ voice: v }) },
 };
 
 /** the workspace ids, for agent.space */
 const spaceIds = () => state.spaces.map((s) => s.id);
+/** the accounts of the agent's workspace, for agent.account */
+const agentAccountIds = () => ["auto", ...state.accounts.filter((a) => a.space === (agent().space ?? state.spaces[0]?.id)).map((a) => a.id)];
+const kindOf = (key: string, e: Entry): Kind => (key === "agent.space" ? { type: "enum", of: spaceIds() } : key === "agent.account" ? { type: "enum", of: agentAccountIds() } : e.kind);
 
 /** Every setting with its value, where it is, and what it takes. */
 export async function readSettings(): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {};
   for (const [key, e] of Object.entries(SETTINGS)) {
-    const kind = key === "agent.space" ? { type: "enum", of: spaceIds() } : e.kind;
+    const kind = kindOf(key, e);
     out[key] = { value: e.get(), where: e.where, takes: kind };
   }
   out["agent.token"] = { value: (await discordTokenHas()) ? "set (in the keychain)" : "not set", where: "에이전트 › 봇 토큰", takes: { type: "secret name", note: "write agent.token with the name of a saved secret (Settings › 시크릿); the value moves natively and is never shown" } };
@@ -70,7 +74,7 @@ export async function readSettings(): Promise<Record<string, unknown>> {
 export function checked(key: string, v: unknown): { ok: true; value: unknown } | { ok: false; why: string } {
   const e = SETTINGS[key];
   if (!e) return { ok: false, why: `no setting ${key}` };
-  const kind: Kind = key === "agent.space" ? { type: "enum", of: spaceIds() } : e.kind;
+  const kind: Kind = kindOf(key, e);
   switch (kind.type) {
     case "bool":
       return typeof v === "boolean" ? { ok: true, value: v } : v === "true" || v === "false" ? { ok: true, value: v === "true" } : { ok: false, why: `${key} takes true or false` };
