@@ -157,6 +157,7 @@ export function stopAgent() {
   heard.clear();
   for (const b of bursts.values()) clearTimeout(b.timer);
   bursts.clear();
+  lastIn.clear();
   setStatus({ state: "off" });
 }
 
@@ -171,6 +172,7 @@ async function onDiscord(ev: DiscordEvent) {
   if (ev.kind === "resumed") return setStatus({ state: "on", name: me?.name });
   if (ev.kind === "reconnecting") return setStatus({ state: "connecting" });
   if (ev.kind === "stopped") return setStatus({ state: "stopped", why: ev.why });
+  if (ev.kind === "typing") return stillTyping(ev.channel, ev.user);
   if (ev.kind === "message") await onMessage(ev.message).catch((e) => logError("agent", `discord message: ${e instanceof Error ? e.message : String(e)}`));
 }
 
@@ -243,6 +245,7 @@ export function endNote(t: { id: string; parentId?: string }, a: AgentSettings |
 }
 
 async function onMessage(m: DiscordMessage) {
+  lastIn.set(m.channel, m.id);
   const a = settings();
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
   const owner = !!a.ownerId && m.author.id === a.ownerId;
@@ -299,24 +302,42 @@ async function scout() {
  * How long it waits for more before it answers: people say one thing in a few lines ("아니",
  * "주인 말 들어야지", "장난하냐"), and each answered on its own reads like a bot.
  */
-export const BURST = { ms: 2500 };
+export const BURST = { ms: 3000 };
+/** how long it waits once they start typing again (Discord says so about every 10s), and at most in all */
+export const TYPING = { ms: 8000, most: 25_000 };
 /** per channel and person: the lines said in a row, waiting to go as one */
-const bursts = new Map<string, { ms: DiscordMessage[]; texts: string[]; timer?: ReturnType<typeof setTimeout> }>();
+const bursts = new Map<string, { ms: DiscordMessage[]; texts: string[]; a: AgentSettings; from: number; timer?: ReturnType<typeof setTimeout> }>();
+/** per channel: the last message in it (anyone's, its own too), so an answer right under the words isn't a reply */
+const lastIn = new Map<string, string>();
+
+/** (re)set when the lines said so far go: after `ms`, never past the most it waits */
+function arm(key: string, ms: number) {
+  const b = bursts.get(key);
+  if (!b) return;
+  clearTimeout(b.timer);
+  const wait = Math.max(0, Math.min(ms, b.from + TYPING.most - Date.now()));
+  b.timer = setTimeout(() => {
+    bursts.delete(key);
+    void askNow(b.ms, settings() ?? b.a, b.texts.join("\n")).catch((e) => logError("agent", `ask: ${e instanceof Error ? e.message : String(e)}`));
+  }, wait);
+}
+
+/** they are typing more: wait for it, like a person would */
+function stillTyping(channel: string, user: string) {
+  const key = `${channel}|${user}`;
+  if (bursts.has(key)) arm(key, TYPING.ms);
+}
 
 function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
   // seen: a reaction, not a line that only says "알겠어, 할게"
   void discordReact(m.channel, m.id, "👀").catch(() => {});
   void discordTyping(m.channel);
   const key = `${m.channel}|${m.author.id}`;
-  const b = bursts.get(key) ?? { ms: [], texts: [] };
-  clearTimeout(b.timer);
+  const b = bursts.get(key) ?? { ms: [], texts: [], a, from: Date.now() };
   b.ms.push(m);
   b.texts.push(text);
-  b.timer = setTimeout(() => {
-    bursts.delete(key);
-    void askNow(b.ms, settings() ?? a, b.texts.join("\n")).catch((e) => logError("agent", `ask: ${e instanceof Error ? e.message : String(e)}`));
-  }, BURST.ms);
   bursts.set(key, b);
+  arm(key, BURST.ms);
 }
 
 /**
@@ -440,7 +461,9 @@ async function mainSaid(replyId: string) {
   }
   const text = sayOf(msg, asks);
   if (!text) return seen();
-  const ids = await discordSend(channel, text, asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
+  // a reply only when something was said since their words; right under them, just say it
+  const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
+  const ids = await discordSend(channel, text, under ? undefined : asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   seen();
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
@@ -566,7 +589,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
     return;
   }
   // chiming in is a line in the talk, not an answer to that one message
-  keepSaid(m.channel, await discordSend(m.channel, out, watching ? undefined : m.id));
+  keepSaid(m.channel, await discordSend(m.channel, out, watching || lastIn.get(m.channel) === m.id ? undefined : m.id));
   hearMine(m.channel, out);
 }
 

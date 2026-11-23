@@ -668,7 +668,8 @@ export type DiscordEvent =
   | { kind: "resumed" }
   | { kind: "reconnecting"; in: number }
   | { kind: "stopped"; why: string }
-  | { kind: "message"; message: DiscordMessage };
+  | { kind: "message"; message: DiscordMessage }
+  | { kind: "typing"; channel: string; user: string };
 export const discordStart = () => call<void>("discord_start");
 export const discordStop = () => call<void>("discord_stop", undefined, undefined);
 export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });

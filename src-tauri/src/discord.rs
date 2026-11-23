@@ -22,7 +22,8 @@ const GATEWAY: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 /// where the token is kept in the secrets vault
 pub const TOKEN_ITEM: &str = "@discord/bot";
 /// GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT
-const INTENTS: u64 = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15);
+// guilds, guild messages, guild typing, DMs, DM typing, message content
+const INTENTS: u64 = (1 << 0) | (1 << 9) | (1 << 11) | (1 << 12) | (1 << 14) | (1 << 15);
 /// a Discord message holds at most this many characters
 const MAX_LEN: usize = 2000;
 
@@ -479,6 +480,8 @@ async fn once(tell: &(dyn Fn(Value) + Send + Sync), token: &str, session: &mut S
                             tell(json!({ "kind": "ready", "id": me["id"], "name": me["global_name"].as_str().or(me["username"].as_str()) }));
                         }
                         Some("RESUMED") => tell(json!({ "kind": "resumed" })),
+                        // someone started typing: it waits for the rest before it answers
+                        Some("TYPING_START") => tell(json!({ "kind": "typing", "channel": v["d"]["channel_id"], "user": v["d"]["user_id"] })),
                         Some("MESSAGE_CREATE") => {
                             if let Some(m) = incoming(&v["d"]) {
                                 tell(json!({ "kind": "message", "message": m }));
