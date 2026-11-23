@@ -166,8 +166,15 @@ describe("routine runs", () => {
     expect(t.ask).toContain("#7 로그인 버그");
   });
 
-  it("main proposes one as a card; it runs only once saved", async () => {
+  it("one the user asked for plainly is saved and on at once; main's card can still change or drop it", async () => {
     const out = await applyRoutes("home", [{ kind: "routine", title: "아침 정리", task: "어제 머지된 PR 요약", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, project: "app" }], "평일 9시마다 어제 머지된 PR 요약해줘");
+    const r = routineById((out[0] as { routineId: string }).routineId)!;
+    expect(r).toMatchObject({ draft: false, enabled: true, project: "p-app" });
+    expect(r.nextAt).toBeGreaterThan(Date.now());
+  });
+
+  it("one main only offers (it judged the user should look first) is a card that runs once saved", async () => {
+    const out = await applyRoutes("home", [{ kind: "routine", draft: true, title: "아침 정리", task: "어제 머지된 PR 요약", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, project: "app" }], "아침마다 PR 정리하는 거 귀찮네");
     expect(out[0].kind).toBe("routine");
     const r = routineById((out[0] as { routineId: string }).routineId)!;
     expect(r).toMatchObject({ draft: true, enabled: false, project: "p-app", mode: "continue", quiet: true });
@@ -176,6 +183,7 @@ describe("routine runs", () => {
     expect(routineById(r.id)).toMatchObject({ draft: false, enabled: true });
     expect(routineById(r.id)!.nextAt).toBeGreaterThan(Date.now());
     expect(CAPTAIN_SYSTEM).toContain('"routine"');
+    expect(CAPTAIN_SYSTEM).toContain('"draft": true');
   });
 
   it("runMessage gives the event part and the quiet rule", () => {
