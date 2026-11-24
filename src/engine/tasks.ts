@@ -3206,6 +3206,15 @@ export function sendNow(id: string) {
     .then(() => stopShells(id, list, "명령 멈춤 · 새 메시지를 바로 전해요"));
 }
 
+/** A word from Ondra itself to a job at work: taken after its current step, not shown in its
+ *  chat as the user's. False when it isn't mid-turn (nothing to say it to). */
+export function whisper(id: string, message: string): boolean {
+  // a job on another Mac isn't reached this way
+  if (taskById(id)?.host || !runs.get(id)?.streaming) return false;
+  void request(agentOf(id), { type: "steer", message }).catch(() => {});
+  return true;
+}
+
 export async function tell(id: string, message: string, opts: { now?: boolean; shown?: string; by?: string } = {}) {
   { const r = far(id, "tell", [id, message, opts]); if (r) return r as never; }
   const t = taskById(id);

@@ -8,6 +8,19 @@
 const OTHER = /(?!\p{Script=Latin})\p{L}/u;
 const WORD = /\b[A-Za-z]{2,}\b/g;
 
+/** The language these words are in, by their script, named for a prompt ("Korean"); none for
+ *  Latin script or nothing to tell by (English, Spanish… are told apart by the model itself). */
+export function tongueOf(...texts: (string | undefined)[]): string | undefined {
+  const s = texts.filter(Boolean).join("\n");
+  if (/\p{Script=Hangul}/u.test(s)) return "Korean";
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(s)) return "Japanese";
+  if (/\p{Script=Han}/u.test(s)) return "Chinese";
+  if (/\p{Script=Cyrillic}/u.test(s)) return "Russian";
+  if (/\p{Script=Arabic}/u.test(s)) return "Arabic";
+  if (/\p{Script=Thai}/u.test(s)) return "Thai";
+  return undefined;
+}
+
 /** whether the text has letters of a non-Latin script */
 export const nonLatin = (text?: string) => !!text && OTHER.test(text);
 
@@ -24,8 +37,22 @@ export function otherScript(...heard: (string | undefined)[]): boolean {
   return nonLatin(said) && !said.split("\n").some((l) => latinProse(l, 2));
 }
 
-/** a line of English prose (four words or more), as thinking aloud reads */
-export const englishLine = (line: string) => latinProse(line, 4);
+/** small words of English grammar: a line built on them is English, whatever names sit in it */
+const GLUE = /\b(the|a|an|to|for|of|in|on|at|with|from|and|but|so|then|now|next|is|are|was|be|it|this|that|i|i'll|i'm|let|let's|we|you|my|not|no|done|good|ok|okay)\b/i;
+
+/** a line of English prose, as thinking aloud reads: four words or more; or three or more built on
+ *  English grammar with a name of another script in it ("Next reel for 민정원.") */
+export function englishLine(line: string): boolean {
+  if (latinProse(line, 4)) return true;
+  const s = line.trim();
+  if (!s || s.includes("`") || /https?:\/\//.test(s)) return false;
+  const words = s.match(WORD) ?? [];
+  if (words.length < 3 || !words.some((w) => GLUE.test(w))) return false;
+  // mostly Latin letters: the other script is a name or two, not the sentence
+  const letters = [...s].filter((c) => /\p{L}/u.test(c));
+  const other = letters.filter((c) => OTHER.test(c)).length;
+  return other / Math.max(1, letters.length) <= 0.35;
+}
 
 /** What is for them: when they write in a non-Latin script, the reply's English-prose lines are the
  *  model's own and dropped (code blocks kept as they are); else it is kept whole. */

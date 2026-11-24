@@ -790,13 +790,39 @@ describe("where it is right now, across workspaces", () => {
       { id: "x", space: "work", title: "앱에서 시킨 일", status: "running", createdAt: 0, entries: [], shells: [] },
     ] as never);
     const home = myState("home", 40 * 60_000);
-    expect(home).toContain('"탭 순서", 40 min, hit 1 snags');
+    expect(home).toContain('"탭 순서", 40 min, working: 0 steps so far, nothing said yet, hit 1 snags');
     expect(home).toContain("회사 work (say nothing of what it is): 1 going, longest 40 min, 2 snags");
     expect(home).not.toContain("결제");
     expect(home).not.toContain("앱에서 시킨 일");
     expect(myState("work", 40 * 60_000)).toContain('"결제 서버 비밀 마이그레이션"');
     set("tasks", [] as never);
     expect(myState("home")).toBe("");
+  });
+
+  it("what its job is really doing (steps, when the last was, what it last said), and one that just failed", async () => {
+    const { myState } = await import("./discord");
+    const { setState: set } = await import("../state/store");
+    const now = 10 * 60_000;
+    set("tasks", [
+      { id: "a", space: "home", title: "Orbit 이슈 #97", status: "failed", error: "blocked by policy", finishedAt: now - 6 * 60_000, agent: { channel: "c1" }, createdAt: 0, entries: [], shells: [] },
+      { id: "b", space: "home", title: "Orbit 이슈 #97", status: "running", agent: { channel: "c1" }, createdAt: now - 5 * 60_000, entries: [
+        { id: "1", at: now - 200_000, kind: "text", text: "로그부터 볼게" },
+        { id: "2", at: now - 100_000, kind: "tool", tool: { kind: "bash" } },
+        { id: "3", at: now - 20_000, kind: "tool", tool: { kind: "read" } },
+      ], shells: [] },
+    ] as never);
+    const s = myState("home", now);
+    expect(s).toContain('"Orbit 이슈 #97", 5 min, working: 2 steps so far, the last 20s ago, last said (3 min ago): "로그부터 볼게"');
+    expect(s).toContain('failed 6 min ago: "Orbit 이슈 #97" (blocked by policy)');
+    const { TRUE_ONLY } = await import("./discord");
+    expect(TRUE_ONLY).toContain("추궁당해도");
+  });
+
+  it('"#name" of a channel it knows becomes the channel link', async () => {
+    const { tagged, seeChannels } = await import("./discordPeople");
+    seeChannels([{ id: "1565", name: "orbit", kind: "text" }, { id: "77", name: "프로젝트", kind: "category" }]);
+    expect(tagged("#orbit에서 커밋 보고 있을게").text).toBe("<#1565>에서 커밋 보고 있을게");
+    expect(tagged("PR #96 봤어 #프로젝트").text).toBe("PR #96 봤어 #프로젝트");
   });
 });
 
