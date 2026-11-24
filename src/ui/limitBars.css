@@ -1,0 +1,181 @@
+/* plan windows as T3 Code-style bars (LimitBars.tsx) */
+.lim-bars {
+  display: grid;
+  gap: var(--s-4);
+  color: var(--ink-3);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lim-row {
+  display: grid;
+  grid-template-columns: 2.4em 1fr;
+  align-items: center;
+  gap: var(--s-8);
+}
+.lim-bar {
+  position: relative;
+  height: 22px;
+  min-width: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  cursor: default;
+}
+.lim-paint {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 6px;
+}
+/* what is left: the service's colour, tinted */
+.lim-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 6px;
+  background: var(--lim-color);
+  opacity: 0.35;
+}
+/* what is used: faint hatching (a whole-pixel tile, so every stripe is the same width) */
+.lim-used {
+  position: absolute;
+  inset: 0 0 0 auto;
+  background-image: repeating-linear-gradient(135deg, transparent 0 1px, var(--lim-color) 1px 2px, transparent 2px 50%);
+  background-size: 7px 7px;
+  opacity: 0.2;
+}
+.lim-row.low .lim-bar {
+  --lim-color: var(--warn);
+}
+/* where even spending would be: a thin grey line a little past the bar's edges */
+.lim-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1.5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  transform: translateX(-50%);
+}
+.lim-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding: 0 3px 0 var(--s-8);
+  font-size: 12px;
+  line-height: 1;
+}
+.lim-left {
+  color: color-mix(in srgb, var(--ink) 85%, transparent);
+  font-weight: 500;
+}
+.lim-row.low .lim-left {
+  color: var(--warn-ink);
+}
+.lim-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  color: var(--ink);
+}
+.lim-bars .lim-credits {
+  padding-left: calc(2.4em + var(--s-8));
+}
+/* in the account picker: under the account's name */
+.acc-pop .lim-bars {
+  width: 240px;
+  margin-top: var(--s-6);
+}
+/* Settings › 계정: a card per window under the account's row, as T3 Code's usage page */
+.lim-cards {
+  display: grid;
+  gap: var(--s-8);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.lim-card {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-12) var(--s-24);
+  padding: var(--s-16);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 10px;
+}
+.lim-head {
+  display: grid;
+  gap: var(--s-4);
+}
+.lim-card-name {
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.lim-big {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.lim-big b {
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.lim-card.low .lim-big b {
+  color: var(--warn-ink);
+}
+.lim-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+}
+.lim-pace {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.lim-pace.ahead {
+  color: var(--warn-ink);
+}
+.lim-card .lim-bar {
+  height: 32px;
+  border-radius: 8px;
+}
+.lim-card .lim-paint,
+.lim-card .lim-fill {
+  border-radius: 8px;
+}
+.lim-card .lim-text {
+  padding: 0 4px 0 var(--s-10);
+  font-size: var(--fs-xs);
+}
+.lim-card.low .lim-bar {
+  --lim-color: var(--warn);
+}
+.lim-cards .lim-credits {
+  padding-left: var(--s-4);
+  font-size: var(--fs-xs);
+}
+/* the row lets the cards take a line of their own, lined up with the name */
+.settings-inner .prov-row.has-lim {
+  flex-wrap: wrap;
+  row-gap: var(--s-12);
+  padding-bottom: var(--s-16);
+}
+.settings-inner .prov-row > .lim-cards {
+  flex: 1 0 100%;
+  padding-left: calc(24px + var(--s-12));
+}
+@container (max-width: 520px) {
+  .lim-card {
+    grid-template-columns: 1fr;
+  }
+}

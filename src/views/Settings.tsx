@@ -3,6 +3,7 @@ import { effortFor, setModelEffort } from "../engine/models";
 import { ring, soundOn, soundVolume } from "../engine/sound";
 import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
+import { LimitCards } from "../ui/LimitBars";
 import { refreshModels } from "../engine/modelList";
 import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, modifierHold, noModifiers, overrides, shortcuts, viewKey, type Shortcut, type ShortcutId } from "../lib/shortcuts";
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
@@ -11,7 +12,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, on,
 import { projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
 import { mirror, setMirror } from "../state/mirror";
 import type { Account, SpaceId } from "../state/types";
-import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { creditsOf, emails, loadEmail, refreshLimits, usageOf } from "../state/limits";
 import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
 import { ModelPicker, PERMISSIONS } from "../ui/ModelPicker";
 import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
@@ -596,14 +597,6 @@ const ownLabel = (a: Account) => {
 /** signed in = the account has a provider login (the same test the account chip uses) */
 const signedIn = (a: Account) => a.providers.length > 0 || !!a.connection;
 
-/** "2시간" / "3일": how long until a plan window starts over */
-const resetIn = (ms: number) => {
-  const m = Math.max(0, Math.round(ms / 60_000));
-  if (m < 60) return t("{m}분", { m });
-  const h = Math.round(m / 60);
-  return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
-};
-
 /** what the per-account sign-in button says (signed in: another service for this account);
  *  its sheet carries the same title */
 const loginWord = (a: Account) => (signedIn(a) ? "서비스 추가" : "로그인");
@@ -656,7 +649,7 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
         }] as MenuEntry[])),
   ];
   return (
-    <div class="prov-row" classList={{ ctx: ctxFor() === `acc:${props.id}` }}>
+    <div class="prov-row" classList={{ ctx: ctxFor() === `acc:${props.id}`, "has-lim": windows().length > 0 || !!credits() }}>
       <span class="prov-logo" title={a().connection?.baseUrl}>
         <Show when={logo()} fallback={<Icon name={a().connection ? "link" : "key"} size={16} />}>
           <Logo name={logo() === "Claude" ? "claude" : logo()} size={18} />
@@ -680,18 +673,6 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
         <span class="prov-sub">{sub()}</span>
       </div>
       <span class="spacer" />
-      <span class="prov-usage">
-        <For each={windows()}>
-          {(l) => (
-            <span class="acc-lim" classList={{ hot: l.used >= 80 && !credits() }} title={l.resetsAt ? t("{t} 후 초기화", { t: resetIn(l.resetsAt - now()) }) : undefined}>
-              {t("{w} {n}%", { w: windowLabel(l.window), n: Math.round(l.used) })}
-            </span>
-          )}
-        </For>
-        <Show when={credits()}>
-          {(c) => <span class="acc-stat" title={t("요금제 한도 이후 사용")}>{t("크레딧 {n}|left", { n: Number.isFinite(Number(c())) ? Number(c()) : c() })}</span>}
-        </Show>
-      </span>
       <Show when={!signedIn(a())}>
         <button class="btn sm primary" onClick={props.onLogin}>{t("로그인")}</button>
       </Show>
@@ -703,6 +684,7 @@ function AccountRow(props: { id: string; onLogin: () => void; onEdit: () => void
       >
         <Icon name="more" size={16} />
       </button>
+      <LimitCards limits={windows()} service={servicesOf(a())[0]} credits={credits()} now={now()} />
     </div>
   );
 }
