@@ -15,6 +15,7 @@
 //   line, or take it (the user's words as a request; anyone else's as a call). See WATCH_WAYS.
 import {
   discordApi,
+  discordChannels,
   discordHistory,
   discordInteractionReply,
   discordModalSet,
@@ -49,7 +50,7 @@ export { DEFAULT_VOICE } from "./agentVoice";
 import { DEFAULT_VOICE } from "./agentVoice";
 import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
 import { forThem, nonLatin } from "./tongue";
-import { allowed, seePeople, tagged } from "./discordPeople";
+import { allowed, seeChannels, seePeople, tagged } from "./discordPeople";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -90,6 +91,7 @@ export const BANTER = `농담은 친구끼리처럼 해도 돼. 욕, 비속어, 
  *  jokes are fine; a made-up reason or event said as true is not (it said a ping "must have rung",
  *  then that it "typed it for somewhere else", then changed its story twice). */
 export const TRUE_ONLY = `사실처럼 말하는 건 네가 직접 보거나 확인한 것만. 왜 그랬는지, 무슨 일이 있었는지 모르면 모른다고 하고, 확인할 수 있으면 확인하고 말해. 그럴듯한 이유, 핑계, 안 일어난 일("폰 울렸을 듯", "딴 데 칠 거 잘못 쳤어")을 지어내지 마. 틀린 게 들키면 뭐가 틀렸는지 한 번 그대로 말하고, 새 핑계를 만들거나 말을 또 바꾸지 마. 누가 봐도 장난인 농담은 괜찮아.
+네 일이 어떻게 되고 있는지는 지금 상태(몇 단계째, 마지막 단계가 언제인지)를 보고 말해. 추궁당해도 확인 전에 "안 하고 있었어"나 "잘못 말했어"로 물러서지 말고, 실제 상태를 그대로 말해.
 남의 말이 두 가지로 읽히면 앞뒤 맥락과 그 사람 말버릇으로 읽고, 그래도 모르겠으면 짧게 되물어. 한쪽으로 단정하고 받아치지 마.`;
 
 /** What it can do as Metamong, whatever voice it was given: turn into someone for a while. */
@@ -355,8 +357,17 @@ export function endNote(t: { id: string; parentId?: string }, a: AgentSettings |
   return [`(Ondra) This work was asked from Discord: your reply line about it is posted there as "${a.name}", as the one who did it. Write it as a chat message in this voice:`, ...chatRules(a, servers.has(from))].filter(Boolean).join("\n");
 }
 
+/** servers whose channel names it knows (looked up again after a while: channels come and go) */
+const roomsKnown = new Map<string, number>();
+function knowChannels(guild: string, now = Date.now()) {
+  if (now - (roomsKnown.get(guild) ?? -Infinity) < 10 * 60_000) return;
+  roomsKnown.set(guild, now);
+  void discordChannels(guild).then(seeChannels).catch(() => roomsKnown.delete(guild));
+}
+
 async function onMessage(m: DiscordMessage) {
   seePeople([m]);
+  if (m.guild) knowChannels(m.guild);
   lastIn.set(m.channel, m.id);
   const a = settings();
   if (!a?.on || !me || m.author.bot || m.author.id === me.id) return;
@@ -1110,8 +1121,20 @@ export function myState(space: string, now = Date.now()): string {
   const snags = (t: Task) => (t.shells ?? []).filter((x) => x.ok === false).length + state.tasks.filter((k) => k.parentId === t.id && k.status === "failed").length;
   const live = state.tasks.filter((t) => t.agent && !t.parentId && (t.status === "running" || t.status === "waiting" || t.status === "queued"));
   const lines: string[] = [];
+  // what it is really doing, so "하는 중?" is answered from this, not from a guess
+  const ago = (at: number) => { const sec = Math.max(0, Math.round((now - at) / 1000)); return sec < 90 ? `${sec}s ago` : `${Math.round(sec / 60)} min ago`; };
+  const doing = (t: Task) => {
+    if (t.status === "waiting") return "waiting on the user";
+    if (t.status === "queued") return "queued, not started";
+    const steps = t.entries.filter((e) => e.kind === "tool");
+    const last = steps[steps.length - 1];
+    const said = [...t.entries].reverse().find((e) => e.kind === "text");
+    return [`working: ${steps.length} steps so far${last ? `, the last ${ago(last.at)}` : ""}`, said?.kind === "text" ? `last said (${ago(said.at)}): "${said.text.replace(/\s+/g, " ").slice(0, 80)}"` : "nothing said yet"].join(", ");
+  };
   for (const t of live.filter((x) => x.space === space))
-    lines.push(`- here: "${t.title}", ${mins(t)} min${t.status === "waiting" ? ", waiting on the user" : ""}${snags(t) ? `, hit ${snags(t)} snags` : ""}`);
+    lines.push(`- here: "${t.title}", ${mins(t)} min, ${doing(t)}${snags(t) ? `, hit ${snags(t)} snags` : ""}`);
+  for (const t of state.tasks.filter((x) => x.agent && !x.parentId && x.space === space && x.status === "failed" && now - (x.finishedAt ?? 0) < 3_600_000))
+    lines.push(`- here, failed ${ago(t.finishedAt ?? now)}: "${t.title}"${t.error ? ` (${t.error.replace(/\s+/g, " ").slice(0, 80)})` : ""}`);
   const others = [...new Set(live.filter((x) => x.space !== space).map((x) => x.space))];
   for (const sp of others) {
     const ts = live.filter((x) => x.space === sp);

@@ -24,8 +24,22 @@ export function otherScript(...heard: (string | undefined)[]): boolean {
   return nonLatin(said) && !said.split("\n").some((l) => latinProse(l, 2));
 }
 
-/** a line of English prose (four words or more), as thinking aloud reads */
-export const englishLine = (line: string) => latinProse(line, 4);
+/** small words of English grammar: a line built on them is English, whatever names sit in it */
+const GLUE = /\b(the|a|an|to|for|of|in|on|at|with|from|and|but|so|then|now|next|is|are|was|be|it|this|that|i|i'll|i'm|let|let's|we|you|my|not|no|done|good|ok|okay)\b/i;
+
+/** a line of English prose, as thinking aloud reads: four words or more; or three or more built on
+ *  English grammar with a name of another script in it ("Next reel for 민정원.") */
+export function englishLine(line: string): boolean {
+  if (latinProse(line, 4)) return true;
+  const s = line.trim();
+  if (!s || s.includes("`") || /https?:\/\//.test(s)) return false;
+  const words = s.match(WORD) ?? [];
+  if (words.length < 3 || !words.some((w) => GLUE.test(w))) return false;
+  // mostly Latin letters: the other script is a name or two, not the sentence
+  const letters = [...s].filter((c) => /\p{L}/u.test(c));
+  const other = letters.filter((c) => OTHER.test(c)).length;
+  return other / Math.max(1, letters.length) <= 0.35;
+}
 
 /** What is for them: when they write in a non-Latin script, the reply's English-prose lines are the
  *  model's own and dropped (code blocks kept as they are); else it is kept whole. */

@@ -136,6 +136,32 @@ describe("the agent's work, in the open", () => {
     expect(sent).toEqual([["c1", "-# 메뉴 막대 초\n초 표시 보는 중"]]);
   });
 
+  it("working for a while with nothing said there, it is reminded to say where it is; nothing is said for it", async () => {
+    const tasks = await import("./tasks");
+    const whisper = vi.spyOn(tasks, "whisper").mockReturnValue(true);
+    setState("tasks", [job({ agent: { channel: "c1" } })]);
+    await workTick(1000);
+    add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "git diff" } }, 2000));
+    await workTick(60_000);
+    expect(whisper).not.toHaveBeenCalled();
+    await workTick(1000 + 2 * 60_000);
+    expect(whisper).toHaveBeenCalledTimes(1);
+    expect(whisper.mock.calls[0][1]).toContain("heard nothing from you for 2 minutes");
+    // not again right away; and what it says resets the clock
+    await workTick(1000 + 3 * 60_000);
+    expect(whisper).toHaveBeenCalledTimes(1);
+    add("t1", entry({ kind: "text", text: "diff 다 읽었어, 검색 쪽이 수상해" }, 200_000));
+    add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "swift build" } }, 200_001));
+    await workTick(1000 + 4 * 60_000);
+    expect(sent.at(-1)).toEqual(["c1", "diff 다 읽었어, 검색 쪽이 수상해"]);
+    await workTick(1000 + 5 * 60_000);
+    expect(whisper).toHaveBeenCalledTimes(1);
+    expect(sent.every(([, t]) => !t.includes("Ondra"))).toBe(true);
+    // the job is told to work out loud
+    expect(inOpenNote({ agent: { channel: "c1" } })).toContain("silence there reads as stopped");
+    whisper.mockRestore();
+  });
+
   it("what came before Ondra was watching isn't replayed", async () => {
     setState("tasks", [job({ agent: { channel: "c1" }, entries: [entry({ kind: "text", text: "옛날 말" }, 10)] })]);
     await workTick(1000);
@@ -152,6 +178,12 @@ describe("its words, in the user's language", () => {
     expect(englishLine("pnpm test 돌리는 중")).toBe(false);
     expect(englishLine("`pnpm run build --watch now`")).toBe(false);
     expect(englishLine("ok")).toBe(false);
+    // English built around a name in Korean is still English; Korean with English terms is Korean
+    expect(englishLine("Next reel for 민정원.")).toBe(true);
+    expect(englishLine("Good. Send to 민정원.")).toBe(true);
+    expect(englishLine("Claude Code 세션 login 확인")).toBe(false);
+    expect(englishLine("PR #96 재리뷰 남겼어. 머지는 안 했어")).toBe(false);
+    expect(englishLine("build 돌리고 test 통과하면 merge 할게")).toBe(false);
     expect(forThem("Checking the room first.\n방 확인했어\n```\nnpm run the whole build\n```", "방 좀 봐줘")).toBe("방 확인했어\n```\nnpm run the whole build\n```");
     // whoever writes English (or nothing to tell by) gets it whole, whatever the agent's own voice
     expect(forThem("Running the tests now.", "can you run the tests?")).toBe("Running the tests now.");

@@ -20,8 +20,19 @@ export function seePeople(ms: Seen[]): void {
   }
 }
 
+/** a server's channels by name → their ids, so "#orbit" written in a line becomes its link */
+const rooms = new Map<string, Set<string>>();
+export function seeChannels(list: { id: string; name: string; kind?: string }[]): void {
+  for (const c of list) {
+    if (c.kind && c.kind !== "text") continue;
+    const k = c.name.trim().toLowerCase();
+    if (!k) continue;
+    rooms.set(k, (rooms.get(k) ?? new Set()).add(c.id));
+  }
+}
+
 /** for tests */
-export const forgetPeople = () => names.clear();
+export const forgetPeople = () => (names.clear(), rooms.clear());
 
 /** the one id a name stands for (none when it is unknown or two people share it) */
 function idOf(word: string): { id: string; len: number } | undefined {
@@ -32,7 +43,8 @@ function idOf(word: string): { id: string; len: number } | undefined {
   return best;
 }
 
-/** The line with "@name" of someone known made their mention (code left as it is), and the ids it tags. */
+/** The line with "@name" of someone known made their mention and "#name" of a known channel its
+ *  link (code left as it is), and the people it tags. */
 export function tagged(text: string, me?: string): { text: string; pings: string[] } {
   let fence = false;
   const out = text
@@ -40,10 +52,17 @@ export function tagged(text: string, me?: string): { text: string; pings: string
     .map((l) => {
       if (/^\s*```/.test(l)) return (fence = !fence), l;
       if (fence || l.includes("`")) return l;
-      return l.replace(/(^|[\s(])@([^\s@<>()`]{1,40})/g, (all, pre: string, word: string) => {
-        const hit = idOf(word);
-        return hit && hit.id !== me ? `${pre}<@${hit.id}>${word.slice(hit.len)}` : all;
-      });
+      return l
+        .replace(/(^|[\s(])@([^\s@<>()`]{1,40})/g, (all, pre: string, word: string) => {
+          const hit = idOf(word);
+          return hit && hit.id !== me ? `${pre}<@${hit.id}>${word.slice(hit.len)}` : all;
+        })
+        .replace(/(^|[\s(])#([\p{L}\p{N}_-]{1,100})/gu, (all, pre: string, word: string) => {
+          // the longest known channel name it starts with ("#orbit에서"), one channel only
+          let best: { id: string; len: number } | undefined;
+          for (const [n, ids] of rooms) if (ids.size === 1 && word.toLowerCase().startsWith(n) && (!best || n.length > best.len)) best = { id: [...ids][0], len: n.length };
+          return best ? `${pre}<#${best.id}>${word.slice(best.len)}` : all;
+        });
     })
     .join("\n");
   return { text: out, pings: pingsIn(out, me) };

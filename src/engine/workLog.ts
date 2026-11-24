@@ -11,11 +11,17 @@ import { state } from "../state/store";
 import type { Entry, Task } from "../state/types";
 import { forThem } from "./tongue";
 
-type Watch = { seen: Set<string>; typingAt: number; busy?: boolean; pictures?: string[] };
+type Watch = { seen: Set<string>; typingAt: number; busy?: boolean; pictures?: string[]; saidAt?: number; askedAt?: number };
 const watching = new Map<string, Watch>();
 /** jobs already let go: an ended job is relayed to its end once, never picked up again */
 const done = new Set<string>();
 let since: number | undefined;
+
+/** Working this long with nothing said there, it looks stopped from the channel: the job is
+ *  reminded, once a while, to say in its own words where it is (nothing is said for it). */
+export const QUIET_FOR = 2 * 60_000;
+const QUIET_NOTE = (min: number) =>
+  `(Ondra) Your work shows on Discord only through your own words, and people there have heard nothing from you for ${min} minutes, so it looks like you stopped. In a line or two, in their language, say what you have actually checked or found so far, or where you are stuck; then go on.`;
 
 /** "… is typing" lasts about 10 s: kept up while it works */
 export const TYPING_EVERY = 8000;
@@ -38,7 +44,7 @@ export async function workTick(now = Date.now()) {
         done.add(t.id);
         continue;
       }
-      w = { seen: new Set(), typingAt: -Infinity };
+      w = { seen: new Set(), typingAt: -Infinity, saidAt: now };
       // what happened before Ondra was watching (a restart mid-job) isn't replayed
       for (const e of t.entries) if (e.at < since) w.seen.add(e.id);
       watching.set(t.id, w);
@@ -71,8 +77,15 @@ async function relay(t: Task, w: Watch, now: number) {
   const text = body && shared ? `-# ${t.title}\n${body}` : body;
   if (text) await discordSend(room, text).catch(() => {});
   for (const p of shots.slice(0, 4)) await discordSendFile(room, p).catch(() => {});
+  if (text || shots.length) w.saidAt = now;
   // its end, where it was asked too, is the agent's own end line (discord.ts mainSaid)
   if (ended(t)) return;
+  // working, but silent there for a while: it is reminded to say where it is, in its own words
+  const quiet = now - Math.max(w.saidAt ?? now, w.askedAt ?? 0);
+  if (t.status === "running" && quiet >= QUIET_FOR) {
+    const { whisper } = await import("./tasks");
+    if (whisper(t.id, QUIET_NOTE(Math.round((now - (w.saidAt ?? now)) / 60_000)))) w.askedAt = now;
+  }
   if (t.status === "running" && now - w.typingAt >= TYPING_EVERY) {
     w.typingAt = now;
     await discordTyping(room).catch(() => {});
