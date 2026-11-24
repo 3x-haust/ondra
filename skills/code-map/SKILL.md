@@ -83,34 +83,17 @@ sockets). It is evidence, not the answer: folder names are not architecture.
    ("작업 실행", "Job runner"), not by the folder. `paths` are globs relative
    to the repo; a file goes to its most specific pattern, so a broad
    `src/ui/**` and a narrow `src/ui/viz/**` can sit side by side.
-4. **Relations**: `label` says what happens, in the user's words, as a
-   newcomer would say it: `"작업 시작"`, `"진행과 결과 돌려주기"`, never a
-   function, event or command name (`agent_spawn`, `bridge:call`, `invoke`).
-   The mechanism goes in `tech` (`Tauri invoke`, `HTTP POST /orders`,
-   `stdin JSON`), the call site in `ref` (`path:line`) when you saw it in code.
-   Draw the calls a newcomer must know, not an import between every pair.
-5. **Actors and externals:** who uses it, and outside systems. A real product
-   gets `logo` (its brand name or slug). Ondra's pictures never guess a logo
-   from a brand word inside a label like `파일·git`.
-6. **Flows** (1–3): the main path of one user request, as a story:
-
-   - 3–8 steps, **six parts at most** (an actor, container or component each).
-     Past six, `blocks` folds components into their containers and drops the
-     hops inside one container, so pick parts at one level when you can.
-   - Each step's `label` is a short plain sentence of what happens
-     (`"작업 지시 보내기"`, `"모델에게 묻기"`); the same rule as relations.
-   - Part names must fit a narrow column: give a part with a long label a
-     `short` name (10 characters at most).
-
-   ```json
-   {"id": "send-task", "label": "요청 하나가 작업이 되기까지", "steps": [
-     {"from": "user", "to": "views", "label": "메시지 입력"},
-     {"from": "views", "to": "captain", "label": "메인 채팅에 전달"},
-     {"from": "tasks", "to": "processes", "label": "에이전트 프로세스 띄우기"},
-     {"from": "processes", "to": "engine-tools", "label": "작업 지시 보내기"},
-     {"from": "engine-tools", "to": "model-api", "label": "모델에게 묻기"},
-     {"from": "processes", "to": "tasks", "label": "진행과 결과 돌려주기"}]}
-   ```
+4. **Relations**: the calls a newcomer must know, not an import between
+   every pair. `label` is what happens in plain words (the label rules are in
+   visual-report, *Architecture pictures*); the mechanism goes in `tech`
+   (`Tauri invoke`, `HTTP POST /orders`), the call site in `ref`
+   (`path:line`) when you saw it in code.
+5. **Actors and externals:** who uses it, and outside systems; a real
+   product gets `logo`.
+6. **Flows** (1–3): the main path of one user request, as a story, within
+   the flow limits in visual-report (six parts at most, at one level; a
+   `short` name for a long label). Past six, `blocks` folds components into
+   their containers.
 7. **Write the summary** (2–3 sentences: what it is, how it's split).
 8. Check until clean, then stamp it at the current commit:
 
@@ -140,16 +123,13 @@ codemap blocks --component jobs     # one part's files and links (tree + table)
 codemap blocks --flow send-task     # one flow, step by step (sequence)
 ```
 
-Each prints a ```` ```blocks ```` fence: paste it into your answer as it is
-(visual-report draws it; a node with a file opens it in the editor). The
-system picture keeps it readable by itself: one line per pair of boxes (both
-verbs on it when they talk both ways), every box's busiest line and then the
-busiest others, outside systems grouped; the rest shows in each container's
-picture. `"overview": true` (or `false`) on a relation forces it in (or out). Start
-with the system picture and 2–4 sentences, then offer the containers to open
-("엔진 · 화면 · 셸 중 어디를 더 볼까요?"). Two pictures per message at most.
-When the question is about one place ("결제는 어디서 처리돼?"), answer with
-`owner` and that part's picture instead of the whole system.
+Each prints a ```` ```blocks ```` fence: paste it into your answer as it is.
+How to show them (system first, drill down on request, two pictures a
+message, one part for a question about one place) is visual-report's
+*Architecture pictures*; `blocks` already keeps the system picture to its
+main lines. `"overview": true` (or `false`) on a relation forces it into (or
+out of) the system picture. For a question about one place ("결제는 어디서
+처리돼?"), find the part with `owner` first.
 
 ## 5. In a job that changes code
 

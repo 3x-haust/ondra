@@ -6,6 +6,8 @@ description: >
   (버그 수정, 기능 추가, 리팩토링, 성능 개선, PR). Read when the task names one of
   them; skip it for a small change (a wording, a colour, one setting) and for a
   new app built from nothing.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # Coding playbooks

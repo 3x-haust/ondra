@@ -8,6 +8,8 @@ description: >-
   dates, web components, built-in AI). Use when writing or changing web UI code
   and a guide may know a newer, lighter way than habit: 웹 화면 코드, CSS,
   모달, 팝오버, 폼, 접근성, 성능.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # Modern web guidance

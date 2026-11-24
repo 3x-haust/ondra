@@ -92,6 +92,12 @@ describe("skill matching", () => {
     ["온드라 기능 추가하고 싶어", "ondra"],
     ["온드라에서 내 차례가 뭐야", "ondra"],
     ["Ondra bug: the canvas is empty", "ondra"],
+    ["나 자러 갈게. 결제 모듈 테스트 다 통과할 때까지 고쳐놔", "overnight"],
+    ["퇴근할게 아침까지 리팩토링 해둬", "overnight"],
+    ["going to bed, finish the migration", "overnight"],
+    ["일어났어 그동안 뭐 됐어?", "recap"],
+    ["따라잡기 해줘", "recap"],
+    ["catch me up", "recap"],
   ])("%s → %s", (query, skill) => {
     expect(top(query)[0]).toBe(skill);
     expect(skillHint(bundled, query)).toContain(`- ${skill}:`);

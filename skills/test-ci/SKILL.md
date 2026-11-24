@@ -5,6 +5,7 @@ description: >
   워크플로): unit and regression tests, a ci.yml with lint, typecheck and
   tests in Actions. Skip unless tests get written.
 metadata:
+  ondra-menu: 'hidden'
   ondra-writes: '(^|/)\.github/workflows/|\.(test|spec)\.[cm]?[jt]sx?$|_test\.(go|py)$|(^|/)test_[^/]+\.py$|(^|/)(vitest|jest|playwright)\.config\.'
 ---
 

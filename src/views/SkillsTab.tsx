@@ -13,6 +13,7 @@ import { Markdown } from "../ui/Markdown";
 import { t } from "../i18n";
 import { EmptyState, GroupTitle, PageHead } from "./Settings";
 import { skillLine } from "../engine/agentTools";
+import { menuHidden } from "../engine/skillMenu";
 import { SkillProposals } from "./SkillProposals";
 
 // the slash list and others read the same line
@@ -222,7 +223,7 @@ export function SkillsTab() {
     return Promise.all(
       list.map(async (f: SkillFile) => {
         const r = await fsRead(f.path).catch(() => ({ text: "" }));
-        return { f, description: parseSkill(r.text ?? "").description ?? "" };
+        return { f, description: parseSkill(r.text ?? "").description ?? "", hidden: menuHidden(r.text ?? "") };
       }),
     );
   });
@@ -232,15 +233,19 @@ export function SkillsTab() {
   onMount(() => {
     if (state.skills.some((s) => !s.enabled || !s.menu)) setState("skills", () => true, (s) => ({ ...s, enabled: true, menu: true }));
   });
-  const ondra = createMemo<Entry[]>(() =>
-    (files() ?? []).map(({ f, description }) => ({
+  const ondra = createMemo<(Entry & { hidden: boolean })[]>(() =>
+    (files() ?? []).map(({ f, description, hidden }) => ({
       key: `o:${f.name}`,
       name: f.name,
       description,
       path: f.path,
       kind: f.overridden ? "changed" : "bundled",
+      hidden,
     })),
   );
+  // the ones the user calls with "/skill:…", and the ones the work picks up by itself (not in the menu)
+  const callable = createMemo(() => ondra().filter((e) => !e.hidden));
+  const auto = createMemo(() => ondra().filter((e) => e.hidden));
   const mine = createMemo<Entry[]>(() =>
     state.skills.map((s) => ({
       key: `i:${s.path}`,
@@ -271,10 +276,18 @@ export function SkillsTab() {
       <SkillProposals />
       <GroupTitle title={t("기본")} />
       <div class="set-group">
-        <For each={ondra()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중…") : t("스킬 없음")}</div>}>
+        <For each={callable()} fallback={<div class="empty-line">{files.loading ? t("불러오는 중…") : t("스킬 없음")}</div>}>
           {(e) => <Row e={e} />}
         </For>
       </div>
+      <Show when={auto().length}>
+        <GroupTitle title={t("기본 · 알아서 써요")}>
+          <span class="set-note">{t("/ 메뉴에는 없고, 작업이 필요할 때 알아서 꺼내 써요")}</span>
+        </GroupTitle>
+        <div class="set-group">
+          <For each={auto()}>{(e) => <Row e={e} />}</For>
+        </div>
+      </Show>
       <GroupTitle title={t("내 스킬")}>
         <Show when={mine().length}>
           <button class="btn ghost sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />{t("추가")}</button>

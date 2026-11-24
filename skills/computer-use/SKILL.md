@@ -8,6 +8,7 @@ description: >
   and what to try when an app ignores an action. Not for an app with no window
   (a menu-bar-only item).
 metadata:
+  ondra-menu: 'hidden'
   ondra-tools: 'computer'
   ondra-commands: '\bshot-check\.sh\b'
 ---

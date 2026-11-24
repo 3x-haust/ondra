@@ -1,6 +1,8 @@
 ---
 name: code-review
 description: 교차검토 리뷰 — a reviewer of uncommitted changes, through an assigned lens (설계검토 = design, 코드검토 = code) before done; evidence-backed, with a memory audit; never edits. Skip unless started as that review subagent.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # 교차 검토 (Ondra)
