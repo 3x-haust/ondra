@@ -12,6 +12,7 @@ import { engine, expand } from "./rpc";
 import { forModel } from "./modelPrompts";
 import { planText } from "./plan";
 import { voiceGist } from "./agentVoice";
+import { tongueOf } from "./tongue";
 
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
@@ -1199,8 +1200,9 @@ export function writesLikeTeammate(t: Pick<Task, "agent" | "parentId">): string 
 }
 
 /** A job of the Discord agent working in the open: what it writes between steps is read there live. */
-export function inOpenNote(t: Pick<Task, "agent" | "parentId">): string {
+export function inOpenNote(t: Pick<Task, "agent" | "parentId"> & Partial<Pick<Task, "title" | "ask">>): string {
   if (!t.agent || t.parentId || t.agent.quiet) return "";
   const name = state.settings.agent?.name || "메타몽";
-  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Only your words show there, nothing about your steps is added for you, so work out loud the whole way, like building in public: every few steps a short line of what you are checking and why, what came of it (tests, a build, a comparison), what you found, a commit or PR with its link, when you change direction and why. Don't go quiet for minutes and report only at the end: silence there reads as stopped. Keep each line short, like thinking aloud, code names in backticks. No file contents, long output or secrets there. Blocks don't show on Discord: when a picture explains it better (a flow, before/after, a chart), make it an image (an SVG or small HTML page in $APP_ARTIFACTS_DIR, screenshot to PNG with the browser tool) and put ![](its path) in your words; it goes up as a picture. A screenshot you took goes up the same way, only when you put it in your words.`;
+  const tongue = tongueOf(t.title, t.ask);
+  return `What you write between tool calls is posted live to a Discord channel the user (and maybe others) reads, as you go, so they can follow the work. Every line of it is a message to those people, ${tongue ? `in ${tongue}` : "in the language they asked in"}, never a note to yourself: a quick note-to-self ("Next reel for X.", "Good. Send it.") stays in your thinking, and a step with nothing to tell them has no text at all. There you are ${name}, the same one they talk with on Discord, in its voice: ${voiceGist()} Only your words show there, nothing about your steps is added for you, so work out loud the whole way, like building in public: every few steps a short line of what you are checking and why, what came of it (tests, a build, a comparison), what you found, a commit or PR with its link, when you change direction and why. Don't go quiet for minutes and report only at the end: silence there reads as stopped. Keep each line short, like thinking aloud, code names in backticks. No file contents, long output or secrets there. Blocks don't show on Discord: when a picture explains it better (a flow, before/after, a chart), make it an image (an SVG or small HTML page in $APP_ARTIFACTS_DIR, screenshot to PNG with the browser tool) and put ![](its path) in your words; it goes up as a picture. A screenshot you took goes up the same way, only when you put it in your words.`;
 }

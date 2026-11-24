@@ -153,12 +153,15 @@ describe("the agent's work, in the open", () => {
     add("t1", entry({ kind: "text", text: "diff 다 읽었어, 검색 쪽이 수상해" }, 200_000));
     add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "swift build" } }, 200_001));
     await workTick(1000 + 4 * 60_000);
-    expect(sent.at(-1)).toEqual(["c1", "diff 다 읽었어, 검색 쪽이 수상해"]);
+    expect(sent[sent.length - 1]).toEqual(["c1", "diff 다 읽었어, 검색 쪽이 수상해"]);
     await workTick(1000 + 5 * 60_000);
     expect(whisper).toHaveBeenCalledTimes(1);
     expect(sent.every(([, t]) => !t.includes("Ondra"))).toBe(true);
     // the job is told to work out loud
     expect(inOpenNote({ agent: { channel: "c1" } })).toContain("silence there reads as stopped");
+    // the language they hear it in, named; notes to itself never go there
+    expect(inOpenNote({ agent: { channel: "c1" }, title: "인스타 릴스 계속 보내기" })).toContain("in Korean, never a note to yourself");
+    expect(inOpenNote({ agent: { channel: "c1" }, title: "Fix the tab order" })).toContain("in the language they asked in");
     whisper.mockRestore();
   });
 
@@ -178,6 +181,8 @@ describe("its words, in the user's language", () => {
     expect(englishLine("pnpm test 돌리는 중")).toBe(false);
     expect(englishLine("`pnpm run build --watch now`")).toBe(false);
     expect(englishLine("ok")).toBe(false);
+    const { tongueOf } = await import("./tongue");
+    expect([tongueOf("릴스 보내"), tongueOf("テスト"), tongueOf("Запусти"), tongueOf("run it"), tongueOf()]).toEqual(["Korean", "Japanese", "Russian", undefined, undefined]);
     // English built around a name in Korean is still English; Korean with English terms is Korean
     expect(englishLine("Next reel for 민정원.")).toBe(true);
     expect(englishLine("Good. Send to 민정원.")).toBe(true);

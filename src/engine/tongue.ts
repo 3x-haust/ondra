@@ -8,6 +8,19 @@
 const OTHER = /(?!\p{Script=Latin})\p{L}/u;
 const WORD = /\b[A-Za-z]{2,}\b/g;
 
+/** The language these words are in, by their script, named for a prompt ("Korean"); none for
+ *  Latin script or nothing to tell by (English, Spanish… are told apart by the model itself). */
+export function tongueOf(...texts: (string | undefined)[]): string | undefined {
+  const s = texts.filter(Boolean).join("\n");
+  if (/\p{Script=Hangul}/u.test(s)) return "Korean";
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(s)) return "Japanese";
+  if (/\p{Script=Han}/u.test(s)) return "Chinese";
+  if (/\p{Script=Cyrillic}/u.test(s)) return "Russian";
+  if (/\p{Script=Arabic}/u.test(s)) return "Arabic";
+  if (/\p{Script=Thai}/u.test(s)) return "Thai";
+  return undefined;
+}
+
 /** whether the text has letters of a non-Latin script */
 export const nonLatin = (text?: string) => !!text && OTHER.test(text);
 
