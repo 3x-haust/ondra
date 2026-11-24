@@ -19,6 +19,7 @@ import "./styles/panes.css";
 import "./styles/changes.css";
 import App from "./App";
 import { keepStrayKeysOut } from "./lib/strayKeys";
+import { installTooltips } from "./ui/tooltip";
 import { Capture } from "./views/Capture";
 import { VizGallery } from "./views/VizGallery";
 import { Pet } from "./pet/Pet";
@@ -35,6 +36,8 @@ render(() => (isCapture ? <Capture /> : isPet ? <Pet /> : isGallery ? <VizGaller
 
 // the characters macOS gives → and the other function keys never end up in a text field as □
 keepStrayKeysOut();
+// every `title` shows as a tip (the web view draws none of its own)
+installTooltips();
 
 // text boxes grow with what's typed (WebKit without field-sizing)
 if (!CSS.supports("field-sizing", "content")) {
