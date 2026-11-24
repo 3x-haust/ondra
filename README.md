@@ -16,7 +16,7 @@
 <p align="center"><sub>macOS 13+ · Apple silicon</sub></p>
 
 <p align="center">
-  <a href="https://3x-haust.github.io/ondra/en/#film"><img src="docs/assets/readme/hero-en.avif" width="880" alt="The opening of Ondra's intro film: one chat replaces a wall of agent tabs, and Ondra splits the request into three tasks. Click to watch the full film."></a>
+  <a href="https://3x-haust.github.io/ondra/en/#film"><img src="docs/assets/readme/hero-en.webp" width="880" alt="The opening of Ondra's intro film: one chat replaces a wall of agent tabs, and Ondra splits the request into three tasks. Click to watch the full film."></a>
 </p>
 
 <p align="center"><sub><a href="https://3x-haust.github.io/ondra/en/#film">Watch the full film (1:40) ↗</a> · Every Ondra screen in it is recorded from the app.</sub></p>
