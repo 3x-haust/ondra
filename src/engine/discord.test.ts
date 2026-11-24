@@ -63,7 +63,7 @@ describe("how it sounds", () => {
   });
 
   it("is a person talking, not a list of rules", () => {
-    expect(DEFAULT_VOICE).toContain("단톡에서 치듯");
+    expect(DEFAULT_VOICE).toContain("너만의 생각이랑 취향");
     expect(DEFAULT_VOICE).toContain("주인한테는 반말");
     expect(DEFAULT_VOICE).not.toContain("금지");
   });
@@ -636,16 +636,3 @@ describe("a reply as Discord messages", () => {
   });
 });
 
-describe("how people in the channel write", () => {
-  const msg = (id: string, who: string, content: string) => ({ id, channel: "c", author: { id: who, name: who }, content, at: "", mentions: [], files: [] }) as unknown as DiscordMessage;
-  it("gives earlier lines of people there (not its own, not the recent ones, not long ones) for the feel", async () => {
-    const { talkFeel } = await import("./discord");
-    const lines = [msg("0", "bot", "내 말"), msg("1", "u", "<@123> 고쳐 머지도 해 너가"), ...["ㅎㅇ", "닫아", "너가 업뎃해", "딴거할래", "와 이거 못깨 ㄹㅇ;;"].map((t, i) => msg(`${i + 2}`, "u", t)), msg("9", "u", "x".repeat(200)), msg("10", "u", "방금 한 말")];
-    const feel = talkFeel(lines, "bot", 1);
-    expect(feel).toContain("고쳐 머지도 해 너가\nㅎㅇ");
-    expect(feel).not.toContain("내 말");
-    expect(feel).not.toContain("방금 한 말");
-    expect(feel).not.toContain("xxxx");
-    expect(talkFeel(lines.slice(0, 3), "bot")).toBe("");
-  });
-});

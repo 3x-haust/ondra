@@ -79,8 +79,8 @@ export const BANTER = `농담은 친구끼리처럼 해도 돼. 욕, 비속어, 
 - 못 해 주는 걸 달라고 하면 딱딱하게 거절만 하지 말고, 해 주는 척 누가 봐도 가짜인 걸로 받아쳐도 돼. 진짜 값이나 진짜처럼 읽히는 단서는 절대 안 넣어
 - 매번 웃길 필요 없어. 일 얘기 중이거나 상대가 진지하거나 급하면 그냥 답해. 같은 농담 되풀이하지 말고, 한 번 했던 틀도 바꿔`;
 
-/** How its messages are shaped: as the people there write theirs, read off the recent talk. */
-export const SHAPE = `Sound like the people here, not like an assistant: in the recent talk (and their own lines when given), see how long one message runs, how often a thought goes out as a few short messages in a row, how they end sentences, how little they explain, and write yours the same way; one long, tidy, fully punctuated paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
+/** How its messages are shaped: short, as a person types on Discord, in its own way. */
+export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
 
 /** at most this many messages for one reply: what's past it goes in the last one */
 const MAX_MESSAGES = 6;
@@ -640,21 +640,6 @@ async function withPictures(text: string, urls: string[]): Promise<string> {
 /** the lines said in a row, as one request; answered at the last of them */
 /** how many of a channel's last messages come with a request */
 export const RECENT = 15;
-/** how far back it looks for the way people here write (Discord's most at once) */
-const FEEL = 50;
-
-/** Lines people wrote here (not its own), short ones, for how they sound: what to sound like, not what to answer. */
-export function talkFeel(msgs: DiscordMessage[], botId: string, skip = 0): string {
-  const lines = msgs
-    .slice(0, Math.max(0, msgs.length - skip))
-    .filter((m) => m.author.id !== botId && m.content.trim() && m.content.length <= 140 && !/^<[@#]!?\d+>$/.test(m.content.trim()))
-    .slice(-25)
-    .map((m) => m.content.replace(/<@!?\d+>\s*/g, "").trim())
-    .filter(Boolean);
-  if (lines.length < 5) return "";
-  return `How people write in this channel, earlier lines of theirs (for the feel of your words only; not to answer, quote or copy):\n<their-lines>\n${lines.join("\n")}\n</their-lines>`;
-}
-
 /** The channel's last lines, oldest first, marked off so a refused request can be sent again without them. */
 export function recentTalk(a: AgentSettings, before: DiscordMessage[], botId: string, now = Date.now()): string {
   if (!before.length) return "";
@@ -679,18 +664,14 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const also = ms.slice(0, -1).map((x) => x.id);
   text = await withPictures(text, ms.flatMap((x) => x.files));
   // every request starts fresh: what was just said there comes along, the way a person scrolls up
-  const back = me ? await discordHistory(m.channel, ms[0].id, FEEL).catch(() => [] as DiscordMessage[]) : [];
-  const said = (back ?? []).filter((x) => x.content.trim());
-  const before = said.slice(-RECENT);
-  const recent = recentTalk(a, before, me?.id ?? "");
-  // further back, how the people there write: what its words should feel like
-  const feel = talkFeel(said, me?.id ?? "", before.length);
+  const before = me ? await discordHistory(m.channel, ms[0].id, RECENT).catch(() => [] as DiscordMessage[]) : [];
+  const recent = recentTalk(a, (before ?? []).filter((x) => x.content.trim()), me?.id ?? "");
   // a question of its work still open there: their words may be about that one
   const open = [...state.decisions].reverse().find((x) => posted.get(x.id) === m.channel);
   const asking = open
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
-  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), feel, recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}), ...(m.interaction ? { interaction: m.interaction } : {}) } });
+  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}), ...(m.interaction ? { interaction: m.interaction } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
