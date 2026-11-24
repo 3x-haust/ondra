@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropToken, eraseToken, fileLine, listLine, putToken, splitTokens, tokenAt, tokensIn } from "./imageTokens";
+import { carryTokens, dropToken, eraseToken, fileLine, listLine, putToken, splitTokens, tokenAt, tokensIn } from "./imageTokens";
 
 describe("image tokens", () => {
   it("go in where the caret is, spaced from the words", () => {
@@ -42,5 +42,22 @@ describe("image tokens", () => {
   });
   it("say which pictures the words still name", () => {
     expect([...tokensIn("[Image #1] 그리고 [Image #12] [Image #")]).toEqual([1, 12]);
+  });
+});
+
+describe("moving a picture with its token (cut, then paste)", () => {
+  it("a cut picture comes back with its number where the words land", () => {
+    const held = new Map([[1, "/a.png"]]);
+    expect(carryTokens("[Image #1] 이거", held, new Map([["/b.png", 2]]))).toEqual({ text: "[Image #1] 이거", back: [["/a.png", 1]] });
+  });
+  it("its number taken by another picture meanwhile: the next free one", () => {
+    const held = new Map([[1, "/a.png"]]);
+    expect(carryTokens("[Image #1]", held, new Map([["/c.png", 1], ["/b.png", 2]]))).toEqual({ text: "[Image #3]", back: [["/a.png", 3]] });
+  });
+  it("copied (still attached): the same picture, by the number it has, nothing attached again", () => {
+    expect(carryTokens("봐 [Image #2]", new Map([[2, "/a.png"]]), new Map([["/a.png", 2]]))).toEqual({ text: "봐 [Image #2]", back: [] });
+  });
+  it("a token it doesn't hold stays as typed", () => {
+    expect(carryTokens("[Image #5]", new Map([[1, "/a.png"]]), new Map())).toEqual({ text: "[Image #5]", back: [] });
   });
 });
