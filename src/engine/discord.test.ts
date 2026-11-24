@@ -301,6 +301,42 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", undefined));
   });
 
+  it("what they say while it answers waits, and goes as one once it has answered", async () => {
+    BURST.ms = 30;
+    await ready();
+    const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
+    say("h1", "멈춰봐");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    say("h2", "너 사람 못알아봤어");
+    await new Promise((r) => setTimeout(r, 80));
+    say("h3", "미친놈아");
+    await new Promise((r) => setTimeout(r, 80));
+    // still answering the first: the rest wait
+    expect(said.thrown).toHaveLength(1);
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 멈춤" });
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.thrown[1].text).toBe("너 사람 못알아봤어\n미친놈아");
+    // the reply goes under the words it answers, with more said since
+    expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 멈춤", "h1");
+  });
+
+  it("two replies in one channel go out one after the other, not mixed", async () => {
+    const { PACE } = await import("./discord");
+    const pace = { ...PACE };
+    Object.assign(PACE, { base: 20, perChar: 0, most: 20 });
+    await ready();
+    emit({ kind: "message", message: msg({ id: "s1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "하나" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "가\n\n나\n\n다" });
+    said.hook?.("reply1");
+    setState("captain", (l) => [...l, { id: "endq", at: 9, space: "home", project: "@agent", from: "captain", after: "tq", reply: "라\n\n마" }]);
+    setState("tasks", [{ id: "tq", title: "x", entries: [], agent: { channel: "c1" } } as never]);
+    said.hook?.("endq");
+    await vi.waitFor(() => expect(vi.mocked(native.discordSend).mock.calls.map((c) => c[1])).toEqual(["가", "나", "다", "라", "마"]), { timeout: 3000 });
+    Object.assign(PACE, pace);
+  });
+
   it("nothing said in between: a plain line; someone spoke in between: a reply to their message", async () => {
     await ready();
     emit({ kind: "message", message: msg({ id: "q1", author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}> 오늘 뭐함`, mentions: [BOT] }) });
@@ -326,7 +362,9 @@ describe("the whole way round", () => {
     say("t2", "ㅅㅂ");
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     expect(said.thrown[0].text).toBe("tq\nㅅㅂ");
-    // someone else typing doesn't hold it
+    // someone else typing doesn't hold it (once it has answered the first)
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ" });
+    said.hook?.("reply1");
     say("t3", "ㅇㅇ");
     emit({ kind: "typing", channel: "c1", user: "222" });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
