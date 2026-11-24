@@ -197,7 +197,7 @@ export const OWNER_WAYS = `How this user wants you to work here:
 - When work ends, say what changed, what was checked, what is still open (and why), with the PR or link. Unchecked things are said plainly, not buried.`;
 
 /** How the work it starts shows on Discord: on by default, the where and whether is its own call. */
-export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps and what it does (skills, subagents, test results, commits, PRs, screenshots) shows on Discord as it happens, typing on, secrets hidden. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). When the work goes elsewhere, your line here just says where; your end line is said there, and here too with a pointer to it. "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
+export const WORK_IN_OPEN = `Work you start from here is done in the open: while it runs, what it says between steps and what it does (skills, subagents, test results, commits, PRs, screenshots) shows on Discord as it happens, typing on, secrets hidden. Where is yours to pick, on the new route: "room" (a channel id), else the channel they asked in. Before you pick, read your ways and the recent talk there: they say where the user wants work shown and whether a channel is for chatting or for work (a server often keeps one channel per project under a 프로젝트 category; a missing one can be made there with the discord tool). When the work goes elsewhere, your line here just says where; your end line is said there; whether to say anything back where they asked, and what, is yours (the discord tool posts anywhere). "quiet": true keeps it to your start and end lines; "shots": false leaves pictures out. The same fields on an "append" move a job that is already running (say, when the user asks you to take it elsewhere).`;
 
 /** What main is told with the user's words from Discord: where they came from, and how to sound there. */
 export function ownerNote(m: DiscordMessage, a: AgentSettings, ways?: { path: string; text: string }): string {
@@ -490,14 +490,6 @@ async function mainSaid(replyId: string) {
   seen();
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
-  // its work showed in another channel: the same end line where it was asked, pointing there
-  const asking = msg.after ? taskById(msg.after)?.agent?.channel : undefined;
-  if (asking && asking !== channel) {
-    const there = `${text}\n자세한 건 <#${channel}> 봐`;
-    const back = await discordSend(asking, there).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
-    keepSaid(asking, back);
-    if (back.length) hearMine(asking, there);
-  }
 }
 
 /** the Discord channel a job of the agent reports to (its own, or the job it is under) */

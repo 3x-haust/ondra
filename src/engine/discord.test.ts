@@ -206,14 +206,15 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalledWith(expect.anything(), "메인 답", expect.anything());
   });
 
-  it("work done in another channel: its end line is said there, and where it was asked with a pointer there", async () => {
+  it("work done in another channel: its end line is said there only; nothing stock is copied to where it was asked", async () => {
     await ready();
     setState("tasks", [{ id: "t8", title: "orbit 탭", entries: [], agent: { channel: "c1", room: "55555" } } as never]);
     const end = "orbit 탭 순서 고쳤어. 닫을 때 인덱스를 안 당겨서 꼬였던 거. PR https://github.com/3x-haust/orbit/pull/9";
     setState("captain", (l) => [...l, { id: "end8", at: 5, space: "home", project: "@agent", from: "captain", after: "t8", reply: end }]);
     said.hook?.("end8");
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", `${end}\n자세한 건 <#55555> 봐`));
-    expect(native.discordSend).toHaveBeenCalledWith("55555", end, undefined);
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("55555", end, undefined));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(native.discordSend).not.toHaveBeenCalledWith("c1", expect.anything());
   });
 
   it("lines said in a row are one request, answered once, at the last; every 👀 goes", async () => {
