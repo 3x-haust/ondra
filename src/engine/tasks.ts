@@ -29,6 +29,7 @@ import { prose, readFences } from "./fences";
 import { notesMarkdown, readNotes, writeNotes } from "./notes";
 import { commandKind, isTestRun, runsProgram, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitsOnly, waitStalled } from "./commandKind";
 import { causeFooting, checkEvidence, isBugFix, isCodeFile, leftovers, promisesLater, readUnverified, reproGap, reviewUnresolved, riskyChange, unbackedChecked, unbackedClaim, uncheckedLine, unreasoned } from "./proof";
+import { checksCovering, checksFor, checksOwed, loadLocalChecks } from "./localChecks";
 import { crosscheckMessage, isPlan, lensesOf, lensKids, planKids, lensText, REVIEW_FIX, reviewGoing, reviewName, reviewSettled } from "./crosscheck";
 import { readMemoryCheck, settleMemory } from "./memcheck";
 import { addMemory, KINDS, markUsed, memoryLines } from "./memory";
@@ -1402,6 +1403,8 @@ export async function startTask(id: string, resume = false, rewind?: { from: str
     const talkOnly = !canUseTools(account.id, model);
     if (talkOnly && !resume) updateTask(id, (x) => void push(x, { kind: "note", text: "이 모델은 도구를 못 써서 대화만 해요" }));
     await prepareQuery(relatedQuery(t));
+    // this user's own checks for the project, as they are now (a check job may have just added one)
+    if (!t.parentId) await loadLocalChecks().catch(() => []);
     // the memory given at the first start is kept for every later session (a
     // stable prompt); later saves reach the next job
     if (!t0.memorySnapshot) {
@@ -2359,7 +2362,7 @@ async function leftoversOwed(t: Task, codeFiles: Set<string>): Promise<string[]>
 }
 
 /** what sends a job back only once: the second time it is written down as unchecked instead */
-const SOFT = new Set(["확인 안 한 말", "재현", "계획", "건너뛴 단계", "확인 못 한 이유", "원인 근거", "확인 안 한 라벨", "언어"]);
+const SOFT = new Set(["확인 안 한 말", "재현", "계획", "건너뛴 단계", "확인 못 한 이유", "원인 근거", "확인 안 한 라벨", "언어", "로컬 검사"]);
 const SOFT_NOTE: Record<string, string> = {
   "확인 안 한 말": "답에서 확인했다고 한 말 중 이 세션 기록으로 뒷받침되지 않는 게 있어요",
   재현: "고치기 전·후 재현 기록이 없어요",
@@ -2367,6 +2370,7 @@ const SOFT_NOTE: Record<string, string> = {
   "건너뛴 단계": "계획에서 이유 없이 남은 단계가 있어요",
   "확인 못 한 이유": "확인 못 한 항목 중 이유가 없는 게 있어요",
   언어: "답의 일부가 영어로 쓰였어요",
+  "로컬 검사": "이 프로젝트의 로컬 검사를 돌리지 않았거나 실패한 채로 끝냈어요",
   "원인 근거": "원인에 근거 라벨이 없어요",
   "확인 안 한 라벨": "(확인함)을 붙였지만 돌린 기록이 없는 말이 있어요",
 };
@@ -2398,6 +2402,15 @@ async function proofMissingAll(t: Task, run: Run, checked: Evidence[]): Promise<
     owed.lines.push("- 답이 영어예요. 사용자는 한국어로 써요: 같은 내용을 한국어로 다시 써서 done으로 보내 줘.");
   }
   const wrote = t.entries.filter((e) => e.kind === "tool" && (e.tool.kind === "edit" || e.tool.kind === "write") && e.tool.ok !== false && !e.tool.note);
+  // this user's own checks for the project that the work falls under: run, and passing
+  if (!t.parentId) {
+    const files = wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && isCodeFile(p, t));
+    const covering = checksCovering(t, checksFor(projectById(t.project, t.space)?.folder ?? t.cwd), files);
+    const at = Date.now();
+    for (const r of covering) if (r.ran && r.ok !== undefined) setState("checkRuns", (m) => ({ ...(m ?? {}), [r.check.name]: { at, ok: r.ok!, task: t.id } }));
+    const lines = checksOwed(covering);
+    if (lines.length) (owed.needs.push("로컬 검사"), owed.lines.push(...lines));
+  }
   // looked things up, answered: nothing to prove but its reasons
   if (!wrote.length) return owed.needs.length ? { needs: owed.needs, label: owed.needs.join(" · "), ask: ["끝내기 전에 빠진 게 있어요.", ...owed.lines, "안 해 본 걸 했다고 하지 말고, 고친 뒤 다시 done으로 끝내 줘."].join("\n") } : null;
   // the job's code: not its notes, data, or what it wrote in the artifacts folder (reports and their scripts)

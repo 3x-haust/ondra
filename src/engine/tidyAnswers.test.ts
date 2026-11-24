@@ -78,6 +78,12 @@ describe("a rule said again becomes a check", () => {
     expect(wantsCheck({ ...ok, from: "~/.claude/projects/-Users-u-Work-acme/memory/user-korean.md" }, now)).toBe(false);
   });
 
+  it("puts the user's own rule in a local check on this Mac, everyone's in the repository", () => {
+    const ask = checkAsk("릴리즈 노트는 한국어 글머리표로", "rule", 0, "~/Work/acme");
+    expect(ask).toMatch(/- Everyone's:[^\n]*goes into the repository[^\n]*AGENTS\.md[^\n]*"merge"/);
+    expect(ask).toMatch(/- This user's own:[^\n]*Nothing goes into the repository[^\n]*\/checks\/<short-name>\/[^\n]*"project":"~\/Work\/acme"[^\n]*nothing to merge/);
+  });
+
   it("leaves rules about how the agent talks to the user alone, even in the agent's own repo", () => {
     expect(checkAsk("답은 한국어로")).toMatch(/how the agent talks to or works with the user[^\n]*change nothing, even when this repository is the agent's own source/);
   });
@@ -94,7 +100,7 @@ describe("a rule said again becomes a check", () => {
     });
     expect(await growChecks(undefined, now)).toBe(1);
     expect(made).toHaveLength(1);
-    expect(made[0]).toMatchObject({ space: "work", project: "acme", cwd: "~/Work/acme", ask: checkAsk(rule) });
+    expect(made[0]).toMatchObject({ space: "work", project: "acme", cwd: "~/Work/acme", ask: checkAsk(rule, "rule", 0, "~/Work/acme") });
     expect(made[0].ask).toContain('{"type":"merge","kind":"fix"}');
     // the user doesn't know about it and is never asked
     expect(made[0].self).toBe("check");
@@ -105,7 +111,7 @@ describe("a rule said again becomes a check", () => {
     // done: the next rule goes, the first is not handed over again
     setState("tasks", (t) => t.id === "t1", "status", "done");
     expect(await growChecks(undefined, now)).toBe(1);
-    expect(made.map((f) => f.ask)).toEqual([checkAsk(rule), checkAsk("px 값 금지")]);
+    expect(made.map((f) => f.ask)).toEqual([checkAsk(rule, "rule", 0, "~/Work/acme"), checkAsk("px 값 금지", "rule", 0, "~/Work/acme")]);
     expect(await growChecks(undefined, now)).toBe(0);
   });
 

@@ -468,6 +468,43 @@ describe("fewer turns before done", () => {
   });
 });
 
+describe("this user's local checks", () => {
+  const check = { rule: "합계 계산은 정수 원 단위로만", project: "/workspace/example", run: "node {dir}/check.mjs", paths: ["src/total.ts"] };
+  const play = async (turns: Record<number, string>, entries: Entry[]) => {
+    await harness((agent, n, emit) => {
+      if (agent !== "t:job") return;
+      emit({ type: "agent_start" });
+      if (turns[n]) say(emit, turns[n]);
+      emit({ type: "agent_settled" });
+    });
+    vi.spyOn(native, "fsFiles").mockResolvedValue(["money/check.json", "money/check.mjs"]);
+    vi.spyOn(native, "fsRead").mockImplementation(async (p) => ({ text: p.endsWith("/money/check.json") ? JSON.stringify(check) : "", size: 1, binary: false }));
+    setState("tasks", [job({ entries })]);
+    await startTask("job", true);
+  };
+  const done = block({ type: "done", summary: "합계를 고쳤어요", evidence: [{ kind: "test", ref: "pnpm test", ok: true }] });
+  const edit = tool("e1", 1, "edit", "/workspace/example/src/total.ts");
+
+  it("are in the job's prompt, and a job that changed what one covers without running it is sent back once", async () => {
+    await play({ 1: `고쳤어요.\n${done}`, 2: `고쳤어요.\n${done}` }, [edit, tool("b2", 2, "bash", "pnpm test")]);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    const spawn = vi.mocked(native.agentSpawn).mock.calls[0][2].join("\n");
+    expect(spawn).toContain("# This user's local checks for this project");
+    expect(spawn).toContain("`node /tmp/ondra/checks/money/check.mjs`");
+    const prompts = sent("t:job", "prompt");
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("로컬 검사를 안 돌렸어요: 합계 계산은 정수 원 단위로만");
+    expect(state.tasks[0].unverified?.join("\n")).toContain("로컬 검사");
+  });
+
+  it("let a job that ran it and passed finish, and keep how it went for Settings", async () => {
+    await play({ 1: `고쳤어요.\n${done}` }, [edit, tool("b2", 2, "bash", "node /tmp/ondra/checks/money/check.mjs"), tool("b3", 3, "bash", "pnpm test")]);
+    await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
+    expect(sent("t:job", "prompt")).toHaveLength(1);
+    expect(state.checkRuns?.money).toMatchObject({ ok: true, task: "job" });
+  });
+});
+
 describe("subagents of a job that ended", () => {
   it("end with it instead of staying paused forever, also ones left from before", async () => {
     const kid = (id: string, status: Task["status"]): Task => job({ id, parentId: "job", status, title: id });

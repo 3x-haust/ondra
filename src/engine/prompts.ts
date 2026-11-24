@@ -1,6 +1,7 @@
 // System prompts. The first parts never change (no times, no ids) so every
 // session on an account shares one cached prefix:
 //   role + report format → user instructions → space rules → memory → task.
+import { checksFor, checksPrompt } from "./localChecks";
 import { projectNow } from "./journal";
 import { homeDir, projectById, spaceById, state } from "../state/store";
 import { notesPrompt } from "./notes";
@@ -1184,7 +1185,7 @@ export function handoffPrompt(t: Task): string {
 export function taskSystem(t: Task, notes?: string, model?: string): string[] {
   const space = spaceById(t.space);
   const project = t.project && !t.parentId ? projectById(t.project, t.space) : undefined;
-  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
+  return [forModel(t.parentId ? SUB_SYSTEM : TASK_SYSTEM, model), t.parentId ? "" : appCheckRules(), instructions(), spaceRules(space), memoryPrompt(memoriesFor(t.space, homeDir(t), t.reach)), project && notes !== undefined ? notesPrompt(project.name, notes) : "", t.parentId ? "" : checksPrompt(checksFor(projectById(t.project, t.space)?.folder ?? t.cwd)), inOpenNote(t), writesLikeTeammate(t)].filter(Boolean);
 }
 
 /** What the Discord agent's jobs post on GitHub reads like a teammate wrote it, not a generated report. */

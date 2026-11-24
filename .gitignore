@@ -18,3 +18,6 @@ remote/*/target/
 # Python byte-code from running bundled skill scripts (would ship inside the app)
 __pycache__/
 *.pyc
+
+# personal instructions for Claude Code in this checkout (never shared)
+CLAUDE.local.md
