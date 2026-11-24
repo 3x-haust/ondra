@@ -396,6 +396,23 @@ describe("the whole way round", () => {
     expect(decided("(skip)")).toBe("(skip)");
   });
 
+  it("someone else's lines in a row are one thing said, answered once; what they add meanwhile is taken in", async () => {
+    BURST.ms = 60;
+    await ready();
+    ways.text = "- 서버에서 나를 안 부른 말은 보고만 있다가 끼어들고 싶을 때만 말해";
+    const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, author: { id: "333", name: "지수민", bot: false }, content: id === "q1" ? `<@${BOT}> ${content}` : content, mentions: id === "q1" ? [BOT] : [] }) });
+    said.answer = "ㅋㅋㅋ 서운해하지 마";
+    say("q1", "시발 왜");
+    say("q2", "날 골라야지 미친놈아");
+    say("q3", "존나 서운해");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledTimes(1));
+    // one talk, all three lines in it
+    expect(said.prompts).toHaveLength(1);
+    expect(said.prompts[0]).toContain("시발 왜\n날 골라야지 미친놈아\n존나 서운해");
+    await new Promise((r) => setTimeout(r, 120));
+    expect(native.discordSend).toHaveBeenCalledTimes(1);
+  });
+
   it("two replies in one channel go out one after the other, not mixed", async () => {
     const { PACE } = await import("./discord");
     const pace = { ...PACE };

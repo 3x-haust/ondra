@@ -172,8 +172,6 @@ const posted = {
 /** per channel: what it said there, newest last (for "그거 지워") */
 const said = new Map<string, string[]>();
 const keepSaid = (channel: string, ids: string[]) => said.set(channel, [...(said.get(channel) ?? []), ...ids].slice(-50));
-/** per channel: talk with others goes one at a time */
-const talking = new Map<string, Promise<void>>();
 let unlisten: (() => void) | undefined;
 let unhook: (() => void) | undefined;
 let sweep: ReturnType<typeof setInterval> | undefined;
@@ -227,6 +225,9 @@ export function stopAgent() {
   heard.clear();
   for (const b of bursts.values()) clearTimeout(b.timer);
   bursts.clear();
+  for (const b of othersSaid.values()) clearTimeout(b.timer);
+  othersSaid.clear();
+  talkingIn.clear();
   answering.clear();
   sending.clear();
   lastIn.clear();
@@ -347,10 +348,58 @@ async function onMessage(m: DiscordMessage) {
   // not called: it looks on only when the user gave it ways of its own
   const ways = await readWays();
   if (!called && !ways) return;
-  const prev = talking.get(m.channel) ?? Promise.resolve();
-  const next = prev.then(() => talk(m, a, text, ways, called ? undefined : { owner })).catch((e) => logError("agent", `talk: ${e instanceof Error ? e.message : String(e)}`));
-  talking.set(m.channel, next);
-  await next;
+  heardFrom(m, a, text, ways, !!called, owner);
+}
+
+/**
+ * Someone else's lines, as their own: what they say in a row ("시발 왜", "날 골라야지", "존나
+ * 서운해") is one thing said, answered once after they stop, like the user's (BURST, TYPING).
+ * One talk at a time a channel; what they add while it answers waits, and is taken into that
+ * answer when it can be (sayLooked), else answered after.
+ */
+type Heard2 = { ms: DiscordMessage[]; texts: string[]; a: AgentSettings; ways: string; called: boolean; owner: boolean; from: number; due?: boolean; timer?: ReturnType<typeof setTimeout> };
+const othersSaid = new Map<string, Heard2>();
+/** channels where it is answering someone else now */
+const talkingIn = new Set<string>();
+
+function heardFrom(m: DiscordMessage, a: AgentSettings, text: string, ways: string, called: boolean, owner: boolean) {
+  const key = `${m.channel}|${m.author.id}`;
+  const b = othersSaid.get(key) ?? { ms: [], texts: [], a, ways, called: false, owner, from: Date.now() };
+  b.ms.push(m);
+  b.texts.push(text);
+  b.a = a;
+  b.ways = ways;
+  b.called ||= called;
+  othersSaid.set(key, b);
+  armOthers(key, BURST.ms);
+}
+
+function armOthers(key: string, ms: number) {
+  const b = othersSaid.get(key);
+  if (!b) return;
+  clearTimeout(b.timer);
+  const wait = Math.max(0, Math.min(ms, b.from + TYPING.most - Date.now()));
+  b.timer = setTimeout(() => {
+    b.due = true;
+    nextTalk(key.slice(0, key.indexOf("|")));
+  }, wait);
+}
+
+/** the next one whose lines are ready there, once it isn't answering anyone */
+function nextTalk(channel: string) {
+  if (talkingIn.has(channel)) return;
+  const key = [...othersSaid.keys()].find((k) => k.startsWith(`${channel}|`) && othersSaid.get(k)!.due);
+  if (!key) return;
+  const b = othersSaid.get(key)!;
+  othersSaid.delete(key);
+  talkingIn.add(channel);
+  const m = b.ms[b.ms.length - 1];
+  void talk(m, settings() ?? b.a, b.texts.join("\n"), b.ways, b.called ? undefined : { owner: b.owner })
+    .catch((e) => logError("agent", `talk: ${e instanceof Error ? e.message : String(e)}`))
+    .finally(() => {
+      talkingIn.delete(channel);
+      nextTalk(channel);
+    });
 }
 
 /** A click on its button, a pick in its menu, or a slash command: a choice on a question of its
@@ -774,6 +823,7 @@ function stopTyping(channel: string) {
 function stillTyping(channel: string, user: string) {
   const key = `${channel}|${user}`;
   if (bursts.has(key)) arm(key, TYPING.ms);
+  if (othersSaid.has(key) && !othersSaid.get(key)!.due) armOthers(key, TYPING.ms);
 }
 
 function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
@@ -1171,7 +1221,15 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   }
   // chiming in is a line in the talk, not an answer to that one message
   const heardAt = Date.parse(m.at);
-  const sent = await sayLooked(m.channel, out, since, a, watching || lastIn.get(m.channel) === m.id ? undefined : m.id, m.interaction, undefined, undefined, { at: Number.isFinite(heardAt) ? heardAt : since, said: text });
+  const theirs = `${m.channel}|${m.author.id}`;
+  const sent = await sayLooked(m.channel, out, since, a, watching || lastIn.get(m.channel) === m.id ? undefined : m.id, m.interaction, undefined, () => othersSaid.get(theirs)?.texts.slice() ?? [], { at: Number.isFinite(heardAt) ? heardAt : since, said: text });
+  // what they added meanwhile and it took in is answered: it doesn't go again
+  const more = othersSaid.get(theirs);
+  if (more && sent.took) {
+    more.ms.splice(0, sent.took);
+    more.texts.splice(0, sent.took);
+    if (!more.ms.length) clearTimeout(more.timer), othersSaid.delete(theirs);
+  }
   keepSaid(m.channel, sent.ids);
   if (sent.ids.length) hearMine(m.channel, sent.text);
 }
