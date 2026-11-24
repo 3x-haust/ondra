@@ -18,7 +18,7 @@ import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { macs } from "../ui/MacBar";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine, tilde } from "../engine/rpc";
-import { checksDir, command, loadLocalChecks, localChecks, setCheckOff, type LocalCheck } from "../engine/localChecks";
+import { checksDir, command, loadLocalChecks, localChecks, setCheckOff } from "../engine/localChecks";
 import { componentNote, componentOf } from "../engine/components";
 import {
   accountProviders,
@@ -152,16 +152,10 @@ export function GroupTitle(props: { title: string; children?: any }) {
 
 /**
  * The checks that hold the user's own ways in a project, kept on this Mac only (engine/localChecks.ts):
- * what each holds, where, its command and how its last run in a job went; one can be turned off.
+ * what each holds, where and its command (on hover); one can be turned off.
  */
 function LocalChecks() {
   onMount(() => void loadLocalChecks());
-  const last = (c: LocalCheck) => {
-    const r = state.checkRuns?.[c.name];
-    if (!r) return t("아직 안 돌렸어요");
-    const day = new Date(r.at).toLocaleDateString();
-    return r.ok ? t("통과 · {day}", { day }) : t("실패 · {day}", { day });
-  };
   return (
     <>
       <GroupTitle title={t("자동 검사")}>
@@ -175,7 +169,6 @@ function LocalChecks() {
           <For each={localChecks()}>
             {(c) => (
               <Row title={c.rule} desc={`${tilde(c.project)} · ${command(c)}`}>
-                <span class="set-note" title={state.checkRuns?.[c.name]?.task}>{last(c)}</span>
                 <Switch_ label={c.rule} on={!c.off} set={(v) => void setCheckOff(c, !v).catch(() => toast(t("검사 설정을 바꾸지 못했어요"), "bad"))} />
               </Row>
             )}

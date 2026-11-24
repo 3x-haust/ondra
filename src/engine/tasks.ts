@@ -2406,8 +2406,6 @@ async function proofMissingAll(t: Task, run: Run, checked: Evidence[]): Promise<
   if (!t.parentId) {
     const files = wrote.map((e) => (e.kind === "tool" ? (e.tool.detail ?? "").split("\n")[0].trim() : "")).filter((p) => p && isCodeFile(p, t));
     const covering = checksCovering(t, checksFor(projectById(t.project, t.space)?.folder ?? t.cwd), files);
-    const at = Date.now();
-    for (const r of covering) if (r.ran && r.ok !== undefined) setState("checkRuns", (m) => ({ ...(m ?? {}), [r.check.name]: { at, ok: r.ok!, task: t.id } }));
     const lines = checksOwed(covering);
     if (lines.length) (owed.needs.push("로컬 검사"), owed.lines.push(...lines));
   }
