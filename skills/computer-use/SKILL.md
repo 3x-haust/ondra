@@ -96,6 +96,11 @@ instructions.
    window moved (`WINDOW_MOVED`): look again, and if that is refused too, use refs
    or keys. A step that reports nothing on screen changed probably did nothing:
    see "When the app doesn't respond".
+   A step can name its element with `find: "보내기"` (its name as on screen)
+   instead of a ref, also one that only an earlier step brings up: it is found
+   when the step runs, waited for up to 3 s. `wait {for: "text", gone?, seconds?}`
+   holds until a text is on screen (or gone). Several matches, or none, stop the
+   batch and say which; use a ref then.
 4. `look {full?}` captures a PNG of the target app's window — only when you need
    pixels (a canvas, an image, a control missing from the screen). Image-only
    models cannot verify visual-only controls; report that rather than guessing.
@@ -178,8 +183,11 @@ decision or as evidence. Do not trade verification for fewer tokens.
 - A known shortcut or a settable field beats a walk through menus: `cmd+n`,
   `cmd+f`, `set-value` on a search field or a pop-up button (its exact item
   title). Opening a pop-up menu in a background app can stall its window.
-  Steps you already know go in one `act` with `steps` (up to 20); observe
-  before using anything they reveal.
+  Work like someone who knows the app: the whole stretch you can foresee goes in
+  one `act` with `steps` (up to 20), with `find` for what earlier steps reveal
+  and `wait` where the app takes a moment (a chat opening, a message going out).
+  Each of your turns costs seconds and a step milliseconds, so look again only
+  where the outcome is uncertain.
 - Before filling a form or spreadsheet, read around it: other tabs or sheets,
   notes, the values a drop-down allows. Use their exact wording and formats.
 - Save and Open sheets: put only the file name in the name field; for the

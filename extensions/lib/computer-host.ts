@@ -217,6 +217,57 @@ export class HostObservation {
     return parts.length ? parts.join(" · ").slice(0, 80) : undefined;
   }
 
+  /** The ref number the model sees for a helper id. */
+  refOf(id: string): number { return this.number(id); }
+
+  /** Whether a line of the current screen has this text (case and spacing aside). */
+  has(phrase: string): boolean {
+    const p = squash(phrase);
+    return !!p && this.lines.some((l) => squash(l.text).includes(p));
+  }
+
+  /**
+   * The element called `phrase` on the current screen, for a step that names it instead of
+   * giving a ref (it may only have appeared after an earlier step). Its own name (title,
+   * description, placeholder, a text's value) counts most, then the text inside it; a control
+   * wins over the text inside it, and for typing a field wins. Several equally good: `tied`.
+   */
+  locate(phrase: string, typing = false): { id?: string; tied: string[] } {
+    const p = squash(phrase);
+    if (!this.tree || !p) return { tied: [] };
+    type Hit = { n: HostNode; score: number; acts: boolean; up: HostNode[] };
+    const hits: Hit[] = [];
+    const walk = (n: HostNode, up: HostNode[]) => {
+      if (n.role !== "AXWindow") {
+        const own = [n.title, n.desc, n.placeholder, n.role === "AXStaticText" || TEXT_ROLES.has(n.role) ? n.value : undefined]
+          .filter((v): v is string => typeof v === "string").map(squash);
+        const acts = ACTING.has(n.role) || Array.isArray(n.actions);
+        let score = own.includes(p) ? 4 : own.some((v) => v.includes(p)) ? 2 : 0;
+        if (!score && acts) {
+          const inner = squash(this.label(n.id) ?? "");
+          score = inner === p ? 3 : inner.includes(p) ? 1 : 0;
+        }
+        if (score) hits.push({ n, score: score + (acts ? 0.5 : 0) + (typing && TEXT_ROLES.has(n.role) ? 1 : 0) - (n.enabled === false ? 1 : 0), acts, up });
+      }
+      for (const c of n.children ?? []) walk(c, [...up, n]);
+    };
+    walk(this.tree, []);
+    // a button's own text is the button
+    const acting = new Set(hits.filter((h) => h.acts).map((h) => h.n));
+    const kept = hits.filter((h) => !h.up.some((a) => acting.has(a)));
+    if (!kept.length) return { tied: [] };
+    const best = Math.max(...kept.map((h) => h.score));
+    const top = kept.filter((h) => h.score === best);
+    return top.length === 1 ? { id: top[0].n.id, tied: [] } : { tied: top.map((h) => h.n.id) };
+  }
+
+  /** A screen line for a helper id, as the model reads it ([12] button "Send"). */
+  lineOf(id: string): string {
+    const ref = this.number(id);
+    const l = this.lines.find((x) => x.ref === ref);
+    return l ? `[${ref}] ${l.text}` : `[${ref}]`;
+  }
+
   /** Whether the element is a button ([12] or helper id). */
   isButton(ref: string): boolean { return this.find(ref)?.role === "AXButton"; }
 
@@ -235,6 +286,18 @@ export class HostObservation {
     this.numbers = new Map(); this.byNumber = new Map();
   }
 }
+
+const squash = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase().normalize("NFC");
+const TEXT_ROLES = new Set(["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]);
+const ACTING = new Set(["AXButton", "AXLink", "AXMenuItem", "AXMenuBarItem", "AXCheckBox", "AXRadioButton", "AXPopUpButton",
+  "AXMenuButton", "AXComboBox", "AXTextField", "AXTextArea", "AXSearchField", "AXCell", "AXRow", "AXTab", "AXDisclosureTriangle", "AXSlider", "AXIncrementor"]);
+
+/** how long a step's `find` waits for its element to come up, and a `wait` by default / at most (ms) */
+export const FIND_MS = 3000;
+export const WAIT_MS = 5000;
+export const WAIT_MAX_MS = 15000;
+/** between two reads of the screen while waiting (ms) */
+const POLL_MS = 120;
 
 type Pending = { id: string; resolve: (r: HostResult) => void; reject: (e: Error) => void };
 
@@ -405,7 +468,13 @@ export class ComputerHostSession {
       const done: Record<string, unknown>[] = [];
       for (let i = 0; i < actions.length; i++) {
         try {
-          const r = await this.once(actions[i], i === actions.length - 1, signal, confirm);
+          const last = i === actions.length - 1;
+          if (actions[i].kind === "wait") {
+            done.push(await this.waitFor(actions[i], signal));
+            if (last) return { steps: done, observation: await this.showNow(signal) };
+            continue;
+          }
+          const r = await this.once(await this.locate(actions[i], signal), last, signal, confirm);
           const { observation, observationError, ...step } = r;
           done.push(step);
           if (i === actions.length - 1) return { steps: done, ...(observation ? { observation } : { observationError }) };
@@ -419,6 +488,60 @@ export class ComputerHostSession {
       }
       return { steps: done };
     });
+  }
+
+  /** Read the screen again without showing it (refs and `find` see it; the model's view stays). */
+  private async refresh(signal?: AbortSignal): Promise<void> {
+    const r = await this.helper.request("observe", { pid: this.requirePid(), full: false }, signal);
+    if (r.tree !== undefined) this.obs.accept(r.tree, { show: false });
+  }
+
+  /** The screen now, as a change from what the model last saw. */
+  private async showNow(signal?: AbortSignal): Promise<HostSnapshot> {
+    const r = await this.helper.request("observe", { pid: this.requirePid(), full: false }, signal);
+    const { changed: _, ...snap } = this.obs.accept(r.tree, {});
+    return snap;
+  }
+
+  /** Ask `test` of the screen, reading it again between tries, until it answers or `ms` pass. */
+  private async until<T>(test: () => T | undefined, ms: number, signal?: AbortSignal): Promise<T | undefined> {
+    const end = Date.now() + ms;
+    for (;;) {
+      const v = test();
+      if (v !== undefined || Date.now() >= end) return v;
+      await new Promise<void>((done, fail) => {
+        const t = setTimeout(done, POLL_MS);
+        signal?.addEventListener("abort", () => (clearTimeout(t), fail(new Error("Computer operation cancelled"))), { once: true });
+      });
+      await this.refresh(signal);
+    }
+  }
+
+  /** A step that names its element (find) instead of a ref: the element, once it is on screen. */
+  private async locate(action: HostAction, signal?: AbortSignal): Promise<HostAction> {
+    if (action.find === undefined) return action;
+    if (action.ref !== undefined) throw new Error("a step takes ref or find, not both");
+    const phrase = typeof action.find === "string" ? action.find.trim() : "";
+    if (!phrase || phrase.length > 120) throw new Error("find is the element's name as on screen (a short phrase)");
+    const typing = action.kind === "type" || action.kind === "set-value";
+    const got = await this.until(() => { const r = this.obs.locate(phrase, typing); return r.id || r.tied.length ? r : undefined; }, FIND_MS, signal);
+    if (!got) throw new Error(`FIND_NOT_FOUND: nothing called “${phrase}” on screen after ${FIND_MS / 1000} s`);
+    if (!got.id) throw new Error(`FIND_AMBIGUOUS: “${phrase}” fits ${got.tied.length}: ${got.tied.slice(0, 6).map((id) => this.obs.lineOf(id)).join("; ")}; use the ref of the one you mean`);
+    const { find: _, ...rest } = action;
+    return { ...rest, ref: this.obs.refOf(got.id) };
+  }
+
+  /** wait {for, gone?, seconds?}: until that text is on screen (or gone), read again and again. */
+  private async waitFor(action: HostAction, signal?: AbortSignal): Promise<HostResult> {
+    const phrase = typeof action.for === "string" ? action.for.trim() : "";
+    if (!phrase || phrase.length > 120) throw new Error("wait needs for: a short text to wait for on screen");
+    const gone = action.gone === true;
+    const ms = Math.min(WAIT_MAX_MS, Math.max(200, typeof action.seconds === "number" ? action.seconds * 1000 : WAIT_MS));
+    const t0 = Date.now();
+    await this.refresh(signal);
+    const ok = await this.until(() => (this.obs.has(phrase) !== gone ? true : undefined), ms, signal);
+    if (!ok) throw new Error(`WAIT_TIMEOUT: “${phrase}” ${gone ? "still on screen" : "not on screen"} after ${Math.round(ms / 100) / 10} s`);
+    return { kind: "wait", wait: { for: phrase, gone, after: Math.round((Date.now() - t0) / 100) / 10 } };
   }
 
   private async once(action: HostAction, show: boolean, signal?: AbortSignal, confirm?: HostConfirm): Promise<HostResult> {
