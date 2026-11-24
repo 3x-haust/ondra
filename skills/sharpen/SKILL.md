@@ -2,8 +2,8 @@
 name: sharpen
 description: >
   Before building something big or vague, find out what the user actually wants:
-  ask → spec → tickets, agree, then run the tickets in parallel. Rounds of
-  questions with one recommended answer each and a visible ambiguity score, a
+  ask → spec → tickets, agree, then run the tickets in parallel. One question at a
+  time, each with one recommended answer and a visible ambiguity score, a
   glossary of the project's words, a spec and vertical-slice tickets kept as
   GitHub issues or in the repo. Use when the user says 인터뷰해줘, 물어보고 해,
   털어줘, 그릴미, grill me, 딥인터뷰, 뾰족하게, "뭘 만들지 같이 정하자", "기능
@@ -40,7 +40,7 @@ Ask yourself what you actually know about what they want, and why.
 A spec and tickets are for big work. For medium work, the interview and a
 short spec are enough; build it in one job.
 
-## 01 ASK: rounds of questions
+## 01 ASK: one question at a time
 
 ### Facts are yours, decisions are theirs
 
@@ -62,8 +62,11 @@ settled, the ones you can ask now without guessing at answers you haven't
 heard. Don't ask about rental cars before it's settled whether the trip is to
 Jeju or Osaka.
 
-Ask the whole frontier as one round (at most 5), then wait. Their answers
-redraw the tree; the next frontier is the next round.
+Ask one question at a time, the way a person interviews: of the frontier,
+the one that matters most now (aim at the weakest part of the score). Wait
+for its answer, redraw the tree with it, then pick the next question; the
+answer often changes what is worth asking next. Never send several questions
+at once.
 
 ### One recommendation per question
 
@@ -74,29 +77,28 @@ offer a menu of alternatives: a list of options boxes their thinking in, and
 writing the answer is how they discover what they want. Put the reason for
 your recommendation in `why` (one line).
 
-Send a round as one ask block:
+Send each question as one ask block with a single question:
 
 ```json
 {"type":"ask",
  "questions":[
-   {"question":"지난 회차를 안 끝냈는데 새 회차가 생기면요?","recommend":"밀린 건 하나로 합쳐 최근 회차만 남겨요","why":"운동이 세 개씩 쌓이지 않게"},
-   {"question":"반복은 어떤 단위까지요?","recommend":"매일 · 매주","why":"지금 화면에서 고를 수 있는 게 이 둘이에요"}
+   {"question":"지난 회차를 안 끝냈는데 새 회차가 생기면요?","recommend":"밀린 건 하나로 합쳐 최근 회차만 남겨요","why":"운동이 세 개씩 쌓이지 않게"}
  ],
  "clarity":{"score":0.55,"parts":[{"label":"목표","score":0.8},{"label":"범위","score":0.5},{"label":"완료 기준","score":0.3},{"label":"제약","score":0.6}]}}
 ```
 
 In main, the same as an `ask` route with `questions` and `clarity`.
 
-Ondra shows the questions one card at a time (the recommendation is the only
-choice; any other answer they type in the chat box) and sends all the answers
-back together, one `"question" → answer` per line.
+Ondra shows it as a card (the recommendation is the only choice; any other
+answer they type in the chat box) and sends the answer back as
+`"question" → answer`. A block with several questions is cut to its first.
 
 Questions are in plain words, answerable from the question line alone. One
 decision per question.
 
 ### The ambiguity score
 
-After every round, score how clear each part is (0 to 1), honestly, from what
+After every answer, score how clear each part is (0 to 1), honestly, from what
 was said and found, not from how many questions were asked:
 
 | Part | New thing | Change to existing code |
@@ -108,22 +110,22 @@ was said and found, not from how many questions were asked:
 | 맞물림: how it fits the code and features already there | — | 0.20 |
 
 `clarity.score` = the weighted sum; the card shows it as 모호함 (1 − score).
-Aim each round at the weakest part, and say so in a line before the round
-("완료 기준이 제일 흐려서 그걸 물어볼게요"). Done asking when 모호함 is 20% or less
+Aim each question at the weakest part; when you move to another part, say so
+in a line ("완료 기준이 제일 흐려서 그걸 물어볼게요"). Done asking when 모호함 is 20% or less
 and the gates below pass. The user can stop at any time ("그만", "알아서 해"):
 then the rest is settled by your recommendations, and the spec says which
 decisions were made that way.
 
 ### Keep every thread
 
-A request with several parts keeps all of them: after a few rounds on one,
-come back to the others. When rounds only polish wording or narrow edge cases,
+A request with several parts keeps all of them: after a few questions on one,
+come back to the others. When questions only polish wording or narrow edge cases,
 offer to stop.
 
 ### Words: the glossary
 
 Whenever a word turns out to mean two things ("완료": this week's turn done, or
-the repetition ended?), settle it in the next round and write it down:
+the repetition ended?), settle it in the next question and write it down:
 
 ```json
 {"type":"remember","kind":"term","text":"완료 = 이번 회차를 끝냄. 반복을 그만두는 건 '반복 종료'"}
@@ -142,7 +144,7 @@ again.
   these up; ask if they aren't found.
 - Restate the goal in one short paragraph (what, for whom, what's out, how
   we'll know) and ask whether it's right: one question, its recommendation
-  "맞아요, 기획서로 정리해요". Their correction is another round.
+  "맞아요, 기획서로 정리해요". Their correction leads to the next question.
 
 ## 02 SPEC: write down what was agreed
 
@@ -194,7 +196,7 @@ Two ways; the project decides, once:
   GitHub.
 
 Search memory first (where this project keeps specs). If nothing says, make it
-the first question of the first round, recommending GitHub issues for a repo on
+the first question, recommending GitHub issues for a repo on
 GitHub with issues on, else local files, and remember the answer as a project
 decision. Never ask again.
 

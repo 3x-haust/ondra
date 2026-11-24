@@ -1,7 +1,8 @@
-// A round of questions (the sharpen skill): the questions whose answers don't wait on one
-// another, sent in one ask block. They show one at a time on the usual card (its one choice
-// is the recommendation; any other answer is typed in the chat box), the next at once with no
-// model turn, and all the answers go back together after the last.
+// A question of the sharpen skill's interview: one at a time, as a person asks: the answer
+// goes back before the next is chosen, so each question can follow from the last answer. It
+// shows on the usual card (its one choice is the recommendation; any other answer is typed in
+// the chat box). The machinery still carries a round of several (a card each, the answers back
+// together), but a block with several questions is cut to its first.
 import type { Block, Decision } from "../state/types";
 
 export type RoundQ = { question: string; recommend: string; note?: string };
@@ -25,8 +26,8 @@ export function readClarity(x: unknown): Clarity | undefined {
   return { score, ...(parts.length ? { parts } : {}) };
 }
 
-/** an ask block with "questions" (two or more is a round; one is a round of one) */
-export function readRound(b: any): { qs: RoundQ[]; clarity?: Clarity } | undefined {
+/** an ask block with "questions": its first (`most` 1), the rest asked after its answer, if still needed */
+export function readRound(b: any, most = 1): { qs: RoundQ[]; clarity?: Clarity } | undefined {
   if (!Array.isArray(b?.questions)) return undefined;
   const qs = (b.questions as any[])
     .map((q) => {
@@ -36,7 +37,7 @@ export function readRound(b: any): { qs: RoundQ[]; clarity?: Clarity } | undefin
       return { question: String(q?.question ?? "").trim(), recommend, ...(note ? { note } : {}) };
     })
     .filter((q) => q.question && q.recommend)
-    .slice(0, 6);
+    .slice(0, Math.min(6, most));
   if (!qs.length) return undefined;
   const clarity = readClarity(b.clarity);
   return { qs, ...(clarity ? { clarity } : {}) };

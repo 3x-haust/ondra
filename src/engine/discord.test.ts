@@ -387,6 +387,11 @@ describe("the whole way round", () => {
     emit({ kind: "message", message: msg({ id: "k2", author: { id: "222", name: "정원", bot: false }, content: "ㅋㅋ" }) });
     await new Promise((r) => setTimeout(r, 80));
     expect(native.discordSend).not.toHaveBeenCalled();
+    // thinking aloud with no word at the end, in Korean talk: only what is for them
+    said.answer = "The user is just joking, a short reply fits.\nㅋㅋㅋ 뭐래";
+    emit({ kind: "message", message: msg({ id: "k3", author: { id: "222", name: "정원", bot: false }, content: `<@${BOT}> 바보`, mentions: [BOT] }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(native.discordSend).mock.calls[0][1]).toBe("ㅋㅋㅋ 뭐래");
     expect(decided("ㅇㅇ\n잔다")).toBe("ㅇㅇ\n잔다");
     expect(decided("(skip)")).toBe("(skip)");
   });

@@ -48,6 +48,7 @@ import { initial, missing, type FormValues } from "./form";
 export { DEFAULT_VOICE } from "./agentVoice";
 import { DEFAULT_VOICE } from "./agentVoice";
 import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
+import { forThem, isKorean } from "./tongue";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -611,7 +612,7 @@ async function stillToSay(channel: string, text: string, since: number, a: Agent
     ).trim();
     const more = /\n?\(more\)\s*$/i.test(out);
     const t = (decided(out) === "(skip)" ? "(skip)" : out).replace(/\n?\(more\)\s*$/i, "").trim();
-    return { text: /^\(?skip\)?$/i.test(t) ? "" : t, folded: added.length > 0, more };
+    return { text: /^\(?skip\)?$/i.test(t) ? "" : forThem(t, isKorean(text, ...added)), folded: added.length > 0, more };
   } catch {
     return asIs;
   }
@@ -873,7 +874,9 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
  *  (as `asks` has it said, else plainly) */
 export function sayOf(msg: CaptainMessage, asks: Record<string, string> = {}): string {
   // (a question its reply already asked comes as "")
-  if (msg.error) return `앗 답을 못 만들었어: ${msg.error}`;
+  // the app's own word for what went wrong ("모델이 바빠요") is said; a raw one (English, from the
+  // model or the network) is for the log, not the channel
+  if (msg.error) return isKorean(msg.error) ? `앗 답을 못 만들었어: ${msg.error}` : "앗 답을 못 만들었어. 다시 말해 줘";
   const lines = [msg.reply?.trim() ?? ""];
   for (const r of msg.routes ?? []) {
     if (r.kind === "answer" && r.text.trim() && !sameStart(r.text, msg.reply)) lines.push(r.text.trim());
@@ -916,9 +919,10 @@ export async function askedLine(d: Decision, a: AgentSettings | undefined = sett
   if (a) {
     try {
       const { oneShot } = await import("./aside");
-      const out = (await oneShot(agentSpace(a), "~", askPrompt(a, d, about, said))).trim();
-      if (said && /^\(?skip\)?$/i.test(out)) return "";
-      if (chatty(out)) return out;
+      const out = decided((await oneShot(agentSpace(a), "~", askPrompt(a, d, about, said))).trim());
+      if (/^\(?skip\)?$/i.test(out)) return said ? "" : plainAsk(d, about);
+      const line = forThem(out, isKorean(d.question, about, voiceOf(a)));
+      if (chatty(line)) return line;
     } catch (e) {
       logError("agent", `ask line: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -966,7 +970,8 @@ async function mainSaid(replyId: string) {
   }
   // pictures in its words (![](path)) go up as pictures, not as their path
   const pics: string[] = [];
-  const text = sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")).trim();
+  const korean = isKorean(askedMsg?.text, msg.after ? taskById(msg.after)?.title : undefined, settings()?.voice ?? DEFAULT_VOICE);
+  const text = forThem(sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")).trim(), korean);
   if (!text && !pics.length) return seen();
   // a reply only when something was said since their words; right under them, just say it
   const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
@@ -1150,6 +1155,11 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
     out = out.slice(popped[0].length).trim();
   }
   if (!out || /^\(?skip\)?$/i.test(out)) return;
+  // its English thinking aloud, in Korean talk, isn't said (control words are read before this)
+  if (!/^\((take|work|react\s.+)\)$/i.test(out)) {
+    out = forThem(out, isKorean(text, ...before.map((x) => x.content)));
+    if (!out) return;
+  }
   // it was for it after all: the user's words as a request, anyone else's as a call
   if (watching && /^\(?take\)?$/i.test(out)) return watching.owner ? ownerTakes(m, a, text) : talk(m, a, text, ways);
   // someone else asked for something it has to go and look at: it goes, as work

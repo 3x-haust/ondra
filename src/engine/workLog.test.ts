@@ -144,3 +144,15 @@ describe("the agent's work, in the open", () => {
   });
 });
 
+
+describe("its words, in the user's language", () => {
+  it("an English mutter in Korean talk isn't for them; commands, code and names in Korean lines are", async () => {
+    const { forThem, englishLine } = await import("./tongue");
+    expect(englishLine("Sent once at the bottom. Releasing the session.")).toBe(true);
+    expect(englishLine("pnpm test 돌리는 중")).toBe(false);
+    expect(englishLine("`pnpm run build --watch now`")).toBe(false);
+    expect(englishLine("ok")).toBe(false);
+    expect(forThem("Checking the room first.\n방 확인했어\n```\nnpm run the whole build\n```", true)).toBe("방 확인했어\n```\nnpm run the whole build\n```");
+    expect(forThem("Running the tests now.", false)).toBe("Running the tests now.");
+  });
+});

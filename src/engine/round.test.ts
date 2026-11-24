@@ -13,15 +13,17 @@ const block = {
 
 describe("a round of questions (the sharpen skill)", () => {
   it("reads each question with one recommended answer: the first option when it came with several", () => {
-    const r = readRound(block)!;
+    const r = readRound(block, 3)!;
     expect(r.qs.map((q) => q.recommend)).toEqual(["최근 회차 하나만 남겨요", "매일 · 매주", "이번 회차를 끝냄"]);
     expect(r.qs[0].note).toBe("운동이 세 개씩 쌓이지 않게");
     expect(readRound({ type: "ask", question: "한 개", options: ["a"] })).toBeUndefined();
+    // asked as a person asks: one question, its answer back before the next
+    expect(readRound(block)!.qs.map((q) => q.question)).toEqual(["밀린 회차는 어떻게 할까요?"]);
     expect(readRound({ type: "ask", questions: [{ question: "", recommend: "x" }] })).toBeUndefined();
   });
 
   it("asks one at a time on the usual card: the recommendation is its only choice, anything else is typed in the chat box", () => {
-    const r = readRound(block)!;
+    const r = readRound(block, 3)!;
     const d = roundDecision({ id: "d1", taskId: "t", at: 1, context: [] }, r.qs, [], r.clarity);
     expect(d.question).toBe("밀린 회차는 어떻게 할까요?");
     expect(d.options[0]).toMatchObject({ label: "최근 회차 하나만 남겨요", primary: true, note: "운동이 세 개씩 쌓이지 않게" });
@@ -31,14 +33,14 @@ describe("a round of questions (the sharpen skill)", () => {
   });
 
   it("the last question of a round is the same card", () => {
-    const r = readRound(block)!;
+    const r = readRound(block, 3)!;
     const d = roundDecision({ id: "d", taskId: "t", at: 1, context: [] }, r.qs.slice(2), [{ q: "a", a: "b" }, { q: "c", a: "d" }]);
     expect(d.options.map((o) => o.id)).toEqual(["o0"]);
     expect(d.round).toMatchObject({ n: 3, total: 3 });
   });
 
   it("each answer brings the next question at once; the last sends all answers together", () => {
-    const r = readRound(block)!;
+    const r = readRound(block, 3)!;
     let d = roundDecision({ id: "d1", taskId: "t", at: 1, context: [] }, r.qs, []);
     let step = answerRound(d, "o0");
     expect(step.next?.question).toBe("반복 종류는요?");
@@ -70,7 +72,7 @@ describe("answering a round", () => {
     const { decide } = await import("./tasks");
     setState(reconcile(freshState()));
     setState("tasks", [{ id: "j", space: "home", topic: "", title: "반복", ask: "", cwd: "/r", status: "waiting", priority: 2, weight: "light", accountId: "default", createdAt: 1, now: "", plan: [], legs: [], entries: [], shells: [], inbox: [] } as never]);
-    const r = readRound(block)!;
+    const r = readRound(block, 3)!;
     setState("decisions", [roundDecision({ id: "d1", taskId: "j", at: 1, context: [] }, r.qs, [])]);
     await decide("d1", "o0");
     expect(state.decisions.map((d) => d.question)).toEqual(["반복 종류는요?"]);
