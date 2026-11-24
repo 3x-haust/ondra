@@ -8,6 +8,8 @@ description: >
   채널에선 조용히), and a feature or bug for Ondra (온드라 기능 추가, Ondra feature
   request, Ondra bug) turned into a short proposal and, when they say so, a pull request to
   3x-haust/ondra.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # Ondra

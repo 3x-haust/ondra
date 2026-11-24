@@ -15,6 +15,8 @@ The app passes them to every pi worker with `--skill`.
 | `modern-web-guidance` | Current HTML, CSS and client-side JS practice from the Chrome team, offline: 209 short guides (dialogs, popovers, forms, accessibility, performance…) found through `guides/INDEX.md`, read when UI code is written. |
 | `sharpen` | Big or vague work (인터뷰해줘, 물어보고 해, 뾰족하게): ask → spec → tickets, agree, then parallel. Rounds of questions with one recommended answer each and an ambiguity score, a glossary in memory (`term`), the spec and vertical-slice tickets as GitHub issues or local files, then one job per ticket with `after` for what blocks it. |
 | `goal-loop` | A goal to finish completely ("루프", "될 때까지", "100%"): the user's intent written as checks, then fix → re-check until all pass. |
+| `overnight` | The user leaving while work goes on (자러 갈게, 퇴근할게, 아침까지): main settles before they go what only they can answer; the fork runs unattended, decides what can be undone and logs it, prepares but doesn't take steps the user didn't allow, uses goal-loop only for fix-until-it-passes work, and stops at a real dead end with why. Adapted from pstack's overnight runs ([cursor/plugins](https://github.com/cursor/plugins), `pstack/docs/guide/07-overnight.md`, MIT); no text copied. |
+| `recap` | Catching the user up when they're back (따라잡기, 뭐 했어?, 일어났어): every job that moved since their last message, read from the jobs, PRs and decision logs, with the calls waiting on them first and decidable from the reply alone. Read-only. Adapted from pstack's `/ketchup` (MIT); no text copied. |
 | `qa` | QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검"): scope from a diff or the screen map, a risk-ordered plan, fast sweeps (`sweep.sh`), confirmed issues with evidence, report-only or fix until no P1/P2 remain. |
 | `coding-playbooks` | Bug fix, feature, refactoring and performance work in a repo that already runs, plus the PR: steps that become the job's plan (a skipped one keeps its reason), causes ruled out with runtime evidence, a new user-facing feature starting from a quick look at how two or three other products did it (three points with links, no report), the data shape before the logic, removing before adding, one change per measurement. The job's task names the playbook from its branch (fix/, feat/, refactor/, perf/); small changes and new apps skip it. |
 | `test-ci` | Tests and CI the way large open-source projects do them: behaviour tests that fail for real, local scripts first, a locked-down GitHub Actions workflow checked locally. |
@@ -46,6 +48,20 @@ metadata:
 
 The first match adds a short note to that tool's result. A skill the job has
 already read is not offered again until its conversation is compacted.
+
+## The / menu
+
+Every skill is offered to the work by the matching above. The `/skill:` menu
+lists only the ones a user starts on purpose (sharpen, goal-loop, qa, …). A
+skill the work picks up by itself and a user never calls (browser-use,
+device-use, visual-report, …) says so in its metadata, and Settings › 스킬
+lists it apart under 기본 · 알아서 써요 (`menuHidden` in
+`src/engine/skillMenu.ts`, held by `src/engine/skillMenu.test.ts`):
+
+```yaml
+metadata:
+  ondra-menu: 'hidden'
+```
 
 `ondra-browser --help` lists every browser command (`<command> --help` for
 one); these files carry the app's rules for using them.

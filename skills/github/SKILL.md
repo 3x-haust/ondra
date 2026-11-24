@@ -6,6 +6,7 @@ description: >
   the repo's way, reviewing, merging the way the repo merges, reading a failed CI run,
   releases and the API. Skip for plain git on a local branch.
 metadata:
+  ondra-menu: 'hidden'
   ondra-commands: '\bgh\s+(pr|issue|run|release|api|repo|workflow|auth)\b'
   ondra-urls: 'github\.com/[^/\s]+/[^/\s]+/(pull|issues|actions|releases)'
 ---

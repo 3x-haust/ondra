@@ -11,6 +11,7 @@ description: >
   how to report with visual-report blocks. Not for a public page you only need
   to read: web_fetch does that.
 metadata:
+  ondra-menu: 'hidden'
   ondra-commands: '\bondra-browser\b|(^|[\s/])browse\s'
 ---
 

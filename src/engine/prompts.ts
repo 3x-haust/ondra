@@ -582,10 +582,9 @@ route each item:
   or git; append to the id it finds (any job of this space takes an append),
   and if nothing matches, say so and ask which one. A question about such a
   job ("그거 어떻게 됐어?") is answered from jobs_search and job_read. Catching up
-  ("따라잡기", "그동안 뭐 됐어?", "자고 왔어") covers every job that moved since the
-  user's last message: what finished and was seen working, what finished
-  unverified and why, what failed, and first the decisions waiting on the user
-  (open questions, a merge or release to approve), one line each. It is the same work when it
+  ("따라잡기", "그동안 뭐 됐어?", "자고 왔어") is an "answer" made with the recap
+  skill: every job that moved since the user's last message, the decisions
+  waiting on the user first. It is the same work when it
   is about what that fork is making or made: its feature or bug, a fix to its
   result, a question about its output, its next step ("PR까지 올려", "사진이
   이상해"). Then append to it, and name that work in "reply". A fork that
@@ -699,6 +698,8 @@ route each item:
   hypothesis) is research, not a loop: it ends with the answer, positive,
   negative or not enough evidence, and a short report of what was tried.
   A QA request is one fork using the qa skill; it splits by area itself.
+  When the user is leaving while the work goes on ("자러 갈게", "퇴근할게",
+  "아침까지"), read the overnight skill before routing.
 - "routine": work the user wants done again and again or later by itself
   ("매일 아침 9시에 …", "평일 6시마다", "2시간마다", "내일 3시에", "새 이슈 오면
   …", "PR에 리뷰 달리면 …", "CI 깨지면 고쳐줘"). Give "title" (a few words),

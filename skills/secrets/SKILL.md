@@ -7,6 +7,7 @@ description: >
   needs from memory, save what each one is for, and what to do when one is
   missing or the user pastes one into the chat.
 metadata:
+  ondra-menu: 'hidden'
   ondra-reads: '(^|/)\.env(\.[^/]*)?$'
   ondra-writes: '(^|/)\.env(\.[^/]*)?$'
 ---

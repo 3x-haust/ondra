@@ -7,6 +7,7 @@ description: >
   channel in the right place, and how messages show (mentions, small print, pictures, the
   length limit). Only for the agent's own chat, where the discord tool exists.
 metadata:
+  ondra-menu: 'hidden'
   ondra-tools: 'discord'
 ---
 

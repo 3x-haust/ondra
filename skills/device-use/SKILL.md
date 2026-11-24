@@ -7,6 +7,7 @@ description: >
   emulator, iPhone, Android, 앱 화면, 시뮬레이터, 에뮬레이터, or needs the mobile app
   checked. The user watches and can drive the same device in the app's 디바이스 hub.
 metadata:
+  ondra-menu: 'hidden'
   ondra-tools: 'device'
   ondra-commands: '\b(xcrun simctl|adb|idb|maestro)\b'
 ---

@@ -7,6 +7,7 @@ description: >
   which library fits each change, keeping an existing file's look, and checking
   the result as page pictures before handing it over.
 metadata:
+  ondra-menu: 'hidden'
   ondra-reads: '\.(docx?|docm|xlsx|xlsm|xls|pptx|pptm|ppt|hwpx?|pdf)$'
   ondra-writes: '\.(docx|xlsx|xlsm|pptx|hwpx)$'
   ondra-commands: '\b(pdftotext|pdftoppm|pypdf|pypdfium2|openpyxl|python-docx|python-pptx|soffice|libreoffice)\b'

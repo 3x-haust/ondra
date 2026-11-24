@@ -1,6 +1,8 @@
 ---
 name: visual-report
 description: Pictures and charts drawn in Ondra's chat — diagrams of code and systems, charts, graphs and visual reports (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화). Its More charts catalog lists every figure type. Everyday progress blocks need none of this; it draws only in the chat.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # Visual report
@@ -111,6 +113,30 @@ Every box is something you read or changed: `state` new / changed / gone for
 what the work touched, `ref` = absolute path:line for code, `by`: user / agent
 for who decided it. When a change spans several parts, one such picture of how
 the part works now and where the change goes (3–9 nodes) replaces a paragraph.
+
+### Architecture pictures
+
+Explaining how a codebase or system is built (`arch`, then `sequence`, then
+`tree` + `table`). A repo with a code map gets these from the code-map
+skill's `codemap blocks`; the rules are the same without one.
+
+- **System first.** One `arch` of the containers and outside systems with
+  only the main lines (one line per pair of boxes, both verbs on it when they
+  talk both ways), and 2–4 sentences. Then offer the containers to open
+  ("엔진 · 화면 · 셸 중 어디를 더 볼까요?"). An opened container shows its parts
+  and its neighbours; an opened part shows its files (`tree` + `table`).
+- A question about one place ("결제는 어디서 처리돼?") gets that part's
+  picture, not the whole system.
+- Two pictures a message at most.
+- A line's label says what happens as a newcomer would say it ("작업 시작",
+  "진행과 결과 돌려주기"), never a function, event or command name
+  (`agent_spawn`, `bridge:call`, `invoke`).
+- A flow (`sequence`) is one user request as a story: 3–8 steps, six parts at
+  most and at one level (containers or components, not both), each step a
+  short plain sentence ("작업 지시 보내기"). Part names fit a narrow column:
+  10 characters at most.
+- A real product gets a `logo`; never guess one from a brand word inside a
+  label (`파일·git`).
 
 ## More charts
 
