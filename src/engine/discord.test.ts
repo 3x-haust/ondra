@@ -62,6 +62,24 @@ describe("how it sounds", () => {
     expect(ownerNote(msg(), { ...agent, voice: "존댓말로 짧게" })).toContain("존댓말로 짧게");
   });
 
+  it("sees what was said after their words, its own lines too, and lets an answered one pass", () => {
+    const later = [msg({ id: "m2", author: { id: BOT, name: "메타몽", bot: true }, content: "역도" })];
+    const p = talkPrompt(agent, "지수민", [], "아니 끝말잇기 계속 ㄱㄱ", BOT, "", undefined, "", Date.now(), later);
+    expect(p).toContain("# 이 말이 올라온 뒤에 오간 말");
+    expect(p).toContain("메타몽(너): 역도");
+    expect(p).toContain("이미 답이 됐거나");
+    expect(talkPrompt(agent, "지수민", [], "ㅎㅇ", BOT)).not.toContain("올라온 뒤에");
+  });
+
+  it("someone else may have it look at things; sending or changing waits for the owner's own OK", async () => {
+    const { othersNote } = await import("./discord");
+    expect(OTHERS_RULES).toContain("(work)");
+    const note = othersNote(msg({ author: { id: "77", name: "지수민", bot: false } }), agent);
+    expect(note).toContain("They are not the user");
+    expect(note).toContain("needs the user's OK first");
+    expect(note).toContain("only the user's own answer counts");
+  });
+
   it("is a person talking, not a list of rules", () => {
     expect(DEFAULT_VOICE).toContain("너만의 생각이랑 취향");
     expect(DEFAULT_VOICE).toContain("주인한테는 반말");
