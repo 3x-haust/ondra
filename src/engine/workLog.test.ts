@@ -188,6 +188,23 @@ describe("the agent's work, in the open", () => {
     expect(sent).toHaveLength(2);
   });
 
+  it("the smaller steps show under theirs, and one of them getting done goes up too", async () => {
+    setState("tasks", [job({ agent: { channel: "c1" }, plan: [] })]);
+    await workTick(1000);
+    const plan = (a: string, b: string) =>
+      setState("tasks", (t) => t.id === "t1", "plan", [
+        { text: "원인 찾기", state: "done" },
+        { text: "고치기", state: "now", sub: [{ text: "캐시 키 바꾸기", state: a }, { text: "만료 처리", state: b }] },
+        { text: "테스트", state: "todo" },
+      ] as never);
+    plan("now", "todo");
+    await workTick(2000);
+    expect(sent).toEqual([["c1", "-# 할 일 1/3\n✅ 원인 찾기\n▶️ 고치기\n　▶️ 캐시 키 바꾸기\n　⬜ 만료 처리\n⬜ 테스트"]]);
+    plan("done", "now");
+    await workTick(3000);
+    expect(sent[1]).toEqual(["c1", "-# 할 일 1/3\n✅ 원인 찾기\n▶️ 고치기\n　✅ 캐시 키 바꾸기\n　▶️ 만료 처리\n⬜ 테스트"]);
+  });
+
   it("what came before Ondra was watching isn't replayed", async () => {
     setState("tasks", [job({ agent: { channel: "c1" }, entries: [entry({ kind: "text", text: "옛날 말" }, 10)] })]);
     await workTick(1000);

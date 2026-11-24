@@ -11,6 +11,7 @@ import { expand } from "./rpc";
 import { state } from "../state/store";
 import type { Entry, PlanStep, Task } from "../state/types";
 import { forThem, tongueOf } from "./tongue";
+import { planCount } from "../state/progress";
 
 type Watch = { seen: Set<string>; typingAt: number; busy?: boolean; pictures?: string[]; saidAt?: number; askedAt?: number; plan?: string };
 const watching = new Map<string, Watch>();
@@ -115,19 +116,17 @@ function lineOf(t: Task, e: Entry, w: Watch): string | undefined {
 }
 
 const MARK = { done: "✅", now: "▶️", todo: "⬜", skip: "➖" } as const;
-const flat = (plan: PlanStep[]) => plan.flatMap((s) => [s, ...(s.sub ?? [])]);
 /** what of a plan is worth showing again: its steps and which are done or skipped */
 const planKey = (plan?: PlanStep[]): string => (plan ?? []).map((s) => `${s.text}|${s.state === "done" || s.state === "skip" ? s.state : ""}|${planKey(s.sub)}`).join("\n");
 
 /** The job's checklist as Discord shows it: "-# 할 일 2/5", then a line a step. */
 export function checklist(t: Pick<Task, "plan" | "title" | "ask">): string {
   const plan = t.plan ?? [];
-  const steps = flat(plan).filter((s) => !s.sub?.length);
-  const done = steps.filter((s) => s.state === "done").length;
-  const all = steps.filter((s) => s.state !== "skip").length;
+  // the count the app shows (steps done of all); the smaller steps are listed under theirs
+  const { label } = planCount(plan);
   const cut = (s: string) => (s.length > 120 ? `${s.slice(0, 120)}…` : s);
   const line = (s: PlanStep, pad = "") => `${pad}${MARK[s.state]} ${s.state === "skip" ? `~~${cut(s.text)}~~` : cut(s.text)}`;
-  const head = tongueOf(t.title, t.ask) === "Korean" ? `-# 할 일 ${done}/${all}` : `-# To-do ${done}/${all}`;
+  const head = tongueOf(t.title, t.ask) === "Korean" ? `-# 할 일 ${label}` : `-# To-do ${label}`;
   const rows = plan.flatMap((s) => [line(s), ...(s.sub ?? []).map((x) => line(x, "　"))]);
   return [head, ...rows.slice(0, 20), ...(rows.length > 20 ? [`… +${rows.length - 20}`] : [])].join("\n");
 }
