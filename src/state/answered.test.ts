@@ -23,4 +23,13 @@ describe("answered questions in main", () => {
   it("leaves out the Discord agent's jobs", () => {
     expect(answeredIn([job("bot", { agent: {} })], { after: 0 })).toEqual([]);
   });
+
+  it("finds an answer added to a transcript it already read, and starts over when lines are dropped", () => {
+    const t = job("root");
+    expect(answeredIn([t], { after: 0 })).toHaveLength(1);
+    t.entries.push({ id: "root-b", at: 200, kind: "user", text: '"머지할까요?" → 머지' });
+    expect(answeredIn([t], { after: 0 }).map((a) => a.a)).toEqual(["PR로 올리기", "머지"]);
+    t.entries.splice(0, 1);
+    expect(answeredIn([t], { after: 0 }).map((a) => a.a)).toEqual(["머지"]);
+  });
 });

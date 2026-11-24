@@ -24,8 +24,9 @@ const stateWith = (tasks: Task[]): AppState => ({ ...freshState(), tasks });
 const fileOf = (s: Saver, st: AppState, held = new Map<string, string>()) => {
   const p = s.build(st);
   for (const [k, v] of Object.entries(p.tasks)) held.set(k, v);
-  s.sentAll(p.order);
-  const text = joinParts(p.head, p.order, (k) => held.get(k));
+  for (const [k, v] of Object.entries(p.fields)) held.set(`f:${k}`, v);
+  s.sentAll(p);
+  const text = joinParts(p, (k) => held.get(`f:${k}`), (k) => held.get(k));
   const back = JSON.parse(text) as AppState;
   return { parts: p, text, back: { ...back, tasks: back.tasks.map(unpackTask) } };
 };
@@ -91,7 +92,34 @@ describe("saving only what changed", () => {
     st.settings.theme = "dark";
     const { parts, back } = fileOf(s, st, held);
     expect(parts.tasks).toEqual({});
+    // and of the other fields, only that one (and one more in turn, as a safety net)
+    expect(Object.keys(parts.fields)).toContain("settings");
+    expect(Object.keys(parts.fields).length).toBeLessThanOrEqual(2);
     expect(back.settings.theme).toBe("dark");
+  });
+
+  it("sends every field first, then only the ones written", () => {
+    const st = stateWith([job("a")]);
+    const s = new Saver(0);
+    const held = new Map<string, string>();
+    const first = fileOf(s, st, held);
+    expect(Object.keys(first.parts.fields).sort()).toEqual(Object.keys(st).filter((k) => k !== "tasks" && st[k as keyof AppState] !== undefined).sort());
+    expect(first.back).toEqual(clone(st));
+    s.mark(["memory", []], st);
+    const { parts, back } = fileOf(s, st, held);
+    expect(parts.fields.memory).toBeUndefined(); // written, but no different
+    expect(back).toEqual(clone(st));
+  });
+
+  it("picks up a field changed around setState within a round of saves", () => {
+    const st = stateWith([job("a")]);
+    const s = new Saver(0);
+    const held = new Map<string, string>();
+    fileOf(s, st, held);
+    st.settings.instructions = "behind its back";
+    let back: AppState | undefined;
+    for (let i = 0; i < Object.keys(st).length; i++) back = fileOf(s, st, held).back;
+    expect(back!.settings.instructions).toBe("behind its back");
   });
 
   it("re-serializes everything when the list is replaced, but sends only what differs", () => {

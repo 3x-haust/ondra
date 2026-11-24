@@ -361,7 +361,7 @@ pub async fn browser_stream_port(app: AppHandle, worker_id: String, space: Optio
 
 /// The skills every worker gets, as SKILL.md paths for `--skill`.
 /// Engine extensions every worker loads (permission modes).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn worker_extensions(app: AppHandle) -> Vec<String> {
     let bundled = app.path().resource_dir().ok().map(|d| d.join("app-extensions"));
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../extensions");
@@ -453,7 +453,7 @@ pub struct GlobalSkill {
     description: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn global_skills() -> Vec<GlobalSkill> {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return vec![] };
     let mut out = Vec::new();
@@ -876,7 +876,7 @@ pub fn space_gh_login(app: AppHandle, space: String, home: Option<String>) -> Re
 }
 
 /** Sets the name and email this space commits with (empty: the one in ~/.gitconfig). */
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_git_identity(app: AppHandle, space: String, home: Option<String>, name: String, email: String) -> Result<(), String> {
     let base = cli_home(&app, &space, home.clone());
     if let Some(b) = &base {

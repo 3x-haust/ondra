@@ -33,7 +33,7 @@ pub struct PetOnDisk {
 }
 
 /// The pets jobs made: every folder in <data>/pets with a pet.json.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pet_list(app: AppHandle) -> Vec<PetOnDisk> {
     let dir = pets_dir(&app);
     let mut out = vec![];

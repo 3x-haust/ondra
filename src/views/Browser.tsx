@@ -46,13 +46,33 @@ export function BrowserView(_props: { embedded?: boolean }) {
         setFailed(true);
       });
   };
+  // Followed frame by frame only while something moves (a resize, a panel sliding, the palette
+  // or the space changing), and looked at a few times a second otherwise: a loop on every frame
+  // kept the window drawing at full rate for as long as the browser was open.
   let frame = 0;
+  let until = 0;
   const tick = () => {
     place();
-    frame = requestAnimationFrame(tick);
+    frame = performance.now() < until ? requestAnimationFrame(tick) : 0;
   };
+  const wake = () => {
+    until = performance.now() + 700;
+    if (!frame) frame = requestAnimationFrame(tick);
+  };
+  createEffect(() => (paletteOpen(), browserTarget(), state.space, wake()));
   onMount(() => {
-    frame = requestAnimationFrame(tick);
+    wake();
+    const ro = new ResizeObserver(wake);
+    ro.observe(area);
+    ro.observe(document.body);
+    const moving = ["resize", "transitionrun", "transitionend", "animationend"] as const;
+    for (const e of moving) window.addEventListener(e, wake, true);
+    const slow = setInterval(place, 250);
+    onCleanup(() => {
+      ro.disconnect();
+      for (const e of moving) window.removeEventListener(e, wake, true);
+      clearInterval(slow);
+    });
     const off = onInBrowserPage((p) => {
       // each space has its own page; another space's loads aren't this toolbar's
       if (p.space && p.space !== state.space) return;

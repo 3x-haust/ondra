@@ -6,11 +6,11 @@ import { isBeta } from "../lib/beta";
 import { UpdateButton } from "../ui/UpdateButton";
 import { switchSpace } from "../state/workspace";
 import { MacBar } from "../ui/MacBar";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createRoot, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { anyPop } from "../ui/ModelPicker";
 import { taskDiff, discarded, endTime } from "../state/progress";
 import { foldLabel, stale } from "../state/fold";
-import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead } from "../state/store";
+import { AGENT_CHAT, addProject, agentDecisions, decisionsIn, projectsShown, removeProject, renameProject, kidsOf, state, taskById, tasksShown, listed, carriedOn, lineHead, allTasks } from "../state/store";
 import { mirror, splitProjectId } from "../state/mirror";
 import { hostState } from "../ui/ComputerPicker";
 import { pickFolder, revealPath } from "../lib/native";
@@ -63,16 +63,38 @@ const openRoot = () => {
   return t && lineHead(t).id;
 };
 
+/** The follow-ups that carry each job on (by the job's id), kept as jobs come and go: the
+ *  sidebar walks every row's line each second, and a scan of all jobs per row per step made
+ *  that O(jobs²) of store reads on the clock alone. */
+const followers = createRoot(() =>
+  createMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const x of allTasks()) {
+      if (!x.follows || !listed(x) || !carriedOn(x)) continue;
+      const l = m.get(x.follows);
+      if (l) l.push(x);
+      else m.set(x.follows, [x]);
+    }
+    return m;
+  }),
+);
 /** every job down a job's line of follow-ups, oldest first */
 function followUps(t: Task): Task[] {
+  const by = followers();
+  if (!by.has(t.id)) return [];
   const out: Task[] = [];
   const seen = new Set([t.id]);
-  let ring = new Set([t.id]);
-  while (ring.size) {
-    const next = tasksShown(t.space).filter((x) => !seen.has(x.id) && listed(x) && ring.has(x.follows ?? "") && carriedOn(x));
-    for (const x of next) seen.add(x.id);
-    out.push(...next);
-    ring = new Set(next.map((x) => x.id));
+  let ring = [t.id];
+  while (ring.length) {
+    const next: string[] = [];
+    for (const id of ring)
+      for (const x of by.get(id) ?? []) {
+        if (seen.has(x.id)) continue;
+        seen.add(x.id);
+        out.push(x);
+        next.push(x.id);
+      }
+    ring = next;
   }
   return out.sort((a, b) => a.createdAt - b.createdAt);
 }
@@ -457,11 +479,14 @@ export function Sidebar() {
   // doesn't move it back up: it shows where it is, in its group's done fold
   // a job paused and left for days folds away with them: nothing will pick it up by itself
   const old = (t: Task) => lineOf(t).every((x) => stale(x, soon()) || (!x.pinned && ended(x) && (x.finishedAt ?? x.createdAt) < soon() - DONE_FOR));
-  const shown = createMemo(() => roots().filter((t) => !old(t)));
+  // worked out once a tick for every row, not again by each project's done fold
+  const olds = createMemo(() => new Set(roots().filter(old).map((t) => t.id)));
+  const isOld = (t: Task) => olds().has(t.id);
+  const shown = createMemo(() => roots().filter((t) => !isOld(t)));
   const filed = (t: Task) => !!t.project && projectsShown(state.space).some((p) => p.id === t.project);
   // jobs not filed under a project row (no project, or one not in this space)
   const loose = createMemo(() => shown().filter((t) => !filed(t)));
-  const looseDone = createMemo(() => roots().filter((t) => old(t) && !filed(t)));
+  const looseDone = createMemo(() => roots().filter((t) => isOld(t) && !filed(t)));
   const needs = createMemo(() => every().filter(needsYou).length);
   const boardLive = () => every().filter((t) => t.status === "running").length;
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
@@ -507,13 +532,20 @@ export function Sidebar() {
         class="sb-scroll"
         ref={(el) => {
           // more rows below the fold: the list fades out at the bottom instead of a clean cut
-          const mark = () => el.classList.toggle("more", el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+          // measured once a frame at most: a row's clock ticking each second is a DOM change too,
+          // and measuring on each one forced a layout every time
+          let frame = 0;
+          const mark = () =>
+            void (frame ||= requestAnimationFrame(() => {
+              frame = 0;
+              el.classList.toggle("more", el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+            }));
           el.addEventListener("scroll", mark, { passive: true });
           const ro = new ResizeObserver(mark);
           ro.observe(el);
           const mo = new MutationObserver(mark);
           mo.observe(el, { childList: true, subtree: true });
-          onCleanup(() => (ro.disconnect(), mo.disconnect()));
+          onCleanup(() => (ro.disconnect(), mo.disconnect(), cancelAnimationFrame(frame)));
         }}
       >
         <button class="sb-row sb-main" classList={{ on: view().name === "main" && !curProject() && !newTaskOpen() }} onClick={() => goMain()} data-shortcut="main">
@@ -597,7 +629,7 @@ export function Sidebar() {
               const live = () => tasksShown(p.space).filter((t) => t.project === p.id && !t.parentId && t.status === "running").length;
               // this project's jobs live under it; open by default while one is going or needs you
               const jobs = createMemo(() => shown().filter((t) => t.project === p.id));
-              const done = createMemo(() => roots().filter((t) => old(t) && t.project === p.id));
+              const done = createMemo(() => roots().filter((t) => isOld(t) && t.project === p.id));
               // the number and the fold go by what the row holds: its jobs and its done fold
               const all = () => jobs().length + done().length;
               const open = () => fold(`p:${p.id}`) ?? (curProject() === p.id || jobs().some((t) => !ended(t)) || [...jobs(), ...done()].some((t) => t.id === openRoot()));

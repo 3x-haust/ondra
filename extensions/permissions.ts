@@ -182,6 +182,10 @@ export function broadKill(command: string, cwd = ""): string | undefined {
 export function foreignData(text: string, data: string, allowed: string[], space = ""): string | undefined {
   if (!data || !text.includes(data)) return undefined;
   if (text.includes(`${data}/state.json`)) return "state.json";
+  if (text.includes(`${data}/state-before-parts.json`)) return "state-before-parts.json";
+  // the state as parts (store.rs): the folder, or anything in it
+  const parts = `${data}/state`;
+  for (let at = text.indexOf(parts); at >= 0; at = text.indexOf(parts, at + 1)) if (/^(\/|["'`\s]|$)/.test(text.slice(at + parts.length))) return "state/";
   for (const dir of ["sessions", "worktrees", "artifacts", "spaces", "browser"]) {
     const head = `${data}/${dir}/`;
     for (let at = text.indexOf(head); at >= 0; at = text.indexOf(head, at + 1)) {
