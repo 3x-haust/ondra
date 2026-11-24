@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Task } from "../state/types";
 import { commandKind, isLocalWait, isTestRun, runsProgram, isSearch, SEARCH_STALL_MS, searchCall, searchStalled, shellArg, WAIT_STALL_MS, waitStalled } from "./commandKind";
 import { ghTouched, isCodeFile, reviewFound, riskyChange } from "./proof";
-import { backgroundShells, closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits } from "./tasks";
+import { backgroundShells, closePlan, lastReport, nextPlan, notTheirLanguage, onlyWaits, slipsLanguage } from "./tasks";
 
 describe("commandKind", () => {
   it("status looks are polls", () => {
@@ -270,6 +270,12 @@ describe("narration language", () => {
     expect(notTheirLanguage("이제 사진을 PR 본문에 올려요.", korean)).toBe(false);
     expect(notTheirLanguage("```bash\ngh pr view 79\n```", korean)).toBe(false);
     expect(notTheirLanguage("Now upload the photos.", { entries: [{ id: "e", at: 0, kind: "user", text: "upload the photos" }] } as never)).toBe(false);
+  });
+  it("flags an English status line hidden in a blocks fence, not a Korean one", () => {
+    const now = (text: string) => "테스트를 돌려요.\n```blocks\n" + JSON.stringify({ type: "now", text, step: 1 }) + "\n```";
+    expect(slipsLanguage(now("Running the package tests now"), korean)).toBe(true);
+    expect(slipsLanguage(now("패키지 테스트를 돌리고 있어요"), korean)).toBe(false);
+    expect(slipsLanguage("Now upload the photos to the PR body.", korean)).toBe(true);
   });
 });
 

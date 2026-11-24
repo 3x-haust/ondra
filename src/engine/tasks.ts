@@ -417,6 +417,12 @@ export function notTheirLanguage(text: string, t: Pick<Task, "entries"> | undefi
   return (prose.match(/[A-Za-z]+/g) ?? []).length >= 4;
 }
 
+/** what the user reads as the job goes (its narration and its "now" status lines) slipped into English for a user who writes Korean */
+export function slipsLanguage(text: string, t: Pick<Task, "entries"> | undefined): boolean {
+  if (notTheirLanguage(prose(text), t)) return true;
+  return readFences(text, "blocks").items.some((b) => b?.type === "now" && typeof b.text === "string" && notTheirLanguage(b.text, t));
+}
+
 export const chineseOnly = (s: string) => /[\u4e00-\u9fff]/.test(s) && !/[\uac00-\ud7a3]/.test(s);
 
 const isNotesFile = (p: string) => /(^|\/)(now|handoff|log|MEMORY|memory|NOTES|notes|TODO|todo)\.md$|\/(context|memory|memories|wiki|\.omd\/handoff)\/.*\.md$/.test(p);
@@ -1593,10 +1599,10 @@ function handlers(id: string, run: Run) {
             });
           });
           run.cursor = run.text.length;
-          // narration slipping into English for a user who writes Korean: one reminder per session
-          if (run.streaming && !run.langNudged && text && notTheirLanguage(text, taskById(id))) {
+          // narration or a status line slipping into English for a user who writes Korean: one reminder per session
+          if (run.streaming && !run.langNudged && slipsLanguage(run.text, taskById(id))) {
             run.langNudged = true;
-            void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls are read by the user: write them in the language they write in (here Korean: \"이제 사진을 올려요\"), not English." }).catch(() => {});
+            void request(agentOf(id), { type: "steer", message: "(Ondra) The lines between your tool calls and your \"now\" status lines are read by the user: write them in the language they write in (here Korean: \"이제 사진을 올려요\"), not English." }).catch(() => {});
           }
           const u = ev.message?.usage;
           noteCall(agentOf(id), u);
