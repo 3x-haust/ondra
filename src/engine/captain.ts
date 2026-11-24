@@ -8,8 +8,8 @@ import { clearExtensionUi, extensionUi } from "./extensionUi";
 // disposable: it is cleared in the background (when the cache has gone cold or
 // the session got long) and a new one starts from a short text recap.
 import { readClarity, readRound, roundDecision } from "./round";
-import { addRoutine, routineById, saidNothing } from "./routines";
-import { parseWhen } from "./routineTime";
+import { addRoutine, removeRoutine, routineById, saidNothing, saveRoutine } from "./routines";
+import { describeWhen, parseWhen } from "./routineTime";
 import { t as tr } from "../i18n";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
@@ -87,7 +87,7 @@ const statsOf = new Map<string, any>();
 /** generation time of the current reply (for tok/s) */
 const genOf = new Map<string, { ms: number; at?: number }>();
 /** what the captain's session already has, so each message only carries what changed */
-type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; spaces?: string; model?: string; notes?: string; recap: boolean };
+type SentHeader = { forks?: string; memory?: string; rules?: string; projects?: string; repos?: string; routines?: string; spaces?: string; model?: string; notes?: string; recap: boolean };
 /** a project chat's notes, read before each message */
 const notesOf = new Map<string, string>();
 const sentOf = new Map<string, SentHeader>();
@@ -1055,6 +1055,12 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   if (rules !== sent.rules) out.push(`# This chat${sent.rules ? " (updated)" : ""}\n${rules}`, "");
   if (projects !== sent.projects) out.push(`# Projects in this space${sent.projects ? " (updated)" : ""} (name: folder)\n${projects}`, "");
   if (repos && repos !== sent.repos) out.push(`# Repos in this space without a project${sent.repos ? " (updated)" : ""}\n${repos}`, "");
+  // its routines and alarms, so "그거 꺼줘" can switch one off (a routine route with its id)
+  const routines = (state.routines ?? [])
+    .filter((r) => r.space === sp(space) && !r.draft)
+    .map((r) => `- ${r.id} | ${r.title} | ${r.alarm ? "alarm, " : ""}${describeWhen(r.when)} | ${r.enabled ? "on" : "off"}`)
+    .join("\n");
+  if (routines !== (sent.routines ?? "")) out.push(`# Routines in this space${sent.routines ? " (updated)" : ""} (id | title | when | on/off)\n${routines || "(none)"}`, "");
   out.push(forksBlock(forks, sent.forks));
   if (related.length) out.push("", "# Memory that may matter for this message", ...memoryLines(related));
   // spaces are separate; the user pointing at another one opens it for this message
@@ -1096,7 +1102,7 @@ function context(space: string, text: string, cwd?: string, event?: Event): stri
   else if (event) out.push("", "# A fork you started has ended (not a user message)", text, "", pid(space) ? FORK_REPORT : FORK_ENDED);
   // the clock, for "3시에", "내일", "10분 뒤" (a resumed session's date would be days old)
   else out.push("", `# Now\n${nowLine()}`, "", "# Message", text);
-  sentOf.set(space, { forks, memory: "", rules, projects, repos, spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
+  sentOf.set(space, { forks, memory: "", rules, projects, repos, routines: (state.routines ?? []).filter((r) => r.space === sp(space) && !r.draft).map((r) => `- ${r.id} | ${r.title} | ${r.alarm ? "alarm, " : ""}${describeWhen(r.when)} | ${r.enabled ? "on" : "off"}`).join("\n"), spaces: spacesLine, model: model || sent.model, notes: notes || sent.notes, recap: false });
   keepSent(space, sentOf.get(space));
   return out.join("\n");
 }
@@ -1396,6 +1402,18 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
         replaces: piece(r.replaces),
       });
       if (id) out.push({ kind: "remember", memoryId: id });
+    } else if (r?.kind === "routine" && typeof r.id === "string" && !r.task && !r.prompt) {
+      // one already there: switched on or off, or dropped (only this space's)
+      const had = routineById(r.id);
+      if (!had || had.space !== sp(space)) {
+        out.push({ kind: "answer", text: tr("그 루틴을 찾지 못했어요."), blocks: [] });
+        continue;
+      }
+      if (r.drop === true) removeRoutine(had.id);
+      else if (typeof r.on === "boolean") {
+        saveRoutine(had.id, { enabled: r.on });
+        out.push({ kind: "routine", routineId: had.id, ...(had.alarm ? { alarm: true } : {}) });
+      }
     } else if (r?.kind === "routine" && (r.task || r.prompt)) {
       // what the user asked for is on at once (its card changes or drops it); one main only offers waits on its card
       const when = parseWhen(r.when);

@@ -293,6 +293,38 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalledWith("c1", expect.anything());
   });
 
+  it("the user's own business, or talk that moved on, in a server channel goes to their DM instead", async () => {
+    await ready();
+    vi.spyOn(native, "discordApi").mockImplementation(async (_m: string, path: string) => (path === "/users/@me/channels" ? { id: "dm1" } : { id: "x" }));
+    // c1 is a server channel (others talk there)
+    emit({ kind: "message", message: msg({ id: "o1", content: "점심 뭐 먹지" }) });
+    await new Promise((r) => setTimeout(r, 20));
+    setState("tasks", [{ id: "tk", title: "카톡 답장 끄기", entries: [], agent: { channel: "c1" } } as never]);
+    setState("captain", (l) => [...l, { id: "endk", at: 5, space: "home", project: "@agent", from: "captain", after: "tk", reply: "(dm)\n카톡 대신 답 껐어" }]);
+    said.hook?.("endk");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("dm1", "카톡 대신 답 껐어", undefined));
+    expect(native.discordApi).toHaveBeenCalledWith("POST", "/users/@me/channels", { recipient_id: OWNER });
+    expect(native.discordSend).not.toHaveBeenCalledWith("c1", expect.anything(), undefined);
+    // the rule is in what it is told for a server channel
+    const { endNote } = await import("./discord");
+    expect(endNote({ id: "tk" })).toContain("(dm)");
+  });
+
+  it("someone written as @name is tagged, and whoever a line tags is notified", async () => {
+    await ready();
+    emit({ kind: "message", message: msg({ id: "p1", author: { id: "783", name: "정원", user: "jeongwon0047", bot: false }, content: "ㅎㅇ" }) });
+    const { tagged, allowed } = await import("./discordPeople");
+    expect(tagged("@정원아 나와")).toEqual({ text: "<@783>아 나와", pings: ["783"] });
+    expect(tagged("@jeongwon0047 안 나오면 계속 부름").text).toBe("<@783> 안 나오면 계속 부름");
+    expect(tagged("메일은 a@정원 `@정원`").text).toBe("메일은 a@정원 `@정원`");
+    expect(tagged("@everyone 다 나와").pings).toEqual([]);
+    expect(allowed([])).toEqual({ parse: [] });
+    expect(allowed(["783"])).toEqual({ parse: [], users: ["783"] });
+    said.answer = "@정원 야 나와봐";
+    emit({ kind: "message", message: msg({ id: "p2", author: { id: "333", name: "지수민", bot: false }, content: `<@${BOT}> 정원이 불러봐`, mentions: [BOT] }) });
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "<@783> 야 나와봐", undefined, ["783"]));
+  });
+
   it("pictures in its replies go up as pictures, not as their path", async () => {
     await ready();
     vi.spyOn(native, "discordSendFile").mockResolvedValue(["f1"]);

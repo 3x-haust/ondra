@@ -173,6 +173,22 @@ describe("routine runs", () => {
     expect(r.nextAt).toBeGreaterThan(Date.now());
   });
 
+  it("one already there is switched off, on or dropped by its id, never by a job; another space's is out of reach", async () => {
+    const out = await applyRoutes("home", [{ kind: "routine", title: "카톡 대신 답", task: "답장", when: { kind: "every", minutes: 15 } }], "15분마다 답장해줘");
+    const id = (out[0] as { routineId: string }).routineId;
+    expect(await applyRoutes("home", [{ kind: "routine", id, on: false }], "그거 꺼줘")).toEqual([{ kind: "routine", routineId: id }]);
+    expect(routineById(id)).toMatchObject({ enabled: false });
+    await applyRoutes("home", [{ kind: "routine", id, on: true }], "다시 켜");
+    expect(routineById(id)).toMatchObject({ enabled: true });
+    expect(state.tasks.some((t) => t.title.includes("끄기"))).toBe(false);
+    const far = await applyRoutes("other", [{ kind: "routine", id, on: false }], "꺼");
+    expect(far[0].kind).toBe("answer");
+    expect(routineById(id)).toMatchObject({ enabled: true });
+    await applyRoutes("home", [{ kind: "routine", id, drop: true }], "아예 지워");
+    expect(routineById(id)).toBeUndefined();
+    expect(CAPTAIN_SYSTEM).toContain('"on":false');
+  });
+
   it("one main only offers (it judged the user should look first) is a card that runs once saved", async () => {
     const out = await applyRoutes("home", [{ kind: "routine", draft: true, title: "아침 정리", task: "어제 머지된 PR 요약", when: { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] }, project: "app" }], "아침마다 PR 정리하는 거 귀찮네");
     expect(out[0].kind).toBe("routine");

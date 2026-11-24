@@ -6,13 +6,15 @@ import { discordApi, discordChannelCreate, discordChannelDelete, discordChannels
 import { state } from "../state/store";
 import { botUserId } from "./discord";
 import { back, become } from "./agentForm";
+import { allowed, pingsIn, tagged } from "./discordPeople";
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const list = (v: unknown) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
 /** a message body from its parts: text, buttons and menus (components), embeds, a poll, a reply */
 function bodyOf(a: Args): Record<string, unknown> {
-  const b: Record<string, unknown> = { allowed_mentions: a.ping === true ? { parse: ["users", "roles"] } : { parse: [] } };
+  // whoever it tags by id is notified; ping: true lets roles and @everyone notify too
+  const b: Record<string, unknown> = { allowed_mentions: a.ping === true ? { parse: ["users", "roles", "everyone"] } : allowed(pingsIn(str(a.text), botUserId())) };
   if (typeof a.text === "string") b.content = a.text;
   for (const k of ["components", "embeds", "poll", "flags"] as const) if (a[k] !== undefined) b[k] = a[k];
   if (str(a.reply_to)) b.message_reference = { message_id: str(a.reply_to), fail_if_not_exists: false };
@@ -67,10 +69,12 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
     }
     case "send": {
       const channel = str(a.channel);
-      const text = str(a.text);
+      // "@name" of someone known is made their mention
+      const { text, pings } = tagged(str(a.text), botUserId());
+      if (typeof a.text === "string") a = { ...a, text };
       if (!channel || (!text && !rich(a))) return { error: "channel and text (or components, embeds, poll, files) are needed" };
       // plain words: split at 2000 characters; with more, one message as Discord takes it
-      if (!rich(a)) return { sent: await discordSend(channel, text) };
+      if (!rich(a)) return { sent: await (pings.length ? discordSend(channel, text, undefined, pings) : discordSend(channel, text)) };
       const files = list(a.files);
       const m = await discordApi("POST", `/channels/${channel}/messages`, bodyOf(a), files.length ? files : undefined);
       return { sent: [m?.id].filter(Boolean) };

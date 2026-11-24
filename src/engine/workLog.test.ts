@@ -152,7 +152,13 @@ describe("its words, in the user's language", () => {
     expect(englishLine("pnpm test 돌리는 중")).toBe(false);
     expect(englishLine("`pnpm run build --watch now`")).toBe(false);
     expect(englishLine("ok")).toBe(false);
-    expect(forThem("Checking the room first.\n방 확인했어\n```\nnpm run the whole build\n```", true)).toBe("방 확인했어\n```\nnpm run the whole build\n```");
-    expect(forThem("Running the tests now.", false)).toBe("Running the tests now.");
+    expect(forThem("Checking the room first.\n방 확인했어\n```\nnpm run the whole build\n```", "방 좀 봐줘")).toBe("방 확인했어\n```\nnpm run the whole build\n```");
+    // whoever writes English (or nothing to tell by) gets it whole, whatever the agent's own voice
+    expect(forThem("Running the tests now.", "can you run the tests?")).toBe("Running the tests now.");
+    expect(forThem("Running the tests now.")).toBe("Running the tests now.");
+    expect(forThem("Sure, I checked it for you.\n방 봤어", "방 봐줘\nplease check it")).toBe("Sure, I checked it for you.\n방 봤어");
+    // any non-Latin script, not only Korean
+    expect(forThem("I will answer in Japanese now.\nはい、できました", "テストを実行して")).toBe("はい、できました");
+    expect(forThem("Let me think about this one.\nГотово", "Запусти тесты")).toBe("Готово");
   });
 });

@@ -654,7 +654,7 @@ export interface DiscordMessage {
   channel: string;
   /** none in a DM */
   guild?: string | null;
-  author: { id: string; name: string; bot: boolean };
+  author: { id: string; name: string; bot: boolean; user?: string };
   content: string;
   mentions: string[];
   /** the author of the message this one replies to */
@@ -695,7 +695,8 @@ export type DiscordEvent =
   | { kind: "interaction"; interaction: DiscordInteraction };
 export const discordStart = () => call<void>("discord_start");
 export const discordStop = () => call<void>("discord_stop", undefined, undefined);
-export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });
+/** words to a channel; `pings`: the people it tags who are notified (none by default) */
+export const discordSend = (channel: string, text: string, replyTo?: string, pings?: string[]) => call<string[]>("discord_send", { channel, text, replyTo, pings });
 /** a picture from this Mac (a screenshot the work took) posted in a channel, with an optional line */
 export const discordSendFile = (channel: string, path: string, text?: string) => call<string[]>("discord_send_file", { channel, path, text });
 /** the user id that owns the bot's application (the user, when they made the bot) */
