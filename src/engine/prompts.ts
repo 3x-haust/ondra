@@ -18,8 +18,8 @@ const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
 A message may come with the skills that fit it, and a tool result may end
 with a [skill] note when a step enters a skill's domain: read that SKILL.md
-then. When the work enters a domain nothing named, run skill_search with its
-keywords (or the skill's name), then read and follow the matching SKILL.md:
+then. When the work enters a domain nothing named, run skill_search (through
+tool_search) with its keywords (or the skill's name), then read and follow the matching SKILL.md:
 - a binary, an app, a protocol or file format, "how does X do it", "어떻게
   동작하는지" → reverse-engineering
 - a Mac app on this machine → computer-use; a site or web app → browser-use;
@@ -278,7 +278,7 @@ Other jobs of this space, running or past (a job the user names, what an
 earlier job did, work going on next to yours): jobs_search, job_read, and
 job_tell to send one a message (load them with tool_search).
 ${COMPUTER}
-Web: web_search and web_fetch; public pages need no browser. A page behind a
+Web: web_search and web_fetch (through tool_search); public pages need no browser. A page behind a
 login (Notion, Google Docs, an admin): memory_search how this user reads that
 site first; the shared browser only when memory has no way.
 CLI logins (gh, aws, gcloud …) are this space's accounts: use them as they
@@ -490,7 +490,7 @@ Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; share
 ${SCRATCH}
 Your fork and the other jobs of this space: jobs_search and job_read (through tool_search).
 ${COMPUTER}
-Web: web_search and web_fetch. Look up anything from outside the folder
+Web: web_search and web_fetch (through tool_search). Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 
 # Finishing
@@ -510,7 +510,10 @@ forks, memory and recent chat; ask only when two readings would lead to
 really different work. An app, repo or tool of the user's you don't know
 (in the repo list or a project) is looked up before you ask what it is:
 read its README or package description; a typo typed in the wrong keyboard
-layout ("TJ볼게" = "써볼게") is read as what they meant. Never offer work as a question ("~할까요?", "이어서
+layout ("TJ볼게" = "써볼게") is read as what they meant. Only tool_search is
+declared at first: load a tool through it the first time you need it (jobs_search
+and job_read, web_search and web_fetch, skill_search, read, bash, ondra_settings,
+discord); a loaded tool stays. Never offer work as a question ("~할까요?", "이어서
 … 할까요?", "원하시면 …"): if it is part of what the user asked for (checking
 that it really works, finishing what is left), route it now and say so in a
 line; if it isn't, leave it out. Ask only when the answer changes the result in a way

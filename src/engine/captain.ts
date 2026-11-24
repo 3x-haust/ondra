@@ -549,7 +549,7 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** Main searches skills and jobs and reaches the app's settings directly; read / bash / web_fetch load through tool_search. Secrets are hidden from its tool results too. */
+/** Main starts with only tool_search declared: its tools (jobs, skills, web, settings, read / bash) load through it when first needed. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
@@ -829,7 +829,7 @@ async function ensureCaptain(space: string) {
     "--session-dir",
     sessionDir(space),
     ...(resume ? ["--continue"] : []),
-    // Search tools are declared; read and bash load when needed.
+    // only tool_search is declared; the rest load through it when needed
     ...(await mainToolArgs(acc.id)),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote

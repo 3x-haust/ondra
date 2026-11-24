@@ -257,9 +257,9 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "skill_search",
     label: "Skill search",
-    description: "Search available skills by task keywords or skill name (Korean or English). Returns up to 10 matching names, descriptions and file paths, never instructions. Read the selected SKILL.md with read and follow it; resolve references relative to baseDir. Try alternate keywords if no match.",
-    promptSnippet: "Find skills for the task before starting work",
-    promptGuidelines: ["Before starting a task, use skill_search with task keywords, then read and follow the matching SKILL.md. Search again when the task changes; do not infer that no skills apply from the absence of a catalog."],
+    // found through tool_search; loaded later, it carries no prompt lines (they would rebuild the prompt)
+    exposure: "deferred",
+    description: "Search available skills by task keywords or skill name (Korean or English). Returns up to 10 matching names, descriptions and file paths, never instructions. Read the selected SKILL.md with read and follow it; resolve references relative to baseDir. Try alternate keywords if no match. Search again when the task changes; no catalog listed doesn't mean no skill applies.",
     parameters: Type.Object({
       query: Type.String({ description: "Task keywords or an exact skill name" }),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "Maximum matches (default 5)" })),

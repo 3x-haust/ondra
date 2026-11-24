@@ -1700,8 +1700,11 @@ button.mc-row:hover {
   position: absolute;
   left: var(--s-12);
   bottom: var(--s-12);
+  /* clear of the fit button on the right; short of room, a whole item goes to the next row */
+  max-width: calc(100% - var(--s-12) * 2 - 40px);
   display: flex;
-  gap: var(--s-12);
+  flex-wrap: wrap;
+  gap: var(--s-4) var(--s-12);
   padding: var(--s-4) var(--s-8);
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
@@ -1713,6 +1716,7 @@ button.mc-row:hover {
   display: inline-flex;
   align-items: center;
   gap: var(--s-6);
+  white-space: nowrap;
 }
 .mg-legend i {
   width: 8px;

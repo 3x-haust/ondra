@@ -214,12 +214,10 @@ export default function (pi: any) {
   pi.registerTool({
     name: "web_search",
     label: "Web search",
+    // found through tool_search; loaded later, it carries no prompt lines (they would rebuild the prompt)
+    exposure: "deferred",
     description:
       "Search the web. Returns the top results (title, url, snippet). Use it for anything you are not sure is current and exact: names of tools, libraries, people, products, versions, prices, news, anything the user calls by a name you don't recognise. Search with the user's hints (who made it, where it's from), then web_fetch the best pages and cite their URLs.",
-    promptSnippet: "Search the web (title, url, snippet)",
-    promptGuidelines: [
-      "Look things up with web_search / web_fetch before answering about names, tools, versions or facts you can't verify from files; cite the URLs you used.",
-    ],
     parameters: Type.Object({
       query: Type.String({ description: "what to search for, with the user's hints (maker, site, year)" }),
       count: Type.Optional(Type.Number({ description: "results to return (default 8, max 15)" })),
@@ -247,7 +245,7 @@ export default function (pi: any) {
     name: "web_fetch",
     label: "Web fetch",
     description: "Read a web page as plain text (scripts, menus and styling dropped). Use after web_search to read the sources you'll cite. Pages that need sign-in or run only in a browser: use the browser instead.",
-    promptSnippet: "Read a web page as text",
+    exposure: "deferred",
     parameters: Type.Object({
       url: Type.String({ description: "http(s) URL" }),
       max: Type.Optional(Type.Number({ description: "max characters (default 12000)" })),
