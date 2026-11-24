@@ -79,6 +79,35 @@ export const BANTER = `농담은 친구끼리처럼 해도 돼. 욕, 비속어, 
 - 못 해 주는 걸 달라고 하면 딱딱하게 거절만 하지 말고, 해 주는 척 누가 봐도 가짜인 걸로 받아쳐도 돼. 진짜 값이나 진짜처럼 읽히는 단서는 절대 안 넣어
 - 매번 웃길 필요 없어. 일 얘기 중이거나 상대가 진지하거나 급하면 그냥 답해. 같은 농담 되풀이하지 말고, 한 번 했던 틀도 바꿔`;
 
+/** How its messages are shaped: as the people there write theirs, read off the recent talk. */
+export const SHAPE = `Your messages look like the people's here: in the recent talk, see how long one message runs and how often a thought goes out as a few short messages in a row, and write yours the same way; one long paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
+
+/** at most this many messages for one reply: what's past it goes in the last one */
+const MAX_MESSAGES = 6;
+
+/** A reply as the messages it goes out as: split at blank lines, never inside a code block. */
+export function messagesOf(text: string): string[] {
+  const out: string[] = [];
+  let cur: string[] = [];
+  let fence = false;
+  const flush = () => {
+    const s = cur.join("\n").trim();
+    if (s) out.push(s);
+    cur = [];
+  };
+  for (const line of text.split("\n")) {
+    if (/^\s*```/.test(line)) fence = !fence;
+    if (!fence && !line.trim()) flush();
+    else cur.push(line);
+  }
+  flush();
+  return out.length > MAX_MESSAGES ? [...out.slice(0, MAX_MESSAGES - 1), out.slice(MAX_MESSAGES - 1).join("\n\n")] : out;
+}
+
+/** the pause before the next message, as long as typing it would roughly take (ms) */
+const typeFor = (s: string) => Math.min(1800, 450 + s.length * 18);
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 const settings = (): AgentSettings | undefined => state.settings.agent;
 const voiceOf = (a: AgentSettings) => (a.voice?.trim() ? a.voice.trim() : DEFAULT_VOICE);
 
@@ -238,6 +267,7 @@ function chatRules(a: AgentSettings, server: boolean): string[] {
   return [
     voiceOf(a),
     BANTER,
+    SHAPE,
     OWNER_WAYS,
     "Route work as usual. No tables, no headings; a link as a plain URL.",
     server
@@ -484,6 +514,18 @@ async function picked(i: DiscordInteraction, a: AgentSettings) {
 
 /** Its words where they go: a slash command's own answer when it came from one, else the channel. */
 async function sayTo(channel: string, text: string, replyTo?: string, interaction?: string, components?: unknown[]): Promise<string[]> {
+  // a reply of several messages goes out one after another, the typing shown between them
+  // (a question with buttons stays one message, its buttons under its words)
+  const parts = components?.length ? [text] : messagesOf(text);
+  if (parts.length > 1) {
+    const ids = await sayTo(channel, parts[0], replyTo, interaction);
+    for (const p of parts.slice(1)) {
+      void discordTyping(channel).catch(() => {});
+      await wait(typeFor(p));
+      ids.push(...(await discordSend(channel, p)));
+    }
+    return ids;
+  }
   if (interaction) {
     const r = await discordInteractionReply(interaction, { content: text.slice(0, 2000), allowed_mentions: { parse: [] }, ...(components ? { components } : {}) }).catch(() => undefined);
     if (r?.id) return [r.id, ...(text.length > 2000 ? await discordSend(channel, text.slice(2000)) : [])];
@@ -847,6 +889,7 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     "# 말투",
     voiceOf(a),
     BANTER,
+    SHAPE,
     "",
     "# 지킬 것",
     watching?.owner ? "여기서 할 수 있는 건 대화뿐이고 주인의 일은 들고 있지 않아. 다른 사람도 읽는 채널이니 주인의 일(코드, 파일, 링크, 아직 안 나온 것)은 말하지 않아" : OTHERS_RULES,

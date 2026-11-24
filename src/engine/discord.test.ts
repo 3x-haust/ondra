@@ -620,3 +620,18 @@ describe("where it is right now, across workspaces", () => {
   });
 });
 
+
+describe("a reply as Discord messages", () => {
+  it("goes out as several messages where it has blank lines, as people send a thought in a few", async () => {
+    const { messagesOf } = await import("./discord");
+    expect(messagesOf("ㅋㅋ 그거 내 실수야\n\n교각 답은 제대로 나갔어\n로그로 확인했고\n\n끝말잇기는 교각, 각으로 와")).toEqual(["ㅋㅋ 그거 내 실수야", "교각 답은 제대로 나갔어\n로그로 확인했고", "끝말잇기는 교각, 각으로 와"]);
+    expect(messagesOf("한 줄")).toEqual(["한 줄"]);
+  });
+  it("never splits a code block, and keeps it to a few messages", async () => {
+    const { messagesOf } = await import("./discord");
+    expect(messagesOf("이거 봐\n\n```ts\nconst a = 1;\n\nconst b = 2;\n```\n\n됐지")).toEqual(["이거 봐", "```ts\nconst a = 1;\n\nconst b = 2;\n```", "됐지"]);
+    const many = messagesOf(Array.from({ length: 9 }, (_, i) => `${i}`).join("\n\n"));
+    expect(many).toHaveLength(6);
+    expect(many[5]).toBe("5\n\n6\n\n7\n\n8");
+  });
+});
