@@ -663,6 +663,8 @@ export interface DiscordMessage {
   reply_msg?: string | null;
   files: string[];
   at: string;
+  /** the app that sent it (its own webhook while it is someone else, or an interaction): the bot's id on its own */
+  app?: string;
   /** a slash command it came from: its answer replaces the command's "thinking…" */
   interaction?: string;
 }

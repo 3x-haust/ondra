@@ -54,6 +54,9 @@ pub struct Incoming {
     /// attachment links (images, files)
     pub files: Vec<String>,
     pub at: String,
+    /// the app that sent it (an app's own webhook or interaction): the bot's id on what it said as someone else
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
 }
 
 /// A MESSAGE_CREATE's `d` as the page gets it; None for what isn't a message.
@@ -68,7 +71,10 @@ pub fn incoming(d: &Value) -> Option<Incoming> {
         author: Author { id: s(&author["id"])?, name, bot: author["bot"].as_bool().unwrap_or(false) },
         content: s(&d["content"]).unwrap_or_default(),
         mentions: d["mentions"].as_array().map(|a| a.iter().filter_map(|m| s(&m["id"])).collect()).unwrap_or_default(),
-        reply_to: d["referenced_message"]["author"]["id"].as_str().map(str::to_string),
+        // a reply to what the bot said as someone else (its webhook) is a reply to the bot
+        reply_to: (if d["referenced_message"]["webhook_id"].is_string() { d["referenced_message"]["application_id"].as_str() } else { None })
+            .or(d["referenced_message"]["author"]["id"].as_str())
+            .map(str::to_string),
         reply_msg: d["message_reference"]["message_id"].as_str().or(d["referenced_message"]["id"].as_str()).map(str::to_string),
         // its own pictures and files, and those of a message it forwards
         files: std::iter::once(&d["attachments"])
@@ -78,6 +84,7 @@ pub fn incoming(d: &Value) -> Option<Incoming> {
             .filter_map(|f| s(&f["url"]))
             .collect(),
         at: s(&d["timestamp"]).unwrap_or_default(),
+        app: s(&d["application_id"]),
     })
 }
 
@@ -900,6 +907,12 @@ mod tests {
         let fw = incoming(&json!({ "id": "m3", "channel_id": "c1", "content": "", "author": { "id": "u1", "username": "lyu" },
             "message_snapshots": [{ "message": { "attachments": [{ "url": "https://cdn.discordapp.com/f.png" }] } }] })).unwrap();
         assert_eq!(fw.files, vec!["https://cdn.discordapp.com/f.png"]);
+        // what it said as someone else (its webhook) is its own: a reply to it is a reply to the bot
+        let hooked = incoming(&json!({ "id": "m4", "channel_id": "c1", "content": "ㅋㅋ", "author": { "id": "u1", "username": "lyu" },
+            "referenced_message": { "id": "m3", "webhook_id": "w1", "application_id": "99", "author": { "id": "w1", "username": "피카츄", "bot": true } } })).unwrap();
+        assert_eq!(hooked.reply_to.as_deref(), Some("99"));
+        let said = incoming(&json!({ "id": "m5", "channel_id": "c1", "content": "피카", "webhook_id": "w1", "application_id": "99", "author": { "id": "w1", "username": "피카츄", "bot": true } })).unwrap();
+        assert_eq!(said.app.as_deref(), Some("99"));
         // a DM has no guild and no reply
         let dm = incoming(&json!({ "id": "m2", "channel_id": "c2", "content": "hi", "author": { "id": "u1", "username": "lyu", "bot": false } })).unwrap();
         assert_eq!((dm.guild, dm.reply_to), (None, None));
