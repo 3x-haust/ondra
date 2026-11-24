@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, pickButtons, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -121,6 +121,16 @@ describe("main's words on Discord", () => {
     said.answer = "";
     expect(await askedLine(d, { on: true, name: "메타몽" }, "배포")).toBe("배포: 바뀐 파일을 어떻게 할까요? (PR로 올리기 / 합치기)");
     expect(pickPrompt(d, "그냥 합쳐")).toContain("pr: PR로 올리기 (1번)");
+  });
+
+  it("a question with things to fill in is asked in words, with no buttons, and the reply answers it", () => {
+    const f: Decision = { ...d, options: [{ id: "보내기", label: "보내기", primary: true }], form: [{ id: "env", label: "배포 대상", kind: "choice", options: ["staging", "prod"], required: true }, { id: "when", label: "날짜", kind: "date" }] };
+    const p = askPrompt({ on: true, name: "메타몽" }, f);
+    expect(p).toContain("# 받아야 할 것");
+    expect(p).toContain("- 배포 대상 (staging / prod) (꼭 필요)");
+    expect(p).not.toContain("# 고를 수 있는 것");
+    expect(pickButtons(f)).toEqual([]);
+    expect(pickButtons(d).length).toBe(1);
   });
 
   it("the voice is a person, with no sample lines to copy, and holds none of the user's real work", () => {

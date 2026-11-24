@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { formAnswer, readFields, type FormValues } from "./form";
 import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
 import { answerExtensionUi, clearExtensionUi, extensionUi } from "./extensionUi";
 import { far, farDecide, markFarRead, startFar } from "./hosts";
@@ -557,6 +558,7 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         // a round of questions (the sharpen skill): one card at a time, its recommendation the one choice
         const round = readRound(b);
         const clarity = readClarity(b.clarity);
+        const fields = readFields(b.fields);
         const d: Decision = round ? roundDecision({ id: uid("d"), taskId: t.id, at: Date.now(), context: Array.isArray(b.context) ? b.context : [] }, round.qs, [], round.clarity) : {
           id: uid("d"),
           taskId: t.id,
@@ -564,8 +566,9 @@ function applyBlocks(t: Task, items: any[], run: Run) {
           kind: "ask",
           ...(clarity ? { clarity } : {}),
           question: String(b.question ?? "확인 필요"),
-          // "label" or {label, note}: the note says what that choice means
-          options: (Array.isArray(b.options) && b.options.length ? b.options : ["진행", "중단"]).slice(0, 5).map((o: any, i: number) => {
+          ...(fields ? { form: fields } : {}),
+          // "label" or {label, note}: the note says what that choice means; a form is sent with one button
+          options: (Array.isArray(b.options) && b.options.length ? b.options : fields ? ["보내기"] : ["진행", "중단"]).slice(0, 5).map((o: any, i: number) => {
             const label = String(o && typeof o === "object" ? (o.label ?? o.name ?? "") : o);
             const note = o && typeof o === "object" && o.note ? String(o.note) : undefined;
             return { id: label, label, primary: i === 0, ...(note ? { note } : {}) };
@@ -3369,14 +3372,16 @@ async function releasesSince(at: number, space: string, project: string | undefi
   }
 }
 
-export async function decide(decisionId: string, optionId: string) {
+export async function decide(decisionId: string, optionId: string, values?: FormValues) {
   const d = state.decisions.find((x) => x.id === decisionId);
   if (!d) {
     // a question of another Mac's job: answered there, as if the user had answered it on that Mac
     const m = mirroredDecision(decisionId);
-    if (m) await farDecide(m, optionId);
+    if (m) await farDecide(m, optionId, values);
     return;
   }
+  // a card with things to fill in: what was filled goes back under the choice pressed
+  const filled = d.form?.length && values && d.options.some((o) => o.id === optionId) ? formAnswer(d, optionId, values) : undefined;
   track("decision_answered", { waited_s: Math.max(0, Math.round((Date.now() - d.at) / 1000)) });
   setState("decisions", (list) => list.filter((x) => x.id !== decisionId));
   if (d.ui) {
@@ -3390,7 +3395,7 @@ export async function decide(decisionId: string, optionId: string) {
   // main asked it: the answer goes back to main as the user's message
   if (d.taskId.startsWith("main:")) {
     const [space, project] = d.taskId.slice(5).split("~");
-    const label = d.options.find((o) => o.id === optionId)?.label ?? optionId;
+    const label = filled ?? d.options.find((o) => o.id === optionId)?.label ?? optionId;
     const { throwThought } = await import("./captain");
     void throwThought(`"${d.question}" → ${label}`, space as Task["space"], { project, note: await staleAnswerNote(d.at, space, project) });
     return;
@@ -3453,6 +3458,7 @@ export async function decide(decisionId: string, optionId: string) {
   // the job offered ("영상 유지 목표로 보류" parked a job that would have wrapped up itself):
   // that is its answer
   const offered = d.kind !== "stalled" && d.options.some((o) => o.id === optionId);
+  if (filled) return void (await tell(t.id, `"${d.question}" → ${filled}`, { shown: filled }));
   if (!offered && meansStop(label)) {
     updateTask(t.id, (x) => push(x, { kind: "user", text: `"${d.question}" → ${label}` }));
     stopTask(t.id);

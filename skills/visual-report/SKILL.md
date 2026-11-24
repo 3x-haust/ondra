@@ -26,7 +26,7 @@ Keep prose to a few sentences; put lists, numbers and results in blocks.
 |---|---|---|
 | `plan` | `steps: string[]` (2–6, short) | first message, and when the plan changes |
 | `now` | `text`, `step` (0-based index into plan) | whenever what you are doing changes |
-| `ask` | `question`, `options: {label, note}[]` (2–3, recommendation first), `context?: Block[]` | before risky/irreversible actions or real ambiguity — then **end your turn** |
+| `ask` | `question`, `options: {label, note}[]` (2–3, recommendation first), `context?: Block[]`, `fields?: {id, label, kind: text / choice / check / number / date, options?, multi?, value?, required?, min?, max?, unit?, long?}[]` (several things at once in one card; options are then its send buttons) | before risky/irreversible actions or real ambiguity — then **end your turn** |
 | `remember` | `text`, `scope: "project" \| "space" \| "global"` | a lasting preference or fact future tasks need |
 | `done` | `summary` (one line), `evidence: {kind, ref, ok, note?}[]`, `unverified?: string[]` | the whole task is finished — last block. `kind`: test, build, run, shot, file, link. Only what you really ran; the rest goes in `unverified` |
 | `handoff` | `did: string[]`, `found?`, `next`, `doneWhen?`, `evidence: {kind, ref}[]` | only when Ondra says the context is nearly full; a fresh session continues from this card alone |

@@ -12,6 +12,7 @@
 //
 // A Mac allowed in sees and acts on only what it may reach (remoteRules.ts): the jobs of the
 // projects it keeps and the ones it asked for, in the workspaces it may use here.
+import type { FormValues } from "./form";
 import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
@@ -369,7 +370,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
           // a question of a job that Mac may reach
           const d = state.decisions.find((x: Decision) => x.id === args[0]);
           if (!d || !mayReach(reach(c), taskById(d.taskId), taskById)) throw new Error("그 작업은 쓸 수 없어요");
-          value = await jobs.decide(String(args[0]), String(args[1]));
+          value = await jobs.decide(String(args[0]), String(args[1]), args[2] && typeof args[2] === "object" ? (args[2] as FormValues) : undefined);
         } else if (fn === "handOn") {
           // both ends of the hand-over must be jobs it may reach
           if (![args[0], args[1]].every((id) => typeof id === "string" && mayReach(reach(c), taskById(id), taskById))) throw new Error("그 작업은 쓸 수 없어요");

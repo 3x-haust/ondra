@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { readFields } from "./form";
 import { clearExtensionUi, extensionUi } from "./extensionUi";
 // The dispatcher (internally "captain"). Every request goes here first and
 // comes back as routes: answer now, add to a running task, start new tasks, or
@@ -1278,16 +1279,17 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
       const d = roundDecision({ id: uid("d"), taskId: `main:${space}`, at: Date.now(), context: Array.isArray(r.context) ? (r.context as Block[]) : [] }, round.qs, [], round.clarity);
       setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
       out.push({ kind: "ask", decisionId: d.id, question: d.question });
-    } else if (r?.kind === "ask" && typeof r.question === "string" && Array.isArray(r.options)) {
-      // main's own question, as the same card a job's question gets
-      const options = (r.options as unknown[])
+    } else if (r?.kind === "ask" && typeof r.question === "string" && (Array.isArray(r.options) || readFields(r.fields))) {
+      // main's own question, as the same card a job's question gets (a form is sent with one button)
+      const fields = readFields(r.fields);
+      const options = (Array.isArray(r.options) && r.options.length ? (r.options as unknown[]) : ["보내기"])
         .slice(0, 4)
         .map((o: any, i) => (typeof o === "string" ? { id: `o${i}`, label: o } : { id: `o${i}`, label: String(o?.label ?? ""), note: o?.note ? String(o.note) : undefined }))
         .filter((o) => o.label.trim())
         .map((o, i) => ({ ...o, primary: i === 0 }));
       if (options.length) {
         const clarity = readClarity(r.clarity);
-        const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask", ...(clarity ? { clarity } : {}) };
+        const d: Decision = { id: uid("d"), taskId: `main:${space}`, at: Date.now(), question: r.question.trim(), options, context: Array.isArray(r.context) ? (r.context as Block[]) : [], kind: "ask", ...(clarity ? { clarity } : {}), ...(fields ? { form: fields } : {}) };
         setState("decisions", (list) => [...list.filter((x) => x.taskId !== d.taskId), d]);
         out.push({ kind: "ask", decisionId: d.id, question: d.question });
       }
