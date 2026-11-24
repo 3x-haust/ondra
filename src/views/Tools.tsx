@@ -92,10 +92,6 @@ export function ToolsTab() {
     if (window.getSelection()?.toString()) return;
     setOpen(open() === key ? null : key);
   };
-  const srcOf = (r: Row, g: Group) => {
-    const s = r.source.replace(/^Ondra 확장 · |^확장 · /, "");
-    return r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && s !== r.name ? t(s) : "";
-  };
   return (
     <>
       <PageHead tab="agent-tools">
@@ -142,7 +138,6 @@ export function ToolsTab() {
                             <div class="tl-fold tl-short"><span class="tl-line" classList={{ en: !r.ko }}>{r.line}</span></div>
                             <div class="tl-fold tl-more"><p class="selectable">{r.full}</p></div>
                           </div>
-                          <span class="tl-src">{srcOf(r, g)}</span>
                           <span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : t("{k} 토큰", { n: r.size, k: tokens(r.size) })}>{r.found ? t("필요 시") : tokens(r.size)}</span>
                           <span class="tl-sw">
                             <Show when={r.tool && (r.optional || r.mcp)}>

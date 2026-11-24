@@ -281,9 +281,7 @@ export function SkillsTab() {
         </For>
       </div>
       <Show when={auto().length}>
-        <GroupTitle title={t("기본 · 알아서 써요")}>
-          <span class="set-note">{t("/ 메뉴에는 없고, 작업이 필요할 때 알아서 꺼내 써요")}</span>
-        </GroupTitle>
+        <GroupTitle title={t("기본 · 알아서 써요")} />
         <div class="set-group">
           <For each={auto()}>{(e) => <Row e={e} />}</For>
         </div>
