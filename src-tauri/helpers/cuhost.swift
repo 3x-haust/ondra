@@ -1670,6 +1670,19 @@ func settle(pid: pid_t) -> Double {
     return nowMs() - t0
 }
 
+/// Waits for the app to change (any of its AX notifications), then for it to go quiet; at most
+/// `ms`. A wait for something to come up reads the screen when the app says it changed, not on a
+/// clock. Some changes post nothing, so the caller reads again after a timeout too.
+func awaitChange(pid: pid_t, ms: Double) -> Bool {
+    let t0 = nowMs()
+    guard observer(for: pid) != nil else { usleep(UInt32(min(ms, 120) * 1000)); return false }
+    let seen = axNotifications
+    while axNotifications == seen && nowMs() - t0 < ms { CFRunLoopRunInMode(.defaultMode, 0.01, true) }
+    if axNotifications == seen { return false }
+    _ = settle(pid: pid)
+    return true
+}
+
 // ───────────────────────── launch (hidden, no activation) ─────────────────────────
 
 func appURL(_ name: String) -> URL? {
@@ -2938,6 +2951,10 @@ func handle(_ req: [String: Any]) -> [String: Any] {
             return fail(id, "NO_WINDOW", "target has no accessible key window")
         }
         return ok(id, ["tree": tree, "env": environment()])
+    case "changes":
+        guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
+        let ms = min(2000, max(10, (req["ms"] as? NSNumber)?.doubleValue ?? 500))
+        return ok(id, ["changed": awaitChange(pid: pid_t(pidN), ms: ms)])
     case "look":
         guard let pidN = req["pid"] as? Int else { return fail(id, "BAD_REQUEST", "missing pid") }
         lastLook.removeValue(forKey: pid_t(pidN))

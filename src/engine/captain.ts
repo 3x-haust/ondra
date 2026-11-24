@@ -850,7 +850,9 @@ async function ensureCaptain(space: string) {
   const signature = await startSig(cwd, skills.signature, space);
   // the bridge and main's worker id: its job tools (extensions/jobs.ts) reach this chat's space
   const door = isSim(space) ? [] : [...(await bridgeEnv()), ["APP_WORKER_ID", agent] as [string, string]];
-  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)], ...door]);
+  // the computer flows it saved in this workspace (extensions/lib/computer-flows.ts), the same folder its jobs use
+  const flows: [string, string][] = engine.info.dataDir ? [["ONDRA_FLOWS_DIR", `${engine.info.dataDir}/computer/${space0.id.replace(/[^A-Za-z0-9_-]/g, "") || "home"}`]] : [];
+  await agentSpawn(agent, cwd, args, [...(await accountEnv(acc.id)), ...(await spaceEnv(space0)), ["ONDRA_MAIN", "1"], ["ONDRA_SKILL_PATHS", JSON.stringify(skills.paths)], ...flows, ...door]);
   logInfo("main", `${space} engine started (${model || "account model"})`);
   sigOf.set(space, signature);
   markAlive(agent);
