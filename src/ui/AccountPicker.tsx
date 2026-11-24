@@ -5,10 +5,11 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import { accountsIn, setState, state } from "../state/store";
 import type { Account } from "../state/types";
-import { creditsOf, emails, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { creditsOf, emails, loadEmail, refreshLimits, usageOf } from "../state/limits";
 import { setView } from "../state/ui";
 import { Logo } from "./Logos";
 import { Icon } from "./Icon";
+import { LimitBars } from "./LimitBars";
 import { usePop } from "./ModelPicker";
 import { t } from "../i18n";
 
@@ -31,16 +32,6 @@ export function accountName(account: Account | string | undefined, short = false
   // no provider known yet: who it is, else the built-in login, never the workspace's name
   return emails[a.id] || (a.id === "default" ? t("기본 로그인") : t(a.label));
 }
-/** "12.5 credits": a number picks the English singular or plural */
-const credits = (id: string) => {
-  const c = creditsOf(id);
-  if (!c) return [];
-  const n = Number(c);
-  return [Number.isFinite(n) ? t("크레딧 {n}", { n }) : `${t("크레딧")} ${c}`];
-};
-/** the windows the provider really has (now usually only the weekly one): "주간 19% 사용" */
-const usage = (id: string) =>
-  [...usageOf(id).map((l) => t("{w} {n}% 사용", { w: windowLabel(l.window), n: Math.round(l.used) })), ...credits(id)].join(" · ");
 
 export function AccountPicker(props: {
   accountId: string;
@@ -112,7 +103,9 @@ export function AccountPicker(props: {
                     <span class="acc-name">{accountName(x, true)}</span>
                     <Show when={emails[x.id] && emails[x.id] !== accountName(x, true)}><span class="acc-email">{emails[x.id]}</span></Show>
                   </span>
-                  <span class="pop-item-sub">{usage(x.id) || (x.providers.length ? "" : t("로그인 필요"))}</span>
+                  <Show when={x.providers.length} fallback={<span class="pop-item-sub">{t("로그인 필요")}</span>}>
+                    <LimitBars limits={usageOf(x.id)} service={services(x)[0]} credits={creditsOf(x.id)} />
+                  </Show>
                 </span>
                 <Show when={props.onPick ? x.id === props.accountId : pick() === x.id}><Icon name="check" size={14} /></Show>
               </button>

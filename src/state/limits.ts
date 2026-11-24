@@ -52,6 +52,30 @@ export function windowLabel(min: number) {
   return t("{n}시간", { n: Math.round(min / 60) });
 }
 
+/** How far a plan window has run (0–1) at `at`, when its length and reset time are known. */
+export function elapsedOf(l: Pick<Limit, "window" | "resetsAt">, at = Date.now()): number | undefined {
+  if (!l.resetsAt || l.window <= 0) return undefined;
+  const len = l.window * 60_000;
+  return Math.max(0, Math.min(1, (len - (l.resetsAt - at)) / len));
+}
+
+export type Pace = "ahead" | "on" | "under";
+/** Spending faster than the window runs ("ahead"), about with it ("on"), or slower ("under"); 5 points either way. */
+export function paceOf(l: Pick<Limit, "window" | "resetsAt" | "used">, at = Date.now()): Pace | undefined {
+  const e = elapsedOf(l, at);
+  if (e === undefined) return undefined;
+  const gap = l.used - e * 100;
+  return gap > 5 ? "ahead" : gap < -5 ? "under" : "on";
+}
+
+/** "40분" / "2시간" / "3일": how long until a plan window starts over */
+export function resetIn(ms: number) {
+  const m = Math.max(0, Math.round(ms / 60_000));
+  if (m < 60) return t("{m}분", { m });
+  const h = Math.round(m / 60);
+  return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
+}
+
 /** what a usage note keeps: the windows as they were then */
 export const snapshot = (accountId: string) => (limits[accountId] ?? []).filter((l) => l.window > 0).map((l) => ({ window: l.window, used: Math.round(l.used) }));
 

@@ -2,7 +2,7 @@
 import { openPanel } from "../state/ui";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { AccountPicker } from "./AccountPicker";
-import { creditsOf, loadEmail, refreshLimits, usageOf, windowLabel } from "../state/limits";
+import { creditsOf, loadEmail, refreshLimits, resetIn, usageOf, windowLabel } from "../state/limits";
 import { ctx, pctText, reusePct } from "../state/ctx";
 import { Icon } from "./Icon";
 import type { Permission, Usage } from "../state/types";
@@ -47,13 +47,6 @@ export function UsageLine(props: { u: Usage; lead?: string }) {
 
 /** how full a plan window gets before the line under the input names it (%) */
 const NEAR = 80;
-
-const left = (ms: number) => {
-  const m = Math.max(0, Math.round(ms / 60_000));
-  if (m < 60) return t("{m}분", { m });
-  const h = Math.round(m / 60);
-  return h < 48 ? t("{n}시간", { n: h }) : t("{n}일", { n: Math.round(h / 24) });
-};
 
 /**
  * The status line under an input, like a terminal agent's footer:
@@ -122,7 +115,7 @@ export function StatusLine(props: { lead?: JSX.Element; accountId: string; space
       </Show>
       <For each={list()}>
         {(l) => (
-          <span class="st-lim" classList={{ hot: l.used >= NEAR }} data-used={l.used} title={l.resetsAt ? t("{t} 후 초기화", { t: left(l.resetsAt - Date.now()) }) : undefined}>
+          <span class="st-lim" classList={{ hot: l.used >= NEAR }} data-used={l.used} title={l.resetsAt ? t("{t} 후 초기화", { t: resetIn(l.resetsAt - Date.now()) }) : undefined}>
             {l.used >= 100 ? t("{w} 한도 다 씀", { w: windowLabel(l.window) }) : t("{w} 한도 {n}%", { w: windowLabel(l.window), n: Math.round(l.used) })}
           </span>
         )}
