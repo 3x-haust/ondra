@@ -301,24 +301,35 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", undefined));
   });
 
-  it("what they say while it answers waits, and goes as one once it has answered", async () => {
+  it("what they say while it answers is taken into that answer, and goes on its own only when it asks for more", async () => {
     BURST.ms = 30;
     await ready();
     const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
-    say("h1", "멈춰봐");
+    say("h1", "dlfdjsk");
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
-    say("h2", "너 사람 못알아봤어");
-    await new Promise((r) => setTimeout(r, 80));
-    say("h3", "미친놈아");
+    say("h2", "일어나");
     await new Promise((r) => setTimeout(r, 80));
     // still answering the first: the rest wait
     expect(said.thrown).toHaveLength(1);
-    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 멈춤" });
+    said.answer = "ㅇ 깼어";
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇ 깼어\n\n고친 거 맞지? ㅋㅋ" });
     said.hook?.("reply1");
+    // one answer to both, said in the talk, not as a reply to the first
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇ 깼어", undefined));
+    expect(said.prompts.at(-1)).toContain("<added>\n일어나\n</added>");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(said.thrown).toHaveLength(1);
+    // more that words alone can't do goes as its own request after
+    say("h3", "멈춰봐");
     await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
-    expect(said.thrown[1].text).toBe("너 사람 못알아봤어\n미친놈아");
-    // the reply goes under the words it answers, with more said since
-    expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 멈춤", "h1");
+    say("h4", "그리고 그 PR 머지해");
+    await new Promise((r) => setTimeout(r, 80));
+    said.answer = "ㅇㅋ 멈춤\n(more)";
+    setState("captain", (m) => m.id === "reply2", { pending: false, reply: "ㅇㅋ 멈춤" });
+    said.hook?.("reply2");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(3));
+    expect(said.thrown[2].text).toBe("그리고 그 PR 머지해");
+    expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 멈춤", "h3");
   });
 
   it("an answer it wrote while another of its own went out there first is looked at again: what's left, or nothing", async () => {
