@@ -850,8 +850,6 @@ export interface AppState {
   absorbed?: Record<string, string>;
   /** per space: the account new work uses ("auto" or missing = route automatically) */
   accountPick?: Record<string, string>;
-  /** a local check's last run in a job (engine/localChecks.ts), by the check's folder name */
-  checkRuns?: Record<string, { at: number; ok: boolean; task: string }>;
   memoryTidy?: { at: number; merged: number; retired: number; learned: number; keyed: number; tasks: string[]; cursor?: number; skills?: number; /** conflicts with the user's own pieces it asked about */ held?: number };
   /** 확인 필요: learned pieces that contradict the user's own, waiting for the user */
   memoryConflicts?: MemoryConflict[];

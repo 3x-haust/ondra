@@ -497,11 +497,10 @@ describe("this user's local checks", () => {
     expect(state.tasks[0].unverified?.join("\n")).toContain("로컬 검사");
   });
 
-  it("let a job that ran it and passed finish, and keep how it went for Settings", async () => {
+  it("let a job that ran it and passed finish", async () => {
     await play({ 1: `고쳤어요.\n${done}` }, [edit, tool("b2", 2, "bash", "node /tmp/ondra/checks/money/check.mjs"), tool("b3", 3, "bash", "pnpm test")]);
     await vi.waitFor(() => expect(state.tasks[0].status).toBe("done"));
     expect(sent("t:job", "prompt")).toHaveLength(1);
-    expect(state.checkRuns?.money).toMatchObject({ ok: true, task: "job" });
   });
 });
 
