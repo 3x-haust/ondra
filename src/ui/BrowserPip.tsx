@@ -122,10 +122,19 @@ export function BrowserPip() {
       { duration: 320, easing: EASE },
     );
   };
+  // shrinking away holds its end (unseen) till it is gone; back before that (the job flickered
+  // out and in), that end is dropped and it shows again: never left on screen unseen, taking the
+  // clicks meant for what is under it
+  let out: Animation | undefined;
   createEffect(() => {
-    if (!leaving() || !el || calm()) return;
+    if (!leaving()) {
+      if (out && el) (out.cancel(), put(at));
+      out = undefined;
+      return;
+    }
+    if (!el || calm()) return;
     const p = at;
-    el.animate(
+    out = el.animate(
       [{ opacity: 1, transform: `translate3d(${p.x}px, ${p.y}px, 0) scale(1)` }, { opacity: 0, transform: `translate3d(${p.x}px, ${p.y}px, 0) scale(0.92)` }],
       { duration: 180, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
     );
