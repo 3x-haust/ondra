@@ -213,9 +213,9 @@ describe("bundled design workflow", () => {
 describe("skill discovery instructions", () => {
   it.each([
     ["captain", CAPTAIN_SYSTEM], ["task", TASK_SYSTEM], ["subagent", SUB_SYSTEM],
-  ])("tells the %s role to search before reading a selected skill", (_role, prompt) => {
-    expect(prompt).toContain("skill_search");
-    expect(prompt).toMatch(/skill_search[\s\S]*read[\s\S]*SKILL\.md/i);
+  ])("tells the %s role to load a skill in one call through use", (_role, prompt) => {
+    expect(prompt).not.toContain("skill_search");
+    expect(prompt).toMatch(/skill tool \(through\s+use\)[\s\S]*comes back read/i);
     expect(prompt).not.toContain("Jobs come with skills (listed in the message when they change)");
   });
 });

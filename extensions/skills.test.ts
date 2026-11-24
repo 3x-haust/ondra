@@ -493,3 +493,16 @@ describe("code-map skill", () => {
     ]));
   }, 30_000);
 });
+
+describe("the skill tool: one call", () => {
+  it("a skill's exact name, or words that clearly fit one, comes back read; vague words only list", async () => {
+    const { pickSkill } = await import("./skills");
+    expect(pickSkill(bundled, "reverse-engineering").load?.name).toBe("reverse-engineering");
+    expect(pickSkill(bundled, "다른 앱의 컴퓨터유즈가 어떻게 동작하는지 분석").load?.name).toBe("reverse-engineering");
+    // the only one a word of it names
+    expect(pickSkill(bundled, "문서").load?.name).toBe("office-docs");
+    const vague = pickSkill(bundled, "디자인");
+    expect(vague.load).toBeUndefined();
+    expect(vague.others.length).toBeGreaterThan(0);
+  });
+});

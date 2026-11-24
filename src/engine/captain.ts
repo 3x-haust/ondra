@@ -36,6 +36,7 @@ import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimi
 import { refreshLimits } from "../state/limits";
 import { onFarEnded } from "./hosts";
 import { lastSaid, placeOf, relay, userParked } from "./jobs";
+import { isUseCall } from "./describe";
 
 /** A chat is the main of a space ("work") or of one project in it ("work~pomo"). */
 export const chatKey = (space: SpaceId, project?: string) => (project ? `${space}~${project}` : space);
@@ -549,11 +550,11 @@ export async function warmMain(spaceId: SpaceId, project?: string, force = false
  * (one uncached request instead of a stale prompt for the rest of the chat).
  */
 const sigOf = new Map<string, string>();
-/** Main starts with only tool_search declared: its tools (jobs, skills, web, settings, read / bash) load through it when first needed. Secrets are hidden from its tool results too. */
+/** Main declares only use and tool_search: its tools (jobs, skills, web, settings, read / bash) are called through use. Secrets are hidden from its tool results too. */
 export async function mainTools(): Promise<string[]> {
   const all = await workerExtensions();
   const lazy = all.find((e) => e.endsWith("/lazy-core.ts"));
-  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts") || e.endsWith("/discord.ts")).flatMap((e) => ["--extension", e]);
+  const direct = all.filter((e) => e.endsWith("/web.ts") || e.endsWith("/skills.ts") || e.endsWith("/jobs.ts") || e.endsWith("/secrets.ts") || e.endsWith("/ondra.ts") || e.endsWith("/discord.ts") || e.endsWith("/use.ts")).flatMap((e) => ["--extension", e]);
   // a copy of the extensions from before this file existed: keep the plain tools
   if (!lazy) return ["--exclude-tools", "edit,write", ...direct];
   return ["--no-builtin-tools", "--extension", lazy, ...direct, ...WORKER_TOOLS];
@@ -729,6 +730,7 @@ export function mainStep(tool: string, args: any, done: boolean): string | undef
     try { site = new URL(site).hostname.replace(/^www\./, ""); } catch { /* as written */ }
     return pick("페이지 읽는 중", "페이지 읽음", stepName(site, 30));
   }
+  if (tool === "skill") return pick("스킬 읽는 중", "스킬 읽음", stepName(args?.query, 30));
   if (tool === "read") return pick("파일 읽는 중", "파일 읽음", stepName(String(args?.path ?? "").split("/").pop(), 30));
   if (tool === "grep" || tool === "find" || tool === "ls") return pick("파일 찾는 중", "파일 찾음", stepName(args?.pattern ?? args?.path, 30));
   if (tool === "bash") return pick("명령 실행 중", "명령 실행함", stepName(args?.command, 30));
@@ -804,7 +806,8 @@ async function ensureCaptain(space: string) {
       if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error")
         errors.set(space, String(ev.message.errorMessage ?? "모델 오류"));
       heardAt.set(space, Date.now());
-      if (ev.type === "tool_execution_start" || ev.type === "tool_execution_end") (noteStep(space, ev), guardTurn(space, ev));
+      // `use` only carries a call: the tool it called counts (its own events, parentToolCallId set)
+      if ((ev.type === "tool_execution_start" || ev.type === "tool_execution_end") && !isUseCall(ev)) (noteStep(space, ev), guardTurn(space, ev));
       if (ev.type === "agent_settled") settled.get(space)?.();
     },
     exit() {
@@ -829,7 +832,7 @@ async function ensureCaptain(space: string) {
     "--session-dir",
     sessionDir(space),
     ...(resume ? ["--continue"] : []),
-    // only tool_search is declared; the rest load through it when needed
+    // only use and tool_search are declared; the rest are called through use
     ...(await mainToolArgs(acc.id)),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote

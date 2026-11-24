@@ -45,7 +45,7 @@ start a private headless instance — never the shared browser. `outline.py`
 needs `fonttools`, `union.py` also `skia-pathops`
 (`python3 -m pip install --user fonttools skia-pathops`).
 
-Image generation: Ondra jobs have no image tool. If `tool_search` finds one,
+Image generation: if `use` lists an image tool (or `tool_search` finds one),
 use it only for mood or mockup photos, never for the mark: a raster can't be
 edited, measured or delivered as a vector, and it may copy someone's logo.
 

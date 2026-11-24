@@ -52,6 +52,21 @@ export function searchSkills(skills: Skill[], query: string, limit = 5) {
     .map(({ skill }) => brief(skill));
 }
 
+/**
+ * What the skill tool answers for a query: the skill it names (its exact name) or the one that
+ * clearly fits, to be read at once; else only the candidates, to name one exactly.
+ */
+export function pickSkill(skills: Skill[], query: string): { load?: Skill; others: Skill[] } {
+  const q = query.trim().toLocaleLowerCase();
+  const ranked = rank(skills, query);
+  const exact = skills.find((s) => !s.disableModelInvocation && s.name.toLocaleLowerCase() === q);
+  if (exact) return { load: exact, others: ranked.map((r) => r.skill).filter((s) => s !== exact).slice(0, 3) };
+  const [a, b] = ranked;
+  // named, a word only it has, two of its words, or the only one any word of the query names
+  const clear = !!a && (((a.named || a.unique || a.strong >= 2) && (!b || a.score >= b.score * 1.5)) || (!b && a.strong >= 1));
+  return clear ? { load: a.skill, others: ranked.slice(1, 4).map((r) => r.skill) } : { others: ranked.slice(0, 5).map((r) => r.skill) };
+}
+
 /** The task's own words in a job's first message (a fresh one or a new session's): its title and the ask. */
 export function taskQuery(prompt: string): string | undefined {
   const lines = prompt.split("\n");
@@ -64,14 +79,14 @@ export function taskQuery(prompt: string): string | undefined {
   return `${head[1]}\n${ask.join("\n")}`.slice(0, 4000);
 }
 
-/** skill_search run on the task itself: the skills that clearly fit, for the job's first turn (or "" when none do). */
+/** the skill search run on the task itself: the skills that clearly fit, for the job's first turn (or "" when none do). */
 export function skillHint(skills: Skill[], query: string, limit = 3): string {
   const fit = rank(skills, query).filter((r) => r.named || r.unique || r.strong >= 2).slice(0, limit);
   if (!fit.length) return "";
   return [
-    "# Skills for this task (skill_search on the task)",
+    "# Skills for this task (matched on the task)",
     ...fit.map(({ skill }) => `- ${skill.name}: ${skill.description.replace(/\s+/g, " ").slice(0, 200)} (${skill.filePath})`),
-    "Read the SKILL.md of each one that fits before you act, and follow it. Search again when the work moves to another domain.",
+    LOAD_EACH,
   ].join("\n");
 }
 
@@ -205,21 +220,22 @@ export class SkillRouter {
   }
 }
 
+const LOAD_EACH = "Load each one that fits before you act (the skill tool with its name, or read its SKILL.md), and follow it. Look again when the work moves to another domain.";
 const line = (s: Skill) => `- ${s.name}: ${s.description.replace(/\s+/g, " ").slice(0, 200)} (${s.filePath})`;
 
 /** The hidden note for a user message's skills. */
 export function messageHint(fit: Skill[], first: boolean): string {
   if (!fit.length) return "";
   return [
-    first ? "# Skills for this task (skill_search on the task)" : "# Skills for this message",
+    first ? "# Skills for this task (matched on the task)" : "# Skills for this message",
     ...fit.map(line),
-    "Read the SKILL.md of each one that fits before you act, and follow it. Search again when the work moves to another domain.",
+    LOAD_EACH,
   ].join("\n");
 }
 
 /** The note added to a tool's result when the work steps into a skill's domain. */
 export const toolHint = (s: Skill, why: string) =>
-  `\n[skill] This step ${why}, which is ${s.name}'s domain: ${s.description.replace(/\s+/g, " ").slice(0, 160)}\nRead ${s.filePath} and follow it before going on, unless you already have.`;
+  `\n[skill] This step ${why}, which is ${s.name}'s domain: ${s.description.replace(/\s+/g, " ").slice(0, 160)}\nLoad it (the skill tool with "${s.name}", or read ${s.filePath}) and follow it before going on, unless you already have.`;
 
 /** where a project keeps skills of its own, for any agent */
 export const PROJECT_SKILL_DIRS = [".agents/skills", ".claude/skills", ".cursor/skills"];
@@ -254,23 +270,6 @@ export default function (pi: ExtensionAPI) {
   const { skills, diagnostics } = loadSkills({ cwd: process.cwd(), agentDir: process.cwd(), skillPaths, includeDefaults: false });
   for (const diagnostic of diagnostics) console.error(`[skills] ${diagnostic.path}: ${diagnostic.message}`);
 
-  pi.registerTool({
-    name: "skill_search",
-    label: "Skill search",
-    // found through tool_search; loaded later, it carries no prompt lines (they would rebuild the prompt)
-    exposure: "deferred",
-    description: "Search available skills by task keywords or skill name (Korean or English). Returns up to 10 matching names, descriptions and file paths, never instructions. Read the selected SKILL.md with read and follow it; resolve references relative to baseDir. Try alternate keywords if no match. Search again when the task changes; no catalog listed doesn't mean no skill applies.",
-    parameters: Type.Object({
-      query: Type.String({ description: "Task keywords or an exact skill name" }),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "Maximum matches (default 5)" })),
-    }),
-    async execute(_id, { query, limit }) {
-      const matches = searchSkills(skills, query, limit);
-      const result = { skills: matches };
-      return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
-    },
-  });
-
   const triggers = new Map<string, Triggers>();
   for (const s of skills) {
     try {
@@ -281,6 +280,29 @@ export default function (pi: ExtensionAPI) {
   }
   const router = new SkillRouter(skills, triggers);
   pi.on("session_start", () => router.reset());
+
+  // one call: the skill named or clearly fitting comes back read, the others by name
+  pi.registerTool({
+    name: "skill",
+    label: "Skill",
+    // reached through use (or tool_search); loaded later, it carries no prompt lines (they would rebuild the prompt)
+    exposure: "deferred",
+    description: "A skill's instructions in one call. Give its exact name, or task keywords (Korean or English): the skill named or clearly fitting comes back read (its SKILL.md, with the folder its references resolve from), other likely ones by name; when none clearly fits, only the candidates (call again with one's exact name). Look again when the task changes; no catalog listed doesn't mean no skill applies.",
+    parameters: Type.Object({
+      query: Type.String({ description: "a skill's exact name, or task keywords" }),
+    }),
+    async execute(_id, { query }) {
+      const { load, others } = pickSkill(skills, query);
+      const named = (l: Skill[]) => l.map((x) => `- ${x.name}: ${x.description.replace(/\s+/g, " ").slice(0, 160)}`).join("\n");
+      const more = others.length ? `\n\nOther skills that may fit (the skill tool with a name reads it):\n${named(others)}` : "";
+      const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], details: { skill: load?.name, others: others.map((x) => x.name) } });
+      if (!load) return text(others.length ? `No one skill clearly fits "${query}". Candidates (the skill tool with an exact name reads one):\n${named(others)}` : `No skill matches "${query}". Try other keywords.`);
+      if (router.loaded.has(load.name)) return text(`${load.name} is already read in this session (${load.filePath}); follow it.${more}`);
+      router.loaded.add(load.name);
+      const body = stripFrontmatter(readFileSync(load.filePath, "utf8"));
+      return text(`Skill: ${load.name}\nLocation: ${load.filePath}\nResolve relative references from: ${load.baseDir}\n\n${body}${more}`);
+    },
+  });
   pi.on("session_compact", () => router.reset());
 
   // Every user message: a job's first (fresh or after a handoff) by the task's own

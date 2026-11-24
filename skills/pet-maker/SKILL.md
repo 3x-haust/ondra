@@ -88,7 +88,7 @@ first of these that works here, and say in your answer which one you used:
 1. **Its own animations, found** (free, best when complete): sprite sheets, GIF sets
    or official animated stickers of the character that really move. Use them for the
    acts they cover; make the rest with the next way that works.
-2. **GPT image**: the `image` tool (find it with tool_search). It draws on the user's
+2. **GPT image**: the `image` tool (call it through use). It draws on the user's
    GPT login in Ondra, from your picture of the character, keeping it the same
    character. It says so when there is no GPT login: then the next way.
 3. **Grok video**, only when `grok` is installed and signed in: sprite-gen (below).

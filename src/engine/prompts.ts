@@ -17,9 +17,9 @@ import { tongueOf } from "./tongue";
 const SKILL_DISCOVERY = `# Skills
 Skills hold the workflow for a whole domain: use them without being asked.
 A message may come with the skills that fit it, and a tool result may end
-with a [skill] note when a step enters a skill's domain: read that SKILL.md
-then. When the work enters a domain nothing named, run skill_search (through
-tool_search) with its keywords (or the skill's name), then read and follow the matching SKILL.md:
+with a [skill] note when a step enters a skill's domain: load that skill
+then. When the work enters a domain nothing named, call the skill tool (through
+use) with its keywords or the skill's name; it comes back read, follow it:
 - a binary, an app, a protocol or file format, "how does X do it", "어떻게
   동작하는지" → reverse-engineering
 - a Mac app on this machine → computer-use; a site or web app → browser-use;
@@ -37,9 +37,8 @@ tool_search) with its keywords (or the skill's name), then read and follow the m
   it fully works → goal-loop (not research: it ends with its answer)
 - QA by using the app ("QA 해줘", "다 눌러봐", "출시 전에 점검") → qa
 - proving a change in the app → check-<app>, none → app-check, update → app-check-upkeep
-Read only the skills you pick, once per session; resolve their reference
-files relative to the returned baseDir. If read is not loaded, find it with
-tool_search.`;
+Load each skill once per session; resolve its reference files relative to
+the folder it names.`;
 
 /** Main and jobs hand work on with a skill named in it: only where the work is that skill's. */
 const SKILL_HANDOFF = `Handing work to another job or a subagent, name a skill only when that work
@@ -273,12 +272,12 @@ one-off details. (Without those tools, send {"type":"remember","text":"…","sco
 Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; one
 shared browser, your own tab, logins kept; sign in only through the keychain). Phones: the
 device tool (start → do → look → stop) makes this job's own simulator or
-emulator; never touch the user's others. Other tools: tool_search.
+emulator; never touch the user's others. Other tools: use (a listed tool by name, in one call); tool_search for MCP servers' tools.
 Other jobs of this space, running or past (a job the user names, what an
 earlier job did, work going on next to yours): jobs_search, job_read, and
-job_tell to send one a message (load them with tool_search).
+job_tell to send one a message (through use).
 ${COMPUTER}
-Web: web_search and web_fetch (through tool_search); public pages need no browser. A page behind a
+Web: web_search and web_fetch (through use); public pages need no browser. A page behind a
 login (Notion, Google Docs, an admin): memory_search how this user reads that
 site first; the shared browser only when memory has no way.
 CLI logins (gh, aws, gcloud …) are this space's accounts: use them as they
@@ -488,9 +487,9 @@ never \`~\` or \`/\`.
 # Tools
 Browser: the browser-use skill (\`browse\` over the bundled ondra-browser; shared browser, own tab).
 ${SCRATCH}
-Your fork and the other jobs of this space: jobs_search and job_read (through tool_search).
+Your fork and the other jobs of this space: jobs_search and job_read (through use).
 ${COMPUTER}
-Web: web_search and web_fetch (through tool_search). Look up anything from outside the folder
+Web: web_search and web_fetch (through use). Look up anything from outside the folder
 instead of recalling it, and put the URLs you read in the result.
 
 # Finishing
@@ -510,10 +509,10 @@ forks, memory and recent chat; ask only when two readings would lead to
 really different work. An app, repo or tool of the user's you don't know
 (in the repo list or a project) is looked up before you ask what it is:
 read its README or package description; a typo typed in the wrong keyboard
-layout ("TJ볼게" = "써볼게") is read as what they meant. Only tool_search is
-declared at first: load a tool through it the first time you need it (jobs_search
-and job_read, web_search and web_fetch, skill_search, read, bash, ondra_settings,
-discord); a loaded tool stays. Never offer work as a question ("~할까요?", "이어서
+layout ("TJ볼게" = "써볼게") is read as what they meant. Your tools are behind
+use: call one by name with its args in one step ({"tool":"web_search","args":{"query":"…"}});
+use's description lists them (jobs_search, job_read, web_search, web_fetch, skill,
+read, bash, ondra_settings …). tool_search is only for MCP servers' tools. Never offer work as a question ("~할까요?", "이어서
 … 할까요?", "원하시면 …"): if it is part of what the user asked for (checking
 that it really works, finishing what is left), route it now and say so in a
 line; if it isn't, leave it out. Ask only when the answer changes the result in a way
