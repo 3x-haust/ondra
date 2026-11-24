@@ -1,14 +1,11 @@
 // A round of questions (the sharpen skill): the questions whose answers don't wait on one
 // another, sent in one ask block. They show one at a time on the usual card (its one choice
-// is the recommendation, anything else is typed), the next at once with no model turn, and
-// all the answers go back together after the last.
+// is the recommendation; any other answer is typed in the chat box), the next at once with no
+// model turn, and all the answers go back together after the last.
 import type { Block, Decision } from "../state/types";
-import { t as tr } from "../i18n";
 
 export type RoundQ = { question: string; recommend: string; note?: string };
 export type Clarity = NonNullable<Decision["clarity"]>;
-/** the choice that answers the rest of the round with its recommendations */
-export const REST = "__rest";
 
 const unit = (x: unknown): number | undefined => {
   const n = typeof x === "number" ? x : typeof x === "string" && x.trim() ? Number(x) : NaN;
@@ -57,24 +54,16 @@ export function roundDecision(
     ...base,
     kind: "ask",
     question: q.question,
-    options: [
-      { id: "o0", label: q.recommend, primary: true, ...(q.note ? { note: q.note } : {}) },
-      ...(rest.length ? [{ id: REST, label: tr("남은 {n}개 모두 추천대로", { n: qs.length }) }] : []),
-    ],
+    // the recommendation is the only choice: any other answer is typed in the chat box
+    options: [{ id: "o0", label: q.recommend, primary: true, ...(q.note ? { note: q.note } : {}) }],
     round: { rest, answers, n: answers.length + 1, total: answers.length + qs.length, recommend: q.recommend },
     ...(clarity ? { clarity } : {}),
   };
 }
 
-const marked = (s: string) => `${s} ${tr("(추천대로)")}`;
-
 /** The answer to this card: the next card of the round, or (after the last) every answer. */
 export function answerRound(d: Decision, optionId: string): { next?: Decision; answers: { q: string; a: string }[] } {
   const r = d.round!;
-  if (optionId === REST) {
-    const all = [{ q: d.question, a: marked(r.recommend) }, ...r.rest.map((q) => ({ q: q.question, a: marked(q.recommend) }))];
-    return { answers: [...r.answers, ...all] };
-  }
   const a = optionId === "o0" ? r.recommend : optionId;
   const answers = [...r.answers, { q: d.question, a }];
   if (!r.rest.length) return { answers };

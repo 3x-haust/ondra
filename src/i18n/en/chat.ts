@@ -282,8 +282,6 @@ export default {
   "추천": "Recommended",
   "필수": "Required",
   "'{label}'을(를) 채워 주세요": "Fill in “{label}”",
-  "남은 {n}개 모두 추천대로": "All {n} left as recommended",
-  "(추천대로)": "(as recommended)",
   "모호함 {n}%": "{n}% unclear",
   "계정 없음|notice": "No account",
   "작업 내용": "Describe the task",

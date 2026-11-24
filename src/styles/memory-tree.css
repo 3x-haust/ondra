@@ -1836,3 +1836,89 @@ button.mc-row:hover {
 .md-in .mt-add {
   margin: 0 0 var(--s-8);
 }
+
+/* ── memory graph, the way Obsidian draws one: a plain ground, soft nodes with no rings, faint
+   links, and on hover the node and its links in the accent while the rest steps back */
+.mg {
+  background-image: none;
+}
+.mg-edge,
+.mg-edge.own,
+.mg-edge.tie,
+.mg-edge.about {
+  stroke: color-mix(in srgb, var(--ink) 11%, transparent);
+  stroke-width: 0.8;
+}
+.mg-edge.dim {
+  opacity: 0.35;
+}
+.mg-edge.lit {
+  stroke: color-mix(in srgb, var(--accent) 75%, transparent);
+  stroke-width: 1.1;
+  opacity: 1;
+}
+.mg-node circle,
+.mg-node rect,
+.mg-node.k-memory circle {
+  stroke: none;
+  transition: fill 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+/* hubs one soft grey (bigger for more inside), the kinds their colour toned down */
+.mg-node.k-global circle,
+.mg-node.k-space circle,
+.mg-node.k-project circle {
+  fill: color-mix(in srgb, var(--ink) 50%, var(--bg));
+}
+.mg-node.k-topic circle,
+.mg-node.k-topics circle {
+  fill: color-mix(in srgb, var(--ink) 34%, var(--bg));
+}
+.mg-node.k-folder circle,
+.mg-node.k-memory circle {
+  fill: color-mix(in srgb, var(--mk, var(--ink-3)) 78%, var(--bg));
+}
+.mg-node.k-file rect {
+  fill: color-mix(in srgb, #d6a35c 70%, var(--bg));
+}
+.mg-node.k-past circle {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 30%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.mg-node.k-memory.user circle {
+  stroke: color-mix(in srgb, var(--ink) 55%, transparent);
+  stroke-width: 1;
+}
+/* names: small and quiet, a thin ground behind them instead of a thick outline */
+.mg-node text {
+  stroke-width: 2px;
+  stroke: color-mix(in srgb, var(--bg) 85%, transparent);
+}
+.mg-node.k-global text,
+.mg-node.k-space text,
+.mg-node.k-project text {
+  fill: var(--ink-2);
+}
+/* hovered and picked: the accent, as Obsidian lights the node under the pointer */
+.mg-node:hover > :is(circle, rect),
+.mg-node.sel > :is(circle, rect) {
+  fill: var(--accent);
+  stroke: none;
+}
+.mg-node.sel > :is(circle, rect) {
+  stroke: color-mix(in srgb, var(--accent) 35%, transparent);
+  stroke-width: 4;
+}
+.mg-node:hover text,
+.mg-node.sel text {
+  fill: var(--ink);
+}
+.mg-node.dim,
+.mg-node.far.dim {
+  opacity: 0.2;
+}
+.mg-legend .lg-kind {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mk, var(--ink-3)) 78%, var(--bg));
+}

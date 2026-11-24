@@ -17,10 +17,11 @@ const COLOR: Record<string, string> = { Claude: "#d97757", Gemini: "#8e75b2" };
 /** at or under this share left, the bar turns the warning colour (%) */
 const LOW = 20;
 
+/** the pace's icon and what it means, with the numbers it comes from ({p}% of the window gone, {u}% used) */
 const PACE: Record<Pace, { icon: string; label: string }> = {
-  ahead: { icon: "trendUp", label: "창이 지나는 것보다 빨리 쓰고 있어요" },
-  on: { icon: "gauge", label: "창이 지나는 만큼 쓰고 있어요" },
-  under: { icon: "trendDown", label: "여유 있게 쓰고 있어요" },
+  ahead: { icon: "trendUp", label: "빨리 쓰고 있어요: 창은 {p}% 지났는데 {u}%를 썼어요" },
+  on: { icon: "gauge", label: "창이 지나는 만큼 쓰고 있어요: {p}% 지났고 {u}%를 썼어요" },
+  under: { icon: "trendDown", label: "여유 있게 쓰고 있어요: 창은 {p}% 지났는데 {u}%만 썼어요" },
 };
 
 /** "2일 1시간" / "1시간 40분" / "12분": two units, as T3 Code's "2d 1h" */
@@ -45,7 +46,9 @@ function view(l: Limit, now: number) {
     ...(reset ? [t("{t} 후 초기화", { t: reset })] : []),
     ...(even === undefined ? [] : [t("세로선: 고르게 썼다면 지금 {n}% 남아 있을 자리", { n: even })]),
   ].join("\n");
-  return { left, even, reset, title, pace: paceOf(l, now), low: left <= LOW };
+  const pace = paceOf(l, now);
+  const paceText = pace && e !== undefined ? t(PACE[pace].label, { p: Math.round(e * 100), u: 100 - left }) : undefined;
+  return { left, even, reset, title, pace, paceText, low: left <= LOW };
 }
 
 function Bar(p: { v: ReturnType<typeof view> }) {
@@ -110,14 +113,15 @@ export function LimitCards(props: { limits: Limit[]; service?: string; now?: num
               <div class="lim-card" classList={{ low: v().low }}>
                 <div class="lim-head">
                   <span class="lim-card-name">{windowLabel(l.window)}</span>
-                  <span class="lim-big">
+                  {/* the whole "36% 남음 ↗" carries what the pace means, so it shows wherever the pointer rests */}
+                  <span class="lim-big" classList={{ explained: !!v().paceText }} title={v().paceText}>
                     <b>{v().left}%</b>
                     {/* the word sits on the number's baseline; the pace icon is centred on the word */}
                     <span class="lim-unit">
                       <span>{t("남음")}</span>
                       <Show when={v().pace}>
                         {(p) => (
-                          <span class="lim-pace" classList={{ ahead: p() === "ahead" }} title={t(PACE[p()].label)} aria-label={t(PACE[p()].label)}>
+                          <span class="lim-pace" classList={{ ahead: p() === "ahead" }} role="img" aria-label={v().paceText}>
                             <Icon name={PACE[p()].icon} size={14} />
                           </span>
                         )}

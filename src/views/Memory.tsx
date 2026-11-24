@@ -14,7 +14,7 @@
 import { PaneControls } from "./PaneControls";
 import { usePaneFocused } from "../state/panes";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { addMemory, faded, inSpace, journalFileName, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
+import { addMemory, faded, inSpace, journalFileName, KINDS, kindLabel, kindOf, memoryFileNames, userOwned } from "../engine/memory";
 import { parseNowKey, projectNow } from "../engine/journal";
 import { tidying, tidyMemory } from "../engine/tidy";
 import { absorbing, absorbNotes, findNotes, notesPending } from "../engine/absorb";
@@ -572,6 +572,9 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
     const z = view().z;
     if (n.id === props.sel || n.id === props.hover || near()?.has(n.id)) return true;
     if (n.kind === "topic") return n.ring === 0 || bigTopics().has(n.id) || (!!props.graph.focus && n.ring <= 1 && memCount() <= 36) || z >= 1.3;
+    // a kind folder's name repeats under every project ("규칙", "방법"…): its colour says it (the legend
+    // names the colours), the name shows in a local graph, near what's hovered or zoomed in
+    if (n.kind === "folder" || n.kind === "past") return !!props.graph.focus || z >= 1.3;
     if (isHub(n.kind)) return true;
     if (n.kind === "file") return !!props.graph.focus || z >= 1;
     return (!!props.graph.focus && n.ring <= 1 && memCount() <= 36) || z >= 1.8;
@@ -649,6 +652,8 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
   const focusNode = () => (props.graph.focus ? props.graph.byId.get(props.graph.focus) : undefined);
   /** the shapes on screen that aren't circles, for the legend */
   const kinds = createMemo(() => ({ file: props.graph.nodes.some((n) => n.kind === "file"), entry: props.graph.nodes.some((n) => n.kind === "entry") }));
+  /** the colours on screen and the kind each one means */
+  const colours = createMemo(() => KINDS.filter((k) => props.graph.nodes.some((n) => n.mk === k.id && (n.kind === "folder" || n.kind === "memory"))));
   return (
     <div class="mg" classList={{ local: !!props.graph.focus }}>
       <svg ref={svg} class="mg-svg" onWheel={onWheel} onPointerDown={onDown}>
@@ -733,8 +738,9 @@ function Graph(props: { graph: G; sel: string; hover?: string; onSel: (id: strin
           </div>
         )}
       </Show>
-      <Show when={kinds().file || kinds().entry}>
+      <Show when={kinds().file || kinds().entry || colours().length}>
         <div class="mg-legend">
+          <For each={colours()}>{(k) => <span><i class={`lg-kind mk-${k.id}`} />{t(k.label)}</span>}</For>
           <Show when={kinds().file}><span><i class="lg-file" />{t("지침 파일")}</span></Show>
           <Show when={kinds().entry}><span><i class="lg-entry" />{t("작업 기록")}</span></Show>
         </div>
