@@ -411,3 +411,82 @@ describe("HostObservation.screen", () => {
     expect(obs.screen()).toBe("메모 — 장보기");
   });
 });
+
+describe("ComputerHostSession steps a person would chain", () => {
+  // A chat app: clicking the room opens it a moment later (two reads later), with a
+  // field and a Send button; sending shows the message a moment after that.
+  function chatHelper(): { path: string; log: string } {
+    const dir = mkdtempSync(join(tmpdir(), "cuhost-chat-"));
+    const path = join(dir, "chat.mjs"), log = join(dir, "acts.jsonl");
+    writeFileSync(path, `
+import { appendFileSync } from "node:fs";
+const env = { frontmostApp: "a", frontmostPid: 1, frontmostWindowId: 5, mouse: { x: 1, y: 2 } };
+let opening = -1, sending = -1, draft = "", sent = [], buf = "";
+const room = () => opening === 0;
+const tree = () => ({ id: "w", role: "AXWindow", title: "Chat", children: [
+  { id: "r1", role: "AXRow", children: [{ id: "r1t", role: "AXStaticText", value: "행동대장들" }] },
+  { id: "r2", role: "AXRow", children: [{ id: "r2t", role: "AXStaticText", value: "가족" }] },
+  { id: "dup1", role: "AXButton", title: "더보기" }, { id: "dup2", role: "AXButton", title: "더보기" },
+  ...(room() ? [
+    { id: "in", role: "AXTextArea", value: draft, placeholder: "메시지 입력", settable: true },
+    { id: "send", role: "AXButton", children: [{ id: "sendt", role: "AXStaticText", value: "전송" }] },
+    ...sent.map((m, i) => ({ id: "m" + i, role: "AXStaticText", value: m })),
+  ] : []) ] });
+const tick = () => { if (opening > 0) opening--; if (sending > 0 && --sending === 0) { sent.push(draft); draft = ""; } };
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", c => { buf += c; let nl;
+  while ((nl = buf.indexOf("\\n")) >= 0) { const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
+    const req = JSON.parse(line); let result = { env };
+    if (req.op === "launch") result = { pid: 42, env, backgroundPreserved: true };
+    if (req.op === "observe") { tick(); result = { tree: tree(), env }; }
+    if (req.op === "act") {
+      appendFileSync(${JSON.stringify(log)}, JSON.stringify(req.action) + "\\n");
+      if (req.action.ref === "r1") opening = 2;
+      if (req.action.kind === "set-value") draft = req.action.value;
+      if (req.action.ref === "send") sending = 2;
+      result = { tree: tree(), env, backgroundPreserved: true, via: "ax" };
+    }
+    process.stdout.write(JSON.stringify({ version: 1, id: req.id, ok: true, result }) + "\\n");
+  }
+});
+`);
+    return { path, log };
+  }
+  const open = async () => {
+    const { path, log } = chatHelper();
+    const helper = new ComputerHostHelper(process.execPath, [path]);
+    helper.start();
+    const session = new ComputerHostSession(helper);
+    await session.start("Chat");
+    return { session, log };
+  };
+
+  it("opens a chat, waits for its field, types, sends and waits for the message, in one call", async () => {
+    const { session, log } = await open();
+    const r = await session.steps([
+      { kind: "click", find: "행동대장들" },
+      { kind: "wait", for: "전송" },
+      { kind: "set-value", find: "메시지", value: "지금 감" },
+      { kind: "click", find: "전송" },
+      { kind: "wait", for: "지금 감" },
+    ]) as Record<string, any>;
+    expect(r.failed).toBeUndefined();
+    // the row itself is clicked (not the text in it), the field and the button found once they appeared
+    expect(readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((a) => [a.kind, a.ref])).toEqual([["press-action", "r1"], ["set-value", "in"], ["press-action", "send"]]);
+    expect(r.steps.filter((s: any) => s.kind === "wait").map((s: any) => s.wait.for)).toEqual(["전송", "지금 감"]);
+    expect(r.observation.text).toContain('text "지금 감"');
+    await session.stop();
+  });
+
+  it("stops at a name that fits several, or that never comes, saying which", async () => {
+    const { session } = await open();
+    const two = await session.steps([{ kind: "click", find: "더보기" }]) as Record<string, any>;
+    expect(two.failed.error).toMatch(/^FIND_AMBIGUOUS: “더보기” fits 2: \[\d+\] button "더보기"; \[\d+\] button "더보기"/);
+    const t0 = Date.now();
+    const none = await session.steps([{ kind: "wait", for: "없는 글자", seconds: 0.4 }, { kind: "click", find: "가족" }]) as Record<string, any>;
+    expect(none).toMatchObject({ failed: { step: 1 }, skipped: 1 });
+    expect(none.failed.error).toMatch(/^WAIT_TIMEOUT: “없는 글자” not on screen after 0.4 s/);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    await session.stop();
+  });
+});
