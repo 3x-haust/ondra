@@ -1,11 +1,11 @@
----
-name: stack-diagram
-description: "Create cloud-architecture-style diagrams of tech stacks, system architectures, infra layouts, and service topologies — with real brand logos, grouped containers, and clean orthogonal arrows — delivered as self-contained HTML, a PNG image, a React/TSX component, or a live artifact. Use this skill whenever the user asks for an architecture / system / stack / infra diagram, a tech-stack overview, a service topology, a cloud-vendor-style diagram, or wants tech logos arranged into a picture of how their services connect — in any language, even if they don't name an output format, and even if the tools involved aren't cloud services. (아키텍처 다이어그램, 스택 다이어그램, 기술 스택 그림, 시스템 구성도, 인프라 구성도, 서비스 구성도)"
-license: MIT (see LICENSE); bundled fonts are SIL OFL 1.1
-compatibility: Python 3.9+ and network access to fetch logos; PNG output also needs Playwright with Chromium (in Ondra, its bundled headless Chrome when Playwright isn't installed)
----
+# Stack diagram (part of visual-report)
 
-# stack-diagram
+A standalone architecture, stack or infra diagram file with official logos: self-contained
+HTML, a PNG, a React/TSX component or a live artifact. Paths below (`scripts/`, `assets/`,
+`references/`) are relative to this folder, `visual-report/stack-diagram/`. Needs Python 3.9+
+and network access to fetch logos; PNG output also needs Playwright with Chromium (in Ondra,
+its bundled headless Chrome when Playwright isn't installed). MIT (see LICENSE); bundled fonts
+are SIL OFL 1.1.
 
 Produces engineering-drawing-style architecture diagrams: real logos on white tiles, labeled group boxes (like cloud-vendor VPC diagrams), orthogonal arrows with monospace labels, on a cool graph-paper background. One self-contained HTML file is the source of truth; PNG / TSX / artifact are derived from it.
 
@@ -19,7 +19,7 @@ Produces engineering-drawing-style architecture diagrams: real logos on white ti
 > - Nothing to install for PNGs: without Playwright, `render_png.py` drives the headless Chrome Ondra ships (`$ONDRA_BROWSER_EXECUTABLE_PATH` in every job) with the same viewport, waits and both themes.
 > - Work in a folder under `$APP_ARTIFACTS_DIR` (icons, draft, `out.html`, PNGs). Show the result with a `shot` block per PNG (absolute path) and a `link` block (`kind: "file"`) to the HTML.
 > - Only brand names go to the icon sources; never pass an internal service name to `fetch_icons.py` (use `assets/generic/` icons for those).
-> - A quick picture inside the chat is the `arch` block (visual-report); this skill is for a standalone diagram file with official logos.
+> - A quick picture inside the chat is the `arch` block (visual-report); this guide is for a standalone diagram file with official logos.
 
 ## Workflow
 

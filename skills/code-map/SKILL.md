@@ -9,6 +9,7 @@ description: >
   with drill-down, and kept in one map file that later jobs read before a
   change and update after it. Reads an existing Groma (groma/) map too.
 metadata:
+  ondra-menu: 'hidden'
   ondra-reads: '/code-map/map\.json$'
   ondra-commands: '\bcodemap\.mjs\b'
 ---

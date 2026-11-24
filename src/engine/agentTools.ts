@@ -80,12 +80,11 @@ const SKILL_LINE: Record<string, string> = {
   overnight: "자리를 비운 동안 묻지 않고 일을 이어 가고, 결정을 기록해 둬요",
   secrets: "API 키와 .env를 값을 보지 않고 다뤄요",
   sharpen: "만들기 전에 원하는 걸 물어 뾰족하게 하고, 기획서와 티켓으로 나눠 병렬로 해요",
-  "stack-diagram": "공식 로고로 아키텍처·스택 다이어그램을 그려요",
   qa: "앱을 직접 써 보며 버그를 찾아요",
   recap: "자리를 비운 동안 무슨 일이 있었는지, 결정할 것부터 알려 줘요",
   "reverse-engineering": "바이너리와 앱을 분석해요",
   "test-ci": "테스트와 CI를 만들어요",
-  "visual-report": "진행과 결과를 차트와 블록으로 보여 줘요",
+  "visual-report": "진행과 결과를 차트와 블록으로 보여 주고, 공식 로고로 아키텍처 다이어그램을 그려요",
   "web-design": "사이트와 화면을 디자인해요",
 };
 

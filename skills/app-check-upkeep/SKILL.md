@@ -5,6 +5,8 @@ description: >
   area read from source, every area driven in one live pass, drift fixed in
   the skill and map only, product bugs reported. Use for "앱 확인 스킬 점검",
   "기능 지도 업데이트", "audit the check skill", or a routine running it.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # App check upkeep

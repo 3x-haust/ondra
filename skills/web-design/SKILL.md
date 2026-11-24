@@ -8,6 +8,8 @@ description: >
   responsive layouts, UI states and accessibility checks. Use for 웹 디자인,
   디자인 시스템, 디자인 토큰, 디자인 규칙, 랜딩 페이지 and 포트폴리오. Not for
   a quick opinion.
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # Web design

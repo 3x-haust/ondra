@@ -27,7 +27,7 @@ use) with its keywords or the skill's name; it comes back read, follow it:
 - research with sources, a survey or comparison → deep-research
 - a chart, a diagram or a page shown in the chat → visual-report; a Word,
   Excel, PowerPoint, PDF or HWPX file, or a document to hand over → office-docs
-- a stack diagram with logos (아키텍처 그림) → stack-diagram
+- a stack diagram with logos (아키텍처 그림) → visual-report
 - a supplied design (Figma) → mimikyu; a new look → web-design; web UI code
   (CSS, dialogs, forms, accessibility) → modern-web-guidance
 - a promo film, launch video, reel or kinetic type (모션그래픽, 홍보 영상)
