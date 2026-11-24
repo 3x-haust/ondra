@@ -130,9 +130,6 @@
   line-height: 1;
   letter-spacing: -0.01em;
 }
-.lim-big.explained {
-  cursor: help;
-}
 .lim-card.low .lim-big b {
   color: var(--warn-ink);
 }
