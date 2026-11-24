@@ -195,3 +195,13 @@ describe("the Discord agent's own chat", () => {
     expect(state.captain.filter((m) => m.project === "ondra").length).toBeGreaterThan(0);
   });
 });
+
+describe("the Discord agent moves a running job's open work", () => {
+  it("a room on an append moves where the job works in the open; main's own chat can't", async () => {
+    setState("tasks", (t) => t.id === "h-run", "agent", { channel: "1520439234652143657" });
+    await applyRoutes("home~@agent", [{ kind: "append", taskId: "h-run", message: "", room: "<#1574400958086123680>" }], "거기서 해");
+    expect(taskById("h-run")?.agent).toEqual({ channel: "1520439234652143657", room: "1574400958086123680" });
+    await applyRoutes("home", [{ kind: "append", taskId: "h-run", message: "", room: "99999999" }], "x");
+    expect(taskById("h-run")?.agent?.room).toBe("1574400958086123680");
+  });
+});
