@@ -7,6 +7,7 @@
 // Two ways to stop: 연결 끊기 (disconnect for now: kept, not dialed until 다시 연결) and 제거
 // (remove: everything of that Mac goes from here, and that Mac is told to forget this one; when it
 // can't be reached it's told the next time it can, see `leaving`).
+import type { FormValues } from "./form";
 import { produce } from "solid-js/store";
 import { remoteCmd, remoteHostName, remoteStart } from "../lib/native";
 import { hostOfTask, mirror, readAt, remoteProjectId, seenHere, setMirror, splitProjectId, type FarAsk, type HostInfo, type HostMirror, type HostStatus } from "../state/mirror";
@@ -205,11 +206,11 @@ export function markFarRead(id: string) {
 }
 
 /** answer another Mac's question there; its card goes now and comes back if that Mac can't take it */
-export async function farDecide(d: Decision, optionId: string) {
+export async function farDecide(d: Decision, optionId: string, values?: FormValues) {
   const host = Object.keys(mirror.hosts).find((h) => mirror.hosts[h].decisions?.some((x) => x.id === d.id));
   if (!host) return;
   setMirror("hosts", host, "decisions", (l) => (l ?? []).filter((x) => x.id !== d.id));
-  const ok = await viaHost(host, "decide", [d.id, optionId]).then(() => true, () => false);
+  const ok = await viaHost(host, "decide", values ? [d.id, optionId, values] : [d.id, optionId]).then(() => true, () => false);
   if (!ok && mirror.hosts[host] && !mirror.hosts[host].decisions?.some((x) => x.id === d.id)) setMirror("hosts", host, "decisions", (l) => [...(l ?? []), d]);
 }
 

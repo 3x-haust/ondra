@@ -355,8 +355,8 @@ describe("a handoff card sent again in the same session", () => {
 });
 
 /** the model asks the user and its turn ends */
-async function asks(question: string, options: string[]) {
-  const text = "```blocks\n" + JSON.stringify({ type: "ask", question, options: options.map((label) => ({ label })) }) + "\n```";
+async function asks(question: string, options: string[], fields?: unknown[]) {
+  const text = "```blocks\n" + JSON.stringify({ type: "ask", question, options: options.map((label) => ({ label })), ...(fields ? { fields } : {}) }) + "\n```";
   emit({ type: "message_start", message: { role: "assistant" } });
   emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
   emit({ type: "message_end", message: { role: "assistant", stopReason: "stop" } });
@@ -400,6 +400,33 @@ describe("a job waiting on the user's answer", () => {
     expect(task("job").status).not.toBe("paused");
     expect(task("job").parkedAt).toBeUndefined();
     expect(sent("prompt").slice(-1)[0]).toContain("영상 유지 목표로 보류");
+  });
+});
+
+describe("a question with things to fill in", () => {
+  it("is one card; what was filled goes back under the button pressed", async () => {
+    await working([job()]);
+    await asks("배포 전에 몇 가지만 알려 주세요", [], [
+      { id: "env", label: "배포 대상", kind: "choice", options: ["staging", "prod"], required: true },
+      { id: "n", label: "동시 실행", kind: "number", unit: "개" },
+    ]);
+    const d = state.decisions.find((x) => x.taskId === "job")!;
+    expect(d.form?.map((f) => f.label)).toEqual(["배포 대상", "동시 실행"]);
+    expect(d.options.map((o) => o.label)).toEqual(["보내기"]);
+    await decide(d.id, "보내기", { env: "prod", n: 4 });
+    await tick();
+    expect(sent("prompt").slice(-1)[0]).toContain("보내기\n- 배포 대상: prod\n- 동시 실행: 4개");
+  });
+
+  it("words typed instead go back as they are", async () => {
+    await working([job()]);
+    await asks("배포 전에 몇 가지만 알려 주세요", [], [{ id: "env", label: "배포 대상", options: ["staging", "prod"] }]);
+    const d = state.decisions.find((x) => x.taskId === "job")!;
+    await decide(d.id, "그냥 스테이징에 올려");
+    await tick();
+    const last = sent("prompt").slice(-1)[0];
+    expect(last).toContain("그냥 스테이징에 올려");
+    expect(last).not.toContain("- 배포 대상");
   });
 });
 

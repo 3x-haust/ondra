@@ -1,5 +1,6 @@
 // A question a task is waiting on, with its answers as buttons.
 import { createSignal, For, onCleanup, Show } from "solid-js";
+import { createStore } from "solid-js/store";
 import { lineHead, projectById, state, taskById } from "../state/store";
 import type { Block, Decision, Task } from "../state/types";
 import { inBrowserShare } from "../lib/native";
@@ -7,6 +8,8 @@ import { ignoredKey, noModifiers, shortcutOverlay, viewKey } from "../lib/shortc
 import { openBrowser, openTask, paneEl, type View } from "../state/ui";
 import { usePaneFocused, useView } from "../state/panes";
 import { decide } from "../engine/tasks";
+import { initial, missing, type FormValues } from "../engine/form";
+import { FormFields } from "./FormFields";
 import { BlockView } from "./Blocks";
 import { Icon } from "./Icon";
 import { bareLabel, dropAsked } from "./decisionText";
@@ -89,12 +92,20 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
   let own: HTMLInputElement | undefined;
   let list: HTMLDivElement | undefined;
   let sent = false;
+  // things to fill in: their values, sent with the choice pressed (a required one empty holds it)
+  const form = () => props.d.form ?? [];
+  const [values, setValues] = createStore<FormValues>(Object.fromEntries(form().map((f) => [f.id, initial(f)])));
+  const [lacking, setLacking] = createSignal<string>();
   const send = async (answer: string) => {
     if (sent) return;
+    const chosen = form().length > 0 && props.d.options.some((o) => o.id === answer);
+    const gap = chosen ? missing(form(), values) : undefined;
+    setLacking(gap);
+    if (gap) return void card?.querySelector<HTMLElement>(".dform-field.missing input, .dform-field.missing textarea, .dform-field.missing button")?.focus();
     sent = true;
     // a sign-in card: what was signed in to in the app's browser reaches the jobs' browser first
     if (loginUrl() !== undefined) await inBrowserShare(t()?.space ?? state.space, loginUrl() || undefined).catch(() => {});
-    void decide(props.d.id, answer);
+    void decide(props.d.id, answer, chosen ? { ...values } : undefined);
     ownDrafts.delete(props.d.id);
   };
   const choose = (i: number) => {
@@ -114,7 +125,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
   const focused = usePaneFocused();
   const anywhere = (e: KeyboardEvent) => {
     // a card in a pane beside the focused one doesn't answer its keys
-    if (props.keys === false || !focused() || !viewKey(e) || !noModifiers(e) || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
+    if (props.keys === false || form().length || !focused() || !viewKey(e) || !noModifiers(e) || !/^[1-9]$/.test(e.key) || Number(e.key) > count()) return;
     const el = document.activeElement;
     if (el && list?.contains(el)) return; // handled by `keys`
     if (composing()) return;
@@ -134,7 +145,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
     } else if (e.key === "Enter" && hi() >= 0) {
       e.preventDefault();
       choose(hi());
-    } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= count()) {
+    } else if (!form().length && /^[1-9]$/.test(e.key) && Number(e.key) <= count()) {
       e.preventDefault();
       choose(Number(e.key) - 1);
     }
@@ -165,6 +176,11 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
   const more = () =>
     !!props.dock && (context().length > 0 || props.d.options.some((o) => o.note) || props.d.question.length > 48 || props.d.question.includes("\n"));
   let card!: HTMLDivElement;
+  const Form = () => (
+    <Show when={form().length}>
+      <FormFields form={form()} values={values} set={setValues} missing={lacking()} idBase={props.d.id} />
+    </Show>
+  );
   /** opened in a dock that scrolls: once it has folded open, its answers are in sight */
   const toggle = () => {
     setOpen(!open());
@@ -239,7 +255,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
     </>
   );
   return (
-    <div class="decision" ref={card} classList={{ stalled: props.d.kind === "stalled", dock: !!props.dock, open: open() }}>
+    <div class="decision" ref={card} classList={{ stalled: props.d.kind === "stalled", dock: !!props.dock, open: open(), form: form().length > 0 }}>
       <Show
         when={props.dock}
         fallback={
@@ -288,6 +304,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
           </div>
         </div>
       </Show>
+      <Show when={props.dock}><Form /></Show>
       <Show
         when={!props.dock}
         fallback={
@@ -313,15 +330,15 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
               <For each={props.d.options}>
                 {(o, i) => (
                   <button class="decision-chip" classList={{ primary: !!o.primary }} onClick={() => choose(i())} title={o.note || undefined}>
-                    <Show when={props.keys !== false}><span class="decision-n">{i() + 1}</span></Show>
+                    <Show when={props.keys !== false && !form().length}><span class="decision-n">{i() + 1}</span></Show>
                     <span class="decision-label">{bareLabel(o.label)}</span>
-                    <Show when={o.primary}><Rec /></Show>
+                    <Show when={o.primary && !form().length}><Rec /></Show>
                   </button>
                 )}
               </For>
               <Show when={own_()}>
                 <button class="decision-chip own" onClick={() => choose(n())}>
-                  <Show when={props.keys !== false}><span class="decision-n">{n() + 1}</span></Show>
+                  <Show when={props.keys !== false && !form().length}><span class="decision-n">{n() + 1}</span></Show>
                   <span class="decision-label">{tr("다른 답")}</span>
                 </button>
               </Show>
@@ -333,17 +350,18 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
         <Show when={(props.showTask !== false || props.d.context.length) && context().length}>
           <div class="decision-ctx"><For each={context()}>{(b) => <BlockView block={b} />}</For></div>
         </Show>
+        <Form />
         {/* the choices as a list, and a line to answer in your own words */}
         <div class="decision-list" role="group" aria-label={props.d.question} tabIndex={0} onKeyDown={keys} onMouseLeave={() => hi() < n() && setHi(-1)} ref={list}>
           <For each={props.d.options}>
             {(o, i) => (
               <button class="decision-opt" classList={{ on: hi() === i(), primary: !!o.primary }} onClick={() => choose(i())}>
-                <span class="decision-n">{i() + 1}</span>
+                <Show when={!form().length}><span class="decision-n">{i() + 1}</span></Show>
                 <span class="decision-text">
                   {/* marked beside its label, never preselected */}
                   <span class="decision-label">
                     {bareLabel(o.label)}
-                    <Show when={o.primary}><Rec /></Show>
+                    <Show when={o.primary && !form().length}><Rec /></Show>
                   </span>
                   <Show when={o.note}><span class="decision-note">{o.note}</span></Show>
                 </span>
@@ -360,7 +378,7 @@ export function DecisionCard(props: { d: Decision; showTask?: boolean; crumb?: b
                 sendTyped();
               }}
             >
-              <span class="decision-n">{n() + 1}</span>
+              <Show when={!form().length}><span class="decision-n">{n() + 1}</span></Show>
               <OwnInput />
             </form>
           </Show>

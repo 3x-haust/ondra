@@ -447,7 +447,18 @@ export interface Decision {
   clarity?: { score: number; parts?: { label: string; score: number }[] };
   /** asked on Discord by the agent, in this channel (so it goes once, and a reply there answers it) */
   posted?: string;
+  /** things to fill in (an ask block's `fields`): sent back with the choice pressed */
+  form?: FormField[];
 }
+
+/** One thing to fill in on a question card */
+export type FormField = { id: string; label: string; required?: boolean; note?: string } & (
+  | { kind: "text"; long?: boolean; value?: string; placeholder?: string }
+  | { kind: "choice"; options: string[]; multi?: boolean; value?: string[] }
+  | { kind: "check"; value?: boolean }
+  | { kind: "number"; min?: number; max?: number; step?: number; unit?: string; value?: number }
+  | { kind: "date"; time?: boolean; value?: string }
+);
 
 export type Route =
   | { kind: "answer"; text: string; blocks: Block[]; taskId?: string }

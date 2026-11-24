@@ -2817,3 +2817,162 @@
 .decision .decision-clarity.low {
   color: var(--accent-text);
 }
+
+/* things to fill in on a question card: label above, the field below, one per row */
+.decision .dform {
+  display: grid;
+  gap: var(--s-12);
+  margin: var(--s-4) 0 var(--s-8);
+}
+.decision.dock .dform {
+  margin: var(--s-8) 0;
+}
+.dform-field {
+  display: grid;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.dform-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+.dform-req {
+  margin-left: 2px;
+  color: var(--accent-text);
+}
+.dform-input {
+  width: 100%;
+  min-height: var(--h-md);
+  padding: var(--s-6) var(--s-10);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-md);
+  box-sizing: border-box;
+}
+textarea.dform-input {
+  min-height: 72px;
+  resize: vertical;
+  line-height: var(--lh-md);
+}
+.dform-input:focus-visible,
+.dform-choice:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.dform-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-6);
+}
+.dform-choice {
+  min-height: var(--h-sm);
+  padding: 0 var(--s-12);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.dform-choice:hover {
+  border-color: var(--accent-line);
+}
+.dform-choice.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: var(--fw-medium);
+}
+.dform-check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  font-size: var(--fs-md);
+  color: var(--ink);
+  cursor: pointer;
+}
+.dform-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.dform-number {
+  display: flex;
+  align-items: center;
+  gap: var(--s-10);
+}
+.dform-number input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.dform-number .dform-input {
+  width: 96px;
+  flex: none;
+}
+.dform-unit {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.dform-date {
+  width: auto;
+}
+.dform-note {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--ink-3);
+}
+.dform-field.missing .dform-input,
+.dform-field.missing .dform-choice {
+  border-color: var(--accent);
+}
+.dform-missing {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--accent-text);
+}
+.dform-number {
+  max-width: 420px;
+}
+/* a card with things to fill in: its choices are the buttons that send it, side by side */
+.decision.form .decision-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-8);
+  margin: 0;
+}
+.decision.form .decision-opt {
+  flex: none;
+  min-height: var(--h-md);
+  padding: 0 var(--s-16);
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.decision.form .decision-opt.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.decision.form .decision-opt.primary:hover {
+  background: var(--accent-hover);
+}
+.decision.form .decision-opt.primary .decision-label {
+  font-weight: var(--fw-medium);
+}
+.decision.form .decision-own {
+  flex: 1 1 100%;
+  border: 0;
+  background: transparent;
+  padding: 0 var(--s-8);
+}
+.decision.form .decision-list .decision-opt {
+  width: auto;
+}
+.dform .dform-input.dform-date {
+  justify-self: start;
+  width: auto;
+  min-width: 220px;
+}

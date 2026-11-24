@@ -306,6 +306,8 @@ async function onInteraction(i: DiscordInteraction) {
 /** a question's choices as buttons under it (the one it thinks better stands out) */
 const PICK = "ondra:pick:";
 export function pickButtons(d: Decision, chosen?: string): unknown[] {
+  // things to fill in can't be filled with a button: they're asked in words, the reply answers
+  if (d.form?.length) return [];
   const buttons = d.options.slice(0, 25).map((o) => ({
     type: 2,
     style: chosen ? (o.id === chosen ? 3 : 2) : o.primary ? 1 : 2,
@@ -514,7 +516,9 @@ export function askPrompt(a: AgentSettings, d: Decision, about?: string, said?: 
     said ? `# 방금 네가 이 채널에 한 말 (바로 이어서 보내는 거야. 여기서 이미 물어봤으면 (skip) 만 써)\n${said}\n` : "",
     about ? `# 하던 일\n${about}\n` : "",
     `# 앱용 질문\n${d.question}`,
-    `# 고를 수 있는 것\n${d.options.map((o) => `- ${o.label}${o.primary ? " (이게 낫다고 봄)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
+    d.form?.length
+      ? `# 받아야 할 것 (주인이 답장 한 번에 알려 주게 물어봐)\n${d.form.map((f) => `- ${f.label}${f.kind === "choice" ? ` (${f.options.join(" / ")}${f.multi ? ", 여러 개 가능" : ""})` : ""}${f.required ? " (꼭 필요)" : ""}${f.note ? ` — ${f.note}` : ""}`).join("\n")}`
+      : `# 고를 수 있는 것\n${d.options.map((o) => `- ${o.label}${o.primary ? " (이게 낫다고 봄)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
     "",
     "상황은 쉬운 말로 한두 문장(용어 대신 주인한테 무슨 일이 생기는지). 고를 건 번호 목록 말고 말 속에서 묻고, 네가 낫다고 보는 쪽 먼저. 디스코드에 올라갈 말만 써.",
   ].filter((l) => l !== "").join("\n");
@@ -540,7 +544,7 @@ export async function askedLine(d: Decision, a: AgentSettings | undefined = sett
 }
 
 /** the question with its choices in one line, for when it can't be said in the agent's voice */
-const plainAsk = (d: Decision, about?: string) => `${about ? `${about}: ` : ""}${d.question} (${d.options.map((o) => o.label).join(" / ")})`;
+const plainAsk = (d: Decision, about?: string) => `${about ? `${about}: ` : ""}${d.question} (${(d.form?.length ? d.form.map((f) => f.label) : d.options.map((o) => o.label)).join(" / ")})`;
 
 /** The prompt that reads the user's words as one of a waiting question's choices, or none. */
 export function pickPrompt(d: Decision, text: string): string {
@@ -650,6 +654,13 @@ const pendingIn = (channel: string) => state.decisions.some((d) => posted.get(d.
 async function answered(channel: string, text: string): Promise<boolean> {
   const d = [...state.decisions].reverse().find((x) => posted.get(x.id) === channel);
   if (!d || !text.trim()) return false;
+  // things to fill in: the reply is the answer, in their words
+  if (d.form?.length) {
+    const { decide } = await import("./tasks");
+    await decide(d.id, text.trim());
+    posted.delete(d.id);
+    return true;
+  }
   const n = /^\s*(\d{1,2})\s*번?\s*$/.exec(text);
   let o = n ? d.options[Number(n[1]) - 1] : undefined;
   if (!n && text.length <= 200) {

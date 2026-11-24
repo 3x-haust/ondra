@@ -224,6 +224,18 @@ export function fixture(base: AppState): AppState {
     ],
     decisions: [
       { id: "d1", taskId: "t2", at: m(5), kind: "ask", question: "초안을 블로그에 바로 게시할까요?", options: [{ id: "a", label: "게시", primary: true }, { id: "b", label: "초안으로 저장" }, { id: "c", label: "수정 후 다시" }], context: [] },
+      {
+        id: "d2", taskId: "t9", at: m(3), kind: "ask", question: "스테이징에 올리기 전에 몇 가지만 알려 주세요", context: [],
+        options: [{ id: "보내기", label: "보내기", primary: true }],
+        form: [
+          { id: "env", label: "배포 대상", kind: "choice", options: ["staging", "staging-2", "prod"], value: ["staging"], required: true },
+          { id: "fix", label: "같이 고칠 것", kind: "choice", multi: true, options: ["타임아웃", "로그 경로", "환경 변수 이름"] },
+          { id: "n", label: "동시 실행", kind: "number", min: 1, max: 8, unit: "개", value: 2 },
+          { id: "when", label: "배포 시각", kind: "date", time: true },
+          { id: "notify", label: "끝나면 슬랙에 알리기", kind: "check", value: true },
+          { id: "memo", label: "메모", kind: "text", long: true, placeholder: "더 알려 줄 것" },
+        ],
+      },
     ],
     projects: [
       { id: "ondra", space: "work", name: "ondra", folder: "~/01_Project/01_Projects/ondra" },
