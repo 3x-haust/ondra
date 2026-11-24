@@ -45,7 +45,7 @@ try {
   const result = spawnSync(engine, [
     "--mode", "rpc", "--no-session", "--offline", "--no-approve", "--no-context-files",
     "--no-extensions", "--no-prompt-templates", "--no-themes", "--no-skills",
-    "--extension", search,
+    "--extension", search, "--extension", join(dirname(search), "use.ts"),
   ], {
     cwd: home,
     env: {
@@ -69,7 +69,9 @@ try {
   assert.equal(context?.success, true);
   assert.deepEqual(context.data.skills, []);
   assert.ok(!context.data.systemPrompt.includes("<available_skills>"));
-  assert.ok(context.data.tools.some((tool) => tool.name === "skill_search" && tool.active));
+  // the skill tool isn't declared up front: use calls it by name in one step
+  assert.ok(context.data.tools.some((tool) => tool.name === "skill" && !tool.active), "skill tool missing");
+  assert.ok(context.data.tools.some((tool) => tool.name === "use" && tool.active && /skill\(query\)/.test(tool.description ?? "")), "use doesn't list skill");
   console.log(JSON.stringify({ bundle: resolve(process.argv[2]), filesMatch: true, personalSkills: false, modelCalls: 0, searchablePaths: paths.length }, null, 2));
 } finally {
   rmSync(home, { recursive: true, force: true });
