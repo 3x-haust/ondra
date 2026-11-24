@@ -13,10 +13,11 @@
 //   • the folder is a git repo (versions, restore) — memgit.ts
 //   • nothing is always-on: a few pieces at the start, the rest via memory_search
 import { similarity } from "./vectors";
-import { createEffect, createRoot } from "solid-js";
+import { createEffect, createRoot, untrack } from "solid-js";
+import { unwrap } from "solid-js/store";
 import { memoryMirror } from "../lib/native";
 import { expand } from "./rpc";
-import { loaded, setState, state, uid } from "../state/store";
+import { loaded, onWrite, setState, state, state as store, uid } from "../state/store";
 import type { Memory, MemoryKind, Skill, SpaceId } from "../state/types";
 import { toast } from "../state/ui";
 import { t as tr } from "../i18n";
@@ -604,6 +605,9 @@ export function memoryFileNames(list: Memory[]): Map<string, string> {
 export const journalFileName = (title: string, id: string) => safe(title).slice(0, 48) || id;
 
 function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
+  // the plain state, not the store: thousands of pieces × their fields through the store's reads
+  // cost seconds, and this runs off the reactive path (nothing here should track)
+  const state = unwrap(store);
   const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
   const spaceLabel = (id?: string) => safe(state.spaces.find((s) => s.id === id)?.label ?? id ?? "공간");
   const folderHome = (folder: string, space?: string) => {
@@ -612,12 +616,18 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
     return `${sp ? spaceLabel(sp) : "프로젝트"}/${safe(p?.name ?? base(folder || "기타"))}`;
   };
   const projectHome = (m: Memory) => folderHome(m.project ?? "", m.space);
-  const home = (m: Memory) => (m.scope === "global" ? "모든 일" : m.scope === "space" ? spaceLabel(m.space) : projectHome(m));
+  const homeRaw = (m: Memory) => (m.scope === "global" ? "모든 일" : m.scope === "space" ? spaceLabel(m.space) : projectHome(m));
   // a space's folder note is its 목차.md (in the space folder); others keep their folder's name
   const noteOf = (h: string) => (!h.includes("/") && h !== "모든 일" && state.spaces.some((sp) => spaceLabel(sp.id) === h && sp.folder && sp.folder !== "~") ? "목차" : base(h));
   const names = memoryFileNames(state.memory);
   const link = (id: string) => (names.has(id) ? `[[${names.get(id)}]]` : "");
   const files: { path: string; text: string; once?: boolean }[] = [];
+  // what each piece replaced, found once (not by a scan of every piece per piece)
+  const olderOf = new Map<string, Memory[]>();
+  for (const x of state.memory) if (x.supersededBy) (olderOf.get(x.supersededBy) ?? olderOf.set(x.supersededBy, []).get(x.supersededBy)!).push(x);
+  // a piece's folder, worked out once
+  const homeOf = new Map<Memory, string>();
+  const home = (m: Memory) => homeOf.get(m) ?? (homeOf.set(m, homeRaw(m)), homeOf.get(m)!);
   for (const m of state.memory) {
     const k = kindOf(m);
     const meta: Record<string, unknown> = {
@@ -639,7 +649,7 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
       tags: [kindLabel(k).replace(/\s/g, "_"), ...(m.paths?.length ? ["경로_규칙"] : []), ...(m.invalidAt ? ["지난_기억"] : [])],
     };
     const links = (m.links ?? []).map(link).filter(Boolean);
-    const older = state.memory.filter((x) => x.supersededBy === m.id).map((x) => link(x.id));
+    const older = (olderOf.get(m.id) ?? []).map((x) => link(x.id));
     const body = [
       m.text,
       "",
@@ -658,7 +668,12 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
   }
   // a note per folder (Obsidian "folder note"): its pieces by type, and its sub-folders
   const homes = new Map<string, Memory[]>();
-  for (const m of state.memory.filter(isLive)) homes.set(home(m), [...(homes.get(home(m)) ?? []), m]);
+  for (const m of state.memory.filter(isLive)) {
+    const h = home(m);
+    const l = homes.get(h);
+    if (l) l.push(m);
+    else homes.set(h, [m]);
+  }
   for (const h of [...homes.keys()]) {
     const parent = h.split("/").slice(0, -1).join("/");
     if (parent && !homes.has(parent)) homes.set(parent, []);
@@ -680,7 +695,13 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
   // a note per topic (a tool or service two or more pieces are about), in each folder
   // that has pieces about it: Obsidian's graph hubs
   const topics = new Map<string, Memory[]>();
-  for (const m of live) for (const a of m.about ?? []) topics.set(safe(a), [...(topics.get(safe(a)) ?? []), m]);
+  for (const m of live)
+    for (const a of m.about ?? []) {
+      const t = safe(a);
+      const l = topics.get(t);
+      if (l) l.push(m);
+      else topics.set(t, [m]);
+    }
   for (const [t, all] of topics) {
     if (all.length < 2 || !t) continue;
     for (const h of new Set(all.map(home)))
@@ -751,7 +772,7 @@ function mirrorFiles(): { path: string; text: string; once?: boolean }[] {
  */
 function mirrorPlan(): { space?: string; files: { path: string; text: string; once?: boolean }[] }[] {
   const all = mirrorFiles();
-  const roots = state.spaces
+  const roots = unwrap(store).spaces
     .filter((sp) => sp.folder && sp.folder !== "~" && sp.folder !== "/")
     .map((sp) => ({ label: safe(sp.label), dir: expand(sp.folder).replace(/\/$/, "") }));
   const app: { path: string; text: string; once?: boolean }[] = [];
@@ -770,19 +791,26 @@ function mirrorPlan(): { space?: string; files: { path: string; text: string; on
   return [{ files: app }, ...[...out].map(([space, files]) => ({ space, files }))];
 }
 
+// The memory folder follows the pieces, a moment after they (or the spaces, projects, 일 기록)
+// change: one write per burst of changes, worked out then. It used to be worked out inside an
+// effect on every change, which with a few thousand pieces held the window for seconds each time.
+const MIRRORED = new Set(["memory", "spaces", "projects", "journal", "memoryNow"]);
 createRoot(() => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let placed = false;
+  const run = () => {
+    timer = undefined;
+    for (const p of mirrorPlan()) void memoryMirror(p.files, p.space).catch(() => {});
+  };
+  const soon = () => void (timer ??= setTimeout(run, 1200));
   createEffect(() => {
     if (!loaded() || location.search.includes("fixture")) return;
-    if (!placed) {
+    untrack(() => {
+      if (placed) return;
       placed = true;
       placeAll();
-    }
-    const plan = mirrorPlan();
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      for (const p of plan) void memoryMirror(p.files, p.space).catch(() => {});
-    }, 1200);
+      soon();
+      onWrite((args) => (typeof args[0] !== "string" || MIRRORED.has(args[0])) && soon());
+    });
   });
 });

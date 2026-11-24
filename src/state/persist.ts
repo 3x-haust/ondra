@@ -1,11 +1,11 @@
-// How the app state reaches state.json without stopping the UI.
+// How the app state reaches the disk without stopping the UI.
 //
 // The store used to be stringified whole (17 MB for a few days of work) inside an
 // effect on every change, a streaming shell tail included. Now each write to the
 // store only marks what it touched (`mark`), and a save a moment later serializes
-// just the tasks that changed: the rest of the file is reused as it was. The native
-// side keeps every task's text and writes the whole file (temp file + rename), so
-// only the changed parts cross the bridge.
+// just the tasks and fields that changed. Only those cross the bridge, and the native
+// side writes only those: each task and each field is a file of its own there
+// (<data>/state/, store.rs), so a running job no longer rewrites 40 MB every save.
 import type { AppState, Entry, Permission, Shell, Task, ToolCall } from "./types";
 
 // ───────────────────────── the file's form of a task
@@ -73,8 +73,10 @@ const slotsOf = (tasks: readonly Task[]): Slot[] => {
 };
 
 export interface Parts {
-  /** the state without its tasks, as JSON */
-  head: string;
+  /** every field of the state besides its tasks, in order */
+  names: string[];
+  /** the fields' JSON the native side doesn't have yet (changed ones, or all after a reset) */
+  fields: Record<string, string>;
   /** every task's slot, in order */
   order: Slot[];
   /** the tasks' JSON the native side doesn't have yet (changed ones, or all after a reset) */
@@ -82,19 +84,23 @@ export interface Parts {
 }
 
 /**
- * Keeps each task's JSON between saves. `mark` is told about every store write (the
- * setState arguments) and notes which tasks it touches; `build` re-serializes only
- * those. As a safety net for a change that went around `setState` (a `produce`
- * draft kept and written later), live tasks and a few others in turn are always
- * serialized again, so nothing stays stale for long.
+ * Keeps each task's and each field's JSON between saves. `mark` is told about every store
+ * write (the setState arguments) and notes which tasks and fields it touches; `build`
+ * re-serializes only those. As a safety net for a change that went around `setState` (a
+ * `produce` draft kept and written later), live tasks and a few others in turn, and a
+ * field in turn, are always serialized again, so nothing stays stale for long.
  */
 export class Saver {
   private json = new Map<Slot, string>();
   private dirty = new Set<string>();
+  private fieldJson = new Map<string, string>();
+  private dirtyFields = new Set<string>();
   private all = true;
-  /** slots the native side holds, as last sent */
+  /** slots and fields the native side holds, as last sent */
   private sent = new Set<Slot>();
+  private sentFields = new Set<string>();
   private turn = 0;
+  private fieldTurn = 0;
   /** how many settled tasks are serialized again on each save, in turn */
   private readonly sweep: number;
   constructor(sweep = 8) {
@@ -106,6 +112,7 @@ export class Saver {
     if (this.all) return;
     if (args[0] !== "tasks") {
       if (typeof args[0] !== "string") this.all = true;
+      else this.dirtyFields.add(args[0]);
       return;
     }
     const sel = args[1];
@@ -124,6 +131,7 @@ export class Saver {
   /** the native side lost what it held (a failed write, a restart): send everything next time */
   reset() {
     this.sent.clear();
+    this.sentFields.clear();
   }
 
   /** what to send for this state; afterwards nothing counts as changed */
@@ -148,26 +156,48 @@ export class Saver {
       const keep = new Set(order);
       for (const k of this.json.keys()) if (!keep.has(k)) this.json.delete(k);
     }
+    // the other fields, as JSON.stringify(rest) would have them (an undefined one is left out)
+    const values = rest as Record<string, unknown>;
+    const names = Object.keys(values).filter((k) => values[k] !== undefined && typeof values[k] !== "function");
+    const swept = names.length ? names[this.fieldTurn++ % names.length] : undefined;
+    const fields: Record<string, string> = {};
+    for (const k of names) {
+      const old = this.fieldJson.get(k);
+      const text = this.all || old === undefined || this.dirtyFields.has(k) || k === swept ? JSON.stringify(values[k]) : old;
+      if (text !== old) this.fieldJson.set(k, text);
+      if (text !== old || !this.sentFields.has(k)) fields[k] = text;
+    }
+    if (this.fieldJson.size > names.length) for (const k of [...this.fieldJson.keys()]) if (!names.includes(k)) this.fieldJson.delete(k);
     this.all = false;
     this.dirty.clear();
-    return { head: JSON.stringify(rest), order, tasks };
+    this.dirtyFields.clear();
+    return { names, fields, order, tasks };
   }
 
-  /** the native side now holds these slots */
-  sentAll(order: Slot[]) {
-    this.sent = new Set(order);
+  /** the native side now holds these */
+  sentAll(p: Pick<Parts, "names" | "order">) {
+    this.sent = new Set(p.order);
+    this.sentFields = new Set(p.names);
   }
 
   /** the JSON of a slot, for resending one the native side says it lacks */
   text(slot: Slot) {
     return this.json.get(slot);
   }
+  /** the JSON of a field, for resending one the native side says it lacks */
+  field(name: string) {
+    return this.fieldJson.get(name);
+  }
 }
 
-/** The whole file from its parts: what the native side writes (also for tests and plain browsers). */
-export function joinParts(head: string, order: Slot[], text: (slot: Slot) => string | undefined): string {
-  const tasks = `"tasks":[${order.map((s) => text(s) ?? "null").join(",")}]`;
-  return head.length > 2 ? `{${tasks},${head.slice(1)}` : `{${tasks}}`;
+/** The whole state's JSON from its parts: what the native side reads back (also for tests and plain browsers). */
+export function joinParts(p: Pick<Parts, "names" | "order">, field: (name: string) => string | undefined, text: (slot: Slot) => string | undefined): string {
+  const tasks = `"tasks":[${p.order.map((s) => text(s) ?? "null").join(",")}]`;
+  const rest = p.names.flatMap((k) => {
+    const v = field(k);
+    return v === undefined ? [] : [`${JSON.stringify(k)}:${v}`];
+  });
+  return `{${[tasks, ...rest].join(",")}}`;
 }
 
 // ───────────────────────── when to save

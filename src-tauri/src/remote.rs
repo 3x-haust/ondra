@@ -111,7 +111,7 @@ pub fn remote_forget(app: AppHandle, id: String) -> Result<Option<serde_json::Va
 }
 
 /// The Mac's name as people know it ("Alex의 MacBook Pro").
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remote_host_name() -> String {
     Command::new("/usr/sbin/scutil")
         .args(["--get", "ComputerName"])

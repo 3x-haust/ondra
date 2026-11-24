@@ -32,7 +32,7 @@ export interface EngineInfo {
   /** Absolute path of the bundled engine binary, null if missing. */
   enginePath: string | null;
   engineVersion: string | null;
-  /** App data folder (state.json, sessions/, artifacts/, accounts/). */
+  /** App data folder (state/, sessions/, artifacts/, accounts/). */
   dataDir: string;
   /** The user's home folder, for expanding `~`. */
   home: string;
@@ -77,11 +77,12 @@ export const ptyClose = (id: string) => call<void>("pty_close", { id });
 // ───────────────────────── state & files ─────────────────────────
 export const stateLoad = () => call<string | null>("state_load", undefined, null);
 /**
- * Save the state from its parts (see state/persist.ts): the state without its tasks, every
- * task's slot in order, and the tasks' JSON the native side doesn't hold yet. Returns the
- * slots it still lacks (nothing written then).
+ * Save the state from its parts (see state/persist.ts): every field's name and every task's
+ * slot in order, and the fields' and tasks' JSON the native side doesn't hold yet. Returns
+ * what it still lacks (the index isn't written until it has everything).
  */
-export const stateSaveParts = (head: string, order: string[], tasks: Record<string, string>) => call<string[]>("state_save_parts", { head, order, tasks }, []);
+export const stateSaveParts = (names: string[], fields: Record<string, string>, order: string[], tasks: Record<string, string>) =>
+  call<{ fields: string[]; tasks: string[] }>("state_save_parts", { names, fields, order, tasks }, { fields: [], tasks: [] });
 /** The app is quitting and waits for the last save: it has been written. */
 export const stateFlushed = () => call<void>("state_flushed");
 export const pickFolder = (prompt: string) => call<string | null>("pick_folder", { prompt }, null);

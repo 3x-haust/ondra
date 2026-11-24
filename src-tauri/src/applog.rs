@@ -64,7 +64,7 @@ pub fn log_append(app: AppHandle, day: String, lines: Vec<String>, keep_from: Op
 }
 
 /// The newest part of the log, up to `max_bytes`, oldest line first (whole lines only).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_recent(app: AppHandle, max_bytes: usize) -> String {
     let d = dir(&app);
     let mut files: Vec<PathBuf> = fs::read_dir(&d)
@@ -98,7 +98,7 @@ pub fn logs_recent(app: AppHandle, max_bytes: usize) -> String {
 }
 
 /// The macOS version (the web view's user agent is frozen at 10.15.7).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn os_version() -> String {
     Command::new("sw_vers").arg("-productVersion").output().ok().map(|o| format!("macOS {}", String::from_utf8_lossy(&o.stdout).trim())).unwrap_or_else(|| "macOS".into())
 }

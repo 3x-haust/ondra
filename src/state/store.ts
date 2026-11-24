@@ -97,16 +97,17 @@ function save(): Promise<void> {
   }
   saving = saving.then(async () => {
     const parts = saver.build(unwrap(state));
-    if (!inTauri) return saver.sentAll(parts.order);
+    if (!inTauri) return saver.sentAll(parts);
     try {
-      let missing = await stateSaveParts(parts.head, parts.order, parts.tasks);
-      if (missing.length) {
+      let missing = await stateSaveParts(parts.names, parts.fields, parts.order, parts.tasks);
+      if (missing.fields.length || missing.tasks.length) {
         // the native side started fresh (or dropped some): send those too
-        const more = Object.fromEntries(missing.map((k) => [k, saver.text(k) ?? "null"]));
-        missing = await stateSaveParts(parts.head, parts.order, more);
+        const fields = Object.fromEntries(missing.fields.map((k) => [k, saver.field(k) ?? "null"]));
+        const tasks = Object.fromEntries(missing.tasks.map((k) => [k, saver.text(k) ?? "null"]));
+        missing = await stateSaveParts(parts.names, fields, parts.order, tasks);
       }
-      if (missing.length) throw new Error(`state save: ${missing.length} tasks missing`);
-      saver.sentAll(parts.order);
+      if (missing.fields.length || missing.tasks.length) throw new Error(`state save: ${missing.fields.length + missing.tasks.length} parts missing`);
+      saver.sentAll(parts);
     } catch (e) {
       saver.reset();
       saveSoon.poke();
@@ -160,7 +161,7 @@ export async function loadState() {
         );
       }
     } catch (e) {
-      console.error("state.json unreadable, starting fresh", e);
+      console.error("saved state unreadable, starting fresh", e);
     }
   }
   setLoaded(true);
@@ -217,8 +218,23 @@ export const projectById = (id?: string, space?: SpaceId) =>
 const remoteProjects = createRoot(() => createMemo(() => linkedProjects(state.settings.hostProjects, (h) => state.settings.hosts?.find((x) => x.id === h)?.name ?? "Mac")));
 /** what the sidebar lists: this Mac's projects and those added from other Macs */
 export const projectsShown = (space: SpaceId) => [...projectsIn(space), ...remoteProjects().filter((p) => p.space === space)];
-/** this Mac's jobs and the other Macs' jobs shown here */
-export const tasksShown = (space: SpaceId) => [...tasksIn(space), ...mirroredTasks().filter((t) => t.space === space)];
+/** Each space's jobs, this Mac's first and then the other Macs' shown there: kept as jobs come
+ *  and go or move, not rebuilt on each read (the sidebar reads it for every row, every second). */
+const bySpace = createRoot(() =>
+  createMemo(() => {
+    const m = new Map<SpaceId, Task[]>();
+    const add = (t: Task) => {
+      const l = m.get(t.space);
+      if (l) l.push(t);
+      else m.set(t.space, [t]);
+    };
+    for (const t of state.tasks) add(t);
+    for (const t of mirroredTasks()) add(t);
+    return m;
+  }),
+);
+/** this Mac's jobs and the other Macs' jobs shown here (a shared list: filter or copy it, never sort it in place) */
+export const tasksShown = (space: SpaceId): readonly Task[] => bySpace().get(space) ?? none;
 /** every job shown here, any space: this Mac's and the other Macs' */
 export const allTasks = (): Task[] => [...state.tasks, ...mirroredTasks()];
 /** the jobs in line on the Mac this one runs on, next first (another Mac's: those of its shown here) */

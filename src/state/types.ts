@@ -1,4 +1,4 @@
-// Everything Ondra keeps. The whole AppState is saved to state.json.
+// Everything Ondra keeps. The whole AppState is saved under state/, a file per task and per field (store.rs).
 import type { SourceId } from "../lib/native";
 
 /** "auto": the AI judges what may go without asking (older saves call it "edits") */

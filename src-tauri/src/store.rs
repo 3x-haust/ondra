@@ -19,8 +19,16 @@ fn state_file(app: &AppHandle) -> PathBuf {
 /// only `.md` files we wrote are removed, anything else in the folder stays.
 /// Without `space`: the app's own folder (모든 일, git versions). With `space`
 /// (an existing space folder): `<space>/.ondra/memory`, that space's pieces.
-#[tauri::command]
+/// The memory folder's writers and its git, one at a time: they run off the main thread (a few
+/// thousand files read and compared, git add/commit) and must not interleave.
+static MEMORY_FOLDER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn memory_folder_lock() -> std::sync::MutexGuard<'static, ()> {
+    MEMORY_FOLDER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[tauri::command(async)]
 pub fn memory_mirror(app: AppHandle, files: Vec<MirrorFile>, space: Option<String>) -> Result<String, String> {
+    let _one = memory_folder_lock();
     let root = match space {
         Some(dir) => {
             let dir = PathBuf::from(dir);
@@ -99,8 +107,9 @@ fn memory_git(root: &Path, args: &[&str]) -> Result<String, String> {
 /// Save this version of the memory: the pieces as JSON (what a restore reads back)
 /// next to the markdown files, committed to the folder's own git repo.
 /// Returns the new commit, or None when nothing changed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn memory_git_commit(app: AppHandle, msg: String, snapshot: String) -> Result<Option<String>, String> {
+    let _one = memory_folder_lock();
     let root = data_dir(&app).join("memory");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     if !root.join(".git").exists() {
@@ -116,8 +125,9 @@ pub fn memory_git_commit(app: AppHandle, msg: String, snapshot: String) -> Resul
 }
 
 /// The saved versions, newest first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn memory_git_log(app: AppHandle, limit: Option<u32>) -> Vec<MemoryVersion> {
+    let _one = memory_folder_lock();
     let root = data_dir(&app).join("memory");
     if !root.join(".git").exists() {
         return vec![];
@@ -134,8 +144,9 @@ pub fn memory_git_log(app: AppHandle, limit: Option<u32>) -> Vec<MemoryVersion> 
 }
 
 /// The pieces as they were in one saved version.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn memory_git_show(app: AppHandle, sha: String) -> Result<String, String> {
+    let _one = memory_folder_lock();
     if !sha.chars().all(|c| c.is_ascii_hexdigit()) || sha.len() < 4 {
         return Err("bad version".into());
     }
@@ -255,7 +266,7 @@ pub struct MirrorFile {
 
 /// The main chat lives as text in the state file; its engine sessions are
 /// disposable. Keep only the newest session file in one of our session folders.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sessions_prune(app: AppHandle, dir: String) -> Result<(), String> {
     let root = data_dir(&app).join("sessions");
     let dir = PathBuf::from(&dir);
@@ -277,64 +288,168 @@ pub fn sessions_prune(app: AppHandle, dir: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn state_load(app: AppHandle) -> Option<String> {
-    std::fs::read_to_string(state_file(&app)).ok()
+/// The app state, one file per part under `<data>/state/`: each task (`t.<slot>.json`), each of
+/// the state's other fields (`f.<name>.json`) and the index of both (`index.json`). A save writes
+/// only the parts that changed: the whole state (40+ MB after a few weeks of jobs) used to be
+/// written again every couple of seconds while a job ran, 4 MB/s around the clock.
+fn state_dir(app: &AppHandle) -> PathBuf {
+    data_dir(app).join("state")
 }
 
-/// Written via a temp file so a crash mid-write never leaves half a state file.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| e.to_string())
+/// What the parts folder holds, as last written or read.
+#[derive(Default)]
+pub struct Held {
+    fields: std::collections::HashMap<String, String>,
+    tasks: std::collections::HashMap<String, String>,
+    index: String,
+}
+static HELD: std::sync::Mutex<Option<Held>> = std::sync::Mutex::new(None);
+
+/// What a save lacked (the app sends those next): the native side started fresh or dropped them.
+#[derive(serde::Serialize, Default, Debug, PartialEq)]
+pub struct Missing {
+    fields: Vec<String>,
+    tasks: Vec<String>,
 }
 
-/// Each task's JSON as last sent by the app (see src/state/persist.ts): a save sends only
-/// the tasks that changed, and the file is put together here.
-static TASK_PARTS: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Index {
+    fields: Vec<String>,
+    tasks: Vec<String>,
+}
 
-/// The whole state file from the state without its tasks (`head`, a JSON object), the tasks'
-/// order (`order`, their slots) and their JSON. Returns the slots it doesn't hold (then it
-/// writes nothing and the app sends those).
-pub fn join_parts(held: &std::collections::HashMap<String, String>, head: &str, order: &[String]) -> Result<Vec<u8>, Vec<String>> {
-    let missing: Vec<String> = order.iter().filter(|k| !held.contains_key(*k)).cloned().collect();
-    if !missing.is_empty() {
-        return Err(missing);
-    }
-    let head = head.trim();
-    let size = head.len() + order.iter().map(|k| held[k].len() + 1).sum::<usize>() + 16;
-    let mut out = Vec::with_capacity(size);
-    out.extend_from_slice(b"{\"tasks\":[");
-    for (i, k) in order.iter().enumerate() {
-        if i > 0 {
-            out.push(b',');
+/// A part's file name. Only lower-case letters, digits, `-` and `_` are kept as they are (the
+/// disk may not tell cases apart): anything else is `%XX`.
+fn part_file(kind: &str, name: &str) -> String {
+    let mut out = format!("{kind}.");
+    for b in name.bytes() {
+        if b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_' {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
         }
-        out.extend_from_slice(held[k].as_bytes());
     }
-    out.push(b']');
-    let rest = head.strip_prefix('{').map(str::trim_start).unwrap_or("}");
-    if !rest.starts_with('}') {
-        out.push(b',');
+    out.push_str(".json");
+    out
+}
+
+/// Write the parts that changed; once nothing is missing, the index too, and the parts no longer
+/// in it go. `names`: every field of the state besides its tasks; `order`: every task's slot.
+pub fn save_parts(
+    dir: &Path,
+    held: &mut Held,
+    names: &[String],
+    fields: std::collections::HashMap<String, String>,
+    order: &[String],
+    tasks: std::collections::HashMap<String, String>,
+) -> Result<Missing, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    for (k, v) in fields {
+        if held.fields.get(&k) != Some(&v) {
+            write_atomic(&dir.join(part_file("f", &k)), v.as_bytes())?;
+            held.fields.insert(k, v);
+        }
     }
-    out.extend_from_slice(rest.as_bytes());
-    Ok(out)
+    for (k, v) in tasks {
+        if held.tasks.get(&k) != Some(&v) {
+            write_atomic(&dir.join(part_file("t", &k)), v.as_bytes())?;
+            held.tasks.insert(k, v);
+        }
+    }
+    let missing = Missing {
+        fields: names.iter().filter(|k| !held.fields.contains_key(*k)).cloned().collect(),
+        tasks: order.iter().filter(|k| !held.tasks.contains_key(*k)).cloned().collect(),
+    };
+    if !missing.fields.is_empty() || !missing.tasks.is_empty() {
+        return Ok(missing);
+    }
+    let index = serde_json::to_string(&Index { fields: names.to_vec(), tasks: order.to_vec() }).map_err(|e| e.to_string())?;
+    if index != held.index {
+        write_atomic(&dir.join("index.json"), index.as_bytes())?;
+        held.index = index;
+        let names: std::collections::HashSet<&String> = names.iter().collect();
+        let order: std::collections::HashSet<&String> = order.iter().collect();
+        held.fields.retain(|k, _| names.contains(k));
+        held.tasks.retain(|k, _| order.contains(k));
+        let keep: std::collections::HashSet<String> =
+            held.fields.keys().map(|k| part_file("f", k)).chain(held.tasks.keys().map(|k| part_file("t", k))).collect();
+        if let Ok(rd) = std::fs::read_dir(dir) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                if (name.starts_with("f.") || name.starts_with("t.")) && name.ends_with(".json") && !keep.contains(&name) {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+    }
+    Ok(missing)
+}
+
+/// The whole state as one JSON text, put together from its parts (None: no parts folder yet).
+/// What was read is held, so the first save after a start writes only what changed since.
+pub fn load_parts(dir: &Path, held: &mut Held) -> Option<String> {
+    let index_text = std::fs::read_to_string(dir.join("index.json")).ok()?;
+    let index: Index = serde_json::from_str(&index_text).ok()?;
+    let mut out = String::from("{\"tasks\":[");
+    let mut first = true;
+    for slot in &index.tasks {
+        let Ok(t) = std::fs::read_to_string(dir.join(part_file("t", slot))) else { continue };
+        if !first {
+            out.push(',');
+        }
+        first = false;
+        out.push_str(&t);
+        held.tasks.insert(slot.clone(), t);
+    }
+    out.push(']');
+    for name in &index.fields {
+        let Ok(f) = std::fs::read_to_string(dir.join(part_file("f", name))) else { continue };
+        out.push(',');
+        out.push_str(&serde_json::to_string(name).ok()?);
+        out.push(':');
+        out.push_str(&f);
+        held.fields.insert(name.clone(), f);
+    }
+    out.push('}');
+    held.index = index_text;
+    Some(out)
 }
 
 #[tauri::command(async)]
-pub fn state_save_parts(app: AppHandle, head: String, order: Vec<String>, tasks: std::collections::HashMap<String, String>) -> Result<Vec<String>, String> {
-    if !head.trim_start().starts_with('{') {
-        return Err("state head is not an object".into());
-    }
-    let mut guard = TASK_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+pub fn state_load(app: AppHandle) -> Option<String> {
+    let mut guard = HELD.lock().unwrap_or_else(|e| e.into_inner());
+    let held = guard.insert(Held::default());
+    load_parts(&state_dir(&app), held).or_else(|| std::fs::read_to_string(state_file(&app)).ok())
+}
+
+/// Written via a temp file so a crash mid-write never leaves half a file.
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| e.to_string())
+}
+
+/// Save the state from its parts (see src/state/persist.ts): only what changed crosses the
+/// bridge and only what changed is written. Returns what it lacked (nothing written for the index then).
+#[tauri::command(async)]
+pub fn state_save_parts(
+    app: AppHandle,
+    names: Vec<String>,
+    fields: std::collections::HashMap<String, String>,
+    order: Vec<String>,
+    tasks: std::collections::HashMap<String, String>,
+) -> Result<Missing, String> {
+    let mut guard = HELD.lock().unwrap_or_else(|e| e.into_inner());
     let held = guard.get_or_insert_with(Default::default);
-    held.extend(tasks);
-    let bytes = match join_parts(held, &head, &order) {
-        Ok(b) => b,
-        Err(missing) => return Ok(missing),
-    };
-    let keep: std::collections::HashSet<&String> = order.iter().collect();
-    held.retain(|k, _| keep.contains(k));
-    write_atomic(&state_file(&app), &bytes)?;
-    Ok(vec![])
+    let missing = save_parts(&state_dir(&app), held, &names, fields, &order, tasks)?;
+    // the one-file state of older versions: kept once, aside, after the first whole save
+    if missing.fields.is_empty() && missing.tasks.is_empty() {
+        let old = state_file(&app);
+        if old.exists() {
+            let _ = std::fs::rename(&old, data_dir(&app).join("state-before-parts.json"));
+        }
+    }
+    Ok(missing)
 }
 
 static QUIT_SAVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -415,7 +530,7 @@ pub fn account_dir_path(app: AppHandle, account_id: String) -> Option<String> {
 }
 
 /// Which providers this account is logged into (names only; secrets stay in the file).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn account_providers(app: AppHandle, account_id: String) -> Vec<String> {
     let own = account_dir(&app, &account_id);
     let dir = own.clone().unwrap_or_else(default_agent_dir);
@@ -820,7 +935,7 @@ pub struct ArtifactFile {
 }
 
 /// What a worker left in its artifacts folder (pages, pictures, recordings), newest first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn artifacts_list(app: AppHandle, worker_id: String) -> Vec<ArtifactFile> {
     let dir = artifacts_dir(app, worker_id);
     let mut out: Vec<ArtifactFile> = std::fs::read_dir(&dir)
@@ -899,19 +1014,49 @@ mod scratch_tests {
 
 #[cfg(test)]
 mod trace_tests {
-    use super::{join_parts, read_lines_from};
+    use super::read_lines_from;
 
     #[test]
-    fn state_file_is_put_together_from_its_parts() {
-        let held: std::collections::HashMap<String, String> =
-            [("a".to_string(), r#"{"id":"a"}"#.to_string()), ("b".to_string(), r#"{"id":"b"}"#.to_string())].into_iter().collect();
-        let order = vec!["b".to_string(), "a".to_string()];
-        let out = String::from_utf8(join_parts(&held, r#"{"version":3,"space":"home"}"#, &order).unwrap()).unwrap();
-        assert_eq!(out, r#"{"tasks":[{"id":"b"},{"id":"a"}],"version":3,"space":"home"}"#);
-        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    fn state_is_saved_part_by_part_and_read_back_whole() {
+        use super::{load_parts, part_file, save_parts, Held};
+        let dir = std::env::temp_dir().join(format!("ondra-state-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let m = |kv: &[(&str, &str)]| kv.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<std::collections::HashMap<_, _>>();
+        let s = |l: &[&str]| l.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let mut held = Held::default();
+        let missing = save_parts(&dir, &mut held, &s(&["version", "space"]), m(&[("version", "3"), ("space", "\"home\"")]), &s(&["b", "a"]), m(&[("a", r#"{"id":"a"}"#), ("b", r#"{"id":"b"}"#)])).unwrap();
+        assert!(missing.fields.is_empty() && missing.tasks.is_empty());
+        let text = load_parts(&dir, &mut Held::default()).unwrap();
+        assert_eq!(text, r#"{"tasks":[{"id":"b"},{"id":"a"}],"version":3,"space":"home"}"#);
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v["tasks"][1]["id"], "a");
-        assert_eq!(String::from_utf8(join_parts(&held, "{}", &[]).unwrap()).unwrap(), r#"{"tasks":[]}"#);
-        assert_eq!(join_parts(&held, "{}", &["c".to_string()]).unwrap_err(), vec!["c".to_string()]);
+
+        // only a changed part is written again
+        let a = dir.join(part_file("t", "a"));
+        let before = std::fs::metadata(&a).unwrap().modified().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        save_parts(&dir, &mut held, &s(&["version", "space"]), m(&[("space", "\"work\"")]), &s(&["b", "a"]), m(&[("a", r#"{"id":"a"}"#), ("b", r#"{"id":"b","x":1}"#)])).unwrap();
+        assert_eq!(std::fs::metadata(&a).unwrap().modified().unwrap(), before);
+        assert_eq!(load_parts(&dir, &mut Held::default()).unwrap(), r#"{"tasks":[{"id":"b","x":1},{"id":"a"}],"version":3,"space":"work"}"#);
+
+        // a native side that starts fresh asks for what it lacks, and writes no index until it has it
+        let mut fresh = Held::default();
+        let missing = save_parts(&dir, &mut fresh, &s(&["version"]), m(&[]), &s(&["a", "c"]), m(&[("c", r#"{"id":"c"}"#)])).unwrap();
+        assert_eq!((missing.fields, missing.tasks), (s(&["version"]), s(&["a"])));
+        assert!(load_parts(&dir, &mut Held::default()).unwrap().contains(r#""space":"work""#));
+
+        // read back, it holds what's there: a save of the same parts writes nothing, and a task gone goes from the folder
+        let mut back = Held::default();
+        load_parts(&dir, &mut back).unwrap();
+        let missing = save_parts(&dir, &mut back, &s(&["version", "space"]), m(&[]), &s(&["a"]), m(&[])).unwrap();
+        assert!(missing.fields.is_empty() && missing.tasks.is_empty());
+        assert!(!dir.join(part_file("t", "b")).exists());
+        assert_eq!(load_parts(&dir, &mut Held::default()).unwrap(), r#"{"tasks":[{"id":"a"}],"version":3,"space":"work"}"#);
+
+        // names the disk could confuse stay apart
+        assert_ne!(part_file("f", "memoryNow"), part_file("f", "memorynow"));
+        assert_eq!(part_file("t", "tmw1#2"), "t.tmw1%232.json");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

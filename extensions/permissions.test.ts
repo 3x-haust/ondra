@@ -105,6 +105,9 @@ describe("foreignData", () => {
   });
   it("blocks the app state and anything of other jobs or the other space", () => {
     expect(foreignData(`cat ${D}/state.json`, D, ok, "home")).toBe("state.json");
+    expect(foreignData(`cat ${D}/state/t.tmw1.json`, D, ok, "home")).toBe("state/");
+    expect(foreignData(`ls ${D}/state`, D, ok, "home")).toBe("state/");
+    expect(foreignData(`cat "${D}/state-before-parts.json"`, D, ok, "home")).toBe("state-before-parts.json");
     expect(foreignData(`rg token ${D}/sessions/t9/x.jsonl`, D, ok, "home")).toBe("sessions/t9");
     expect(foreignData(`ls ${D}/sessions/`, D, ok, "home")).toBe("sessions/");
     expect(foreignData(`cat ${D}/worktrees/app-t9/.env`, D, ok, "home")).toBe("worktrees/app-t9");
