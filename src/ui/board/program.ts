@@ -179,6 +179,40 @@ function panel(x, y, w, h, name, o) {
 }
 function highlight(x, y, w, h, o) { o = o || {}; __mark({ kind: "mark", x: __n(x), y: __n(y), w: __n(w), h: __n(h) }, Object.assign({ color: "yellow" }, o)); return __g(__n(x), __n(y), __n(w), __n(h)); }
 function dot(x, y, o) { o = o || {}; const r = __n(o.r, 5); __mark({ kind: "dot", x: __n(x), y: __n(y), r }, o); return __g(__n(x) - r, __n(y) - r, 2 * r, 2 * r); }
+/** a picture of a thing, a lucide icon by name ("server", "laptop", "lock", "database", "user", "cloud"…), {size, label, center} */
+function icon(name, x, y, o) {
+  o = o || {}; const s = __n(o.size, 48); x = __n(x); y = __n(y);
+  if (o.center) { x -= s / 2; y -= s / 2; }
+  __mark({ kind: "icon", name: String(name), x, y, size: s, label: __s(o.label) }, o);
+  const lw = o.label ? measure(o.label, 14) : 0, w = Math.max(s, lw);
+  return __g(x + s / 2 - w / 2, y, w, s + (o.label ? 26 : 0));
+}
+/** something moving from one shape (or point) to another while its step is on; {label} rides on it, {bend} curves its way */
+function travel(a, b, o) {
+  o = o || {};
+  if (!__ok(a) || !__ok(b)) return undefined;
+  const ca = __c(a), cb = __c(b);
+  const p = __edge(a, cb[0], cb[1], 6), q = __edge(b, ca[0], ca[1], 8);
+  const bend = __n(o.bend);
+  const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+  const pts = bend ? [p, [mx - ((q[1] - p[1]) / l) * bend, my + ((q[0] - p[0]) / l) * bend], q] : [p, q];
+  __mark({ kind: "travel", pts, curve: !!bend, label: __s(o.label), r: __n(o.r, 6) }, Object.assign({ color: "accent" }, o));
+}
+/** a number that counts from \`from\` to \`to\` when its step comes on; {unit, size, bold, align} */
+function count(x, y, from, to, o) {
+  o = o || {}; x = __n(x); y = __n(y);
+  const size = __n(o.size, 22), s = String(__n(to)) + (o.unit ? String(o.unit) : ""), w = measure(s, size) * 1.06;
+  __mark({ kind: "count", x, y, from: __n(from), to: __n(to), size, unit: __s(o.unit), bold: o.bold !== false, align: __s(o.align) }, o);
+  const x0 = o.align === "center" ? x - w / 2 : o.align === "right" ? x - w : x;
+  return __g(x0, y - size * 0.62, w, size * 1.24);
+}
+/** a soft ring breathing around a shape while its step is on: where to look */
+function pulse(shape, o) {
+  if (!__isG(shape)) return undefined;
+  o = o || {};
+  __mark({ kind: "pulse", x: shape.x - 8, y: shape.y - 8, w: shape.w + 16, h: shape.h + 16 }, Object.assign({ color: "accent" }, o));
+  return shape;
+}
 function part(name, shape, dims, at, o) {
   o = o || {};
   if (__o.parts.length >= 160) throw new Error("too many parts (160 at most)");
@@ -277,6 +311,26 @@ export function boardOf(raw: any): Board {
       case "dot":
         b.marks.push({ kind: "dot", ...common, x: num(m.x), y: num(m.y), r: num(m.r, 1, 60) || 5 });
         break;
+      case "icon": {
+        const name = iconName(m.name);
+        if (name) b.marks.push({ kind: "icon", ...common, name, x: num(m.x), y: num(m.y), size: num(m.size, 12, 240) || 48, ...(label ? { label } : {}) });
+        break;
+      }
+      case "travel": {
+        const pts = (Array.isArray(m.pts) ? m.pts.slice(0, 3) : []).map((p: any) => [num(p?.[0]), num(p?.[1])] as [number, number]);
+        if (pts.length >= 2) b.marks.push({ kind: "travel", ...common, pts, ...(m.curve ? { curve: true } : {}), ...(label ? { label: label.slice(0, 40) } : {}), r: num(m.r, 2, 30) || 6 });
+        break;
+      }
+      case "count": {
+        const unit = str(m.unit, 12);
+        b.marks.push({ kind: "count", ...common, x: num(m.x), y: num(m.y), from: num(m.from, -1e12, 1e12), to: num(m.to, -1e12, 1e12), size: num(m.size, 10, 72) || 22,
+          ...(unit ? { unit } : {}), ...(m.bold ? { bold: true } : {}),
+          ...(m.align === "center" || m.align === "middle" ? { align: "middle" as const } : m.align === "right" || m.align === "end" ? { align: "end" as const } : {}) });
+        break;
+      }
+      case "pulse":
+        if (num(m.w) > 0 && num(m.h) > 0) b.marks.push({ kind: "pulse", ...common, x: num(m.x), y: num(m.y), w: num(m.w), h: num(m.h) });
+        break;
     }
   }
   for (const p of Array.isArray(raw?.parts) ? raw.parts.slice(0, 160) : []) {
@@ -293,9 +347,15 @@ export function boardOf(raw: any): Board {
   return b;
 }
 
+/** an icon's name as lucide spells it: "Server", "fileText", "file text" → "server", "file-text" */
+export function iconName(v: unknown): string | undefined {
+  const s = String(v ?? "").trim().replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[\s_]+/g, "-").toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s) && s.length <= 40 ? s : undefined;
+}
+
 /** Is this board a program (calls like `box(…)`, statements), not the line form? */
 export function isProgram(src: string): boolean {
-  return /^\s*(?:title|step|size|box|circle|ellipse|line|arrow|curve|pen|poly|path|arc|text|highlight|dot|part|chip|row|connect|label|bars|cells|panel)\s*\(/m.test(src) || /^\s*(?:const|let|var|for|function|if)\b/m.test(src);
+  return /^\s*(?:title|step|size|box|circle|ellipse|line|arrow|curve|pen|poly|path|arc|text|highlight|dot|part|chip|row|connect|label|bars|cells|panel|icon|travel|count|pulse)\s*\(/m.test(src) || /^\s*(?:const|let|var|for|function|if)\b/m.test(src);
 }
 
 /** the part of a program that is complete so far: up to the last line that ends outside any bracket, string or comment */

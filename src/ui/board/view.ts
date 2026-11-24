@@ -1,12 +1,16 @@
-// A board on screen: the drawing appears stroke by stroke in the order it explains,
-// a pen point at the end of the line being drawn, the step being drawn named under
-// it. A board already seen is shown whole.
+// A board on screen: an explanation that builds up step by step. Each step's things
+// appear at once (a short fade), what earlier steps drew steps back, and the only
+// motion is what means something: a request travelling its way, a number counting,
+// a ring around what this step is about. The steps can be paged through (click one,
+// ← →, or play them from the start); with none picked the whole board shows.
+// A 3D model is built part by part instead (three-view.ts).
 // Plain DOM (no Solid) so a reply that is still streaming can move the same board
-// into its re-rendered text and keep drawing where it was.
+// into its re-rendered text and keep going where it was.
 import { headings, labelSize, parseBoard, type Board, type Mark, type Tone } from "./parse";
 import { completePart, engineReady, isProgram, loadEngine, runProgram } from "./program";
+import { iconNode, iconsReady, loadIcons } from "./icons";
 import { short } from "./names";
-import { box, head, polyline, ring, swipe, type Pt } from "./sketch";
+import { head, polyline, type Pt } from "./sketch";
 import type { ThreeView } from "./three-view";
 import { t } from "../../i18n";
 
@@ -19,13 +23,13 @@ const INK: Record<Tone, string> = {
 const LINE: Record<Tone, string> = { ...INK, ink: "var(--ink-2)" };
 const soft = (tone: Tone, pct = 12, color?: string) => `color-mix(in srgb, ${color ?? INK[tone]} ${pct}%, transparent)`;
 
-// pen pace
-const PX_PER_MS = 0.9;
+// 3D parts come in over a step's couple of seconds; steps follow each other at reading pace
 const GAP = 70;
 const STEP_GAP = 450;
-const stroke = (len: number) => Math.max(160, Math.min(900, len / PX_PER_MS));
-/** the pen speeds up and slows down at the ends of a stroke */
+/** easing in and out */
 const ease = (p: number) => 0.5 - Math.cos(Math.PI * p) / 2;
+/** how long a step stays when the board plays itself: time to read it and watch what moves */
+const dwell = (text: string, moving: boolean) => Math.max(moving ? 3200 : 2200, Math.min(7000, 900 + text.length * 75));
 
 // boards already drawn once: shown whole when they come back (scrolling, reopening the job)
 const SEEN_KEY = "ondra.boards.seen";
@@ -44,16 +48,39 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   return e;
 }
 
-/** what one mark draws: its pieces in drawing order, each with how long the pen takes */
-function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] } {
+type Built = { g: SVGGElement; under?: SVGElement; motion?: Motion };
+/** what moves while a mark's step is on */
+type Motion =
+  | { kind: "travel"; way: SVGPathElement; token: SVGGElement }
+  | { kind: "count"; text: SVGTextElement; from: number; to: number; unit: string }
+  | { kind: "pulse"; e: SVGElement };
+
+/** a number as it reads: whole numbers with separators, else the decimals the values have */
+function figure(v: number, from: number, to: number): string {
+  const places = Math.min(3, Math.max(...[from, to].map((n) => (String(n).split(".")[1] ?? "").length)));
+  return v.toLocaleString(undefined, { minimumFractionDigits: places, maximumFractionDigits: places });
+}
+
+/** an icon's elements into a group (drawn on a 24 grid, scaled to its size) */
+function fillIcon(g: SVGGElement, name: string): boolean {
+  const node = iconNode(name);
+  if (!node) return false;
+  g.textContent = "";
+  for (const [tag, attrs] of node) {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) if (k !== "key") e.setAttribute(k, v);
+    g.appendChild(e);
+  }
+  return true;
+}
+
+/** what one mark draws, as it finally looks */
+function build(m: Mark): Built {
   const g = el("g", { class: "bd-mark" });
-  const pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[] = [];
-  const pen = (d: string, len: number, width = "width" in m && m.width ? m.width : 1.8) => {
-    const p = el("path", { d, fill: "none", stroke: m.color ?? LINE[m.tone], "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round", pathLength: 1 });
-    // short even dashes whatever the stroke's length (it is measured as 1)
-    if (m.dash) p.setAttribute("stroke-dasharray", `${(6 / Math.max(len, 1)).toFixed(5)} ${(5 / Math.max(len, 1)).toFixed(5)}`);
+  const line = (d: string, width = "width" in m && m.width ? m.width : 1.8) => {
+    const p = el("path", { d, fill: "none", stroke: m.color ?? LINE[m.tone], "stroke-width": width, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    if (m.dash) p.setAttribute("stroke-dasharray", "6 5");
     g.appendChild(p);
-    pieces.push({ e: p, ms: stroke(len), kind: m.dash ? "fade" : "pen" });
     return p;
   };
   const words = (x: number, y: number, s: string, size: number, opts: { anchor?: string; bold?: boolean; tone?: Tone; color?: string; free?: boolean } = {}) => {
@@ -63,24 +90,19 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
     if (opts.free) tx.setAttribute("class", "bd-free");
     tx.textContent = s;
     g.appendChild(tx);
-    pieces.push({ e: tx, ms: Math.max(180, Math.min(600, s.length * 28)), kind: "fade" });
+    return tx;
   };
   switch (m.kind) {
     case "box": {
-      // the outline first, then its tint washes in (stronger when asked to be filled)
       const r = Math.min(8, m.w / 4, m.h / 4);
-      const f = m.bare ? undefined : el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color) });
-      if (f) g.appendChild(f);
-      pen(box(m.x, m.y, m.w, m.h), 2 * (m.w + m.h), m.bare ? 1.2 : undefined);
-      if (f) pieces.push({ e: f, ms: 260, kind: "fade" });
+      g.appendChild(el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: r, fill: m.bare ? "none" : soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color),
+        stroke: m.color ?? LINE[m.tone], "stroke-width": m.bare ? 1.2 : 1.8, ...(m.dash ? { "stroke-dasharray": "6 5" } : {}) }));
       if (m.label) words(m.x + m.w / 2, m.labelY ?? m.y + m.h / 2, m.label, labelSize(m), { anchor: "middle", tone: m.tone === "quiet" ? "quiet" : "ink" });
       break;
     }
     case "circle": {
-      const f = el("circle", { cx: m.x, cy: m.y, r: m.r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color) });
-      g.appendChild(f);
-      pen(ring(m.x, m.y, m.r), 2 * Math.PI * m.r);
-      pieces.push({ e: f, ms: 260, kind: "fade" });
+      g.appendChild(el("circle", { cx: m.x, cy: m.y, r: m.r, fill: soft(m.tone, m.fill ? 20 : m.tone === "ink" && !m.color ? 4 : 10, m.color),
+        stroke: m.color ?? LINE[m.tone], "stroke-width": 1.8, ...(m.dash ? { "stroke-dasharray": "6 5" } : {}) }));
       if (m.label) words(m.x, m.y, m.label, m.size ?? Math.max(13, Math.min(20, m.r * 0.45)), { anchor: "middle", tone: "ink" });
       break;
     }
@@ -88,9 +110,8 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
     case "arrow":
     case "curve": {
       const pts = m.pts as Pt[];
-      const len = pts.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0);
-      pen(polyline(pts, m.kind === "curve"), len, 1.6);
-      if (m.head) pen(head(pts[pts.length - 2], pts[pts.length - 1]), 24, 1.6);
+      line(polyline(pts, m.kind === "curve"), 1.6);
+      if (m.head) line(head(pts[pts.length - 2], pts[pts.length - 1]), 1.6);
       if (m.label) {
         const mid = pts[Math.floor((pts.length - 1) / 2)], nxt = pts[Math.floor((pts.length - 1) / 2) + 1];
         const vertical = Math.abs(nxt[0] - mid[0]) < Math.abs(nxt[1] - mid[1]);
@@ -102,25 +123,53 @@ function build(m: Mark): { g: SVGGElement; under?: SVGElement; pieces: { e: SVGE
       words(m.x, m.y, m.text, m.size, { bold: m.bold, tone: m.tone, color: m.color, anchor: m.align, free: true });
       break;
     case "path": {
-      // a shape the program drew: its tint first when filled, then the pen goes round it
-      if (m.fill) { const f = el("path", { d: m.d, fill: soft(m.tone, 22, m.color), stroke: "none" }); g.appendChild(f); }
-      pen(m.d, m.len);
-      if (m.fill) pieces.push({ e: g.firstChild as SVGElement, ms: 260, kind: "fade" });
+      if (m.fill) g.appendChild(el("path", { d: m.d, fill: soft(m.tone, 22, m.color), stroke: "none" }));
+      line(m.d);
       break;
     }
     case "mark": {
-      const p = el("path", { d: swipe(m.x, m.y, m.w, m.h), fill: "none", stroke: soft(m.tone, 38, m.color), "stroke-width": m.h, "stroke-linecap": "round", pathLength: 1 });
-      pieces.push({ e: p, ms: stroke(m.w), kind: "pen" });
-      return { g, under: p, pieces };
+      const p = el("rect", { x: m.x - 2, y: m.y, width: m.w + 4, height: m.h, rx: Math.min(6, m.h / 2), fill: soft(m.tone, 38, m.color) });
+      return { g, under: p };
     }
-    case "dot": {
-      const d = el("circle", { cx: m.x, cy: m.y, r: m.r, fill: m.color ?? INK[m.tone] });
-      g.appendChild(d);
-      pieces.push({ e: d, ms: 140, kind: "fade" });
+    case "dot":
+      g.appendChild(el("circle", { cx: m.x, cy: m.y, r: m.r, fill: m.color ?? INK[m.tone] }));
+      break;
+    case "icon": {
+      // the picture on a soft tile, its name under it
+      const k = m.size / 24;
+      const tile = el("rect", { x: m.x - 6, y: m.y - 6, width: m.size + 12, height: m.size + 12, rx: Math.min(14, m.size / 4), fill: soft(m.tone, m.tone === "ink" && !m.color ? 5 : 12, m.color) });
+      const pic = el("g", { transform: `translate(${m.x} ${m.y}) scale(${k})`, fill: "none", stroke: m.color ?? INK[m.tone], "stroke-width": 1.75, "stroke-linecap": "round", "stroke-linejoin": "round", "data-icon": m.name });
+      g.append(tile, pic);
+      // unknown (or not loaded yet): a plain tile with the name in it until the pictures come
+      if (!fillIcon(pic, m.name)) pic.appendChild(el("rect", { x: 3, y: 3, width: 18, height: 18, rx: 4, "stroke-dasharray": "2 2", "stroke-width": 1 }));
+      if (m.label) words(m.x + m.size / 2, m.y + m.size + 20, m.label, 14, { anchor: "middle", tone: "ink", free: true });
       break;
     }
+    case "travel": {
+      // the way it goes is drawn by connect(); here only what goes along it
+      const way = el("path", { d: polyline(m.pts as Pt[], !!m.curve), fill: "none", stroke: "none" });
+      const token = el("g", { class: "bd-token" });
+      token.appendChild(el("circle", { r: m.r + 5, fill: soft(m.tone, 22, m.color) }));
+      token.appendChild(el("circle", { r: m.r, fill: m.color ?? INK[m.tone] }));
+      if (m.label) {
+        const tx = el("text", { y: -m.r - 10, "font-size": 13, "text-anchor": "middle", "font-weight": 600, fill: m.color ?? INK[m.tone], class: "bd-free" });
+        tx.textContent = m.label;
+        token.appendChild(tx);
+      }
+      g.append(way, token);
+      return { g, motion: { kind: "travel", way, token } };
+    }
+    case "count": {
+      const tx = words(m.x, m.y, figure(m.to, m.from, m.to) + (m.unit ?? ""), m.size, { bold: m.bold, tone: m.tone, color: m.color, anchor: m.align, free: true });
+      return { g, motion: { kind: "count", text: tx, from: m.from, to: m.to, unit: m.unit ?? "" } };
+    }
+    case "pulse": {
+      const r = el("rect", { x: m.x, y: m.y, width: m.w, height: m.h, rx: Math.min(14, m.h / 3), fill: "none", stroke: m.color ?? INK[m.tone], "stroke-width": 2, class: "bd-pulse" });
+      g.appendChild(r);
+      return { g, motion: { kind: "pulse", e: r } };
+    }
   }
-  return { g, pieces };
+  return { g };
 }
 
 /** the part of the board a mark covers, labels included (text width is a guess) */
@@ -135,6 +184,12 @@ function extent(m: Mark): [number, number, number, number] {
     }
     case "mark": return [m.x, m.y, m.x + m.w, m.y + m.h];
     case "dot": return [m.x - m.r, m.y - m.r, m.x + m.r, m.y + m.r];
+    case "icon": return [m.x - 6, m.y - 6, m.x + m.size + 6, m.y + m.size + (m.label ? 30 : 6)];
+    case "pulse": return [m.x, m.y, m.x + m.w, m.y + m.h];
+    case "count": {
+      const w = (String(m.to).length + (m.unit?.length ?? 0)) * m.size * 0.62, x0 = m.align === "middle" ? m.x - w / 2 : m.align === "end" ? m.x - w : m.x;
+      return [x0, m.y - m.size, x0 + w, m.y + m.size];
+    }
     case "path": {
       // the points the pen goes to (an arc's end, not its radii and flags)
       const xs: number[] = [], ys: number[] = [];
@@ -154,7 +209,7 @@ function extent(m: Mark): [number, number, number, number] {
   }
 }
 
-type Drawn = { key: string; g: SVGGElement; under?: SVGElement; pieces: { e: SVGElement; ms: number; kind: "pen" | "fade" }[]; step: number };
+type Drawn = { key: string; g: SVGGElement; under?: SVGElement; motion?: Motion; step: number };
 
 type BoardOptions = { big?: boolean; onExpand?: (src: string) => void; onAsk?: (text: string) => void };
 
@@ -174,11 +229,14 @@ export class BoardView {
   private settle = 0;
   private svg?: SVGSVGElement;
   private ink?: SVGGElement;
-  private penDot?: SVGGElement;
-  /** pen strokes waiting or being drawn, each revealed along its length on its own clock */
-  private strokes: { e: SVGElement; at: number; ms: number }[] = [];
-  private raf = 0;
   private underLayer?: SVGGElement;
+  /** the step being looked at; null: the whole board */
+  private focus: number | null = null;
+  /** while it streams in, the newest step is shown, until the user picks one */
+  private live = true;
+  private playing = 0;
+  private motionRaf = 0;
+  private motionFrom = 0;
   private three?: ThreeView;
   private threeLoading = false;
   private disposed = false;
@@ -187,18 +245,24 @@ export class BoardView {
   private readonly stage: HTMLDivElement;
   private readonly stepsEl: HTMLOListElement;
   private readonly tag: HTMLDivElement;
+  private readonly playBtn: HTMLButtonElement;
+  private readonly againBtn: HTMLButtonElement;
 
   constructor(private readonly opts: BoardOptions = {}) {
     this.root = document.createElement("div");
     this.root.className = `bd${opts.big ? " bd-big" : ""}`;
+    this.root.tabIndex = 0;
+    this.root.addEventListener("keydown", (e) => this.key(e));
     this.head = document.createElement("div");
     this.head.className = "bd-head";
     this.titleEl = document.createElement("span");
     this.titleEl.className = "bd-title";
     const tools = document.createElement("span");
     tools.className = "bd-tools";
-    const again = this.button(t("다시 그리기"), "M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4", () => this.replay(0));
-    tools.append(again);
+    this.playBtn = this.button(t("처음부터 보기"), "M7 5v14l11-7z", () => (this.playing ? this.stop() : this.play()));
+    this.againBtn = this.button(t("다시 그리기"), "M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4", () => this.replay(0));
+    this.againBtn.style.display = "none";
+    tools.append(this.playBtn, this.againBtn);
     if (opts.onExpand) tools.append(this.button(t("크게 보기"), "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7", () => opts.onExpand!(this.src)));
     this.head.append(this.titleEl, tools);
     this.stage = document.createElement("div");
@@ -228,7 +292,7 @@ export class BoardView {
     return this.src;
   }
 
-  /** the board's source as it stands; new strokes are drawn after the ones already there */
+  /** the board's source as it stands; what is new appears after what is already there */
   update(src: string, done = false): void {
     // the chat may have moved this board into a new spot, which WebKit leaves blank until drawn again
     this.three?.wake();
@@ -267,7 +331,11 @@ export class BoardView {
     if (!done && !this.instant) this.settle = window.setTimeout(() => this.update(this.src, true), 700);
     if (done || this.instant) {
       this.hash = hashOf(src);
-      // remembered once its drawing has had time to finish
+      // finished: the whole board, unless the user is looking at a step
+      if (this.live && !this.board?.parts.length) {
+        this.live = false;
+        this.show(null);
+      }
       const left = Math.max(0, this.clock - performance.now());
       this.timers.push(window.setTimeout(() => remember(this.hash), left + 200));
     }
@@ -278,8 +346,12 @@ export class BoardView {
     this.titleEl.textContent = b.title ?? "";
     this.head.classList.toggle("bd-head-empty", !b.title);
     this.root.style.setProperty("--bd-ratio", `${b.w} / ${b.h}`);
+    const solid = b.parts.length > 0;
+    // (display, not hidden: the button's own style would show it anyway)
+    this.playBtn.style.display = solid || b.steps.filter((x) => x.text).length < 2 ? "none" : "";
+    this.againBtn.style.display = solid ? "" : "none";
     this.renderSteps(b);
-    if (b.parts.length) this.render3d(b);
+    if (solid) this.render3d(b);
     else this.render2d(b);
   }
 
@@ -290,27 +362,23 @@ export class BoardView {
       let li = this.stepsEl.children[i] as HTMLLIElement | undefined;
       if (!li) {
         li = document.createElement("li");
-        li.onclick = () => this.replay(i);
-        li.title = t("이 단계부터 다시 그리기");
+        // a 3D model is built again from that step; a drawing shows that step (again: the whole board)
+        li.onclick = () => (this.board?.parts.length ? this.replay(i) : (this.stop(), this.live = false, this.show(this.focus === i ? null : i, true)));
         this.stepsEl.appendChild(li);
       }
+      li.title = b.parts.length ? t("이 단계부터 다시 그리기") : t("이 단계 보기");
       if (li.textContent !== s.text) li.textContent = s.text;
       li.hidden = !s.text;
     });
     while (this.stepsEl.children.length > b.steps.length) this.stepsEl.lastElementChild!.remove();
   }
 
+  /** the 3D build's marker on the step being built */
   private nowStep(i: number | null) {
     [...this.stepsEl.children].forEach((li, k) => li.classList.toggle("is-now", k === i));
-    // while a step is drawn, what came before it steps back so the eye goes to the new part
-    for (const d of this.drawn) {
-      const past = i !== null && d.step < i;
-      d.g.classList.toggle("bd-past", past);
-      d.under?.classList.toggle("bd-past", past);
-    }
   }
 
-  /** when the next new piece may start, and the step marker for it */
+  /** when the next new piece may start, and the step marker for it (3D) */
   private slot(step: number, ms: number, gap = GAP): number {
     const now = performance.now();
     let at = Math.max(now, this.clock);
@@ -335,41 +403,168 @@ export class BoardView {
       this.svg = el("svg", { class: "bd-svg", role: "img" });
       this.underLayer = el("g", {});
       this.ink = el("g", {});
-      this.penDot = el("g", { class: "bd-pen", visibility: "hidden" });
-      this.penDot.append(el("circle", { r: 9, class: "bd-pen-glow" }), el("circle", { r: 3.5, class: "bd-pen-tip" }));
-      this.svg.append(this.underLayer, this.ink, this.penDot);
+      this.svg.append(this.underLayer, this.ink);
       this.stage.appendChild(this.svg);
     }
     if (b.title) this.svg.setAttribute("aria-label", b.title);
-    let added = false;
     const marks = headings(b.marks);
+    const fresh: Drawn[] = [];
+    let icons = false;
     marks.forEach((m, i) => {
+      if (m.kind === "icon") icons = true;
       const key = JSON.stringify(m);
       const old = this.drawn[i];
       if (old?.key === key) return;
-      const made = build(m);
-      const d: Drawn = { key, step: m.step, ...made };
+      const d: Drawn = { key, step: m.step, ...build(m) };
       if (old) {
-        // changed while the line was still arriving: swap it in place, no second drawing
+        // changed while the line was still arriving: swap it in place
         old.g.replaceWith(d.g);
         if (old.under && d.under) old.under.replaceWith(d.under);
         else old.under?.remove();
       } else {
         this.ink!.appendChild(d.g);
         if (d.under) this.underLayer!.appendChild(d.under);
-        if (!this.instant) { this.play(d); added = true; }
+        fresh.push(d);
       }
       this.drawn[i] = d;
     });
     for (const d of this.drawn.slice(b.marks.length)) { d.g.remove(); d.under?.remove(); }
     this.drawn.length = b.marks.length;
+    // the pictures load once; boards drawn before they came get them now
+    if (icons && !iconsReady()) void loadIcons().then(() => {
+      if (this.disposed || !this.svg) return;
+      for (const g of this.svg.querySelectorAll<SVGGElement>("g[data-icon]")) fillIcon(g, g.dataset.icon!);
+    });
     this.fit(b);
-    if (added) this.finish();
+    // streaming: the newest step is the one shown; finished or seen before: the whole board
+    if (this.live && !this.instant) this.show(Math.max(0, b.steps.length - 1), false, fresh);
+    else this.show(this.focus, false, this.instant ? [] : fresh);
   }
 
   /**
-   * Only as tall as what is drawn (it grows downward as the board comes in; the scale
-   * stays). Measured from the drawing itself when it is on screen, else from the marks.
+   * Show one step (what came before it steps back, what comes after waits) or, with null,
+   * the whole board. Things new to the eye fade in; the step's motion starts.
+   */
+  private show(i: number | null, user = false, fresh: Drawn[] = []) {
+    const last = (this.board?.steps.length ?? 1) - 1;
+    if (i !== null) i = Math.max(0, Math.min(last, i));
+    const was = this.focus;
+    this.focus = i;
+    const appear: Drawn[] = [...fresh];
+    for (const d of this.drawn) {
+      const ahead = i !== null && d.step > i;
+      const past = i !== null && d.step < i;
+      const wasHidden = d.g.getAttribute("visibility") === "hidden";
+      for (const e of [d.g, d.under]) {
+        if (!e) continue;
+        e.setAttribute("visibility", ahead ? "hidden" : "visible");
+        e.classList.toggle("bd-past", past);
+      }
+      if (!ahead && wasHidden && !fresh.includes(d)) appear.push(d);
+    }
+    [...this.stepsEl.children].forEach((li, k) => {
+      li.classList.toggle("is-now", k === i);
+      li.classList.toggle("is-ahead", i !== null && k > i);
+    });
+    this.root.classList.toggle("bd-focused", i !== null);
+    if (!quiet()) {
+      appear.filter((d) => d.g.getAttribute("visibility") !== "hidden").forEach((d, k) => {
+        for (const e of [d.g, d.under]) if (e) this.anims.push(e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: Math.min(k * 28, 360), easing: "ease-out", fill: "backwards" }));
+      });
+    }
+    if (user || was !== i || fresh.length) this.moveFrom(i);
+  }
+
+  /** the motion of the step shown: tokens travel their way, numbers count, a ring breathes */
+  private moveFrom(i: number | null) {
+    cancelAnimationFrame(this.motionRaf);
+    this.motionRaf = 0;
+    const on = this.drawn.filter((d) => d.motion && i !== null && d.step === i);
+    for (const d of this.drawn) {
+      const m = d.motion;
+      if (!m) continue;
+      const active = on.includes(d);
+      if (m.kind === "travel") m.token.setAttribute("visibility", active ? "visible" : "hidden");
+      if (m.kind === "pulse") m.e.classList.toggle("is-on", active && !quiet());
+      if (m.kind === "count" && !active) m.text.textContent = figure(m.to, m.from, m.to) + m.unit;
+      if (m.kind === "pulse" && !active) d.g.setAttribute("visibility", "hidden");
+      if (m.kind === "pulse" && active) d.g.setAttribute("visibility", "visible");
+    }
+    if (!on.length || quiet()) {
+      for (const d of on) if (d.motion?.kind === "travel") this.place(d.motion, 1);
+      return;
+    }
+    this.motionFrom = performance.now();
+    const frame = () => {
+      const ms = performance.now() - this.motionFrom;
+      let more = false;
+      for (const d of on) {
+        const m = d.motion!;
+        if (m.kind === "travel") {
+          // along its way, a short rest at the end, again
+          const len = m.way.getTotalLength?.() ?? 0;
+          const go = Math.max(900, Math.min(2400, len * 4)), cycle = go + 700;
+          this.place(m, ease(Math.min(1, (ms % cycle) / go)));
+          more = true;
+        } else if (m.kind === "count") {
+          const k = Math.min(1, ms / 1100);
+          m.text.textContent = figure(m.from + (m.to - m.from) * ease(k), m.from, m.to) + m.unit;
+          if (k < 1) more = true;
+        }
+      }
+      this.motionRaf = more && !this.disposed ? requestAnimationFrame(frame) : 0;
+    };
+    this.motionRaf = requestAnimationFrame(frame);
+  }
+
+  private place(m: Extract<Motion, { kind: "travel" }>, k: number) {
+    const len = m.way.getTotalLength?.() ?? 0;
+    if (!len) return;
+    const at = m.way.getPointAtLength(len * k);
+    m.token.setAttribute("transform", `translate(${at.x.toFixed(1)} ${at.y.toFixed(1)})`);
+  }
+
+  /** the steps one after another from the first, at reading pace, then the whole board */
+  private play() {
+    if (!this.board || this.board.parts.length) return;
+    this.stop();
+    this.live = false;
+    const steps = this.board.steps;
+    const go = (i: number) => {
+      if (i >= steps.length) return this.stop(true);
+      this.show(i, true);
+      const moving = this.drawn.some((d) => d.step === i && d.motion);
+      this.playing = window.setTimeout(() => go(i + 1), dwell(steps[i].text, moving));
+    };
+    this.root.classList.add("bd-playing");
+    go(0);
+  }
+
+  private stop(toWhole = false) {
+    clearTimeout(this.playing);
+    this.playing = 0;
+    this.root.classList.remove("bd-playing");
+    if (toWhole) this.show(null, true);
+  }
+
+  private key(e: KeyboardEvent) {
+    if (!this.board || this.board.parts.length) return;
+    const last = this.board.steps.length - 1;
+    const at = this.focus;
+    let next: number | null | undefined;
+    if (e.key === "ArrowRight") next = at === null ? 0 : at >= last ? null : at + 1;
+    else if (e.key === "ArrowLeft") next = at === null ? last : at <= 0 ? null : at - 1;
+    else if (e.key === "Escape" && at !== null) next = null;
+    if (next === undefined) return;
+    e.preventDefault();
+    this.stop();
+    this.live = false;
+    this.show(next, true);
+  }
+
+  /**
+   * Only as tall as what is drawn (steps still to come count: the board doesn't jump
+   * as they show). Measured from the drawing itself when it is on screen, else from the marks.
    */
   private fit(b: Board) {
     let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
@@ -378,62 +573,13 @@ export class BoardView {
     for (const r of box) if (r.width || r.height) take(r.x, r.y, r.x + r.width, r.y + r.height);
     if (!Number.isFinite(top)) for (const m of b.marks) take(...extent(m));
     const any = Number.isFinite(top) && Number.isFinite(bottom);
-    // the width it was drawn for, widened only when something reaches past it
     const x0 = any ? Math.min(0, Math.floor(left - 16)) : 0;
-    // as wide as the drawing (so a small one is not lost in empty paper), never narrower than 480
     const w = any ? Math.max(480, Math.ceil(right + 24) - x0) : b.w;
     const y0 = any ? Math.max(0, Math.floor(top - 24)) : 0;
     const h = any ? Math.max(140, Math.ceil(bottom + 24 - y0)) : b.h;
     this.svg!.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
     this.root.style.setProperty("--bd-ratio", `${w} / ${h}`);
   }
-
-  private play(d: Drawn) {
-    for (const p of d.pieces) {
-      const delay = this.slot(d.step, p.kind === "pen" ? p.ms : Math.min(p.ms, 220));
-      if (p.kind === "pen") this.pen(p.e, delay, p.ms);
-      else this.anims.push(p.e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: p.ms, delay, easing: "ease-out", fill: "backwards" }));
-    }
-  }
-
-  /** a stroke hidden until its turn, then drawn from start to end with the pen point on its tip */
-  private pen(e: SVGElement, delay: number, ms: number) {
-    e.style.strokeDasharray = "1 1";
-    e.style.strokeDashoffset = "1";
-    this.strokes.push({ e, at: performance.now() + delay, ms });
-    if (!this.raf) this.raf = requestAnimationFrame(this.tick);
-  }
-
-  private tick = () => {
-    this.raf = 0;
-    const now = performance.now();
-    let tip: { e: SVGElement; k: number } | undefined;
-    this.strokes = this.strokes.filter((s) => {
-      const p = (now - s.at) / s.ms;
-      if (p >= 1) {
-        s.e.style.strokeDasharray = "";
-        s.e.style.strokeDashoffset = "";
-        return false;
-      }
-      if (p > 0) {
-        const k = ease(p);
-        s.e.style.strokeDashoffset = String(1 - k);
-        tip = { e: s.e, k };
-      }
-      return true;
-    });
-    const dot = this.penDot;
-    if (dot) {
-      const path = tip?.e as SVGPathElement | undefined;
-      // a wide highlighter swipe has no pen point
-      if (path && path.getTotalLength && Number(path.getAttribute("stroke-width")) < 4) {
-        const at = path.getPointAtLength(path.getTotalLength() * tip!.k);
-        dot.setAttribute("transform", `translate(${at.x.toFixed(1)} ${at.y.toFixed(1)})`);
-        dot.setAttribute("visibility", "visible");
-      } else if (!this.strokes.length || !tip) dot.setAttribute("visibility", "hidden");
-    }
-    if (this.strokes.length) this.raf = requestAnimationFrame(this.tick);
-  };
 
   private render3d(b: Board) {
     if (!this.three) {
@@ -531,34 +677,29 @@ export class BoardView {
     this.tag.hidden = false;
   }
 
-  /** draw again from a step (the steps before it stay as they are) */
+  /** build a 3D model again from a step (the steps before it stay as they are) */
   replay(from: number): void {
     if (!this.board) return;
+    if (!this.board.parts.length) return this.show(from, true);
     this.stopAll();
     this.instant = false;
     this.clock = performance.now();
     this.lastStep = -1;
-    if (this.board.parts.length) {
-      this.three?.set([], undefined);
-      this.parts3d = 0;
-      const keep = this.board.parts.filter((p) => p.step < from).length;
-      this.three?.set(this.board.parts.slice(0, keep), undefined);
-      this.parts3d = keep;
-      this.render3d(this.board);
-      return;
-    }
-    for (const d of this.drawn) if (d.step >= from) this.play(d);
-    this.finish();
+    this.three?.set([], undefined);
+    this.parts3d = 0;
+    const keep = this.board.parts.filter((p) => p.step < from).length;
+    this.three?.set(this.board.parts.slice(0, keep), undefined);
+    this.parts3d = keep;
+    this.render3d(this.board);
   }
 
   private stopAll() {
     for (const a of this.anims) a.cancel();
     this.anims = [];
-    cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    for (const s of this.strokes) { s.e.style.strokeDasharray = ""; s.e.style.strokeDashoffset = ""; }
-    this.strokes = [];
-    this.penDot?.setAttribute("visibility", "hidden");
+    cancelAnimationFrame(this.motionRaf);
+    this.motionRaf = 0;
+    clearTimeout(this.playing);
+    this.playing = 0;
     for (const id of this.timers) clearTimeout(id);
     this.timers = [];
     this.nowStep(null);

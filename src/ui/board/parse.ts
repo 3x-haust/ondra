@@ -31,8 +31,16 @@ export type Mark =
   | (Common & { kind: "text"; x: number; y: number; text: string; size: number; bold?: boolean; align?: "middle" | "end" })
   | (Common & { kind: "mark"; x: number; y: number; w: number; h: number })
   | (Common & { kind: "dot"; x: number; y: number; r: number })
-  /** any shape the program drew: SVG path data, its length for the pen's pace */
-  | (Common & { kind: "path"; d: string; len: number; fill?: boolean; width?: number; head?: [[number, number], [number, number]] });
+  /** any shape the program drew: SVG path data, its rough length */
+  | (Common & { kind: "path"; d: string; len: number; fill?: boolean; width?: number; head?: [[number, number], [number, number]] })
+  /** a picture of a thing (a lucide icon by name: server, laptop, lock…), top-left at x, y, its name under it */
+  | (Common & { kind: "icon"; name: string; x: number; y: number; size: number; label?: string })
+  /** something moving along a way while its step is on: a request, a packet, a coin; `label` rides on it */
+  | (Common & { kind: "travel"; pts: [number, number][]; curve?: boolean; label?: string; r: number })
+  /** a number that counts from one value to another when its step comes on */
+  | (Common & { kind: "count"; x: number; y: number; from: number; to: number; size: number; unit?: string; bold?: boolean; align?: "middle" | "end" })
+  /** a soft ring that breathes around what this step is about */
+  | (Common & { kind: "pulse"; x: number; y: number; w: number; h: number });
 
 export type Shape = "box" | "cylinder" | "cone" | "sphere" | "torus" | "capsule";
 export type Part = {
