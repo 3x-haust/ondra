@@ -188,6 +188,13 @@ decision or as evidence. Do not trade verification for fewer tokens.
   and `wait` where the app takes a moment (a chat opening, a message going out).
   Each of your turns costs seconds and a step milliseconds, so look again only
   where the outcome is uncertain.
+- What you will do again in an app (a message to a chat room, a routine form)
+  is worth keeping once it worked: `save {app, flow, about, steps}`, each step
+  naming its element with `find`, and `{placeholders}` for what changes (the
+  room, the text). Never put a message's contents or a secret in a flow. Saved
+  flows come with your first words and with `start`; `run {app, flow, values}`
+  does one in a single call, opening the app if needed. A run that stops hands
+  you the screen where it stopped: carry on by hand, then save the flow again.
 - Before filling a form or spreadsheet, read around it: other tabs or sheets,
   notes, the values a drop-down allows. Use their exact wording and formats.
 - Save and Open sheets: put only the file name in the name field; for the

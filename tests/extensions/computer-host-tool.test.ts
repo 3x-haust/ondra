@@ -71,6 +71,29 @@ describe("computer tool — host background mode", () => {
     expect(stopped.stopped).toBe(true);
   });
 
+  it("a flow done once is saved and done again in one call, opening the app and filling its values", async () => {
+    vi.stubEnv("ONDRA_FLOWS_DIR", mkdtempSync(join(tmpdir(), "cu-flows-")));
+    const { call, hooks } = load();
+    // refs and pixels are this session's only: refused
+    await expect(call({ action: "save", app: "TextEdit", flow: "x", about: "x", steps: [{ kind: "click", ref: 3 }] })).rejects.toThrow("find");
+    const saved = text(await call({ action: "save", app: "TextEdit", flow: "enter", about: "입력하고 Go", steps: [{ kind: "type", text: "{word}" }, { kind: "click", find: "Go" }] }));
+    expect(saved).toContain("enter(word): 입력하고 Go");
+    // a new session hears of it with its first words
+    const fresh = load();
+    const note = fresh.hooks.get("before_agent_start")!({ messageType: "user", prompt: "hi" }) as any;
+    expect(note.message.content).toContain("- textedit: enter(word): 입력하고 Go");
+    expect(fresh.hooks.get("before_agent_start")!({ messageType: "user", prompt: "again" })).toBeUndefined();
+    await expect(fresh.call({ action: "run", app: "TextEdit", flow: "enter", values: {} })).rejects.toThrow("values needed: word");
+    const ran = text(await fresh.call({ action: "run", app: "TextEdit", flow: "enter", values: { word: "hello" } }));
+    expect(ran).toMatch(/^Opened TextEdit in the background, pid 4242\.\nflow “enter” done in [\d.]+ s:\n1\. type: done.*\n2\. click \[3\] “Go”: done/);
+    // its start says what is saved for the app
+    await fresh.call({ action: "stop" });
+    expect(text(await fresh.call({ action: "start", app: "TextEdit" }))).toContain("Saved flows for this app (run {app, flow, values} does one in a single call): enter(word): 입력하고 Go");
+    await expect(fresh.call({ action: "run", app: "TextEdit", flow: "nope" })).rejects.toThrow("saved: enter(word)");
+    await fresh.call({ action: "stop" });
+    void hooks;
+  });
+
   it.each([false, null])("does not save or return pixels without a verified window match (%s)", async matched => {
     vi.stubEnv("ONDRA_COMPUTER_HOST_BIN", fakeHelperBin(matched));
     const { call } = load();
@@ -124,7 +147,7 @@ describe("computer tool — host background mode", () => {
   it("registers a deferred sequential tool without spawning the helper", () => {
     const { tool } = load();
     expect(tool).toMatchObject({ name: "computer", exposure: "deferred", executionMode: "sequential" });
-    expect(tool.parameters.properties.action.enum).toEqual(["start", "observe", "look", "act", "targets", "target", "resume", "stop"]);
+    expect(tool.parameters.properties.action.enum).toEqual(["start", "observe", "look", "act", "targets", "target", "resume", "stop", "save", "run"]);
     expect(tool.description).not.toMatch(/guest|isolated/i);
   });
 

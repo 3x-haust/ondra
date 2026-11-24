@@ -298,6 +298,8 @@ export const WAIT_MS = 5000;
 export const WAIT_MAX_MS = 15000;
 /** between two reads of the screen while waiting (ms) */
 const POLL_MS = 120;
+/** the most a wait holds for the app to say it changed before it reads the screen anyway (some changes say nothing) */
+const CHANGE_MS = 500;
 
 type Pending = { id: string; resolve: (r: HostResult) => void; reject: (e: Error) => void };
 
@@ -509,12 +511,26 @@ export class ComputerHostSession {
     for (;;) {
       const v = test();
       if (v !== undefined || Date.now() >= end) return v;
-      await new Promise<void>((done, fail) => {
-        const t = setTimeout(done, POLL_MS);
-        signal?.addEventListener("abort", () => (clearTimeout(t), fail(new Error("Computer operation cancelled"))), { once: true });
-      });
+      await this.nextChange(Math.min(CHANGE_MS, end - Date.now()), signal);
       await this.refresh(signal);
     }
+  }
+
+  /** a helper that can't say when the app changed (an older one): it reads on a clock instead */
+  private noChanges = false;
+
+  /** Until the app says something changed on screen (then a read sees it at once), or `ms` pass. */
+  private async nextChange(ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw new Error("Computer operation cancelled");
+    if (!this.noChanges) {
+      const r = await this.helper.request("changes", { pid: this.requirePid(), ms: Math.max(10, Math.round(ms)) }, signal).catch(() => undefined);
+      if (typeof r?.changed === "boolean") return;
+      this.noChanges = true;
+    }
+    await new Promise<void>((done, fail) => {
+      const t = setTimeout(done, POLL_MS);
+      signal?.addEventListener("abort", () => (clearTimeout(t), fail(new Error("Computer operation cancelled"))), { once: true });
+    });
   }
 
   /** A step that names its element (find) instead of a ref: the element, once it is on screen. */

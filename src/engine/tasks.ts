@@ -2967,6 +2967,7 @@ function dataEnv(t: Task): [string, string][] {
     ["ONDRA_DATA_DIR", data],
     ["ONDRA_SPACE_KEY", key],
     ["ONDRA_RECIPES_DIR", `${data}/browser/${key}/recipes`],
+    ["ONDRA_FLOWS_DIR", `${data}/computer/${key}`],
     ...(ids ? [["ONDRA_JOBS_ALLOWED", ids.join(",")] as [string, string]] : []),
   ];
 }
