@@ -35,6 +35,9 @@ pub struct Author {
     pub id: String,
     pub name: String,
     pub bot: bool,
+    /// the account name ("@...") when it isn't the name shown, so "@that" can be made a mention
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -68,7 +71,7 @@ pub fn incoming(d: &Value) -> Option<Incoming> {
         id: s(&d["id"])?,
         channel: s(&d["channel_id"])?,
         guild: s(&d["guild_id"]),
-        author: Author { id: s(&author["id"])?, name, bot: author["bot"].as_bool().unwrap_or(false) },
+        author: Author { id: s(&author["id"])?, user: s(&author["username"]).filter(|u| *u != name), name, bot: author["bot"].as_bool().unwrap_or(false) },
         content: s(&d["content"]).unwrap_or_default(),
         mentions: d["mentions"].as_array().map(|a| a.iter().filter_map(|m| s(&m["id"])).collect()).unwrap_or_default(),
         // a reply to what the bot said as someone else (its webhook) is a reply to the bot
@@ -182,10 +185,12 @@ pub async fn discord_token_has() -> bool {
 
 /// Send `text` to a channel, as a reply to `reply_to` when given; the ids of what was sent.
 #[tauri::command]
-pub async fn discord_send(channel: String, text: String, reply_to: Option<String>) -> Result<Vec<String>, String> {
+pub async fn discord_send(channel: String, text: String, reply_to: Option<String>, pings: Option<Vec<String>>) -> Result<Vec<String>, String> {
     let mut ids = Vec::new();
+    // only the people it tagged by id are notified (never @everyone or a role)
+    let users: Vec<String> = pings.unwrap_or_default().into_iter().filter(|x| !x.is_empty() && x.chars().all(|c| c.is_ascii_digit())).take(100).collect();
     for (i, piece) in pieces(&text).into_iter().enumerate() {
-        let mut body = json!({ "content": piece, "allowed_mentions": { "parse": [], "replied_user": false } });
+        let mut body = json!({ "content": piece, "allowed_mentions": { "parse": [], "users": users, "replied_user": false } });
         if let (0, Some(r)) = (i, &reply_to) {
             body["message_reference"] = json!({ "message_id": r, "fail_if_not_exists": false });
         }
@@ -536,6 +541,7 @@ pub fn interaction_event(d: &Value) -> Option<Value> {
         id: s(&user["id"])?,
         name: s(&user["global_name"]).or_else(|| s(&user["username"])).unwrap_or_default(),
         bot: user["bot"].as_bool().unwrap_or(false),
+        user: s(&user["username"]).filter(|u| Some(u) != s(&user["global_name"]).as_ref()),
     };
     let mut ev = json!({
         "id": s(&d["id"])?,
@@ -897,7 +903,7 @@ mod tests {
             "attachments": [{ "url": "https://cdn.discordapp.com/a.png" }]
         });
         let m = incoming(&d).unwrap();
-        assert_eq!(m.author, Author { id: "u1".into(), name: "성윤".into(), bot: false });
+        assert_eq!(m.author, Author { id: "u1".into(), name: "성윤".into(), bot: false, user: Some("lyu".into()) });
         assert_eq!(m.guild.as_deref(), Some("g1"));
         assert_eq!(m.mentions, vec!["99"]);
         assert_eq!(m.reply_to.as_deref(), Some("99"));

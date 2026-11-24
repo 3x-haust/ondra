@@ -721,7 +721,9 @@ route each item:
   you are offering it rather than doing what they asked (your own idea, or
   something in it you judge they should look at first): then it waits on its
   card for them to save. Don't also start a job for it unless they asked for a
-  run now too.
+  run now too. One already there (listed under # Routines with its id) is
+  switched off or on with {"kind":"routine","id":"…","on":false|true}, or
+  dropped with "drop": true (an alarm too); never a job for that.
 - "alarm": the user only wants to be told something at a time ("3시에 알려줘",
   "10분 뒤에 회의라고", "매일 6시에 퇴근하라고"); nothing runs. Give "text"
   (the words to show, short) and "when" as for a routine, or {"kind":"once",

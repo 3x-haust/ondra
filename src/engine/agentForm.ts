@@ -4,6 +4,7 @@
 // said before, stay as they were. When the time is up (or it decides a hit undid it) it pops back.
 // The time keeps across a restart.
 import { discordApi } from "../lib/native";
+import { allowed } from "./discordPeople";
 import { setState, state } from "../state/store";
 import type { AgentSettings } from "../state/types";
 
@@ -34,7 +35,7 @@ export function formNote(a: AgentSettings | undefined, now = Date.now()): string
   const f = formNow(a, now);
   if (!f) return "";
   const left = Math.max(1, Math.round((f.until - now) / 60_000));
-  return `지금 너는 ${f.who}(으)로 변신해 있어 (${left}분쯤 남음). 속은 그대로 너라 누가 누군지는 알지만, 겉으로는 ${f.who}가 실제로 할 법한 말과 행동만 해: ${f.who}의 말투, 성격, ${f.who} 입장에서 본 사람 사이(누구를 뭐라고 부르는지, 누구랑 친한지). "주인", "메타몽", "변신", 네 일처럼 너만 할 말은 하지 마. 서버 사람이면 그 사람이 실제로 쓴 말을 찾아 읽고 따라 해. 변신이 풀리면 원래 너로 돌아와.`;
+  return `지금 너는 ${f.who}(으)로 변신해 있어 (${left}분쯤 남음). 속은 그대로 너라 누가 누군지는 알지만, 겉으로는 ${f.who}가 실제로 할 법한 말과 행동만 해: ${f.who}의 말투, 성격, ${f.who} 입장에서 본 사람 사이(누구를 뭐라고 부르는지, 누구랑 친한지). "주인", "${a?.name || "메타몽"}", "변신", 네 일처럼 너만 할 말은 하지 마. 서버 사람이면 그 사람이 실제로 쓴 말을 찾아 읽고 따라 해. 변신이 풀리면 원래 너로 돌아와.`;
 }
 
 /** Turn into someone for `minutes`: what it says till then goes out under their name and picture. */
@@ -89,7 +90,7 @@ async function hookOf(channel: string): Promise<{ id: string; token: string } | 
  * Say `text` there as who it turned into: their name and picture on these messages only.
  * Nothing (undefined) when it isn't turned or the channel won't let it: then it says it as itself.
  */
-export async function sayAsForm(channel: string, text: string): Promise<string[] | undefined> {
+export async function sayAsForm(channel: string, text: string, pings: string[] = []): Promise<string[] | undefined> {
   const f = formNow();
   if (!f) return undefined;
   const h = await hookOf(channel);
@@ -97,7 +98,7 @@ export async function sayAsForm(channel: string, text: string): Promise<string[]
   const ids: string[] = [];
   try {
     for (let i = 0; i < text.length; i += 2000) {
-      const m = (await discordApi("POST", `/webhooks/${h.id}/${h.token}?wait=true`, { content: text.slice(i, i + 2000), username: f.who, ...(f.picture ? { avatar_url: f.picture } : {}), allowed_mentions: { parse: [] } })) as { id?: string };
+      const m = (await discordApi("POST", `/webhooks/${h.id}/${h.token}?wait=true`, { content: text.slice(i, i + 2000), username: f.who, ...(f.picture ? { avatar_url: f.picture } : {}), allowed_mentions: allowed(pings) })) as { id?: string };
       if (m?.id) ids.push(m.id);
     }
   } catch {

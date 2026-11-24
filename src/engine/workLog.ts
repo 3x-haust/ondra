@@ -9,7 +9,7 @@ import { redact } from "../lib/log";
 import { expand } from "./rpc";
 import { state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { forThem, isKorean } from "./tongue";
+import { forThem } from "./tongue";
 
 type Watch = { seen: Set<string>; typingAt: number; busy?: boolean; pictures?: string[] };
 const watching = new Map<string, Watch>();
@@ -90,7 +90,7 @@ function lineOf(t: Task, e: Entry, w: Watch): string | undefined {
   const s = out(stripPictures(e.text, w));
   // what it muttered in English in Korean work isn't carried (the engine's reminder to keep to
   // the user's language comes only after the line is out)
-  const said = s ? forThem(s, isKorean(t.title)) : "";
+  const said = s ? forThem(s, t.title) : "";
   return said ? said.slice(0, MAX_LINE) : undefined;
 }
 
