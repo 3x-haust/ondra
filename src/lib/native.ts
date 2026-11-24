@@ -669,7 +669,7 @@ export interface DiscordMessage {
 /** A click on its button, a pick in its menu, or a slash command (acknowledged natively; no token here). */
 export interface DiscordInteraction {
   id: string;
-  kind: "component" | "command";
+  kind: "component" | "command" | "modal";
   channel: string;
   guild?: string | null;
   user: { id: string; name: string; bot: boolean };
@@ -677,6 +677,8 @@ export interface DiscordInteraction {
   message?: string;
   custom_id?: string;
   values?: string[];
+  /** a popup sent: what was typed in each input, by its custom_id */
+  fields?: Record<string, string | string[]>;
   /** a command: its name and options */
   command?: string;
   options?: { name: string; value?: unknown; options?: unknown[] }[];
@@ -718,6 +720,8 @@ export const discordChannelDelete = (channel: string) => call<void>("discord_cha
 export const discordApi = (method: string, path: string, body?: unknown, files?: string[]) => call<any>("discord_api", { method, path, body, files });
 /** its answer to an interaction it acknowledged: the command's own message, or a follow-up */
 export const discordInteractionReply = (id: string, body: unknown, followUp?: boolean) => call<any>("discord_interaction_reply", { id, body, followUp });
+/** the popup a button opens when pressed (null: none); answered by the app at once, as Discord wants */
+export const discordModalSet = (customId: string, modal: unknown) => call<void>("discord_modal_set", { customId, modal }, undefined);
 export const discordTokenHas = () => call<boolean>("discord_token_has", undefined, false);
 
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */

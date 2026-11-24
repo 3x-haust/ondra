@@ -14,6 +14,7 @@ import {
   discordApi,
   discordHistory,
   discordInteractionReply,
+  discordModalSet,
   discordOwner,
   discordReact,
   discordSaveFile,
@@ -34,7 +35,8 @@ import { workTick } from "./workLog";
 import { expand, isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
-import type { AgentSettings, CaptainMessage, Decision, SpaceId, Task } from "../state/types";
+import type { AgentSettings, CaptainMessage, Decision, FormField, SpaceId, Task } from "../state/types";
+import { initial, missing, type FormValues } from "./form";
 
 /**
  * What it is like when the user hasn't said otherwise. Kept short on purpose: a "be funny" section
@@ -280,6 +282,8 @@ async function onInteraction(i: DiscordInteraction) {
   const a = settings();
   if (!a?.on || !me || i.user.bot) return;
   if (i.custom_id?.startsWith(PICK)) return picked(i, a);
+  if (i.custom_id?.startsWith(FIELD)) return fieldPicked(i, a);
+  if (i.custom_id?.startsWith(FORM)) return popupSent(i, a);
   const opts = (o: DiscordInteraction["options"] = []): string => o.map((x) => (x.options ? `${x.name} ${opts(x.options as never)}` : `${x.name}:${String(x.value)}`)).join(" ");
   const text =
     i.kind === "command"
@@ -306,8 +310,17 @@ async function onInteraction(i: DiscordInteraction) {
 /** a question's choices as buttons under it (the one it thinks better stands out) */
 const PICK = "ondra:pick:";
 export function pickButtons(d: Decision, chosen?: string): unknown[] {
-  // things to fill in can't be filled with a button: they're asked in words, the reply answers
-  if (d.form?.length) return [];
+  // things to fill in: menus for the choices, the rest in a popup the button opens; a form too
+  // big for that is asked in words, and the reply answers
+  if (d.form?.length) {
+    const f = discordForm(d);
+    if (!f) return [];
+    return [...menuRows(d, f.menus, draftOf(d), !!chosen), ...buttonRows(d, chosen)];
+  }
+  return buttonRows(d, chosen);
+}
+
+function buttonRows(d: Decision, chosen?: string): unknown[] {
   const buttons = d.options.slice(0, 25).map((o) => ({
     type: 2,
     style: chosen ? (o.id === chosen ? 3 : 2) : o.primary ? 1 : 2,
@@ -320,12 +333,146 @@ export function pickButtons(d: Decision, chosen?: string): unknown[] {
   return rows;
 }
 
+// ---- a question with things to fill in, on Discord (Discord allows 5 rows on a message, 5 inputs in a popup)
+const FIELD = "ondra:field:";
+const FORM = "ondra:form:";
+/** what was picked in a question's menus so far, by question */
+const drafts = new Map<string, FormValues>();
+const draftOf = (d: Decision): FormValues => drafts.get(d.id) ?? Object.fromEntries((d.form ?? []).map((f) => [f.id, initial(f)]));
+
+/** how Discord can show a form: choices and checks as menus (one row each, the buttons below), the rest in a popup; undefined when it doesn't fit */
+export function discordForm(d: Decision): { menus: FormField[]; typed: FormField[] } | undefined {
+  const form = d.form ?? [];
+  const menus = form.filter((f) => f.kind === "choice" || f.kind === "check");
+  const typed = form.filter((f) => f.kind !== "choice" && f.kind !== "check");
+  const buttonRowsN = Math.ceil(Math.min(d.options.length, 25) / 5);
+  if (!form.length || menus.length + buttonRowsN > 5 || typed.length > 5) return undefined;
+  return { menus, typed };
+}
+
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+function menuRows(d: Decision, menus: FormField[], v: FormValues, done: boolean): unknown[] {
+  return menus.map((f) => {
+    const i = d.form!.indexOf(f);
+    const options =
+      f.kind === "choice"
+        ? f.options.filter((o, k, all) => all.indexOf(o) === k).slice(0, 25).map((o) => ({ label: cut(`${f.label}: ${o}`, 100), value: o.slice(0, 100), default: f.multi ? ((v[f.id] as string[] | undefined) ?? []).includes(o) : v[f.id] === o }))
+        : [
+            { label: cut(`${f.label}: 예`, 100), value: "yes", default: v[f.id] === true },
+            { label: cut(`${f.label}: 아니오`, 100), value: "no", default: v[f.id] === false },
+          ];
+    const multi = f.kind === "choice" && f.multi;
+    return {
+      type: 1,
+      components: [{ type: 3, custom_id: `${FIELD}${d.id}:${i}`.slice(0, 100), placeholder: cut(`${f.label}${f.required ? " *" : ""}`, 150), options, min_values: multi ? 0 : 1, max_values: multi ? options.length : 1, ...(done ? { disabled: true } : {}) }],
+    };
+  });
+}
+
+const hint = (f: FormField) =>
+  f.kind === "number" ? [f.min !== undefined && f.max !== undefined ? `${f.min}–${f.max}` : "숫자", f.unit].filter(Boolean).join(" ") : f.kind === "date" ? (f.time ? "2026-01-31 14:00" : "2026-01-31") : (f.kind === "text" && f.placeholder) || "";
+
+/** the popup a choice button opens when the question has things to type */
+export function formModal(d: Decision, optionId: string, typed: FormField[], v: FormValues): unknown {
+  return {
+    custom_id: `${FORM}${d.id}:${optionId}`.slice(0, 100),
+    title: cut(d.question.split("\n")[0], 45),
+    components: typed.map((f) => {
+      const now = v[f.id];
+      return {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: `f${d.form!.indexOf(f)}`,
+          label: cut(f.label + (f.kind === "number" && f.unit ? ` (${f.unit})` : ""), 45),
+          style: f.kind === "text" && f.long ? 2 : 1,
+          required: !!f.required,
+          ...(now !== undefined && now !== "" ? { value: String(now).slice(0, 4000) } : {}),
+          ...(hint(f) ? { placeholder: cut(hint(f), 100) } : {}),
+        }],
+      };
+    }),
+  };
+}
+
+/** before a form's buttons go up: each opens its popup at once when pressed (the app answers the click) */
+async function armForm(d: Decision) {
+  const f = d.form?.length ? discordForm(d) : undefined;
+  if (!f?.typed.length) return;
+  for (const o of d.options.slice(0, 25)) await discordModalSet(`${PICK}${d.id}:${o.id}`.slice(0, 100), formModal(d, o.id, f.typed, draftOf(d))).catch(() => {});
+}
+
+/** the buttons and menus for a question, armed */
+async function controlsFor(d: Decision): Promise<unknown[]> {
+  await armForm(d);
+  return pickButtons(d);
+}
+
+/** a pick in a question's menu: kept until the question is sent; the menus show it */
+async function fieldPicked(i: DiscordInteraction, a: AgentSettings) {
+  if (i.user.id !== a.ownerId) return;
+  const [did, n] = i.custom_id!.slice(FIELD.length).split(":");
+  const d = state.decisions.find((x) => x.id === did);
+  const f = d?.form?.[Number(n)];
+  if (!d || !f) return;
+  const v = { ...draftOf(d) };
+  const got = i.values ?? [];
+  v[f.id] = f.kind === "check" ? got[0] === "yes" : f.kind === "choice" && f.multi ? got.filter((x) => f.options.includes(x)) : got.find((x) => f.kind === "choice" && f.options.includes(x));
+  drafts.set(d.id, v);
+  if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: pickButtons(d) }).catch(() => {});
+}
+
+/** what was typed in the popup, as the field's value */
+function typedValue(f: FormField, raw: string | string[] | undefined): FormValues[string] {
+  const s = (Array.isArray(raw) ? raw.join(", ") : (raw ?? "")).trim();
+  if (!s) return undefined;
+  if (f.kind === "number") {
+    const n = Number(s.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : s;
+  }
+  return s;
+}
+
+/** the question sent (its button, with what was picked and typed): the answer, unless something needed is empty */
+async function formSent(i: DiscordInteraction, d: Decision, optionId: string, typed: Record<string, string | string[]> = {}) {
+  const v = { ...draftOf(d) };
+  d.form!.forEach((f, k) => {
+    if (`f${k}` in typed) v[f.id] = typedValue(f, typed[`f${k}`]);
+  });
+  const gap = missing(d.form!, v);
+  if (gap) {
+    drafts.set(d.id, v);
+    await armForm(d);
+    await discordInteractionReply(i.id, { content: `'${gap}'을(를) 채워 주세요`, flags: 64 }, true).catch(() => {});
+    return;
+  }
+  drafts.delete(d.id);
+  const { decide } = await import("./tasks");
+  await decide(d.id, optionId, v);
+  posted.delete(d.id);
+  for (const o of d.options.slice(0, 25)) void discordModalSet(`${PICK}${d.id}:${o.id}`.slice(0, 100), null).catch(() => {});
+  if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: pickButtons(d, optionId) }).catch(() => {});
+}
+
+/** a popup sent */
+async function popupSent(i: DiscordInteraction, a: AgentSettings) {
+  if (i.user.id !== a.ownerId) return;
+  const [did, oid] = i.custom_id!.slice(FORM.length).split(":");
+  const d = state.decisions.find((x) => x.id === did);
+  if (d?.form?.length && d.options.some((o) => o.id === oid)) await formSent(i, d, oid, i.fields);
+}
+
 /** the user picked a choice under a question: that's the answer; the buttons then show what was picked */
 async function picked(i: DiscordInteraction, a: AgentSettings) {
   if (i.user.id !== a.ownerId) return;
   const [did, oid] = i.custom_id!.slice(PICK.length).split(":");
   const d = state.decisions.find((x) => x.id === did);
   const o = d?.options.find((x) => x.id === oid);
+  if (d?.form?.length && o) {
+    // things to type: the click opened the popup, its sending answers; only menus: this sends it
+    if (!discordForm(d)?.typed.length) await formSent(i, d, o.id);
+    return;
+  }
   if (d && o) {
     const { decide } = await import("./tasks");
     await decide(d.id, o.id);
@@ -516,7 +663,9 @@ export function askPrompt(a: AgentSettings, d: Decision, about?: string, said?: 
     said ? `# 방금 네가 이 채널에 한 말 (바로 이어서 보내는 거야. 여기서 이미 물어봤으면 (skip) 만 써)\n${said}\n` : "",
     about ? `# 하던 일\n${about}\n` : "",
     `# 앱용 질문\n${d.question}`,
-    d.form?.length
+    d.form?.length && discordForm(d)
+      ? `# 받아야 할 것 (말 아래에 메뉴와 버튼이 붙어. 거기서 고르고 버튼을 누르면 된다고 짧게만 말해. 칸을 하나하나 다시 묻지 마)\n${d.form.map((f) => `- ${f.label}${f.required ? " (꼭 필요)" : ""}`).join("\n")}`
+      : d.form?.length
       ? `# 받아야 할 것 (주인이 답장 한 번에 알려 주게 물어봐)\n${d.form.map((f) => `- ${f.label}${f.kind === "choice" ? ` (${f.options.join(" / ")}${f.multi ? ", 여러 개 가능" : ""})` : ""}${f.required ? " (꼭 필요)" : ""}${f.note ? ` — ${f.note}` : ""}`).join("\n")}`
       : `# 고를 수 있는 것\n${d.options.map((o) => `- ${o.label}${o.primary ? " (이게 낫다고 봄)" : ""}${o.note ? ` — ${o.note}` : ""}`).join("\n")}`,
     "",
@@ -585,7 +734,7 @@ async function mainSaid(replyId: string) {
   // a reply only when something was said since their words; right under them, just say it
   const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
   const choices = (msg.routes ?? []).flatMap((r) => (r.kind === "ask" ? [state.decisions.find((x) => x.id === r.decisionId)] : [])).filter((d): d is Decision => !!d);
-  const buttons = choices.length === 1 ? pickButtons(choices[0]) : undefined;
+  const buttons = choices.length === 1 ? await controlsFor(choices[0]) : undefined;
   const ids = text ? await sayTo(channel, text, under ? undefined : asked?.message, asked?.interaction, buttons).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[])) : [];
   seen();
   keepSaid(channel, ids);
@@ -643,7 +792,7 @@ function postQuestions() {
     if (!channel) continue;
     posted.set(d.id, channel);
     void askedLine(d, settings(), t?.title)
-      .then((text) => sayTo(channel, text, undefined, undefined, pickButtons(d)).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
+      .then(async (text) => sayTo(channel, text, undefined, undefined, await controlsFor(d)).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
       .catch(() => posted.delete(d.id));
   }
 }
@@ -656,6 +805,7 @@ async function answered(channel: string, text: string): Promise<boolean> {
   if (!d || !text.trim()) return false;
   // things to fill in: the reply is the answer, in their words
   if (d.form?.length) {
+    drafts.delete(d.id);
     const { decide } = await import("./tasks");
     await decide(d.id, text.trim());
     posted.delete(d.id);

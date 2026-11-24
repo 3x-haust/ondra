@@ -36,6 +36,8 @@ on a subagent or the user is no handoff: just end the turn.
 
 ## Result blocks
 
+Any block can carry `"live": "key"`: something that keeps changing while you work (a long test run, a deploy, a checklist ticked off). Send the whole block again with the same key and it takes the earlier one's place, the newest at the end, so the chat has one card, not a pile of copies. Use it for `progress`, `tests`, `checklist`, `metric`, `timeline`, `table`.
+
 | type | fields |
 |---|---|
 | `diagram` | `label?`, `nodes: {id, label, note?, ref?, state?, by?}[]`, `edges: {from, to, label?}[]` — how something works, as boxes and arrows (3–9 nodes). `ref` = absolute path:line, `state`: new / changed / gone, `by`: user / agent (who decided it) |

@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, pickButtons, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -123,13 +123,43 @@ describe("main's words on Discord", () => {
     expect(pickPrompt(d, "그냥 합쳐")).toContain("pr: PR로 올리기 (1번)");
   });
 
-  it("a question with things to fill in is asked in words, with no buttons, and the reply answers it", () => {
-    const f: Decision = { ...d, options: [{ id: "보내기", label: "보내기", primary: true }], form: [{ id: "env", label: "배포 대상", kind: "choice", options: ["staging", "prod"], required: true }, { id: "when", label: "날짜", kind: "date" }] };
+  it("a question with things to fill in: menus for its choices, a popup for what is typed, the button sends it", () => {
+    const f: Decision = { ...d, options: [{ id: "보내기", label: "보내기", primary: true }], form: [
+      { id: "env", label: "배포 대상", kind: "choice", options: ["staging", "prod"], value: ["staging"], required: true },
+      { id: "ok", label: "알림", kind: "check" },
+      { id: "when", label: "날짜", kind: "date" },
+      { id: "n", label: "동시 실행", kind: "number", min: 1, max: 8, unit: "개", value: 2 },
+    ] };
+    const rows = pickButtons(f) as any[];
+    expect(rows).toHaveLength(3);
+    expect(rows[0].components[0]).toMatchObject({ type: 3, custom_id: "ondra:field:d1:0", min_values: 1, max_values: 1 });
+    expect(rows[0].components[0].options).toEqual([
+      { label: "배포 대상: staging", value: "staging", default: true },
+      { label: "배포 대상: prod", value: "prod", default: false },
+    ]);
+    expect(rows[1].components[0].options.map((o: any) => o.value)).toEqual(["yes", "no"]);
+    expect(rows[2].components[0]).toMatchObject({ type: 2, label: "보내기", custom_id: "ondra:pick:d1:보내기" });
+    // the popup: what is typed, prefilled, with a hint
+    const m = formModal(f, "보내기", discordForm(f)!.typed, { n: 2 }) as any;
+    expect(m.custom_id).toBe("ondra:form:d1:보내기");
+    expect(m.components.map((r: any) => r.components[0])).toEqual([
+      { type: 4, custom_id: "f2", label: "날짜", style: 1, required: false, placeholder: "2026-01-31" },
+      { type: 4, custom_id: "f3", label: "동시 실행 (개)", style: 1, required: false, value: "2", placeholder: "1–8 개" },
+    ]);
+    // sent: everything shows what was picked, and can't be pressed again
+    const done = pickButtons(f, "보내기") as any[];
+    expect(done.every((r) => r.components.every((c: any) => c.disabled))).toBe(true);
+    // the agent says it shortly, not field by field
     const p = askPrompt({ on: true, name: "메타몽" }, f);
-    expect(p).toContain("# 받아야 할 것");
-    expect(p).toContain("- 배포 대상 (staging / prod) (꼭 필요)");
+    expect(p).toContain("메뉴와 버튼");
     expect(p).not.toContain("# 고를 수 있는 것");
-    expect(pickButtons(f)).toEqual([]);
+  });
+
+  it("a form too big for Discord's menus is asked in words, and the reply answers it", () => {
+    const big: Decision = { ...d, options: [{ id: "보내기", label: "보내기" }], form: Array.from({ length: 6 }, (_, k) => ({ id: `t${k}`, label: `칸 ${k}`, kind: "text" as const })) };
+    expect(discordForm(big)).toBeUndefined();
+    expect(pickButtons(big)).toEqual([]);
+    expect(askPrompt({ on: true, name: "메타몽" }, big)).toContain("답장 한 번에");
     expect(pickButtons(d).length).toBe(1);
   });
 
@@ -441,6 +471,30 @@ describe("the whole way round", () => {
     expect(rows[0].components.every((b: any) => b.disabled)).toBe(true);
     expect(rows[0].components.find((b: any) => b.style === 3).label).toBe("운영");
     expect(said.thrown).toHaveLength(0);
+  });
+
+  it("a form on Discord: picks in its menus are kept, the popup's words join them, and a needed one left empty holds it", async () => {
+    await ready();
+    const modals = vi.spyOn(native, "discordModalSet").mockResolvedValue(undefined);
+    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
+    setState("decisions", [{ id: "d8", taskId: "t1", at: 1, kind: "ask", question: "배포 전에 알려 주세요", context: [], options: [{ id: "보내기", label: "보내기" }], form: [
+      { id: "env", label: "배포 대상", kind: "choice", options: ["staging", "prod"], required: true },
+      { id: "memo", label: "메모", kind: "text", required: true },
+      { id: "n", label: "동시 실행", kind: "number", unit: "개" },
+    ] }]);
+    const tasks = await import("./tasks");
+    const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
+    const on = (x: object) => emit({ kind: "interaction", interaction: { id: "i9", channel: "c1", user: { id: OWNER, name: "x", bot: false }, message: "q9", ...x } as never });
+    // posted with its menus, and its button armed with the popup
+    await vi.waitFor(() => expect(modals).toHaveBeenCalledWith("ondra:pick:d8:보내기", expect.objectContaining({ custom_id: "ondra:form:d8:보내기" })), { timeout: 5000 });
+    on({ kind: "component", custom_id: "ondra:field:d8:0", values: ["prod"] });
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/q9", expect.anything()));
+    // the popup sent with the needed memo empty: held, and said only to them
+    on({ kind: "modal", custom_id: "ondra:form:d8:보내기", fields: { f1: " ", f2: "4" } });
+    await vi.waitFor(() => expect(native.discordInteractionReply).toHaveBeenCalledWith("i9", expect.objectContaining({ content: "'메모'을(를) 채워 주세요", flags: 64 }), true));
+    expect(decide).not.toHaveBeenCalled();
+    on({ kind: "modal", custom_id: "ondra:form:d8:보내기", fields: { f1: "오늘 저녁", f2: "4" } });
+    await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d8", "보내기", { env: "prod", memo: "오늘 저녁", n: 4 }));
   });
 
   it("a click on a button it made comes to it as the user's words; a slash command is answered in its own place", async () => {

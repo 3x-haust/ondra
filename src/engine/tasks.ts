@@ -1,6 +1,7 @@
 // Task lifecycle: start an engine session, turn its events into transcript
 // entries, roll to a fresh session on a handoff (the relay), pick another
 // model when one is rejected, and schedule queued work into free slots.
+import { liveKey } from "./live";
 import { formAnswer, readFields, type FormValues } from "./form";
 import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
 import { answerExtensionUi, clearExtensionUi, extensionUi } from "./extensionUi";
@@ -706,9 +707,17 @@ function applyBlocks(t: Task, items: any[], run: Run) {
         // a review lens's check of the memory it was given: applied once its pair is over
         if (t.review) t.memoryCheck = readMemoryCheck(b.items);
         break;
-      default:
+      default: {
         if (b.type === "shot" && b.path) t.shot = b.path;
+        // a card that keeps changing: the earlier one goes, the newest is at the end
+        const live = liveKey(b.live);
+        if (live) {
+          b.live = live;
+          const i = t.entries.findIndex((e) => e.kind === "block" && e.block.live === live);
+          if (i >= 0) t.entries.splice(i, 1);
+        }
         push(t, { kind: "block", block: b as Block });
+      }
     }
   }
 }

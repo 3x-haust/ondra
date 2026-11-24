@@ -403,6 +403,31 @@ describe("a job waiting on the user's answer", () => {
   });
 });
 
+/** the model sends blocks in one message, mid-turn */
+async function shows(...blocks: unknown[]) {
+  const text = "```blocks\n" + blocks.map((x) => JSON.stringify(x)).join("\n") + "\n```";
+  emit({ type: "message_start", message: { role: "assistant" } });
+  emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } });
+  emit({ type: "message_end", message: { role: "assistant", stopReason: "toolUse" } });
+  await tick();
+}
+
+describe("a card that keeps changing", () => {
+  it("sent again with the same key, replaces the earlier one: one card, the newest, at the end", async () => {
+    await working([job()]);
+    await shows({ type: "progress", label: "테스트", value: 10, total: 300, live: "tests" });
+    await shows({ type: "checklist", items: [{ label: "빌드", done: true }] });
+    await shows({ type: "progress", label: "테스트", value: 120, total: 300, live: "tests" }, { type: "progress", label: "배포", value: 1, total: 3, live: "deploy" });
+    await shows({ type: "progress", label: "테스트", value: 300, total: 300, live: "tests" });
+    const blocks = task("job").entries.flatMap((e) => (e.kind === "block" ? [e.block] : []));
+    expect(blocks.map((b) => [b.type, b.live, (b as any).value])).toEqual([
+      ["checklist", undefined, undefined],
+      ["progress", "deploy", 1],
+      ["progress", "tests", 300],
+    ]);
+  });
+});
+
 describe("a question with things to fill in", () => {
   it("is one card; what was filled goes back under the button pressed", async () => {
     await working([job()]);
