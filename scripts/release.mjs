@@ -20,7 +20,7 @@
 //   5. latest.json, components.json, and the archive of each component new in this release
 // Secrets come from the environment only and are never printed.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assetName, cacheDir, REPO, releaseUrl, sha256File } from "./components.mjs";
@@ -136,6 +136,19 @@ const gh = ["release", "create", tag, "--target", head, "--title", `${name} ${ve
 if (publish) {
   run("gh", gh);
   say(`published ${tag}`);
+  // a dmg is ~230MB and one is left per version: once its release is on GitHub, the local copy goes
+  const dmgDir = dirname(dmg);
+  for (const file of readdirSync(dmgDir).filter((f) => f.endsWith(".dmg"))) {
+    const v = file.match(/_(\d[^_]*)_aarch64\.dmg$/)?.[1];
+    if (!v) continue;
+    try {
+      execFileSync("gh", ["release", "view", `v${v}`, "--json", "tagName"], { cwd: root, stdio: "ignore" });
+    } catch {
+      continue; // not released: keep it
+    }
+    rmSync(join(dmgDir, file), { force: true });
+    say(`removed ${file} (on GitHub)`);
+  }
 } else {
   const quote = (a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`);
   console.log(`\nTo publish:\n  gh ${gh.map(quote).join(" ")}`);
