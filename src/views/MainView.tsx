@@ -9,7 +9,7 @@ import { AnsweredCard, answerOf, DecisionCard } from "../ui/DecisionCard";
 import { answeredIn, type Answered } from "../state/answered";
 // Every reply carries one row for each job it started or relayed to, kept up to
 // date; the jobs themselves live in the sidebar, grouped by what they need from you.
-import { chooseAccount, createTask, finishTask, NO_ACCOUNT } from "../engine/tasks";
+import { chooseAccount, createTask, decide, finishTask, NO_ACCOUNT } from "../engine/tasks";
 import { createEffect, createMemo, createResource, createRoot, createSignal, onCleanup, For, type JSX, Match, on, Show, Switch } from "solid-js";
 import { accountById, accountsIn, addProject, allDecisions, allTasks, decisionFor, projectById, projectsShown, tasksShown, repoHome, setState, spaceById, kidsOf, lineHead, state, taskById, updateAccount } from "../state/store";
 import { ProjectBadge } from "../ui/ProjectBadge";
@@ -456,7 +456,7 @@ export function AskDock(props: { list: Decision[] }) {
   return (
     <Show when={props.list.length}>
       <div class="ask-dock">
-        <For each={props.list}>{(d, i) => <DecisionCard d={d} dock keys={i() === 0} />}</For>
+        <For each={props.list}>{(d, i) => <DecisionCard d={d} dock keys={i() === 0} ownBelow />}</For>
       </div>
     </Show>
   );
@@ -749,7 +749,12 @@ export function MainView() {
   // (a workspace only that Mac has).
   const mainHere = () => accountsIn(state.space).some((a) => a.providers.length > 0);
   const raw = () => (project() && mainHere() ? undefined : computer());
+  /** the question the input answers: the first card in the dock (the one its number keys answer), as in a job's thread */
+  const answering = () => ((d) => (d && !d.ui && !d.form?.length ? d : undefined))(asks()[0]);
   const sendMain = (text: string) => {
+    // a question is open: what's typed is the answer to it, not a new message
+    const d = answering();
+    if (d) return void decide(d.id, text.trim());
     const p = project();
     const at = raw();
     // on another Mac: what's typed is a job there (its own Ondra takes it from there)
@@ -840,7 +845,7 @@ export function MainView() {
             skillCommands(() => ({ space: state.space }), { host: computer()!.host, project: splitProjectId(project()?.id)?.id }).map((c) => ({ ...c, run: (a: string) => sendMain(`/${c.name} ${a}`.trim()) }))
           : skillCommands(() => ({ space: state.space, project: project()?.id }))),
       ]}
-      placeholder={t("메시지 보내기|input")}
+      placeholder={answering() ? t("다른 답 입력") : t("메시지 보내기|input")}
       onSend={sendMain}
       onTyping={() => void warmMain(state.space, project()?.id)}
       top={<BtwCard scope={`main:${key()}`} />}

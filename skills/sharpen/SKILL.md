@@ -87,11 +87,9 @@ Send a round as one ask block:
 
 In main, the same as an `ask` route with `questions` and `clarity`.
 
-Ondra shows the questions one card at a time (the recommendation is the one
-choice, a line under it for their own words, and "남은 N개 모두 추천대로") and
-sends all the answers back together, one `"question" → answer` per line. An
-answer ending in "(추천대로)" was taken without thought: a soft decision you
-may revisit if something later contradicts it.
+Ondra shows the questions one card at a time (the recommendation is the only
+choice; any other answer they type in the chat box) and sends all the answers
+back together, one `"question" → answer` per line.
 
 Questions are in plain words, answerable from the question line alone. One
 decision per question.
