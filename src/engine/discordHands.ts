@@ -5,6 +5,7 @@
 import { discordApi, discordChannelCreate, discordChannelDelete, discordChannels, discordDelete, discordGuilds, discordHistory, discordInteractionReply, discordReact, discordSend, discordUnreact } from "../lib/native";
 import { state } from "../state/store";
 import { botUserId } from "./discord";
+import { back, become } from "./agentForm";
 
 type Args = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -96,6 +97,13 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       const m = await discordInteractionReply(id, bodyOf(a), a.follow_up === true);
       return { sent: [m?.id].filter(Boolean) };
     }
+    case "become": {
+      const who = str(a.name);
+      if (!who) return { error: "name is who you turn into (their name or the character's)" };
+      return become({ who, picture: str(a.picture) || undefined, minutes: typeof a.minutes === "number" ? a.minutes : undefined });
+    }
+    case "back":
+      return back();
     case "api": {
       const method = str(a.method).toUpperCase() || "GET";
       const path = str(a.path);
@@ -115,7 +123,7 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
           at: m.at,
           from: m.author.name,
           fromId: m.author.id,
-          ...(me && m.author.id === me ? { you: true } : {}),
+          ...(me && (m.author.id === me || m.app === me) ? { you: true } : {}),
           ...(m.reply_msg ? { replyTo: m.reply_msg } : {}),
           text: m.content,
           ...(m.files.length ? { files: m.files.length } : {}),
@@ -140,5 +148,5 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       return { deleted: done, ...(Object.keys(failed).length ? { failed } : {}) };
     }
   }
-  return { error: `unknown action ${action}: servers, channels, create, delete, send, edit, react, unreact, read, delete_messages, respond, api` };
+  return { error: `unknown action ${action}: servers, channels, create, delete, send, edit, react, unreact, read, delete_messages, respond, become, back, api` };
 }

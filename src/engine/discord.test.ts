@@ -63,7 +63,7 @@ describe("how it sounds", () => {
   });
 
   it("is a person talking, not a list of rules", () => {
-    expect(DEFAULT_VOICE).toContain("옆자리 동료");
+    expect(DEFAULT_VOICE).toContain("너만의 생각이랑 취향");
     expect(DEFAULT_VOICE).toContain("주인한테는 반말");
     expect(DEFAULT_VOICE).not.toContain("금지");
   });
@@ -635,3 +635,4 @@ describe("a reply as Discord messages", () => {
     expect(many[5]).toBe("5\n\n6\n\n7\n\n8");
   });
 });
+

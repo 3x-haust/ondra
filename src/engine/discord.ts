@@ -44,6 +44,7 @@ import { initial, missing, type FormValues } from "./form";
  */
 export { DEFAULT_VOICE } from "./agentVoice";
 import { DEFAULT_VOICE } from "./agentVoice";
+import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -79,8 +80,11 @@ export const BANTER = `농담은 친구끼리처럼 해도 돼. 욕, 비속어, 
 - 못 해 주는 걸 달라고 하면 딱딱하게 거절만 하지 말고, 해 주는 척 누가 봐도 가짜인 걸로 받아쳐도 돼. 진짜 값이나 진짜처럼 읽히는 단서는 절대 안 넣어
 - 매번 웃길 필요 없어. 일 얘기 중이거나 상대가 진지하거나 급하면 그냥 답해. 같은 농담 되풀이하지 말고, 한 번 했던 틀도 바꿔`;
 
-/** How its messages are shaped: as the people there write theirs, read off the recent talk. */
-export const SHAPE = `Your messages look like the people's here: in the recent talk, see how long one message runs and how often a thought goes out as a few short messages in a row, and write yours the same way; one long paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
+/** What it can do as Metamong, whatever voice it was given: turn into someone for a while. */
+export const TRANSFORM = `넌 메타몽이라 누구로든 변신할 수 있어. 해 달라고 하거나 네가 하고 싶을 때, 그 사람이나 캐릭터를 찾아보고 얼굴 사진 웹 주소까지 찾은 다음 discord 도구 become으로 변신해서, 그 사람이 실제로 말하는 식대로 말해. 변신 중에 하는 말만 그 이름이랑 얼굴로 나가고 전에 한 말은 그대로야. 변신은 오래 못 가서 정한 시간이 지나면 알아서 풀리고, 누가 기술로 때리거나 세게 건드리면 그때도 펑 하고 풀려서 back으로 돌아와. 채널이 허락 안 하는 데서는 얼굴은 그대로고 말투만 바뀐 반쪽 변신이 돼.`;
+
+/** How its messages are shaped: short, as a person types on Discord, in its own way. */
+export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
 
 /** at most this many messages for one reply: what's past it goes in the last one */
 const MAX_MESSAGES = 6;
@@ -163,6 +167,8 @@ export async function startAgent() {
     unhook = () => off.forEach((f) => f());
   }
   sweep ??= setInterval(() => (postQuestions(), void scout(), void workTick()), 3000);
+  // a turn into someone that outlived the app pops back now, else when its time is up
+  keepTime();
   setStatus({ state: "connecting" });
   try {
     await discordStart();
@@ -230,8 +236,8 @@ export const OWNER_WAYS = `How you work here (every user's; their own ways, belo
 - Their explicit words outrank your defaults: if they told you to do something your rules would skip, do it.
 - Answer with the result, not a plan to get it. No lines that only say what you are about to do (they already see you typing); starting work, say where and on what, not how you will go about it or that you will report back.
 - Before you speak, read the channel's recent talk and judge whether this is the place for it. Lines they send in a row (nobody else between, the same topic) are one request: answer once. Use Discord's reply only when talk got mixed and it's unclear what you answer.
-- While work shows in a channel, say there what you checked, what you found, test and build results, commits and PRs, briefly at each step; don't say one line and go quiet.
-- When work ends, say what changed and why, what was checked, what is still open (and why), with the PR or link, without repeating what that channel already heard. Work that ended in another channel: where they asked gets a line or two of what was done with the PR or link and a pointer there, not just that it ended.
+- While work shows in a channel, say there what you checked, what you found, test and build results, commits and PRs, in a few words at each step; don't say one line and go quiet.
+- When work ends, tell it the way you'd tell a friend: that it's done, the PR or link, and only what's still open that they need to act on. The why and the how only when they ask; no recap of what that channel already heard. Work that ended in another channel: where they asked gets a line or two of what was done with the PR or link and a pointer there, not just that it ended.
 - Speaking, reacting, replying, deleting and suggesting are your own calls from these ways, memory and the talk, done with the general tools (discord). Don't lean on automatic copies or set phrases, and don't build special settings or workflow features to do it for you.
 - People, servers and lessons go in your personal memory, not the work memory.`;
 
@@ -263,9 +269,11 @@ export function waysNote(ways: { path: string; text: string }): string {
 }
 
 /** The voice and ways for a line that goes to Discord, and what a server channel must not get. */
-function chatRules(a: AgentSettings, server: boolean): string[] {
+export function chatRules(a: AgentSettings, server: boolean): string[] {
   return [
     voiceOf(a),
+    isDitto(a) ? TRANSFORM : "",
+    formNote(a),
     BANTER,
     SHAPE,
     OWNER_WAYS,
@@ -522,7 +530,7 @@ async function sayTo(channel: string, text: string, replyTo?: string, interactio
     for (const p of parts.slice(1)) {
       void discordTyping(channel).catch(() => {});
       await wait(typeFor(p));
-      ids.push(...(await discordSend(channel, p)));
+      ids.push(...(await plain(channel, p)));
     }
     return ids;
   }
@@ -535,8 +543,11 @@ async function sayTo(channel: string, text: string, replyTo?: string, interactio
     const m = await discordApi("POST", `/channels/${channel}/messages`, body).catch(() => undefined);
     if (m?.id) return [m.id];
   }
-  return discordSend(channel, text, replyTo);
+  return plain(channel, text, replyTo);
 }
+
+/** words alone: as who it turned into while it is someone else (no reply arrow then), else as itself */
+const plain = async (channel: string, text: string, replyTo?: string) => (await sayAsForm(channel, text)) ?? discordSend(channel, text, replyTo);
 
 /** The user's words for it: an answer to a question waiting there, or a request. */
 async function ownerTakes(m: DiscordMessage, a: AgentSettings, text: string) {
@@ -640,11 +651,14 @@ async function withPictures(text: string, urls: string[]): Promise<string> {
 /** the lines said in a row, as one request; answered at the last of them */
 /** how many of a channel's last messages come with a request */
 export const RECENT = 15;
-
 /** The channel's last lines, oldest first, marked off so a refused request can be sent again without them. */
+/** its own message: as itself, or as someone it turned into (its webhook, the app's id on it) */
+export const isMine = (m: DiscordMessage, botId: string) => !!botId && (m.author.id === botId || m.app === botId);
+const myName = (a: AgentSettings, m: DiscordMessage, botId: string) => (m.author.id === botId ? `${a.name}(너)` : `${a.name}(너, ${m.author.name}(으)로 변신해서)`);
+
 export function recentTalk(a: AgentSettings, before: DiscordMessage[], botId: string, now = Date.now()): string {
   if (!before.length) return "";
-  const name = (m: DiscordMessage) => (m.author.id === botId ? `${a.name}(너)` : m.author.id === a.ownerId ? `${m.author.name}(주인)` : m.author.name);
+  const name = (m: DiscordMessage) => (isMine(m, botId) ? myName(a, m, botId) : m.author.id === a.ownerId ? `${m.author.name}(주인)` : m.author.name);
   const ago = (m: DiscordMessage) => {
     const at = Date.parse(m.at);
     if (!Number.isFinite(at)) return "";
@@ -874,7 +888,7 @@ async function answered(channel: string, text: string): Promise<boolean> {
 
 /** The prompt for talk with someone who isn't the user, or for a line it watches (anyone's, the user's too). */
 export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage[], said: string, botId: string, memory = "", watching?: { owner: boolean }, ways = "", now = Date.now()): string {
-  const name = (m: DiscordMessage) => (m.author.id === botId ? `${a.name}(너)` : watching && m.author.id === a.ownerId ? `${m.author.name}(주인)` : m.author.name);
+  const name = (m: DiscordMessage) => (isMine(m, botId) ? myName(a, m, botId) : watching && m.author.id === a.ownerId ? `${m.author.name}(주인)` : m.author.name);
   // when, so a way like "5분 안에 이어 말하면" can be kept
   const ago = (m: DiscordMessage) => {
     const at = Date.parse(m.at);
@@ -888,6 +902,8 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     "",
     "# 말투",
     voiceOf(a),
+    formNote(a),
+    formNow(a) ? "누가 기술로 때리거나 세게 건드려서 변신이 풀리면, 답 맨 앞에 (back)을 붙이고 원래 너로 말해." : "",
     BANTER,
     SHAPE,
     "",
@@ -918,7 +934,13 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
   const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways));
   // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
-  const out = (await say(before).catch((e) => (before.length && isRefusal(e instanceof Error ? e.message : String(e)) ? say([]) : Promise.reject(e)))).trim();
+  let out = (await say(before).catch((e) => (before.length && isRefusal(e instanceof Error ? e.message : String(e)) ? say([]) : Promise.reject(e)))).trim();
+  // a hit undid its turn into someone: it pops back, then says its line as itself
+  const popped = /^\(back\)\s*/i.exec(out);
+  if (popped) {
+    popBack();
+    out = out.slice(popped[0].length).trim();
+  }
   if (!out || /^\(?skip\)?$/i.test(out)) return;
   // it was for it after all: the user's words as a request, anyone else's as a call
   if (watching && /^\(?take\)?$/i.test(out)) return watching.owner ? ownerTakes(m, a, text) : talk(m, a, text, ways);

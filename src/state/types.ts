@@ -823,6 +823,8 @@ export interface AgentSettings {
   suggested?: string[];
   /** the routine it offered and hasn't heard back on: the user's next words in that channel may say yes */
   offer?: { channel: string; at: number; say: string; title: string; task: string; when: unknown };
+  /** who it turned into and until when (agentForm.ts): what it says till then goes out under their name and picture */
+  form?: { who: string; until: number; picture?: string };
 }
 
 export interface AppState {
