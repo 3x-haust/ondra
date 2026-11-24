@@ -509,7 +509,9 @@ const CHECK_RECENT_MS = 7 * 24 * 60 * 60_000;
 export function checkReason(m: Memory, now = Date.now()): "rule" | "lesson" | undefined {
   if (!isLive(m) || m.scope !== "project" || !m.project || m.checkTask || now - (m.updatedAt ?? m.createdAt) >= CHECK_RECENT_MS) return undefined;
   const k = kindOf(m);
-  if (k === "rule" && (m.seen ?? 1) >= CHECK_SEEN) return "rule";
+  // a rule read from a note file (another tool's memory) was written down, not a correction the
+  // user had to repeat; such notes also hold how the user wants the agent to talk, not this code
+  if (k === "rule" && !m.from && (m.seen ?? 1) >= CHECK_SEEN) return "rule";
   if (k === "lesson" && sourcesOf(m).length >= MIN_EVIDENCE) return "lesson";
   return undefined;
 }
@@ -525,6 +527,7 @@ export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0
     "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on the mistake itself: the real place the user had to correct, put back for a moment, or a small bad example you don't keep.",
     "- Add one line to the rule list in AGENTS.md (or CLAUDE.md, whichever the repo has; make the list if there is none): the rule, then what holds it (the lint rule's name, the test file).",
     "- A rule a machine can't check (taste, wording, how or when to ask, commit or deploy, anything outside the code): change nothing and say why in one line with done.",
+    "- A rule about how the agent talks to or works with the user (the language it answers in, its tone, when it asks) is the user's own preference, not this project's code: change nothing, even when this repository is the agent's own source, where a check would force one user's taste on everyone who uses it.",
     '- This is a check, not a change anyone sees: once it is in and proven, send {"type":"merge","kind":"fix"} with your done.',
     "- Ondra started this by itself and the user doesn't know about it, so nobody is asked: no ask block. Decide yourself; when it isn't clear, change nothing and say why with done. What you couldn't check goes in unverified.",
   ].join("\n");

@@ -74,6 +74,12 @@ describe("a rule said again becomes a check", () => {
     expect(wantsCheck({ ...ok, checkTask: "t1" }, now)).toBe(false);
     expect(wantsCheck({ ...ok, updatedAt: now - 30 * DAY }, now)).toBe(false);
     expect(wantsCheck({ ...ok, invalidAt: now }, now)).toBe(false);
+    // read from a note file (another tool's memory): written down, not said again
+    expect(wantsCheck({ ...ok, from: "~/.claude/projects/-Users-u-Work-acme/memory/user-korean.md" }, now)).toBe(false);
+  });
+
+  it("leaves rules about how the agent talks to the user alone, even in the agent's own repo", () => {
+    expect(checkAsk("답은 한국어로")).toMatch(/how the agent talks to or works with the user[^\n]*change nothing, even when this repository is the agent's own source/);
   });
 
   it("starts one job in the project, once, and one at a time per project", async () => {
