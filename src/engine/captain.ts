@@ -16,7 +16,7 @@ import { jobReport, keepJobResult, keepResult } from "./results";
 import { dropOffers } from "./offers";
 import { noteCall } from "../state/ctx";
 import { prepareQuery } from "./vectors";
-import { AGENT_CHAT, isAgentChat, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
+import { AGENT_CHAT, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
@@ -1298,6 +1298,9 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
     } else if (r?.kind === "append" && job(r.taskId ?? r.workerId)) {
       // any job of this space, listed or found with jobs_search (a subagent, an older one, another project's)
       const target = job(r.taskId ?? r.workerId)!;
+      // the agent may move where a running job of its works in the open (a "room" on the append)
+      const open = isAgentChat(space) && target.agent ? inOpen(r) : {};
+      if (Object.keys(open).length) updateTask(target.id, (x) => x.agent && Object.assign(x.agent, open));
       const message = String(r.message ?? "").trim();
       if (!message) {
         out.push({ kind: "append", taskId: target.id, message });
