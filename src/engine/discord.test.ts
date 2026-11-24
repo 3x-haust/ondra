@@ -62,6 +62,24 @@ describe("how it sounds", () => {
     expect(ownerNote(msg(), { ...agent, voice: "존댓말로 짧게" })).toContain("존댓말로 짧게");
   });
 
+  it("sees what was said after their words, its own lines too, and lets an answered one pass", () => {
+    const later = [msg({ id: "m2", author: { id: BOT, name: "메타몽", bot: true }, content: "역도" })];
+    const p = talkPrompt(agent, "지수민", [], "아니 끝말잇기 계속 ㄱㄱ", BOT, "", undefined, "", Date.now(), later);
+    expect(p).toContain("# 이 말이 올라온 뒤에 오간 말");
+    expect(p).toContain("메타몽(너): 역도");
+    expect(p).toContain("이미 답이 됐거나");
+    expect(talkPrompt(agent, "지수민", [], "ㅎㅇ", BOT)).not.toContain("올라온 뒤에");
+  });
+
+  it("someone else may have it look at things; sending or changing waits for the owner's own OK", async () => {
+    const { othersNote } = await import("./discord");
+    expect(OTHERS_RULES).toContain("(work)");
+    const note = othersNote(msg({ author: { id: "77", name: "지수민", bot: false } }), agent);
+    expect(note).toContain("They are not the user");
+    expect(note).toContain("needs the user's OK first");
+    expect(note).toContain("only the user's own answer counts");
+  });
+
   it("is a person talking, not a list of rules", () => {
     expect(DEFAULT_VOICE).toContain("너만의 생각이랑 취향");
     expect(DEFAULT_VOICE).toContain("주인한테는 반말");
@@ -283,6 +301,65 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", undefined));
   });
 
+  it("what they say while it answers waits, and goes as one once it has answered", async () => {
+    BURST.ms = 30;
+    await ready();
+    const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
+    say("h1", "멈춰봐");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    say("h2", "너 사람 못알아봤어");
+    await new Promise((r) => setTimeout(r, 80));
+    say("h3", "미친놈아");
+    await new Promise((r) => setTimeout(r, 80));
+    // still answering the first: the rest wait
+    expect(said.thrown).toHaveLength(1);
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 멈춤" });
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.thrown[1].text).toBe("너 사람 못알아봤어\n미친놈아");
+    // the reply goes under the words it answers, with more said since
+    expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 멈춤", "h1");
+  });
+
+  it("an answer it wrote while another of its own went out there first is looked at again: what's left, or nothing", async () => {
+    await ready();
+    const snow = (ms: number) => ((BigInt(ms) - 1_420_070_400_000n) << 22n).toString();
+    emit({ kind: "message", message: msg({ id: "w1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "이유 찾아봐" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    // meanwhile its answer to someone else went out there
+    vi.mocked(native.discordHistory).mockResolvedValue([msg({ id: snow(Date.now()), guild: null, author: { id: BOT, name: "메타몽", bot: true }, content: "아까 안 된 건 펑만 쳐서임", at: new Date().toISOString() })]);
+    said.answer = "(skip)";
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "펑만 치고 변신을 안 했었어" });
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(said.prompts.some((p) => p.includes("<about-to-say>\n펑만 치고 변신을 안 했었어") && p.includes("메타몽(너): 아까 안 된 건 펑만 쳐서임"))).toBe(true));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(native.discordSend).not.toHaveBeenCalled();
+    // only what is left goes
+    emit({ kind: "message", message: msg({ id: "w2", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "프사는" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    said.answer = "프사도 이제 바뀜";
+    setState("captain", (m) => m.id === "reply2", { pending: false, reply: "펑만 쳐서 그랬어\n\n프사도 이제 바뀜" });
+    said.hook?.("reply2");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "프사도 이제 바뀜", undefined));
+    expect(native.discordSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("two replies in one channel go out one after the other, not mixed", async () => {
+    const { PACE } = await import("./discord");
+    const pace = { ...PACE };
+    Object.assign(PACE, { base: 20, perChar: 0, most: 20 });
+    await ready();
+    emit({ kind: "message", message: msg({ id: "s1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "하나" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "가\n\n나\n\n다" });
+    said.hook?.("reply1");
+    setState("captain", (l) => [...l, { id: "endq", at: 9, space: "home", project: "@agent", from: "captain", after: "tq", reply: "라\n\n마" }]);
+    setState("tasks", [{ id: "tq", title: "x", entries: [], agent: { channel: "c1" } } as never]);
+    said.hook?.("endq");
+    await vi.waitFor(() => expect(vi.mocked(native.discordSend).mock.calls.map((c) => c[1])).toEqual(["가", "나", "다", "라", "마"]), { timeout: 3000 });
+    Object.assign(PACE, pace);
+  });
+
   it("nothing said in between: a plain line; someone spoke in between: a reply to their message", async () => {
     await ready();
     emit({ kind: "message", message: msg({ id: "q1", author: { id: OWNER, name: "성윤", bot: false }, content: `<@${BOT}> 오늘 뭐함`, mentions: [BOT] }) });
@@ -308,7 +385,9 @@ describe("the whole way round", () => {
     say("t2", "ㅅㅂ");
     await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
     expect(said.thrown[0].text).toBe("tq\nㅅㅂ");
-    // someone else typing doesn't hold it
+    // someone else typing doesn't hold it (once it has answered the first)
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ" });
+    said.hook?.("reply1");
     say("t3", "ㅇㅇ");
     emit({ kind: "typing", channel: "c1", user: "222" });
     await vi.waitFor(() => expect(said.thrown).toHaveLength(2));

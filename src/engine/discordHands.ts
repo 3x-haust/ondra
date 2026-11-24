@@ -111,6 +111,34 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       const files = list(a.files);
       return { result: noTokens(await discordApi(method, path, a.body, files.length ? files : undefined)) };
     }
+    case "search": {
+      const server = str(a.server);
+      if (!server) return { error: "server is the server id to search in (servers lists them)" };
+      const q = new URLSearchParams();
+      if (str(a.from)) q.set("author_id", str(a.from));
+      if (str(a.text)) q.set("content", str(a.text));
+      if (str(a.channel)) q.set("channel_id", str(a.channel));
+      if (typeof a.offset === "number") q.set("offset", String(Math.max(0, Math.floor(a.offset))));
+      if (![...q.keys()].some((k) => k !== "offset")) return { error: "search needs from (a user id), text or channel" };
+      const me = botUserId();
+      // a server Discord hasn't indexed yet answers "try again in a moment": it waits and asks again
+      for (let i = 0; i < 4; i++) {
+        const r = (await discordApi("GET", `/guilds/${server}/messages/search?${q}`)) as { messages?: unknown[][]; total_results?: number; code?: number; retry_after?: number };
+        if (Array.isArray(r?.messages) && typeof r.total_results === "number") {
+          type Hit = { id: string; channel_id: string; timestamp: string; content: string; author: { id: string; username: string; global_name?: string } };
+          return {
+            total: r.total_results,
+            messages: r.messages.map((group) => group[0] as Hit).filter(Boolean).map((m) => ({
+              id: m.id, channel: m.channel_id, at: m.timestamp, from: m.author.global_name || m.author.username, fromId: m.author.id,
+              ...(me && m.author.id === me ? { you: true } : {}), text: m.content,
+            })),
+            ...(r.total_results > r.messages.length ? { more: "offset by the number seen so far for older ones (25 a page)" } : {}),
+          };
+        }
+        await new Promise((done) => setTimeout(done, Math.min(5, Math.max(1, Number(r?.retry_after) || 2)) * 1000));
+      }
+      return { error: "Discord is still building this server's search index: try search again in a minute, or read the channel further back (read with before)" };
+    }
     case "read": {
       const channel = str(a.channel);
       if (!channel) return { error: "channel is empty" };
@@ -148,5 +176,5 @@ export async function discordHands(worker: string | undefined, a: Args): Promise
       return { deleted: done, ...(Object.keys(failed).length ? { failed } : {}) };
     }
   }
-  return { error: `unknown action ${action}: servers, channels, create, delete, send, edit, react, unreact, read, delete_messages, respond, become, back, api` };
+  return { error: `unknown action ${action}: servers, channels, create, delete, send, edit, react, unreact, read, search, delete_messages, respond, become, back, api` };
 }

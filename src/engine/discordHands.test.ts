@@ -35,6 +35,21 @@ describe("the Discord agent's hands", () => {
     expect(await discordHands("captain:home~@agent", { action: "read" })).toHaveProperty("error");
   });
 
+  it("search finds what someone said however far back, waiting while Discord still indexes the server", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(discord, "botUserId").mockReturnValue("b1");
+    const hit = { id: "m7", channel_id: "c1", timestamp: "t7", content: "ㅋㅋ 몰라 나 잠", author: { id: "783", username: "jw", global_name: "정원" } };
+    const api = vi.spyOn(native, "discordApi")
+      .mockResolvedValueOnce({ message: "Index not yet available. Try again later", code: 110000, retry_after: 2 } as never)
+      .mockResolvedValueOnce({ total_results: 30, messages: [[hit]] } as never);
+    const found = discordHands("captain:home~@agent", { action: "search", server: "g1", from: "783" });
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(await found).toEqual({ total: 30, messages: [{ id: "m7", channel: "c1", at: "t7", from: "정원", fromId: "783", text: "ㅋㅋ 몰라 나 잠" }], more: expect.any(String) });
+    expect(api).toHaveBeenLastCalledWith("GET", "/guilds/g1/messages/search?author_id=783");
+    expect(await discordHands("captain:home~@agent", { action: "search", server: "g1" })).toHaveProperty("error");
+    vi.useRealTimers();
+  });
+
   it("delete one message or several, saying which failed", async () => {
     const del = vi.spyOn(native, "discordDelete").mockImplementation(async (_c, id) => {
       if (id === "m3") throw "디스코드가 거절했어요 (404 Not Found): Unknown Message";
