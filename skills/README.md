@@ -25,6 +25,8 @@ The app passes them to every pi worker with `--skill`.
 | `code-map` | Explaining a codebase (코드 설명, 구조 설명, 아키텍처 지도): one `map.json` per repo (system → containers → components, file ownership by globs, relations with verbs and call sites) kept in the repo's shared git folder, drawn as `arch` blocks with drill-down by `scripts/codemap.mjs`, checked against the code (`check` lists drifted parts), read before a change (`owner`) and updated after it. Reads an existing Groma map (`from-groma`); ideas from [groma.md](https://github.com/MrLesk/Groma.md) (MIT, `NOTICE.md`), no code copied. |
 | `ondra` | Ondra itself: what a feature is and where it lives, changing its settings for the user through `ondra_settings` (extensions/ondra.ts; the Discord agent's token moves from a saved secret, never shown), and a feature or bug turned into a short proposal and, when the user says so, a PR to 3x-haust/ondra. |
 | `secrets` | API keys, tokens and .env files: use Ondra's secrets as `$NAME` without seeing values, find and save what each one is for in memory, and what to do when one is missing or pasted into the chat. |
+| `github` | GitHub through the `gh` CLI: the signed-in account and repo, reading issues and PRs with their checks, PRs and reviews the repo's way, merging the way the repo merges, failed CI runs, releases and the API. |
+| `discord` | The Discord agent's own hands on a server (its `discord` tool): read a channel before speaking, make a channel in the right place, delete its own messages, and how messages show (mentions, small print, pictures, 2000 characters). |
 
 ## When a skill is offered
 

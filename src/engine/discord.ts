@@ -11,12 +11,11 @@
 //   looks on at talk not for it and picks, like a person in the room: let it pass, react, say a
 //   line, or take it (the user's words as a request; anyone else's as a call). See WATCH_WAYS.
 import {
-  discordDelete,
   discordHistory,
   discordOwner,
   discordReact,
-  discordUnreact,
   discordSaveFile,
+  discordSendFile,
   discordSend,
   discordStart,
   discordStop,
@@ -29,10 +28,10 @@ import { logError, logInfo } from "../lib/log";
 import { applyDigest, digestPrompt, memoryLines, type Heard } from "./agentMemory";
 import { readWays, waysPath } from "./agentWays";
 import { workTick } from "./workLog";
-import { isRefusal } from "./rpc";
+import { expand, isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
 import { AGENT_CHAT, setState, state, taskById } from "../state/store";
-import type { AgentSettings, CaptainMessage, Decision, SpaceId } from "../state/types";
+import type { AgentSettings, CaptainMessage, Decision, SpaceId, Task } from "../state/types";
 
 /**
  * What it is like when the user hasn't said otherwise. Kept short on purpose: a "be funny" section
@@ -146,6 +145,7 @@ export function stopAgent() {
   unhook = undefined;
   if (sweep) clearInterval(sweep);
   sweep = undefined;
+  for (const c of [...typingIn.keys()]) stopTyping(c);
   me = undefined;
   for (const h of heard.values()) if (h.timer) clearTimeout(h.timer);
   heard.clear();
@@ -193,7 +193,7 @@ export const OWNER_WAYS = `How you work here (every user's; their own ways, belo
 - You are the agent yourself, the one doing the work, not a relay to it: jobs are your own hands. Say what you are doing in the first person, never that you sent, handed or dispatched it to something else; no status-report phrasing, no colon lists.
 - Do it. Ask first only before what can't be undone: deleting, merging, pushing to a default branch, kicking or banning, cancelling, spending money. Creating, sending, changing settings, starting work: just do it.
 - Their explicit words outrank your defaults: if they told you to do something your rules would skip, do it.
-- Answer with the result, not a plan to get it. No lines that only say what you are about to do (you already reacted 👀); starting work, say where and on what, not how you will go about it or that you will report back.
+- Answer with the result, not a plan to get it. No lines that only say what you are about to do (they already see you typing); starting work, say where and on what, not how you will go about it or that you will report back.
 - Before you speak, read the channel's recent talk and judge whether this is the place for it. Lines they send in a row (nobody else between, the same topic) are one request: answer once. Use Discord's reply only when talk got mixed and it's unclear what you answer.
 - While work shows in a channel, say there what you checked, what you found, test and build results, commits and PRs, briefly at each step; don't say one line and go quiet.
 - When work ends, say what changed and why, what was checked, what is still open (and why), with the PR or link, without repeating what that channel already heard. Work that ended in another channel: where they asked gets a line or two of what was done with the PR or link and a pointer there, not just that it ended.
@@ -270,13 +270,12 @@ async function onMessage(m: DiscordMessage) {
   await next;
 }
 
-/** The user's words for it: an answer to a question waiting there, taking back what it said, or a request. */
+/** The user's words for it: an answer to a question waiting there, or a request. */
 async function ownerTakes(m: DiscordMessage, a: AgentSettings, text: string) {
   // a number answers the question waiting in this channel
-  // "메타몽 2", "메타몽 그거 지워": what follows its name
+  // what follows its name
   const bare = a.name && text.startsWith(a.name) ? text.slice(a.name.length).replace(/^[\s,!?.~]+/, "") : text;
   if (await answered(m.channel, bare)) return;
-  if (await takenBack(m, bare)) return;
   return askMain(m, a, text);
 }
 
@@ -324,6 +323,19 @@ function arm(key: string, ms: number) {
   }, wait);
 }
 
+/** "… is typing" while it works on their words, up to a few minutes; stopped when it answers */
+const typingIn = new Map<string, ReturnType<typeof setInterval>>();
+function keepTyping(channel: string) {
+  void discordTyping(channel).catch(() => {});
+  if (typingIn.has(channel)) return;
+  const from = Date.now();
+  typingIn.set(channel, setInterval(() => (Date.now() - from > 180_000 ? stopTyping(channel) : void discordTyping(channel).catch(() => {})), 8000));
+}
+function stopTyping(channel: string) {
+  clearInterval(typingIn.get(channel));
+  typingIn.delete(channel);
+}
+
 /** they are typing more: wait for it, like a person would */
 function stillTyping(channel: string, user: string) {
   const key = `${channel}|${user}`;
@@ -331,9 +343,8 @@ function stillTyping(channel: string, user: string) {
 }
 
 function askMain(m: DiscordMessage, a: AgentSettings, text: string) {
-  // seen: a reaction, not a line that only says "알겠어, 할게"
-  void discordReact(m.channel, m.id, "👀").catch(() => {});
-  void discordTyping(m.channel);
+  // seen: it is typing while it works on it (kept up until it answers), not a fixed reaction or line
+  keepTyping(m.channel);
   const key = `${m.channel}|${m.author.id}`;
   const b = bursts.get(key) ?? { ms: [], texts: [], a, from: Date.now() };
   b.ms.push(m);
@@ -393,7 +404,7 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const asking = open
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
-  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
+  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -475,9 +486,9 @@ async function mainSaid(replyId: string) {
   const asked = msg.after ? undefined : chat.slice(0, chat.indexOf(msg)).reverse().find((x) => x.from === "me")?.discord;
   const channel = asked?.channel ?? (msg.after ? channelOf(msg.after) : undefined);
   if (!channel) return;
-  // answered (or nothing to say): the 👀 that said "seen" goes
+  // answered (or nothing to say): it stops typing there
   const seen = () => {
-    if (asked) for (const id of [...(asked.also ?? []), asked.message]) void discordUnreact(asked.channel, id, "👀").catch(() => {});
+    if (asked) stopTyping(asked.channel);
   };
   const asks: Record<string, string> = {};
   for (const r of msg.routes ?? []) {
@@ -486,14 +497,40 @@ async function mainSaid(replyId: string) {
     const d = state.decisions.find((x) => x.id === r.decisionId);
     if (d) asks[d.id] = await askedLine(d, settings(), undefined, sayOf({ ...msg, routes: msg.routes?.filter((x) => x.kind !== "ask") }));
   }
-  const text = sayOf(msg, asks);
-  if (!text) return seen();
+  // pictures in its words (![](path)) go up as pictures, not as their path
+  const pics: string[] = [];
+  const text = sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")).trim();
+  if (!text && !pics.length) return seen();
   // a reply only when something was said since their words; right under them, just say it
   const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
-  const ids = await discordSend(channel, text, under ? undefined : asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
+  const ids = text ? await discordSend(channel, text, under ? undefined : asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[])) : [];
   seen();
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
+  for (const p of pics.slice(0, 4)) keepSaid(channel, await discordSendFile(channel, p).catch(() => [] as string[]));
+}
+
+/** What it is busy with right now, across its workspaces, so it talks like one person working in
+ *  two places. This workspace's work by name; another's only as how much and how it goes (no titles,
+ *  repos or people: that talk may be read by others). Context to use or not, never a line to say. */
+export function myState(space: string, now = Date.now()): string {
+  const label = (id: string) => state.spaces.find((x) => x.id === id)?.label ?? id;
+  const mins = (t: Task) => Math.max(1, Math.round((now - (t.legs?.[0]?.startedAt ?? t.createdAt)) / 60_000));
+  const snags = (t: Task) => (t.shells ?? []).filter((x) => x.ok === false).length + state.tasks.filter((k) => k.parentId === t.id && k.status === "failed").length;
+  const live = state.tasks.filter((t) => t.agent && !t.parentId && (t.status === "running" || t.status === "waiting" || t.status === "queued"));
+  const lines: string[] = [];
+  for (const t of live.filter((x) => x.space === space))
+    lines.push(`- here: "${t.title}", ${mins(t)} min${t.status === "waiting" ? ", waiting on the user" : ""}${snags(t) ? `, hit ${snags(t)} snags` : ""}`);
+  const others = [...new Set(live.filter((x) => x.space !== space).map((x) => x.space))];
+  for (const sp of others) {
+    const ts = live.filter((x) => x.space === sp);
+    const n = ts.reduce((k, t) => k + snags(t), 0);
+    lines.push(`- ${label(sp)} work (say nothing of what it is): ${ts.length} going, longest ${Math.max(...ts.map(mins))} min${n ? `, ${n} snags so far` : ""}`);
+  }
+  const hard = state.tasks.filter((t) => t.agent && !t.parentId && t.status === "failed" && now - (t.finishedAt ?? 0) < 3 * 3_600_000).length;
+  if (hard) lines.push(`- in the last few hours ${hard} of your jobs failed`);
+  if (!lines.length) return "";
+  return `Where you are right now (yours to bring up or not, like a person who is busy elsewhere; true things only: jobs run side by side, so "after that one" only when one really waits on another, say the same account's limit or the same repo):\n${lines.join("\n")}`;
 }
 
 /** the Discord channel a job of the agent reports to (its own, or the job it is under) */
@@ -508,7 +545,7 @@ export function channelOf(taskId: string): string | undefined {
 export async function sayOnDiscord(channel: string, text: string) {
   const a = settings();
   if (!a?.on || !text.trim()) return;
-  const line = `${a.ownerId ? `<@${a.ownerId}> ` : ""}⏰ ${text.trim()}`;
+  const line = `${a.ownerId ? `<@${a.ownerId}> ` : ""}${text.trim()}`;
   const ids = await discordSend(channel, line).catch((e) => (logError("agent", `alarm: ${e instanceof Error ? e.message : String(e)}`), [] as string[]));
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, line);
@@ -529,18 +566,6 @@ function postQuestions() {
 }
 
 const pendingIn = (channel: string) => state.decisions.some((d) => posted.get(d.id) === channel);
-
-/** "지워" from the user: the message of its they replied to, else its last one in the channel */
-export const wantsDeleted = (text: string) => /^(그거|이거|방금\s*거|아까\s*거)?\s*(지워|삭제)(줘|해|해줘)?\s*[.!]*$/.test(text.trim());
-async function takenBack(m: DiscordMessage, text: string): Promise<boolean> {
-  if (!wantsDeleted(text) || !me) return false;
-  const mine = said.get(m.channel) ?? [];
-  const target = m.reply_to === me.id && m.reply_msg ? m.reply_msg : mine[mine.length - 1];
-  if (!target) return false;
-  await discordDelete(m.channel, target);
-  said.set(m.channel, mine.filter((x) => x !== target));
-  return true;
-}
 
 /** The user's words in a channel with a question waiting, when they answer it ("그냥 끝내", "2"): that choice. */
 async function answered(channel: string, text: string): Promise<boolean> {

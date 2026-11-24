@@ -3,7 +3,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Entry, Task } from "../state/types";
-import { resetWorkLog, stepLine, testLine, workTick } from "./workLog";
+import { resetWorkLog, workTick } from "./workLog";
 import { inOpenNote, writesLikeTeammate } from "./prompts";
 import { voiceGist } from "./agentVoice";
 
@@ -28,62 +28,41 @@ describe("the agent's work, in the open", () => {
     vi.spyOn(native, "discordTyping").mockImplementation(async (c) => void typing.push(c));
   });
 
-  it("its words, a skill, tests, a commit and a PR show in the channel as they happen, a few at a time", async () => {
+  it("only its own words show, a few at a time; no stock line about a skill, a test, a commit or a PR", async () => {
     setState("tasks", [job({ agent: { channel: "c1" } })]);
     await workTick(1000);
     add("t1", entry({ kind: "text", text: "이거부터 읽어볼게" }));
     add("t1", entry({ kind: "tool", tool: { name: "read", kind: "read", target: "SKILL.md", detail: "/Users/me/.ondra/skills/code-review/SKILL.md" } }));
     await workTick(4000);
-    expect(sent).toEqual([["c1", "이거부터 읽어볼게\n`code-review` 스킬 꺼냄"]]);
+    expect(sent).toEqual([["c1", "이거부터 읽어볼게"]]);
     expect(typing).toEqual(["c1"]);
-
-    setState("tasks", (t) => t.id === "t1", "shells", [
-      { id: "s1", command: "pnpm vitest run", startedAt: 1, endedAt: 2, ok: false, tail: " FAIL  src/a.test.ts > tabs\nAssertionError: expected 2 to be 3\n Tests  3 failed | 1541 passed (1544)" },
-      { id: "s2", command: "git commit -m x", startedAt: 1, endedAt: 2, ok: true, tail: "[feat/tabs 1a2b3c4] fix(tabs): keep order\n 1 file changed" },
-      { id: "s3", command: "gh pr create", startedAt: 1, endedAt: 2, ok: true, tail: "https://github.com/3x-haust/ondra/pull/732\n" },
-    ]);
+    setState("tasks", (t) => t.id === "t1", "shells", [{ id: "s1", command: "pnpm vitest run", startedAt: 1, endedAt: 2, ok: false, tail: " Tests  3 failed | 1541 passed (1544)" }]);
     add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "test", target: "pnpm vitest run", detail: "pnpm vitest run", shellId: "s1", ok: false, endedAt: 3 } }));
-    add("t1", entry({ kind: "text", text: "맞음. 이게 진짜 버그다" }));
-    add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "git commit -m x", detail: "git commit -m x", shellId: "s2", ok: true, endedAt: 3 } }));
-    add("t1", entry({ kind: "tool", tool: { name: "bash", kind: "bash", target: "gh pr create", detail: "gh pr create", shellId: "s3", ok: true, endedAt: 3 } }));
+    add("t1", entry({ kind: "spawn", childIds: ["k1"] }));
     await workTick(7000);
-    expect(sent[1][1].split("\n")).toEqual([
-      "테스트 돌림 → 1541 통과 / 3 실패: `a.test.ts`",
-      "  ↳ AssertionError: expected 2 to be 3",
-      "맞음. 이게 진짜 버그다",
-      "커밋함 `1a2b3c4` fix(tabs): keep order",
-      "PR 올림 #732 https://github.com/3x-haust/ondra/pull/732",
-    ]);
-    // nothing twice
-    await workTick(9000);
+    expect(sent).toHaveLength(1);
+    add("t1", entry({ kind: "text", text: "3개 깨짐. 탭 순서 문제네" }));
+    add("t1", entry({ kind: "tool", tool: { name: "edit", kind: "edit", target: "a.ts" } }));
+    await workTick(10000);
+    expect(sent[1]).toEqual(["c1", "3개 깨짐. 탭 순서 문제네"]);
+    await workTick(13000);
     expect(sent).toHaveLength(2);
   });
 
-  it("a screenshot it looked at goes up as a picture, unless it chose to leave them out", async () => {
+  it("a picture goes up when it puts one in its words, not every screenshot it looked at; none when it chose to leave them out", async () => {
     setState("tasks", [job({ agent: { channel: "c1" } }), job({ id: "t2", agent: { channel: "c1", shots: false } })]);
     await workTick(1000);
     const shot = { name: "read", kind: "read", target: "after.png", detail: "/tmp/after.png", image: "/tmp/after.png", ok: true, endedAt: 3 };
     add("t1", entry({ kind: "tool", tool: shot }));
     add("t2", entry({ kind: "tool", tool: shot }));
     await workTick(4000);
-    expect(files).toEqual([["c1", "/tmp/after.png"]]);
-  });
-
-  it("subagents: their start and end only, not what they say along the way", async () => {
-    setState("tasks", [
-      job({ agent: { channel: "c1" } }),
-      job({ id: "k1", parentId: "t1", title: "설계 검토", model: "openai/gpt-6-astra", agent: { channel: "c1" } }),
-      job({ id: "k2", parentId: "t1", title: "코드 검토", model: "claude-opus-5-5", agent: { channel: "c1" } }),
-    ]);
-    await workTick(1000);
-    add("t1", entry({ kind: "spawn", childIds: ["k1", "k2"] }));
-    add("k1", entry({ kind: "text", text: "흠 이 파일부터" }));
-    await workTick(4000);
-    expect(sent).toEqual([["c1", "서브에이전트 2개 돌림 (설계 검토, gpt-6-astra · 코드 검토, claude-opus-5-5)"]]);
-    add("k1", entry({ kind: "text", text: "P1 하나 P2 둘" }));
-    setState("tasks", (t) => t.id === "k1", "status", "done");
+    expect(files).toEqual([]);
+    for (const id of ["t1", "t2"]) {
+      add(id, entry({ kind: "text", text: "고친 뒤 화면 ![](/tmp/after.png)" }));
+      add(id, entry({ kind: "tool", tool: { name: "ls", kind: "search", target: "x" } }));
+    }
     await workTick(7000);
-    expect(sent[1]).toEqual(["c1", "설계 검토 끝: P1 하나 P2 둘"]);
+    expect(files).toEqual([["c1", "/tmp/after.png"]]);
   });
 
   it("no tool output in full, and secrets and private paths hidden", async () => {
@@ -165,15 +144,3 @@ describe("the agent's work, in the open", () => {
   });
 });
 
-describe("a step as a line", () => {
-  it("tests from vitest, cargo and pytest", () => {
-    expect(testLine(" Tests  1541 passed (1541)", true)).toBe("테스트 돌림 → 1541 통과");
-    expect(testLine("test result: ok. 4 passed; 0 failed; 0 ignored", true)).toBe("테스트 돌림 → 4 통과");
-    expect(testLine("==== 2 failed, 10 passed in 1.2s ====\nE   AssertionError: boom", false)).toBe("테스트 돌림 → 10 통과 / 2 실패\n  ↳ E   AssertionError: boom");
-  });
-  it("a build, a push; a plain command says nothing", () => {
-    expect(stepLine({ name: "bash", kind: "bash", target: "", detail: "npx tsc --noEmit", ok: true, endedAt: 1 })).toBe("빌드 돌림 → 통과");
-    expect(stepLine({ name: "bash", kind: "bash", target: "", detail: "git push -u origin feat/x", ok: true, endedAt: 1 })).toBe("푸시함");
-    expect(stepLine({ name: "bash", kind: "bash", target: "", detail: "ls -la", ok: true, endedAt: 1 })).toBeUndefined();
-  });
-});

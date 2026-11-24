@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, wantsDeleted, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -128,10 +128,6 @@ describe("main's words on Discord", () => {
     expect(DEFAULT_VOICE).not.toMatch(/Orbit|github\.com|#\d/);
   });
 
-  it('"지워" takes back what it said', () => {
-    for (const s of ["지워", "그거 지워줘", "삭제해", "방금 거 지워"]) expect(wantsDeleted(s)).toBe(true);
-    for (const s of ["지워진 파일 찾아줘", "삭제 기능 만들어줘"]) expect(wantsDeleted(s)).toBe(false);
-  });
 });
 
 describe("the whole way round", () => {
@@ -181,14 +177,14 @@ describe("the whole way round", () => {
     // it is the one doing the work, not a relay that sends it somewhere
     expect(said.thrown[0].note).toContain("You are the agent yourself, the one doing the work, not a relay");
     expect(said.thrown[0].note).toContain("never that you sent, handed or dispatched it");
-    expect(native.discordReact).toHaveBeenCalledWith("c1", "m9", "👀");
+    // seen: it types there, no fixed reaction
+    expect(native.discordTyping).toHaveBeenCalledWith("c1");
+    expect(native.discordReact).not.toHaveBeenCalled();
     setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] });
     // the job it started is the agent's, and knows where to report (captain sets this)
     setState("tasks", [{ id: "t7", title: "로그인 버그", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 고치는 중", undefined));
-    // answered: the 👀 that said "seen" goes
-    await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledWith("c1", "m9", "👀"));
     // banter is fine: it swears and roasts when asked, only hate, real threats and doxxing are out
     expect(said.thrown[0].note).toContain(BANTER);
     // main's own words never go to Discord
@@ -217,7 +213,17 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalledWith("c1", expect.anything());
   });
 
-  it("lines said in a row are one request, answered once, at the last; every 👀 goes", async () => {
+  it("pictures in its replies go up as pictures, not as their path", async () => {
+    await ready();
+    vi.spyOn(native, "discordSendFile").mockResolvedValue(["f1"]);
+    setState("tasks", [{ id: "tp", title: "탭", entries: [], agent: { channel: "c1" } } as never]);
+    setState("captain", (l) => [...l, { id: "endp", at: 5, space: "home", project: "@agent", from: "captain", after: "tp", reply: "고친 화면 ![](/tmp/after.png)" }]);
+    said.hook?.("endp");
+    await vi.waitFor(() => expect(native.discordSendFile).toHaveBeenCalledWith("c1", "/tmp/after.png"));
+    expect(native.discordSend).toHaveBeenCalledWith("c1", "고친 화면", undefined);
+  });
+
+  it("lines said in a row are one request, answered once, at the last", async () => {
     BURST.ms = 60;
     await ready();
     const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
@@ -229,12 +235,10 @@ describe("the whole way round", () => {
     expect(said.thrown).toHaveLength(1);
     expect(said.thrown[0].text).toBe("아니\n주인 말 들어야지\n장난하냐");
     // each was seen at once
-    for (const id of ["a1", "a2", "a3"]) expect(native.discordReact).toHaveBeenCalledWith("c1", id, "👀");
+    expect(native.discordReact).not.toHaveBeenCalled();
     setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 알겠어" });
     said.hook?.("reply1");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 알겠어", undefined));
-    await vi.waitFor(() => expect(native.discordUnreact).toHaveBeenCalledTimes(3));
-    for (const id of ["a1", "a2", "a3"]) expect(native.discordUnreact).toHaveBeenCalledWith("c1", id, "👀");
   });
 
   it("nothing said in between: a plain line; someone spoke in between: a reply to their message", async () => {
@@ -254,7 +258,7 @@ describe("the whole way round", () => {
     await ready();
     const say = (id: string, content: string) => emit({ kind: "message", message: msg({ id, guild: null, author: { id: OWNER, name: "성윤", bot: false }, content }) });
     say("t1", "tq");
-    await vi.waitFor(() => expect(native.discordReact).toHaveBeenCalledWith("c1", "t1", "👀"), { interval: 5 });
+    await vi.waitFor(() => expect(native.discordTyping).toHaveBeenCalledWith("c1"), { interval: 5 });
     emit({ kind: "typing", channel: "c1", user: OWNER });
     // past the usual wait, still held
     await new Promise((r) => setTimeout(r, 250));
@@ -473,14 +477,14 @@ describe("the whole way round", () => {
     await vi.waitFor(() => expect(state.settings.agent?.ownerId).toBe("444"));
   });
 
-  it('the user says "지워": its last message there goes', async () => {
+  it('the user says "지워": no keyword match deletes anything; it goes to the agent, who deletes with its discord tool', async () => {
     said.answer = "안녕하세요";
     await ready();
     emit({ kind: "message", message: msg({ id: "m3", content: "메타몽 안녕" }) });
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalled());
     emit({ kind: "message", message: msg({ id: "m4", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 그거 지워" }) });
-    await vi.waitFor(() => expect(native.discordDelete).toHaveBeenCalledWith("c1", "s1"));
-    expect(said.thrown).toHaveLength(0);
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(native.discordDelete).not.toHaveBeenCalled();
   });
 });
 
@@ -494,3 +498,25 @@ describe("its jokes", () => {
     for (const p of [DEFAULT_VOICE, OTHERS_RULES, BANTER]) expect(p).not.toMatch(/"[^"]*[가-힣][^"]*"/);
   });
 });
+
+describe("where it is right now, across workspaces", () => {
+  it("this workspace's work by name; the other's only how much and how it goes; nothing when idle", async () => {
+    const { myState } = await import("./discord");
+    const { setState: set } = await import("../state/store");
+    set("spaces", [{ id: "home", label: "개인" }, { id: "work", label: "회사" }] as never);
+    set("tasks", [
+      { id: "h1", space: "home", title: "탭 순서", status: "running", agent: { channel: "c1" }, createdAt: 0, legs: [{ startedAt: 0 }], entries: [], shells: [{ ok: false }] },
+      { id: "w1", space: "work", title: "결제 서버 비밀 마이그레이션", status: "running", agent: { channel: "c2" }, createdAt: 0, legs: [{ startedAt: 0 }], entries: [], shells: [{ ok: false }, { ok: false }] },
+      { id: "x", space: "work", title: "앱에서 시킨 일", status: "running", createdAt: 0, entries: [], shells: [] },
+    ] as never);
+    const home = myState("home", 40 * 60_000);
+    expect(home).toContain('"탭 순서", 40 min, hit 1 snags');
+    expect(home).toContain("회사 work (say nothing of what it is): 1 going, longest 40 min, 2 snags");
+    expect(home).not.toContain("결제");
+    expect(home).not.toContain("앱에서 시킨 일");
+    expect(myState("work", 40 * 60_000)).toContain('"결제 서버 비밀 마이그레이션"');
+    set("tasks", [] as never);
+    expect(myState("home")).toBe("");
+  });
+});
+
