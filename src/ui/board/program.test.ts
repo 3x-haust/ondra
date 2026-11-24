@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardOf, completePart, isProgram } from "./program";
+import { boardOf, completePart, iconName, isProgram, loadEngine, runProgram } from "./program";
 
 describe("board programs", () => {
   it("tells a program from the line form", () => {
@@ -88,5 +88,28 @@ describe("drawing helpers", () => {
     expect(name.y + name.size / 2).toBeLessThan(a.y);
     expect(name.y - name.size / 2).toBeGreaterThan(frame.y);
     expect(next.y).toBe(frame.y + frame.h + 20);
+  });
+
+  it("draws things as pictures, and what happens as motion: travel, count, pulse", async () => {
+    expect(isProgram('icon("server", 1, 2)')).toBe(true);
+    expect(iconName("fileText")).toBe("file-text");
+    expect(iconName("Credit Card")).toBe("credit-card");
+    expect(iconName("../x")).toBeUndefined();
+    await loadEngine();
+    const out = runProgram(`step("묻기")
+const a = icon("laptop", 40, 80, { label: "노트북" })
+const b = icon("server", 400, 80)
+connect(a, b)
+travel(a, b, { label: "GET /", bend: 30 })
+step("답")
+count(40, 300, 0, 120, { unit: "ms" })
+pulse(b)`)!;
+    const kinds = out.board.marks.map((m) => [m.kind, m.step]);
+    expect(kinds).toEqual([["icon", 0], ["icon", 0], ["arrow", 0], ["travel", 0], ["count", 1], ["pulse", 1]]);
+    expect(out.board.marks[0]).toMatchObject({ name: "laptop", size: 48, label: "노트북" });
+    expect(out.board.marks[3]).toMatchObject({ kind: "travel", curve: true, label: "GET /", tone: "accent" });
+    expect(out.board.marks[4]).toMatchObject({ from: 0, to: 120, unit: "ms" });
+    // a bad icon name or a way with no points is dropped
+    expect(boardOf({ marks: [{ kind: "icon", name: "<script>", x: 0, y: 0 }, { kind: "travel", pts: [[0, 0]] }] }).marks).toEqual([]);
   });
 });

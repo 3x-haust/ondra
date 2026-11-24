@@ -2382,17 +2382,33 @@
   stroke-width: 4px;
   stroke-linejoin: round;
 }
-.bd-stage svg g {
+.bd:focus {
+  outline: none;
+}
+.bd:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.bd-stage svg g,
+.bd-stage svg rect {
   transition: opacity var(--dur-slow) ease;
 }
+/* a step being looked at: what came before steps back */
 .bd-stage svg .bd-past {
-  opacity: 0.5;
+  opacity: 0.32;
 }
-.bd-pen-tip {
-  fill: var(--accent);
+/* the ring around what this step is about breathes while the step is on */
+.bd-pulse {
+  opacity: 0;
 }
-.bd-pen-glow {
-  fill: var(--accent-soft);
+.bd-pulse.is-on {
+  animation: bd-breathe 1.6s ease-in-out infinite;
+}
+@keyframes bd-breathe {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+.bd-playing .bd-tools .icon-btn:first-child {
+  color: var(--accent);
 }
 .bd-surface {
   position: absolute;
@@ -2514,6 +2530,13 @@
 .bd-steps > li:hover,
 .bd-steps > li.is-now {
   color: var(--ink);
+}
+.bd-steps > li.is-now {
+  font-weight: var(--fw-strong);
+}
+/* steps not shown yet while one is looked at */
+.bd-steps > li.is-ahead {
+  opacity: 0.55;
 }
 .lightbox .lb-board {
   width: min(1100px, 92vw);

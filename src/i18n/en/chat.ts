@@ -211,6 +211,8 @@ export default {
   "크게 보기": "Enlarge",
   "다시 그리기": "Draw again",
   "이 단계부터 다시 그리기": "Draw again from this step",
+  "처음부터 보기": "Play from the start",
+  "이 단계 보기": "Show this step",
   "이 부분 묻기": "Ask about this",
   "그림 그리는 중": "Drawing…",
   "전": "Before",

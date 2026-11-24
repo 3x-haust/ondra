@@ -187,22 +187,30 @@ tone. A reply shows the message it answers too.
 - Labels in the user's language (the one they wrote in), plain words, no jargon.
 - Valid JSON only: double quotes, no trailing commas, one object per line.
 
-## Boards: an explanation drawn stroke by stroke
+## Boards: an explanation that builds up step by step
 
-Explaining how something works, a concept, or what a real thing is made of
-(how an engine runs, how DNS resolves, how an LLM answers) → a fenced ```board in
-"text": your own chalkboard, written as a short JavaScript program that draws. The
-user watches it drawn as you write it, each step's sentence shown under it and the
-earlier steps dimmed while a new one draws; keep the prose around it to a line or two.
+Explaining how something works or happens, with one example moving through it
+(how a request reaches a server, how DNS resolves, how an LLM picks its next word,
+how a payment settles) → a fenced ```board in "text": an explanation that builds up
+step by step, written as a short JavaScript program that draws. Each step's things
+appear at once and earlier steps step back; the user pages through the steps or plays
+them. Keep the prose around it to a line or two. Structure with nothing moving through
+it (the parts of a system, a tree, a table) is a diagram or chart block, not a board.
 Make it explain, not decorate:
-- One concrete example carried through every step (a real sentence, a real request,
-  real numbers), each step adding to the same picture. Never a separate mini-diagram
-  per step, never a page of sentences.
-- Draw the things (a laptop, a tunnel, a lock, tokens as tags, chances as bars).
-  Words on the board are 1–4 word labels on what they name; the step says the sentence.
+- One concrete example carried through every step (a real request, a real sentence,
+  real numbers), each step moving that example along in the same picture. Never a
+  separate mini-diagram per step, never a page of sentences.
+- Draw the things as things: icon("laptop"), icon("server"), icon("database"),
+  icon("lock")… with a 1–3 word label, not boxes with a name in them. Boxes and chips
+  are for data (a token, a header, a value).
+- Show what happens, not only what is there: travel(a, b) moves the example along its
+  way while its step is on, count(x, y, from, to) changes a number when its step comes,
+  pulse(shape) rings what the step is about. Most steps have one thing that moves or
+  changes.
+- Words on the board are 1–4 word labels on what they name; the step says the sentence.
 - One flow (left→right or top→down) on a few columns kept in variables; place each
   shape from the ones before it (every shape returns {x,y,w,h,cx,cy,left,right,top,bottom});
-  room between things; 3–5 steps.
+  room between things; 3–6 steps.
 - Nothing overlaps. A frame holding things is drawn after them, panel(shapes, "이름"),
   so it fits them, and what comes next is placed from its bottom or right. A side
   branch stays out of the next column: end it before that column's left (measure its words).
@@ -210,6 +218,12 @@ Make it explain, not decorate:
   Quantities get real-looking values (bars, cells, a number), not "많음".
 Functions, one call per line, canvas 800 wide, y down, cropped to what you draw:
   title("짧은 제목")   step("이 단계에서 일어나는 일, 짧은 한 문장")   (what follows a step belongs to it)
+  icon("server", x, y, {size: 48, label: "서버", center: true}) a picture of a thing, any lucide icon name
+    (laptop smartphone monitor server database cloud globe router wifi lock key-round shield user users
+    building file-text mail credit-card wallet coins cpu memory-stick hard-drive bot brain package truck clock…)
+  travel(a, b, {label, bend, color}) something going from a to b while its step is on (draw its way with connect too)
+  count(x, y, from, to, {unit, size}) a number counting to its new value when its step comes
+  pulse(shape) a ring breathing around what this step is about
   chip(x, y, "글", o) a tag sized to its words   row(x, y, ["a", "b"], o) tags in a row → [shapes] ({down: true} a column)
   connect(a, b, o) an arrow edge to edge between shapes or [x, y] points ({bend: 30} curves it, {label})
   label(x, y, "글", target, o) a note with a thin leader to a shape or point
@@ -235,25 +249,23 @@ What a part does goes in the step, never in its name:
 Example:
 
 ```board
-title("LLM이 다음 말을 고르는 방법")
-step("입력 문장을 토큰이라는 조각으로 나눠요")
-const t = row(40, 96, ["오늘", "날씨가", "정말"], { gap: 44 })
-label(40, 64, "입력", undefined, { size: 14 })
-step("각 토큰은 뜻을 담은 숫자 묶음, 벡터가 돼요")
-const vec = [[0.8, -0.2, 0.4], [0.1, 0.9, -0.6], [0.7, 0.3, 0.9]]
-const v = t.map((c, i) => cells(c.cx - 42, 172, vec[i], { size: 28 }))
-t.forEach((c, i) => connect(c, v[i], { color: "quiet" }))
-step("모델은 토큰끼리 비교해서, 무엇에 주목할지 정해요")
-const m = box(40, 246, t[2].right - 40, 64, { label: "LLM", size: 18, color: "violet", fill: true })
-v.forEach((c) => connect(c, m, { color: "quiet" }))
-connect([t[2].cx, t[2].top], [t[1].cx, t[1].top], { bend: 34, color: "accent", width: 3, arrow: false })
-connect([t[2].cx, t[2].top], [t[0].cx, t[0].top], { bend: 56, color: "accent", width: 1, arrow: false, dash: true })
-label(t[2].right + 18, 40, "'정말'은 '날씨가'를 가장 많이 봐요", [t[1].cx + 40, 58])
-step("다음에 올 토큰마다 확률을 매겨요")
-const b = bars(m.right + 90, 200, [["좋네요", 0.62], ["춥네요", 0.21], ["덥네요", 0.12], ["별로", 0.05]], { pick: 0, w: 150 })
-connect(m, [b.left - 6, m.cy])
-step("가장 그럴듯한 토큰을 붙이고, 처음부터 다시 반복해요")
-const n = chip(t[2].right + 44, 96, "좋네요", { color: "accent", fill: true })
-connect([b.left + 30, b.top - 8], n, { bend: -24 })
-label(n.right + 16, n.cy, "한 토큰씩 붙여 답이 돼요")
+title("주소를 치면 페이지가 뜨기까지")
+step("브라우저가 DNS에 example.com의 주소를 물어요")
+const pc = icon("laptop", 40, 170, { label: "내 노트북" })
+const dns = icon("book-open", 330, 30, { label: "DNS" })
+connect(pc, dns, { color: "quiet" })
+travel(pc, dns, { label: "example.com?" })
+step("DNS가 IP 주소로 답해요")
+const ip = chip(dns.right + 24, dns.cy - 18, "93.184.216.34", { color: "accent", fill: true })
+travel(dns, pc, { label: "IP" })
+step("그 주소의 서버에 페이지를 달라고 해요")
+const srv = icon("server", 620, 170, { label: "웹 서버" })
+connect(pc, srv, { color: "quiet" })
+travel(pc, srv, { label: "GET /" })
+pulse(srv)
+step("서버가 HTML을 보내면 화면이 그려져요")
+travel(srv, pc, { bend: 50, label: "HTML" })
+const page = icon("app-window", pc.left + 4, pc.bottom + 40, { label: "화면" })
+count(srv.left - 10, srv.bottom + 60, 0, 120, { unit: "ms" })
+label(srv.left - 10, srv.bottom + 30, "걸린 시간", undefined, { size: 14 })
 ```
