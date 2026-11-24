@@ -385,7 +385,7 @@ describe("the Discord agent's routines", () => {
     expect(r.agent).toEqual({ channel: "c9" });
     const before = state.captain.length;
     ringAlarm(r.id, r.nextAt! + 1);
-    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("c9", "<@111> ⏰ 회의 들어가기"));
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith("c9", "<@111> 회의 들어가기"));
     expect(state.captain.length).toBe(before);
     expect(routineById(r.id)).toMatchObject({ runs: 1, enabled: false });
   });

@@ -42,7 +42,7 @@ export function scoutPrompt(a: AgentSettings, asked: Asked[], routines: string[]
     `# 전에 제안한 것 (다시 제안하지 마)\n${a.suggested?.length ? a.suggested.map((k) => `- ${k}`).join("\n") : "(없음)"}`,
     "",
     "# 제안할 게 있으면 JSON 하나만",
-    '{"key":"짧은 이름(예: 아침 PR 정리)","say":"주인한테 할 말 한 줄","title":"루틴 이름","task":"매번 할 일(주인 말 그대로에 가깝게)","when":{"kind":"daily","time":"09:00","days":[1,2,3,4,5]}}',
+    '{"key":"짧은 이름","say":"주인한테 할 말 한 줄","title":"루틴 이름","task":"매번 할 일(주인 말 그대로에 가깝게)","when":{"kind":"daily","time":"09:00","days":[1,2,3,4,5]}}',
     'when은 {"kind":"daily","time":"HH:MM","days":[0-6, 일=0]} (days 빼면 매일), {"kind":"every","minutes":N}, {"kind":"event","event":"issue|pr|ci|release"} 중 하나.',
     "",
     "# say는 이 말투로, 사람이 툭 묻듯이 한 줄 (\"요즘 아침마다 PR 정리 시키던데 매일 9시에 알아서 해둘까?\")",
