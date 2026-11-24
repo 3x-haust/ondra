@@ -123,8 +123,8 @@ describe("main's words on Discord", () => {
     expect(pickPrompt(d, "그냥 합쳐")).toContain("pr: PR로 올리기 (1번)");
   });
 
-  it("the voice is a person with an example talk, and holds none of the user's real work", () => {
-    expect(DEFAULT_VOICE).toContain("이런 느낌이야");
+  it("the voice is a person, with no sample lines to copy, and holds none of the user's real work", () => {
+    expect(DEFAULT_VOICE).not.toContain("너:");
     expect(DEFAULT_VOICE).not.toMatch(/Orbit|github\.com|#\d/);
   });
 
@@ -180,7 +180,7 @@ describe("the whole way round", () => {
     expect(said.thrown[0].note).toContain("Ask first only before what can't be undone");
     // it is the one doing the work, not a relay that sends it somewhere
     expect(said.thrown[0].note).toContain("You are the agent yourself, the one doing the work, not a relay");
-    expect(said.thrown[0].note).toContain("잡으러 보냈어");
+    expect(said.thrown[0].note).toContain("never that you sent, handed or dispatched it");
     expect(native.discordReact).toHaveBeenCalledWith("c1", "m9", "👀");
     setState("captain", (m) => m.id === "reply1", { pending: false, reply: "ㅇㅋ 고치는 중", routes: [{ kind: "new", taskId: "t7" }] });
     // the job it started is the agent's, and knows where to report (captain sets this)
@@ -480,5 +480,16 @@ describe("the whole way round", () => {
     emit({ kind: "message", message: msg({ id: "m4", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 그거 지워" }) });
     await vi.waitFor(() => expect(native.discordDelete).toHaveBeenCalledWith("c1", "s1"));
     expect(said.thrown).toHaveLength(0);
+  });
+});
+
+describe("its jokes", () => {
+  it("come from the moment, play along with something plainly fake instead of a flat no, and carry no sample to copy", () => {
+    expect(BANTER).toContain("누가 봐도 가짜");
+    expect(BANTER).toContain("진짜 값");
+    expect(BANTER).not.toMatch(/예:|예를 들|"[^"]+"/);
+  });
+  it("no instruction it reads carries sample lines to copy", () => {
+    for (const p of [DEFAULT_VOICE, OTHERS_RULES, BANTER]) expect(p).not.toMatch(/"[^"]*[가-힣][^"]*"/);
   });
 });
