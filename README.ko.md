@@ -16,7 +16,7 @@
 <p align="center"><sub>macOS 13 이상 · Apple silicon</sub></p>
 
 <p align="center">
-  <a href="https://3x-haust.github.io/ondra/#film"><img src="docs/assets/readme/hero-ko.avif" width="880" alt="Ondra 소개 영상의 도입부: 잔뜩 열린 에이전트 탭 대신 채팅 하나에 할 일을 적으면 Ondra가 작업 세 개로 나눠요. 누르면 전체 영상을 볼 수 있어요."></a>
+  <a href="https://3x-haust.github.io/ondra/#film"><img src="docs/assets/readme/hero-ko.webp" width="880" alt="Ondra 소개 영상의 도입부: 잔뜩 열린 에이전트 탭 대신 채팅 하나에 할 일을 적으면 Ondra가 작업 세 개로 나눠요. 누르면 전체 영상을 볼 수 있어요."></a>
 </p>
 
 <p align="center"><sub><a href="https://3x-haust.github.io/ondra/#film">전체 영상 보기 (1분 40초) ↗</a> · 영상 속 Ondra 화면은 모두 실제 앱에서 녹화했어요.</sub></p>
