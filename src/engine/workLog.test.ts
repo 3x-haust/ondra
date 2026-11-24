@@ -144,3 +144,14 @@ describe("the agent's work, in the open", () => {
   });
 });
 
+
+describe("its words, in the user's language", () => {
+  it("an English mutter in Korean work isn't carried; commands and names in a Korean line are", async () => {
+    const { offTongue } = await import("./workLog");
+    const job = { title: "행동대장들 카톡 대신 답" };
+    expect(offTongue(job, "Sent once at the bottom. Releasing the session.")).toBe(true);
+    expect(offTongue(job, "pnpm test 돌리는 중")).toBe(false);
+    expect(offTongue(job, "ok")).toBe(false);
+    expect(offTongue({ title: "Fix the login page" }, "Running the tests now.")).toBe(false);
+  });
+});
