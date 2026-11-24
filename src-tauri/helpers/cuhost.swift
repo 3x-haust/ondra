@@ -184,6 +184,50 @@ func axChildren(_ el: AXUIElement) -> [AXUIElement] {
     guard AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &v) == .success else { return [] }
     return (v as? [AXUIElement]) ?? []
 }
+func axElements(_ el: AXUIElement, _ attr: String) -> [AXUIElement]? {
+    var v: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(el, attr as CFString, &v) == .success else { return nil }
+    return v as? [AXUIElement]
+}
+
+/// Several attributes in one round trip, each with its own result: the value, or why it failed
+/// (.noValue for an empty one). Nil when the app doesn't answer the batched call at all.
+func axMany(_ el: AXUIElement, _ attrs: [String]) -> [(value: CFTypeRef?, error: AXError)]? {
+    var raw: CFArray?
+    guard AXUIElementCopyMultipleAttributeValues(el, attrs as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw) == .success,
+          let vals = raw as? [AnyObject], vals.count == attrs.count else { return nil }
+    return vals.map { obj in
+        let v = obj as CFTypeRef
+        if v is NSNull { return (nil, .noValue) }
+        if CFGetTypeID(v) == AXValueGetTypeID(), AXValueGetType(v as! AXValue) == .axError {
+            var e = AXError.failure
+            _ = AXValueGetValue(v as! AXValue, .axError, &e)
+            return (nil, e)
+        }
+        return (v, .success)
+    }
+}
+
+/// A table or outline lists all its rows as children, also the hundreds scrolled out of view,
+/// and some apps answer for each of those slowly (KakaoTalk's chat list: half a minute for one
+/// read). Its visible rows say which are on screen: the others are only counted, never read.
+/// Each child keeps its index among all children (element keys stay the same).
+func visibleChildren(_ el: AXUIElement, role: String, children: [AXUIElement]) -> (kids: [(Int, AXUIElement)], hidden: Int) {
+    let all = Array(children.enumerated())
+    guard role == "AXTable" || role == "AXOutline", children.count > 20,
+          let rows = axElements(el, kAXRowsAttribute), !rows.isEmpty,
+          let visible = axElements(el, kAXVisibleRowsAttribute), !visible.isEmpty else { return (all, 0) }
+    func among(_ list: [AXUIElement]) -> [CFHashCode: [AXUIElement]] { Dictionary(grouping: list, by: { CFHash($0) }) }
+    let rowsBy = among(rows), visibleBy = among(visible)
+    func has(_ by: [CFHashCode: [AXUIElement]], _ x: AXUIElement) -> Bool { by[CFHash(x)]?.contains { CFEqual($0, x) } ?? false }
+    var kids: [(Int, AXUIElement)] = [], hidden = 0
+    for (i, c) in all {
+        if has(rowsBy, c), !has(visibleBy, c) { hidden += 1; continue }
+        kids.append((i, c))
+    }
+    return (kids, hidden)
+}
+
 func axActions(_ el: AXUIElement) -> [String] {
     var names: CFArray?
     guard AXUIElementCopyActionNames(el, &names) == .success else { return [] }
@@ -301,8 +345,9 @@ func elementNode(_ el: AXUIElement, key parentKey: String, map: AXMap, depth: In
     if kClipRoles.contains(a.role), let f = a.frame, f.width > 0, f.height > 0 { childClip = clip.intersection(f) }
     if depth < maxDepth && !secure {
         var kids: [[String: Any]] = []
-        var offscreen = 0
-        for (i, child) in a.children.enumerated() {
+        let (pick, hidden) = visibleChildren(el, role: a.role, children: a.children)
+        var offscreen = hidden
+        for (i, child) in pick {
             if count >= limit { node["truncated"] = true; break }
             let ca = readAttrs(child)
             if let f = ca.frame, f.width > 0, f.height > 0, !f.intersects(childClip) { offscreen += 1; continue }
@@ -768,12 +813,13 @@ func scrollByReveal(_ area: AXUIElement, direction: String, lines: Int) -> [Stri
     var stack = axChildren(area), visited = 0
     while let el = stack.popLast(), visited < 4000 {
         visited += 1
-        let kids = axChildren(el)
         // small elements (a row, a message) give even steps; whole containers would jump
-        if let f = axFrame(el), f.width > 0, f.height > 0,
-           (vertical ? f.height : f.width) < (vertical ? view.height : view.width) * 0.6,
-           let d = distance(f), best == nil || d < best!.1 { best = (el, d) }
-        stack.append(contentsOf: kids)
+        let f = axFrame(el)
+        let small = f.map { $0.width > 0 && $0.height > 0 && (vertical ? $0.height : $0.width) < (vertical ? view.height : view.width) * 0.6 } ?? false
+        if small, let f, let d = distance(f), best == nil || d < best!.1 { best = (el, d) }
+        // what is inside a small element out of view is out of view too, and no nearer the edge
+        if small, let f, !f.intersects(view) { continue }
+        stack.append(contentsOf: axChildren(el))
     }
     guard let (el, _) = best, let before = axFrame(el) else { return nil }
     guard AXUIElementPerformAction(el, "AXScrollToVisible" as CFString) == .success else { return nil }
@@ -889,7 +935,10 @@ func pressMenuPath(pid: pid_t, path: [String]) throws -> [String: Any] {
 }
 
 func elementIsSecure(_ el: AXUIElement) -> Bool {
-    isSecure(role: axString(el, kAXRoleAttribute) ?? "", subrole: axString(el, kAXSubroleAttribute))
+    if let v = axMany(el, [kAXRoleAttribute, kAXSubroleAttribute]) {
+        return isSecure(role: v[0].value as? String ?? "", subrole: v[1].value as? String)
+    }
+    return isSecure(role: axString(el, kAXRoleAttribute) ?? "", subrole: axString(el, kAXSubroleAttribute))
 }
 
 /// A point to send pointer events to, plus the window to route them to.
@@ -2621,9 +2670,11 @@ func windowSensitivity(pid: pid_t, window: AXUIElement) -> WindowSensitivity {
     let remembered = secureWindows.contains(where: { $0.pid == pid && CFEqual($0.window, window) })
     var remaining = 20000
     func scan(_ el: AXUIElement, depth: Int) -> WindowSensitivity {
-        guard remaining > 0, depth < 200, let role = axString(el, kAXRoleAttribute) else { return .unknown }
+        // role, subrole, modal and children in one round trip (single reads where the app has no batch)
+        let many = axMany(el, [kAXRoleAttribute, kAXSubroleAttribute, kAXModalAttribute, kAXChildrenAttribute])
+        guard remaining > 0, depth < 200, let role = many.map({ $0[0].value as? String }) ?? axString(el, kAXRoleAttribute) else { return .unknown }
         remaining -= 1
-        let subrole = axString(el, kAXSubroleAttribute)
+        let subrole = many.map { $0[1].value as? String } ?? axString(el, kAXSubroleAttribute)
         if isSecure(role: role, subrole: subrole) {
             if !secureWindows.contains(where: { $0.pid == pid && CFEqual($0.window, window) }) {
                 secureWindows.append(ApprovalTarget(pid: pid, window: window, root: window))
@@ -2636,13 +2687,17 @@ func windowSensitivity(pid: pid_t, window: AXUIElement) -> WindowSensitivity {
             }
             return .secure
         }
+        let modal = many.map { ($0[2].value as? NSNumber)?.boolValue } ?? axBool(el, kAXModalAttribute)
         var result: WindowSensitivity = ["AXSheet", "AXDialog", "AXSystemDialog"].contains(role) ||
-            ["AXDialog", "AXSystemDialog"].contains(subrole ?? "") || axBool(el, kAXModalAttribute) == true ? .dialog : .ordinary
+            ["AXDialog", "AXSystemDialog"].contains(subrole ?? "") || modal == true ? .dialog : .ordinary
         var children: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &children)
+        var error: AXError
+        if let m = many { children = m[3].value; error = m[3].error } else { error = AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &children) }
         guard error == .success || error == .noValue || error == .attributeUnsupported else { return .unknown }
         if error == .success, children != nil, !(children is [AXUIElement]) { return .unknown }
-        for child in (children as? [AXUIElement]) ?? [] {
+        // rows scrolled out of a table's view are neither on screen nor in the tree: they are
+        // scanned once scrolled in, by the read that follows the scroll and comes before any look
+        for (_, child) in visibleChildren(el, role: role, children: (children as? [AXUIElement]) ?? []).kids {
             let next = scan(child, depth: depth + 1)
             if next.rawValue > result.rawValue { result = next }
         }
