@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, decided, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -373,6 +373,22 @@ describe("the whole way round", () => {
     said.hook?.("reply2");
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "프사도 이제 바뀜", undefined));
     expect(native.discordSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("the thinking it writes before its decision is never posted", async () => {
+    await ready();
+    ways.text = "- 내가 방금 말한 채널에서 1분 안에 주인이 이어서 하는 말은 나한테 하는 말로 받아";
+    said.answer = "The owner spoke within 1 minute after my message in this channel, so it's addressed to me. It's also a request to do something, so take.\n\n(take)";
+    emit({ kind: "message", message: msg({ id: "k1", author: { id: OWNER, name: "성윤", bot: false }, content: "카톡답장 꺼줘" }) });
+    // taken as the user's request, nothing said
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].text).toBe("카톡답장 꺼줘");
+    said.answer = "Not for me, just chatting.\n(skip)";
+    emit({ kind: "message", message: msg({ id: "k2", author: { id: "222", name: "정원", bot: false }, content: "ㅋㅋ" }) });
+    await new Promise((r) => setTimeout(r, 80));
+    expect(native.discordSend).not.toHaveBeenCalled();
+    expect(decided("ㅇㅇ\n잔다")).toBe("ㅇㅇ\n잔다");
+    expect(decided("(skip)")).toBe("(skip)");
   });
 
   it("two replies in one channel go out one after the other, not mixed", async () => {
@@ -734,15 +750,18 @@ describe("where it is right now, across workspaces", () => {
 describe("a reply as Discord messages", () => {
   it("goes out as several messages where it has blank lines, as people send a thought in a few", async () => {
     const { messagesOf } = await import("./discord");
-    expect(messagesOf("ㅋㅋ 그거 내 실수야\n\n교각 답은 제대로 나갔어\n로그로 확인했고\n\n끝말잇기는 교각, 각으로 와")).toEqual(["ㅋㅋ 그거 내 실수야", "교각 답은 제대로 나갔어\n로그로 확인했고", "끝말잇기는 교각, 각으로 와"]);
+    // a line each, as a person presses enter
+    expect(messagesOf("ㅋㅋ 그거 내 실수야\n\n교각 답은 제대로 나갔어\n로그로 확인했고\n\n끝말잇기는 교각, 각으로 와")).toEqual(["ㅋㅋ 그거 내 실수야", "교각 답은 제대로 나갔어", "로그로 확인했고", "끝말잇기는 교각, 각으로 와"]);
+    // a list stays one, with its lead-in
+    expect(messagesOf("고친 거:\n- 타이핑\n- 엔터\n이제 봐")).toEqual(["고친 거:\n- 타이핑\n- 엔터", "이제 봐"]);
     expect(messagesOf("한 줄")).toEqual(["한 줄"]);
   });
   it("never splits a code block, and keeps it to a few messages", async () => {
     const { messagesOf } = await import("./discord");
     expect(messagesOf("이거 봐\n\n```ts\nconst a = 1;\n\nconst b = 2;\n```\n\n됐지")).toEqual(["이거 봐", "```ts\nconst a = 1;\n\nconst b = 2;\n```", "됐지"]);
-    const many = messagesOf(Array.from({ length: 9 }, (_, i) => `${i}`).join("\n\n"));
-    expect(many).toHaveLength(6);
-    expect(many[5]).toBe("5\n\n6\n\n7\n\n8");
+    const many = messagesOf(Array.from({ length: 11 }, (_, i) => `${i}`).join("\n"));
+    expect(many).toHaveLength(8);
+    expect(many[7]).toBe("7\n8\n9\n10");
   });
 });
 

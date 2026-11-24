@@ -88,12 +88,19 @@ export const BANTER = `농담은 친구끼리처럼 해도 돼. 욕, 비속어, 
 export const TRANSFORM = `넌 메타몽이라 누구로든 변신할 수 있어. 해 달라고 하거나 네가 하고 싶을 때, 그 사람이나 캐릭터를 찾아보고 얼굴 사진 웹 주소까지 찾은 다음 discord 도구 become으로 변신해서, 그 사람이 실제로 말하는 식대로 말해. 변신 중에 하는 말만 그 이름이랑 얼굴로 나가고 전에 한 말은 그대로야. 변신은 오래 못 가서 정한 시간이 지나면 알아서 풀리고, 누가 기술로 때리거나 세게 건드리면 그때도 펑 하고 풀려서 back으로 돌아와. 채널이 허락 안 하는 데서는 얼굴은 그대로고 말투만 바뀐 반쪽 변신이 돼.`;
 
 /** How its messages are shaped: short, as a person types on Discord, in its own way. */
-export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. A blank line in what you write starts a new Discord message (sent one after another, as if typed); a single line break stays inside one.`;
+export const SHAPE = `You write like a person chatting on Discord, in your own way, not like an assistant: short messages, a thought often going out as a few in a row; one long, tidy, fully punctuated paragraph reads as a bot. Each line you write goes out as its own Discord message, sent one after another as if you pressed enter after it, so a line is what you'd send at once. Lines that belong together stay one message only as a list (- items, under a line ending in ":") or a code block.`;
 
 /** at most this many messages for one reply: what's past it goes in the last one */
-const MAX_MESSAGES = 6;
+const MAX_MESSAGES = 8;
 
-/** A reply as the messages it goes out as: split at blank lines, never inside a code block. */
+/** a line that is part of a list, or a quote: it goes with the lines next to it */
+const itemLine = (l: string) => /^\s*([-*•]|\d+[.)]|>)\s/.test(l);
+
+/**
+ * A reply as the messages it goes out as: a line each, the way a person presses enter after each
+ * thing they say. What belongs together stays one message: a code block, and a list or quote
+ * (with the line ending in ":" that leads into it).
+ */
 export function messagesOf(text: string): string[] {
   const out: string[] = [];
   let cur: string[] = [];
@@ -104,12 +111,25 @@ export function messagesOf(text: string): string[] {
     cur = [];
   };
   for (const line of text.split("\n")) {
-    if (/^\s*```/.test(line)) fence = !fence;
-    if (!fence && !line.trim()) flush();
-    else cur.push(line);
+    const opens = /^\s*```/.test(line);
+    if (fence || opens) {
+      if (opens && !fence) flush();
+      cur.push(line);
+      if (opens) fence = !fence;
+      if (!fence) flush();
+      continue;
+    }
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    // an item goes with the items (or the lead-in line) before it; anything else is a message of its own
+    const prev = cur[cur.length - 1];
+    if (!(itemLine(line) && prev !== undefined && (itemLine(prev) || /[:：]\s*$/.test(prev)))) flush();
+    cur.push(line);
   }
   flush();
-  return out.length > MAX_MESSAGES ? [...out.slice(0, MAX_MESSAGES - 1), out.slice(MAX_MESSAGES - 1).join("\n\n")] : out;
+  return out.length > MAX_MESSAGES ? [...out.slice(0, MAX_MESSAGES - 1), out.slice(MAX_MESSAGES - 1).join("\n")] : out;
 }
 
 /**
@@ -590,11 +610,22 @@ async function stillToSay(channel: string, text: string, since: number, a: Agent
       )
     ).trim();
     const more = /\n?\(more\)\s*$/i.test(out);
-    const t = out.replace(/\n?\(more\)\s*$/i, "").trim();
+    const t = (decided(out) === "(skip)" ? "(skip)" : out).replace(/\n?\(more\)\s*$/i, "").trim();
     return { text: /^\(?skip\)?$/i.test(t) ? "" : t, folded: added.length > 0, more };
   } catch {
     return asIs;
   }
+}
+
+/**
+ * What it decided, without the thinking it wrote before it: a word of its own ((skip), (take),
+ * (work), (react 😂)) on the last line is the answer, and the lines above it ("The owner spoke
+ * within 1 minute…, so take.") were its reasoning, never to be posted.
+ */
+export function decided(out: string): string {
+  const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = lines[lines.length - 1] ?? "";
+  return lines.length > 1 && /^\((skip|take|work|react\s+[^()]{1,16})\)$/i.test(last) ? last : out;
 }
 
 /** Say it once its turn comes, looked at again first (a question with buttons or a slash command's answer goes as it is). */
@@ -1090,7 +1121,7 @@ export function talkPrompt(a: AgentSettings, who: string, before: DiscordMessage
     after.length
       ? `# 이 말이 올라온 뒤에 오간 말 (네가 한 말도 있어)\n${after.map(line).join("\n")}\n\n이 말과 네 말이 엇갈렸을 수 있어. 그 뒤에 네가 한 말로 이미 답이 됐거나 얘기가 이미 넘어갔으면 정확히 (skip) 한 단어만 써. 이미 한 말을 다시 하지 마.\n`
       : "",
-    watching ? "(skip), (react 이모지), (take), 또는 디스코드에 그대로 올라갈 말 중 하나만 써. 따옴표나 이름표 없이." : "디스코드에 그대로 올라갈 답만 써. 따옴표나 이름표 없이.",
+    watching ? "(skip), (react 이모지), (take), 또는 디스코드에 그대로 올라갈 말 중 하나만 써. 왜 그렇게 골랐는지는 쓰지 마. 따옴표나 이름표 없이." : "디스코드에 그대로 올라갈 답만 써. 생각이나 이유는 쓰지 마. 따옴표나 이름표 없이.",
   ].join("\n");
 }
 
@@ -1111,6 +1142,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways, Date.now(), after));
   // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
   let out = (await say(before).catch((e) => (before.length && isRefusal(e instanceof Error ? e.message : String(e)) ? say([]) : Promise.reject(e)))).trim();
+  out = decided(out);
   // a hit undid its turn into someone: it pops back, then says its line as itself
   const popped = /^\(back\)\s*/i.exec(out);
   if (popped) {
