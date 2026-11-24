@@ -15,7 +15,7 @@ import { usePane } from "../state/panes";
 import { placePop, usePop } from "./ModelPicker";
 import { withQuotes } from "./quote";
 import { openImage } from "./Lightbox";
-import { dropToken, eraseToken, listLine, putToken, tokenAt, tokensIn } from "./imageTokens";
+import { carryTokens, dropToken, eraseToken, listLine, putToken, tokenAt, tokensIn } from "./imageTokens";
 import { tilde } from "../engine/rpc";
 import { Icon } from "./Icon";
 import { ignoredKey, noModifiers, shortcutHint } from "../lib/shortcuts";
@@ -71,6 +71,8 @@ export const composers = new Set<{ root: HTMLElement; quote: (text: string) => v
 
 /** pasted text kept as a file: its words, so the card can show the first line and put it back */
 const pastedText = new Map<string, string>();
+/** the pictures named by the "[Image #n]" in the words last cut or copied from an input (number → picture), any chat */
+let held: Map<number, string> | undefined;
 const firstLine = (s: string) => s.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 
 export const isImage = (p: string) => /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(p);
@@ -271,6 +273,12 @@ export function Composer(props: {
       queueMicrotask(grow);
     }
     el?.focus();
+  };
+  /** words cut or copied with an "[Image #n]" in them: which picture each names, for where they're pasted */
+  const hold = () => {
+    const words = el.value.slice(el.selectionStart, el.selectionEnd);
+    const pics = new Map([...nums()].filter(([, n]) => tokensIn(words).has(n)).map(([p, n]) => [n, p] as [number, string]));
+    held = pics.size ? pics : undefined;
   };
   /** an attachment taken off, and its "[Image #n]" out of the words */
   const remove = (path: string) => {
@@ -781,11 +789,14 @@ export function Composer(props: {
           data-shortcut={props.id === "main-input" || props.id === "task-input" ? "focusInput" : undefined}
           aria-label={t("메시지")}
           title={`${t("메시지")} ${shortcutHint("focusInput")}`.trim()}
+          onCut={hold}
+          onCopy={hold}
           onInput={(e) => {
             setText(e.currentTarget.value);
-            // a picture whose "[Image #n]" was taken out of the words (cut, a selection typed over) goes too
+            // a picture whose "[Image #n]" was taken out of the words (cut, a selection typed over) goes too;
+            // dragged words are taken out before they land, so a drag keeps it (the drop names it again)
             const named = tokensIn(e.currentTarget.value);
-            for (const [path, n] of nums()) if (!named.has(n)) remove(path);
+            if ((e as InputEvent).inputType !== "deleteByDrag") for (const [path, n] of nums()) if (!named.has(n)) remove(path);
             grow();
             void refresh();
             props.onTyping?.();
@@ -801,6 +812,24 @@ export function Composer(props: {
           onPaste={async (e) => {
             // files copied as files (Finder, a screenshot tool): the web view only gets their names
             const plain = e.clipboardData?.getData("text/plain") ?? "";
+            // words cut or copied here with an "[Image #n]" in them: the picture comes along to where they land
+            if (held && !e.clipboardData?.types.includes("Files") && tokensIn(plain).size) {
+              const { text: words, back } = carryTokens(plain, held, nums());
+              if (back.length || words !== plain) {
+                e.preventDefault();
+                if (back.length) {
+                  setFiles((f) => [...f, ...back.map(([p]) => p).filter((p) => !f.includes(p))]);
+                  setNums((m) => new Map([...m, ...back]));
+                }
+                const at = el.selectionStart ?? el.value.length;
+                const next = `${el.value.slice(0, at)}${words}${el.value.slice(el.selectionEnd ?? at)}`;
+                el.value = next;
+                setText(next);
+                el.setSelectionRange(at + words.length, at + words.length);
+                grow();
+                return;
+              }
+            }
             const names = plain.split("\n").map((l) => l.trim()).filter(Boolean);
             const fileish = names.length > 0 && names.length <= 20 && names.every((n) => /^[^/\\:*?"<>|]+\.[A-Za-z0-9]{1,6}$/.test(n) || n.startsWith("/"));
             if (fileish || e.clipboardData?.types.includes("Files")) {

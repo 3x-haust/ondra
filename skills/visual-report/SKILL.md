@@ -1,6 +1,6 @@
 ---
 name: visual-report
-description: Pictures and charts drawn in Ondra's chat — diagrams of code and systems, charts, graphs and visual reports (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화). Its More charts catalog lists every figure type. Everyday progress blocks need none of this; it draws only in the chat.
+description: Pictures and charts — diagrams of code and systems, charts, graphs and visual reports drawn in Ondra's chat (보고서, 리포트, 차트, 그래프, 다이어그램, 시각화), and architecture, stack and infra diagram files with official logos as HTML, PNG or TSX (아키텍처 다이어그램, 스택 다이어그램, 기술 스택 그림, 시스템 구성도, 인프라 구성도, 서비스 구성도). Its More charts catalog lists every figure type. Everyday progress blocks need none of this.
 metadata:
   ondra-menu: 'hidden'
 ---
@@ -137,6 +137,10 @@ skill's `codemap blocks`; the rules are the same without one.
   10 characters at most.
 - A real product gets a `logo`; never guess one from a brand word inside a
   label (`파일·git`).
+
+A diagram **file** with official logos (an architecture, stack or infra picture
+to hand over: HTML, PNG, TSX), not a block in the chat: follow
+`stack-diagram/GUIDE.md` in this skill's folder.
 
 ## More charts
 

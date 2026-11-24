@@ -49,6 +49,8 @@ function groupsOf(c: EngineContext): Group[] {
     // deferred tools sit behind tool_search: declared only once a job looks for them
     const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
     const optional = !x.active && !found;
+    // a tool jobs don't get unless switched on, and not switched on: not listed (only on, so it can go off)
+    if (optional && !(state.settings.extraTools ?? []).includes(x.name)) continue;
     add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: optional, found, optional, mcp: !optional && canSwitchOff(x.name), tool: true, full: toolMore(x) });
   }
   for (const s of c.skills)
@@ -90,10 +92,6 @@ export function ToolsTab() {
     if (window.getSelection()?.toString()) return;
     setOpen(open() === key ? null : key);
   };
-  const srcOf = (r: Row, g: Group) => {
-    const s = r.source.replace(/^Ondra 확장 · |^확장 · /, "");
-    return r.source && !g.title.startsWith(r.source) && r.source !== "MCP 서버" && s !== r.name ? t(s) : "";
-  };
   return (
     <>
       <PageHead tab="agent-tools">
@@ -127,17 +125,19 @@ export function ToolsTab() {
                 <div class="set-group tl-group">
                   <For each={g.rows}>
                     {(r) => (
-                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key }}>
-                        <div class="tl-head" onClick={() => toggle(r.key)}>
-                          <button class="tl-open" aria-expanded={open() === r.key} onClick={(e) => (e.stopPropagation(), setOpen(open() === r.key ? null : r.key))}>
-                            <span class="tl-name">{r.name}</span>
-                          </button>
+                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key, still: r.tool }}>
+                        {/* a tool's row does nothing on a click; a skill's opens to its whole description */}
+                        <div class="tl-head" onClick={() => !r.tool && toggle(r.key)}>
+                          <Show when={!r.tool} fallback={<span class="tl-open"><span class="tl-name">{r.name}</span></span>}>
+                            <button class="tl-open" aria-expanded={open() === r.key} onClick={(e) => (e.stopPropagation(), setOpen(open() === r.key ? null : r.key))}>
+                              <span class="tl-name">{r.name}</span>
+                            </button>
+                          </Show>
                           {/* the one line, or the whole description when open: never both */}
                           <div class="tl-desc">
                             <div class="tl-fold tl-short"><span class="tl-line" classList={{ en: !r.ko }}>{r.line}</span></div>
                             <div class="tl-fold tl-more"><p class="selectable">{r.full}</p></div>
                           </div>
-                          <span class="tl-src">{srcOf(r, g)}</span>
                           <span class="tl-size" title={r.found ? t("필요할 때 찾아 써요") : t("{k} 토큰", { n: r.size, k: tokens(r.size) })}>{r.found ? t("필요 시") : tokens(r.size)}</span>
                           <span class="tl-sw">
                             <Show when={r.tool && (r.optional || r.mcp)}>

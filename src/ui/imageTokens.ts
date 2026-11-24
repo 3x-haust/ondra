@@ -76,3 +76,28 @@ export function eraseToken(text: string, start: number, end: number, back: boole
   }
   return null;
 }
+
+/**
+ * Words pasted with tokens that were cut or copied from an input (`held`: number → picture): each
+ * such token brings its picture back. A picture still attached keeps the number it has; one that
+ * went with the cut gets its old number back, or the next free one if another picture took it.
+ * `back` is what to attach again; the text has the tokens renumbered where they had to be.
+ */
+export function carryTokens(pasted: string, held: ReadonlyMap<number, string>, nums: ReadonlyMap<string, number>): { text: string; back: [string, number][] } {
+  const taken = new Map([...nums].map(([p, n]) => [n, p]));
+  const back = new Map<string, number>();
+  let top = Math.max(0, ...nums.values());
+  const text = pasted.replace(TOKEN, (all, d: string) => {
+    const path = held.get(Number(d));
+    if (!path) return all;
+    let n = nums.get(path) ?? back.get(path);
+    if (n === undefined) {
+      n = taken.has(Number(d)) ? ++top : Number(d);
+      top = Math.max(top, n);
+      taken.set(n, path);
+      back.set(path, n);
+    }
+    return imageToken(n);
+  });
+  return { text, back: [...back] };
+}

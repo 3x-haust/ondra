@@ -448,10 +448,10 @@
 .settings-inner .tl-row + .tl-row {
   border-top: 1px solid var(--line-soft);
 }
-/* name · description · source · tokens · switch: every row has the same columns,
+/* name · description · tokens · switch: every row has the same columns,
    so the numbers and the switches each line up down the page */
 .settings-inner .tl-head {
-  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) auto 56px 32px;
+  grid-template-columns: minmax(96px, 170px) minmax(0, 1fr) 56px 32px;
   align-items: start;
   min-height: 44px;
   padding: var(--s-12) var(--s-14);
@@ -607,6 +607,13 @@
 /* tools: the row opens from anywhere but the switch */
 .settings-inner .tl-head {
   cursor: pointer;
+}
+/* a tool's row is only read: no hand, no hover */
+.settings-inner .tl-row.still .tl-head {
+  cursor: default;
+}
+.tl-row.still .tl-head:hover {
+  background: none;
 }
 .settings-inner .tl-open {
   display: block;

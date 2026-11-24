@@ -17,10 +17,10 @@ describe("the / menu", () => {
   it("leaves out the skills only the work picks up, and keeps the ones a user starts", () => {
     const hidden = bundled.filter((s) => menuHidden(s.md)).map((s) => s.name).sort();
     expect(hidden).toEqual([
-      "browser-use", "code-review", "coding-playbooks", "computer-use", "device-use", "discord",
-      "github", "modern-web-guidance", "office-docs", "ondra", "secrets", "test-ci", "visual-report",
+      "app-check", "app-check-upkeep", "browser-use", "code-map", "code-review", "coding-playbooks", "computer-use", "device-use", "discord",
+      "github", "modern-web-guidance", "office-docs", "ondra", "secrets", "test-ci", "visual-report", "web-design",
     ]);
-    for (const name of ["sharpen", "goal-loop", "overnight", "recap", "qa", "deep-research", "code-map"])
+    for (const name of ["sharpen", "goal-loop", "overnight", "recap", "qa", "deep-research"])
       expect(menuHidden(bundled.find((s) => s.name === name)!.md)).toBe(false);
   });
 

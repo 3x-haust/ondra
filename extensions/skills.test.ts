@@ -37,7 +37,7 @@ const top = (query: string) => searchSkills(bundled, query, 3).map((s) => s.name
 
 describe("skill matching", () => {
   it("reads every bundled skill", () => {
-    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa", "stack-diagram"]));
+    expect(bundled.map((s) => s.name)).toEqual(expect.arrayContaining(["reverse-engineering", "computer-use", "visual-report", "deep-research", "mimikyu", "qa"]));
   });
 
   it("maps a question about how another tool works to reverse engineering", () => {
@@ -57,8 +57,8 @@ describe("skill matching", () => {
     ["랜딩 페이지 디자인", "web-design"],
     ["포트폴리오 디자인", "web-design"],
     ["매출 차트 보고서 만들어줘", "visual-report"],
-    ["우리 스택 아키텍처 다이어그램 그려줘", "stack-diagram"],
-    ["draw our system architecture diagram with logos", "stack-diagram"],
+    ["우리 스택 아키텍처 다이어그램 그려줘", "visual-report"],
+    ["draw our system architecture diagram with logos", "visual-report"],
     ["모션그래픽 만들어줘", "motion-graphics"],
     ["제품 홍보 영상 만들어줘", "motion-graphics"],
     ["인스타 릴스용 키네틱 타이포 영상", "motion-graphics"],
@@ -492,4 +492,17 @@ describe("code-map skill", () => {
       expect.objectContaining({ from: "customer", to: "ordering", label: "Places an order", tech: "HTTPS" }),
     ]));
   }, 30_000);
+});
+
+describe("the skill tool: one call", () => {
+  it("a skill's exact name, or words that clearly fit one, comes back read; vague words only list", async () => {
+    const { pickSkill } = await import("./skills");
+    expect(pickSkill(bundled, "reverse-engineering").load?.name).toBe("reverse-engineering");
+    expect(pickSkill(bundled, "다른 앱의 컴퓨터유즈가 어떻게 동작하는지 분석").load?.name).toBe("reverse-engineering");
+    // the only one a word of it names
+    expect(pickSkill(bundled, "문서").load?.name).toBe("office-docs");
+    const vague = pickSkill(bundled, "디자인");
+    expect(vague.load).toBeUndefined();
+    expect(vague.others.length).toBeGreaterThan(0);
+  });
 });

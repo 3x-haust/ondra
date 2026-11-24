@@ -6,6 +6,8 @@ description: >
   when a change must be proved by using it for real and the repo has no
   check skill yet, or for "앱 확인 스킬", "검증 스킬", "verification skill",
   "control skill".
+metadata:
+  ondra-menu: 'hidden'
 ---
 
 # App check

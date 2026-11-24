@@ -566,3 +566,6 @@ export function describeComputer(action: string | undefined, target?: string): S
 
 /** An element's label as a click target: ‘보내기’. */
 export const computerLabel = (label: string) => quoted(label);
+
+/** a `use` tool's own start/update/end: it only carries the call of the tool it names, which has events of its own */
+export const isUseCall = (ev: any) => typeof ev?.type === "string" && ev.type.startsWith("tool_execution_") && ev.toolName === "use";

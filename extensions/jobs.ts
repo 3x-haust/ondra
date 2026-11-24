@@ -24,16 +24,15 @@ const out = (v: unknown) => ({ content: [{ type: "text", text: typeof v === "str
 
 export default function (pi: any) {
   if (!URL_ || !TOKEN || !WORKER) return;
-  // main finds jobs whenever the user names one; a job only now and then (through tool_search)
-  const exposure = MAIN ? undefined : "deferred";
+  // reached through use (or tool_search), in main as in a job: not declared up front
+  const exposure = "deferred";
 
   pi.registerTool({
     name: "jobs_search",
     label: "Jobs search",
-    ...(exposure ? { exposure } : {}),
+    exposure,
     description:
       "Find jobs in this space by words or meaning (Korean and English) across title, ask, topic, project, summary, branch and PR: running, waiting, queued, paused, done and failed, any age, any project, subagents with their parent. One line each: id | status | project | title | when | where it worked | last state (asks / did / failed / now). With no query: the live ones first, then the latest.",
-    promptSnippet: "Find a job of this space (running or past) by name, topic, branch or PR",
     parameters: Type.Object({
       query: Type.Optional(Type.String({ description: "what the job is about, as the user names it (\"리디자인\", \"비로그인\", a branch, a PR number); empty lists jobs" })),
       status: Type.Optional(Type.String({ description: "running | waiting | queued | paused | done | failed | live (not finished) | finished" })),
@@ -51,10 +50,9 @@ export default function (pi: any) {
   pi.registerTool({
     name: "job_read",
     label: "Job read",
-    ...(exposure ? { exposure } : {}),
+    exposure,
     description:
       "One job in depth by its id (from jobs_search): its ask, plan with steps done, what it is waiting on, where it worked (branch, worktree, PR), subagents, result and summary, evidence and what wasn't verified, and its latest messages where you may read them.",
-    promptSnippet: "Read one job of this space in depth",
     parameters: Type.Object({
       id: Type.String({ description: "the job's id" }),
       messages: Type.Optional(Type.Number({ description: "how many of its latest messages (default 6, at most 20)" })),
@@ -73,7 +71,6 @@ export default function (pi: any) {
     exposure: "deferred",
     description:
       "Send a message to another job of this space (its id from jobs_search): your parent, a sibling, or a past job you need something from. A running job gets it at its next turn (now: true steers it in at once), a waiting one as its answer, a paused one resumes with it, a finished one of this project is carried on by a new job (another project's finished job is only read, with job_read). The user sees it in that job's thread as from you. Not for yourself; say what you need in one self-contained message.",
-    promptSnippet: "Send a message to another job of this space",
     parameters: Type.Object({
       id: Type.String({ description: "the job's id" }),
       message: Type.String({ description: "what it needs to know or do, self-contained" }),

@@ -10,7 +10,7 @@ import { hostOfTask, mirroredDecision, splitProjectId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
-import { computerLabel, computerStep, cutTitle, describeBrowser, describeCommand, describeComputer } from "./describe";
+import { isUseCall, computerLabel, computerStep, cutTitle, describeBrowser, describeCommand, describeComputer } from "./describe";
 import { t as tr } from "../i18n";
 import { skillPaths } from "./skillPick";
 import { prepareQuery } from "./vectors";
@@ -456,6 +456,8 @@ function describeTool(name: string, args: any): ToolCall & { now: string } {
     case "find":
     case "ls":
       return { name, kind: "search", target: String(args?.pattern ?? args?.path ?? ""), detail: JSON.stringify(args), now: "찾는 중" };
+    case "skill":
+      return { name, kind: "read", target: String(args?.query ?? ""), detail: String(args?.query ?? ""), now: "스킬 읽는 중" };
     case "web_search":
       return { name, kind: "search", target: String(args?.query ?? ""), detail: JSON.stringify(args ?? {}), now: "웹 검색 중" };
     case "web_fetch": {
@@ -1558,6 +1560,8 @@ function handlers(id: string, run: Run) {
       if (runs.get(id) !== run) return;
       run.heardAt = Date.now();
       ui.event(ev);
+      // `use` only carries a call: the tool it called shows (its own events, parentToolCallId set)
+      if (isUseCall(ev)) return;
       switch (ev.type) {
         case "agent_start":
           run.streaming = true;

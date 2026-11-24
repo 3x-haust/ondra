@@ -220,7 +220,6 @@ export default {
   "내 스킬": "My skills",
   "내 스킬 없음": "No skills of your own",
   "기본 · 알아서 써요": "Built-in · used on their own",
-  "/ 메뉴에는 없고, 작업이 필요할 때 알아서 꺼내 써요": "Not in the / menu: jobs pick them up when the work needs them",
   "스킬 없음": "No skills",
   "새 스킬": "New skill",
   "내 스킬로 저장했어요": "Saved to your skills",
