@@ -205,3 +205,18 @@ describe("the Discord agent moves a running job's open work", () => {
     expect(taskById("h-run")?.agent?.room).toBe("1574400958086123680");
   });
 });
+
+describe("main's card that keeps changing", () => {
+  it("sent again with the same key, its earlier copy in this chat goes", async () => {
+    setState("captain", [
+      { id: "a", at: 1, space: "home", from: "captain", reply: "배포 시작", routes: [{ kind: "answer", text: "", blocks: [{ type: "progress", label: "배포", value: 1, total: 3, live: "deploy" }, { type: "text", text: "남김" }] }] },
+      { id: "b", at: 1, space: "home", project: "p", from: "captain", reply: "다른 채팅", routes: [{ kind: "answer", text: "", blocks: [{ type: "progress", label: "배포", value: 1, total: 3, live: "deploy" }] }] },
+    ]);
+    const out = await applyRoutes("home", [{ kind: "answer", text: "", blocks: [{ type: "progress", label: "배포", value: 3, total: 3, live: "deploy" }] }], "");
+    expect(out[0]).toMatchObject({ kind: "answer", blocks: [{ value: 3 }] });
+    const a = state.captain.find((m) => m.id === "a")!.routes![0] as { blocks: { type: string }[] };
+    expect(a.blocks.map((b) => b.type)).toEqual(["text"]);
+    // another chat's card stays
+    expect((state.captain.find((m) => m.id === "b")!.routes![0] as { blocks: unknown[] }).blocks).toHaveLength(1);
+  });
+});

@@ -477,10 +477,50 @@ async fn load_file(path: &str) -> Result<(String, String, Vec<u8>), String> {
 static INTERACTIONS: Mutex<Vec<(String, String, String, std::time::Instant)>> = Mutex::new(Vec::new());
 
 /// A click, a menu choice or a slash command, as the page is told (no token).
+/// Popups (modals) a button opens, by its custom_id, set by the page before it posts the button:
+/// Discord wants the popup as the answer to the click within 3 seconds, so it can't wait for the page
+static MODALS: Mutex<Vec<(String, Value, std::time::Instant)>> = Mutex::new(Vec::new());
+
+/// The popup a button opens (none: `modal` null); kept a day
+#[tauri::command]
+pub fn discord_modal_set(custom_id: String, modal: Value) {
+    let mut m = MODALS.lock().unwrap();
+    m.retain(|x| x.0 != custom_id && x.2.elapsed() < Duration::from_secs(24 * 3600));
+    if !modal.is_null() {
+        m.push((custom_id, modal, std::time::Instant::now()));
+    }
+}
+
+fn modal_for(custom_id: &str) -> Option<Value> {
+    MODALS.lock().unwrap().iter().find(|x| x.0 == custom_id).map(|x| x.1.clone())
+}
+
+/// What was typed in a popup: each input's custom_id and value (or picked values), however nested
+fn modal_values(v: &Value, out: &mut serde_json::Map<String, Value>) {
+    match v {
+        Value::Array(a) => a.iter().for_each(|x| modal_values(x, out)),
+        Value::Object(o) => {
+            if let Some(id) = o.get("custom_id").and_then(Value::as_str) {
+                if let Some(x) = o.get("value").filter(|x| x.is_string()).or_else(|| o.get("values").filter(|x| x.is_array())) {
+                    out.insert(id.to_string(), x.clone());
+                }
+            }
+            if let Some(c) = o.get("components") {
+                modal_values(c, out);
+            }
+            if let Some(c) = o.get("component") {
+                modal_values(c, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn interaction_event(d: &Value) -> Option<Value> {
     let kind = match d["type"].as_u64()? {
         2 => "command",
         3 => "component",
+        5 => "modal",
         _ => return None,
     };
     let s = |v: &Value| v.as_str().filter(|x| !x.is_empty()).map(str::to_string);
@@ -503,6 +543,12 @@ pub fn interaction_event(d: &Value) -> Option<Value> {
         if d["data"]["values"].is_array() {
             ev["values"] = d["data"]["values"].clone();
         }
+    } else if kind == "modal" {
+        ev["message"] = d["message"]["id"].clone();
+        ev["custom_id"] = d["data"]["custom_id"].clone();
+        let mut fields = serde_json::Map::new();
+        modal_values(&d["data"]["components"], &mut fields);
+        ev["fields"] = Value::Object(fields);
     } else {
         ev["command"] = d["data"]["name"].clone();
         if d["data"]["options"].is_array() {
@@ -522,6 +568,13 @@ async fn acknowledge(d: Value) {
         held.push((id.to_string(), app.to_string(), tok.to_string(), std::time::Instant::now()));
     }
     let Ok(http) = client() else { return };
+    // a button that opens a popup: the popup is the answer
+    if kind == 3 {
+        if let Some(modal) = d["data"]["custom_id"].as_str().and_then(modal_for) {
+            let _ = http.post(format!("{API}/interactions/{id}/{tok}/callback")).json(&json!({ "type": 9, "data": modal })).send().await;
+            return;
+        }
+    }
     let kind = if kind == 2 { 5 } else { 6 };
     let _ = http.post(format!("{API}/interactions/{id}/{tok}/callback")).json(&json!({ "type": kind })).send().await;
 }
@@ -770,6 +823,25 @@ mod tests {
         assert_eq!(ev["interaction"]["command"], "status");
         assert!(!ev.to_string().contains("SECRET"));
         assert!(super::interaction_event(&serde_json::json!({ "type": 1 })).is_none());
+    }
+
+    #[test]
+    fn what_is_typed_in_a_popup_reaches_the_page_by_input() {
+        let submit = serde_json::json!({ "id": "i3", "type": 5, "token": "SECRET", "channel_id": "c1", "user": { "id": "u1", "username": "lyu" }, "message": { "id": "m1" },
+            "data": { "custom_id": "ondra:form:d1:o0", "components": [
+                { "type": 1, "components": [{ "type": 4, "custom_id": "f0", "value": "스테이징" }] },
+                { "type": 18, "component": { "type": 3, "custom_id": "f1", "values": ["a", "b"] } }
+            ] } });
+        let ev = super::interaction_event(&submit).unwrap();
+        assert_eq!(ev["interaction"]["kind"], "modal");
+        assert_eq!(ev["interaction"]["custom_id"], "ondra:form:d1:o0");
+        assert_eq!(ev["interaction"]["fields"]["f0"], "스테이징");
+        assert_eq!(ev["interaction"]["fields"]["f1"], serde_json::json!(["a", "b"]));
+        assert!(!ev.to_string().contains("SECRET"));
+        super::discord_modal_set("b1".into(), serde_json::json!({ "title": "t" }));
+        assert_eq!(super::modal_for("b1").unwrap()["title"], "t");
+        super::discord_modal_set("b1".into(), serde_json::Value::Null);
+        assert!(super::modal_for("b1").is_none());
     }
 
     #[test]

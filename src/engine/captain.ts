@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { liveKeys } from "./live";
 import { readFields } from "./form";
 import { clearExtensionUi, extensionUi } from "./extensionUi";
 // The dispatcher (internally "captain"). Every request goes here first and
@@ -1272,6 +1273,12 @@ export async function applyRoutes(space: string, raw: any[], original: string, c
     if (r?.kind === "answer") {
       const text = String(r.text ?? "");
       const blocks = Array.isArray(r.blocks) ? (r.blocks as Block[]) : [];
+      // a card that keeps changing: its earlier copy in this chat goes, the newest stays
+      const live = liveKeys(blocks);
+      if (live.size)
+        setState("captain", (m) => inChat(m, space) && !!m.routes?.some((x) => x.kind === "answer" && x.blocks.some((b) => b.live && live.has(b.live))), "routes", (rs) =>
+          (rs ?? []).map((x) => (x.kind === "answer" ? { ...x, blocks: x.blocks.filter((b) => !(b.live && live.has(b.live))) } : x)),
+        );
       if (text.trim() || blocks.length) out.push({ kind: "answer", text, blocks });
     } else if (r?.kind === "ask" && readRound(r)) {
       // a round of questions (the sharpen skill): one card at a time, the answers come back together

@@ -346,6 +346,9 @@ export interface Worktree {
 export type Block = BlockBody & {
   /** the one-line takeaway the agent writes under its picture */
   say?: string;
+  /** a card that keeps changing (progress, a status, a checklist): a later block with the same
+   *  key takes its place, so there is one, the newest, at the end */
+  live?: string;
 };
 type BlockBody =
   | { type: "progress"; label: string; value: number; total: number }

@@ -225,6 +225,7 @@ Put one JSON object per line in a \`\`\`blocks fence:
   {"type":"diff","path":"src/a.ts","ref":"/abs/src/a.ts:40","note":"왜","hunks":[{"at":40,"lines":["-old"," same","+new"]}]} (1–3 hunks),
   {"type":"table","columns":[…],"rows":[[…]]}, {"type":"scope","in":[{label,note}],"out":[…]},
   {"type":"shot","path":"/abs/a.png","caption":"…"}, {"type":"link","kind":"pr|doc|url","title":"…","ref":"URL"}
+- "live":"key" on a block that keeps changing: resent whole, it replaces the last
 - a picture, unasked, whenever the result relates two or more things (a cause
   across places, before/after, what calls what, options): one per report; its
   types and rules are in the visual-report skill.
