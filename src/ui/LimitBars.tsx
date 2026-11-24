@@ -53,7 +53,8 @@ function view(l: Limit, now: number) {
 
 function Bar(p: { v: ReturnType<typeof view> }) {
   return (
-    <span class="lim-bar" role="img" aria-label={p.v.title} title={p.v.title}>
+    // the app's web view shows no native tooltip: what it means shows in our own (data-tip, limitBars.css)
+    <span class="lim-bar" role="img" aria-label={p.v.title} data-tip={p.v.title}>
       <span class="lim-paint">
         <span class="lim-fill" style={{ width: `${p.v.left}%` }} />
         <span class="lim-used" style={{ width: `${100 - p.v.left}%` }} />
@@ -114,7 +115,7 @@ export function LimitCards(props: { limits: Limit[]; service?: string; now?: num
                 <div class="lim-head">
                   <span class="lim-card-name">{windowLabel(l.window)}</span>
                   {/* the whole "36% 남음 ↗" carries what the pace means, so it shows wherever the pointer rests */}
-                  <span class="lim-big" classList={{ explained: !!v().paceText }} title={v().paceText}>
+                  <span class="lim-big" classList={{ explained: !!v().paceText }} data-tip={v().paceText}>
                     <b>{v().left}%</b>
                     {/* the word sits on the number's baseline; the pace icon is centred on the word */}
                     <span class="lim-unit">

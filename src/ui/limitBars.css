@@ -182,3 +182,32 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* what a bar or a pace means, on hover at once: the app's web view shows no native tooltip */
+.lim-bar[data-tip],
+.lim-big[data-tip] {
+  position: relative;
+}
+.lim-bar[data-tip]:hover::after,
+.lim-big[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 300px;
+  padding: 6px 9px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: normal;
+  line-height: 1.45;
+  letter-spacing: 0;
+  white-space: pre-line;
+  word-break: keep-all;
+  text-align: left;
+  pointer-events: none;
+}
