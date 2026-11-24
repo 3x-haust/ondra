@@ -321,6 +321,29 @@ describe("the whole way round", () => {
     expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇㅋ 멈춤", "h1");
   });
 
+  it("an answer it wrote while another of its own went out there first is looked at again: what's left, or nothing", async () => {
+    await ready();
+    const snow = (ms: number) => ((BigInt(ms) - 1_420_070_400_000n) << 22n).toString();
+    emit({ kind: "message", message: msg({ id: "w1", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "이유 찾아봐" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    // meanwhile its answer to someone else went out there
+    vi.mocked(native.discordHistory).mockResolvedValue([msg({ id: snow(Date.now()), guild: null, author: { id: BOT, name: "메타몽", bot: true }, content: "아까 안 된 건 펑만 쳐서임", at: new Date().toISOString() })]);
+    said.answer = "(skip)";
+    setState("captain", (m) => m.id === "reply1", { pending: false, reply: "펑만 치고 변신을 안 했었어" });
+    said.hook?.("reply1");
+    await vi.waitFor(() => expect(said.prompts.some((p) => p.includes("<about-to-say>\n펑만 치고 변신을 안 했었어") && p.includes("메타몽(너): 아까 안 된 건 펑만 쳐서임"))).toBe(true));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(native.discordSend).not.toHaveBeenCalled();
+    // only what is left goes
+    emit({ kind: "message", message: msg({ id: "w2", guild: null, author: { id: OWNER, name: "성윤", bot: false }, content: "프사는" }) });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    said.answer = "프사도 이제 바뀜";
+    setState("captain", (m) => m.id === "reply2", { pending: false, reply: "펑만 쳐서 그랬어\n\n프사도 이제 바뀜" });
+    said.hook?.("reply2");
+    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "프사도 이제 바뀜", undefined));
+    expect(native.discordSend).toHaveBeenCalledTimes(1);
+  });
+
   it("two replies in one channel go out one after the other, not mixed", async () => {
     const { PACE } = await import("./discord");
     const pace = { ...PACE };
