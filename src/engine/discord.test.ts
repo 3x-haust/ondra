@@ -24,7 +24,7 @@ vi.mock("./captain", async () => {
 });
 vi.mock("./aside", () => ({ oneShot: async (_s: string, _c: string, prompt: string) => (said.prompts.push(prompt), said.answer) }));
 
-import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
+import { askedLine, askPrompt, discordForm, formModal, pickButtons, BANTER, BURST, TYPING, PACE, firstFor, calledIn, cleanText, DEFAULT_VOICE, digest, OTHERS_RULES, ownerNote, pickPrompt, sayOf, startAgent, stopAgent, talkPrompt, WATCH_WAYS } from "./discord";
 
 /** what the user's ways file holds (agent/AGENT.md), as the agent writes it when asked */
 const ways = { text: undefined as string | undefined };
@@ -34,9 +34,26 @@ const WATCH_REST = "- 서버에서 나를 안 부른 말은 보고만 있다가,
 const BOT = "999";
 const OWNER = "111";
 const agent: AgentSettings = { on: true, name: "메타몽", ownerId: OWNER };
+const pace0 = { ...PACE, think: [...PACE.think] as [number, number] };
 const msg = (over: Partial<DiscordMessage> = {}): DiscordMessage => ({
   id: "m1", channel: "c1", guild: "g1", author: { id: "222", name: "지나가던사람", bot: false },
   content: "", mentions: [], files: [], at: "", ...over,
+});
+
+describe("how fast it writes", () => {
+  it("its first message waits for reading, thinking and typing it, less the time the answer already took", () => {
+    const p = { ...PACE };
+    Object.assign(PACE, { read: 35, think: [1000, 1000], perChar: 110, first: 9000 });
+    // "뭐함" read, a second's thought, "코딩함 ㅋㅋ" typed: 70 + 1000 + 660
+    expect(firstFor("뭐함", "코딩함 ㅋㅋ", 0)).toBe(1730);
+    // the answer took a second already
+    expect(firstFor("뭐함", "코딩함 ㅋㅋ", 1000)).toBe(730);
+    // a long think of its own (main's work) already covers it
+    expect(firstFor("뭐함", "코딩함 ㅋㅋ", 5000)).toBe(0);
+    // never past the most
+    expect(firstFor("x".repeat(500), "y".repeat(500), 0)).toBe(9000);
+    Object.assign(PACE, p);
+  });
 });
 
 describe("who it answers", () => {
@@ -210,6 +227,8 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordSaveFile").mockImplementation(async (url) => `/data/attachments/discord/${url.split("/").pop()!.split("?")[0]}`);
     BURST.ms = 0;
     TYPING.ms = 0;
+    // the person-like pace before its first message is tested on its own
+    Object.assign(PACE, { read: 0, think: [0, 0], perChar: 0 });
     ways.text = undefined;
     vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: null, engineVersion: null, dataDir: "/data", home: "/Users/me" });
     vi.spyOn(native, "fsRead").mockImplementation(async (path) => {
@@ -220,6 +239,7 @@ describe("the whole way round", () => {
   afterEach(() => {
     stopAgent();
     vi.restoreAllMocks();
+    Object.assign(PACE, pace0);
   });
   const ready = async () => {
     await startAgent();
@@ -316,7 +336,7 @@ describe("the whole way round", () => {
     said.hook?.("reply1");
     // one answer to both, said in the talk, not as a reply to the first
     await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "ㅇ 깼어", undefined));
-    expect(said.prompts.at(-1)).toContain("<added>\n일어나\n</added>");
+    expect(said.prompts[said.prompts.length - 1]).toContain("<added>\n일어나\n</added>");
     await new Promise((r) => setTimeout(r, 50));
     expect(said.thrown).toHaveLength(1);
     // more that words alone can't do goes as its own request after

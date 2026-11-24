@@ -112,10 +112,19 @@ export function messagesOf(text: string): string[] {
   return out.length > MAX_MESSAGES ? [...out.slice(0, MAX_MESSAGES - 1), out.slice(MAX_MESSAGES - 1).join("\n\n")] : out;
 }
 
-/** the pause before the next message, as long as typing it would roughly take (ms) */
-/** how long typing the next message takes, as a person types Hangul in a chat (ms) */
-export const PACE = { base: 700, perChar: 110, most: 6000 };
-const typeFor = (s: string) => Math.min(PACE.most, PACE.base + s.length * PACE.perChar);
+/**
+ * How a person writes in a chat (ms): reads what was said (`read` a character), thinks a moment
+ * (`think`, somewhere in that range), then types it (`perChar`: Hangul on a keyboard, about nine
+ * a second). Its first message waits for all that, less the time its answer already took; each
+ * next one for a short pause (`base`, give or take) and its typing. `most`: the longest pause
+ * between its messages; `first`: before the first.
+ */
+export const PACE = { read: 35, think: [500, 1500] as [number, number], base: 500, perChar: 110, most: 6000, first: 9000 };
+const between = (lo: number, hi: number) => lo + Math.random() * Math.max(0, hi - lo);
+const typeFor = (s: string) => Math.min(PACE.most, between(PACE.base * 0.6, PACE.base * 1.4) + s.length * PACE.perChar);
+/** how long before its first message goes: reading theirs, thinking, typing its own, less what has passed since they said it */
+export const firstFor = (said: string, first: string, sinceSaid: number) =>
+  Math.max(0, Math.min(PACE.first, said.length * PACE.read + between(...PACE.think) + first.length * PACE.perChar - sinceSaid));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const settings = (): AgentSettings | undefined => state.settings.agent;
@@ -589,12 +598,21 @@ async function stillToSay(channel: string, text: string, since: number, a: Agent
 }
 
 /** Say it once its turn comes, looked at again first (a question with buttons or a slash command's answer goes as it is). */
-function sayLooked(channel: string, text: string, since: number, a: AgentSettings, replyTo?: string, interaction?: string, components?: unknown[], added?: () => string[]): Promise<{ ids: string[]; text: string; took: number; more: boolean }> {
+function sayLooked(channel: string, text: string, since: number, a: AgentSettings, replyTo?: string, interaction?: string, components?: unknown[], added?: () => string[], heard?: { at: number; said: string }): Promise<{ ids: string[]; text: string; took: number; more: boolean }> {
   return inTurn(channel, async () => {
     const more = added?.() ?? [];
-    const r = interaction || components?.length ? { text, folded: false, more: false } : await stillToSay(channel, text, since, a, more);
+    const asIs = !!interaction || !!components?.length;
+    const r = asIs ? { text, folded: false, more: false } : await stillToSay(channel, text, since, a, more);
     // an answer that took their later lines in too is said in the talk, not as a reply to the first
     const to = r.folded && !r.more ? undefined : replyTo;
+    // like a person: read, think, type the first message, unless the answer took that long already
+    if (r.text && heard && !asIs) {
+      const ms = firstFor([heard.said, ...more].join("\n"), messagesOf(r.text)[0] ?? r.text, Date.now() - heard.at);
+      if (ms > 0) {
+        void discordTyping(channel).catch(() => {});
+        await wait(ms);
+      }
+    }
     return { ids: r.text ? await sayNow(channel, r.text, to, interaction, components) : [], text: r.text, took: r.folded && !r.more ? more.length : 0, more: r.more };
   });
 }
@@ -926,7 +944,10 @@ async function mainSaid(replyId: string) {
   const a = settings();
   const sent = text
     ? await (askedMsg && a
-        ? sayLooked(channel, text, askedMsg.at, a, under ? undefined : asked?.message, asked?.interaction, buttons, () => answering.get(channel)?.held?.texts.slice() ?? [])
+        ? sayLooked(channel, text, askedMsg.at, a, under ? undefined : asked?.message, asked?.interaction, buttons, () => answering.get(channel)?.held?.texts.slice() ?? [], {
+            at: [asked?.message, ...(asked?.also ?? [])].map((id) => madeAt(id ?? "")).filter(Number.isFinite).sort((x, y) => y - x)[0] ?? askedMsg.at,
+            said: askedMsg.text ?? "",
+          })
         : sayTo(channel, text, under ? undefined : asked?.message, asked?.interaction, buttons).then((ids) => ({ ids, text, took: 0 }))
       ).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), { ids: [] as string[], text, took: 0 }))
     : { ids: [] as string[], text, took: 0 };
@@ -1107,7 +1128,8 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
     return;
   }
   // chiming in is a line in the talk, not an answer to that one message
-  const sent = await sayLooked(m.channel, out, since, a, watching || lastIn.get(m.channel) === m.id ? undefined : m.id, m.interaction);
+  const heardAt = Date.parse(m.at);
+  const sent = await sayLooked(m.channel, out, since, a, watching || lastIn.get(m.channel) === m.id ? undefined : m.id, m.interaction, undefined, undefined, { at: Number.isFinite(heardAt) ? heardAt : since, said: text });
   keepSaid(m.channel, sent.ids);
   if (sent.ids.length) hearMine(m.channel, sent.text);
 }
