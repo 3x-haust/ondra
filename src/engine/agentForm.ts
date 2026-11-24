@@ -34,7 +34,7 @@ export function formNote(a: AgentSettings | undefined, now = Date.now()): string
   const f = formNow(a, now);
   if (!f) return "";
   const left = Math.max(1, Math.round((f.until - now) / 60_000));
-  return `지금 너는 ${f.who}(으)로 변신해 있어 (${left}분쯤 남음). 말투랑 성격만 ${f.who}처럼 바꿔서 말해. 너는 그대로 너고, 누가 누군지도 그대로야. 변신이 풀리면 원래 말투로 돌아와.`;
+  return `지금 너는 ${f.who}(으)로 변신해 있어 (${left}분쯤 남음). 속은 그대로 너라 누가 누군지는 알지만, 겉으로는 ${f.who}가 실제로 할 법한 말과 행동만 해: ${f.who}의 말투, 성격, ${f.who} 입장에서 본 사람 사이(누구를 뭐라고 부르는지, 누구랑 친한지). "주인", "메타몽", "변신", 네 일처럼 너만 할 말은 하지 마. 서버 사람이면 그 사람이 실제로 쓴 말을 찾아 읽고 따라 해. 변신이 풀리면 원래 너로 돌아와.`;
 }
 
 /** Turn into someone for `minutes`: what it says till then goes out under their name and picture. */
