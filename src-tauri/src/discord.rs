@@ -344,14 +344,23 @@ pub async fn discord_send_file(channel: String, path: String, text: Option<Strin
     if bytes.len() > 8 * 1024 * 1024 {
         return Err("8MB가 넘어서 못 올려요".into());
     }
+    let payload = json!({ "content": text.unwrap_or_default().chars().take(1900).collect::<String>(), "allowed_mentions": { "parse": [] } });
+    let v = multipart(reqwest::Method::POST, &format!("/channels/{channel}/messages"), &payload, &[(name, mime.to_string(), bytes)]).await?;
+    Ok(v["id"].as_str().map(|s| vec![s.to_string()]).unwrap_or_default())
+}
+
+/// A body with files (multipart: the body as payload_json, each file as files[n]), rate limits waited out.
+async fn multipart(method: reqwest::Method, path: &str, payload: &Value, files: &[(String, String, Vec<u8>)]) -> Result<Value, String> {
     let token = token()?;
     let http = client()?;
-    let payload = json!({ "content": text.unwrap_or_default().chars().take(1900).collect::<String>(), "allowed_mentions": { "parse": [] } });
     for _ in 0..3 {
-        let part = reqwest::multipart::Part::bytes(bytes.clone()).file_name(name.clone()).mime_str(mime).map_err(|e| e.to_string())?;
-        let form = reqwest::multipart::Form::new().text("payload_json", payload.to_string()).part("files[0]", part);
+        let mut form = reqwest::multipart::Form::new().text("payload_json", payload.to_string());
+        for (i, (name, mime, bytes)) in files.iter().enumerate() {
+            let part = reqwest::multipart::Part::bytes(bytes.clone()).file_name(name.clone()).mime_str(mime).map_err(|e| e.to_string())?;
+            form = form.part(format!("files[{i}]"), part);
+        }
         let res = http
-            .post(format!("{API}/channels/{channel}/messages"))
+            .request(method.clone(), format!("{API}{path}"))
             .header("Authorization", format!("Bot {token}"))
             .multipart(form)
             .send()
@@ -365,12 +374,168 @@ pub async fn discord_send_file(channel: String, path: String, text: Option<Strin
             continue;
         }
         if !status.is_success() {
-            return Err(format!("디스코드가 거절했어요 ({status})"));
+            let why = serde_json::from_str::<Value>(&body).ok().and_then(|v| v["message"].as_str().map(str::to_string)).unwrap_or(body);
+            return Err(format!("디스코드가 거절했어요 ({status}): {why}"));
         }
-        let v: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
-        return Ok(v["id"].as_str().map(|s| vec![s.to_string()]).unwrap_or_default());
+        return Ok(serde_json::from_str(&body).unwrap_or(Value::Null));
     }
     Err("디스코드가 잠시 막았어요. 조금 뒤에 다시 해 주세요".into())
+}
+
+/// Any call on Discord's bot API, for the agent's own `discord` tool: whatever a bot's code can do
+/// (messages with buttons, menus, embeds and polls; reactions, pins, threads, roles, members,
+/// channels, slash commands, events…) without a command per action. A path under the API only
+/// (no host, no `..`); the token is added here and never comes back. `files`: local files sent
+/// with the body (it becomes payload_json), never secret ones.
+#[tauri::command]
+pub async fn discord_api(method: String, path: String, body: Option<Value>, files: Option<Vec<String>>) -> Result<Value, String> {
+    let m = api_method(&method)?;
+    api_path(&path)?;
+    let files = files.unwrap_or_default();
+    if files.is_empty() {
+        return rest(m, &path, body).await;
+    }
+    if files.len() > 10 {
+        return Err("파일은 한 번에 10개까지예요".into());
+    }
+    let mut loaded = Vec::new();
+    for f in &files {
+        loaded.push(load_file(f).await?);
+    }
+    multipart(m, &path, &body.unwrap_or_else(|| json!({})), &loaded).await
+}
+
+pub fn api_method(m: &str) -> Result<reqwest::Method, String> {
+    match m.trim().to_ascii_uppercase().as_str() {
+        "GET" => Ok(reqwest::Method::GET),
+        "POST" => Ok(reqwest::Method::POST),
+        "PUT" => Ok(reqwest::Method::PUT),
+        "PATCH" => Ok(reqwest::Method::PATCH),
+        "DELETE" => Ok(reqwest::Method::DELETE),
+        _ => Err("method는 GET, POST, PUT, PATCH, DELETE 중 하나예요".into()),
+    }
+}
+
+/// a path under the API: "/channels/123/messages?limit=5", never another host
+pub fn api_path(p: &str) -> Result<(), String> {
+    let bad = !p.starts_with('/') || p.starts_with("//") || p.contains("..") || p.contains("://") || p.chars().any(|c| c.is_whitespace() || c == '\\' || c == '#');
+    if bad {
+        return Err("path는 /channels/… 처럼 API 아래 경로여야 해요".into());
+    }
+    Ok(())
+}
+
+/// files that hold keys or sign-ins never leave this Mac
+pub fn secret_file(path: &str) -> bool {
+    let l = path.to_ascii_lowercase();
+    let name = l.rsplit('/').next().unwrap_or("");
+    ["/.ssh/", "/.codex/", "/.aws/", "/.gnupg/", "/.config/gh/", "/.kube/", "/.docker/", "/library/keychains/", "/dev.3xhaust.ondra/secrets", "/dev.3xhaust.ondra/keys"].iter().any(|d| l.contains(d))
+        || name.starts_with(".env")
+        || name.starts_with("id_rsa")
+        || name.starts_with("id_ed25519")
+        || name.contains("credential")
+        || name.contains("secret")
+        || [".pem", ".key", ".p12", ".keychain", ".keychain-db"].iter().any(|e| name.ends_with(e))
+        || ["auth.json", "keys.json", "devbridge.token", ".netrc", ".npmrc", ".pypirc", "hosts.yml"].contains(&name)
+}
+
+async fn load_file(path: &str) -> Result<(String, String, Vec<u8>), String> {
+    let full = match path.strip_prefix("~/") {
+        Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
+        None => path.to_string(),
+    };
+    // where it really is (a link can't carry a secret out)
+    let real = tokio::fs::canonicalize(&full).await.map_err(|e| format!("파일을 못 찾았어요: {e}"))?;
+    let real_s = real.to_string_lossy().to_string();
+    if secret_file(&full) || secret_file(&real_s) {
+        return Err("키나 로그인 정보가 든 파일은 올리지 않아요".into());
+    }
+    let bytes = tokio::fs::read(&real).await.map_err(|e| format!("파일을 못 읽었어요: {e}"))?;
+    if bytes.len() > 25 * 1024 * 1024 {
+        return Err("25MB가 넘어서 못 올려요".into());
+    }
+    let name = real.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_string();
+    let mime = match name.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "mp4" => "video/mp4",
+        "mov" => "video/quicktime",
+        "pdf" => "application/pdf",
+        "txt" | "md" | "log" => "text/plain",
+        "json" => "application/json",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
+    }
+    .to_string();
+    Ok((name, mime, bytes))
+}
+
+/// Interactions it acknowledged (a click on its button or menu, a slash command), kept 15 minutes
+/// (Discord's limit) so its answer can go to one: id → (application, token). Never to the page.
+static INTERACTIONS: Mutex<Vec<(String, String, String, std::time::Instant)>> = Mutex::new(Vec::new());
+
+/// A click, a menu choice or a slash command, as the page is told (no token).
+pub fn interaction_event(d: &Value) -> Option<Value> {
+    let kind = match d["type"].as_u64()? {
+        2 => "command",
+        3 => "component",
+        _ => return None,
+    };
+    let s = |v: &Value| v.as_str().filter(|x| !x.is_empty()).map(str::to_string);
+    let user = d["member"].get("user").or_else(|| d.get("user"))?;
+    let author = Author {
+        id: s(&user["id"])?,
+        name: s(&user["global_name"]).or_else(|| s(&user["username"])).unwrap_or_default(),
+        bot: user["bot"].as_bool().unwrap_or(false),
+    };
+    let mut ev = json!({
+        "id": s(&d["id"])?,
+        "kind": kind,
+        "channel": s(&d["channel_id"])?,
+        "guild": d["guild_id"],
+        "user": author,
+    });
+    if kind == "component" {
+        ev["message"] = d["message"]["id"].clone();
+        ev["custom_id"] = d["data"]["custom_id"].clone();
+        if d["data"]["values"].is_array() {
+            ev["values"] = d["data"]["values"].clone();
+        }
+    } else {
+        ev["command"] = d["data"]["name"].clone();
+        if d["data"]["options"].is_array() {
+            ev["options"] = d["data"]["options"].clone();
+        }
+    }
+    Some(json!({ "kind": "interaction", "interaction": ev }))
+}
+
+/// Discord waits 3 seconds for an answer: say "got it" at once (a click: nothing changes on the
+/// message; a command: "… is thinking" until its answer replaces it).
+async fn acknowledge(d: Value) {
+    let (Some(id), Some(tok), Some(app), Some(kind)) = (d["id"].as_str(), d["token"].as_str(), d["application_id"].as_str(), d["type"].as_u64()) else { return };
+    {
+        let mut held = INTERACTIONS.lock().unwrap();
+        held.retain(|x| x.3.elapsed() < Duration::from_secs(15 * 60));
+        held.push((id.to_string(), app.to_string(), tok.to_string(), std::time::Instant::now()));
+    }
+    let Ok(http) = client() else { return };
+    let kind = if kind == 2 { 5 } else { 6 };
+    let _ = http.post(format!("{API}/interactions/{id}/{tok}/callback")).json(&json!({ "type": kind })).send().await;
+}
+
+/// Its answer to an interaction (the message a slash command shows; a follow-up to a click)
+#[tauri::command]
+pub async fn discord_interaction_reply(id: String, body: Value, follow_up: Option<bool>) -> Result<Value, String> {
+    let held = INTERACTIONS.lock().unwrap().iter().find(|x| x.0 == id && x.3.elapsed() < Duration::from_secs(15 * 60)).map(|x| (x.1.clone(), x.2.clone()));
+    let Some((app, tok)) = held else { return Err("그 상호작용은 끝났어요 (15분 지남)".into()) };
+    if follow_up == Some(true) {
+        rest(reqwest::Method::POST, &format!("/webhooks/{app}/{tok}"), Some(body)).await
+    } else {
+        rest(reqwest::Method::PATCH, &format!("/webhooks/{app}/{tok}/messages/@original"), Some(body)).await
+    }
 }
 
 /// "… is typing" in a channel (lasts about 10 seconds)
@@ -535,6 +700,12 @@ async fn once(tell: &(dyn Fn(Value) + Send + Sync), token: &str, session: &mut S
                         Some("RESUMED") => tell(json!({ "kind": "resumed" })),
                         // someone started typing: it waits for the rest before it answers
                         Some("TYPING_START") => tell(json!({ "kind": "typing", "channel": v["d"]["channel_id"], "user": v["d"]["user_id"] })),
+                        Some("INTERACTION_CREATE") => {
+                            if let Some(ev) = interaction_event(&v["d"]) {
+                                tauri::async_runtime::spawn(acknowledge(v["d"].clone()));
+                                tell(ev);
+                            }
+                        }
                         Some("MESSAGE_CREATE") => {
                             if let Some(m) = incoming(&v["d"]) {
                                 tell(json!({ "kind": "message", "message": m }));
@@ -562,6 +733,45 @@ async fn once(tell: &(dyn Fn(Value) + Send + Sync), token: &str, session: &mut S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn its_api_calls_stay_on_discords_api() {
+        for ok in ["/channels/1/messages", "/channels/1/messages/2/reactions/%F0%9F%91%8D/@me", "/guilds/1/members?limit=5"] {
+            assert!(super::api_path(ok).is_ok(), "{ok}");
+        }
+        for bad in ["https://evil.example/x", "//evil.example/x", "/channels/../../x", "channels/1", "/a b", "/x#y", "/x\\y"] {
+            assert!(super::api_path(bad).is_err(), "{bad}");
+        }
+        assert!(super::api_method("patch").is_ok());
+        assert!(super::api_method("TRACE").is_err());
+    }
+
+    #[test]
+    fn files_with_keys_or_sign_ins_never_go_up() {
+        for f in ["/Users/me/.codex/auth.json", "/Users/me/.ssh/id_ed25519", "/p/.env.local", "/p/server.pem", "/Users/me/Library/Application Support/dev.3xhaust.ondra/keys.json", "/p/aws-credentials.txt"] {
+            assert!(super::secret_file(f), "{f}");
+        }
+        for f in ["/tmp/after.png", "/Users/me/p/report.pdf", "/p/README.md"] {
+            assert!(!super::secret_file(f), "{f}");
+        }
+    }
+
+    #[test]
+    fn a_click_and_a_command_reach_the_page_without_their_token() {
+        let click = serde_json::json!({ "id": "i1", "type": 3, "token": "SECRET", "application_id": "a", "channel_id": "c1", "guild_id": "g",
+            "member": { "user": { "id": "u1", "username": "lyu" } }, "message": { "id": "m1" }, "data": { "custom_id": "pick:2", "component_type": 2 } });
+        let ev = super::interaction_event(&click).unwrap();
+        assert_eq!(ev["interaction"]["kind"], "component");
+        assert_eq!(ev["interaction"]["custom_id"], "pick:2");
+        assert_eq!(ev["interaction"]["message"], "m1");
+        assert!(!ev.to_string().contains("SECRET"));
+        let cmd = serde_json::json!({ "id": "i2", "type": 2, "token": "SECRET", "channel_id": "c1", "user": { "id": "u1", "username": "lyu" },
+            "data": { "name": "status", "options": [{ "name": "detail", "value": true }] } });
+        let ev = super::interaction_event(&cmd).unwrap();
+        assert_eq!(ev["interaction"]["command"], "status");
+        assert!(!ev.to_string().contains("SECRET"));
+        assert!(super::interaction_event(&serde_json::json!({ "type": 1 })).is_none());
+    }
+
     #[test]
     fn a_private_channel_is_seen_by_the_user_and_the_bot_only() {
         let b = super::channel_body("g1", "메타몽-작업", "text", Some("cat"), Some("일하는 곳"), &["u1".to_string()], "bot");

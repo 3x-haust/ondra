@@ -49,4 +49,24 @@ describe("the Discord agent's hands", () => {
     expect(await discordHands("captain:home~@agent", { action: "delete_messages", channel: "c1", messages: Array.from({ length: 101 }, (_, i) => `x${i}`) })).toHaveProperty("error");
     expect(del).toHaveBeenCalledTimes(3);
   });
+
+  it("everything else a bot can do: buttons and files, edits, reactions, a slash command's answer, any API call", async () => {
+    const api = vi.spyOn(native, "discordApi").mockImplementation(async () => ({ id: "m9" }));
+    const react = vi.spyOn(native, "discordReact").mockResolvedValue();
+    const reply = vi.spyOn(native, "discordInteractionReply").mockResolvedValue({ id: "r1" });
+    const rows = [{ type: 1, components: [{ type: 2, style: 1, label: "배포", custom_id: "deploy" }] }];
+    expect(await discordHands("captain:home~@agent", { action: "send", channel: "c1", text: "할까?", components: rows, files: ["/tmp/a.png"] })).toEqual({ sent: ["m9"] });
+    expect(api).toHaveBeenLastCalledWith("POST", "/channels/c1/messages", { content: "할까?", components: rows, allowed_mentions: { parse: [] } }, ["/tmp/a.png"]);
+    await discordHands("captain:home~@agent", { action: "edit", channel: "c1", message: "m9", components: [] });
+    expect(api).toHaveBeenLastCalledWith("PATCH", "/channels/c1/messages/m9", { components: [], allowed_mentions: { parse: [] } });
+    await discordHands("captain:home~@agent", { action: "react", channel: "c1", message: "m9", emoji: "👍" });
+    expect(react).toHaveBeenCalledWith("c1", "m9", "👍");
+    await discordHands("captain:home~@agent", { action: "respond", interaction: "i1", text: "됨" });
+    expect(reply).toHaveBeenCalledWith("i1", { content: "됨", allowed_mentions: { parse: [] } }, false);
+    await discordHands("captain:home~@agent", { action: "api", method: "put", path: "/channels/c1/pins/m9" });
+    expect(api).toHaveBeenLastCalledWith("PUT", "/channels/c1/pins/m9", undefined, undefined);
+    expect(await discordHands("captain:home~@agent", { action: "api", path: "https://evil.example" })).toHaveProperty("error");
+    api.mockResolvedValueOnce({ id: "w1", token: "SECRET", channel_id: "c1" });
+    expect(await discordHands("captain:home~@agent", { action: "api", method: "POST", path: "/channels/c1/webhooks", body: { name: "x" } })).toEqual({ result: { id: "w1", channel_id: "c1" } });
+  });
 });

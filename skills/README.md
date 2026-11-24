@@ -26,7 +26,7 @@ The app passes them to every pi worker with `--skill`.
 | `ondra` | Ondra itself: what a feature is and where it lives, changing its settings for the user through `ondra_settings` (extensions/ondra.ts; the Discord agent's token moves from a saved secret, never shown), and a feature or bug turned into a short proposal and, when the user says so, a PR to 3x-haust/ondra. |
 | `secrets` | API keys, tokens and .env files: use Ondra's secrets as `$NAME` without seeing values, find and save what each one is for in memory, and what to do when one is missing or pasted into the chat. |
 | `github` | GitHub through the `gh` CLI: the signed-in account and repo, reading issues and PRs with their checks, PRs and reviews the repo's way, merging the way the repo merges, failed CI runs, releases and the API. |
-| `discord` | The Discord agent's own hands on a server (its `discord` tool): read a channel before speaking, make a channel in the right place, delete its own messages, and how messages show (mentions, small print, pictures, 2000 characters). |
+| `discord` | The Discord agent's own hands on a server (its `discord` tool, everything a bot can do): buttons, select menus and slash commands and how clicks come back, embeds, polls, threads, pins, roles and any other bot API call, reading a channel before speaking, and how messages show. |
 
 ## When a skill is offered
 

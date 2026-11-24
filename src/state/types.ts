@@ -494,7 +494,7 @@ export interface CaptainMessage {
   took?: number;
   /** in the agent's chat: the Discord message the user's words came from (its reply goes there),
    *  and the ones said just before it that were taken with it */
-  discord?: { channel: string; message: string; also?: string[] };
+  discord?: { channel: string; message: string; also?: string[]; interaction?: string };
 }
 
 export type MemoryKind = "rule" | "preference" | "fact" | "decision" | "procedure" | "lesson" | "term";

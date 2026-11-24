@@ -61,6 +61,26 @@ describe("secrets", () => {
     expect(envFilesUnder(dir)).toEqual([".env", "Deploy/Front/.env.local"]);
   });
 
+  it("reads the home folder's own env files without walking unrelated folders", () => {
+    const home = mkdtempSync(join(tmpdir(), "sec-home-"));
+    writeFileSync(join(home, ".env"), "API_KEY=home-value-123\n");
+    mkdirSync(join(home, "Downloads"));
+    writeFileSync(join(home, "Downloads", ".env"), "API_KEY=unrelated-value-123\n");
+    const saved = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      expect(envFilesUnder(join(home, "."))).toEqual([".env"]);
+      expect(envFilesUnder(join(home, "Downloads"))).toEqual([".env"]);
+      const handlers: Record<string, (e: any, ctx: any) => any> = {};
+      secrets({ on: (name: string, fn: (e: any, ctx: any) => any) => (handlers[name] = fn) } as any);
+      const out = handlers.tool_result({ toolName: "tool_search", content: [{ type: "text", text: "home-value-123" }] }, { cwd: home });
+      expect(out.content[0].text).toBe("[secret:.env:API_KEY]");
+    } finally {
+      if (saved === undefined) delete process.env.HOME;
+      else process.env.HOME = saved;
+    }
+  });
+
   it("sees which names a command uses", () => {
     expect(namesUsed('curl -H "Authorization: Bearer $STRIPE_KEY" ${DB_URL:-x} $STRIPE_KEYS', ["STRIPE_KEY", "DB_URL", "OTHER"])).toEqual(["STRIPE_KEY", "DB_URL"]);
   });
