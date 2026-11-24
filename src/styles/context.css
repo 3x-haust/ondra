@@ -750,9 +750,9 @@
     transition: none;
   }
 }
-/* rows without a source keep the size in its own column */
+/* name · description · size · switch: the size keeps its own column */
 .tl-head .tl-size {
-  grid-column: 4;
+  grid-column: 3;
 }
 
 /* hooks: what a command gets, folded away until asked for */

@@ -26,7 +26,7 @@ export default function (pi: any) {
   pi.registerTool({
     name: "ondra_settings",
     label: "Ondra settings",
-    // reached through use (or tool_search), in main as in a job: not declared up front
+    // reached through use, in main as in a job: not declared up front
     exposure: "deferred",
     description:
       "Read or change Ondra's own settings for the user, the ones they could switch in Settings themselves: theme, language, default permission, parallel jobs, worktrees, auto memory, app checks, auto-merging checked fixes, PR review follow-up, GitHub write, sounds, telemetry, and the Discord agent (agent.on, agent.name, agent.ownerId, agent.space, agent.others, agent.channels, agent.voice, agent.account, agent.token). Read first to see each key's value, where it is in Settings and what it takes. agent.token takes the NAME of a saved secret (Settings › 시크릿); the value moves inside the app and is never shown. Change only what the user asked for.",

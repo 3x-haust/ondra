@@ -10,19 +10,20 @@ describe("a job's tool allowlist", () => {
     expect(workerTools(undefined)).toEqual(WORKER_TOOLS);
     expect(workerTools([])).toEqual(WORKER_TOOLS);
     expect(workerTools(["", "  "])).toEqual(WORKER_TOOLS);
-    expect(list(WORKER_TOOLS)).toBe("+tool_search");
+    // no tool_search: Ondra's tools are called through use
+    expect(WORKER_TOOLS).toEqual([]);
   });
 
   it("adds the tools turned on in settings, keeping the engine's defaults", () => {
     const args = workerTools(["grep", "find", "mcp__docs__search"]);
-    expect(args.slice(0, 3)).toEqual(["--extension", "builtin:tool-search", "--tools"]);
+    expect(args[0]).toBe("--tools");
     // only "+name" entries: read, bash, edit and write stay on and none can be removed
-    expect(list(args)).toBe("+tool_search,+grep,+find,+mcp__docs__search");
+    expect(list(args)).toBe("+grep,+find,+mcp__docs__search");
     expect(list(args).split(",").every((x) => x.startsWith("+"))).toBe(true);
   });
 
   it("takes exact names only, once each", () => {
-    expect(list(workerTools(["grep", "grep", " ls ", "tool_search"]))).toBe("+tool_search,+grep,+ls");
+    expect(list(workerTools(["grep", "grep", " ls "]))).toBe("+grep,+ls");
     // a pattern, a comma or a "-name" would change what the engine allows
     expect(workerTools(["mcp__*", "a,b", "-read", "+bash"])).toEqual(WORKER_TOOLS);
   });

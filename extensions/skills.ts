@@ -285,7 +285,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "skill",
     label: "Skill",
-    // reached through use (or tool_search); loaded later, it carries no prompt lines (they would rebuild the prompt)
+    // reached through use; never declared, it carries no prompt lines (they would rebuild the prompt)
     exposure: "deferred",
     description: "A skill's instructions in one call. Give its exact name, or task keywords (Korean or English): the skill named or clearly fitting comes back read (its SKILL.md, with the folder its references resolve from), other likely ones by name; when none clearly fits, only the candidates (call again with one's exact name). Look again when the task changes; no catalog listed doesn't mean no skill applies.",
     parameters: Type.Object({

@@ -24,7 +24,7 @@ const out = (v: unknown) => ({ content: [{ type: "text", text: typeof v === "str
 
 export default function (pi: any) {
   if (!URL_ || !TOKEN || !WORKER) return;
-  // reached through use (or tool_search), in main as in a job: not declared up front
+  // reached through use, in main as in a job: not declared up front
   const exposure = "deferred";
 
   pi.registerTool({

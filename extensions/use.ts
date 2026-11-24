@@ -3,8 +3,8 @@
 // needed. Rather than tool_search (one call to load, the next to call), `use {tool, args}` runs it
 // at once through the engine's own pipeline (validation, hooks, permission checks, secrets), and
 // its one-line catalog (name(params): what it does) is all the model carries of them. Wrong args
-// bring that tool's parameters back. MCP servers' tools stay behind tool_search: there are many,
-// they come and go, and a catalog of them would grow with every server.
+// bring that tool's parameters back. MCP servers' tools (should a session have any) are left out:
+// there are many, they come and go, and a catalog of them would grow with every server.
 import { Type } from "typebox";
 
 type Info = { name: string; description?: string; parameters?: any; exposure?: string };
@@ -29,7 +29,7 @@ export const reachable = (all: Info[]) =>
 export function useDescription(tools: Info[]): string {
   const lines = tools.map((t) => `- ${signature(t)}: ${gist(t.description)}`).sort();
   return [
-    "Call one of the tools below in one step, by name, without loading it first: {tool, args}. args are that tool's parameters as an object. If they don't fit, its full description and parameters come back; call again. Tools not listed here (MCP servers') load with tool_search.",
+    "Call one of the tools below in one step, by name, without loading it first: {tool, args}. args are that tool's parameters as an object. If they don't fit, its full description and parameters come back; call again.",
     ...lines,
   ].join("\n");
 }
@@ -52,8 +52,8 @@ export default function (pi: any) {
         const name = String(p.tool ?? "").trim();
         const known = reachable(pi.getAllTools() as Info[]);
         const t = known.find((x) => x.name === name);
-        if (!t) throw new Error(`No tool "${name}" to use here. These are: ${known.map((x) => x.name).join(", ")}. MCP servers' tools load with tool_search.`);
-        if (!ctx?.executeTool) throw new Error("use can't call tools in this session; load it with tool_search instead.");
+        if (!t) throw new Error(`No tool "${name}" to use here. These are: ${known.map((x) => x.name).join(", ")}.`);
+        if (!ctx?.executeTool) throw new Error("use can't call tools in this session.");
         const out = await ctx.executeTool(name, p.args ?? {}, { signal, onUpdate });
         if (out.isError) {
           const said = (out.result?.content ?? []).filter((c: any) => c?.type === "text").map((c: any) => c.text).join("\n");
