@@ -21,9 +21,12 @@ const hooks = new Map<string, { id: string; token: string } | null>();
 
 const setForm = (form: Form | undefined) => setState("settings", "agent", (a) => (a ? { ...a, form } : a));
 
+/** it can turn into someone only while it is Metamong (the agent's name in Settings › 에이전트) */
+export const isDitto = (a: AgentSettings | undefined = state.settings.agent) => !!a && /메타몽|ditto/i.test(a.name);
+
 /** what it is now: the form while it holds, nothing once its time is up */
 export function formNow(a: AgentSettings | undefined = state.settings.agent, now = Date.now()): Form | undefined {
-  return a?.form && a.form.until > now ? a.form : undefined;
+  return isDitto(a) && a?.form && a.form.until > now ? a.form : undefined;
 }
 
 /** the line its prompts get while it is someone else */
@@ -37,6 +40,7 @@ export function formNote(a: AgentSettings | undefined, now = Date.now()): string
 /** Turn into someone for `minutes`: what it says till then goes out under their name and picture. */
 export function become(o: { who: string; picture?: string; minutes?: number }): { who: string; until: number; picture?: string } | { error: string } {
   // Discord takes a webhook name of 1–80 characters, without "discord" or "clyde" in it
+  if (!isDitto()) return { error: "only Metamong can turn into someone (the agent's name in Settings › 에이전트)" };
   const who = o.who.trim().slice(0, 80);
   if (!who || /discord|clyde/i.test(who)) return { error: "that name can't be a Discord name (empty, or has discord/clyde in it)" };
   const picture = o.picture?.trim();

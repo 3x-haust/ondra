@@ -44,7 +44,7 @@ import { initial, missing, type FormValues } from "./form";
  */
 export { DEFAULT_VOICE } from "./agentVoice";
 import { DEFAULT_VOICE } from "./agentVoice";
-import { formNote, formNow, back as popBack, keepTime, sayAsForm } from "./agentForm";
+import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -269,10 +269,10 @@ export function waysNote(ways: { path: string; text: string }): string {
 }
 
 /** The voice and ways for a line that goes to Discord, and what a server channel must not get. */
-function chatRules(a: AgentSettings, server: boolean): string[] {
+export function chatRules(a: AgentSettings, server: boolean): string[] {
   return [
     voiceOf(a),
-    TRANSFORM,
+    isDitto(a) ? TRANSFORM : "",
     formNote(a),
     BANTER,
     SHAPE,

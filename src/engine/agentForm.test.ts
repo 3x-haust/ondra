@@ -73,3 +73,21 @@ describe("turning into someone (Metamong)", () => {
     expect(await sayAsForm("c1", "나 메타몽")).toBeUndefined();
   });
 });
+
+describe("only Metamong turns into someone", () => {
+  it("an agent with another name has no such power, in its prompt or its tool", async () => {
+    vi.resetModules();
+    const { reconcile } = await import("solid-js/store");
+    const { freshState, setState } = await import("../state/store");
+    setState(reconcile(freshState()));
+    setState("settings", "agent", { on: true, name: "도리", form: { who: "피카츄", until: Date.now() + 60_000 } });
+    const { become, formNow, isDitto } = await import("./agentForm");
+    const { chatRules, TRANSFORM } = await import("./discord");
+    expect(isDitto()).toBe(false);
+    expect(formNow()).toBeUndefined();
+    expect(become({ who: "피카츄" })).toHaveProperty("error");
+    const { state } = await import("../state/store");
+    expect(chatRules(state.settings.agent!, true)).not.toContain(TRANSFORM);
+    expect(chatRules({ ...state.settings.agent!, name: "메타몽" }, true)).toContain(TRANSFORM);
+  });
+});
