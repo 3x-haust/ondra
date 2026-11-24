@@ -165,6 +165,29 @@ describe("the agent's work, in the open", () => {
     whisper.mockRestore();
   });
 
+  it("its checklist goes up when a step is done or the plan changes, not when only the step it's on moves", async () => {
+    setState("tasks", [job({ agent: { channel: "c1" }, plan: [] })]);
+    await workTick(1000);
+    const plan = (a: string, b: string, c: string) => setState("tasks", (t) => t.id === "t1", "plan", [{ text: "원인 찾기", state: a }, { text: "고치기", state: b }, { text: "테스트", state: c }] as never);
+    plan("now", "todo", "todo");
+    await workTick(2000);
+    expect(sent).toEqual([["c1", "-# 할 일 0/3\n▶️ 원인 찾기\n⬜ 고치기\n⬜ 테스트"]]);
+    plan("done", "now", "todo");
+    add("t1", entry({ kind: "text", text: "원인은 캐시였어. 이제 고칠게" }));
+    add("t1", entry({ kind: "tool", tool: { name: "edit", kind: "edit", target: "a.ts" } }));
+    await workTick(3000);
+    expect(sent[1]).toEqual(["c1", "원인은 캐시였어. 이제 고칠게\n-# 할 일 1/3\n✅ 원인 찾기\n▶️ 고치기\n⬜ 테스트"]);
+    // only the step it's on moved: nothing new
+    plan("done", "todo", "now");
+    await workTick(4000);
+    expect(sent).toHaveLength(2);
+    // its end is the agent's own end line: no last checklist
+    plan("done", "done", "done");
+    setState("tasks", (t) => t.id === "t1", "status", "done");
+    await workTick(5000);
+    expect(sent).toHaveLength(2);
+  });
+
   it("what came before Ondra was watching isn't replayed", async () => {
     setState("tasks", [job({ agent: { channel: "c1" }, entries: [entry({ kind: "text", text: "옛날 말" }, 10)] })]);
     await workTick(1000);
