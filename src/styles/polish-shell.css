@@ -2561,3 +2561,34 @@
   color: var(--ink-4);
   margin-right: calc(-1 * var(--s-2, 2px));
 }
+
+/* the tip every `title` shows as (ui/tooltip.ts): the web view draws none of its own */
+.app-tip {
+  position: fixed;
+  z-index: 10000;
+  max-width: 300px;
+  padding: 5px 8px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.app-tip[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .app-tip:not([hidden]) {
+    animation: app-tip-in 0.12s var(--ease);
+  }
+}
+@keyframes app-tip-in {
+  from {
+    opacity: 0;
+  }
+}
