@@ -372,8 +372,11 @@ function BrowserPane(props: { t: Task }) {
   let view!: HTMLDivElement;
   let settle: ReturnType<typeof setTimeout> | undefined;
   onMount(() => {
+    // the first size at once (the page is laid out for it before it is shown); a resize once it settles
+    let first = true;
     const ro = new ResizeObserver(([e]) => {
       clearTimeout(settle);
+      if (first && e.contentRect.width >= 50) return void ((first = false), fit(e.contentRect.width, e.contentRect.height));
       settle = setTimeout(() => fit(e.contentRect.width, e.contentRect.height), 250);
     });
     ro.observe(view);
