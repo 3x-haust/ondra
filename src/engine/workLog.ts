@@ -9,6 +9,7 @@ import { redact } from "../lib/log";
 import { expand } from "./rpc";
 import { state } from "../state/store";
 import type { Entry, Task } from "../state/types";
+import { forThem, isKorean } from "./tongue";
 
 type Watch = { seen: Set<string>; typingAt: number; busy?: boolean; pictures?: string[] };
 const watching = new Map<string, Watch>();
@@ -87,19 +88,10 @@ function lineOf(t: Task, e: Entry, w: Watch): string | undefined {
   }
   w.seen.add(e.id);
   const s = out(stripPictures(e.text, w));
-  if (!s || offTongue(t, s)) return;
-  return s.slice(0, MAX_LINE);
-}
-
-const HANGUL = /[\uac00-\ud7a3]/;
-/**
- * A line it muttered in English in work that is in Korean ("Sent once at the bottom. Releasing
- * the session."): the engine tells it to keep to the user's language only after the line is out,
- * so it isn't carried to the channel. Commands, paths and names in a Korean line still go.
- */
-export function offTongue(t: Pick<Task, "title">, line: string): boolean {
-  if (!HANGUL.test(t.title) || HANGUL.test(line)) return false;
-  return (line.match(/\b[A-Za-z]{2,}\b/g) ?? []).length >= 3;
+  // what it muttered in English in Korean work isn't carried (the engine's reminder to keep to
+  // the user's language comes only after the line is out)
+  const said = s ? forThem(s, isKorean(t.title)) : "";
+  return said ? said.slice(0, MAX_LINE) : undefined;
 }
 
 /** markdown pictures in its words (![](~/…/shot.png)) go up as pictures, not as their path */
