@@ -17,12 +17,14 @@ const COLOR: Record<string, string> = { Claude: "#d97757", Gemini: "#8e75b2" };
 /** at or under this share left, the bar turns the warning colour (%) */
 const LOW = 20;
 
-/** the pace's icon and what it means, with the numbers it comes from ({p}% of the window gone, {u}% used) */
+/** the pace's icon and what it means, in time gone and share used: "5시간 중 2시간 지났는데 85% 썼어요" */
 const PACE: Record<Pace, { icon: string; label: string }> = {
-  ahead: { icon: "trendUp", label: "빨리 쓰고 있어요: 창은 {p}% 지났는데 {u}%를 썼어요" },
-  on: { icon: "gauge", label: "창이 지나는 만큼 쓰고 있어요: {p}% 지났고 {u}%를 썼어요" },
-  under: { icon: "trendDown", label: "여유 있게 쓰고 있어요: 창은 {p}% 지났는데 {u}%만 썼어요" },
+  ahead: { icon: "trendUp", label: "빨리 쓰고 있어요. {w} 중 {p} 지났는데 {u}% 썼어요" },
+  on: { icon: "gauge", label: "알맞게 쓰고 있어요. {w} 중 {p} 지났고 {u}% 썼어요" },
+  under: { icon: "trendDown", label: "여유 있게 쓰고 있어요. {w} 중 {p} 지났는데 {u}%만 썼어요" },
 };
+/** the window's length as said out loud: "5시간", "일주일" */
+const spanOf = (min: number) => (min >= 10_000 && min <= 10_100 ? t("일주일") : windowLabel(min));
 
 /** "2일 1시간" / "1시간 40분" / "12분": two units, as T3 Code's "2d 1h" */
 export function resetsIn(ms: number): string {
@@ -44,10 +46,10 @@ function view(l: Limit, now: number) {
   const title = [
     t("{w} {n}% 남음", { w: windowLabel(l.window), n: left }),
     ...(reset ? [t("{t} 후 초기화", { t: reset })] : []),
-    ...(even === undefined ? [] : [t("세로선: 고르게 썼다면 지금 {n}% 남아 있을 자리", { n: even })]),
+    ...(even === undefined ? [] : [t("세로선: 고르게 썼다면 지금쯤 {n}% 남아 있었을 거예요", { n: even })]),
   ].join("\n");
   const pace = paceOf(l, now);
-  const paceText = pace && e !== undefined ? t(PACE[pace].label, { p: Math.round(e * 100), u: 100 - left }) : undefined;
+  const paceText = pace && e !== undefined ? t(PACE[pace].label, { w: spanOf(l.window), p: resetsIn(e * l.window * 60_000), u: 100 - left }) : undefined;
   return { left, even, reset, title, pace, paceText, low: left <= LOW };
 }
 
@@ -114,7 +116,7 @@ export function LimitCards(props: { limits: Limit[]; service?: string; now?: num
                 <div class="lim-head">
                   <span class="lim-card-name">{windowLabel(l.window)}</span>
                   {/* the whole "36% 남음 ↗" carries what the pace means, so it shows wherever the pointer rests */}
-                  <span class="lim-big" classList={{ explained: !!v().paceText }} title={v().paceText}>
+                  <span class="lim-big" title={v().paceText}>
                     <b>{v().left}%</b>
                     {/* the word sits on the number's baseline; the pace icon is centred on the word */}
                     <span class="lim-unit">
