@@ -11,7 +11,9 @@
 //   looks on at talk not for it and picks, like a person in the room: let it pass, react, say a
 //   line, or take it (the user's words as a request; anyone else's as a call). See WATCH_WAYS.
 import {
+  discordApi,
   discordHistory,
+  discordInteractionReply,
   discordOwner,
   discordReact,
   discordSaveFile,
@@ -22,6 +24,7 @@ import {
   discordTyping,
   onEvent,
   type DiscordEvent,
+  type DiscordInteraction,
   type DiscordMessage,
 } from "../lib/native";
 import { logError, logInfo } from "../lib/log";
@@ -167,6 +170,7 @@ async function onDiscord(ev: DiscordEvent) {
   if (ev.kind === "reconnecting") return setStatus({ state: "connecting" });
   if (ev.kind === "stopped") return setStatus({ state: "stopped", why: ev.why });
   if (ev.kind === "typing") return stillTyping(ev.channel, ev.user);
+  if (ev.kind === "interaction") return void onInteraction(ev.interaction).catch((e) => logError("agent", `discord interaction: ${e instanceof Error ? e.message : String(e)}`));
   if (ev.kind === "message") await onMessage(ev.message).catch((e) => logError("agent", `discord message: ${e instanceof Error ? e.message : String(e)}`));
 }
 
@@ -268,6 +272,79 @@ async function onMessage(m: DiscordMessage) {
   const next = prev.then(() => talk(m, a, text, ways, called ? undefined : { owner })).catch((e) => logError("agent", `talk: ${e instanceof Error ? e.message : String(e)}`));
   talking.set(m.channel, next);
   await next;
+}
+
+/** A click on its button, a pick in its menu, or a slash command: a choice on a question of its
+ *  work answers it (the user's own click); anything else comes to it as words from whoever did it. */
+async function onInteraction(i: DiscordInteraction) {
+  const a = settings();
+  if (!a?.on || !me || i.user.bot) return;
+  if (i.custom_id?.startsWith(PICK)) return picked(i, a);
+  const opts = (o: DiscordInteraction["options"] = []): string => o.map((x) => (x.options ? `${x.name} ${opts(x.options as never)}` : `${x.name}:${String(x.value)}`)).join(" ");
+  const text =
+    i.kind === "command"
+      ? `/${i.command}${i.options?.length ? ` ${opts(i.options)}` : ""}`
+      : i.values
+        ? `[메뉴 선택: ${i.custom_id} → ${i.values.join(", ")}]`
+        : `[버튼 클릭: ${i.custom_id}]`;
+  await onMessage({
+    // a click answers the message it is on; a command is answered in its own place
+    id: i.kind === "component" && i.message ? i.message : i.id,
+    channel: i.channel,
+    guild: i.guild ?? null,
+    author: i.user,
+    content: text,
+    mentions: [me.id],
+    reply_to: me.id,
+    reply_msg: i.message ?? null,
+    files: [],
+    at: new Date().toISOString(),
+    ...(i.kind === "command" ? { interaction: i.id } : {}),
+  });
+}
+
+/** a question's choices as buttons under it (the one it thinks better stands out) */
+const PICK = "ondra:pick:";
+export function pickButtons(d: Decision, chosen?: string): unknown[] {
+  const buttons = d.options.slice(0, 25).map((o) => ({
+    type: 2,
+    style: chosen ? (o.id === chosen ? 3 : 2) : o.primary ? 1 : 2,
+    label: o.label.slice(0, 80),
+    custom_id: `${PICK}${d.id}:${o.id}`.slice(0, 100),
+    ...(chosen ? { disabled: true } : {}),
+  }));
+  const rows: unknown[] = [];
+  for (let k = 0; k < buttons.length; k += 5) rows.push({ type: 1, components: buttons.slice(k, k + 5) });
+  return rows;
+}
+
+/** the user picked a choice under a question: that's the answer; the buttons then show what was picked */
+async function picked(i: DiscordInteraction, a: AgentSettings) {
+  if (i.user.id !== a.ownerId) return;
+  const [did, oid] = i.custom_id!.slice(PICK.length).split(":");
+  const d = state.decisions.find((x) => x.id === did);
+  const o = d?.options.find((x) => x.id === oid);
+  if (d && o) {
+    const { decide } = await import("./tasks");
+    await decide(d.id, o.id);
+    posted.delete(d.id);
+  }
+  // answered (here or elsewhere): the buttons can't be pressed again
+  if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: d ? pickButtons(d, o?.id ?? "-") : [] }).catch(() => {});
+}
+
+/** Its words where they go: a slash command's own answer when it came from one, else the channel. */
+async function sayTo(channel: string, text: string, replyTo?: string, interaction?: string, components?: unknown[]): Promise<string[]> {
+  if (interaction) {
+    const r = await discordInteractionReply(interaction, { content: text.slice(0, 2000), allowed_mentions: { parse: [] }, ...(components ? { components } : {}) }).catch(() => undefined);
+    if (r?.id) return [r.id, ...(text.length > 2000 ? await discordSend(channel, text.slice(2000)) : [])];
+  }
+  if (components?.length && text.length <= 2000) {
+    const body = { content: text, components, allowed_mentions: { parse: [] }, ...(replyTo ? { message_reference: { message_id: replyTo, fail_if_not_exists: false } } : {}) };
+    const m = await discordApi("POST", `/channels/${channel}/messages`, body).catch(() => undefined);
+    if (m?.id) return [m.id];
+  }
+  return discordSend(channel, text, replyTo);
 }
 
 /** The user's words for it: an answer to a question waiting there, or a request. */
@@ -404,7 +481,7 @@ async function askNow(ms: DiscordMessage[], a: AgentSettings, text: string) {
   const asking = open
     ? `A question from your work is still open in this channel: "${open.question}" (${open.options.map((o) => o.label).join(" / ")}). Their words may be about it (what it means, to say it more simply, or a choice in their own words): then explain that question plainly, or take the choice.`
     : "";
-  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}) } });
+  throwThought(text, space, { project: AGENT_CHAT, note: [ownerNote(m, a, ways), recent, asking, myState(space)].filter(Boolean).join("\n"), discord: { channel: m.channel, message: m.id, ...(also.length ? { also } : {}), ...(m.interaction ? { interaction: m.interaction } : {}) } });
   // an offer is answered by their next words there (the note above carried it)
   if (a.offer?.channel === m.channel) setAgent({ offer: undefined });
 }
@@ -503,7 +580,9 @@ async function mainSaid(replyId: string) {
   if (!text && !pics.length) return seen();
   // a reply only when something was said since their words; right under them, just say it
   const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
-  const ids = text ? await discordSend(channel, text, under ? undefined : asked?.message).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[])) : [];
+  const choices = (msg.routes ?? []).flatMap((r) => (r.kind === "ask" ? [state.decisions.find((x) => x.id === r.decisionId)] : [])).filter((d): d is Decision => !!d);
+  const buttons = choices.length === 1 ? pickButtons(choices[0]) : undefined;
+  const ids = text ? await sayTo(channel, text, under ? undefined : asked?.message, asked?.interaction, buttons).catch((e) => (logError("agent", `send: ${e instanceof Error ? e.message : String(e)}`), [] as string[])) : [];
   seen();
   keepSaid(channel, ids);
   if (ids.length) hearMine(channel, text);
@@ -560,7 +639,7 @@ function postQuestions() {
     if (!channel) continue;
     posted.set(d.id, channel);
     void askedLine(d, settings(), t?.title)
-      .then((text) => discordSend(channel, text).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
+      .then((text) => sayTo(channel, text, undefined, undefined, pickButtons(d)).then((ids) => (keepSaid(channel, ids), hearMine(channel, text))))
       .catch(() => posted.delete(d.id));
   }
 }
@@ -645,7 +724,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
     return;
   }
   // chiming in is a line in the talk, not an answer to that one message
-  keepSaid(m.channel, await discordSend(m.channel, out, watching || lastIn.get(m.channel) === m.id ? undefined : m.id));
+  keepSaid(m.channel, await sayTo(m.channel, out, watching || lastIn.get(m.channel) === m.id ? undefined : m.id, m.interaction));
   hearMine(m.channel, out);
 }
 

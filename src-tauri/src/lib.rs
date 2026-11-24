@@ -528,6 +528,8 @@ pub fn run() {
             discord::discord_channels,
             discord::discord_channel_create,
             discord::discord_channel_delete,
+            discord::discord_api,
+            discord::discord_interaction_reply,
             secrets::secret_list,
             secrets::secret_set,
             secrets::secret_delete,

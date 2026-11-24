@@ -143,6 +143,8 @@ describe("the whole way round", () => {
     vi.spyOn(native, "discordTyping").mockResolvedValue();
     vi.spyOn(native, "discordHistory").mockResolvedValue([]);
     vi.spyOn(native, "discordSend").mockImplementation(async () => ["s1"]);
+    vi.spyOn(native, "discordApi").mockImplementation(async () => ({ id: "b1" }));
+    vi.spyOn(native, "discordInteractionReply").mockImplementation(async () => ({ id: "r1" }));
     vi.spyOn(native, "discordDelete").mockResolvedValue();
     vi.spyOn(native, "discordOwner").mockResolvedValue("444");
     vi.spyOn(native, "discordReact").mockResolvedValue();
@@ -412,7 +414,39 @@ describe("the whole way round", () => {
     expect(native.discordSend).not.toHaveBeenCalled();
   });
 
-  it("a job's question is posted there, and a number answers it", async () => {
+  it("the user's click on a choice answers the question, and the buttons then show what was picked; someone else's does nothing", async () => {
+    await ready();
+    setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
+    setState("decisions", [{ id: "d7", taskId: "t1", at: 1, kind: "ask", question: "어디에?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
+    const tasks = await import("./tasks");
+    const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
+    const click = (user: string) => emit({ kind: "interaction", interaction: { id: "i1", kind: "component", channel: "c1", user: { id: user, name: "x", bot: false }, message: "q1", custom_id: "ondra:pick:d7:b" } });
+    click("222");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(decide).not.toHaveBeenCalled();
+    click(OWNER);
+    await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d7", "b"));
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/q1", expect.anything()));
+    const rows = (vi.mocked(native.discordApi).mock.calls.find((c) => c[0] === "PATCH")![2] as any).components;
+    expect(rows[0].components.every((b: any) => b.disabled)).toBe(true);
+    expect(rows[0].components.find((b: any) => b.style === 3).label).toBe("운영");
+    expect(said.thrown).toHaveLength(0);
+  });
+
+  it("a click on a button it made comes to it as the user's words; a slash command is answered in its own place", async () => {
+    await ready();
+    emit({ kind: "interaction", interaction: { id: "i2", kind: "component", channel: "c1", guild: "g1", user: { id: OWNER, name: "성윤", bot: false }, message: "m8", custom_id: "deploy-now" } });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(1));
+    expect(said.thrown[0].text).toContain("deploy-now");
+    emit({ kind: "interaction", interaction: { id: "i3", kind: "command", channel: "c1", guild: "g1", user: { id: OWNER, name: "성윤", bot: false }, command: "status", options: [{ name: "detail", value: true }] } });
+    await vi.waitFor(() => expect(said.thrown).toHaveLength(2));
+    expect(said.thrown[1].text).toContain("/status detail:true");
+    setState("captain", (m) => m.id === "reply2", { pending: false, reply: "다 돌고 있어" });
+    said.hook?.("reply2");
+    await vi.waitFor(() => expect(native.discordInteractionReply).toHaveBeenCalledWith("i3", expect.objectContaining({ content: "다 돌고 있어" })));
+  });
+
+  it("a job's question is posted there with its choices as buttons, and a number answers it", async () => {
     said.answer = "";
     await ready();
     emit({ kind: "message", message: msg({ id: "m1", author: { id: OWNER, name: "성윤", bot: false }, content: "메타몽 배포 준비해" }) });
@@ -421,7 +455,9 @@ describe("the whole way round", () => {
     setState("tasks", [{ id: "t1", title: "배포 준비", entries: [], agent: { channel: "c1" } } as never]);
     said.hook?.("reply1");
     setState("decisions", [{ id: "d5", taskId: "t1", at: 1, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledWith("c1", "배포 준비: 어디에 먼저 올릴까요? (스테이징 / 운영)"), { timeout: 5000 });
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledWith("POST", "/channels/c1/messages", expect.objectContaining({ content: "배포 준비: 어디에 먼저 올릴까요? (스테이징 / 운영)" })), { timeout: 5000 });
+    const body = vi.mocked(native.discordApi).mock.calls[0][2] as any;
+    expect(body.components[0].components.map((b: any) => [b.label, b.custom_id])).toEqual([["스테이징", "ondra:pick:d5:a"], ["운영", "ondra:pick:d5:b"]]);
     const tasks = await import("./tasks");
     const decide = vi.spyOn(tasks, "decide").mockResolvedValue(undefined);
     emit({ kind: "message", message: msg({ id: "m2", author: { id: OWNER, name: "성윤", bot: false }, content: "1" }) });
@@ -429,7 +465,7 @@ describe("the whole way round", () => {
     expect(said.thrown).toHaveLength(1);
     // in words, too
     setState("decisions", [{ id: "d6", taskId: "t1", at: 2, kind: "ask", question: "어디에 먼저 올릴까요?", context: [], options: [{ id: "a", label: "스테이징" }, { id: "b", label: "운영" }] }]);
-    await vi.waitFor(() => expect(native.discordSend).toHaveBeenCalledTimes(3), { timeout: 5000 });
+    await vi.waitFor(() => expect(native.discordApi).toHaveBeenCalledTimes(2), { timeout: 5000 });
     said.answer = "b";
     emit({ kind: "message", message: msg({ id: "m3", author: { id: OWNER, name: "성윤", bot: false }, content: "그냥 운영으로 바로 가자" }) });
     await vi.waitFor(() => expect(decide).toHaveBeenCalledWith("d6", "b"));

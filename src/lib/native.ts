@@ -662,6 +662,23 @@ export interface DiscordMessage {
   reply_msg?: string | null;
   files: string[];
   at: string;
+  /** a slash command it came from: its answer replaces the command's "thinking…" */
+  interaction?: string;
+}
+/** A click on its button, a pick in its menu, or a slash command (acknowledged natively; no token here). */
+export interface DiscordInteraction {
+  id: string;
+  kind: "component" | "command";
+  channel: string;
+  guild?: string | null;
+  user: { id: string; name: string; bot: boolean };
+  /** a click: the message the button is on, its custom_id, the picked values of a menu */
+  message?: string;
+  custom_id?: string;
+  values?: string[];
+  /** a command: its name and options */
+  command?: string;
+  options?: { name: string; value?: unknown; options?: unknown[] }[];
 }
 export type DiscordEvent =
   | { kind: "ready"; id: string; name: string }
@@ -669,7 +686,8 @@ export type DiscordEvent =
   | { kind: "reconnecting"; in: number }
   | { kind: "stopped"; why: string }
   | { kind: "message"; message: DiscordMessage }
-  | { kind: "typing"; channel: string; user: string };
+  | { kind: "typing"; channel: string; user: string }
+  | { kind: "interaction"; interaction: DiscordInteraction };
 export const discordStart = () => call<void>("discord_start");
 export const discordStop = () => call<void>("discord_stop", undefined, undefined);
 export const discordSend = (channel: string, text: string, replyTo?: string) => call<string[]>("discord_send", { channel, text, replyTo });
@@ -695,6 +713,10 @@ export const discordChannels = (guild: string) => call<DiscordChannel[]>("discor
 export const discordChannelCreate = (guild: string, name: string, o: { kind?: "text" | "category"; category?: string; topic?: string; only?: string[] } = {}) =>
   call<DiscordChannel>("discord_channel_create", { guild, name, kind: o.kind, category: o.category, topic: o.topic, only: o.only });
 export const discordChannelDelete = (channel: string) => call<void>("discord_channel_delete", { channel });
+/** any call on Discord's bot API (a path under it), with local files when given; the token is added natively */
+export const discordApi = (method: string, path: string, body?: unknown, files?: string[]) => call<any>("discord_api", { method, path, body, files });
+/** its answer to an interaction it acknowledged: the command's own message, or a follow-up */
+export const discordInteractionReply = (id: string, body: unknown, followUp?: boolean) => call<any>("discord_interaction_reply", { id, body, followUp });
 export const discordTokenHas = () => call<boolean>("discord_token_has", undefined, false);
 
 /** Settings › 시크릿: the saved names (values stay in the keychain and never come back to the page). */
