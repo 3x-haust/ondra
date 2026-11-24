@@ -6,8 +6,6 @@
 //   APPLE_SIGNING_IDENTITY=7CBA1EA9C27F25912D4A2774F0D1B98B6C5A7BF5 \
 //   node scripts/release.mjs notes.md [--publish]
 //
-// notes.md is Korean bullets under one `## 바뀐 점` heading (scripts/release-notes.mjs checks it).
-//
 // Without --publish it builds and checks everything and prints the `gh release create` command;
 // with it, it runs that command too. --skip-build reuses the last `tauri build`. ONDRA_PYTHON
 // picks the python for the dmg script (it needs `pip install ds_store mac_alias`).
@@ -26,7 +24,6 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, wr
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assetName, cacheDir, REPO, releaseUrl, sha256File } from "./components.mjs";
-import { notesProblems } from "./release-notes.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -55,10 +52,7 @@ const onPath = (bin) => {
   }
 };
 
-if (!notes) die("no notes file: node scripts/release.mjs notes.md");
-if (!existsSync(notes)) die(`no notes file ${notes}`);
-const problems = notesProblems(readFileSync(notes, "utf8"));
-if (problems.length) die(`${notes}:\n  ${problems.join("\n  ")}`);
+if (notes && !existsSync(notes)) die(`no notes file ${notes}`);
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY) die("TAURI_SIGNING_PRIVATE_KEY is not set: the updater checks the package with it");
 // a release without the key would send no usage numbers or feedback, and nothing would say so
 const dotenv = existsSync(join(root, ".env")) ? readFileSync(join(root, ".env"), "utf8") : "";
@@ -126,7 +120,7 @@ run(process.env.ONDRA_PYTHON || "python3", [join(root, "scripts/dmg/build.py"), 
 say(`dmg ${mb(dmg)}`);
 
 // ── 5. manifests and new components ──
-run("node", [join(root, "scripts/release-manifest.mjs"), notes], { stdio: ["ignore", "ignore", "inherit"] });
+run("node", [join(root, "scripts/release-manifest.mjs"), ...(notes ? [notes] : [])], { stdio: ["ignore", "ignore", "inherit"] });
 copyFileSync(manifestFile, join(macos, "components.json"));
 const fresh = manifest.components.filter((c) => c.url === releaseUrl(tag, c));
 const parts = fresh.map((c) => {
@@ -138,7 +132,7 @@ const parts = fresh.map((c) => {
 for (const c of manifest.components.filter((c) => !fresh.includes(c))) say(`${c.name} ${c.version}: unchanged (from ${c.url.split("/download/")[1].split("/")[0]})`);
 
 const assets = [dmg, archive, join(macos, "latest.json"), join(macos, "components.json"), ...parts];
-const gh = ["release", "create", tag, "--target", head, "--title", `${name} ${version}${/^0\./.test(version) ? " Beta" : ""}`, "--notes-file", notes, ...assets];
+const gh = ["release", "create", tag, "--target", head, "--title", `${name} ${version}${/^0\./.test(version) ? " Beta" : ""}`, ...(notes ? ["--notes-file", notes] : ["--notes", ""]), ...assets];
 if (publish) {
   run("gh", gh);
   say(`published ${tag}`);

@@ -19,6 +19,7 @@
 // and a space only ever sees its own pieces.
 import { createSignal } from "solid-js";
 import { expand } from "./rpc";
+import { checksDir } from "./localChecks";
 import { oneShot } from "./aside";
 import { readFences } from "./fences";
 import { absorbNotes, findNotes } from "./absorb";
@@ -509,23 +510,26 @@ const CHECK_RECENT_MS = 7 * 24 * 60 * 60_000;
 export function checkReason(m: Memory, now = Date.now()): "rule" | "lesson" | undefined {
   if (!isLive(m) || m.scope !== "project" || !m.project || m.checkTask || now - (m.updatedAt ?? m.createdAt) >= CHECK_RECENT_MS) return undefined;
   const k = kindOf(m);
-  if (k === "rule" && (m.seen ?? 1) >= CHECK_SEEN) return "rule";
+  // a rule read from a note file (another tool's memory) was written down, not a correction the
+  // user had to repeat; such notes also hold how the user wants the agent to talk, not this code
+  if (k === "rule" && !m.from && (m.seen ?? 1) >= CHECK_SEEN) return "rule";
   if (k === "lesson" && sourcesOf(m).length >= MIN_EVIDENCE) return "lesson";
   return undefined;
 }
 export const wantsCheck = (m: Memory, now = Date.now()) => !!checkReason(m, now);
 
-export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0) =>
+export const checkAsk = (rule: string, why: "rule" | "lesson" = "rule", jobs = 0, project = "") =>
   [
     why === "lesson"
       ? `The same trouble came up in ${jobs || MIN_EVIDENCE} different jobs in this project, and was written down as: "${rule}"`
       : `The user had to say this rule for this project more than once: "${rule}"`,
-    "Make it hold by itself so no one has to say it again, at the strongest place that works, in this order: the code's shape (delete the old way so the mistake can't be written), a type, a lint rule whose message names the fix (the project's linter config, or a small custom rule), a test, a step in the check or CI scripts the project already runs. Prose in AGENTS.md is the last resort, for what none of these can hold.",
+    "Make it hold by itself so no one has to say it again. First decide whose rule it is:",
+    "- Everyone's: how this project's code, tests or product must behave, true for anyone who works on it or uses it. It goes into the repository, at the strongest place that works, in this order: the code's shape (delete the old way so the mistake can't be written), a type, a lint rule whose message names the fix (the project's linter config, or a small custom rule), a test, a step in the check or CI scripts the project already runs. Prose in AGENTS.md is the last resort, for what none of these can hold. Add one line to the rule list in AGENTS.md (or CLAUDE.md, whichever the repo has; make the list if there is none): the rule, then what holds it (the lint rule's name, the test file). It is a check, not a change anyone sees: once it is in and proven, send {\"type\":\"merge\",\"kind\":\"fix\"} with your done.",
+    `- This user's own: their release or deploy steps, their tools and habits, what only they do in this project. Nothing goes into the repository (no file, no AGENTS.md line), since everyone else who clones it would be held to it: make it a local check on this Mac instead, a folder ${checksDir()}/<short-name>/ holding its script and a check.json {"rule":"…","project":"${project || "<the project folder>"}","run":"<the command, {dir} for the folder>","paths":["<repo-relative files it covers>"],"after":"<regex of a command it must run before>"} (paths and after are optional; with neither it covers any code change). Ondra shows it in Settings and makes later jobs in this project run it. There is nothing to merge: just done.`,
     "- The check has to pass on the code as it is: fix the few places that break it. If many places break it, make it fail only on new ones (an allowlist of today's places, or a count that may only go down) and say how many are left.",
     "- Prove it: run it (and the project's own lint and tests) and show it passes, and that it fails on the mistake itself: the real place the user had to correct, put back for a moment, or a small bad example you don't keep.",
-    "- Add one line to the rule list in AGENTS.md (or CLAUDE.md, whichever the repo has; make the list if there is none): the rule, then what holds it (the lint rule's name, the test file).",
     "- A rule a machine can't check (taste, wording, how or when to ask, commit or deploy, anything outside the code): change nothing and say why in one line with done.",
-    '- This is a check, not a change anyone sees: once it is in and proven, send {"type":"merge","kind":"fix"} with your done.',
+    "- A rule about how the agent talks to or works with the user (the language it answers in, its tone, when it asks) is the user's own preference that memory already holds, not this project's code: change nothing, even when this repository is the agent's own source, where a check would force one user's taste on everyone who uses it.",
     "- Ondra started this by itself and the user doesn't know about it, so nobody is asked: no ask block. Decide yourself; when it isn't clear, change nothing and say why with done. What you couldn't check goes in unverified.",
   ].join("\n");
 
@@ -556,7 +560,7 @@ export async function growChecks(only?: SpaceId, now = Date.now()): Promise<numb
       cwd: m.project,
       title: tr("규칙을 자동 검사로 · {rule}", { rule: m.text.slice(0, 40) }),
       topic: tr("자동 검사"),
-      ask: checkAsk(m.text, checkReason(m, now), sourcesOf(m).length),
+      ask: checkAsk(m.text, checkReason(m, now), sourcesOf(m).length, m.project),
       display: tr("같은 말을 또 하지 않게 이 규칙을 자동 검사로 만들어요: {rule}", { rule: m.text }),
       weight: "light",
       self: "check",

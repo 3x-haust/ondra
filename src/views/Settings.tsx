@@ -18,6 +18,7 @@ import { openTask, setView, type SettingsTab, toast, view } from "../state/ui";
 import { macs } from "../ui/MacBar";
 import { allSessions, continueSession, importFrom, scan, scanning, sources } from "../engine/importer";
 import { engine, tilde } from "../engine/rpc";
+import { checksDir, command, loadLocalChecks, localChecks, setCheckOff, type LocalCheck } from "../engine/localChecks";
 import { componentNote, componentOf } from "../engine/components";
 import {
   accountProviders,
@@ -25,6 +26,7 @@ import {
   inTauri,
   openNotices,
   pickFolder,
+  revealPath,
   toolStatus,
   spaceGhLogin,
   spaceGitIdentity,
@@ -145,6 +147,42 @@ export function GroupTitle(props: { title: string; children?: any }) {
       <span class="spacer" />
       {props.children}
     </div>
+  );
+}
+
+/**
+ * The checks that hold the user's own ways in a project, kept on this Mac only (engine/localChecks.ts):
+ * what each holds, where, its command and how its last run in a job went; one can be turned off.
+ */
+function LocalChecks() {
+  onMount(() => void loadLocalChecks());
+  const last = (c: LocalCheck) => {
+    const r = state.checkRuns?.[c.name];
+    if (!r) return t("아직 안 돌렸어요");
+    const day = new Date(r.at).toLocaleDateString();
+    return r.ok ? t("통과 · {day}", { day }) : t("실패 · {day}", { day });
+  };
+  return (
+    <>
+      <GroupTitle title={t("자동 검사")}>
+        <button class="btn sm ghost" title={tilde(checksDir())} onClick={() => void revealPath(checksDir())}>
+          <Icon name="folder" size={14} />
+          {t("폴더 열기")}
+        </button>
+      </GroupTitle>
+      <div class="set-group">
+        <Show when={localChecks().length} fallback={<div class="set-row"><span class="set-note">{t("내 컴퓨터에만 두는 자동 검사가 아직 없어요")}</span></div>}>
+          <For each={localChecks()}>
+            {(c) => (
+              <Row title={c.rule} desc={`${tilde(c.project)} · ${command(c)}`}>
+                <span class="set-note" title={state.checkRuns?.[c.name]?.task}>{last(c)}</span>
+                <Switch_ label={c.rule} on={!c.off} set={(v) => void setCheckOff(c, !v).catch(() => toast(t("검사 설정을 바꾸지 못했어요"), "bad"))} />
+              </Row>
+            )}
+          </For>
+        </Show>
+      </div>
+    </>
   );
 }
 
@@ -277,6 +315,8 @@ function General() {
           </Row>
         </Show>
       </div>
+
+      <LocalChecks />
 
       <ReviewSettings />
 

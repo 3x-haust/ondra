@@ -84,7 +84,8 @@ const ask = (n: Note, part: string, i: number, total: number) =>
     "Skip: status tables, today's progress, open questions, dated one-off log lines (but keep a lesson/decision a log teaches), instructions about maintaining this file itself, and anything superseded later in the text.",
     "Never copy secrets (tokens, passwords, keys, connection strings); keep only the rule around them.",
     "pin=true only for rules that must apply to every job (safety, git/commit rules, secrets, language). importance 1-5. about: 0-3 named things. keys: 3-6 related search words (Korean and English).",
-    'Reply with only a fenced block (an empty list is fine):\n```pieces\n[{"text":"...","kind":"rule","pin":false,"importance":3,"about":["..."],"keys":["..."]}]\n```',
+    'user=true for a piece about the user rather than this folder: who they are, or how the agent should talk to or work with them (the language it answers in, its tone, when it asks). It holds in every project, even when the file sits in one (a Claude Code memory of `type: user` is one).',
+    'Reply with only a fenced block (an empty list is fine):\n```pieces\n[{"text":"...","kind":"rule","pin":false,"user":false,"importance":3,"about":["..."],"keys":["..."]}]\n```',
     "",
     "----- file -----",
     part,
@@ -111,7 +112,8 @@ export async function absorbNotes(list?: Note[]): Promise<number> {
             const text = typeof p?.text === "string" ? p.text.trim() : "";
             if (!text || text.length > 300) continue;
             const before = state.memory.length;
-            addMemory(text, n.project ? "project" : "space", {
+            // about the user, not the folder: it holds everywhere, so no project's checks take it up
+            addMemory(text, p.user === true ? "global" : n.project ? "project" : "space", {
               space: n.space,
               project: n.project,
               kind: KIND_IDS.has(p.kind as MemoryKind) ? (p.kind as MemoryKind) : undefined,
