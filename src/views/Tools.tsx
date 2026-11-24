@@ -49,6 +49,8 @@ function groupsOf(c: EngineContext): Group[] {
     // deferred tools sit behind tool_search: declared only once a job looks for them
     const found = !x.active && (x.exposure === "deferred" || x.exposure === "codemode");
     const optional = !x.active && !found;
+    // a tool jobs don't get unless switched on, and not switched on: not listed (only on, so it can go off)
+    if (optional && !(state.settings.extraTools ?? []).includes(x.name)) continue;
     add(s.group, { key: `t:${x.name}`, name: x.name, line: toolLine(x), ko: isKorean(x), source: s.label, size: x.schemaTokens, off: optional, found, optional, mcp: !optional && canSwitchOff(x.name), tool: true, full: toolMore(x) });
   }
   for (const s of c.skills)
@@ -127,11 +129,14 @@ export function ToolsTab() {
                 <div class="set-group tl-group">
                   <For each={g.rows}>
                     {(r) => (
-                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key }}>
-                        <div class="tl-head" onClick={() => toggle(r.key)}>
-                          <button class="tl-open" aria-expanded={open() === r.key} onClick={(e) => (e.stopPropagation(), setOpen(open() === r.key ? null : r.key))}>
-                            <span class="tl-name">{r.name}</span>
-                          </button>
+                      <div class="tl-row" classList={{ off: !isOn(r), open: open() === r.key, still: r.tool }}>
+                        {/* a tool's row does nothing on a click; a skill's opens to its whole description */}
+                        <div class="tl-head" onClick={() => !r.tool && toggle(r.key)}>
+                          <Show when={!r.tool} fallback={<span class="tl-open"><span class="tl-name">{r.name}</span></span>}>
+                            <button class="tl-open" aria-expanded={open() === r.key} onClick={(e) => (e.stopPropagation(), setOpen(open() === r.key ? null : r.key))}>
+                              <span class="tl-name">{r.name}</span>
+                            </button>
+                          </Show>
                           {/* the one line, or the whole description when open: never both */}
                           <div class="tl-desc">
                             <div class="tl-fold tl-short"><span class="tl-line" classList={{ en: !r.ko }}>{r.line}</span></div>

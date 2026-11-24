@@ -608,6 +608,13 @@
 .settings-inner .tl-head {
   cursor: pointer;
 }
+/* a tool's row is only read: no hand, no hover */
+.settings-inner .tl-row.still .tl-head {
+  cursor: default;
+}
+.tl-row.still .tl-head:hover {
+  background: none;
+}
 .settings-inner .tl-open {
   display: block;
   min-width: 0;
