@@ -57,6 +57,7 @@ for await (const line of createInterface({input: process.stdin})) {
   vi.stubEnv("ONDRA_SECRET_NAMES", "LOGIN_SECRET");
   vi.stubEnv("LOGIN_SECRET", "q!");
   vi.stubEnv("ONDRA_COMPUTER_EVALUATION_MODE", undefined);
+  vi.stubEnv("ONDRA_PERMISSION", "auto");
   let tool: any;
   const hooks = new Map<string, (...args: any[]) => any>();
   computer({ registerTool: (t: any) => tool = t, on: (name: string, fn: any) => hooks.set(name, fn) });
@@ -73,6 +74,18 @@ beforeEach(() => { current = fixture(); });
 afterEach(async () => { await current.close(); vi.unstubAllEnvs(); });
 
 describe("computer secure input", () => {
+  it("goes through without a card on full access, still as the held action", async () => {
+    vi.stubEnv("ONDRA_PERMISSION", "full");
+    await current.call({action: "start", app: "Secure"});
+    const confirm = vi.fn(async () => false);
+    const result = await current.call(fill, confirm);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toMatch(/APPROVAL_DENIED/);
+    const ops = current.requests().map(r => r.op);
+    expect(ops).toContain("commit-approval");
+    expect(ops).not.toContain("act");
+  });
+
   it("confirms a saved name, sends only that name, and distinguishes delivery from login", async () => {
     await current.call({action: "start", app: "Secure"});
     const confirm = vi.fn(async () => true);
