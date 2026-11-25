@@ -252,6 +252,18 @@ pub async fn fs_read(path: String) -> Result<FileText, String> {
 mod tests {
     use super::*;
 
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn copy_image_puts_the_picture_on_the_clipboard() {
+        let pixels: Vec<u8> = vec![255, 0, 0, 255, 0, 0, 255, 255];
+        let mut png = Vec::new();
+        image::RgbaImage::from_raw(2, 1, pixels.clone()).unwrap().write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        copy_image(png).unwrap();
+        let got = arboard::Clipboard::new().unwrap().get_image().unwrap();
+        assert_eq!((got.width, got.height), (2, 1));
+        assert_eq!(got.bytes.as_ref(), pixels.as_slice());
+    }
+
     #[cfg(unix)]
     #[test]
     fn shared_files_and_search_only_follow_links_within_the_project() {
