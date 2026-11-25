@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { bundleCrate } from "./bundle-crate.mjs";
 import { bundleEngine } from "./bundle-engine.mjs";
 import { writeAppNotices } from "./notices.mjs";
 
@@ -11,14 +11,9 @@ export function bundleWindows(root) {
   const tauri = join(root, "src-tauri");
   bundleEngine(process.env.ONDRA_ENGINE_DIST, "win32", arch, join(tauri, "resources/windows/engine"));
 
-  // A standalone workspace and lockfile; never ask Tauri to bundle an old sidecar or a Mac helper.
-  const crate = join(root, "remote/host");
-  const target = resolve(process.env.CARGO_TARGET_DIR ?? join(crate, "target"));
-  execFileSync("cargo", ["build", "--locked", "--release", "--target", triple, "--target-dir", target], {
-    cwd: crate, stdio: "inherit",
-    env: process.env.RUSTUP_TOOLCHAIN_REMOTE ? { ...process.env, RUSTUP_TOOLCHAIN: process.env.RUSTUP_TOOLCHAIN_REMOTE } : process.env,
-  });
-  mkdirSync(join(tauri, "binaries"), { recursive: true });
-  copyFileSync(join(target, triple, "release/ondra-remote.exe"), join(tauri, "binaries", `ondra-remote-${triple}.exe`));
-  writeAppNotices();
+  // Standalone workspaces and lockfiles; never ask Tauri to bundle an old sidecar or a Mac helper.
+  bundleCrate(root, "remote/host", "ondra-remote", triple,
+    process.env.RUSTUP_TOOLCHAIN_REMOTE ? { ...process.env, RUSTUP_TOOLCHAIN: process.env.RUSTUP_TOOLCHAIN_REMOTE } : process.env);
+  bundleCrate(root, "dictate", "ondra-dictate", triple);
+  writeAppNotices(undefined, { dictate: true });
 }
