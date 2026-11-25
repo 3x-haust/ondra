@@ -151,6 +151,9 @@ export function SecretsSettings() {
       </PageHead>
 
       <div class="set-group">
+        <Show when={!farOf() && /Windows/.test(navigator.userAgent)}>
+          <p class="set-note">{t("이 PC의 시크릿과 직접 연결 키는 Windows 사용자 계정으로 암호화해요. 일반 계정의 로그인 토큰은 엔진의 auth.json에 저장되며 이 보호를 받지 않아요.")}</p>
+        </Show>
         <Show when={scope() === GLOBAL}>
           <For each={groups()} fallback={<div class="empty-line">{t("없어요")}</div>}>
             {(g) => (

@@ -13,6 +13,7 @@ export default {
   "{name}을(를) 바꿨어요": "Replaced {name}",
   "{name} 삭제": "Delete {name}",
   "Ondra 밖에서 실행해도 같은 값이 쓰여요": "Also written to .env, so runs outside Ondra get it",
+  "이 PC의 시크릿과 직접 연결 키는 Windows 사용자 계정으로 암호화해요. 일반 계정의 로그인 토큰은 엔진의 auth.json에 저장되며 이 보호를 받지 않아요.": "Secrets and direct connection keys on this PC are encrypted for your Windows user account. Regular account sign-in tokens are stored in the engine's auth.json and are not covered by this protection.",
   "이 프로젝트의 .env에는 복사하지 않아요. 기존 .env 파일은 암호화되지 않아요.": "Secrets aren't copied to this project's .env. Existing .env files aren't encrypted.",
   ".env가 .gitignore에 없어요": ".env isn't in .gitignore",
   ".gitignore에 추가": "Add to .gitignore",
