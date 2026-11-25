@@ -18,7 +18,7 @@ import { t } from "../i18n";
 export interface Place { host: string; space?: string; account?: string; model?: string; thinking?: string }
 type HostAccount = HostInfo["accounts"][number];
 
-const hostName = (id: string) => state.settings.hosts?.find((h) => h.id === id)?.name ?? "Mac";
+const hostName = (id: string) => state.settings.hosts?.find((h) => h.id === id)?.name ?? t("기기");
 /** "연결됨" / "10분 전부터 연결 안 됨" … for one Mac */
 export const hostState = (id: string) => hostStatusText(mirror.hosts[id], state.settings.hosts?.find((h) => h.id === id)?.seen, t, ago);
 const infoOf = (host: string): HostInfo | undefined => mirror.hosts[host]?.info;

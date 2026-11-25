@@ -967,7 +967,7 @@ function keyRows(): KeyRow[] {
   });
   const macRows = () => Array.from({ length: 9 }, (_, i): KeyRow => {
     const m = macs()[i];
-    return { id: `mac${i + 1}` as ShortcutId, label: t("Mac {n}", { n: i + 1 }), section: t("Mac"), note: m?.name };
+    return { id: `mac${i + 1}` as ShortcutId, label: t("기기 {n}", { n: i + 1 }), section: t("기기"), note: m?.name };
   });
   let placed = false;
   let macsPlaced = false;

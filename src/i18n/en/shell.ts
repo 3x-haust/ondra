@@ -66,7 +66,7 @@ export default {
   "{mac}에는 {space} 워크스페이스가 없어요": "{mac} has no {space} workspace",
   "{space} · 새 작업은 {mac}에서 해요": "{space} · new work runs on {mac}",
   "{name}에서 실행": "Run on {name}",
-  "Mac {n}": "Mac {n}",
+  "기기 {n}": "Device {n}",
   "점": "Dot",
   "이모지": "Emoji",
   "이모지 검색": "Search emoji",
