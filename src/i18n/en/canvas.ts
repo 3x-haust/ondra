@@ -277,6 +277,14 @@ export default {
   "꺼짐": "Off",
   "실제 기기": "Physical device",
   "Android 에뮬레이터": "Android emulator",
+  "받지 못했어요": "Couldn't download",
+  "약 {gb}GB를 받아요": "About {gb} GB to download",
+  "라이선스": "License",
+  "동의하고 받기": "Agree and download",
+  "이 PC는 가상화가 꺼져 있어요. 시작 › ‘Windows 기능 켜기/끄기’에서 ‘Windows 하이퍼바이저 플랫폼’을 켜고 PC를 다시 시작해 주세요. BIOS의 가상화도 켜져 있어야 해요.":
+    "Virtualization is off on this PC. In Start › ‘Turn Windows features on or off’, check ‘Windows Hypervisor Platform’ and restart the PC. Virtualization must also be on in the BIOS.",
+  "이 컴퓨터는 KVM을 쓸 수 없어요. BIOS에서 가상화(VT-x/AMD-V)를 켜고, KVM을 설치한 뒤 sudo usermod -aG kvm $USER를 실행하고 다시 로그인해 주세요.":
+    "This computer can't use KVM. Turn on virtualization (VT-x/AMD-V) in the BIOS, install KVM, run sudo usermod -aG kvm $USER and log in again.",
   "사용 작업": "Used by",
   "작업 지정 안 함": "Any task",
   "켜기": "Turn on",
