@@ -17,7 +17,7 @@ import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
-import { addProject, onWrite, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { onWrite, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import { permissionOf } from "../state/persist";
 import type { Decision, Task } from "../state/types";
 import type { FarAsk, HostInfo } from "../state/mirror";
@@ -194,7 +194,7 @@ function sendInfo(conn: number, c: Conn) {
 async function sendProjects(conn: number) {
   const may = spacesOf(conns.get(conn)?.device ?? "");
   // each with its workspace's name, so the other Mac shows it in the tab of that name
-  const list = (state.projects ?? []).filter((p) => spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: mirrorPath(p.folder, engine.info.home), space: state.spaces.find((s) => s.id === p.space)?.label }));
+  const list = (state.projects ?? []).filter((p) => !p.host && spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: mirrorPath(p.folder, engine.info.home), space: state.spaces.find((s) => s.id === p.space)?.label }));
   await send(conn, { t: "projects", list });
 }
 
@@ -240,7 +240,7 @@ export function create(c: { device: string }, f: FarAsk) {
 
 /** One of this Mac's projects' secrets, for Settings › 시크릿 on the Mac that added it: its saved names
  *  (and how many came in from its .env), never a value. A value comes this way only to be saved. */
-export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean }
+export interface FarSecrets { items: string[]; added?: number; notIgnored?: boolean; canWriteDotenv?: boolean }
 const projectFolder = (id: unknown) => {
   const p = typeof id === "string" ? projectById(id) : undefined;
   if (!p || p.host) throw new Error("그 프로젝트가 이 Mac에 없어요");
@@ -254,7 +254,7 @@ export const secretCalls = {
     const p = projectFolder(project);
     const r = await secretSync([[p.id, p.folder]]);
     noteSecrets(r.saved, state.projects ?? []);
-    return { items: namesOf(r.saved, p.id), added: r.added.length };
+    return { items: namesOf(r.saved, p.id), added: r.added.length, canWriteDotenv: typeof navigator !== "undefined" && /Macintosh/.test(navigator.userAgent) };
   },
   secretSet: async (o: { project: string; name: string; value: string; writeDotenv?: boolean; addIgnore?: boolean }): Promise<FarSecrets> => {
     const p = projectFolder(o?.project);
@@ -277,8 +277,7 @@ export const secretCalls = {
   },
 };
 
-/** a folder there made a project here: in the workspace that Mac named (by its name here) if it may
- *  use it, else the one in use, else the first one it may use */
+/** Legacy folder lookup: only a project already registered here can be shared. */
 function addProjectFor(c: Conn, folder: unknown, label?: unknown) {
   if (typeof folder !== "string" || !folder.trim()) throw new Error("bad request");
   const may = spacesOf(c.device);
@@ -286,8 +285,9 @@ function addProjectFor(c: Conn, folder: unknown, label?: unknown) {
   const space = named && spaceAllowed(may, named) ? named : spaceAllowed(may, state.space) ? state.space : state.spaces.find((s) => spaceAllowed(may, s.id))?.id;
   if (!space) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const path = normPath(folder, engine.info.home);
-  if (!path) throw new Error("bad request");
-  return addProject(space, path);
+  const pr = path && state.projects?.find((p) => !p.host && p.space === space && normPath(p.folder, engine.info.home) === path);
+  if (!pr) throw new Error("그 프로젝트는 쓸 수 없어요");
+  return pr.id;
 }
 
 /** what another Mac may do with a job here: the same the user does (checked by checkCall first) */
@@ -343,7 +343,7 @@ function mayUseProject(c: Conn, id: string | undefined) {
  *  workspaces it may use, and the jobs it may reach */
 const peerOf = (conn: number, c: Conn): FarPeer => {
   const may = spacesOf(c.device);
-  const watch = new Set([...c.watch].filter((id) => { const p = projectById(id); return !!p && spaceAllowed(may, p.space); }));
+  const watch = new Set([...c.watch].filter((id) => { const p = projectById(id); return !!p && !p.host && spaceAllowed(may, p.space); }));
   return { conn, device: c.device, watch, sees: (t) => !t.host && wanted(c, t), send: (data) => void send(conn, data) };
 };
 

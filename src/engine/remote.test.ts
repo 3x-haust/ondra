@@ -104,8 +104,11 @@ describe("calls from a Mac allowed in", () => {
     expect(taskById("inPayroll")?.title).toBe("mine now");
     // a new job or project there is refused too; here it's fine
     expect((await call("create", [{ id: "n1", title: "n", ask: "do", project: "payroll" }]))?.error).toBeTruthy();
-    expect((await call("addProject", ["/tmp/new"]))?.value).toBeTruthy();
-    expect(state.projects?.find((p) => p.folder === "/tmp/new")?.space).toBe("home");
+    const before = state.projects!.map((p) => p.id);
+    expect((await call("addProject", ["/tmp/new"]))?.error).toBeTruthy();
+    expect((await call("addProject", ["/tmp/payroll", "개인"]))?.error).toBeTruthy();
+    expect((await call("addProject", ["/tmp/app", "개인"]))?.value).toBe("app");
+    expect(state.projects!.map((p) => p.id)).toEqual(before);
     setDeviceSpaces(DEV, undefined);
   });
   it("answer, hand over and read secrets only for what it may reach", async () => {
