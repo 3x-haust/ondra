@@ -68,8 +68,9 @@ jobs:
           restore-keys: ondra-incremental-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
 
       # The remote helper (fat LTO) takes one to two minutes and rarely changes. Its build is kept
-      # under the hash of its sources and this file; on an exact match those sources are dated back, so cargo
-      # finds the kept build up to date and uses it instead of compiling it again.
+      # under the hash of its sources (here also src-tauri/src/winvault.rs, which it compiles in) and
+      # this file; on an exact match those sources are dated back, so cargo finds the kept build up to
+      # date and uses it instead of compiling it again.
       - id: remote
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -77,15 +78,11 @@ jobs:
             remote/host/target/${{ env.TARGET }}/release/ondra?remote*
             remote/host/target/${{ env.TARGET }}/release/deps/ondra?remote*
             remote/host/target/${{ env.TARGET }}/release/.fingerprint/ondra-remote-*
-          key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**', '.github/workflows/windows.yml') }}
+          key: ondra-remote-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('remote/host/**', '!remote/host/target/**', 'src-tauri/src/winvault.rs', '.github/workflows/windows.yml') }}
 
       - name: Use the kept remote helper build
         if: steps.remote.outputs.cache-hit == 'true'
-        run: |
-          git ls-files remote/host | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
-          Remove-Item Env:CARGO_INCREMENTAL -ErrorAction Ignore
-          Get-ChildItem remote/host/target/$env:TARGET/release, remote/host/target/$env:TARGET/release/deps -Filter '*ondra*remote*' | Select-Object Name, LastWriteTime | Format-Table -AutoSize | Out-String -Width 300
-          cargo build --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked -v 2>&1 | Select-String -Pattern 'Dirty|Fresh ondra|Compiling ondra'
+        run: git ls-files remote/host src-tauri/src/winvault.rs | ForEach-Object { (Get-Item $_).LastWriteTime = [datetime]'2000-01-01' }
 
       - name: Build the pinned coding agent
         run: |
