@@ -80,7 +80,7 @@ export async function handle(c: Call): Promise<unknown> {
     if (!space || c.worker?.startsWith("captain:sim")) return { error: "only main or a job can reach its space's services" };
     return (await import("./services")).servicesHands(space, a);
   }
-  // the app's settings, for the user (the ondra skill): main or a job, never another Mac's worker
+  // the app's settings, for the user (the ondra skill): main or a job, never another device's worker
   if (c.op === "settings_read" || c.op === "settings_write") {
     if (!t && !c.worker?.startsWith("captain:")) return { error: "only main or a job can reach the settings" };
     const { readSettings, writeSettings } = await import("./appSettings");

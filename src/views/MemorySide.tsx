@@ -5,7 +5,7 @@ import { createMemo, createResource, createSignal, For, Match, Show, Switch } fr
 import { faded, isLive, KINDS, kindLabel, kindOf, removeMemory, restoreMemory, retireMemory, setMemory, sourcesOf, updateMemory, userOwned } from "../engine/memory";
 import { tidyParts } from "../engine/tidy";
 import { memoryHistory, memoryVersion, restoreMemoryAt } from "../engine/memgit";
-import { fsRead, openInEditor, revealPath } from "../lib/native";
+import { fsRead, openInEditor, revealPath, revealLabel } from "../lib/native";
 import { setState, state, taskById } from "../state/store";
 import type { JournalEntry, Memory, MemoryKind } from "../state/types";
 import { openTask, previewFile, toast } from "../state/ui";
@@ -774,7 +774,7 @@ function FileSide(props: { path: string; model: Model; onSel: (id: string) => vo
         <span class="spacer" />
         <button class="icon-btn sm" title={t("패널에서 보기")} aria-label={t("패널에서 보기")} onClick={() => previewFile(props.path)}><Icon name="panel" size={14} /></button>
         <button class="icon-btn sm" title={t("편집기에서 열기")} aria-label={t("편집기에서 열기")} onClick={() => openInEditor(props.path)}><Icon name="external" size={14} /></button>
-        <button class="icon-btn sm" title={t("Finder에서 보기")} aria-label={t("Finder에서 보기")} onClick={() => revealPath(props.path)}><Icon name="folder" size={14} /></button>
+        <button class="icon-btn sm" title={revealLabel()} aria-label={revealLabel()} onClick={() => revealPath(props.path)}><Icon name="folder" size={14} /></button>
       </div>
       <div class="md-doc"><Markdown text={(text() ?? "").slice(0, 20000)} /></div>
     </div>

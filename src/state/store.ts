@@ -257,7 +257,7 @@ const bySpace = createRoot(() =>
 export const tasksShown = (space: SpaceId): readonly Task[] => bySpace().get(space) ?? none;
 /** every job shown here, any space: this Mac's and the other Macs' */
 export const allTasks = (): Task[] => [...state.tasks, ...mirroredTasks()];
-/** the jobs in line on the Mac this one runs on, next first (another Mac's: those of its shown here) */
+/** the jobs in line on the Mac this one runs on, next first (another device's: those of its shown here) */
 export const queueWith = (t: Task): Task[] =>
   (t.host ? mirroredTasks().filter((x) => x.host === t.host) : state.tasks).filter((x) => x.status === "queued" && !x.parentId).sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
 /** every question waiting on the user: this Mac's and those of the other Macs' jobs */
@@ -290,7 +290,7 @@ export function projectFor(space: SpaceId, cwd?: string): string | undefined {
  * project holding its folder. None of these: no project (기타).
  */
 export function taskProject(t: Task): string | undefined {
-  // another Mac's job: that Mac filed it (its folders aren't this Mac's)
+  // another device's job: that device filed it (its folders aren't this Mac's)
   if (t.host) return t.project;
   const known = (id?: string) => (id && projectsIn(t.space).some((p) => p.id === id) ? id : undefined);
   return (t.worktree?.repo ? projectFor(t.space, homeDir(t)) : undefined) ?? known(t.project) ?? projectFor(t.space, t.cwd);

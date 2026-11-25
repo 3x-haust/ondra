@@ -170,7 +170,7 @@ export function skillAsk(text: string): { skills: string[]; rest: string } {
 }
 
 /** Menu skills as "/name" commands. In a job it runs there; in main it becomes a job that uses it.
- *  `on`: a job or project of another Mac, whose skills are that Mac's (its jobs run with those). */
+ *  `on`: a job or project of another device, whose skills are that device's (its jobs run with those). */
 export const skillCommands = (target: () => { task?: string; space: SpaceId; project?: string }, on?: { host: string; task?: string; project?: string }) =>
   menuSkills(on).map((sk) => ({
     name: `skill:${sk.name}`,

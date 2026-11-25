@@ -282,11 +282,11 @@ function useCrumbFit(deps: () => unknown) {
   return [level, ref] as const;
 }
 
-/** /remember in a job: its project's memory, on the Mac the job runs on (that Mac's jobs read that one) */
+/** /remember in a job: its project's memory, on the Mac the job runs on (that device's jobs read that one) */
 function remember(t: Task, text: string) {
   if (!t.host) return void addMemory(text, "project", { project: homeDir(t) });
   void farMemAdd(t.host, { task: t.id, text }).then(
-    (id) => id && toast(tr("그 Mac의 메모리에 저장 · {text}", { text: text.trim().slice(0, 200) })),
+    (id) => id && toast(tr("그 기기의 메모리에 저장 · {text}", { text: text.trim().slice(0, 200) })),
     (e) => toast(farError(e), "bad"),
   );
 }
@@ -328,7 +328,7 @@ export function TaskView(props: { id: string }) {
               <button class="strip strip-far" onClick={() => reconnect(far)}>
                 <i class={`cn-dot is-${mirror.hosts[far]?.status ?? "connecting"}`} aria-hidden="true" />
                 <b>{hostState(far)}</b>
-                <span class="rest muted">{tr("그 Mac에서는 작업이 계속 돌고 있을 수 있어요")}</span>
+                <span class="rest muted">{tr("그 기기에서는 작업이 계속 돌고 있을 수 있어요")}</span>
                 <span class="strip-act"><Icon name="refresh" size={12} />{tr("다시 연결")}</span>
               </button>,
             );
@@ -511,7 +511,7 @@ export function TaskView(props: { id: string }) {
                   branch={task().worktree?.state === "open" ? task().worktree!.branch : undefined}
                 />}
                   files={() => listFiles(task().host, expand(task().cwd)).catch(() => [])}
-                  // another Mac's job reads attachments there: they are sent over first
+                  // another device's job reads attachments there: they are sent over first
                   upload={task().host ? (f) => sendFiles(task().host!, f) : undefined}
                   commands={[
                     // the same names as Main's list: verbs for what opens, then this task's own actions
@@ -570,7 +570,7 @@ export function TaskView(props: { id: string }) {
           </>
         );
         return (
-          // a job of another Mac: the pictures in its thread come from there
+          // a job of another device: the pictures in its thread come from there
           <HostCtx.Provider value={() => task().host}>
             <div class="view task-view">
               {head}

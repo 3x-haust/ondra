@@ -128,7 +128,7 @@ describe("routine runs", () => {
     const after = routineById(r.id)!;
     expect(after.runs).toBe(1);
     expect(after.nextAt!).toBeGreaterThan(Date.now());
-    expect(taskById(after.lastTask!)!.ask).toContain("Mac이 잠들어 있었어요");
+    expect(taskById(after.lastTask!)!.ask).toContain("기기가 잠들어 있었어요");
     await tickRoutines(Date.now());
     expect(routineById(r.id)!.runs).toBe(1);
   });

@@ -57,7 +57,7 @@ function explain(code: DictateError, detail?: string) {
     "mic-denied": t("마이크 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Ondra를 켜 주세요."),
     "speech-denied": t("음성 인식 권한이 꺼져 있어요. 시스템 설정 › 개인정보 보호 및 보안 › 음성 인식에서 Ondra를 켜 주세요."),
     "no-mic": t("쓸 수 있는 마이크가 없어요."),
-    unavailable: t("지금은 이 Mac에서 음성 인식을 쓸 수 없어요."),
+    unavailable: t("지금은 이 기기에서 음성 인식을 쓸 수 없어요."),
     "no-on-device": t("이 언어는 Mac 안에서 받아쓸 수 없어요. 시스템 설정 › 키보드에서 받아쓰기를 켠 뒤 다시 해 보세요."),
     failed: t("받아쓰기에 실패했어요."),
   }[code];

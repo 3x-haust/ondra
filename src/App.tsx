@@ -220,7 +220,7 @@ export default function App() {
   // a job that finishes or needs you while Ondra is in the background: tell the system
   const seen = new Map<string, string>();
   createEffect(() => {
-    // another Mac's jobs too (that Mac tells its own screen; this one tells this screen). Counted
+    // another device's jobs too (that device tells its own screen; this one tells this screen). Counted
     // there, not here.
     for (const t of allTasks()) {
       const was = seen.get(t.id);

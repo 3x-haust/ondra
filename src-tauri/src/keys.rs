@@ -25,6 +25,10 @@ pub struct Keys {
 
 impl Default for Keys {
     fn default() -> Self {
+        // as the page's table has them (src/lib/shortcuts.ts); Alt+Space is every Windows window's menu
+        #[cfg(windows)]
+        return Self { capture: Some("ctrl+alt+Space".into()), quit: Some("ctrl+KeyQ".into()), close_pane: Some("ctrl+KeyW".into()) };
+        #[cfg(not(windows))]
         Self { capture: Some("alt+Space".into()), quit: Some("cmd+KeyQ".into()), close_pane: Some("cmd+KeyW".into()) }
     }
 }
@@ -91,6 +95,12 @@ pub fn keycode(text: &str) -> Option<u16> {
 pub fn label(text: &str) -> String {
     let mut parts: Vec<&str> = text.split('+').collect();
     let code = parts.pop().unwrap_or_default();
+    #[cfg(windows)]
+    {
+        let mods = [("ctrl", "Ctrl"), ("alt", "Alt"), ("shift", "Shift"), ("cmd", "Win")];
+        let key = code.strip_prefix("Key").or_else(|| code.strip_prefix("Digit")).unwrap_or(code);
+        return mods.iter().filter(|(m, _)| parts.contains(m)).map(|(_, n)| *n).chain([key]).collect::<Vec<_>>().join("+");
+    }
     let mods = [("ctrl", "⌃"), ("alt", "⌥"), ("shift", "⇧"), ("cmd", "⌘")];
     let mut out: String = mods.iter().filter(|(m, _)| parts.contains(m)).map(|(_, g)| *g).collect();
     let key = match code {
@@ -216,9 +226,17 @@ mod tests {
 
     #[test]
     fn titles_the_tray_item() {
-        assert_eq!(capture_title(&Keys::default()), "빠른 입력  ⌥Space");
-        assert_eq!(label("ctrl+alt+shift+cmd+KeyD"), "⌃⌥⇧⌘D");
-        assert_eq!(label("ctrl+Backquote"), "⌃`");
+        #[cfg(not(windows))]
+        {
+            assert_eq!(capture_title(&Keys::default()), "빠른 입력  ⌥Space");
+            assert_eq!(label("ctrl+alt+shift+cmd+KeyD"), "⌃⌥⇧⌘D");
+            assert_eq!(label("ctrl+Backquote"), "⌃`");
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(capture_title(&Keys::default()), "빠른 입력  Ctrl+Alt+Space");
+            assert_eq!(label("ctrl+alt+shift+cmd+KeyD"), "Ctrl+Alt+Shift+Win+D");
+        }
         assert_eq!(capture_title(&Keys { capture: None, ..Keys::default() }), "빠른 입력");
     }
 }

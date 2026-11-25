@@ -3,7 +3,7 @@
 // where it is in the app. Settings the user switches are ondra_settings (appSettings.ts); connected
 // services are `services`. A new button-only feature gets its action here (docs/DESIGN.md §9.17).
 //
-// Kept for the user alone: letting another Mac in (its pairing ask) and secret values. A job or
+// Kept for the user alone: letting another device in (its pairing ask) and secret values. A job or
 // main acts in its own workspace: its jobs and projects, never another workspace's.
 import { pathsExist } from "../lib/native";
 import { addProject, inOrder, moveProject, projectsIn, projectsShown, removeProject, renameProject, setState, state, taskById, uid } from "../state/store";
@@ -47,7 +47,7 @@ const remoteMod = () => import("./remote");
 const hostsMod = () => import("./hosts");
 
 export const ACTIONS: Record<string, Action> = {
-  // ───────── 다른 Mac (설정 › 연결)
+  // ───────── 다른 기기 (설정 › 연결)
   "remote.status": {
     where: "설정 › 연결",
     about: "Whether others may work on this Mac (remote), the Macs added here (this one sends them work), the Macs let in here, and who is asking to come in",
@@ -67,7 +67,7 @@ export const ACTIONS: Record<string, Action> = {
   "remote.link": {
     where: "설정 › 연결 › 연결 링크 복사",
     about:
-      "Make this Mac's connect link (ondra://connect/…, good for 10 minutes and one Mac) for another Mac or PC to add this one with (there: 설정 › 연결 › Mac 추가, or remote.add on that one). Needs remote on (ondra_settings remote:true). When that one connects, the user allows it here themselves (a card in Ondra); you can't",
+      "Make this Mac's connect link (ondra://connect/…, good for 10 minutes and one Mac) for another device or PC to add this one with (there: 설정 › 연결 › 기기 추가, or remote.add on that one). Needs remote on (ondra_settings remote:true). When that one connects, the user allows it here themselves (a card in Ondra); you can't",
     run: async () => {
       if (!state.settings.remote) return fail("others may not work on this Mac yet: turn it on first (ondra_settings {\"remote\": true}), then make the link");
       const { connectLink } = await remoteMod();
@@ -76,17 +76,17 @@ export const ACTIONS: Record<string, Action> = {
     },
   },
   "remote.add": {
-    where: "설정 › 연결 › Mac 추가",
-    about: "Add another Mac by its connect link: this one then sends work to it. That Mac's user allows it there",
+    where: "설정 › 연결 › 기기 추가",
+    about: "Add another device by its connect link: this one then sends work to it. That Mac's user allows it there",
     takes: { link: "the ondra://connect/… link from the other Mac" },
     run: async (a) => {
       const { addHost } = await hostsMod();
-      return (await addHost(str(a, "link"))) ? { added: true, then: "that Mac's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
+      return (await addHost(str(a, "link"))) ? { added: true, then: "that device's user allows it there; remote.status shows when it's connected" } : fail("that isn't a connect link (ondra://connect/<id>?code=…)");
     },
   },
   "remote.remove": {
-    where: "설정 › 연결 › 다른 Mac › 제거",
-    about: "Remove a Mac added here (its projects and jobs go from this list; that Mac is told to forget this one)",
+    where: "설정 › 연결 › 다른 기기 › 제거",
+    about: "Remove a Mac added here (its projects and jobs go from this list; that device is told to forget this one)",
     takes: { id: "its id from remote.status added_here" },
     run: async (a) => {
       const id = str(a, "id");
@@ -96,7 +96,7 @@ export const ACTIONS: Record<string, Action> = {
     },
   },
   "remote.forget": {
-    where: "설정 › 연결 › 이 Mac › 제거",
+    where: "설정 › 연결 › 이 기기 › 제거",
     about: "Stop a Mac let in here from coming in again (it may be let in again with a new link)",
     takes: { id: "its id from remote.status let_in" },
     run: async (a) => {

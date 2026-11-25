@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// that Mac's files, and the copies made here
+// that device's files, and the copies made here
 const there = new Map<string, { text: string; modified: number }>();
 const here = new Map<string, string>();
 let winCache = false;
@@ -58,7 +58,7 @@ beforeEach(() => {
   refused.clear();
 });
 
-describe("a page of another Mac", () => {
+describe("a page of another device", () => {
   it("comes with what it uses, laid out as there", async () => {
     const S = "/Users/other/proj/out";
     put(`${S}/index.html`, `<link rel="stylesheet" href="css/style.css"><img src="img/a%20b.png" srcset="img/a@2x.png 2x, img/a@3x.png 3x"><script type="module" src="js/app.js"></script>
@@ -101,7 +101,7 @@ describe("a page of another Mac", () => {
         "Users/other/proj/shared/pic.png",
       ].sort(),
     );
-    // asked there in that Mac's terms
+    // asked there in that device's terms
     expect(vi.mocked(askHost).mock.calls.every((c) => String((c[2] as unknown[])[0]).startsWith("/Users/other") || typeof (c[2] as unknown[])[0] !== "string")).toBe(true);
   });
 

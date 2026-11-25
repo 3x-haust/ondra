@@ -15,7 +15,7 @@ import { openLink } from "../ui/links";
 import { toast, isMainPlace, panelWide, setPanelWide, activeTab, closePanelTab, newPanelTab, panelShared, setBrowserPage, panelTab, previewPlace, ptabs, setActiveTab, setPanelLeave, setPanelShared, setPanelTab, setPtabs, setTabFits, type PanelTab } from "../state/ui";
 import { gitEnv, prOf, setPriority, setTaskAccount, setWeight } from "../engine/tasks";
 import { expand, tilde } from "../engine/rpc";
-import { gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc } from "../lib/native";
+import { gitCommit, gitPr, gitPush, openExternal, openInTerminal, pageSrc, pdfSrc, revealLabel } from "../lib/native";
 import { farError, farShell, farTerm, HostCtx, localCopy, onMac, pageSrcOf, pageTooBig, readText, revealOn, setFarShell, srcOf, tooBig } from "../engine/far";
 import { Xterm } from "../ui/Xterm";
 import { artifacts, kindOf, loadArtifacts } from "../state/artifacts";
@@ -74,7 +74,7 @@ function BranchCardIn(props: { t: Task; w: NonNullable<Task["worktree"]> }) {
 
 /** Open a pull request from the job's branch and show it. */
 async function makePr(t: Task) {
-  // a job of another Mac: its branch, and gh signed in, are there
+  // a job of another device: its branch, and gh signed in, are there
   const url = await onMac(t.host, "far.pr", [t.id], async () => gitPr(expand(t.cwd), t.title, `${t.ask}\n\n— Ondra`, await gitEnv(t)));
   if (url.startsWith("http")) openLink(url);
   return url;
@@ -177,7 +177,7 @@ const folderName = (t: Task) => {
   return parent ? `${name} · ${parent}` : name;
 };
 
-/** the accounts a job may move to: its workspace's here, or (another Mac's job) that workspace's there */
+/** the accounts a job may move to: its workspace's here, or (another device's job) that workspace's there */
 function accountChoices(t: Task): { id: string; name: string }[] {
   if (!t.host) return state.accounts.filter((a) => a.space === t.space || a.id === t.accountId).map((a) => ({ id: a.id, name: accountName(a) }));
   const all = mirror.hosts[t.host]?.info?.accounts ?? [];
@@ -306,7 +306,7 @@ function ShellCard(props: { s: Shell; open: boolean; toggle: () => void }) {
   );
 }
 
-/** A shell in the folder of a job of another Mac, running there; this one shows it and types into it. */
+/** A shell in the folder of a job of another device, running there; this one shows it and types into it. */
 function FarShell(props: { t: Task }) {
   const id = `${props.t.id}-${Math.random().toString(36).slice(2, 8)}`;
   const io = farTerm(props.t.host!, props.t.id, id);
@@ -314,7 +314,7 @@ function FarShell(props: { t: Task }) {
 }
 
 /** What the job's commands are doing now: the running ones with their live output; finished ones folded.
- *  A job of another Mac gets a shell there in the app (that Mac's own Terminal isn't on this screen). */
+ *  A job of another device gets a shell there in the app (that device's own Terminal isn't on this screen). */
 function TerminalPane(props: { t: Task }) {
   const [shell, setShell] = createSignal(false);
   // 터미널 열기 from the job's menu opens the shell at once
@@ -342,7 +342,7 @@ function TerminalPane(props: { t: Task }) {
         >
           <button class="btn sm ghost" classList={{ on: shell() }} onClick={() => setShell(!shell())} title={props.t.cwd}>
             <Icon name="shell" size={14} />
-            {shell() ? tr("터미널 닫기") : tr("그 Mac의 터미널")}
+            {shell() ? tr("터미널 닫기") : tr("그 기기의 터미널")}
           </button>
         </Show>
       </div>
@@ -468,7 +468,7 @@ function ArtifactsPane(props: { t: Task }) {
             <>
               <div class="abar">
                 <span class="acount">{tr("{n}개", { n: list().length })}</span>
-                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, list()[0].path.replace(/\/[^/]*$/, ""))}>
+                <button class="icon-btn sm" title={props.t.host ? tr("그 기기에서 위치 보기") : revealLabel()} onClick={() => void revealOn(props.t.host, list()[0].path.replace(/\/[^/]*$/, ""))}>
                   <Icon name="open" size={14} />
                 </button>
               </div>
@@ -484,7 +484,7 @@ function ArtifactsPane(props: { t: Task }) {
                       <span class="athumb">
                         <Switch fallback={<Icon name={icon(a.name)} size={20} />}>
                           <Match when={kindOf(a.name) === "image"}><img src={srcOf(a.path, props.t.host)} alt="" loading="lazy" /></Match>
-                          {/* another Mac's video: only its icon in the grid (fetched once opened) */}
+                          {/* another device's video: only its icon in the grid (fetched once opened) */}
                           <Match when={kindOf(a.name) === "video" && !props.t.host}><video src={`${srcOf(a.path, undefined)}#t=0.1`} preload="metadata" muted /></Match>
                         </Switch>
                       </span>
@@ -506,14 +506,14 @@ function ArtifactsPane(props: { t: Task }) {
                   <button class="icon-btn sm" title={`${tr("이전")} (←)`} onClick={() => step(-1)}><Icon name="back" size={14} /></button>
                   <button class="icon-btn sm" title={`${tr("다음")} (→)`} onClick={() => step(1)}><Icon name="arrow" size={14} /></button>
                 </Show>
-                <button class="icon-btn sm" title={props.t.host ? tr("그 Mac의 Finder에서 보기") : tr("Finder에서 보기")} onClick={() => void revealOn(props.t.host, a.path)}><Icon name="open" size={14} /></button>
+                <button class="icon-btn sm" title={props.t.host ? tr("그 기기에서 위치 보기") : revealLabel()} onClick={() => void revealOn(props.t.host, a.path)}><Icon name="open" size={14} /></button>
               </div>
               <div class="aview">
                 <Switch fallback={<div class="pane-empty">{tr("미리 볼 수 없음")}</div>}>
-                  <Match when={kindOf(a.name) !== "text" && tooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
-                  <Match when={kindOf(a.name) === "page" && pageTooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 Mac에서 가져오지 않았어요")}</div></Match>
+                  <Match when={kindOf(a.name) !== "text" && tooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 기기에서 가져오지 않았어요")}</div></Match>
+                  <Match when={kindOf(a.name) === "page" && pageTooBig(a.path, props.t.host)}><div class="pane-empty">{tr("파일이 너무 커서 그 기기에서 가져오지 않았어요")}</div></Match>
                   <Match when={kindOf(a.name) === "page"}>
-                    {/* another Mac's page: copied here, with the files it uses */}
+                    {/* another device's page: copied here, with the files it uses */}
                     <Show when={/\.pdf$/i.test(a.path)} fallback={
                       <Show when={props.t.host ? pageSrcOf(a.path, props.t.host) : `${pageSrc(a.path)}?v=${a.modified}`} fallback={<div class="pane-empty" />}>
                         {(src) => <iframe class="aframe" src={src()} sandbox="allow-scripts allow-popups allow-forms" title={a.name} />}
@@ -592,7 +592,7 @@ const hasPage = (t: Task) => !!t.browser || !!t.shot || t.entries.some((e) => e.
 setTabFits((place, kind) => {
   if (kind === "preview") return previewPlace() === place ? "use" : "drop";
   if (isMainPlace(place) || place === "results") return jobOnly(kind) ? "keep" : "use";
-  // a job of another Mac counts as well (taskById holds those)
+  // a job of another device counts as well (taskById holds those)
   const t = taskById(place);
   if (!t) return "use";
   // the shared browser you opened yourself goes along; a task's own page doesn't
@@ -742,7 +742,7 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
     <>
     {/* in the gutter beside the card, which clips what pokes out of it */}
     <div class="panel-resize" title={tr("끌어서 폭 바꾸기 · 두 번 눌러 넓게 보기")} onPointerDown={drag} onDblClick={() => setPanelWide(!panelWide())} />
-    {/* a job of another Mac: pictures in the panel come from there */}
+    {/* a job of another device: pictures in the panel come from there */}
     <HostCtx.Provider value={() => props.t?.host}>
     <aside class="panel" ref={el} classList={{ "flow-only": !props.t && tab() === "flow" }}>
       <div class="panel-bar" data-tauri-drag-region>

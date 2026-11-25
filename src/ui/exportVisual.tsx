@@ -1,7 +1,7 @@
 // A diagram as a picture: the SVG with its computed look written into it, drawn
 // at 2x onto a canvas. Used to see it full size, save it to Downloads, or copy it.
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { copyImage, inTauri, revealPath, saveDownload } from "../lib/native";
+import { copyImage, inTauri, revealPath, saveDownload, revealLabel } from "../lib/native";
 import { ignoredKey, noModifiers } from "../lib/shortcuts";
 import { Icon } from "./Icon";
 import { toast } from "../state/ui";
@@ -112,7 +112,7 @@ export function VisualViewer() {
 export async function saveVisual(svg: SVGSVGElement, label?: string) {
   try {
     const path = await saveDownload(await bytes(await svgPng(svg)), fileName(label));
-    toast(t("다운로드 폴더에 저장했어요"), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
+    toast(t("다운로드 폴더에 저장했어요"), "info", { label: revealLabel(), run: () => void revealPath(path) });
   } catch (e) {
     toast(t("저장하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");
   }

@@ -2,6 +2,7 @@
 // the left (the changed files as a tree with compact folders, or a list), the editor group on the
 // right (preview and kept tabs, breadcrumbs, the editor's actions and its … menu), the diff in
 // CodeMirror, and a status bar. A view of its own, so it can sit in a pane beside the job's chat.
+import { revealLabel } from "../lib/native";
 import { createEffect, createMemo, createResource, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from "solid-js";
 import { taskById } from "../state/store";
 import type { Task } from "../state/types";
@@ -11,7 +12,7 @@ import { discarded } from "../state/progress";
 import { expand } from "../engine/rpc";
 import type { FileAt } from "../lib/native";
 import { editorOn, fileAtRev, mergedIn, revealOn } from "../engine/far";
-import { ignoredKey, matchesShortcut, withHint } from "../lib/shortcuts";
+import { ignoredKey, matchesShortcut, shortcutLabel, withHint } from "../lib/shortcuts";
 import { useChanges } from "../ui/Review";
 import {
   buildTree, capText, changedFiles, closeTab, cycleTab, fileOrder, folderKeys, foldersOf, listRows, MAX_LINES, openTab, pinTab, splitPath, stepAcross, stepFile,
@@ -137,7 +138,7 @@ function Body(props: { t: Task }) {
   // merged: what the merge brought in, from the repo
   const [mergedData] = createResource(
     () => (merged() && w() ? ([mergedRoot(), w()!.branch, w()!.into, w()!.base, props.t.host] as const) : false),
-    // a job of another Mac: from its repo there
+    // a job of another device: from its repo there
     ([repo, branch, into, base, host]) => mergedIn(host, repo, branch, into, base).catch(() => null),
   );
   const source = createMemo<Source | null | undefined>(() => {
@@ -417,9 +418,9 @@ function Body(props: { t: Task }) {
       ? []
       : [
           "sep" as const,
-          // a job of another Mac: they open on that Mac's screen
-          { id: "finder", label: props.t.host ? t("그 Mac의 Finder에서 보기") : t("Finder에서 보기"), icon: "folder", run: () => void revealOn(props.t.host, full(f.path)) },
-          { id: "editor", label: props.t.host ? t("그 Mac의 편집기에서 열기") : t("편집기에서 열기"), icon: "external", run: () => void editorOn(props.t.host, full(f.path)) },
+          // a job of another device: they open on that device's screen
+          { id: "finder", label: props.t.host ? t("그 기기에서 위치 보기") : revealLabel(), icon: "folder", run: () => void revealOn(props.t.host, full(f.path)) },
+          { id: "editor", label: props.t.host ? t("그 기기의 편집기에서 열기") : t("편집기에서 열기"), icon: "external", run: () => void editorOn(props.t.host, full(f.path)) },
         ]),
   ];
   const moreItems = (): MenuEntry[] => {
@@ -608,7 +609,7 @@ function Body(props: { t: Task }) {
                       <dt>{t("다음 변경")}</dt>
                       <dd>F7</dd>
                       <dt>{t("다음 파일")}</dt>
-                      <dd>⌥F5</dd>
+                      <dd>{shortcutLabel("nextFileChange")}</dd>
                     </dl>
                   </div>
                 }

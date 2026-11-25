@@ -51,7 +51,7 @@ const once = (list: MenuSkill[]) => {
   return list.filter((s) => s.name && !seen.has(s.name) && !!seen.add(s.name));
 };
 
-/** The skills a job of that workspace gets, read now: what another Mac shows for its jobs here (engine/farHost.ts). */
+/** The skills a job of that workspace gets, read now: what another device shows for its jobs here (engine/farHost.ts). */
 export async function skillsFor(space: SpaceId): Promise<MenuSkill[]> {
   if (Date.now() - at > 60_000 || !found().length) {
     at = Date.now();
@@ -60,12 +60,12 @@ export async function skillsFor(space: SpaceId): Promise<MenuSkill[]> {
   return once([...mine(space), ...found()]);
 }
 
-/** another Mac's skills, per Mac and place (a job, a project): its jobs run with those, not this Mac's */
+/** another device's skills, per Mac and place (a job, a project): its jobs run with those, not this Mac's */
 const [far, setFar] = createStore<Record<string, MenuSkill[]>>({});
 const farAt = new Map<string, number>();
 
 /** Skills for the "/" menu; the list on disk is read again at most once a minute. A job or project
- *  of another Mac (`on`) lists that Mac's skills, asked again at most once a minute too. */
+ *  of another device (`on`) lists that device's skills, asked again at most once a minute too. */
 export function menuSkills(on?: { host: string; task?: string; project?: string }): MenuSkill[] {
   if (on) {
     const key = `${on.host}|${on.task ?? ""}|${on.project ?? ""}`;

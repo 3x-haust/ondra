@@ -37,7 +37,7 @@ const peer = (o: Partial<FarPeer> = {}): FarPeer => ({
   ...o,
 });
 const call = (fn: string, ...args: unknown[]) => farCall(peer(), fn)!(...args) as Promise<unknown>;
-const NO = "그 Mac에서 열 수 없는 위치예요";
+const NO = "그 기기에서 열 수 없는 위치예요";
 
 beforeAll(async () => {
   // outside the app: home /Users/me, data /tmp/ondra
@@ -53,12 +53,12 @@ beforeEach(() => {
   setState("tasks", [
     task("t1", { project: "p1", cwd: "~/work/app", worktree: { path: "/Users/me/worktrees/app/t1", repo: "/Users/me/work/app", branch: "b", base: "main", state: "open" } as Task["worktree"], shot: "/tmp/shots/t1.png", entries: [{ id: "e", at: 1, kind: "text", text: "see /var/folders/x/look.png" }] }),
     task("t2", { project: "p2", cwd: "~/work/secret" }),
-    // started from that Mac, no project: its folder is the home folder, too wide to open
+    // started from that device, no project: its folder is the home folder, too wide to open
     task("t3", { cwd: "~", from: { device: "dev", space: "" } }),
   ]);
 });
 
-describe("what another Mac may reach here", () => {
+describe("what another device may reach here", () => {
   it("is the folders of its projects and jobs, their results, its attachments; never home", () => {
     const roots = rootsFor(peer());
     expect(roots).toEqual(expect.arrayContaining(["/Users/me/work/app", "/Users/me/worktrees/app/t1", "/tmp/ondra/artifacts/t1", "/tmp/ondra/artifacts/t3", "/tmp/ondra/attachments/remote"]));
@@ -169,9 +169,9 @@ describe("what another Mac may reach here", () => {
 
   it("acts on its own jobs and projects only", async () => {
     expect(await call("far.artifacts", "t1")).toHaveLength(1);
-    await expect(call("far.artifacts", "t2")).rejects.toThrow("그 작업이 이 Mac에 없어요");
-    await expect(call("far.memList", "p2")).rejects.toThrow("그 프로젝트가 이 Mac에 없어요");
-    await expect(call("far.ptyOpen", "x", "t2", 80, 24)).rejects.toThrow("그 작업이 이 Mac에 없어요");
+    await expect(call("far.artifacts", "t2")).rejects.toThrow("그 작업이 이 기기에 없어요");
+    await expect(call("far.memList", "p2")).rejects.toThrow("그 프로젝트가 이 기기에 없어요");
+    await expect(call("far.ptyOpen", "x", "t2", 80, 24)).rejects.toThrow("그 작업이 이 기기에 없어요");
     expect(ptyOpen).not.toHaveBeenCalled();
   });
 

@@ -32,7 +32,7 @@ const job = (id: string, extra: Partial<Task> = {}): Task => ({
 });
 const flush = () => new Promise((r) => setTimeout(r, 0));
 let seq = 0;
-/** a call from that Mac; its answer */
+/** a call from that device; its answer */
 async function call(fn: string, args: unknown[]) {
   const n = ++seq;
   hear({ ev: "msg", conn: 1, data: { t: "call", seq: n, fn, args } });

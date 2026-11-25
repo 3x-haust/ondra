@@ -90,6 +90,39 @@ export const shortcuts = {
   quit: cmd("KeyQ"),
 } satisfies Record<string, Shortcut>;
 export type ShortcutId = keyof typeof shortcuts;
+
+// ───────────── Windows
+// The table is written for macOS. On Windows Ctrl takes ⌘'s place (the Win key belongs to the
+// system), so a default is read through `defaultChord`; a user's own binding is stored as pressed.
+export const onWindows = () => typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
+/** the defaults that would collide once ⌘ becomes Ctrl, or that Windows itself keeps */
+const WINDOWS: Partial<Record<ShortcutId, Shortcut>> = {
+  // Ctrl+W is the pane's close; the tab closes on the Ctrl+F4 of Windows' tabbed apps
+  closeTab: { code: "F4", ctrl: true },
+  // Ctrl+1–9 are the workspaces
+  mac1: { code: "Digit1", alt: true }, mac2: { code: "Digit2", alt: true }, mac3: { code: "Digit3", alt: true },
+  mac4: { code: "Digit4", alt: true }, mac5: { code: "Digit5", alt: true }, mac6: { code: "Digit6", alt: true },
+  mac7: { code: "Digit7", alt: true }, mac8: { code: "Digit8", alt: true }, mac9: { code: "Digit9", alt: true },
+  // Alt+Space opens every window's system menu
+  capture: { code: "Space", ctrl: true, alt: true },
+};
+/** ⌘ as Ctrl; ⌃⌘ (the pane sizes) as Ctrl+Alt+Shift, since Ctrl+arrows move by word */
+const ctrlFor = (s: Shortcut): Shortcut => {
+  if (!s.meta) return s;
+  const out: Shortcut = { code: s.code, ctrl: true };
+  if (s.alt || s.ctrl) out.alt = true;
+  if (s.shift || s.ctrl) out.shift = true;
+  return out;
+};
+/** what an id answers to when the user hasn't changed it, on this system */
+export function defaultChord(id: ShortcutId): Shortcut {
+  const s = (shortcuts as Record<string, Shortcut>)[id];
+  return onWindows() ? WINDOWS[id] ?? ctrlFor(s) : s;
+}
+/** the key that goes with a click or a letter for "more" (open beside, reveal): ⌘, Ctrl on Windows */
+export const primaryKey = (e: { metaKey?: boolean; ctrlKey?: boolean }) => (onWindows() ? !!e.ctrlKey : !!e.metaKey);
+/** ⌘ and a key (⌘F, ⌘S), Ctrl and the key on Windows */
+export const primaryChord = (code: string): Shortcut => (onWindows() ? { code, ctrl: true } : { code, meta: true });
 /** kept down rather than pressed: shown as "⌘ 길게" */
 export const HELD: readonly string[] = ["hints", "quit"];
 /** bound to modifiers alone */
@@ -140,7 +173,7 @@ export function binding(id: string, o: Overrides = overrides()): Shortcut | unde
   if (!isShortcutId(id)) return undefined;
   const text = o[id];
   if (text === UNBOUND) return undefined;
-  return (text !== undefined && parseChord(text)) || table[id];
+  return (text !== undefined && parseChord(text)) || defaultChord(id);
 }
 // A chord taken straight from the table (`shortcuts.search`) stands for its id, so
 // code that matches or shows `shortcuts.x` follows the user's binding too.
@@ -159,9 +192,17 @@ const KEY_GLYPHS: Record<string, string> = {
 function keyGlyph(code: string): string {
   return KEY_GLYPHS[code] ?? code.replace(/^(Key|Digit|Numpad)/, "");
 }
-/** a chord as written, modifiers in the macOS order ⌃⌥⇧⌘ */
+const WINDOWS_KEYS: Record<string, string> = {
+  Enter: "Enter", NumpadEnter: "Enter", Tab: "Tab", Backspace: "Backspace", Delete: "Del", Escape: "Esc",
+  PageUp: "PgUp", PageDown: "PgDn", Home: "Home", End: "End", Minus: "-",
+};
+/** a chord as written: ⌃⌥⇧⌘ glyphs on macOS, "Ctrl+Alt+Shift+K" on Windows */
 export function chordLabel(s: Shortcut): string {
   if (s.code === "Slash" && s.shift && !s.meta && !s.ctrl && !s.alt) return "?";
+  if (onWindows()) {
+    const key = s.code && (WINDOWS_KEYS[s.code] ?? keyGlyph(s.code));
+    return [s.ctrl && "Ctrl", s.alt && "Alt", s.shift && "Shift", s.meta && "Win", key].filter(Boolean).join("+");
+  }
   return `${s.ctrl ? "⌃" : ""}${s.alt ? "⌥" : ""}${s.shift ? "⇧" : ""}${s.meta ? "⌘" : ""}${keyGlyph(s.code)}`;
 }
 /** what a chord shows now: a table chord shows the user's binding ("" when unbound) */

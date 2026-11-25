@@ -1,4 +1,4 @@
-// Another Mac's jobs work here as this Mac's do: every action on one goes to that Mac (far), its
+// Another Mac's jobs work here as this Mac's do: every action on one goes to that device (far), its
 // questions come over and are answered there, and a new job in its project carries all it was asked with.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcile } from "solid-js/store";
@@ -21,7 +21,7 @@ const job = (over: Partial<Task> = {}): Task => ({
   now: "", plan: [], legs: [], entries: [], shells: [], inbox: [],
   ...over,
 });
-/** a job's fields as that Mac sends them (its entries go apart) */
+/** a job's fields as that device sends them (its entries go apart) */
 const head = (over: Partial<Task> = {}) => {
   const { entries: _, ...rest } = job(over);
   return rest;
@@ -29,7 +29,7 @@ const head = (over: Partial<Task> = {}) => {
 const ask = (over: Partial<Decision> = {}): Decision => ({ id: "d1", taskId: "far1", at: 1, question: "Which one?", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], context: [], kind: "ask", ...over });
 
 let sent: Record<string, unknown>[] = [];
-/** the calls sent to that Mac, in order */
+/** the calls sent to that device, in order */
 const calls = () => sent.filter((c) => c.cmd === "peer-send").map((c) => c.data as { t: string; seq: number; fn: string; args: unknown[] });
 const answer = (seq: number, value: unknown) => onPeer({ ev: "peer-msg", peer: HOST, data: { t: "ret", seq, value } });
 
@@ -45,8 +45,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("actions on another Mac's job", () => {
-  it("go to that Mac instead of this Mac's (missing) copy", async () => {
+describe("actions on another device's job", () => {
+  it("go to that device instead of this Mac's (missing) copy", async () => {
     finishTask("far1");
     pauseTask("far1");
     togglePin("far1");
@@ -73,7 +73,7 @@ describe("actions on another Mac's job", () => {
     expect(state.tasks[0]).toMatchObject({ pinned: true, priority: 1 });
   });
 
-  it("다시 실행 opens the new job that Mac made", async () => {
+  it("다시 실행 opens the new job that device made", async () => {
     const got = duplicateTask("far1");
     expect(got).toBeInstanceOf(Promise);
     const c = calls()[0];
@@ -86,7 +86,7 @@ describe("actions on another Mac's job", () => {
     setMirror("hosts", HOST, "tasks", 0, "unread", true);
     markRead("far1");
     expect(taskById("far1")?.unread).toBe(false);
-    // that Mac still has it unread: its next patch doesn't bring the dot back
+    // that device still has it unread: its next patch doesn't bring the dot back
     apply(HOST, [{ id: "far1", head: head({ unread: true }) }]);
     expect(taskById("far1")?.unread).toBe(false);
     // it said more: unread again
@@ -96,7 +96,7 @@ describe("actions on another Mac's job", () => {
     expect(calls()).toEqual([]);
   });
 
-  it("is in line with that Mac's own queue, not this Mac's", () => {
+  it("is in line with that device's own queue, not this Mac's", () => {
     setState("tasks", [job({ id: "here", status: "queued", priority: 0 })]);
     setMirror("hosts", HOST, "tasks", (l) => [...l, job({ id: "far2", status: "queued", host: HOST, createdAt: 5 }), job({ id: "far3", status: "queued", host: HOST, createdAt: 3 })]);
     expect(queueWith(taskById("far2")!).map((t) => t.id)).toEqual(["far3", "far2"]);
@@ -131,7 +131,7 @@ describe("its questions", () => {
     expect(decisionFor("far1")).toBeUndefined();
   });
 
-  it("come back when that Mac couldn't take the answer", async () => {
+  it("come back when that device couldn't take the answer", async () => {
     setMirror("hosts", HOST, "decisions", [ask()]);
     const done = decide("d1", "b");
     onPeer({ ev: "peer-msg", peer: HOST, data: { t: "ret", seq: calls()[0].seq, error: "unknown: decide" } });
@@ -139,7 +139,7 @@ describe("its questions", () => {
     expect(decisionFor("far1")?.id).toBe("d1");
   });
 
-  it("are sent for the jobs that Mac keeps only", () => {
+  it("are sent for the jobs that device keeps only", () => {
     setState("projects", [{ id: "p1", space: "home", name: "p1", folder: "/repo/p1" }]);
     setState("tasks", [job({ id: "kept", project: "p1" }), job({ id: "asked", from: { device: "dev", space: "home" } }), job({ id: "other" })]);
     setState("decisions", [ask({ id: "d-kept", taskId: "kept" }), ask({ id: "d-asked", taskId: "asked" }), ask({ id: "d-other", taskId: "other" }), ask({ id: "d-main", taskId: "main:home" })]);
@@ -147,7 +147,7 @@ describe("its questions", () => {
   });
 });
 
-describe("a new job in that Mac's project", () => {
+describe("a new job in that device's project", () => {
   it("is asked with everything a job here would get", () => {
     setMirror("hosts", HOST, "tasks", 0, "status", "done");
     setState("spaces", (l) => [...l, { id: "work", label: "회사", folder: "~", rules: "" }]);
@@ -164,7 +164,7 @@ describe("a new job in that Mac's project", () => {
     expect(mirror.hosts[HOST].tasks.some((t) => t.title === "Ship it")).toBe(true);
   });
 
-  it("is made there with them, and only with that Mac's own jobs to build on", () => {
+  it("is made there with them, and only with that device's own jobs to build on", () => {
     setState("spaces", (l) => [...l, { id: "work", label: "회사", folder: "~", rules: "" }]);
     setState("projects", [{ id: "repo", space: "home", name: "repo", folder: "/repo" }]);
     setState("tasks", [job({ id: "j1", status: "done", project: "repo" }), job({ id: "elsewhere", space: "work" })]);
@@ -206,7 +206,7 @@ describe("a project's secrets, asked from the Mac that added it", () => {
     expect(set).toHaveBeenLastCalledWith({ name: "API_KEY", value: "v", project: "repo", folder: "/repo", writeDotenv: true, addIgnore: true });
   });
 
-  it("refuse a project that Mac doesn't have", async () => {
+  it("refuse a project that device doesn't have", async () => {
     await expect(secretCalls.secretList("ghost")).rejects.toThrow();
     await expect(secretCalls.secretDelete({ project: remoteProjectId(HOST, "repo"), name: "X" })).rejects.toThrow();
   });

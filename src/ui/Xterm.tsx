@@ -1,4 +1,4 @@
-// A real terminal (xterm.js) on a PTY from the Rust side, or on one of another Mac (`io`, engine/far.ts).
+// A real terminal (xterm.js) on a PTY from the Rust side, or on one of another device (`io`, engine/far.ts).
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -16,7 +16,7 @@ export function Xterm(props: {
   onExit?: (code: number | null) => void;
   /** Keep the PTY running when this view goes away. */
   keep?: boolean;
-  /** the PTY is elsewhere (another Mac's): its output, keys and size go through this */
+  /** the PTY is elsewhere (another device's): its output, keys and size go through this */
   io?: TermIO;
 }) {
   let host!: HTMLDivElement;

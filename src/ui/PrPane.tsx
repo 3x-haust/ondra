@@ -38,7 +38,7 @@ export function PrPane(props: { t: Task }) {
     setErr("");
     setFetchedAt(Date.now());
     try {
-      // a job of another Mac: read there, with gh signed in as that Mac is
+      // a job of another device: read there, with gh signed in as that device is
       const raw = await onMac(props.t.host, "far.prView", [props.t.id], async () => ghPrView(u, await gitEnv(props.t)));
       return raw ? parsePrView(raw) : undefined;
     } catch (e) {

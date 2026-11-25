@@ -43,7 +43,7 @@ describe("removing a Mac this one works on", () => {
     await flush();
     expect(sent).toContainEqual(expect.objectContaining({ cmd: "dial", peer: A, bye: true }));
   });
-  it("is done once that Mac forgot this one (or never knew it)", () => {
+  it("is done once that device forgot this one (or never knew it)", () => {
     removeHost(A);
     peer("bye", undefined, A, true);
     expect(state.settings.leaving).toEqual([]);
@@ -51,7 +51,7 @@ describe("removing a Mac this one works on", () => {
     peer("denied", "unknown", B, true);
     expect(state.settings.leaving).toEqual([]);
   });
-  it("keeps the goodbye for later when that Mac can't be reached", () => {
+  it("keeps the goodbye for later when that device can't be reached", () => {
     removeHost(A);
     peer("closed", "timed out", A, true);
     expect(state.settings.leaving?.map((l) => l.id)).toEqual([A]);
@@ -78,7 +78,7 @@ describe("removing a Mac this one works on", () => {
   });
 });
 
-describe("that Mac removed this one", () => {
+describe("that device removed this one", () => {
   it("revoked: it goes from here, no zombie left", () => {
     peer("denied", "revoked");
     expect(state.settings.hosts?.map((h) => h.id)).toEqual([B]);

@@ -3,10 +3,11 @@
 // none where there is nothing to do. The web view's own menu (새로 고침, 뒤로) never shows:
 // it acts on the app's page, not on what was clicked. Text fields keep the system's
 // editing menu, and a part of the app with its own menu (a task, a file) handles it first.
-import { revealPath, saveDownload } from "../lib/native";
+import { revealPath, saveDownload, revealLabel } from "../lib/native";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
 import { linkMenuItems } from "./links";
+import { chordLabel, primaryChord } from "../lib/shortcuts";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 
 /** What the menu offers for a right-click on `target`, with `picked` the text selected then. */
@@ -83,7 +84,7 @@ async function saveImage(src: string, name: string) {
     const ext = EXT[b.type] ?? "png";
     const file = /\.[a-z0-9]{2,5}$/i.test(name) ? name : `${name}.${ext}`;
     const path = await saveDownload([...new Uint8Array(await b.arrayBuffer())], file);
-    toast(t("다운로드 폴더에 저장했어요"), "info", { label: t("Finder에서 보기"), run: () => void revealPath(path) });
+    toast(t("다운로드 폴더에 저장했어요"), "info", { label: revealLabel(), run: () => void revealPath(path) });
   } catch (e) {
     toast(t("저장하지 못했어요: {e}", { e: e instanceof Error ? e.message : String(e) }), "bad");
   }
@@ -102,7 +103,7 @@ export function menuItems(m: MenuTarget): MenuEntry[] {
       { id: "save-image", label: t("이미지 저장"), icon: "download", run: () => void saveImage(m.src, m.name) },
       ...(/^https?:\/\//.test(m.src) ? (["sep", { id: "copy-image-link", label: t("이미지 주소 복사"), icon: "link", run: () => copyText(m.src) }] as MenuEntry[]) : []),
     ];
-  if (m.kind === "text") return [{ id: "copy-text", label: t("복사"), icon: "copy", kbd: "⌘C", run: () => copyText(m.text) }];
+  if (m.kind === "text") return [{ id: "copy-text", label: t("복사"), icon: "copy", kbd: chordLabel(primaryChord("KeyC")), run: () => copyText(m.text) }];
   if (m.kind === "link") return linkMenuItems(m.url);
   return [];
 }

@@ -456,7 +456,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
   const [open, setOpen] = createSignal(false);
-  // a job of another Mac: the pictures it looked at are there
+  // a job of another device: the pictures it looked at are there
   const host = useHost();
   const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
   const shown = () => props.tools.filter((t) => t.tool.ok !== false && t.tool.image);

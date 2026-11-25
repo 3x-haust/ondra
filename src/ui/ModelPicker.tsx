@@ -91,7 +91,7 @@ export function placePop(el: HTMLElement) {
   }
 }
 
-/** another Mac's account, for picking a model there */
+/** another device's account, for picking a model there */
 export interface RemoteModels {
   models: string[];
   /** the account's own model there */
@@ -112,7 +112,7 @@ export function ModelPicker(props: {
   effortOf?: (model: string) => string;
   /** open upward (inside a composer at the bottom) */
   up?: boolean;
-  /** an account of another Mac (Settings › 연결): its models and levels as that Mac sent them */
+  /** an account of another device (Settings › 연결): its models and levels as that device sent them */
   remote?: RemoteModels;
 }) {
   const [open, setOpen] = usePop();
