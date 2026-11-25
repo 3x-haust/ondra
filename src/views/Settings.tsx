@@ -69,16 +69,6 @@ import appIcon from "../../src-tauri/icons/128x128@2x.png";
 const folderName = (f: string | undefined) => (!f || f === "~" ? t("홈 폴더") : f);
 
 
-function Stepper(props: { value: number; min: number; max: number; onChange: (n: number) => void }) {
-  return (
-    <div class="stepper">
-      <button disabled={props.value <= props.min} onClick={() => props.onChange(props.value - 1)} aria-label={t("줄이기")}>−</button>
-      <span>{props.value}</span>
-      <button disabled={props.value >= props.max} onClick={() => props.onChange(props.value + 1)} aria-label={t("늘리기")}>+</button>
-    </div>
-  );
-}
-
 export function Switch_(props: { on: boolean; set: (on: boolean) => void; label?: string }) {
   return <button class="switch" classList={{ on: props.on }} role="switch" aria-checked={props.on} aria-label={props.label} onClick={() => props.set(!props.on)}><i /></button>;
 }
@@ -253,12 +243,6 @@ function General() {
               {(p) => <button classList={{ on: (state.settings.permission ?? "auto") === p.id }} title={t(p.desc)} onClick={() => setState("settings", "permission", p.id)}>{t(p.label)}</button>}
             </For>
           </div>
-        </Row>
-        <Row title={t("동시 작업 수")} desc={t("한 번에 같이 도는 작업 수예요")}>
-          <Stepper value={state.settings.slots.light} min={1} max={10} onChange={(n) => setState("settings", "slots", "light", n)} />
-        </Row>
-        <Row title={t("빌드·시뮬레이터 작업 동시 수")} desc={t("빌드, 시뮬레이터, 앱 조작")}>
-          <Stepper value={state.settings.slots.heavy} min={1} max={3} onChange={(n) => setState("settings", "slots", "heavy", n)} />
         </Row>
       </div>
 
@@ -1191,7 +1175,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: strin
 /** Settings the search finds without the tab open: the tab, and the row's name as its Row shows it. */
 const FINDABLE: [SettingsTab, string][] = [
   ["general", "테마"], ["general", "화면 크기"], ["general", "언어"], ["general", "링크 열기"],
-  ["general", "기본 모델"], ["general", "기본 권한"], ["general", "동시 작업 수"], ["general", "빌드·시뮬레이터 작업 동시 수"],
+  ["general", "기본 모델"], ["general", "기본 권한"],
   ["general", "작업마다 새 워크트리"], ["general", "GitHub 푸시·PR 허용"], ["general", "확인된 버그 수정은 바로 병합"], ["general", "끝내기 전에 앱 직접 실행해 보기"],
   ["general", "메모리 자동 저장"], ["general", "두 번 말한 규칙은 자동 검사로"], ["general", "스킬 고치기 제안"],
   ["general", "작업 브라우저 작게 띄우기"], ["general", "알림 소리"], ["general", "소리 크기"], ["general", "공통 지침"], ["general", "업데이트 확인"],

@@ -440,7 +440,7 @@ Write it the way a careful product team writes a dev tool,
 not the way a chatbot talks.
 
 ### 12.1 Rules
-1. Labels are nouns or short noun phrases: `동시 작업 수`, not `한 번에 하는 일`. Settings rows, tabs, menu items, column titles.
+1. Labels are nouns or short noun phrases: `기본 권한`, not `처음에 줄 권한`. Settings rows, tabs, menu items, column titles.
 2. Buttons are one or two words, a verb or verb-noun: `저장`, `병합`, `다시 시도`, `작업 만들기`. English: `Save`, `Merge`, `Try again`.
 3. Messages (toasts, empty states, errors) are one short sentence in 해요체 at most, and often just a phrase: `저장했어요`, `이슈 없음`. No cheerful filler, no "~해 드릴게요", no "~했답니다", no exclamation marks.
 4. No helper text under labels. If a label needs one, the label is wrong. A tooltip may hold one short fact.

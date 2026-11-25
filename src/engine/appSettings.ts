@@ -47,8 +47,6 @@ export const SETTINGS: Record<string, Entry> = {
   language: { where: "일반 › 언어", kind: { type: "enum", of: ["system", "ko", "en"] }, get: () => state.settings.language ?? "system", set: (v: "system" | "ko" | "en") => setState("settings", "language", v) },
   links: { where: "일반 › 링크 열기", kind: { type: "enum", of: ["inside", "outside"] }, get: () => state.settings.links ?? "inside", set: (v: "inside" | "outside") => setState("settings", "links", v) },
   permission: { where: "일반 › 기본 권한 (ask 매번 묻기 · auto 자동 판단 · full 전체 권한)", kind: { type: "enum", of: ["ask", "auto", "full"] }, get: () => state.settings.permission ?? "auto", set: (v: Permission) => setState("settings", "permission", v) },
-  "slots.light": { where: "일반 › 동시 작업 수", kind: { type: "int", min: 1, max: 10 }, get: () => state.settings.slots.light, set: (v: number) => setState("settings", "slots", "light", v) },
-  "slots.heavy": { where: "일반 › 빌드·시뮬레이터 작업 동시 수", kind: { type: "int", min: 1, max: 3 }, get: () => state.settings.slots.heavy, set: (v: number) => setState("settings", "slots", "heavy", v) },
   isolate: { where: "일반 › 작업 폴더와 GitHub › 작업마다 새 워크트리", kind: { type: "bool" }, get: () => state.settings.isolate, set: (v: boolean) => setState("settings", "isolate", v) },
   learn: { where: "일반 › 확인과 메모리 › 메모리 자동 저장", kind: { type: "bool" }, get: () => state.settings.learn, set: (v: boolean) => setState("settings", "learn", v) },
   appCheck: { where: "일반 › 확인과 메모리 › 끝내기 전에 앱 직접 실행해 보기", kind: { type: "bool" }, missing: true, get: () => state.settings.appCheck !== false, set: (v: boolean) => setState("settings", "appCheck", v) },
