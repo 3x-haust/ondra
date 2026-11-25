@@ -1,0 +1,36 @@
+[package]
+name = "ondra-browser"
+version = "1.0.0"
+license = "MIT"
+edition = "2021"
+publish = false
+rust-version = "1.89"
+description = "Ondra's browser tool for Windows and Linux: drives Chrome over the DevTools protocol (macOS ships the Swift build in src-tauri/helpers/browser)."
+
+# Its own workspace: built apart from the app, like remote/host.
+[workspace]
+
+[[bin]]
+name = "ondra-browser"
+path = "src/main.rs"
+
+[[bin]]
+name = "browse"
+path = "src/browse.rs"
+
+[dependencies]
+serde_json = "1"
+base64 = "0.22"
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+getrandom = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
