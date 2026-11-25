@@ -1,8 +1,8 @@
 // The Mac bar at the foot of the sidebar: this Mac, always (its name, icon and color are set from
-// here too), and each Mac added in Settings › 연결 as a mark. Picking one (or ⌃1…⌃9) makes it where the current workspace's new
-// work runs. Right-click: rename, an emoji or icon, a color (that can tint the whole window, so
-// it's plain which Mac is in use), connection settings, disconnect or remove. The workspace tabs at the top
-// stay as they are.
+// here too), and each Mac added in Settings › 연결 as a mark. Each device has workspaces of its own:
+// picking one (or ⌃1…⌃9) shows its workspaces in the tabs at the top and the work done on it, and
+// new work there runs on it. Right-click: rename, an emoji or icon, a color (that can tint the whole
+// window, so it's plain which Mac is in use), connection settings, disconnect or remove.
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type Component, type JSX } from "solid-js";
 import { Dynamic, Portal } from "solid-js/web";
 import {
@@ -12,12 +12,13 @@ import {
   Palette, PawPrint, Pizza, Plane, Puzzle, Rocket, Shapes, Snowflake, Sparkles, SquareCheck, SquareTerminal, Star, Sun, Target, Minus, Plus, ChevronLeft, ChevronRight, RotateCcw,
   ThumbsUp, TrainFront, TreePine, Trophy, Umbrella, Users, Utensils, Wrench, Zap,
 } from "lucide-solid";
-import { setState, state } from "../state/store";
+import { decisionsIn, setState, spacesOf, state } from "../state/store";
+import { switchSpace } from "../state/workspace";
 import { mirror } from "../state/mirror";
 import { setView, toast } from "../state/ui";
 import { askRemoveHost, hostConnectItem } from "./macActions";
 import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
-import { chosenComputer, hostState, localHere, setComputer, thisComputer } from "./ComputerPicker";
+import { hostState, thisComputer } from "./ComputerPicker";
 import { projectHue } from "./ProjectBadge";
 import { ctxFor, openMenuAt, type MenuEntry } from "./taskMenu";
 import { Icon } from "./Icon";
@@ -58,25 +59,20 @@ export function macs(): Mac[] {
 export const otherMacs = () => (state.settings.hosts ?? []).length > 0;
 
 const statusOf = (m: Mac) => (m.local ? "ok" : (mirror.hosts[m.id]?.status ?? "connecting"));
-const current = () => chosenComputer(state.space)?.host ?? LOCAL;
-/** that Mac has this workspace (another Mac's tab may be only there; this Mac may have no account here) */
-const hasHere = (m: Mac) => {
-  if (m.local) return localHere(state.space);
-  const label = state.spaces.find((s) => s.id === state.space)?.label;
-  const h = state.settings.hosts?.find((x) => x.id === m.id);
-  const labels = mirror.hosts[m.id]?.info?.spaces.map((s) => s.label) ?? h?.spaces;
-  return !labels || labels.includes(label ?? "");
-};
-
-/** run the current workspace's new work on that Mac */
+/** the device whose workspace is open */
+const current = () => state.spaces.find((s) => s.id === state.space)?.host ?? LOCAL;
+/** a device's workspaces here (another device's come once it has connected) */
+const tabsOf = (m: Mac) => spacesOf(m.local ? undefined : m.id);
+/** the workspace last open on each device, to come back to */
+const lastOn: Record<string, string> = {};
+/** show that device: the workspace last open on it, else its first */
 export function pickMac(id: string) {
   const m = macs().find((x) => x.id === id);
-  if (!m) return;
-  const space = t(state.spaces.find((s) => s.id === state.space)?.label ?? "");
-  if (!hasHere(m)) return void toast(t("{mac}에는 {space} 워크스페이스가 없어요", { mac: m.name, space }));
-  if (m.id === current()) return;
-  setComputer(state.space, m.local ? undefined : { host: m.id });
-  toast(t("{space} · 새 작업은 {mac}에서 해요", { space, mac: m.name }));
+  if (!m || m.id === current()) return;
+  const tabs = tabsOf(m);
+  if (!tabs.length) return void toast(t("{mac}에 연결되면 워크스페이스가 보여요", { mac: m.name }));
+  lastOn[current()] = state.space;
+  switchSpace((tabs.find((s) => s.id === lastOn[m.id]) ?? tabs[0]).id);
 }
 
 function setLook(id: string, patch: Look) {
@@ -490,7 +486,7 @@ export function MacBar() {
             <button
               class="mbar-mac"
               style={tintVars(m)}
-              classList={{ on: current() === m.id, ctx: ctxFor() === `mac:${m.id}` || open()?.id === m.id, off: !hasHere(m), away: statusOf(m) !== "ok" }}
+              classList={{ on: current() === m.id, ctx: ctxFor() === `mac:${m.id}` || open()?.id === m.id, off: !tabsOf(m).length, away: statusOf(m) !== "ok" }}
               aria-pressed={current() === m.id}
               aria-label={m.name}
               title={[m.name, m.local ? "" : hostState(m.id), i() < 9 ? shortcutHint(`mac${i() + 1}` as ShortcutId) : ""].filter(Boolean).join(" · ")}
@@ -502,6 +498,8 @@ export function MacBar() {
               }}
             >
               <MacMark mac={m} />
+              {/* a question waits in one of its workspaces (the tabs show only the open device's) */}
+              <Show when={current() !== m.id && tabsOf(m).some((s) => decisionsIn(s.id).length)}><i class="space-alert" /></Show>
               {/* the one picked opens into a pill with its name */}
               <span class="mbar-name">{m.name}</span>
             </button>

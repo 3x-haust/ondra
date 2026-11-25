@@ -13,9 +13,11 @@ export function Capture() {
     const raw = await stateLoad().catch(() => null);
     if (!raw) return;
     try {
-      const s = JSON.parse(raw) as { space?: string; spaces?: { id: string; label: string }[] };
-      if (s.spaces?.length) setSpaces(s.spaces.map(({ id, label }) => ({ id, label })));
-      if (s.space && s.spaces?.some((x) => x.id === s.space)) setSpace(s.space);
+      const s = JSON.parse(raw) as { space?: string; spaces?: { id: string; label: string; host?: string }[] };
+      // this device's own workspaces: another device's main isn't run here
+      const own = (s.spaces ?? []).filter((x) => !x.host);
+      if (own.length) setSpaces(own.map(({ id, label }) => ({ id, label })));
+      if (s.space && own.some((x) => x.id === s.space)) setSpace(s.space);
     } catch {}
   };
   const next = () => {

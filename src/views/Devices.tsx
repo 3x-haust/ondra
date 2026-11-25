@@ -11,7 +11,7 @@ import {
 } from "../lib/native";
 import { deviceSpace, devices, refreshDevices, setDeviceSpace, usedBy } from "../state/devices";
 import { noModifiers, viewKey } from "../lib/shortcuts";
-import { spaceById, state } from "../state/store";
+import { spaceById, state, ownSpaces } from "../state/store";
 import type { SpaceId } from "../state/types";
 import { openTask, setView, toast } from "../state/ui";
 import { Icon } from "../ui/Icon";
@@ -66,7 +66,7 @@ function SpacePick(props: { d: Device }) {
           onChange={(e) => setDeviceSpace(props.d, (e.currentTarget.value || undefined) as SpaceId | undefined)}
         >
           <option value="">{t("전체")}</option>
-          <For each={state.spaces}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
+          <For each={ownSpaces()}>{(s) => <option value={s.id}>{t(s.label)}</option>}</For>
         </select>
       </label>
     </Show>

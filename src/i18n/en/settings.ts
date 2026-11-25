@@ -439,7 +439,6 @@ export default {
   "{name}의 계정": "Account on {name}",
   "이 프로젝트는 {name}에 있어요": "This project is on {name}",
   "어느 Mac에서 할지": "Which Mac it runs on",
-  "{name}에서 실행": "Running on {name}",
   "{name} 연결 안 됨": "{name} not connected",
   "연결": "Connections",
   "다른 Mac": "Other Macs",

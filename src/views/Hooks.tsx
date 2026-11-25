@@ -2,7 +2,7 @@
 // Saved as JSON in the app's data folder; extensions/hooks.ts reads it in every job.
 import { createSignal, For, onMount, Show } from "solid-js";
 import { hooksLoad, hooksSave } from "../lib/native";
-import { state, uid } from "../state/store";
+import { state, uid, ownSpaces } from "../state/store";
 import { toast } from "../state/ui";
 import { Fold } from "../ui/Fold";
 import { EmptyState, PageHead } from "./Settings";
@@ -86,7 +86,7 @@ export function HooksTab() {
                   <span>{t("워크스페이스|one")}</span>
                   <select class="select" value={h.space ?? ""} onChange={(e) => patch(h.id, { space: e.currentTarget.value || undefined })}>
                     <option value="">{t("전체")}</option>
-                    <For each={state.spaces}>{(sp) => <option value={sp.id}>{t(sp.label)}</option>}</For>
+                    <For each={ownSpaces()}>{(sp) => <option value={sp.id}>{t(sp.label)}</option>}</For>
                   </select>
                 </label>
                 <Show when={forTools(h.event)}>

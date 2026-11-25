@@ -1969,12 +1969,19 @@
   min-width: 28px;
   height: 28px;
   padding: 0 7px;
+  position: relative;
   border-radius: 999px;
   color: var(--ink-3);
   transition:
     background-color 0.18s var(--ease),
     color 0.18s var(--ease),
     padding 0.18s var(--ease);
+}
+/* a question waits on a device not shown: its dot on the mark's corner */
+.app .sidebar .mbar-mac .space-alert {
+  top: 2px;
+  right: 2px;
+  margin-top: 0;
 }
 .app .sidebar .mbar-mac:hover,
 .app .sidebar .mbar-mac.ctx {
@@ -2017,7 +2024,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* the Mac new work runs on: a pill in its color, with its name */
+/* the device shown (its workspaces and work): a pill in its color, with its name */
 .app .sidebar .mbar-mac.on {
   padding: 0 11px 0 9px;
   background: color-mix(in oklab, var(--tint) 16%, transparent);

@@ -1,7 +1,7 @@
 // Settings › 연결: other Macs this one works on (their projects
 // show in the sidebar, their jobs run there), and other Macs allowed to work on this one.
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
-import { setState, state } from "../state/store";
+import { setState, state, ownSpaces } from "../state/store";
 import { mirror } from "../state/mirror";
 import { addHost, hiddenProjects, reconnect, showHostProject } from "../engine/hosts";
 import { answerPair, askStopJobs, connectLink, dropDevice, keepAwake, remote, setDeviceSpaces, setRemoteOn } from "../engine/remote";
@@ -222,15 +222,15 @@ const allSpaces = (id: string) => !state.settings.deviceSpaces?.[id];
 
 /** one Mac allowed in: the workspaces it may use, its jobs here, 제거 */
 function deviceMenu(id: string, name: string): MenuEntry[] {
-  const may = state.settings.deviceSpaces?.[id] ?? state.spaces.map((s) => s.id);
+  const may = state.settings.deviceSpaces?.[id] ?? ownSpaces().map((s) => s.id);
   const toggle = (space: string) => {
     const next = may.includes(space) ? may.filter((x) => x !== space) : [...may, space];
     // every one of them again: back to "all" (a workspace made later is included too)
-    setDeviceSpaces(id, state.spaces.every((s) => next.includes(s.id)) ? undefined : next);
+    setDeviceSpaces(id, ownSpaces().every((s) => next.includes(s.id)) ? undefined : next);
   };
   const n = jobsFrom(state.tasks, id).length;
   const groups: MenuItem[][] = [
-    state.spaces.length > 1 ? state.spaces.map((s) => ({ id: `space:${s.id}`, label: s.label, icon: "folder", checked: may.includes(s.id), run: () => toggle(s.id) })) : [],
+    ownSpaces().length > 1 ? ownSpaces().map((s) => ({ id: `space:${s.id}`, label: s.label, icon: "folder", checked: may.includes(s.id), run: () => toggle(s.id) })) : [],
     n ? [{ id: "jobs", label: t("그 기기에서 시킨 작업 {n}개 정리", { n }), icon: "archive", run: () => askStopJobs(id, name) }] : [],
     [{ id: "remove", label: t("제거"), icon: "trash", danger: true, run: () => askForgetDevice(id) }],
   ];

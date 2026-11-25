@@ -3,7 +3,7 @@
 // gets their findings merged: where they agree first, where they differ checked once. None set:
 // the job's own model, as before. Laid out like the account list: one row per reviewer.
 import { createSignal, For, Show } from "solid-js";
-import { setState, state } from "../state/store";
+import { setState, state, ownSpaces } from "../state/store";
 import type { Account, Reviewer, SpaceId } from "../state/types";
 import { reviewersFor } from "../engine/crosscheck";
 import { accountName } from "../ui/AccountPicker";
@@ -36,9 +36,9 @@ export function ReviewSettings() {
   return (
     <>
       <GroupTitle title={t("코드 리뷰")}>
-        <Show when={state.spaces.length > 1}>
+        <Show when={ownSpaces().length > 1}>
           <div class="seg sm">
-            <For each={state.spaces}>{(s) => <button classList={{ on: space() === s.id }} onClick={() => setSpace(s.id)}>{s.label}</button>}</For>
+            <For each={ownSpaces()}>{(s) => <button classList={{ on: space() === s.id }} onClick={() => setSpace(s.id)}>{s.label}</button>}</For>
           </div>
         </Show>
       </GroupTitle>

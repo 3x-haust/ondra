@@ -1,6 +1,6 @@
 import { binding, type ShortcutCommand, type ShortcutId } from "../lib/shortcuts";
 import { nextWaiting, stepFork } from "../views/Sidebar";
-import { state, taskById } from "./store";
+import { deviceSpaces, state, taskById } from "./store";
 import { switchSpace } from "./workspace";
 import { macs, otherMacs, pickMac } from "../ui/MacBar";
 import { canClosePane, closeFocused, hasAttention, nextAttention, splitNew } from "../views/PaneControls";
@@ -80,8 +80,10 @@ export function appCommands(): ShortcutCommand[] {
     command("previousJob", "이전 작업", "이동", "back", () => { const t = stepFork(state.space, -1); if (t) openTask(t.id); }, () => !!stepFork(state.space, -1), true),
     command("nextJob", "다음 작업", "이동", "arrow", () => { const t = stepFork(state.space, 1); if (t) openTask(t.id); }, () => !!stepFork(state.space, 1), true),
     command("waiting", "다음 내 차례", "이동", "hand", () => { const t = nextWaiting(state.space); if (t) openTask(t.id); }, () => !!nextWaiting(state.space), true),
-    ...(otherMacs() ? macs() : []).map((m, i): ShortcutCommand => ({ id: `mac-${m.id}`, label: t("{name}에서 실행", { name: m.name }), section: t("기기"), icon: "monitor", shortcut: i < 9 ? binding(`mac${i + 1}`) : undefined, inInput: true, run: () => pickMac(m.id) })),
-    ...state.spaces.map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? binding(`ws${i + 1}`) : undefined, inInput: true, run: () => switchSpace(s.id) })),
+    ...(otherMacs() ? macs() : []).map((m, i): ShortcutCommand => ({ id: `mac-${m.id}`, label: t("{name} 기기로 전환", { name: m.name }), section: t("기기"), icon: "monitor", shortcut: i < 9 ? binding(`mac${i + 1}`) : undefined, inInput: true, run: () => pickMac(m.id) })),
+    // ⌘1…⌘9: the open device's workspaces; another device's are named with it
+    ...deviceSpaces().map((s, i): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: t(s.label) }), section: t("워크스페이스"), icon: "arrow", shortcut: i < 9 ? binding(`ws${i + 1}`) : undefined, inInput: true, run: () => switchSpace(s.id) })),
+    ...state.spaces.filter((s) => !deviceSpaces().includes(s)).map((s): ShortcutCommand => ({ id: `sp-${s.id}`, label: t("{name} 워크스페이스로 전환", { name: `${macs().find((m) => (s.host ? m.id === s.host : m.local))?.name ?? ""} · ${t(s.label)}` }), section: t("워크스페이스"), icon: "arrow", inInput: true, run: () => switchSpace(s.id) })),
     // the panel and every tab it can show, in one section
     command("panel", "패널 열기·닫기", "패널", "panel", togglePanel, panelAvailable, true),
     command("flow", "작업 흐름", "패널", "branch", () => openPanel("flow"), panelAvailable, true),

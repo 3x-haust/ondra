@@ -3,7 +3,7 @@
 // is never the personal one's. A service that only takes known clients (Google, Slack) asks for
 // the user's own OAuth app: its id goes into the space's mcp.json, its secret into the keychain.
 import { createResource, createSignal, For, Show } from "solid-js";
-import { state } from "../state/store";
+import { state, ownSpaces } from "../state/store";
 import { toast } from "../state/ui";
 import { openExternal } from "../lib/native";
 import { addServer, PRESETS, readServers, removeServer, serverConfig, serverName, serverStates, setEnabled, signIn, type Preset, type Server, type ServerState } from "../engine/services";
@@ -89,7 +89,7 @@ export function ServicesSettings() {
     <>
       <PageHead tab="services">
         <select class="select" aria-label={t("워크스페이스")} value={space()} onChange={(e) => (setSpace(e.currentTarget.value), reset(), setConfirm(null))}>
-          <For each={state.spaces}>{(s) => <option value={s.id}>{s.label}</option>}</For>
+          <For each={ownSpaces()}>{(s) => <option value={s.id}>{s.label}</option>}</For>
         </select>
       </PageHead>
       <p class="set-note">{t("연결한 서비스는 이 워크스페이스의 메인과 작업만 써요. 필요할 때만 불러 써서 평소 대화를 무겁게 하지 않아요.")}</p>
