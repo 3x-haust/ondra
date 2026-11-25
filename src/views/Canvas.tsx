@@ -29,6 +29,7 @@ import { viewKey } from "../lib/shortcuts";
 import { lang, t } from "../i18n";
 import { PaneControls } from "./PaneControls";
 import { usePaneFocused } from "../state/panes";
+import { inSpace, kept } from "../state/viewState";
 
 // ───────────── geometry
 
@@ -67,10 +68,10 @@ interface Edge {
   over?: boolean;
 }
 
-/** the map, or the same tasks as columns by state */
-const [mode, setMode] = createSignal<"canvas" | "list">("canvas");
+/** the map, or the same tasks as columns by state (each workspace as it was left) */
+const [mode, setMode] = kept<"canvas" | "list">(() => inSpace(state.space, "canvas.mode"), "canvas");
 /** projects whose finished jobs are unfolded on the canvas */
-const [unfolded, setUnfolded] = createSignal<string[]>([]);
+const [unfolded, setUnfolded] = kept<string[]>(() => inSpace(state.space, "canvas.unfolded"), []);
 /** a finished job folds into "끝난 일" right away (one waiting on a merge or an answer stays out) */
 const folded = (t: Task) => tone(t) === "done" && !t.pinned;
 /** a finished sub-job folds under its job the same way */
@@ -1299,6 +1300,11 @@ export function Canvas() {
 
   /** the view has been framed once (before that, nothing is kept) */
   let framed = false;
+  /** the workspace the view on screen was framed for: only its own view is kept under its name */
+  let framedFor: string | undefined;
+  /** each workspace's canvas comes back panned and zoomed as it was left */
+  const [left, setLeft] = kept<{ x: number; y: number; z: number } | null>(() => inSpace(space(), "canvas.view"), null);
+  createEffect(on([pan, zoom], ([p, z]) => framed && framedFor === untrack(space) && setLeft({ x: Math.round(p.x), y: Math.round(p.y), z })));
   /** the zoom the person (or a frame) chose: a picked card may have taken the view under it for now */
   let want = 1;
   /** the view before the sheet opened, to go back to on close (dropped once the person pans or zooms) */
@@ -1317,6 +1323,7 @@ export function Canvas() {
     const r = { w: vp.clientWidth, h: vp.clientHeight };
     if (!r.w || !r.h) return;
     framed = true;
+    framedFor = untrack(space);
     const pk = picked();
     const a = area(!!pk, r);
     const floor = all ? FLOOR_ZOOM : READ_ZOOM;
@@ -1355,6 +1362,22 @@ export function Canvas() {
     if (animate) panTo(p, z);
     else batch(() => (setZoom(z), setPan(p)));
   };
+  /** back to how this workspace's canvas was left; false when it never was (it is framed then) */
+  const resume = () => {
+    const v = untrack(left);
+    if (!v || !vp?.clientWidth || !graph().nodes.length) return false;
+    // the cards have moved off it since (jobs gone, a smaller window): framed afresh instead
+    const w = vp.clientWidth, h = vp.clientHeight;
+    const seen = graph().nodes.some((n) => n.x * v.z + v.x < w && (n.x + n.w) * v.z + v.x > 0 && n.y * v.z + v.y < h && (n.y + n.h) * v.z + v.y > 0);
+    if (!seen) return false;
+    framed = true;
+    framedFor = untrack(space);
+    want = v.z;
+    batch(() => (setZoom(v.z), setPan({ x: v.x, y: v.y })));
+    return true;
+  };
+  // another workspace while the canvas stays open: its own view
+  createEffect(on(space, () => vp && requestAnimationFrame(() => resume() || fit(false)), { defer: true }));
 
   /** ctrl-wheel: about the pointer (a picked card stays whole beside the sheet) */
   const zoomAt = (factor: number, cx: number, cy: number) => {
@@ -1588,8 +1611,8 @@ export function Canvas() {
     size();
     const ro = new ResizeObserver(size);
     ro.observe(el);
-    // shown (opened, or back from the board): framed as on first open
-    const id = requestAnimationFrame(() => fit(false));
+    // shown (opened, or back from the board): as it was left, else framed as on first open
+    const id = requestAnimationFrame(() => resume() || fit(false));
     onCleanup(() => (ro.disconnect(), cancelAnimationFrame(id), (framed = false)));
   });
   // lanes go into two columns while the view holds both at the first view's zoom

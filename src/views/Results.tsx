@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "so
 import { pinResult, removeResults, restoreResults, resultCopy, resultPreview, resultsIn, resultText } from "../engine/results";
 import { ignoredKey, primaryKey } from "../lib/shortcuts";
 import { projectById, state, taskById } from "../state/store";
+import { inSpace, kept, scrollKept } from "../state/viewState";
 import type { ResultEntry } from "../state/types";
 import { openTask, panelOpen, setJumpMsg, setView, toast } from "../state/ui";
 import { BlockView } from "../ui/Blocks";
@@ -33,7 +34,10 @@ const whenOf = (at: number) => (daysAgo(at) === 0 ? timeOf(at) : dayOf(at));
 
 export function ResultsView() {
   const [q, setQ] = createSignal("");
-  const [proj, setProj] = createSignal<string>("");
+  // the project filter stays as it was left, per workspace
+  const [picks, setProj] = kept(() => inSpace(state.space, "results.project"), "");
+  // a project that has no results any more (or is the only place left) filters nothing
+  const proj = () => (places().length > 1 && places().some((p) => `:${p.id}` === picks()) ? picks() : "");
   const [picked, setPicked] = createSignal<string[]>([]);
   const [anchor, setAnchor] = createSignal<string>();
   const [menu, setMenu] = createSignal<{ id: string; x: number; y: number } | null>(null);
@@ -212,7 +216,7 @@ export function ResultsView() {
       </header>
       <Show when={all().length} fallback={<div class="pane-empty res-none"><Icon name="inbox" size={20} /><span>{t("결과물 없음")}</span></div>}>
         <div class="res-body">
-          <div class="res-list" ref={listEl} tabIndex={0} onKeyDown={keys}>
+          <div class="res-list" ref={(el) => ((listEl = el), scrollKept(() => inSpace(state.space, "results/list"))(el))} tabIndex={0} onKeyDown={keys}>
             <For each={list()} fallback={<div class="res-empty">{t("검색 결과 없음")}</div>}>
               {(r, i) => (
                 <>
@@ -258,7 +262,8 @@ export function ResultsView() {
               )}
             </For>
           </div>
-          <div class="res-read">
+          {/* each result is read from where it was left (another one from its top) */}
+          <div class="res-read" ref={scrollKept(() => inSpace(state.space, `results/${sel()?.id ?? ""}`))}>
             <Show
               when={!many()}
               fallback={

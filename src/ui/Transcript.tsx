@@ -1,12 +1,13 @@
 // A task's transcript: messages, tool calls as single rows (runs of them
 import { noteText } from "../engine/describe";
 import { holdScroll, keepBottom, toBottomSent } from "./stick";
+import { kept, ofJob, spot } from "../state/viewState";
 import { openImage } from "./Lightbox";
 import { srcOf, useHost } from "../engine/far";
 // collapse into one summary line), visual blocks, handoffs, turn dividers,
 // and the live line while the agent works.
 import { Fold } from "./Fold";
-import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch } from "solid-js";
+import { createEffect, onCleanup, onMount, createMemo, createSignal, For, Index, type JSX, Match, on, Show, Switch, untrack } from "solid-js";
 import type { Block, Entry, Shell, Task, ToolCall, Usage } from "../state/types";
 import { live, previewFile } from "../state/ui";
 import { kidsOf, queueWith, taskById } from "../state/store";
@@ -204,9 +205,12 @@ const VISUAL = new Set(["diagram", "scope", "bars", "tree", "groups", "sequence"
  *  (a page it ended with is the result itself, and numbers and proof stay in view) */
 const isPicture = (b: Block) => (VISUAL.has(b.type) && b.type !== "page") || b.type === "timeline" || !!vizOf(b.type);
 
+/** A fold in the thread, opened or closed by hand: it is still so when the job is opened again. */
+const folded = (key: () => string) => kept(key, false, { many: true });
+
 /** a finished turn's pictures: one line under the answer that opens them all */
 function PictureFold(props: { entries: Entry[]; task: Task }) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = folded(() => ofJob(props.task.id, `pics/${props.entries[0]?.id}`));
   return (
     <div class="work-fold pic-fold" classList={{ open: open() }}>
       <button class="work-head" onClick={(e) => (holdScroll(800, e.currentTarget), setOpen(!open()))} aria-expanded={open()}>
@@ -259,8 +263,8 @@ function summaryParts(lead: Entry[], pictures: Entry[]): { lead: Entry[]; pictur
  * fold can be opened (a fold of one row is just that row). Errors never fold.
  */
 function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean; end?: boolean }) {
-  const [shown, setShown] = createSignal(false);
-  const [mounted, setMounted] = createSignal(false);
+  const [shown, setShown] = folded(() => ofJob(props.task.id, `turn/${props.turn.id}`));
+  const [mounted, setMounted] = createSignal(untrack(shown));
   const body = () => props.turn.body;
   /** where the closing summary starts: the run of text and blocks at the very end */
   const tailStart = createMemo(() => {
@@ -333,7 +337,7 @@ function TurnView(props: { turn: Turn; task: Task; open: boolean; last?: boolean
               <span>{tr("작업 과정 {n}단계", { n: rowCount(work()) })}</span>
               <Icon name="chevron" size={14} class="chev" />
             </button>
-            <Show when={mounted()}>
+            <Show when={mounted() || shown()}>
               <div class="work-clip">
                 <div class="work-body">
                   <Items entries={work()} task={props.task} live={false} openTools />
@@ -460,7 +464,7 @@ function ToolGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
  * the pictures themselves (click one to see it big).
  */
 function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = folded(() => `fold/pics/${props.tools[0]?.id}`);
   // a job of another device: the pictures it looked at are there
   const host = useHost();
   const live = () => !props.stopped && props.tools.some((t) => !t.tool.endedAt && !t.tool.stopped);
@@ -492,7 +496,7 @@ function PictureGroup(props: { tools: ToolEntry[]; stopped?: boolean }) {
 }
 
 function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = folded(() => `fold/calls/${props.tools[0]?.id}`);
   /** Ondra stopped it: neither running nor failed */
   const halt = (t: ToolEntry) => props.halts?.get(t.id);
   const open_ = () => props.tools.find((t) => !t.tool.endedAt && !halt(t));
@@ -596,7 +600,7 @@ function doneLabel(run: ToolEntry[]): string {
  * ("파일 수정함 · 명령 3개 실행함 · 웹 검색함"): only what was done, no names; open it for each line.
  */
 function WorkLine(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boolean; halts?: Map<string, Halt> }) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = folded(() => `fold/work/${props.tools[0]?.id}`);
   const parts = () => runs(props.tools);
   // one phrase per kind, counted over the whole line, in the order they first came
   const label = () => {
@@ -668,7 +672,7 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
   const browser = () => (t().kind === "browser" ? describeBrowser(t().target ?? "") : undefined);
   const what = () =>
     isComputer(t()) ? (computerSaid(t()).target ?? t().app ?? "") : ((b) => (b && b.action !== "other" ? (b.target ?? "") : shortName(t())))(browser());
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = folded(() => `fold/tool/${props.e.id}`);
   const canOpen = () => !!shell() || t().kind === "other" || t().kind === "search" || !!t().note;
   const click = () => {
     if (canOpen()) setOpen(!open());
@@ -925,6 +929,8 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   const [stick, setStick] = createSignal(true);
   // a finished job opens on its answer, not below its proof: when the end doesn't fit, its first line is at the top.
   // Only on opening it: a reply finishing while the user watches stays at the bottom, where they are.
+  // Opened again, it is where it was left instead (keepBottom puts it back).
+  const place = () => ofJob(props.task.id, "thread");
   const toAnswer = (wait: number) =>
     setTimeout(() => {
       const at = scroller?.querySelector<HTMLElement>(".answer-at");
@@ -932,7 +938,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
       const top = at.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16;
       if (scroller.scrollHeight - top > scroller.clientHeight + 4) (holdScroll(400, scroller), scroller.scrollTo({ top }));
     }, wait);
-  onMount(() => settled() && toAnswer(80));
+  onMount(() => settled() && !spot(place()) && toAnswer(80));
   // what the user sends always shows: a new message (or one queued for the next turn) takes the chat to the bottom
   const sent = () => props.task.entries.filter((e) => e.kind === "user" && !e.by).length + (props.task.queue ?? []).filter((q) => !q.by).length;
   // (not deferred: a deferred `on` never learns the first value, so the very first send would go unnoticed)
@@ -944,7 +950,7 @@ export function Transcript(props: { task: Task; agentId: string; footer?: JSX.El
   };
 
   return (
-    <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el, setStick)); }}>
+    <div class="thread" ref={(el) => { scroller = el; onCleanup(keepBottom(el, setStick, { key: place })); }}>
       <Show when={!stick()}>
         <button class="jump-latest" title={tr("맨 아래로")} aria-label={tr("맨 아래로")} onClick={() => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })}>
           <Icon name="down" size={14} />

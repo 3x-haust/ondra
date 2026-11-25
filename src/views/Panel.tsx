@@ -6,6 +6,7 @@ import { Fold } from "../ui/Fold";
 import { Markdown } from "../ui/Markdown";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { accountById, homeDir, kidsOf, projectById, projectsIn, state, taskById } from "../state/store";
+import { kept, ofJob, scrollKept } from "../state/viewState";
 import { hostAccount } from "../ui/ComputerPicker";
 import { mirror } from "../state/mirror";
 import type { Priority, Shell, Task } from "../state/types";
@@ -321,8 +322,9 @@ function TerminalPane(props: { t: Task }) {
   createEffect(() => {
     if (props.t.host && farShell() === props.t.id) (setShell(true), setFarShell(null));
   });
-  const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
-  const [past, setPast] = createSignal(false);
+  // what was opened or shut here stays so when the job is opened again
+  const [toggled, setToggled] = kept<Record<string, boolean>>(() => ofJob(props.t.id, "shells"), {});
+  const [past, setPast] = kept(() => ofJob(props.t.id, "shells.past"), false);
   const running = () => [...props.t.shells].reverse().filter((s) => !s.endedAt);
   const ended = () => [...props.t.shells].reverse().filter((s) => s.endedAt);
   const isOpen = (s: Shell) => toggled()[s.id] ?? !s.endedAt;
@@ -433,7 +435,8 @@ function BrowserPane(props: { t: Task }) {
  */
 function ArtifactsPane(props: { t: Task }) {
   const list = () => artifacts[props.t.id] ?? [];
-  const [pick, setPick] = createSignal<string>();
+  // the one opened big is still open when the job is opened again
+  const [pick, setPick] = kept<string | undefined>(() => ofJob(props.t.id, "artifact"), undefined);
   const idx = () => list().findIndex((a) => a.path === pick());
   const cur = () => (idx() >= 0 ? list()[idx()] : undefined);
   const step = (d: number) => {
@@ -846,7 +849,8 @@ export function Panel(props: { t?: Task; onClose: () => void }) {
           <Icon name={panelWide() ? "compact" : "zoom"} size={14} />
         </button>
       </div>
-      <div class="panel-body">
+      {/* each tab of each job is where it was left */}
+      <div class="panel-body" ref={scrollKept(() => (props.t ? ofJob(props.t.id, `panel/${tab()}`) : `panel/${tab()}`))}>
         <Switch>
           <Match when={tab() === "new"}><NewTab t={props.t} /></Match>
           <Match when={tab() === "flow"}><div class="flow-pane"><Flow /></div></Match>
