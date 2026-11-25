@@ -364,6 +364,7 @@ Tones: neutral (`--muted`/`--ink-2`), accent, ok, warn, bad. Never two pills for
 - Page title `--fs-xl` 600. Group title `--fs-sm` 600 `--ink`, 24 above and 8 below.
 - Group: `--card`, 1px `--line`, radius `--r-xl`. Rows are divided by 1px `--line-soft`.
 - Row: min h 44, padding 0 14, gap 12. Optional leading 16 icon. Label `--fs-md` `--ink`. Control right-aligned. A current value (when it isn't the control) goes right in `--ink-3`.
+- A page keeps what people look for, grouped by what it is about (a group of ten switches is two or three). A switch few change, that main can switch when asked (`ondra_settings`, §9.17), goes off the page.
 - **No description line under the label.** If a row cannot be understood without one, rename it. The rare exception is a consequence the person must know before switching (data deletion). That gets one line, `--fs-xs` `--ink-3`, at most 40 characters.
 - Switch: 30×18 track, 14 thumb, 2 inset. Off: `--input` track. On: `--accent`. The thumb slides in 160ms `--ease`.
 - Disclosure row ("설치 안 된 9개 보기"): `--ink-3`, 12 chevron, folds open (§11).
@@ -482,7 +483,13 @@ Never: 일 (for a task), 맡기기, 대장, 기억 (as the feature name), 공간
 | 한 번에 하는 일 | 동시 작업 수 | Concurrent tasks |
 | 한 번에 하는 무거운 일 | 빌드·시뮬레이터 작업 동시 수 | Concurrent build and simulator tasks |
 | 일마다 따로 작업하기 | 작업마다 새 워크트리 | New worktree for each task |
-| PR 지켜보기 | PR 리뷰 자동 대응 | Follow up on PR reviews |
+| PR 지켜보기 | PR 리뷰 자동 대응 (off the page; main switches it) | Follow up on PR reviews |
+| 확인된 버그 수정은 바로 합치기 | 확인된 버그 수정은 바로 병합 | Merge checked fixes without asking |
+| 작업 끝나면 앱에서 직접 확인 | 끝내기 전에 앱 직접 실행해 보기 | Run the app before finishing |
+| 반복한 규칙은 자동 검사로 | 두 번 말한 규칙은 자동 검사로 | Turn rules said twice into checks |
+| 스킬 다듬기 제안 | 스킬 고치기 제안 | Suggest skill fixes |
+| 작업 브라우저 미리보기 | 작업 브라우저 작게 띄우기 | Show the job browser small |
+| 작업 끝 소리 | 알림 소리 | Alert sound |
 | 자동으로 기억 | 메모리 자동 저장 | Save memories automatically |
 | 일이 띄운 앱은 뒤에 | 내 창 앞에 두기 | Keep my window in front |
 | 일로 맡기기 | 작업 만들기 | Start task |

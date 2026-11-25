@@ -873,7 +873,7 @@ Do what the message asks and no more. A question ("뭐 해야 해?", "어떻게
 follow-ups nobody asked for. Simple things stay simple: one line, not a list.`;
 
 /**
- * Settings › 작업 끝나면 앱에서 직접 확인 (on unless turned off): a change to an app is proved in
+ * Settings › 끝내기 전에 앱 직접 실행해 보기 (on unless turned off): a change to an app is proved in
  * the app, through the project's check skill, made once with app-check when there is none.
  */
 export function appCheckRules(): string {

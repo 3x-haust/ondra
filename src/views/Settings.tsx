@@ -261,37 +261,44 @@ function General() {
         </Row>
       </div>
 
-      <GroupTitle title={t("작업 방식")} />
+      {/* how jobs work, by what it is about; a switch few change (PR review follow-up) is off the page:
+          main switches it when asked (ondra_settings) */}
+      <GroupTitle title={t("작업 폴더와 GitHub")} />
       <div class="set-group">
         <Row title={t("작업마다 새 워크트리")} desc={t("작업끼리 파일이 섞이지 않게 따로 폴더를 만들어요")}>
           <Switch_ label={t("작업마다 새 워크트리")} on={state.settings.isolate} set={(v) => setState("settings", "isolate", v)} />
         </Row>
-        <Row title={t("PR 리뷰 자동 대응")} desc={t("PR에 리뷰가 달리면 작업이 이어서 고쳐요")}>
-          <Switch_ label={t("PR 리뷰 자동 대응")} on={!!state.settings.watchPullRequests} set={(v) => setState("settings", "watchPullRequests", v)} />
-        </Row>
         <Row title={t("GitHub 푸시·PR 허용")} desc={t("끄면 읽기만 해요")}>
           <Switch_ label={t("GitHub 푸시·PR 허용")} on={state.settings.githubWrite !== false} set={(v) => setState("settings", "githubWrite", v)} />
+        </Row>
+        <Row title={t("확인된 버그 수정은 바로 병합")} desc={t("화면이 바뀌지 않는 버그·성능 수정은 다 확인되면 묻지 않고 병합해요. 메모리에 다르게 적혀 있으면 그걸 따라요")}>
+          <Switch_ label={t("확인된 버그 수정은 바로 병합")} on={state.settings.autoMergeFixes !== false} set={(v) => setState("settings", "autoMergeFixes", v)} />
+        </Row>
+      </div>
+
+      <GroupTitle title={t("확인과 메모리")} />
+      <div class="set-group">
+        <Row title={t("끝내기 전에 앱 직접 실행해 보기")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
+          <Switch_ label={t("끝내기 전에 앱 직접 실행해 보기")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
         </Row>
         <Row title={t("메모리 자동 저장")} desc={t("작업에서 알게 된 것을 기억에 남겨요")}>
           <Switch_ label={t("메모리 자동 저장")} on={state.settings.learn} set={(v) => setState("settings", "learn", v)} />
         </Row>
-        <Row title={t("작업 끝나면 앱에서 직접 확인")} desc={t("앱을 바꾼 작업은 실제로 실행해서 써 보고 끝내요")}>
-          <Switch_ label={t("작업 끝나면 앱에서 직접 확인")} on={state.settings.appCheck !== false} set={(v) => setState("settings", "appCheck", v)} />
+        <Row title={t("두 번 말한 규칙은 자동 검사로")} desc={t("프로젝트 규칙을 두 번 말하면, 작업이 린트·테스트 같은 자동 검사로 만들어요")}>
+          <Switch_ label={t("두 번 말한 규칙은 자동 검사로")} on={state.settings.ruleChecks !== false} set={(v) => setState("settings", "ruleChecks", v)} />
         </Row>
-        <Row title={t("확인된 버그 수정은 바로 합치기")} desc={t("화면이 바뀌지 않는 버그·성능 수정은 다 확인되면 묻지 않고 합쳐요. 메모리에 다르게 적혀 있으면 그걸 따라요")}>
-          <Switch_ label={t("확인된 버그 수정은 바로 합치기")} on={state.settings.autoMergeFixes !== false} set={(v) => setState("settings", "autoMergeFixes", v)} />
+        <Row title={t("스킬 고치기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
+          <Switch_ label={t("스킬 고치기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
         </Row>
-        <Row title={t("반복한 규칙은 자동 검사로")} desc={t("프로젝트 규칙을 두 번 말하면, 작업이 린트·테스트 같은 자동 검사로 만들어요")}>
-          <Switch_ label={t("반복한 규칙은 자동 검사로")} on={state.settings.ruleChecks !== false} set={(v) => setState("settings", "ruleChecks", v)} />
+      </div>
+
+      <GroupTitle title={t("알림과 미리보기")} />
+      <div class="set-group">
+        <Row title={t("작업 브라우저 작게 띄우기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
+          <Switch_ label={t("작업 브라우저 작게 띄우기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
         </Row>
-        <Row title={t("스킬 다듬기 제안")} desc={t("스킬을 쓴 작업이 잘 안 풀리면 스킬을 어떻게 고칠지 제안해요")}>
-          <Switch_ label={t("스킬 다듬기 제안")} on={!!state.settings.skillReflect} set={(v) => setState("settings", "skillReflect", v)} />
-        </Row>
-        <Row title={t("작업 브라우저 미리보기")} desc={t("작업이 브라우저를 쓰면 구석에 작게 띄워요")}>
-          <Switch_ label={t("작업 브라우저 미리보기")} on={state.settings.browserPip !== false} set={(v) => setState("settings", "browserPip", v)} />
-        </Row>
-        <Row title={t("작업 끝 소리")} desc={t("작업이 끝나거나 답이 필요하면 소리를 내요")}>
-          <Switch_ label={t("작업 끝 소리")} on={soundOn()} set={(v) => (setState("settings", "jobSound", v), v && ring("done", { test: true }))} />
+        <Row title={t("알림 소리")} desc={t("작업이 끝나거나 답이 필요하면 소리를 내요")}>
+          <Switch_ label={t("알림 소리")} on={soundOn()} set={(v) => (setState("settings", "jobSound", v), v && ring("done", { test: true }))} />
         </Row>
         <Show when={soundOn()}>
           <Row title={t("소리 크기")}>
@@ -1184,8 +1191,9 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: string; desc: strin
 const FINDABLE: [SettingsTab, string][] = [
   ["general", "테마"], ["general", "화면 크기"], ["general", "언어"], ["general", "링크 열기"],
   ["general", "기본 모델"], ["general", "기본 권한"], ["general", "동시 작업 수"], ["general", "빌드·시뮬레이터 작업 동시 수"],
-  ["general", "작업마다 새 워크트리"], ["general", "PR 리뷰 자동 대응"], ["general", "GitHub 푸시·PR 허용"], ["general", "메모리 자동 저장"],
-  ["general", "작업 브라우저 미리보기"], ["general", "작업 끝 소리"], ["general", "소리 크기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
+  ["general", "작업마다 새 워크트리"], ["general", "GitHub 푸시·PR 허용"], ["general", "확인된 버그 수정은 바로 병합"], ["general", "끝내기 전에 앱 직접 실행해 보기"],
+  ["general", "메모리 자동 저장"], ["general", "두 번 말한 규칙은 자동 검사로"], ["general", "스킬 고치기 제안"],
+  ["general", "작업 브라우저 작게 띄우기"], ["general", "알림 소리"], ["general", "소리 크기"], ["general", "공통 지침"], ["general", "업데이트 확인"],
   ["general", "익명 사용 통계 보내기"],
   ["pet", "화면에 펫 띄우기"], ["pet", "펫 고르기"], ["pet", "펫 크기"], ["pet", "새 펫 만들기"],
   ["tools", "손쉬운 사용"], ["tools", "화면 기록"],
