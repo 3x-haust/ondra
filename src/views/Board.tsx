@@ -14,6 +14,7 @@ import { changes, Glyph, glyphOf, SidebarToggle } from "./Sidebar";
 import { t } from "../i18n";
 import { openTaskMenu, taskMenuItems } from "../ui/taskMenu";
 import { discarded } from "../state/progress";
+import { inSpace, kept, scrollKept } from "../state/viewState";
 
 /** about how wide the task menu is: enough to put it beside a card instead of on it */
 const MENU_W = 232;
@@ -39,8 +40,9 @@ export const cardMenu = (id: string) => (e: MouseEvent) => {
 
 type Col = { id: string; label: string; tone: string; tasks: Task[] };
 
-const [groupBy, setGroupBy] = createSignal<"state" | "project">("state");
-const [showOld, setShowOld] = createSignal(false);
+// each workspace's board stays grouped and unfolded as it was left, across restarts too
+const [groupBy, setGroupBy] = kept<"state" | "project">(() => inSpace(state.space, "board.group"), "state");
+const [showOld, setShowOld] = kept(() => inSpace(state.space, "board.old"), false);
 
 const DAY = 86_400_000;
 
@@ -226,7 +228,7 @@ export function Board(props: { embedded?: boolean } = {}) {
           </div>
         }
       >
-      <div class="board" ref={watch} classList={{ project: groupBy() === "project", "fade-l": edge().l, "fade-r": edge().r }}>
+      <div class="board" ref={(el) => (watch(el), scrollKept(() => inSpace(state.space, "board"))(el))} classList={{ project: groupBy() === "project", "fade-l": edge().l, "fade-r": edge().r }}>
         <For each={cols()}>
           {(c) => (
             <section class="bcol" classList={{ empty: !c.tasks.length }}>
@@ -246,7 +248,8 @@ export function Board(props: { embedded?: boolean } = {}) {
                   </button>
                 </Show>
               </div>
-              <div class="bcol-list">
+              {/* the columns are made again as cards move: each one keeps how far it was scrolled */}
+              <div class="bcol-list" ref={scrollKept(() => inSpace(state.space, `board/${groupBy()}/${c.id}`))}>
                 <For each={c.tasks} fallback={<div class="bcol-empty">{t("없음")}</div>}>{(x) => <Card t={x} byProject={groupBy() === "project"} />}</For>
               </div>
             </section>
