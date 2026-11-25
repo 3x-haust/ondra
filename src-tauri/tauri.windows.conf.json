@@ -3,7 +3,7 @@
   "bundle": {
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
-    "externalBin": ["binaries/ondra-remote", "binaries/ondra-cuhost"],
+    "externalBin": ["binaries/ondra-remote"],
     "resources": {
       "binaries/ondra-bgguard.dylib": null,
       "dmg/background.tiff": null,

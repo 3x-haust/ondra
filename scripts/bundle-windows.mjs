@@ -11,15 +11,14 @@ export function bundleWindows(root) {
   const tauri = join(root, "src-tauri");
   bundleWindowsEngine(process.env.ONDRA_ENGINE_DIST, arch, join(tauri, "resources/windows/engine"));
 
-  // Both helpers have standalone workspaces and locked dependencies.
+  // A standalone workspace and lockfile; never ask Tauri to bundle an old sidecar or a Mac helper.
+  const crate = join(root, "remote/host");
+  const target = resolve(process.env.CARGO_TARGET_DIR ?? join(crate, "target"));
+  execFileSync("cargo", ["build", "--locked", "--release", "--target", triple, "--target-dir", target], {
+    cwd: crate, stdio: "inherit",
+    env: process.env.RUSTUP_TOOLCHAIN_REMOTE ? { ...process.env, RUSTUP_TOOLCHAIN: process.env.RUSTUP_TOOLCHAIN_REMOTE } : process.env,
+  });
   mkdirSync(join(tauri, "binaries"), { recursive: true });
-  for (const [name, crate] of [["ondra-remote", join(root, "remote/host")], ["ondra-cuhost", join(tauri, "helpers/windows")]]) {
-    const target = resolve(process.env.CARGO_TARGET_DIR ?? join(crate, "target"));
-    execFileSync("cargo", ["build", "--locked", "--release", "--target", triple, "--target-dir", target], {
-      cwd: crate, stdio: "inherit",
-      env: name === "ondra-remote" && process.env.RUSTUP_TOOLCHAIN_REMOTE ? { ...process.env, RUSTUP_TOOLCHAIN: process.env.RUSTUP_TOOLCHAIN_REMOTE } : process.env,
-    });
-    copyFileSync(join(target, triple, `release/${name}.exe`), join(tauri, "binaries", `${name}-${triple}.exe`));
-  }
+  copyFileSync(join(target, triple, "release/ondra-remote.exe"), join(tauri, "binaries", `ondra-remote-${triple}.exe`));
   writeAppNotices();
 }
