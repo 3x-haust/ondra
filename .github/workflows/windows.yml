@@ -120,7 +120,7 @@ jobs:
           $process = Start-Process $setup[0].FullName -ArgumentList '/S', "/D=$installed" -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "NSIS installer exited with $($process.ExitCode)" }
 
-          foreach ($file in 'ondra.exe', 'engine/package.json', 'engine/photon_rs_bg.wasm',
+          foreach ($file in 'ondra.exe', 'ondra-browser.exe', 'browse.exe', 'components.json', 'engine/package.json', 'engine/photon_rs_bg.wasm',
                    'engine/native/win32/prebuilds/win32-x64/win32-platform.node', 'engine/THIRD_PARTY_NOTICES.txt') {
             if ((Get-Item -LiteralPath (Join-Path $installed $file)).Length -eq 0) { throw "Empty installed file: $file" }
           }
@@ -149,6 +149,11 @@ jobs:
               Start-Sleep -Milliseconds 250
             } until ((Get-Date) -ge $deadline)
             if ($first.MainWindowHandle -eq 0) { throw 'Ondra did not open a window' }
+            # the browser component: fetched from components.json, checked and unpacked by the app
+            $chrome = "$env:APPDATA/dev.3xhaust.ondra/components/chrome/*/chrome-headless-shell-win64/chrome-headless-shell.exe"
+            $deadline = (Get-Date).AddMinutes(3)
+            while (!(Test-Path $chrome) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+            if (!(Test-Path $chrome)) { throw 'The app did not install the browser component' }
             $second = Start-Process $exe -PassThru
             if (!$second.WaitForExit(15000) -or $second.ExitCode -ne 0 -or $first.HasExited) {
               throw 'Relaunch did not reuse the running app'
@@ -156,6 +161,18 @@ jobs:
           } finally {
             if (!$first.HasExited) { $first.Kill(); $first.WaitForExit() }
           }
+
+      - name: Use the browser tool
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          # a password saved the way a user saves one (Credential Manager), read by the installed app
+          cmd //c "cmdkey /generic:127.0.0.1 /user:ci@example.com /pass:s3cret!!!"
+          trap 'cmd //c "cmdkey /delete:127.0.0.1"' EXIT
+          installed=$(cygpath -u "$RUNNER_TEMP")/installed
+          # the Chrome the app installed at first launch
+          chrome=$(ls "$(cygpath -u "$APPDATA")"/dev.3xhaust.ondra/components/chrome/*/chrome-headless-shell-win64/chrome-headless-shell.exe | head -1)
+          .github/browser/smoke.sh "$installed" "$chrome" "$installed/browse.exe"
 
       - name: Run Windows platform tests
         run: |
@@ -168,7 +185,8 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib '--' --test-threads=1 `
             remote::power::tests winvault::tests providers::tests::keychain_wrapper_stores_reads_and_deletes `
             farfs::tests components::tests::bundled_engine_needs_the_platform_executable_and_its_assets `
-            fs::tests::copy_image_puts_the_picture_on_the_clipboard
+            fs::tests::copy_image_puts_the_picture_on_the_clipboard `
+            components::tests::chrome_zip_unpacks_into_a_runnable_browser
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

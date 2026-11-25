@@ -241,7 +241,8 @@ pub async fn inbrowser_show(app: AppHandle, x: f64, y: f64, w: f64, h: f64, url:
     let builder = WebviewBuilder::new(label(&space), WebviewUrl::External(start));
     #[cfg(target_os = "macos")]
     let builder = builder.data_store_identifier(store_id(&space)).user_agent(user_agent());
-    #[cfg(windows)]
+    // its own cookie store per space (WebView2 and WebKitGTK take a folder)
+    #[cfg(not(target_os = "macos"))]
     let builder = builder.data_directory(crate::engine::data_dir(&app).join("webviews").join(format!("space-{:x}", u128::from_be_bytes(store_id(&space)))));
     let builder = builder.on_new_window(move |url, features| {
             let on = PAGE_OF.lock().unwrap().get(&popup_label).cloned().unwrap_or_default();

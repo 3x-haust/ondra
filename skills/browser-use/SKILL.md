@@ -5,8 +5,8 @@ description: >
   underneath): light pages, lean looks, one call per step. Use when a
   worker must open a site, check a web app, fill a
   form, read a page, take screenshots, or record proof of a change. Covers the
-  shared browser (your own tab, shared logins), signing in from the macOS
-  keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
+  shared browser (your own tab, shared logins), signing in from the
+  system keychain, live streaming to the app window, recordings as evidence, CAPTCHAs
   and canvas apps, Google Docs/Sheets and Gmail in the signed-in browser, and
   how to report with visual-report blocks. Not for a public page you only need
   to read: web_fetch does that.
@@ -22,10 +22,10 @@ The browser is the app's own: `browse` and `ondra-browser` are on your `PATH`
 another browser tool, never use `npx` for one, never change any `ONDRA_BROWSER_*`
 variable, and never ask the user to set anything up.
 
-Not every computer has it yet: where `command -v ondra-browser` finds nothing
-(Windows and Linux for now), this skill doesn't apply. Read public pages with
-`web_fetch`; a step that needs the browser (a sign-in, clicks, a screenshot of a
-page) is the user's to do, or goes into "unverified".
+Where `command -v ondra-browser` finds nothing (an older app), this skill
+doesn't apply. Read public pages with `web_fetch`; a step that needs the browser
+(a sign-in, clicks, a screenshot of a page) is the user's to do, or goes into
+"unverified".
 
 ## The loop: one call per step
 
