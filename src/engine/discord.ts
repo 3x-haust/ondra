@@ -1318,24 +1318,31 @@ export async function openThreads() {
   }
 }
 
-/** a job's head line in the channel: what it is while it works; how it ended and what came of it once it has */
+/**
+ * A job's head in the channel: what it is while it works; once it ended, how, and what came of it as
+ * the app shows a finished job (its result line and the points under it).
+ */
 export function headLine(t: Task): string {
   const title = cut(t.title || t.ask, 120);
   if (jobOpen(t)) return `⏳ **${title}**`;
-  const came = t.digest?.line || t.summary || (t.status === "failed" ? t.error : "") || "";
+  const came = t.digest ? [t.digest.line, t.digest.text].filter(Boolean).join("\n") : t.summary || (t.status === "failed" ? t.error : "") || "";
   return cut(`${t.status === "failed" ? "❌" : "✅"} **${title}**${came ? `\n${came}` : ""}`, 1900);
 }
 
 /** A digest is written a little after a job ends: its head waits for it this long, then says what it has. */
 const HEAD_WAITS = 3 * 60_000;
 
-/** Ended jobs: their head message in the channel says how it ended, the work stays folded in the thread. */
+/**
+ * Ended jobs: their head message in the channel says how it ended, the work stays folded in the
+ * thread. One that carries on again (a word in its thread) shows as working until it ends again.
+ */
 export async function foldThreads(now = Date.now()) {
   for (const t of state.tasks) {
     const a = t.agent;
-    if (!a?.head || a.folded || !a.threadIn || t.parentId || jobOpen(t)) continue;
-    if (!t.digest && (t.finishedAt ?? now) > now - HEAD_WAITS) continue;
-    setJobAgent(t.id, { folded: true });
+    if (!a?.head || !a.threadIn || t.parentId || !!a.folded === !jobOpen(t)) continue;
+    // a finished job's points are written a little after it ends (a failed one gets none)
+    if (!jobOpen(t) && t.status === "done" && !t.digest && (t.finishedAt ?? now) > now - HEAD_WAITS) continue;
+    setJobAgent(t.id, { folded: !jobOpen(t) });
     await discordApi("PATCH", `/channels/${a.threadIn}/messages/${a.head}`, { content: headLine(t), allowed_mentions: { parse: [] } }).catch(() => {});
   }
 }

@@ -796,12 +796,12 @@ describe("the whole way round", () => {
     const now = Date.now();
     const head = { channel: "c1", thread: "th5", threadIn: "c1", head: "h5", folded: false };
     setState("tasks", [
-      { id: "t5", title: "로그 정리", status: "done", finishedAt: now - 30_000, entries: [], digest: { line: "오래된 로그 3GB를 지웠어요", text: "", at: now }, agent: head } as never,
+      { id: "t5", title: "로그 정리", status: "done", finishedAt: now - 30_000, entries: [], digest: { line: "오래된 로그 3GB를 지웠어요", text: "- 최근 7일 로그는 남겼어요\n- 매주 지우는 작업은 아직 없어요", at: now }, agent: head } as never,
       { id: "t6", title: "요약 기다림", status: "done", finishedAt: now - 30_000, entries: [], agent: { ...head, thread: "th6", head: "h6" } } as never,
       { id: "t7", title: "안 끝남", status: "running", entries: [], agent: { ...head, thread: "th7", head: "h7" } } as never,
     ]);
     await foldThreads(now);
-    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h5", { content: "✅ **로그 정리**\n오래된 로그 3GB를 지웠어요", allowed_mentions: { parse: [] } });
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h5", { content: "✅ **로그 정리**\n오래된 로그 3GB를 지웠어요\n- 최근 7일 로그는 남겼어요\n- 매주 지우는 작업은 아직 없어요", allowed_mentions: { parse: [] } });
     expect(taskById("t5")?.agent?.folded).toBe(true);
     // no digest yet: it waits for one a little, then says what it has
     expect(api).not.toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h6", expect.anything());
@@ -811,6 +811,11 @@ describe("the whole way round", () => {
     api.mockClear();
     await foldThreads(now + 5 * 60_000);
     expect(api).not.toHaveBeenCalled();
+    // a word in its thread and it works again: back to working, folded again once it ends
+    setState("tasks", (x) => x.id === "t5", "status", "running");
+    await foldThreads(now + 6 * 60_000);
+    expect(api).toHaveBeenCalledWith("PATCH", "/channels/c1/messages/h5", { content: "⏳ **로그 정리**", allowed_mentions: { parse: [] } });
+    expect(taskById("t5")?.agent?.folded).toBe(false);
     expect(headLine({ id: "t8", title: "빌드", status: "failed", error: "서명 키가 없어요", entries: [] } as never)).toBe("❌ **빌드**\n서명 키가 없어요");
   });
 
