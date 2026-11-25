@@ -22,7 +22,15 @@ export function seePeople(ms: Seen[]): void {
 
 /** a server's channels by name → their ids, so "#orbit" written in a line becomes its link */
 const rooms = new Map<string, Set<string>>();
-export function seeChannels(list: { id: string; name: string; kind?: string }[]): void {
+/** servers and channels by id, with their names: where a message is, said by name */
+const servers = new Map<string, string>();
+const channels = new Map<string, { name: string; category?: string; guild?: string }>();
+export function seeServers(list: { id: string; name: string }[]): void {
+  for (const g of list) if (g.name) servers.set(g.id, g.name);
+}
+export function seeChannels(list: { id: string; name: string; kind?: string; category?: string | null }[], guild?: string): void {
+  const cats = new Map(list.filter((c) => c.kind === "category").map((c) => [c.id, c.name]));
+  for (const c of list) if (c.kind !== "category") channels.set(c.id, { name: c.name, category: (c.category && cats.get(c.category)) || undefined, guild });
   for (const c of list) {
     if (c.kind && c.kind !== "text") continue;
     const k = c.name.trim().toLowerCase();
@@ -32,7 +40,19 @@ export function seeChannels(list: { id: string; name: string; kind?: string }[])
 }
 
 /** for tests */
-export const forgetPeople = () => (names.clear(), rooms.clear());
+export const forgetPeople = () => (names.clear(), rooms.clear(), servers.clear(), channels.clear());
+
+/**
+ * Where a message is, by name: a DM with someone, or a server's channel (its category, and whether
+ * work is shown there). Ids stay beside the names, so a way written for a place finds it again.
+ */
+export function placeOf(m: { guild?: string | null; channel: string; author: { name: string } }, o: { work?: boolean; ko?: boolean } = {}): string {
+  if (!m.guild) return o.ko ? `${m.author.name}와의 DM` : `a DM with ${m.author.name}`;
+  const g = servers.get(m.guild), c = channels.get(m.channel);
+  if (o.ko)
+    return `${g ? `"${g}" 서버` : "서버"}(id ${m.guild})의 ${c ? `#${c.name} 채널` : "채널"}(id ${m.channel})${c?.category ? `, "${c.category}" 카테고리` : ""}${o.work ? ", 작업을 보여 주는 방" : ""}`;
+  return `the server ${g ? `"${g}" ` : ""}(id ${m.guild}), channel ${c ? `#${c.name} ` : ""}(id ${m.channel})${c?.category ? ` under "${c.category}"` : ""}${o.work ? ", a room where work is shown" : ""}`;
+}
 
 /** the one id a name stands for (none when it is unknown or two people share it) */
 function idOf(word: string): { id: string; len: number } | undefined {
