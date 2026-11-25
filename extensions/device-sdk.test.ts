@@ -11,7 +11,7 @@ async function setup(status: Record<string, unknown>, after: Record<string, unkn
   vi.stubEnv("ONDRA_BRIDGE", "http://127.0.0.1:1/bridge");
   vi.stubEnv("ONDRA_BRIDGE_TOKEN", "t");
   const gets: string[] = [];
-  let now = { sdk: "/data/android/sdk", adb: true, emulator: false, avd: false, busy: null, percent: 0, size: 0, license: null, accel: null, ...status };
+  let now = { sdk: "/data/android/sdk", stateDir: "/data/android/agent-device", adb: true, emulator: false, avd: false, busy: null, percent: 0, size: 0, license: null, accel: null, ...status };
   vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
     const { args } = JSON.parse(init.body);
     if (args.get) {
@@ -39,6 +39,7 @@ describe("an Android emulator for a computer without one", () => {
     expect(confirm.mock.calls[0][1]).toContain("Terms");
     expect(gets).toEqual(["emulator"]);
     expect(process.env.ANDROID_HOME).toBe("/data/android/sdk");
+    expect(process.env.AGENT_DEVICE_STATE_DIR).toBe("/data/android/agent-device");
     expect(process.env.PATH?.split(process.platform === "win32" ? ";" : ":").slice(0, 2)).toEqual([join("/data/android/sdk", "platform-tools"), join("/data/android/sdk", "emulator")]);
   });
 

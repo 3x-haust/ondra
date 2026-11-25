@@ -41,6 +41,14 @@ pub fn managed() -> Option<PathBuf> {
     DATA.get().map(|d| d.join("android").join("sdk"))
 }
 
+/// While Ondra's own SDK is in use: the agent-device state folder that goes with it. Each such
+/// folder runs its own agent-device daemon, and a daemon finds adb only through the environment
+/// it started with, so one started before this SDK came in would never find it.
+pub fn agent_device_state() -> Option<PathBuf> {
+    let ours = managed()?;
+    (super::sdk() == ours).then(|| ours.with_file_name("agent-device"))
+}
+
 // ───────────── Google's repository ─────────────
 
 #[derive(Clone, Debug, PartialEq)]
@@ -429,6 +437,8 @@ pub struct Status {
     pub license: Option<String>,
     /// "windows" | "kvm" when the emulator can't run fast here (see accel_missing)
     pub accel: Option<String>,
+    /// AGENT_DEVICE_STATE_DIR for this SDK (see agent_device_state)
+    pub state_dir: Option<String>,
 }
 
 #[derive(Default)]
@@ -452,6 +462,7 @@ pub async fn status(full: bool) -> Status {
         adb: has(&sdk, "platform-tools/adb"),
         emulator: has(&sdk, "emulator/emulator"),
         avd: super::avd_names().iter().any(|n| !n.starts_with("ondra-")),
+        state_dir: agent_device_state().map(|p| p.display().to_string()),
         ..Default::default()
     };
     {

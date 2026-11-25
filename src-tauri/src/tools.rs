@@ -326,6 +326,9 @@ pub async fn worker_env(app: AppHandle, worker_id: String, space: Option<String>
         env.push(("ANDROID_HOME".into(), sdk.clone()));
         env.push(("ANDROID_SDK_ROOT".into(), sdk));
     }
+    if let Some(state) = crate::devices::sdk::agent_device_state() {
+        env.push(("AGENT_DEVICE_STATE_DIR".into(), state.display().to_string()));
+    }
     if let Some(xc) = crate::devices::xcode_cache() {
         env.push(("XCODE_XCCONFIG_FILE".into(), xc.display().to_string()));
     }

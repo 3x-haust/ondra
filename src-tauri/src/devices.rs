@@ -480,7 +480,12 @@ fn within(cmd: &mut Command, secs: u64) -> Option<String> {
 /// it made. A device the user lent the job is only let go of, never shut down.
 fn release_owned(worker: &str, m: &Owned) {
     let session: String = format!("ondra-{worker}").chars().take(60).collect();
-    let _ = within(Command::new("agent-device").args(["close", "--session", &session]).env("PATH", crate::engine::user_path()), 20);
+    let mut close = Command::new("agent-device");
+    close.args(["close", "--session", &session]).env("PATH", crate::engine::user_path());
+    if let Some(state) = sdk::agent_device_state() {
+        close.env("AGENT_DEVICE_STATE_DIR", state);
+    }
+    let _ = within(&mut close, 20);
     if !m.made {
         return;
     }

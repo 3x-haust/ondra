@@ -54,8 +54,10 @@ let ADB = existsSync(adbIn(SDK)) ? adbIn(SDK) : "adb";
 let EMULATOR = join(SDK, `emulator/emulator${EXE}`);
 /** Use `dir` as the Android SDK from now on, here and in what this starts (agent-device finds adb
  *  through ANDROID_HOME in one place and on PATH in another). */
-function useSdk(dir: string) {
+function useSdk(dir: string, stateDir?: string | null) {
   SDK = dir;
+  // Ondra's own SDK has its own agent-device daemon (one started earlier can't see this SDK)
+  if (stateDir) process.env.AGENT_DEVICE_STATE_DIR = stateDir;
   ADB = existsSync(adbIn(dir)) ? adbIn(dir) : "adb";
   EMULATOR = join(dir, `emulator/emulator${EXE}`);
   process.env.ANDROID_HOME = dir;
@@ -584,7 +586,7 @@ export const avdNames = (r: { ok: boolean; out: string }) => (r.ok ? r.out.split
 
 const BRIDGE = process.env.ONDRA_BRIDGE;
 const BRIDGE_TOKEN = process.env.ONDRA_BRIDGE_TOKEN;
-type SdkStatus = { sdk: string; adb: boolean; emulator: boolean; avd: boolean; busy?: string | null; percent: number; error?: string | null; size: number; license?: string | null; accel?: string | null };
+type SdkStatus = { sdk: string; adb: boolean; emulator: boolean; avd: boolean; busy?: string | null; percent: number; error?: string | null; size: number; license?: string | null; accel?: string | null; stateDir?: string | null };
 type Ask = { hasUI?: boolean; ui?: { confirm(title: string, body: string, o?: { signal?: AbortSignal; timeout?: number }): Promise<boolean> } };
 
 async function sdkCall(args: Record<string, unknown>, signal?: AbortSignal): Promise<SdkStatus | undefined> {
@@ -624,7 +626,7 @@ export async function androidReady(ctx: Ask | undefined, signal?: AbortSignal): 
   if (!s) return existsSync(EMULATOR) ? undefined : "This computer has no Android emulator. The user can get one in Ondra's 디바이스 (Devices) screen.";
   if (!s.adb) s = (await sdkCall({ get: "adb" }, signal)) && (await sdkSettled(signal));
   if (!s?.adb) return `Couldn't get adb: ${s?.error ?? "no answer from the app"}.`;
-  useSdk(s.sdk);
+  useSdk(s.sdk, s.stateDir);
   if (s.emulator && s.avd) return undefined;
   s = (await sdkCall({ full: true }, signal)) ?? s;
   if (s.license == null) return s.emulator ? "The Android SDK here has an emulator but no AVD. Ask the user to make one in Android Studio's Device Manager." : `No Android emulator can be downloaded for this computer${s.error ? ` (${s.error})` : ""}.`;
@@ -642,7 +644,7 @@ export async function androidReady(ctx: Ask | undefined, signal?: AbortSignal): 
   await sdkCall({ get: "emulator" }, signal);
   s = await sdkSettled(signal);
   if (!s?.emulator || !s.avd) return signal?.aborted ? "cancelled" : `Couldn't get the Android emulator: ${s?.error ?? "no answer from the app"}.`;
-  useSdk(s.sdk);
+  useSdk(s.sdk, s.stateDir);
   return undefined;
 }
 

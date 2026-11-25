@@ -574,6 +574,8 @@ export interface AndroidSdk {
   size: number;
   license?: string | null;
   accel?: "windows" | "kvm" | null;
+  /** AGENT_DEVICE_STATE_DIR that goes with Ondra's own SDK */
+  stateDir?: string | null;
 }
 export const androidSdkStatus = (full = false) =>
   call<AndroidSdk>("android_sdk_status", { full }, { sdk: "", adb: true, emulator: true, avd: true, percent: 0, size: 0 });
