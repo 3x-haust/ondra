@@ -80,7 +80,7 @@ jobs:
           $process = Start-Process $setup[0].FullName -ArgumentList '/S', "/D=$installed" -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "NSIS installer exited with $($process.ExitCode)" }
 
-          foreach ($file in 'ondra.exe', 'engine/package.json', 'engine/photon_rs_bg.wasm',
+          foreach ($file in 'ondra.exe', 'ondra-browser.exe', 'browse.exe', 'components.json', 'engine/package.json', 'engine/photon_rs_bg.wasm',
                    'engine/native/win32/prebuilds/win32-x64/win32-platform.node', 'engine/THIRD_PARTY_NOTICES.txt') {
             if ((Get-Item -LiteralPath (Join-Path $installed $file)).Length -eq 0) { throw "Empty installed file: $file" }
           }
@@ -114,6 +114,15 @@ jobs:
             if (!$first.HasExited) { $first.Kill(); $first.WaitForExit() }
           }
 
+      - name: Use the browser tool
+        shell: bash
+        run: |
+          # a password saved the way a user saves one (Credential Manager), read by the installed app
+          cmd //c "cmdkey /generic:127.0.0.1 /user:ci@example.com /pass:s3cret!!!"
+          trap 'cmd //c "cmdkey /delete:127.0.0.1"' EXIT
+          installed=$(cygpath -u "$RUNNER_TEMP")/installed
+          .github/browser/smoke.sh "$installed" "$installed/components.json" "$installed/browse.exe"
+
       - name: Run Windows platform tests
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -121,6 +130,7 @@ jobs:
           cargo test --manifest-path remote/host/Cargo.toml --release --target $env:TARGET --locked identity
           foreach ($test in 'remote::power::tests', 'winvault::tests', 'providers::tests::keychain_wrapper_stores_reads_and_deletes',
                    'farfs::tests', 'components::tests::bundled_engine_needs_the_platform_executable_and_its_assets',
+                   'components::tests::chrome_zip_unpacks_into_a_runnable_browser',
                    'fs::tests::copy_image_puts_the_picture_on_the_clipboard') {
             cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib $test
           }

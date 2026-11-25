@@ -70,7 +70,7 @@ jobs:
           rpm=$(ls "$bundles"/rpm/*.rpm)
           sudo apt-get install -y "./$deb"
           lib=/usr/lib/Ondra
-          for f in /usr/bin/ondra /usr/bin/ondra-remote $lib/engine/ondra-engine $lib/engine/package.json $lib/engine/photon_rs_bg.wasm \
+          for f in /usr/bin/ondra /usr/bin/ondra-remote /usr/bin/ondra-browser $lib/components.json $lib/engine/ondra-engine $lib/engine/package.json $lib/engine/photon_rs_bg.wasm \
                    $lib/engine/native/linux/prebuilds/linux-x64/linux-platform-x11.node $lib/engine/THIRD_PARTY_NOTICES.txt; do
             test -s "$f" || { echo "missing or empty: $f"; exit 1; }
           done
@@ -79,6 +79,17 @@ jobs:
           version=$($lib/engine/ondra-engine --version)
           [ "$version" = "$expected" ] || { echo "engine reported '$version', expected '$expected'"; exit 1; }
           sha256sum "$deb" "$rpm"
+
+      - name: Use the browser tool
+        run: |
+          # a password saved the way a user saves one (the keyring), read by the installed app
+          cat > "$RUNNER_TEMP/browser.sh" <<'EOF'
+          set -e
+          export $(printf ci | gnome-keyring-daemon --unlock --components=secrets)
+          printf 's3cret!!!' | secret-tool store --label=127.0.0.1 server 127.0.0.1 user ci@example.com
+          .github/browser/smoke.sh /usr/bin /usr/lib/Ondra/components.json /usr/lib/Ondra/app-skills/browser-use/browse
+          EOF
+          HOME=$(mktemp -d) dbus-run-session -- bash "$RUNNER_TEMP/browser.sh"
 
       - name: Start the installed app
         run: |
