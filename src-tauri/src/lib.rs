@@ -24,6 +24,7 @@ mod engine;
 pub mod focus;
 mod keychain;
 mod secrets;
+mod mcp;
 mod discord;
 mod providers;
 mod git;
@@ -533,6 +534,13 @@ pub fn run() {
             discord::discord_modal_set,
             secrets::secret_list,
             secrets::secret_set,
+            mcp::mcp_dir,
+            mcp::mcp_servers,
+            mcp::mcp_save,
+            mcp::mcp_secret_set,
+            mcp::mcp_secret_from,
+            mcp::mcp_secret_delete,
+            mcp::mcp_cli,
             secrets::secret_delete,
             secrets::secret_sync,
             secrets::secret_overview,

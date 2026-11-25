@@ -71,6 +71,12 @@ export async function handle(c: Call): Promise<unknown> {
   if (c.op?.startsWith("job")) return jobOp(c.op, c.worker, a);
   // the Discord agent's hands on the server (main only, engine/discordHands.ts)
   if (c.op === "discord") return (await import("./discordHands")).discordHands(c.worker, a);
+  // the space's connected services (Settings › 서비스): main's space, or the job's
+  if (c.op === "services") {
+    const space = t?.space ?? (c.worker?.startsWith("captain:") ? c.worker.slice(8).replace(/^sim\d*:/, "").split("~")[0] : undefined);
+    if (!space || c.worker?.startsWith("captain:sim")) return { error: "only main or a job can reach its space's services" };
+    return (await import("./services")).servicesHands(space, a);
+  }
   // the app's settings, for the user (the ondra skill): main or a job, never another Mac's worker
   if (c.op === "settings_read" || c.op === "settings_write") {
     if (!t && !c.worker?.startsWith("captain:")) return { error: "only main or a job can reach the settings" };

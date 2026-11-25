@@ -21,6 +21,7 @@ import { prepareQuery } from "./vectors";
 import { AGENT_CHAT, groupGoing, groupOf, groupRoot, isAgentChat, updateTask, accountById, addProject, allDecisions, trimChats, projectById, projectFor, projectsIn, projectsShown, repoHome, setState, spaceById, state, taskById, tasksIn, tasksShown, uid } from "../state/store";
 import type { Block, CaptainMessage, Decision, Memory, Priority, Route, SpaceId, Task, Project } from "../state/types";
 import { setLive } from "../state/ui";
+import { mcpArgs, mcpSig } from "./services";
 import { agentKill, agentSpawn, agentStopCommand, bridgeEnv, ensureDir, fsFiles, fsRead, fsRepos, sessionsPrune, spaceEnv, workerExtensions } from "../lib/native";
 import { draftAnswer, prose, readFences } from "./fences";
 import { shellArg } from "./commandKind";
@@ -624,7 +625,7 @@ const wantedAccount = (space: string): string | undefined => {
 // picking another account or model under the chat restarts main on it (auto routing alone doesn't: a warm cache stays)
 const startSig = async (dir: string, skills: string, space: string) => {
   const id = wantedAccount(space);
-  return `${id}\n${mainModel(id)}\n${mainEffort(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}`;
+  return `${id}\n${mainModel(id)}\n${mainEffort(id)}\n${await instructionSig(dir)}\n${(await mainToolArgs(id)).join(" ")}\n${promptSig()}\n${skills}\n${await mcpSig(sp(space))}`;
 };
 export async function restartIfStale(space: string): Promise<boolean> {
   if (busy.has(space)) return false;
@@ -858,6 +859,8 @@ async function ensureCaptain(space: string) {
     ...(resume ? ["--continue"] : []),
     // only use is declared; the rest are called through it
     ...(await mainToolArgs(acc.id)),
+    // the space's connected services (Settings › 연결), reached through use as well
+    ...(!isSim(space) && canUseTools(acc.id, model) ? await mcpArgs(sp(space)) : []),
     // one cache key for every main session with this system prompt: a fresh
     // session's first call reads what the last one (or the warm-up) wrote
     "--shared-prompt-cache",

@@ -40,4 +40,25 @@ export default function (pi: any) {
       return out(changes ? r.results : r.settings);
     },
   });
+  pi.registerTool({
+    name: "services",
+    label: "Services",
+    exposure: "deferred",
+    description:
+      "Connect services (Gmail, Google Calendar/Drive, Slack, Notion, Linear, Sentry, or any MCP server by address or command) to this workspace for the user, as in Settings › 서비스: list (what is connected and its state, and the presets) | connect {preset or name, url? | command?, client_id?, client_secret?: the NAME of a saved secret (Settings › 시크릿), never its value} adds it and opens the sign-in in the user's browser, waiting until they finish | sign_in {name} | on / off {name} | remove {name}. Google and Slack take only the user's own OAuth app: if its id or secret isn't there, say what to make (connect without them tells how) and ask for the client id and for the secret to be saved in Settings › 시크릿. A connected service's tools come through use (mcp__<service>), from main's next message and in new jobs.",
+    parameters: Type.Object({
+      action: Type.String({ description: "list | connect | sign_in | on | off | remove" }),
+      preset: Type.Optional(Type.String()),
+      name: Type.Optional(Type.String()),
+      url: Type.Optional(Type.String()),
+      command: Type.Optional(Type.String({ description: "a command run on this Mac that speaks MCP over stdio, e.g. npx -y <package>" })),
+      client_id: Type.Optional(Type.String()),
+      client_secret: Type.Optional(Type.String({ description: "the name of a saved secret" })),
+    }),
+    async execute(_id: string, p: any, signal?: AbortSignal) {
+      const r = await call("services", p ?? {}, signal);
+      if (r?.error) return out(`services failed: ${r.error}${r.how ? `\n${r.how} (${r.link})` : ""}`);
+      return out(r);
+    },
+  });
 }
