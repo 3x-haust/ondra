@@ -19,6 +19,7 @@ import {
   discordGuilds,
   discordHistory,
   discordInteractionReply,
+  revealPath,
   discordModalSet,
   discordOwner,
   discordReact,
@@ -52,6 +53,7 @@ import { DEFAULT_VOICE } from "./agentVoice";
 import { formNote, formNow, isDitto, back as popBack, keepTime, sayAsForm } from "./agentForm";
 import { forThem, nonLatin } from "./tongue";
 import { allowed, placeOf, seeChannels, seePeople, seeServers, tagged } from "./discordPeople";
+import { localLinks, openClick, openRow } from "./discordFiles";
 
 /**
  * What keeps talk with others safe. Learned from a maintainer bot on Discord that, playing along
@@ -454,6 +456,8 @@ async function onInteraction(i: DiscordInteraction) {
   if (i.custom_id?.startsWith(PICK)) return picked(i, a);
   if (i.custom_id?.startsWith(FIELD)) return fieldPicked(i, a);
   if (i.custom_id?.startsWith(FORM)) return popupSent(i, a);
+  const open = openClick(i.custom_id);
+  if (open) return opened(i, a, open.path);
   const opts = (o: DiscordInteraction["options"] = []): string => o.map((x) => (x.options ? `${x.name} ${opts(x.options as never)}` : `${x.name}:${String(x.value)}`)).join(" ");
   const text =
     i.kind === "command"
@@ -650,6 +654,15 @@ async function picked(i: DiscordInteraction, a: AgentSettings) {
   }
   // answered (here or elsewhere): the buttons can't be pressed again
   if (i.message) await discordApi("PATCH", `/channels/${i.channel}/messages/${i.message}`, { components: d ? pickButtons(d, o?.id ?? "-") : [] }).catch(() => {});
+}
+
+/** a click on a file or folder button: shown in Finder on this Mac, for the user only (a note only they see) */
+async function opened(i: DiscordInteraction, a: AgentSettings, path?: string) {
+  const say = (content: string) => discordInteractionReply(i.id, { content, flags: 64 }, true).catch(() => {});
+  if (i.user.id !== a.ownerId) return say("주인의 Mac에서만 열 수 있어요");
+  if (!path) return say("이 버튼은 지난 실행 때 거라 열 수 없어요");
+  await revealPath(path).catch(() => {});
+  await say("Mac에서 Finder로 열었어요");
 }
 
 /** Its words where they go: a slash command's own answer when it came from one, else the channel. */
@@ -1077,17 +1090,21 @@ async function mainSaid(replyId: string) {
   // pictures in its words (![](path)) go up as pictures, not as their path
   const pics: string[] = [];
   // their language is that of the words it answers (or the job's), not its own voice's
-  const said = forThem(sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")).trim(), askedMsg?.text, msg.after ? taskById(msg.after)?.title : undefined);
+  // links to files and folders on this Mac: a file goes up with it, a folder becomes a button that opens it
+  const local = await localLinks(sayOf(msg, asks).replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_, p: string) => (pics.push(expand(p)), "")));
+  pics.push(...local.files);
+  const opens = openRow(local.open);
+  const said = forThem(local.text.trim(), askedMsg?.text, msg.after ? taskById(msg.after)?.title : undefined);
   // the user's own business, or talk that moved on, in a server channel: to their DM instead
   const { text, dm } = dmOf(said);
   if (dm && servers.has(channel)) {
     const to = await dmChannel();
     if (to) {
       seen();
-      const ids = text ? await sayTo(to, text).catch(() => [] as string[]) : [];
+      const ids = text ? await sayTo(to, text, undefined, undefined, opens.length ? opens : undefined).catch(() => [] as string[]) : [];
       keepSaid(to, ids);
       if (ids.length) hearMine(to, text);
-      for (const p of pics.slice(0, 4)) keepSaid(to, await discordSendFile(to, p).catch(() => [] as string[]));
+      for (const p of pics.slice(0, 6)) keepSaid(to, await discordSendFile(to, p).catch(() => [] as string[]));
       return;
     }
   }
@@ -1095,7 +1112,9 @@ async function mainSaid(replyId: string) {
   // a reply only when something was said since their words; right under them, just say it
   const under = !!asked && [asked.message, ...(asked.also ?? [])].includes(lastIn.get(channel) ?? "");
   const choices = (msg.routes ?? []).flatMap((r) => (r.kind === "ask" ? [state.decisions.find((x) => x.id === r.decisionId)] : [])).filter((d): d is Decision => !!d);
-  const buttons = choices.length === 1 ? await controlsFor(choices[0]) : undefined;
+  const asked1 = choices.length === 1 ? await controlsFor(choices[0]) : [];
+  // Discord takes five rows on a message
+  const buttons = asked1.length || opens.length ? [...asked1, ...opens].slice(0, 5) : undefined;
   const a = settings();
   const sent = text
     ? await (askedMsg && a
@@ -1116,7 +1135,7 @@ async function mainSaid(replyId: string) {
   seen();
   keepSaid(channel, sent.ids);
   if (sent.ids.length) hearMine(channel, sent.text);
-  for (const p of pics.slice(0, 4)) keepSaid(channel, await discordSendFile(channel, p).catch(() => [] as string[]));
+  for (const p of pics.slice(0, 6)) keepSaid(channel, await discordSendFile(channel, p).catch(() => [] as string[]));
 }
 
 /** What it is busy with right now, across its workspaces, so it talks like one person working in

@@ -5,7 +5,8 @@
 // plan changes: no stock lines about its steps (it says what it ran, found and opened itself). Where and
 // whether is the agent's own call (Task.agent: room, quiet, shots); this only carries it. Jobs
 // from the app never get here (no Task.agent).
-import { discordSend, discordSendFile, discordTyping } from "../lib/native";
+import { discordApi, discordSend, discordSendFile, discordTyping } from "../lib/native";
+import { localLinks, openRow } from "./discordFiles";
 import { redact } from "../lib/log";
 import { expand } from "./rpc";
 import { state } from "../state/store";
@@ -83,8 +84,11 @@ async function relay(t: Task, w: Watch, now: number) {
   }
   const body = lines.join("\n").slice(0, MAX_LINE * 2);
   const text = body && shared ? `-# ${t.title}\n${body}` : body;
-  if (text) await discordSend(room, text).catch(() => {});
-  for (const p of shots.slice(0, 4)) await discordSendFile(room, p).catch(() => {});
+  // links to this Mac's files go up with it, folders get a button that opens them there (discordFiles.ts)
+  const local = text ? await localLinks(text) : { text, files: [] as string[], open: [] };
+  if (local.text) await discordSend(room, local.text).catch(() => {});
+  if (local.open.length) await discordApi("POST", `/channels/${room}/messages`, { content: "-# 📂", components: openRow(local.open) }).catch(() => {});
+  for (const p of [...shots.slice(0, 4), ...local.files]) await discordSendFile(room, p).catch(() => {});
   if (text || shots.length) w.saidAt = now;
   // its end, where it was asked too, is the agent's own end line (discord.ts mainSaid)
   if (ended(t)) return;
