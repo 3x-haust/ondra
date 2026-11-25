@@ -10,7 +10,7 @@
 import { onEvent, artifactsList, farPiece, farPut, farReal, farStat, fsFiles, fsGrep, fsRead, fsWrite, ghIssue, ghIssues, ghPrView, gitChanges, gitCommit, gitFileAt, gitMerged, gitPr, gitPush, openInEditor, ptyClose, ptyOpen, ptyResize, ptyWrite, reverseTrace, revealPath, spaceEnv, type Env } from "../lib/native";
 import { homeDir, spaceById, state } from "../state/store";
 import type { Memory, Project, Task } from "../state/types";
-import { allowedPath, capText, cleanRoots, mentions, normPath, repoPath, under } from "./farPaths";
+import { allowedPath, capText, cleanRoots, mentions, mirrorPath, normPath, realPath, repoPath, tooWide, under, windowsHome } from "./farPaths";
 import { engine, expand } from "./rpc";
 import { addMemory, isLive, removeMemory, updateMemory } from "./memory";
 import { skillsFor } from "./skillMenu";
@@ -68,14 +68,17 @@ export function rootsFor(p: FarPeer): string[] {
  *  path, not a part of a longer one */
 function named(p: FarPeer, abs: string): boolean {
   if (!/\/[^/]*[^/.]\.[A-Za-z0-9]+$/.test(abs)) return false;
+  const win = windowsHome(home());
+  const native = win ? abs.replace(/\//g, "\\") : abs;
+  const textNames = (text: string) => mentions(text, abs) || (win && mentions(text, native));
   for (const t of state.tasks) {
     if (!p.sees(t)) continue;
-    if (t.shot && expand(t.shot) === abs) return true;
+    if (t.shot && normPath(t.shot, home()) === abs) return true;
     for (const e of t.entries) {
       const hit =
-        e.kind === "tool" ? !!e.tool.image && expand(e.tool.image) === abs
-        : e.kind === "text" || e.kind === "user" ? mentions(e.text, abs)
-        : e.kind === "block" ? mentions(JSON.stringify(e.block), abs)
+        e.kind === "tool" ? !!e.tool.image && normPath(e.tool.image, home()) === abs
+        : e.kind === "text" ? textNames(e.text)
+        : e.kind === "block" ? mentions(JSON.stringify(e.block), abs) || (win && mentions(JSON.stringify(e.block), JSON.stringify(native).slice(1, -1)))
         : false;
       if (hit) return true;
     }
@@ -87,19 +90,22 @@ function named(p: FarPeer, abs: string): boolean {
  *  pointing out of the folders counts as outside. `files`: a single file a job named is fine too
  *  (as it named it: that one file, wherever it is). */
 async function reach(p: FarPeer, path: unknown, files = false): Promise<string> {
-  if (typeof path !== "string") fail(NOT_THERE);
+  if (!home() || typeof path !== "string") fail(NOT_THERE);
   const abs = normPath(path as string, home()) ?? fail(NOT_THERE);
-  if (files && named(p, abs)) return abs;
+  if (files && named(p, abs)) {
+    const st = await farStat(abs);
+    if (st && !st.dir) return abs;
+  }
   const roots = rootsFor(p);
   if (!allowedPath(abs, roots, home())) fail(NOT_THERE);
-  const [real, ...rootsReal] = await farReal([abs, ...roots]).catch(() => [abs, ...roots]);
-  if (real && real !== abs && !rootsReal.some((r, i) => under(real, r ?? roots[i]))) fail(NOT_THERE);
+  const [real, ...rootsReal] = (await farReal([abs, ...roots])).map((r) => realPath(r, home()));
+  if (!real || !rootsReal.some((r) => r && !tooWide(r, home()) && under(real, r))) fail(NOT_THERE);
   return abs;
 }
 
 /** the env of a folder's space here (gh signed in as that space) */
 const envOf = async (dir: string): Promise<Env> => {
-  const pr = (state.projects ?? []).find((x) => under(dir, expand(x.folder)));
+  const pr = (state.projects ?? []).find((x) => { const root = normPath(x.folder, home()); return root && under(dir, root); });
   const space = pr?.space ?? state.space;
   return spaceEnv(spaceById(space)).catch(() => []);
 };
@@ -183,7 +189,7 @@ const FAR: Record<string, Fn> = {
     return { ...c, patch: text, cut };
   },
   "far.fileAt": async (p, dir: string, rev: string | null, path: string) => {
-    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path) ?? fail(NOT_THERE));
+    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path, home()) ?? fail(NOT_THERE));
     if (f.text === null) return f;
     const { text, cut } = capText(f.text, MAX_TEXT);
     return { ...f, text, cut: f.cut || cut };
@@ -194,7 +200,7 @@ const FAR: Record<string, Fn> = {
     const { text, cut } = capText(m.changes.patch ?? "", MAX_TEXT);
     return { ...m, changes: { ...m.changes, patch: text, cut } };
   },
-  "far.artifacts": (p, id: string) => artifactsList(myTask(p, id).id),
+  "far.artifacts": async (p, id: string) => (await artifactsList(myTask(p, id).id)).map((f) => ({ ...f, path: mirrorPath(f.path, home()) })),
   "far.trace": async (p, id: string, from: number) => {
     const r = await reverseTrace(myTask(p, id).id, Math.max(0, Number(from) || 0));
     const { text, cut } = capText(r.text, 1 << 20);

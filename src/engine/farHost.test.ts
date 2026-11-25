@@ -4,9 +4,11 @@ vi.mock("../lib/native", async (orig) => {
   const real = await orig<typeof import("../lib/native")>();
   return {
     ...real,
+    engineInfo: vi.fn(real.engineInfo),
     fsFiles: vi.fn(async (dir: string) => [dir]),
     fsRead: vi.fn(async (path: string) => ({ text: path, size: 1, binary: false })),
     revealPath: vi.fn(async () => {}),
+    farStat: vi.fn(async () => ({ size: 1, modified: 1, dir: false })),
     artifactsList: vi.fn(async (id: string) => [{ path: `/tmp/ondra/artifacts/${id}/a.png`, name: "a.png", size: 1, modified: 1 }]),
     ptyOpen: vi.fn(async () => {}),
     // links followed: one link inside the project points out of it
@@ -14,7 +16,7 @@ vi.mock("../lib/native", async (orig) => {
   };
 });
 
-import { fsFiles, fsRead, ptyOpen } from "../lib/native";
+import { engineInfo, farReal, fsFiles, fsRead, ptyOpen } from "../lib/native";
 import { setState } from "../state/store";
 import type { Project, Task } from "../state/types";
 import { farCall, rootsFor, type FarPeer } from "./farHost";
@@ -84,6 +86,36 @@ describe("what another Mac may reach here", () => {
     expect(fsRead).toHaveBeenCalledTimes(2);
     await expect(call("far.files", "/tmp/shots")).rejects.toThrow(NO);
     await expect(call("far.read", "/tmp/shots/t2.png")).rejects.toThrow(NO);
+  });
+
+  it("checks a Windows project and its junctions by their native final paths", async () => {
+    const home = String.raw`C:\Users\me`;
+    vi.mocked(engineInfo).mockResolvedValueOnce({ enginePath: null, engineVersion: null, dataDir: "C:/ondra", home });
+    await refreshEngine();
+    try {
+      vi.mocked(farReal).mockImplementationOnce(async (paths) => paths.map((p) => `\\\\?\\${p.replace(/\//g, "\\")}`));
+      await call("far.read", "/@drive/C/Users/me/work/app/src/a.ts");
+      expect(fsRead).toHaveBeenCalledWith("C:/Users/me/work/app/src/a.ts");
+      vi.mocked(farReal).mockImplementationOnce(async (paths) => paths.map((p, i) => i ? p : String.raw`\\?\C:\outside\a.ts`));
+      await expect(call("far.read", "~/work/app/link/a.ts")).rejects.toThrow(NO);
+      setState("tasks", [task("t1", { project: "p1", entries: [{ kind: "text", id: "e", at: 1, text: String.raw`![shot](D:\shots\look.png)` }] })]);
+      await call("far.read", "/@drive/D/shots/look.png");
+      expect(fsRead).toHaveBeenCalledWith("D:/shots/look.png");
+      await expect(call("far.read", "D:/shots/other.png")).rejects.toThrow(NO);
+      await expect(call("far.write", "D:/shots/look.png", "x")).rejects.toThrow(NO);
+      await expect(call("far.files", "D:/shots")).rejects.toThrow(NO);
+      await expect(call("far.read", "/Users/me/work/app/x")).rejects.toThrow(NO);
+    } finally {
+      await refreshEngine();
+    }
+  });
+
+  it("won't serve project files without a confirmed real location", async () => {
+    vi.mocked(farReal).mockResolvedValueOnce([null]);
+    await expect(call("far.read", "~/work/app/a")).rejects.toThrow(NO);
+    vi.mocked(farReal).mockRejectedValueOnce(new Error("unavailable"));
+    await expect(call("far.read", "~/work/app/a")).rejects.toThrow();
+    expect(fsRead).not.toHaveBeenCalled();
   });
 
   it("acts on its own jobs and projects only", async () => {

@@ -23,6 +23,25 @@ describe("paths another Mac asks for", () => {
   });
 });
 
+describe("paths on the machine serving the files", () => {
+  const home = String.raw`C:\Users\me`;
+  it("resolves drive, home, file URL and share paths on Windows only", () => {
+    expect(normPath("~/work/app", home)).toBe("C:/Users/me/work/app");
+    expect(normPath(String.raw`d:\Work\한 글`, home)).toBe("D:/Work/한 글");
+    expect(normPath("file:///D:/Work/a%20b.html", home)).toBe("D:/Work/a b.html");
+    expect(normPath(String.raw`\\files\shared\work\a`, home)).toBe("//files/shared/work/a");
+    expect(normPath(String.raw`D:\Work\a`, HOME)).toBeUndefined();
+    expect(normPath(String.raw`\\files\shared\a`, HOME)).toBeUndefined();
+    expect(normPath("/Users/me/work/app", home)).toBeUndefined();
+    expect(normPath(String.raw`/tmp/a\b`, HOME)).toBe(String.raw`/tmp/a\b`);
+  });
+  it("does not treat ambiguous or special Windows names as project files", () => {
+    for (const p of ["D:notes", "/notes", "D:/../other", "//files/share/../other", "//?/D:/Work", "//./pipe/local", "D:/Work/con.txt", "D:/Work/a:stream", "D:/Work/foo. /x"]) expect(normPath(p, home), p).toBeUndefined();
+    expect(cleanRoots(["D:/", "//files/share", "C:/USERS/ME", "~/work"], home)).toEqual(["C:/Users/me/work"]);
+    expect(asHostPath(String.raw`C:\Users\me/work\file`, home)).toBe("~/work/file");
+  });
+});
+
 describe("folders another Mac may reach", () => {
   it("never include the disk, /Users or the home folder and above", () => {
     for (const r of ["/", "/Users", "/Volumes", "/tmp", HOME]) expect(tooWide(r, HOME)).toBe(true);

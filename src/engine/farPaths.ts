@@ -4,28 +4,54 @@
 // Never the disk at large: a folder as wide as the home folder doesn't count.
 // Pure, so it can be tested; engine/farHost.ts applies it.
 
-/** "~/x", "file:///x", "/a/./b/../c" → one absolute path; undefined when it isn't one */
+/** Pick the grammar from the serving machine's home, never from what the peer asks for. */
+export const windowsHome = (home: string) => /^(?:[A-Za-z]:[/\\]|\\\\|\/\/)/.test(home);
+const winPart = (s: string) => !!s && !/[\\<>:"|?*\x00-\x1f]|[. ]$/.test(s) && !/^(?:con|prn|aux|nul|conin\$|conout\$|(?:com|lpt)[1-9¹²³])(?:\.|$)/i.test(s);
+
+/** An old Mac expects absolute slash paths, including for the files next to a page. The
+ * markers have no special meaning on a POSIX host, and are legal site-cache directories. */
+const DRIVE = "/@drive/";
+const SHARE = "/@share/";
+
+/** "~/x", a local file URL or an absolute native path → one slash-separated absolute path. */
 export function normPath(p: string, home: string): string | undefined {
   if (typeof p !== "string" || !p || p.includes("\0")) return undefined;
-  let s = p.trim();
+  const win = windowsHome(home);
+  let s = win ? p.replace(/\\/g, "/") : p.trim();
   if (s.startsWith("file://")) {
     try {
       s = decodeURI(s.slice(7));
+      if (win) s = /^\/[a-z]:\//i.test(s) ? s.slice(1) : !s.startsWith("/") ? `//${s}` : s;
     } catch {
       return undefined;
     }
   }
-  if (s === "~" || s.startsWith("~/")) s = home.replace(/\/+$/, "") + s.slice(1);
-  if (!s.startsWith("/")) return undefined;
+  if (s.includes("\0")) return undefined;
+  if (s === "~" || s.startsWith("~/")) s = (win ? home.replace(/\\/g, "/") : home).replace(/\/+$/, "") + s.slice(1);
+  let root = "/";
+  if (win) {
+    if (s.startsWith(DRIVE)) s = s.slice(DRIVE.length).replace(/^([a-z])(?:\/|$)/i, "$1:/");
+    else if (s.startsWith(SHARE)) s = `//${s.slice(SHARE.length)}`;
+    const drive = /^([a-z]):\//i.exec(s);
+    const share = /^\/\/([^/]+)\/([^/]+)(?:\/|$)/.exec(s);
+    if (drive) {
+      root = `${drive[1].toUpperCase()}:/`;
+      s = s.slice(3);
+    } else if (share && winPart(share[1]) && winPart(share[2]) && !/^(pipe|mailslot|ipc\$)$/i.test(share[2])) {
+      root = `//${share[1]}/${share[2]}/`;
+      s = s.slice(share[0].length);
+    } else return undefined;
+  } else if (!s.startsWith("/")) return undefined;
   const out: string[] = [];
   for (const part of s.split("/")) {
     if (!part || part === ".") continue;
     if (part === "..") {
       if (!out.length) return undefined;
       out.pop();
-    } else out.push(part);
+    } else if (win && !winPart(part)) return undefined;
+    else out.push(part);
   }
-  return `/${out.join("/")}`;
+  return root + out.join("/");
 }
 
 /** the path is the folder or inside it */
@@ -34,6 +60,7 @@ export const under = (p: string, root: string) => p === root || p.startsWith(roo
 /** a folder too wide to open to another Mac: the disk, /Users, /Volumes, the home folder or anything above it */
 export function tooWide(root: string, home: string): boolean {
   const h = normPath(home, home) ?? home;
+  if (windowsHome(home)) return root.endsWith("/") || under(h.toLowerCase(), root.toLowerCase());
   return root === "/" || root === "/Users" || root === "/Volumes" || root === "/private" || root === "/tmp" || under(h, root);
 }
 
@@ -51,7 +78,10 @@ export function cleanRoots(roots: (string | undefined)[], home: string): string[
 export function allowedPath(p: string, roots: string[], home: string, named: (abs: string) => boolean = () => false): string | undefined {
   const abs = normPath(p, home);
   if (!abs) return undefined;
-  return roots.some((r) => under(abs, r)) || named(abs) ? abs : undefined;
+  // Only the lexical filter folds case. The host still compares canonical paths exactly
+  // so a case-sensitive Windows directory cannot grant access to its differently cased sibling.
+  const win = windowsHome(home);
+  return roots.some((r) => win ? under(abs.toLowerCase(), r.toLowerCase()) : under(abs, r)) || named(abs) ? abs : undefined;
 }
 
 /** The text names that path as a whole: not as the start of a longer one ("/a/b.png" in "/a/b.png.bak"
@@ -68,16 +98,40 @@ export function mentions(text: string, abs: string): boolean {
 }
 
 /** a path inside a repo, as git takes it: relative, without ".." */
-export function repoPath(p: string): string | undefined {
-  if (typeof p !== "string" || !p || p.startsWith("/") || p.includes("\0")) return undefined;
+export function repoPath(p: string, home = ""): string | undefined {
+  if (typeof p !== "string") return undefined;
+  if (windowsHome(home)) {
+    p = p.replace(/\\/g, "/");
+    if (p.split("/").some((part) => !winPart(part))) return undefined;
+  }
+  if (!p || p.startsWith("/") || p.includes("\0")) return undefined;
   return p.split("/").some((x) => x === "..") ? undefined : p;
 }
 
 /** A path as the other Mac reads it: this Mac's home turned back into "~" (it has its own). */
 export function asHostPath(p: string, myHome: string): string {
+  if (windowsHome(myHome) && windowsHome(p)) {
+    const h = normPath(myHome, myHome);
+    const abs = normPath(p, myHome);
+    return abs && h && under(abs, h) ? `~${abs.slice(h.length)}` : p;
+  }
   const h = myHome.replace(/\/+$/, "");
   if (!h || !p) return p;
   return p === h ? "~" : p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
+}
+
+/** What a Windows host calls its path in the mirror. POSIX senders stay byte-for-byte unchanged. */
+export function mirrorPath(path: string, home: string): string {
+  if (!windowsHome(home)) return path;
+  const p = normPath(path, home);
+  return !p ? path : p.startsWith("//") ? SHARE + p.slice(2) : DRIVE + p[0] + p.slice(2);
+}
+
+/** Rust canonicalize uses a verbatim prefix on Windows. Strip it only on a trusted native result. */
+export function realPath(path: string | null, home: string): string | undefined {
+  if (!path) return undefined;
+  if (!windowsHome(home)) return path.startsWith("/") ? path : undefined;
+  return normPath(path.replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\(?=[A-Za-z]:\\)/, ""), home);
 }
 
 /** a file from another Mac, as this Mac caches it: one name per Mac, path and version */
