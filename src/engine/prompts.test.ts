@@ -4,7 +4,7 @@ import { reconcile } from "solid-js/store";
 import * as native from "../lib/native";
 import { freshState, setState, state } from "../state/store";
 import type { Task } from "../state/types";
-import { appCheckRules, CAPTAIN_SYSTEM, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
+import { appCheckRules, CAPTAIN_SYSTEM, forHost, rigorNote, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "./prompts";
 import { startRpc } from "./rpc";
 import { chineseOnly } from "./tasks";
 import { REVIEW_FIX } from "./crosscheck";
@@ -327,6 +327,23 @@ describe("worker prompt delivery", () => {
       const prompts = args.flatMap((arg, i) => arg === "--append-system-prompt" ? [args[i + 1]] : []);
       expect(prompts[0]).toContain("mimikyu skill");
       expect(state.tasks.find((x) => x.id === t.id)?.status).toBe("running");
+    });
+
+    it(`gives a ${role} only the tools this computer has`, async () => {
+      // Windows and Linux today: no ondra-browser, no background app helper
+      vi.spyOn(native, "engineInfo").mockResolvedValue({ enginePath: "/e", engineVersion: "1", dataDir: "/d", home: "/h", browser: false, computer: false });
+      await startRpc();
+      const t = task(role === "subagent" ? "parent-task" : undefined);
+      if (t.parentId) setState("tasks", [{ ...task(), id: t.parentId }]);
+      setState("tasks", (list) => [...list, t]);
+
+      await startTask(t.id, false);
+
+      const [, , args] = vi.mocked(native.agentSpawn).mock.calls[0];
+      const role0 = args[args.indexOf("--append-system-prompt") + 1];
+      for (const gone of ["computer-use", "computer tool", "ondra-browser", "browser-use", "`browse`", "shared browser"]) expect(role0).not.toContain(gone);
+      expect(role0).toContain("web_fetch");
+      for (const gone of ["computer-use;", "browser-use;"]) expect(forHost(CAPTAIN_SYSTEM)).not.toContain(gone);
     });
   }
 });
