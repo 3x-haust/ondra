@@ -3,6 +3,7 @@
  * (the input grows, its tray opens) or its content grows: the messages move up
  * instead of sliding under the input.
  */
+import { viewState } from "../state/viewState";
 
 let holding = false;
 /** what was clicked: only the chat holding it stays put (another pane's chat keeps following) */
@@ -22,11 +23,15 @@ export function holdScroll(ms = 600, at: Element | null = null) {
  * keys, dragging the scrollbar) it lets go and stays where they put it. It
  * follows again only once they are back at the very bottom (or press "맨 아래로").
  * `onStick` hears when following turns on or off.
+ * With `key`, the chat comes back as it was left (viewState): at the bottom and following, or
+ * where the user had scrolled up to. The key may change while it stays on screen (main's chat of
+ * another workspace in the same box): it then takes up that chat's place.
  */
 /** Tell a chat kept by keepBottom that the user just sent: it goes to the bottom and follows again. */
 export const toBottomSent = (el: HTMLElement | undefined) => el?.dispatchEvent(new Event("sent"));
 
-export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void): () => void {
+export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void, opts: { key?: () => string | undefined; vs?: Pick<typeof viewState, "spot" | "keepSpot"> } = {}): () => void {
+  const vs = opts.vs ?? viewState;
   let stuck = true;
   let ours = false; // the scroll we just made ourselves
   let last = 0;
@@ -62,10 +67,32 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     });
   };
   const gap = () => el.scrollHeight - el.scrollTop - el.clientHeight;
+  /** the chat shown now, to note where it is */
+  let k = opts.key?.();
+  const note = () => k && vs.keepSpot(k, { top: el.scrollTop, left: 0, bottom: stuck });
   const set = (v: boolean) => {
     if (v === stuck) return;
     stuck = v;
     onStick?.(v);
+    note();
+  };
+  /** take up where this chat was left; until its content is long enough, putBack keeps it there */
+  const resume = () => {
+    const s = k ? vs.spot(k) : undefined;
+    pinUntil = 0;
+    const v = !s || !!s.bottom;
+    if (v !== stuck) ((stuck = v), onStick?.(v));
+    ours = true;
+    el.scrollTop = v ? el.scrollHeight : s!.top;
+    lastTop = v ? el.scrollTop : s!.top;
+    last = gap();
+  };
+  /** another chat came into the box */
+  const rekey = () => {
+    const nk = opts.key?.();
+    if (nk === k) return;
+    k = nk;
+    resume();
   };
   const follow = () => {
     // a tray opening under it pushes the chat up, closing lets it back down;
@@ -81,6 +108,7 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     lastTop = el.scrollTop;
   };
   const onScroll = () => {
+    rekey();
     const d = gap();
     if (pinned() && d > 4) {
       ours = true;
@@ -98,6 +126,7 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     else if (d <= 4) set(true);
     else if (d > last + 1) set(false); // moved up (scrollbar, find, focus …)
     last = d;
+    note();
   };
   // intent beats the race with streaming content: let go before the scroll lands
   const onWheel = (e: WheelEvent) => {
@@ -135,6 +164,7 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     el.scrollTop = el.scrollHeight;
     last = gap();
     lastTop = el.scrollTop;
+    note();
   };
   el.addEventListener("sent", onSent);
   el.addEventListener("pointerdown", onDown, { passive: true });
@@ -151,7 +181,9 @@ export function keepBottom(el: HTMLElement, onStick?: (stuck: boolean) => void):
     for (const c of el.children) ro.observe(c);
   };
   watch();
-  const mo = new MutationObserver(() => (watch(), follow()));
+  // a chat kept before starts where it was left
+  if (k && vs.spot(k)) resume();
+  const mo = new MutationObserver(() => (rekey(), watch(), follow()));
   mo.observe(el, { childList: true, subtree: true, characterData: true });
   el.addEventListener("scroll", onScroll, { passive: true });
   el.addEventListener("wheel", onWheel, { passive: true });
