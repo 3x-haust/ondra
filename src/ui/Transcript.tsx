@@ -26,6 +26,8 @@ import { costDetail, jobCost } from "./cost";
 import { Glyph } from "../views/Sidebar";
 import { t as tr } from "../i18n";
 import { SiteIcons } from "./SiteBits";
+import { CiProgress, JobCtx } from "./CiProgress";
+import { waitsOnCi } from "../engine/ciRun";
 
 type Item =
   | { kind: "tools"; id: string; tools: (Entry & { kind: "tool" })[] }
@@ -147,6 +149,8 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
   const stopped = () => halted(props.task);
   const halts = createMemo(() => haltsOf(props.task.entries));
   return (
+    // a step that waits on CI asks GitHub as this job's space, in its folder
+    <JobCtx.Provider value={() => props.task}>
     <Index each={items()}>
       {(item, i) => (
         <Switch>
@@ -182,6 +186,7 @@ function Items(props: { entries: Entry[]; task: Task; live: boolean; openTools?:
         </Switch>
       )}
     </Index>
+    </JobCtx.Provider>
   );
 }
 
@@ -553,9 +558,11 @@ function CallGroup(props: { tools: ToolEntry[]; shells: Shell[]; stopped?: boole
         </span>
         <Icon name="chevron" size={12} class="tool-chev" />
       </button>
+      {/* the command running now waits on CI: its jobs under the group's line, folded or open */}
+      <Show when={((l) => l && ciWait(l) && l)(live())} keyed>{(l) => <CiProgress cmd={l.tool.target ?? ""} />}</Show>
       <Fold open={open()}>
         <div class="explore-body">
-          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} halt={halt(e)} />}</For>
+          <For each={props.tools}>{(e) => <ToolLine e={e} shells={props.shells} stopped={props.stopped} halt={halt(e)} ci={false} />}</For>
         </div>
       </Fold>
     </div>
@@ -646,7 +653,11 @@ function shortName(t: ToolCall) {
   return /^[~/.]/.test(x) || x.includes("/") ? x.replace(/\/+$/, "").split("/").pop() || x : x;
 }
 
-function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean; halt?: Halt }) {
+/** a running step that waits on GitHub CI: its row shows the run's jobs under it */
+const ciWait = (e: ToolEntry) => e.tool.kind === "bash" && waitsOnCi(e.tool.target ?? "");
+
+/** `ci` false: the row sits inside a group that shows the CI progress itself */
+function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped?: boolean; halt?: Halt; ci?: boolean }) {
   const t = () => props.e.tool;
   const shell = () => (t().shellId ? props.shells.find((s) => s.id === t().shellId) : undefined);
   /** never finished, and the task stopped working: not running any more (Ondra's stop says 멈춤 instead) */
@@ -698,6 +709,9 @@ function ToolLine(props: { e: Entry & { kind: "tool" }; shells: Shell[]; stopped
         </span>
         <Icon name="chevron" size={12} class={canOpen() ? "tool-chev" : "tool-chev none"} />
       </button>
+      <Show when={props.ci !== false && running() && ciWait(props.e)}>
+        <CiProgress cmd={t().target ?? ""} />
+      </Show>
       <Fold open={open() && !!t().note}>
         <div class="tool-note">
           <Markdown text={t().text || tr("(내용 없음)")} />

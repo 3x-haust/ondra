@@ -734,6 +734,73 @@ pub async fn gh_watch(cwd: String, event: String, search: Option<String>, env: O
     .map_err(|e| e.to_string())?
 }
 
+/// Where a CI lookup runs: the repo the command named (`owner/name`), else the
+/// job's folder, whose git remote tells gh the repo.
+fn ci_place(cwd: &str, repo: &Option<String>) -> Result<(String, Vec<String>), String> {
+    match repo.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+        Some(r) if r.split('/').count() == 2 && r.chars().all(|c| c.is_ascii_alphanumeric() || "/._-".contains(c)) => {
+            Ok((std::env::temp_dir().to_string_lossy().into_owned(), vec!["-R".into(), r.into()]))
+        }
+        Some(r) => Err(format!("not a repo: {r}")),
+        None if std::path::Path::new(cwd).is_dir() => Ok((cwd.to_string(), vec![])),
+        None => Err("no folder".into()),
+    }
+}
+
+/// One Actions run (`gh run view <id> --json <fields>`), for showing a wait on CI as progress.
+#[tauri::command]
+pub async fn gh_run_view(cwd: String, run: String, repo: Option<String>, fields: String, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    if run.is_empty() || !run.chars().all(|c| c.is_ascii_digit()) {
+        return Err(format!("not a run id: {run}"));
+    }
+    if !fields.chars().all(|c| c.is_ascii_alphabetic() || c == ',') {
+        return Err(format!("bad fields: {fields}"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let (dir, place) = ci_place(&cwd, &repo)?;
+        let mut args: Vec<&str> = vec!["run", "view", &run, "--json", &fields];
+        args.extend(place.iter().map(String::as_str));
+        self::run(&dir, "gh", &args, &env.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The latest successful runs of a workflow (ids only), to learn how long its jobs usually take.
+#[tauri::command]
+pub async fn gh_run_list(cwd: String, workflow: String, repo: Option<String>, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (dir, place) = ci_place(&cwd, &repo)?;
+        let mut args: Vec<&str> = vec!["run", "list", "--workflow", &workflow, "--status", "success", "-L", "5", "--json", "databaseId"];
+        args.extend(place.iter().map(String::as_str));
+        run(&dir, "gh", &args, &env.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A PR's checks (`statusCheckRollup`), whose links name the runs it waits on.
+/// An empty `pr` is the folder's branch, as `gh pr checks` with no PR means.
+#[tauri::command]
+pub async fn gh_pr_checks(cwd: String, pr: String, repo: Option<String>, env: Option<Vec<(String, String)>>) -> Result<String, String> {
+    if pr.starts_with('-') {
+        return Err(format!("not a PR: {pr}"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        // no PR named: only the folder knows which branch it is on
+        let (dir, place) = ci_place(&cwd, if pr.is_empty() { &None } else { &repo })?;
+        let mut args: Vec<&str> = vec!["pr", "view"];
+        if !pr.is_empty() {
+            args.push(&pr);
+        }
+        args.extend(["--json", "statusCheckRollup"]);
+        args.extend(place.iter().map(String::as_str));
+        run(&dir, "gh", &args, &env.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 const PR_DIFF_MAX: usize = 1_500_000;
 
 fn pr_json(url: &str, env: &[(String, String)], fields: &str, with_diff: bool) -> Result<String, String> {
