@@ -57,7 +57,9 @@ export function rootsFor(p: FarPeer): string[] {
   const data = engine.info.dataDir;
   for (const t of state.tasks) {
     if (!p.sees(t)) continue;
-    dirs.push(t.cwd, t.worktree?.path, t.worktree?.repo);
+    dirs.push(t.cwd);
+    const w = t.worktree;
+    if (w) dirs.push(...[w.path, w.repo].map((root) => w.sub ? `${root}/${w.sub}` : root));
     if (data) dirs.push(`${data}/artifacts/${safeId(t.id)}`);
   }
   if (data) dirs.push(`${data}/attachments/remote`);
@@ -92,15 +94,20 @@ function named(p: FarPeer, abs: string): boolean {
 async function reach(p: FarPeer, path: unknown, files = false): Promise<string> {
   if (!home() || typeof path !== "string") fail(NOT_THERE);
   const abs = normPath(path as string, home()) ?? fail(NOT_THERE);
-  if (files && named(p, abs)) {
-    const st = await farStat(abs);
-    if (st && !st.dir) return abs;
-  }
   const roots = rootsFor(p);
-  if (!allowedPath(abs, roots, home())) fail(NOT_THERE);
+  const inProject = allowedPath(abs, roots, home());
+  const oneFile = files && named(p, abs);
+  if (!inProject && !oneFile) return fail(NOT_THERE);
   const [real, ...rootsReal] = (await farReal([abs, ...roots])).map((r) => realPath(r, home()));
-  if (!real || !rootsReal.some((r) => r && !tooWide(r, home()) && under(real, r))) fail(NOT_THERE);
-  return abs;
+  if (!real) return fail(NOT_THERE);
+  if (inProject && rootsReal.some((r) => r && !tooWide(r, home()) && under(real, r))) return real;
+  // A named output grants that file, not a target it can be redirected to. macOS stores
+  // /var and /tmp under /private, including its standard screenshot and temp directories.
+  if (oneFile && (real === abs || (!windowsHome(home()) && /^\/(tmp|var)\//.test(abs) && real === `/private${abs}`))) {
+    const st = await farStat(real);
+    if (st && !st.dir) return real;
+  }
+  return fail(NOT_THERE);
 }
 
 /** the env of a folder's space here (gh signed in as that space) */
@@ -176,26 +183,26 @@ export function farMsg(p: FarPeer, msg: Record<string, unknown>) {
 type Fn = (p: FarPeer, ...a: never[]) => unknown;
 const FAR: Record<string, Fn> = {
   /** every file of a folder (relative paths) */
-  "far.files": async (p, dir: string) => fsFiles(await reach(p, dir)),
+  "far.files": async (p, dir: string) => fsFiles(await reach(p, dir), true),
   "far.read": async (p, path: string) => fsRead(await reach(p, path, true)),
-  "far.grep": async (p, dir: string, q: string) => fsGrep(await reach(p, dir), String(q ?? "")),
+  "far.grep": async (p, dir: string, q: string) => fsGrep(await reach(p, dir), String(q ?? ""), true),
   "far.write": async (p, path: string, text: string, expect?: number) => fsWrite(await reach(p, path), String(text ?? ""), typeof expect === "number" ? expect : undefined),
   "far.stat": async (p, path: string) => farStat(await reach(p, path, true)),
   "far.piece": async (p, path: string, offset: number, len: number) => farPiece(await reach(p, path, true), Math.max(0, Number(offset) || 0), Math.min(MAX_PIECE, Math.max(0, Number(len) || MAX_PIECE))),
   "far.changes": async (p, dir: string, base?: string, counts?: boolean) => {
-    const c = await gitChanges(await reach(p, dir), typeof base === "string" ? base : undefined);
+    const c = await gitChanges(await reach(p, dir), typeof base === "string" ? base : undefined, true);
     if (counts === true) return { ...c, patch: "" };
     const { text, cut } = capText(c.patch ?? "", MAX_TEXT);
     return { ...c, patch: text, cut };
   },
   "far.fileAt": async (p, dir: string, rev: string | null, path: string) => {
-    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path, home()) ?? fail(NOT_THERE));
+    const f = await gitFileAt(await reach(p, dir), typeof rev === "string" ? rev : null, repoPath(path, home()) ?? fail(NOT_THERE), true);
     if (f.text === null) return f;
     const { text, cut } = capText(f.text, MAX_TEXT);
     return { ...f, text, cut: f.cut || cut };
   },
   "far.merged": async (p, repo: string, branch: string, into: string | undefined, base: string) => {
-    const m = await gitMerged(await reach(p, repo), String(branch), typeof into === "string" ? into : undefined, String(base));
+    const m = await gitMerged(await reach(p, repo), String(branch), typeof into === "string" ? into : undefined, String(base), true);
     if (!m) return m;
     const { text, cut } = capText(m.changes.patch ?? "", MAX_TEXT);
     return { ...m, changes: { ...m.changes, patch: text, cut } };

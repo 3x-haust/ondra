@@ -51,8 +51,7 @@ fn has_head(cwd: &str) -> bool {
     git(cwd, &["rev-parse", "--verify", "-q", "HEAD"]).is_some()
 }
 
-fn untracked_diff(cwd: &str, path: &str, budget: usize) -> (String, u64) {
-    let full = Path::new(cwd).join(path);
+fn untracked_diff(full: &Path, path: &str, budget: usize) -> (String, u64) {
     let Ok(bytes) = std::fs::read(&full) else { return (String::new(), 0) };
     if bytes.contains(&0) {
         return (format!("diff --git a/{path} b/{path}\nnew file mode 100644\nBinary files /dev/null and b/{path} differ\n"), 0);
@@ -73,19 +72,46 @@ fn untracked_diff(cwd: &str, path: &str, budget: usize) -> (String, u64) {
 
 /// Changes in `cwd`: against HEAD, or against `base` (a task worktree's start
 /// commit) so the agent's own commits are included too.
+#[cfg(test)]
 pub fn changes(cwd: &str, base: Option<&str>) -> GitChanges {
+    panel_changes(cwd, base, false)
+}
+
+fn commit_oid(cwd: &str, rev: &str) -> Option<String> {
+    git(cwd, &["rev-parse", "--verify", "-q", "--end-of-options", &format!("{rev}^{{commit}}")])
+        .map(|s| s.trim().to_owned()).filter(|s| matches!(s.len(), 40 | 64) && s.bytes().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// Remote diffs are produced for the project, not filtered after Git has included its siblings.
+fn panel_diff(cwd: &str, scoped: bool, options: &[&str]) -> Option<String> {
+    let mut args = vec!["diff"];
+    if scoped { args.extend(["--relative", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all"]); }
+    args.extend_from_slice(options);
+    if scoped { args.extend(["--", "."]); }
+    git(cwd, &args)
+}
+
+fn panel_changes(cwd: &str, base: Option<&str>, scoped: bool) -> GitChanges {
     let empty = GitChanges { is_repo: false, branch: None, files: vec![], patch: String::new() };
     if cwd.is_empty() || git(cwd, &["rev-parse", "--is-inside-work-tree"]).map(|s| s.trim() == "true") != Some(true) {
         return empty;
     }
     let branch = git(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let head = has_head(cwd);
-    let since = base.filter(|b| git(cwd, &["cat-file", "-e", &format!("{b}^{{commit}}")]).is_some());
+    let oid = base.and_then(|b| commit_oid(cwd, b));
+    let since = oid.as_deref();
     let base = since.unwrap_or(if head { "HEAD" } else { "--cached" });
+    let mut status_args = vec!["status", "--porcelain=v1", "-z", "--untracked-files=all"];
+    let mut prefix = String::new();
+    if scoped {
+        let Some(p) = git(cwd, &["rev-parse", "--show-prefix"]) else { return empty };
+        prefix = p.trim_end_matches(['\r', '\n']).to_owned();
+        status_args.extend(["--ignore-submodules=all", "--", "."]);
+    }
 
     // status: XY path\0 (renames carry the old path as the next field)
     let mut statuses: Vec<(String, String)> = vec![];
-    if let Some(raw) = git(cwd, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]) {
+    if let Some(raw) = git(cwd, &status_args) {
         let mut fields = raw.split('\0').filter(|s| !s.is_empty());
         while let Some(entry) = fields.next() {
             if entry.len() < 4 {
@@ -106,13 +132,13 @@ pub fn changes(cwd: &str, base: Option<&str>) -> GitChanges {
                 "M"
             };
             if since.is_none() || code == "?" {
-                statuses.push((path, code.to_string()));
+                if let Some(rel) = path.strip_prefix(&prefix) { statuses.push((rel.to_owned(), code.to_string())); }
             }
         }
     }
     if let Some(b) = since {
         // committed + uncommitted changes since the task started
-        if let Some(raw) = git(cwd, &["diff", "--name-status", "-z", b]) {
+        if let Some(raw) = panel_diff(cwd, scoped, &["--name-status", "-z", b]) {
             let mut fields = raw.split('\0').filter(|s| !s.is_empty());
             while let Some(code) = fields.next() {
                 let c = code.chars().next().unwrap_or('M');
@@ -128,8 +154,7 @@ pub fn changes(cwd: &str, base: Option<&str>) -> GitChanges {
     }
 
     let mut counts: HashMap<String, (u64, u64)> = HashMap::new();
-    let numstat_args: Vec<&str> = vec!["diff", "--numstat", base];
-    if let Some(raw) = git(cwd, &numstat_args) {
+    if let Some(raw) = panel_diff(cwd, scoped, &["--numstat", base]) {
         for line in raw.lines() {
             let mut parts = line.splitn(3, '\t');
             let (Some(a), Some(d), Some(p)) = (parts.next(), parts.next(), parts.next()) else { continue };
@@ -145,7 +170,7 @@ pub fn changes(cwd: &str, base: Option<&str>) -> GitChanges {
         }
     }
 
-    let mut patch = git(cwd, &["diff", base]).unwrap_or_default();
+    let mut patch = panel_diff(cwd, scoped, &[base]).unwrap_or_default();
     if patch.len() > PATCH_CAP {
         patch.truncate(floor_char_boundary(&patch, PATCH_CAP));
         patch.push_str("\n… (diff truncated)\n");
@@ -155,7 +180,11 @@ pub fn changes(cwd: &str, base: Option<&str>) -> GitChanges {
     for (path, status) in statuses {
         let (add, del) = if status == "?" {
             let budget = PATCH_CAP.saturating_sub(patch.len());
-            let (diff, n) = untracked_diff(cwd, &path, budget);
+            let full = if scoped {
+                let Some(file) = Path::new(cwd).canonicalize().ok().and_then(|dir| crate::fs::scoped_file(&dir, Path::new(&path))) else { continue };
+                file
+            } else { Path::new(cwd).join(&path) };
+            let (diff, n) = untracked_diff(&full, &path, budget);
             if patch.len() < PATCH_CAP {
                 patch.push_str(&diff);
             }
@@ -176,13 +205,13 @@ fn floor_char_boundary(s: &str, mut i: usize) -> usize {
 }
 
 #[tauri::command]
-pub async fn git_changes(cwd: String, base: Option<String>) -> GitChanges {
+pub async fn git_changes(cwd: String, base: Option<String>, scoped: Option<bool>) -> GitChanges {
     let cwd = if let Some(rest) = cwd.strip_prefix("~/") {
         crate::engine::home().join(rest).display().to_string()
     } else {
         cwd
     };
-    tauri::async_runtime::spawn_blocking(move || changes(&cwd, base.as_deref())).await.unwrap_or(GitChanges {
+    tauri::async_runtime::spawn_blocking(move || panel_changes(&cwd, base.as_deref(), scoped == Some(true))).await.unwrap_or(GitChanges {
         is_repo: false,
         branch: None,
         files: vec![],
@@ -223,11 +252,21 @@ fn top_of(cwd: &str) -> String {
     git(cwd, &["rev-parse", "--show-toplevel"]).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| cwd.to_string())
 }
 
-pub fn file_at(cwd: &str, rev: Option<&str>, path: &str) -> FileAt {
-    let top = top_of(cwd);
-    let bytes = match rev {
-        None => std::fs::read(Path::new(&top).join(path)).ok(),
-        Some(r) => git_bytes(&top, &["show", &format!("{r}:{path}")]),
+fn file_at(cwd: &str, rev: Option<&str>, path: &str, scoped: bool) -> FileAt {
+    let bytes = if scoped {
+        let rel = Path::new(path);
+        if path.is_empty() || rel.components().any(|c| !matches!(c, std::path::Component::Normal(_))) { None }
+        else if let Some(r) = rev {
+            commit_oid(cwd, r).and_then(|oid| git_bytes(cwd, &["cat-file", "blob", &format!("{oid}:./{path}")]))
+        } else {
+            Path::new(cwd).canonicalize().ok().and_then(|root| crate::fs::scoped_file(&root, rel)).and_then(|p| std::fs::read(p).ok())
+        }
+    } else {
+        let top = top_of(cwd);
+        match rev {
+            None => std::fs::read(Path::new(&top).join(path)).ok(),
+            Some(r) => git_bytes(&top, &["show", &format!("{r}:{path}")]),
+        }
     };
     let Some(mut bytes) = bytes else { return FileAt { text: None, size: 0, binary: false, missing: true, cut: false } };
     let size = bytes.len() as u64;
@@ -243,18 +282,18 @@ pub fn file_at(cwd: &str, rev: Option<&str>, path: &str) -> FileAt {
 }
 
 #[tauri::command]
-pub async fn git_file_at(cwd: String, rev: Option<String>, path: String) -> FileAt {
-    tauri::async_runtime::spawn_blocking(move || file_at(&cwd, rev.as_deref(), &path))
+pub async fn git_file_at(cwd: String, rev: Option<String>, path: String, scoped: Option<bool>) -> FileAt {
+    tauri::async_runtime::spawn_blocking(move || file_at(&cwd, rev.as_deref(), &path, scoped == Some(true)))
         .await
         .unwrap_or(FileAt { text: None, size: 0, binary: false, missing: true, cut: false })
 }
 
 /// What `from`..`to` changed, in the same shape as `changes` (commits only, nothing on disk).
-pub fn changes_between(cwd: &str, from: &str, to: &str) -> GitChanges {
+fn changes_between(cwd: &str, from: &str, to: &str, scoped: bool) -> GitChanges {
     let branch = None;
     let mut files = vec![];
     let mut counts: HashMap<String, (u64, u64)> = HashMap::new();
-    if let Some(raw) = git(cwd, &["diff", "--numstat", "-z", from, to]) {
+    if let Some(raw) = panel_diff(cwd, scoped, &["--numstat", "-z", from, to]) {
         // "a\td\tpath\0", or "a\td\t\0old\0new\0" for a rename
         let mut fields = raw.split('\0');
         while let Some(head) = fields.next() {
@@ -269,7 +308,7 @@ pub fn changes_between(cwd: &str, from: &str, to: &str) -> GitChanges {
             counts.insert(path, (a.parse().unwrap_or(0), d.parse().unwrap_or(0)));
         }
     }
-    if let Some(raw) = git(cwd, &["diff", "--name-status", "-z", from, to]) {
+    if let Some(raw) = panel_diff(cwd, scoped, &["--name-status", "-z", from, to]) {
         let mut fields = raw.split('\0').filter(|s| !s.is_empty());
         while let Some(code) = fields.next() {
             let c = code.chars().next().unwrap_or('M');
@@ -283,7 +322,7 @@ pub fn changes_between(cwd: &str, from: &str, to: &str) -> GitChanges {
             }
         }
     }
-    let mut patch = git(cwd, &["diff", from, to]).unwrap_or_default();
+    let mut patch = panel_diff(cwd, scoped, &[from, to]).unwrap_or_default();
     if patch.len() > PATCH_CAP {
         patch.truncate(floor_char_boundary(&patch, PATCH_CAP));
         patch.push_str("\n… (diff truncated)\n");
@@ -302,8 +341,8 @@ pub struct Merged {
     changes: GitChanges,
 }
 
-pub fn merged(repo: &str, branch: &str, into: Option<&str>, base: &str) -> Option<Merged> {
-    let commit = |r: &str| git(repo, &["rev-parse", "--verify", "-q", &format!("{r}^{{commit}}")]).map(|s| s.trim().to_string());
+fn merged(repo: &str, branch: &str, into: Option<&str>, base: &str, scoped: bool) -> Option<Merged> {
+    let commit = |r: &str| commit_oid(repo, r);
     let mut pair: Option<(String, String)> = None;
     if let Some(into) = into.filter(|s| !s.is_empty()) {
         if let Some(log) = git(repo, &["reflog", "show", "--format=%H%x09%gs", &format!("refs/heads/{into}")]) {
@@ -322,13 +361,13 @@ pub fn merged(repo: &str, branch: &str, into: Option<&str>, base: &str) -> Optio
         }
     }
     let (from, to) = pair?;
-    let changes = changes_between(repo, &from, &to);
+    let changes = changes_between(repo, &from, &to, scoped);
     Some(Merged { from, to, changes })
 }
 
 #[tauri::command]
-pub async fn git_merged(repo: String, branch: String, into: Option<String>, base: String) -> Option<Merged> {
-    tauri::async_runtime::spawn_blocking(move || merged(&repo, &branch, into.as_deref(), &base)).await.ok().flatten()
+pub async fn git_merged(repo: String, branch: String, into: Option<String>, base: String, scoped: Option<bool>) -> Option<Merged> {
+    tauri::async_runtime::spawn_blocking(move || merged(&repo, &branch, into.as_deref(), &base, scoped == Some(true))).await.ok().flatten()
 }
 
 #[cfg(test)]
@@ -373,20 +412,56 @@ mod tests {
         sh(&r, &["add", "-A"]);
         sh(&r, &["commit", "-q", "-m", "work"]);
 
-        let at = super::file_at(&r, Some(&base), "src/a.ts");
+        let at = super::file_at(&r, Some(&base), "src/a.ts", false);
         assert_eq!(at.text.as_deref(), Some("one\ntwo\n"));
-        assert_eq!(super::file_at(&r, None, "src/a.ts").text.as_deref(), Some("one\nTWO\n"));
-        assert!(super::file_at(&r, Some(&base), "b.bin").missing);
-        assert!(super::file_at(&r, None, "b.bin").binary);
+        assert_eq!(super::file_at(&r, None, "src/a.ts", false).text.as_deref(), Some("one\nTWO\n"));
+        assert!(super::file_at(&r, Some(&base), "b.bin", false).missing);
+        assert!(super::file_at(&r, None, "b.bin", false).binary);
 
         sh(&r, &["checkout", "-q", "main"]);
         sh(&r, &["merge", "-q", "--no-edit", "task/x"]);
-        let m = super::merged(&r, "task/x", Some("main"), &base).expect("found in the reflog");
+        let m = super::merged(&r, "task/x", Some("main"), &base, false).expect("found in the reflog");
         assert_eq!(m.from, base);
         let mut got: Vec<(String, String)> = m.changes.files.iter().map(|f| (f.status.clone(), f.path.clone())).collect();
         got.sort();
         assert_eq!(got, vec![("A".into(), "b.bin".into()), ("M".into(), "src/a.ts".into()), ("R".into(), "new.txt".into())]);
         assert!(m.changes.patch.contains("rename from old.txt"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn shared_subproject_panels_use_paths_relative_to_the_project() {
+        let root = std::env::temp_dir().join(format!("git-panel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let project = root.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        let dir = project.to_str().unwrap();
+        let r = root.to_str().unwrap();
+        sh(r, &["init", "-q", "-b", "main"]);
+        std::fs::write(root.join("notes"), "meeting\n").unwrap();
+        std::fs::write(project.join("notes"), "agenda\n").unwrap();
+        sh(r, &["add", "-A"]);
+        sh(r, &["-c", "user.name=test", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qm", "first"]);
+        std::fs::write(root.join("notes"), "outside update\n").unwrap();
+        std::fs::write(project.join("notes"), "inside update\n").unwrap();
+        std::fs::write(project.join("todo"), "new task\n").unwrap();
+        let changes = super::panel_changes(dir, None, true);
+        assert_eq!(changes.files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["notes", "todo"]);
+        assert!(changes.patch.contains("+inside update") && changes.patch.contains("+new task"));
+        assert!(!changes.patch.contains("outside update"));
+        assert_eq!(super::file_at(dir, None, "notes", true).text.as_deref(), Some("inside update\n"));
+        assert_eq!(super::file_at(dir, Some("HEAD"), "notes", true).text.as_deref(), Some("agenda\n"));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("../notes", project.join("linked-notes")).unwrap();
+            assert!(super::file_at(dir, None, "linked-notes", true).missing);
+            assert!(!super::panel_changes(dir, None, true).patch.contains("outside update"));
+        }
+        sh(r, &["add", "-A"]);
+        sh(r, &["-c", "user.name=test", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qm", "second"]);
+        let history = super::merged(dir, "main", None, "HEAD^", true).unwrap().changes;
+        assert!(history.patch.contains("+inside update") && !history.patch.contains("outside update"));
+        assert!(history.files.iter().any(|f| f.path == "notes" && f.add == 1));
         let _ = std::fs::remove_dir_all(&root);
     }
 

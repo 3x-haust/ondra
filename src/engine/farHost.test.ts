@@ -65,7 +65,7 @@ describe("what another Mac may reach here", () => {
 
   it("lists and reads inside them, in this Mac's own terms", async () => {
     expect(await call("far.files", "~/work/app")).toEqual(["/Users/me/work/app"]);
-    expect(fsFiles).toHaveBeenCalledWith("/Users/me/work/app");
+    expect(fsFiles).toHaveBeenCalledWith("/Users/me/work/app", true);
     await call("far.read", "/Users/me/worktrees/app/t1/src/a.ts");
     expect(fsRead).toHaveBeenCalledWith("/Users/me/worktrees/app/t1/src/a.ts");
   });
@@ -108,6 +108,24 @@ describe("what another Mac may reach here", () => {
     } finally {
       await refreshEngine();
     }
+  });
+
+  it("shares a subproject in both worktrees, not either repository top", () => {
+    setState("tasks", [task("t1", { project: "p1", cwd: "/copies/mono/apps/shared", worktree: {
+      path: "/copies/mono", repo: "/work/mono", sub: "apps/shared", base: "HEAD", branch: "b", state: "open",
+    } })]);
+    const roots = rootsFor(peer());
+    expect(roots).toEqual(expect.arrayContaining(["/copies/mono/apps/shared", "/work/mono/apps/shared"]));
+    expect(roots).not.toContain("/copies/mono");
+    expect(roots).not.toContain("/work/mono");
+  });
+
+  it("uses the checked final location for a project file and refuses a redirected named file", async () => {
+    vi.mocked(farReal).mockImplementationOnce(async (paths) => paths.map((p, i) => i ? p : "/Users/me/work/app/current.ts"));
+    await call("far.read", "~/work/app/alias.ts");
+    expect(fsRead).toHaveBeenCalledWith("/Users/me/work/app/current.ts");
+    vi.mocked(farReal).mockImplementationOnce(async (paths) => paths.map((p, i) => i ? p : "/tmp/shots/different.png"));
+    await expect(call("far.read", "/tmp/shots/t1.png")).rejects.toThrow(NO);
   });
 
   it("won't serve project files without a confirmed real location", async () => {
