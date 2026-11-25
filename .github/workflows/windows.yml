@@ -81,8 +81,11 @@ jobs:
                    'engine/native/win32/prebuilds/win32-x64/win32-platform.node', 'engine/THIRD_PARTY_NOTICES.txt') {
             if ((Get-Item -LiteralPath (Join-Path $installed $file)).Length -eq 0) { throw "Empty installed file: $file" }
           }
-          $remote = (Get-FileHash "src-tauri/binaries/ondra-remote-$env:TARGET.exe").Hash
-          if ((Get-FileHash "$installed/ondra-remote.exe").Hash -ne $remote) { throw 'Installed remote helper differs from the build' }
+          foreach ($helper in 'ondra-remote', 'ondra-cuhost') {
+            $builtHash = (Get-FileHash "src-tauri/binaries/$helper-$env:TARGET.exe" -ErrorAction Stop).Hash
+            $installedHash = (Get-FileHash "$installed/$helper.exe" -ErrorAction Stop).Hash
+            if ($installedHash -ne $builtHash) { throw "Installed $helper.exe differs from the build" }
+          }
           $expected = (Get-Content "$env:ONDRA_ENGINE_DIST/../package.json" -Raw | ConvertFrom-Json).version
           Set-Location $installed
           $version = & ./engine/ondra-engine.exe --version
