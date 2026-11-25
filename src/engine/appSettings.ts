@@ -58,6 +58,18 @@ export const SETTINGS: Record<string, Entry> = {
   githubWrite: { where: "일반 › GitHub 푸시·PR 허용", kind: { type: "bool" }, get: () => !!state.settings.githubWrite, set: (v: boolean) => setState("settings", "githubWrite", v) },
   browserPip: { where: "일반 › 작업 브라우저 미리보기", kind: { type: "bool" }, missing: true, get: () => state.settings.browserPip !== false, set: (v: boolean) => setState("settings", "browserPip", v) },
   jobSound: { where: "일반 › 작업 끝 소리", kind: { type: "bool" }, missing: true, get: () => state.settings.jobSound !== false, set: (v: boolean) => setState("settings", "jobSound", v) },
+  remote: {
+    where: "연결 › 다른 Mac에서 이 Mac 쓰기 (my other Macs may give this one work)",
+    kind: { type: "bool" },
+    get: () => !!state.settings.remote,
+    set: async (v: boolean) => (await import("./remote")).setRemoteOn(v),
+  },
+  remoteAwake: {
+    where: "연결 › 전원에 연결돼 있는 동안 잠들지 않기",
+    kind: { type: "bool" },
+    get: () => !!state.settings.remoteAwake,
+    set: async (v: boolean) => (setState("settings", "remoteAwake", v), (await import("./remote")).keepAwake()),
+  },
   focusGuard: { where: "macOS 권한 › 창 보호", kind: { type: "bool" }, get: () => state.settings.focusGuard, set: (v: boolean) => setState("settings", "focusGuard", v) },
   telemetry: { where: "일반 › 익명 사용 통계 보내기", kind: { type: "bool" }, missing: true, get: () => state.settings.telemetry !== false, set: (v: boolean) => setState("settings", "telemetry", v) },
   skillReflect: { where: "스킬 › 잘 안 된 작업을 보고 스킬 고치기 제안", kind: { type: "bool" }, get: () => !!state.settings.skillReflect, set: (v: boolean) => setState("settings", "skillReflect", v) },

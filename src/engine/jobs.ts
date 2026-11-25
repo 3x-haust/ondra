@@ -18,7 +18,7 @@ import { workedIn } from "./workedIn";
 import { planText } from "./plan";
 
 /** who is asking: a job (by its worker id), or main of a chat (`captain:<space>[~<project>]`) */
-type Caller = { space: SpaceId; task?: Task; chat?: string; project?: string };
+export type Caller = { space: SpaceId; task?: Task; chat?: string; project?: string };
 
 export function callerOf(worker: string | undefined): Caller | undefined {
   if (!worker) return undefined;

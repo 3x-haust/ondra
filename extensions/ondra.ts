@@ -1,5 +1,7 @@
 // Ondra's own settings as a tool, for doing what the user asks of the app itself ("에이전트 설정해줘",
 // "테마 다크로", "동시 작업 3개로"): the `ondra` skill says when and how.
+//   ondra_app      → press what the user could press in the app (src/engine/appActions.ts): another
+//                    Mac's connect link, projects, a job's pin/archive/stop, workspaces, updates, a screen
 //   ondra_settings → read every setting the user could switch in Settings (value, where, what it
 //                    takes), or change some of them. Nothing else of the app; no secret values.
 // Through the app's local door (ONDRA_BRIDGE + token), as the job or as main. Without the app it
@@ -38,6 +40,22 @@ export default function (pi: any) {
       const r = await call(changes ? "settings_write" : "settings_read", changes ? { changes } : {}, signal);
       if (r?.error) return out(`ondra_settings failed: ${r.error}`);
       return out(changes ? r.results : r.settings);
+    },
+  });
+  pi.registerTool({
+    name: "ondra_app",
+    label: "Ondra",
+    exposure: "deferred",
+    description:
+      "Press what the user could press in Ondra itself: this Mac's connect link for another Mac or PC, adding a Mac, projects, a job's pin, archive, stop or rename, workspaces, updates, or showing the user a screen. action \"list\" (or none) lists every action with where it is in the app and what it takes; then {action, args}. Never tell the user to click something here that an action does. Letting another Mac in stays the user's (they allow it in Ondra when it asks), as do secret values.",
+    parameters: Type.Object({
+      action: Type.Optional(Type.String({ description: 'an action from the list, e.g. "remote.link", "project.add"; "list" or none lists them' })),
+      args: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "what the action takes" })),
+    }),
+    async execute(_id: string, p: any, signal?: AbortSignal) {
+      const r = await call("app", { action: p?.action, args: p?.args ?? {} }, signal);
+      if (r?.error) return out(`ondra_app ${p?.action ?? ""} failed: ${r.error}`);
+      return out(r);
     },
   });
   pi.registerTool({

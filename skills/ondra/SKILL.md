@@ -2,8 +2,9 @@
 name: ondra
 description: >
   Ondra (온드라) itself, the app this runs in: what an Ondra feature, button or screen is
-  and where it lives (온드라 기능, 온드라 설정, 이 화면, 내 차례, 캔버스, 결과물), changing
-  Ondra's settings for the user (에이전트 설정, 디스코드 에이전트, 디스코드 연결, 테마, 동시
+  and where it lives (온드라 기능, 온드라 설정, 이 화면, 내 차례, 캔버스, 결과물), pressing
+  what the user could press in Ondra (연결 링크, 다른 Mac 연결, 프로젝트 추가, 작업 보관·고정,
+  워크스페이스 추가, 업데이트, 화면 열기), changing Ondra's settings for the user (에이전트 설정, 디스코드 에이전트, 디스코드 연결, 테마, 동시
   작업, 기본 권한, 워크트리), the Discord agent's own ways for this user (멘션 없이 듣기, 이
   채널에선 조용히), and a feature or bug for Ondra (온드라 기능 추가, Ondra feature
   request, Ondra bug) turned into a short proposal and, when they say so, a pull request to
@@ -49,6 +50,24 @@ common instructions, updates, telemetry), 계정과 워크스페이스, 연결, 
 
 Not sure where something is, or how it behaves exactly? Read the code (below) instead of
 guessing, and say what you checked.
+
+## Pressing something in Ondra
+
+Anything the user could click in Ondra, you do with `ondra_app`: `{"action":"list"}` lists
+every action with the button it stands for and what it takes; then `{"action":"remote.link"}`,
+`{"action":"project.add","args":{"folder":"~/code/blog"}}` and so on. Never tell the user to click
+something an action does, and never say you can't press Ondra. A setting (on/off, a number, a
+choice) is `ondra_settings` instead.
+
+Another Mac or PC ("윈도우에서 이 맥 연결", "다른 맥 추가"):
+1. `ondra_settings` `{"remote": true}` if it is off (this Mac may be given work).
+2. `remote.link` makes this Mac's link (10 minutes, one Mac). Put it in on the other one
+   (there: 설정 › 연결 › Mac 추가; with computer use, paste it there).
+3. The other one connects and this Mac asks the user to allow it (a card in Ondra): that click
+   is theirs. Say so in a line, and check `remote.status` after.
+Adding another Mac here from its link is `remote.add`.
+
+What stays the user's: letting a Mac in, a job's security approvals, and secret values.
 
 ## Changing a setting
 
