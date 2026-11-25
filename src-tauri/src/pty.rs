@@ -139,7 +139,7 @@ pub fn pty_open(
             #[cfg(windows)]
             let shell = std::env::var_os("ComSpec").unwrap_or_else(|| "cmd.exe".into());
             #[cfg(not(windows))]
-            let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/zsh".into());
+            let shell = std::env::var_os("SHELL").unwrap_or_else(|| crate::engine::DEFAULT_SHELL.into());
             let mut b = CommandBuilder::new(shell);
             #[cfg(not(windows))]
             b.arg("-l");

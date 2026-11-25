@@ -642,7 +642,9 @@ fn scan_cursor() -> ImportSource {
     add_skills(&mut src, &root.join("skills"));
     #[cfg(windows)]
     { src.logged_in = dirs::data_dir().is_some_and(|dir| dir.join("Cursor").is_dir()); }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    { src.logged_in = dirs::config_dir().is_some_and(|dir| dir.join("Cursor").is_dir()); }
+    #[cfg(target_os = "macos")]
     { src.logged_in = home().join("Library/Application Support/Cursor").is_dir(); }
     src
 }

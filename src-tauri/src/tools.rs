@@ -583,10 +583,31 @@ pub async fn notify(app: AppHandle, title: String, body: String, sound: Option<b
                 }
             }
         }
-        let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
-        let tone = if sound { format!(" sound name \"{ALARM_SOUND}\"") } else { String::new() };
-        let script = format!("display notification \"{}\" with title \"{}\"{}", esc(&body), esc(&title), tone);
-        let _ = std::process::Command::new("/usr/bin/osascript").args(["-e", &script]).output();
+        #[cfg(not(target_os = "linux"))]
+        {
+            let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+            let tone = if sound { format!(" sound name \"{ALARM_SOUND}\"") } else { String::new() };
+            let script = format!("display notification \"{}\" with title \"{}\"{}", esc(&body), esc(&title), tone);
+            let _ = std::process::Command::new("/usr/bin/osascript").args(["-e", &script]).output();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if sound {
+                play_alarm();
+            }
+            // with an action, notify-send waits and prints the action's name when the notice is clicked
+            let mut cmd = std::process::Command::new("notify-send");
+            cmd.args(["--app-name", &app.package_info().name]);
+            if waits {
+                cmd.args(["--action", "default=열기", "--wait"]);
+            }
+            let out = cmd.arg("--").arg(&title).arg(&body).stdin(Stdio::null()).stderr(Stdio::null()).output();
+            if let (Ok(out), Some(tag)) = (out, tag) {
+                if String::from_utf8_lossy(&out.stdout).trim() == "default" {
+                    clicked(&app, &tag);
+                }
+            }
+        }
     };
     if waits {
         // a click may come much later: a thread of its own, not one of the blocking pool's
@@ -613,9 +634,17 @@ pub fn play_sound(app: AppHandle, name: String, volume: f64) {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("paplay")
+        .arg(format!("--volume={}", (volume.min(1.0) * 65536.0) as u32))
+        .arg(dir.join("sounds").join(format!("{name}.wav")))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 }
 
 /** the system sound an alarm rings with (/System/Library/Sounds) */
+#[cfg(not(target_os = "linux"))]
 const ALARM_SOUND: &str = "Glass";
 
 fn play_alarm() {
@@ -625,10 +654,17 @@ fn play_alarm() {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
+    // the freedesktop sound theme's bell, which desktops ship with
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("paplay")
+        .arg("/usr/share/sounds/freedesktop/stereo/complete.oga")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 }
 
 /** a tagged notice was clicked: Ondra comes up and the page opens what it was about */
-#[cfg(target_os = "macos")]
+#[cfg(not(windows))]
 fn clicked(app: &AppHandle, tag: &str) {
     use tauri::Emitter;
     if let Some(w) = app.get_window("main") {
@@ -905,6 +941,9 @@ fn open_gh_login(dir: &Path, gh: Option<PathBuf>) -> Result<(), String> {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755));
     }
+    #[cfg(target_os = "linux")]
+    return crate::store::linux::terminal(&dir.display().to_string(), Some(&script.display().to_string()));
+    #[cfg(target_os = "macos")]
     Command::new("/usr/bin/open").arg(&script).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 

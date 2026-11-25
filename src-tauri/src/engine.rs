@@ -227,7 +227,7 @@ fn login_env() -> &'static HashMap<String, String> {
 fn login_env() -> &'static HashMap<String, String> {
     static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
     ENV.get_or_init(|| {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| DEFAULT_SHELL.into());
         let vars = ["PATH", "LANG"].iter().chain(crate::LOGIN_VARS).copied().collect::<Vec<_>>().join(" ");
         let script = format!(r#"for v in {vars}; do printf '\n__ENV__%s=%s' "$v" "$(printenv $v)"; done; printf '\n'"#);
         let out = Command::new(shell).args(["-ilc", &script]).stdin(Stdio::null()).stderr(Stdio::null()).output();
@@ -265,6 +265,9 @@ pub(crate) fn user_home() -> Option<PathBuf> {
 pub fn home() -> PathBuf {
     user_home().unwrap_or_else(|| if cfg!(windows) { std::env::temp_dir() } else { PathBuf::from("/") })
 }
+
+/// The shell when $SHELL is unset: macOS's default, else the one every Linux has.
+pub(crate) const DEFAULT_SHELL: &str = if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/sh" };
 
 pub(crate) const PATH_SEPARATOR: &str = if cfg!(windows) { ";" } else { ":" };
 

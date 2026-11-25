@@ -34,7 +34,10 @@ fn sdk() -> PathBuf {
         .unwrap_or_else(|_| {
             #[cfg(windows)]
             { dirs::data_local_dir().unwrap_or_else(|| dirs_home().join("AppData/Local")).join("Android/Sdk") }
-            #[cfg(not(windows))]
+            // where Android Studio puts it on each system
+            #[cfg(target_os = "linux")]
+            { dirs_home().join("Android/Sdk") }
+            #[cfg(target_os = "macos")]
             { dirs_home().join("Library/Android/sdk") }
         })
 }

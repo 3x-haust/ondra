@@ -45,6 +45,11 @@ tempfile = "3"
 dirs = "6"
 tauri-plugin-single-instance = "2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# the GTK dialogs WebKitGTK already brings in, as tauri-plugin-dialog uses on Linux
+rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
+dirs = "6"
+
 [profile.release]
 # thin LTO over 16 units, kept between builds: a release where only the page changed relinks in
 # ~25 s instead of ~90 s (fat LTO, one unit), for ~2 MB more in the gzipped update

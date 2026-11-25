@@ -222,11 +222,11 @@ pub fn plugin_mode() -> Option<i32> {
 /// `.env`). Variables already set win. Jobs inherit them.
 fn load_env() {
     let mut files = vec![];
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     if let Some(dir) = dirs::data_dir() {
         files.push(dir.join("dev.3xhaust.ondra/.env"));
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     if let Some(home) = std::env::var_os("HOME") {
         files.push(std::path::PathBuf::from(home).join("Library/Application Support/dev.3xhaust.ondra/.env"));
     }
