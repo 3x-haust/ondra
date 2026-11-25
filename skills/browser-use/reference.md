@@ -77,7 +77,7 @@ The password goes from the system's password store straight into the page; you
 never see it. That store is the keychain on macOS (it may show the user an
 approval prompt: say so in `now`, "키체인 승인 기다리는 중"), Credential Manager
 on Windows (a generic credential named for the site, `cmdkey /generic:<host>
-/user:<account> /pass`), and the keyring on Linux (an item with `server <host>`
+/user:<account> /pass`; a second account on the site is named `<host>/<account>`), and the keyring on Linux (an item with `server <host>`
 and `user <account>`, `secret-tool store --label=<host> server <host> user
 <account>`). The user saves it there themselves; never ask for the password. Never type, paste, read or print a password yourself: no
 `fill`/`type`/`keyboard` into a password field, no `get value` or `eval` on one,
