@@ -1,14 +1,14 @@
-# Connections: working on another Mac
+# Connections: working on another computer
 
-Another Mac's projects show in this app's sidebar. Jobs in those projects run on that Mac, with its files, tools and accounts. They show up here like any other job.
+A connected computer's projects show in this app's sidebar. Jobs in those projects run on the host, with its files, tools and accounts. You don't need a remote desktop session.
 
 ## Setting it up
 
-1. On the Mac that does the work, open Settings › 연결 and turn on **다른 Mac에서 이 Mac 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
-2. On the other Mac, open Settings › 연결, press **Mac 추가** and paste the link. The first Mac then asks **허용 / 거절**.
-3. Once it's allowed, every project of that Mac shows in the sidebar by itself, in the workspace tab of the same name, with the Mac's name beside it. A project made there later shows up too, and one removed there goes.
+1. On the computer that will run the jobs, open Settings › 연결 and turn on **다른 기기에서 이 기기 쓰기**. Press **연결 링크 복사**. The link (`ondra://connect/<id>?code=…`) works once and expires after 10 minutes.
+2. On the computer you're connecting from, open Settings › 연결, press **기기 추가** and paste the link. The host then asks **허용 / 거절**. Older Mac versions label these controls **다른 Mac에서 이 Mac 쓰기** and **Mac 추가**.
+3. Once allowed, the host's projects appear automatically in the sidebar, in the workspace tab of the same name, with the host's name beside them. A project added there later shows up too, and one removed there disappears.
 
-After that the Macs find each other again on their own, with no new link needed.
+The two devices reconnect on their own, with no new link needed. To run jobs in the other direction, repeat setup with their roles reversed.
 
 ## Hiding a project
 

@@ -26,7 +26,13 @@ pub fn remote_start(app: AppHandle) -> Result<(), String> {
     }
     let bin = crate::tools::sidecar("ondra-remote").ok_or("ondra-remote is not bundled")?;
     let dir = crate::engine::data_dir(&app).join("remote");
-    let mut child = Command::new(bin)
+    let mut command = Command::new(bin);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW for this stdin/stdout helper
+    }
+    let mut child = command
         .arg("--data")
         .arg(&dir)
         .stdin(Stdio::piped())
@@ -110,9 +116,13 @@ pub fn remote_forget(app: AppHandle, id: String) -> Result<Option<serde_json::Va
     Ok(Some(serde_json::Value::Array(list)))
 }
 
-/// The Mac's name as people know it ("Alex의 MacBook Pro").
+/// The computer name shown to the peer approving a connection.
 #[tauri::command(async)]
 pub fn remote_host_name() -> String {
+    #[cfg(windows)]
+    return std::env::var("COMPUTERNAME").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "Windows PC".into());
+
+    #[cfg(not(windows))]
     Command::new("/usr/sbin/scutil")
         .args(["--get", "ComputerName"])
         .output()
@@ -122,11 +132,20 @@ pub fn remote_host_name() -> String {
         .unwrap_or_else(|| "Mac".into())
 }
 
+#[cfg(target_os = "macos")]
 static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
 
 /// Keep this Mac from sleeping while others may work on it (on power only): a `caffeinate` tied to this app, so it never outlives it.
 #[tauri::command]
 pub fn remote_awake(on: bool) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    return if on { Err("Keep awake is only available on macOS".into()) } else { Ok(()) };
+    #[cfg(target_os = "macos")]
+    keep_awake(on)
+}
+
+#[cfg(target_os = "macos")]
+fn keep_awake(on: bool) -> Result<(), String> {
     let mut slot = AWAKE.lock().map_err(|e| e.to_string())?;
     if let Some(mut c) = slot.take() {
         let _ = c.kill();
