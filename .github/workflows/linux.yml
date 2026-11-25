@@ -1,0 +1,98 @@
+name: Linux packages
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify deb and rpm (x64)
+    # The oldest supported runner: the packages run on systems with this glibc or newer.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      ENGINE_REV: 3311ed88dc6c5c403db2ce4edc762b734acbfb25
+      TARGET: x86_64-unknown-linux-gnu
+      CARGO_INCREMENTAL: '0'
+      RUSTUP_TOOLCHAIN: 1.95.0
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.14.0'
+          package-manager-cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+          no-cache: true
+
+      - name: Install system libraries, pnpm and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf xvfb dbus-x11 gnome-keyring libsecret-tools
+          npm install --global --prefix "$RUNNER_TEMP/pnpm" pnpm@11.6.0
+          echo "$RUNNER_TEMP/pnpm/bin" >> "$GITHUB_PATH"
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+
+      - name: Build the pinned coding agent
+        run: |
+          engine="$RUNNER_TEMP/engine"
+          git init --quiet "$engine"
+          cd "$engine"
+          git fetch --no-tags --depth 1 https://github.com/3x-haust/3xhaustpi.git "$ENGINE_REV"
+          git checkout --detach "$ENGINE_REV"
+          npm ci --ignore-scripts
+          npm run build:offline
+          echo "ONDRA_ENGINE_DIST=$PWD/packages/coding-agent/dist" >> "$GITHUB_ENV"
+
+      - name: Install app dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build packages
+        run: pnpm tauri build --target "$TARGET" --bundles deb,rpm --ci -- --locked
+
+      - name: Verify the installed package
+        run: |
+          bundles="src-tauri/target/$TARGET/release/bundle"
+          deb=$(ls "$bundles"/deb/*.deb)
+          rpm=$(ls "$bundles"/rpm/*.rpm)
+          sudo apt-get install -y "./$deb"
+          lib=/usr/lib/Ondra
+          for f in /usr/bin/ondra /usr/bin/ondra-remote $lib/engine/ondra-engine $lib/engine/package.json $lib/engine/photon_rs_bg.wasm \
+                   $lib/engine/native/linux/prebuilds/linux-x64/linux-platform-x11.node $lib/engine/THIRD_PARTY_NOTICES.txt; do
+            test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          cmp /usr/bin/ondra-remote "src-tauri/binaries/ondra-remote-$TARGET"
+          expected=$(node -p "require('$ONDRA_ENGINE_DIST/../package.json').version")
+          version=$($lib/engine/ondra-engine --version)
+          [ "$version" = "$expected" ] || { echo "engine reported '$version', expected '$expected'"; exit 1; }
+          sha256sum "$deb" "$rpm"
+
+      - name: Start the installed app
+        run: |
+          export XDG_RUNTIME_DIR=$(mktemp -d) HOME=$(mktemp -d)
+          xvfb-run -a dbus-run-session -- sh -c 'ondra > app.log 2>&1 & pid=$!; sleep 25; kill -0 $pid && kill $pid' || { cat app.log; exit 1; }
+          cat app.log
+          test -d "$HOME/.local/share/dev.3xhaust.ondra" || { echo "the app never wrote its data folder"; exit 1; }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Ondra-linux-x64
+          path: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
