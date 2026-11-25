@@ -30,7 +30,7 @@ import { addMemory, applying, inSpace, isLive, KINDS, memoryLines, namedSpaces, 
 import { skillScope } from "./skillPick";
 import { effortFor, failedModelIn, modelFor, nextModel } from "./models";
 import { digestJob } from "./digest";
-import { CAPTAIN_SYSTEM, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
+import { CAPTAIN_SYSTEM, forHost, instructions, notTheUser, projectRules, spaceRules } from "./prompts";
 import { engine, expand, explain, isAlive, isModelError, isRefusal, listen, markAlive, markDead, request, stderrOf } from "./rpc";
 import { canUseTools, isDirect } from "./connections";
 import { accountEnv, agentAccount, accountFull, collectStats, hitLimit, markLimited, NO_ACCOUNT, spaceAccount, spareAccount, createTask, finished, forkAt, handOn, onJobEnded, rawStats, stopTask, turnUsage, WORKER_TOOLS } from "./tasks";
@@ -880,7 +880,7 @@ async function ensureCaptain(space: string) {
     // the same system prompt in every main chat (any space, any project): one
     // shared cached prefix per account. What differs per chat (space and project
     // rules) goes into the first message instead.
-    ...[simSystem.get(space) ?? CAPTAIN_SYSTEM, instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
+    ...[simSystem.get(space) ?? forHost(CAPTAIN_SYSTEM), instructions()].filter(Boolean).flatMap((p) => ["--append-system-prompt", p]),
     ...(model ? ["--model", model] : []),
   ];
   // a simulated project's folder is made up, another Mac's isn't on this one: main runs in the space's folder then

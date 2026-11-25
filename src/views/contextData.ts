@@ -6,7 +6,7 @@ import { mainModel, mainToolArgs, restartIfStale } from "../engine/captain";
 import { agentKill, agentSpawn, type Env, inTauri, workerEnv, workerExtensions } from "../lib/native";
 import { clearStderr, engine, expand, isAlive, request } from "../engine/rpc";
 import { accountEnv, offTools, workerTools } from "../engine/tasks";
-import { CAPTAIN_SYSTEM, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
+import { CAPTAIN_SYSTEM, forHost, instructions, projectRules, relatedMemory, spaceRules, SUB_SYSTEM, TASK_SYSTEM, taskSystem } from "../engine/prompts";
 import { applying, inSpace, isLive, recall } from "../engine/memory";
 import { modelFor } from "../engine/models";
 import { homeDir, spaceById, state, taskById } from "../state/store";
@@ -173,7 +173,7 @@ function chatParts(key: string): Part[] {
   const space = spaceById(spOf(key));
   const proj = projectOf(key);
   return [
-    { title: tr("메인 규칙"), text: CAPTAIN_SYSTEM },
+    { title: tr("메인 규칙"), text: forHost(CAPTAIN_SYSTEM) },
     { title: tr("공통 지침"), text: instructions() },
     { title: tr("워크스페이스 · {name}", { name: tr(space.label) }), text: spaceRules(space) },
     ...(proj ? [{ title: tr("프로젝트 · {name}", { name: proj.name }), text: projectRules(proj) }] : []),
