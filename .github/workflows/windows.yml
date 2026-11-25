@@ -127,7 +127,9 @@ jobs:
           cmd //c "cmdkey /generic:127.0.0.1 /user:ci@example.com /pass:s3cret!!!"
           trap 'cmd //c "cmdkey /delete:127.0.0.1"' EXIT
           installed=$(cygpath -u "$RUNNER_TEMP")/installed
-          .github/browser/smoke.sh "$installed" "$installed/components.json" "$installed/browse.exe"
+          # the Chrome the app installed at first launch
+          chrome=$(ls "$(cygpath -u "$APPDATA")"/dev.3xhaust.ondra/components/chrome/*/chrome-headless-shell-win64/chrome-headless-shell.exe | head -1)
+          .github/browser/smoke.sh "$installed" "$chrome" "$installed/browse.exe"
 
       - name: Run Windows platform tests
         run: |
