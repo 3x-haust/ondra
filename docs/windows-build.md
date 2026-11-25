@@ -8,7 +8,7 @@ After the run succeeds, download **Ondra-windows-x64-nsis** from the run's **Art
 
 ## Reproduce the build locally
 
-Use PowerShell 7 on Windows and a short local checkout path (for example `C:\src\ondra`). Install [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/) including Visual Studio C++ Build Tools, the Windows SDK and WebView2. CI uses the x64 **MSVC** Rust 1.95.0 toolchain, Git for Windows, Node 24.14.0, pnpm 11.6.0 and Bun 1.3.14. Git Bash is also used by the engine's shell tool at runtime. Node, pnpm, Rust and Bun are build tools, not requirements to run the installed app.
+Use PowerShell 7 on Windows and a short local checkout path (for example `C:\src\ondra`). Install [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/) including Visual Studio C++ Build Tools, the Windows SDK and WebView2. CI uses the x64 **MSVC** Rust 1.95.0 toolchain, Git for Windows, Node 24.14.0, pnpm 11.6.0 and Bun 1.3.14. For x64 CI uses the baseline Windows Bun executable as the embedded runtime (`ONDRA_ENGINE_BUN_EXE`), rather than downloading it again during compilation. Git Bash is also used by the engine's shell tool at runtime. Node, pnpm, Rust and Bun are build tools, not requirements to run the installed app.
 
 ### Prepare the engine
 

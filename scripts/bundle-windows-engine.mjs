@@ -17,6 +17,7 @@ export function bundleWindowsEngine(dist, arch, dest) {
   mkdirSync(dest, { recursive: true });
   const target = arch === "x64" ? "bun-windows-x64-baseline" : "bun-windows-arm64";
   execFileSync("bun", ["build", "--compile", "--no-compile-autoload-bunfig", "--no-compile-autoload-dotenv", `--target=${target}`,
+    ...(process.env.ONDRA_ENGINE_BUN_EXE ? [`--compile-executable-path=${process.env.ONDRA_ENGINE_BUN_EXE}`] : []),
     "./dist/bun/cli.js", "./src/utils/image-resize-worker.ts", "./src/extensions/codemode/worker.ts", "--outfile", join(dest, "ondra-engine.exe")],
   { cwd: pkg, stdio: "inherit" });
 

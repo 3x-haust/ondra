@@ -34,9 +34,10 @@ jobs:
           node-version: '24.14.0'
           package-manager-cache: false
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - id: bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: '1.3.14'
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64-baseline.zip
           no-cache: true
 
       - name: Install pnpm and Rust MSVC
@@ -65,6 +66,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build unsigned installer
+        env:
+          ONDRA_ENGINE_BUN_EXE: ${{ steps.bun.outputs.bun-path }}
         run: pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
 
       - name: Verify installed payload
