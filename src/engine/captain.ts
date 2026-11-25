@@ -241,7 +241,7 @@ function jobEnded(t: Task) {
       evidence.length ? `Evidence: ${evidence.join(" | ")}` : "",
       said ? `What it reported:\n${said.slice(-room)}` : "",
       blocks.length ? `Its result blocks:\n${blocks.slice(batch.length > 1 ? -4 : -10).join("\n")}` : "",
-      own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}` : "",
+      own.length ? `The user's own words to this fork (its question cards and its thread, in order; the latest decides what they want now):\n${own.map((q) => `- ${q}`).join("\n")}\nWhat it was asked there and its result covers is done: start new work for one of them only when you checked it is still missing now (its PR, the code on main), never from a screenshot or a line from before the fork finished.` : "",
       userParked(x) ? "The user ended or stopped this work themselves. Its row shows what came out; say in one line what is left, if anything, then stop: no new fork to carry it on and no append to it until the user asks." : "",
       ...[...endNotes].map((fn) => fn(x)),
     ].filter(Boolean).join("\n");
