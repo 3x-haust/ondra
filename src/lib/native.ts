@@ -36,6 +36,9 @@ export interface EngineInfo {
   dataDir: string;
   /** The user's home folder, for expanding `~`. */
   home: string;
+  /** The tools this app ships on this computer (false: not here): ondra-browser, and the helper that drives other apps. */
+  browser?: boolean;
+  computer?: boolean;
 }
 export const engineInfo = () =>
   call<EngineInfo>("engine_info", undefined, { enginePath: "/dev/engine", engineVersion: "dev", dataDir: "/tmp/ondra", home: "/Users/me" });

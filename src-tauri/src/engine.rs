@@ -365,6 +365,9 @@ pub struct EngineInfo {
     engine_version: Option<String>,
     data_dir: String,
     home: String,
+    /// the tools this app ships on this computer: ondra-browser, and ondra-cuhost for other apps
+    browser: bool,
+    computer: bool,
 }
 
 #[tauri::command]
@@ -378,6 +381,8 @@ pub async fn engine_info(app: AppHandle) -> EngineInfo {
         engine_version: version,
         data_dir: data_dir(&app).display().to_string(),
         home: home().display().to_string(),
+        browser: crate::tools::sidecar("ondra-browser").is_some(),
+        computer: crate::tools::sidecar("ondra-cuhost").is_some(),
     }
 }
 

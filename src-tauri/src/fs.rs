@@ -252,6 +252,18 @@ pub async fn fs_read(path: String) -> Result<FileText, String> {
 mod tests {
     use super::*;
 
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn copy_image_puts_the_picture_on_the_clipboard() {
+        let pixels: Vec<u8> = vec![255, 0, 0, 255, 0, 0, 255, 255];
+        let mut png = Vec::new();
+        image::RgbaImage::from_raw(2, 1, pixels.clone()).unwrap().write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        copy_image(png).unwrap();
+        let got = arboard::Clipboard::new().unwrap().get_image().unwrap();
+        assert_eq!((got.width, got.height), (2, 1));
+        assert_eq!(got.bytes.as_ref(), pixels.as_slice());
+    }
+
     #[cfg(unix)]
     #[test]
     fn shared_files_and_search_only_follow_links_within_the_project() {
@@ -337,7 +349,7 @@ JSON.stringify(out)"#;
         .collect()
 }
 
-/// A picture (PNG bytes) onto the macOS clipboard. The web view's own clipboard
+/// A picture (PNG bytes) onto the system clipboard. The web view's own clipboard
 /// refuses images once the click's permission has lapsed, which drawing the picture
 /// takes long enough to do.
 #[tauri::command]
@@ -359,7 +371,18 @@ pub fn copy_image(bytes: Vec<u8>) -> Result<(), String> {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    Err("이 운영체제에서는 이미지를 복사할 수 없어요".into())
+    {
+        // On Linux the app itself serves what it put on the clipboard: the board stays open for later pastes.
+        static BOARD: std::sync::Mutex<Option<arboard::Clipboard>> = std::sync::Mutex::new(None);
+        let picture = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).map_err(|_| "이미지를 읽지 못했어요".to_string())?.into_rgba8();
+        let (width, height) = picture.dimensions();
+        let data = arboard::ImageData { width: width as usize, height: height as usize, bytes: picture.into_raw().into() };
+        let mut board = BOARD.lock().unwrap_or_else(|e| e.into_inner());
+        if board.is_none() {
+            *board = Some(arboard::Clipboard::new().map_err(|_| "클립보드를 열지 못했어요".to_string())?);
+        }
+        board.as_mut().map_or(Ok(()), |b| b.set_image(data)).map_err(|_| "클립보드에 넣지 못했어요".into())
+    }
 }
 
 /// Make a new project folder (main can start a project somewhere new). Only inside home.

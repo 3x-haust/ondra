@@ -163,7 +163,8 @@ jobs:
           # One run for all filters: a run per filter compiled the test build again after the first.
           cargo test --manifest-path src-tauri/Cargo.toml --release --target $env:TARGET --locked --lib '--' --test-threads=1 `
             remote::power::tests winvault::tests providers::tests::keychain_wrapper_stores_reads_and_deletes `
-            farfs::tests components::tests::bundled_engine_needs_the_platform_executable_and_its_assets
+            farfs::tests components::tests::bundled_engine_needs_the_platform_executable_and_its_assets `
+            fs::tests::copy_image_puts_the_picture_on_the_clipboard
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
