@@ -9,7 +9,7 @@
 // where its source is.
 //
 //   node scripts/notices.mjs            writes the app's notices (the engine's come from bundle.mjs)
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -50,7 +50,8 @@ licenseTexts.inner = (dir) => {
 
 /** The web view's npm packages (production only), as pnpm resolved them. */
 export function appNpm(cwd = root) {
-  const out = execFileSync("pnpm", ["licenses", "list", "--prod", "--json"], { cwd, encoding: "utf8", maxBuffer: 64 << 20 });
+  // On Windows pnpm may be a .cmd shim and must run through the command interpreter.
+  const out = execSync("pnpm licenses list --prod --json", { cwd, encoding: "utf8", maxBuffer: 64 << 20 });
   /** @type {Pkg[]} */
   const list = [];
   for (const [license, pkgs] of Object.entries(JSON.parse(out))) {

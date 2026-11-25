@@ -20,6 +20,12 @@ import { engineNotices, writeAppNotices } from "./notices.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+if (process.platform === "win32" || process.env.TAURI_ENV_TARGET_TRIPLE?.includes("-windows-")) {
+  const { bundleWindows } = await import("./bundle-windows.mjs");
+  bundleWindows(root);
+  process.exit(0);
+}
+
 const tauri = join(root, "src-tauri");
 const binDir = join(tauri, "binaries");
 const resDir = join(tauri, "resources");
