@@ -621,6 +621,8 @@ export function Sidebar() {
   const mainBusy = () => state.captain.some((m) => m.space === state.space && !m.project && m.pending);
   // the agent: on, or something of it here
   const agentShown = () => !!state.settings.agent?.on || state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT) || state.tasks.some((x) => x.agent && x.space === state.space);
+  // its jobs going now, counted as a project row counts its own (top-level jobs only)
+  const agentLive = () => state.tasks.filter((x) => x.agent && x.space === state.space && !x.parentId && x.status === "running").length;
   const agentBusy = () => state.captain.some((m) => m.space === state.space && m.project === AGENT_CHAT && m.pending) || state.tasks.some((x) => x.agent && x.space === state.space && x.status === "running");
   const agentAsks = () => agentDecisions().filter((d) => taskById(d.taskId)?.space === state.space).length;
   const curProject = () => (view().name === "main" ? (view() as { project?: string }).project : undefined);
@@ -706,7 +708,7 @@ export function Sidebar() {
           <button class="sb-row sb-main" classList={{ on: view().name === "agent" }} onClick={() => setView({ name: "agent" })}>
             <Icon name="pet" size={16} class="sb-main-ic" />
             <span class="sb-title">{state.settings.agent?.name || tr("에이전트")}</span>
-            <Show when={agentAsks()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}>
+            <Show when={agentAsks()} fallback={<Show when={agentLive()} fallback={<Show when={agentBusy()}><span class="spin sm" /></Show>}><span class="sb-live" title={tr("진행 중 {n}개", { n: agentLive() })}><span class="spin xs" />{agentLive()}</span></Show>}>
               <span class="sb-live sb-agent-ask" title={tr("물어보는 중 {n}개", { n: agentAsks() })}>{agentAsks()}</span>
             </Show>
           </button>
