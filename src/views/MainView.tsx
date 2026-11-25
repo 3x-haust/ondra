@@ -28,7 +28,7 @@ import { addMemory } from "../engine/memory";
 import { BtwCard, btwCommand, plusFor, skillCommands } from "../ui/Aside";
 import type { Command } from "../ui/Composer";
 import { petWords } from "./PetSettings";
-import { sendSide } from "../engine/aside";
+import { sendSide, sideHere } from "../engine/aside";
 import { allSessions, continueSession } from "../engine/importer";
 import { engine } from "../engine/rpc";
 import { agoIn, compact, endedAt, midTrim, now, short, soon, statusLabel, titleOf } from "../ui/bits";
@@ -1344,7 +1344,7 @@ function petCommand(arg: string) {
  *  the permission, memory, settings and /pet. */
 function everyCommands(): Command[] {
   return [
-    { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(state.space, a)) },
+    { name: "side", desc: t("사이드 채팅 열기"), keys: shortcutHint("side"), icon: "message", run: (a) => (openPanel("side"), a.trim() && void sendSide(sideHere(), a)) },
     { name: "flow", desc: t("작업 흐름 열기"), keys: shortcutHint("flow"), icon: "branch", run: () => openPanel("flow") },
     { name: "ask", desc: t("권한: {name}", { name: t("매번 묻기") }), icon: "lock", run: () => setState("settings", "permission", "ask") },
     { name: "auto", desc: t("권한: {name}", { name: t("자동 판단") }), icon: "bolt", run: () => setState("settings", "permission", "auto") },

@@ -4,12 +4,13 @@
 //    on screen in most detail) and may read the full session logs, nothing else.
 //    It answers once and leaves no trace in the conversation. One engine process
 //    per question.
-//  • side chat: a second, separate conversation per space. It can read files but
+//  • side chat: a second, separate conversation per place (as btw). It can read files but
 //    never change them, and knows nothing of the main conversation unless told.
 //    Its messages are kept as text; the engine session under it is disposable.
 import { createStore } from "solid-js/store";
 import { projectById, setState, spaceById, state, taskById, uid } from "../state/store";
 import { inChat } from "./captain";
+import { view } from "../state/ui";
 import type { BtwEntry, SideMessage, SpaceId, Task } from "../state/types";
 import { agentKill, agentSpawn, spaceLogs } from "../lib/native";
 import { prose } from "./fences";
@@ -259,130 +260,155 @@ export const btwForward = (question: string, answer: string) =>
   answer.trim() ? `${question}\n\n${tr("btw 답")}:\n${answer.trim()}` : question;
 
 // ───────────── side chat
+// One per place, as btw: main (per project) and every job ("main:<space>[~project]", "task:<id>").
 
-const sideAgent = (space: SpaceId) => `side:${space}`;
-const sideBusy = new Set<SpaceId>();
-const sideAttached = new Set<SpaceId>();
-const sideText = new Map<SpaceId, string>();
-const sideErr = new Map<SpaceId, string>();
-const sideSettled = new Map<SpaceId, () => void>();
-const sideRecap = new Map<SpaceId, boolean>();
+/** the place on screen, for its side chat: the job open, else the main chat (of the project open) */
+export function sideHere(): string {
+  const v = view();
+  if (v.name === "task" && taskById(v.id)) return `task:${v.id}`;
+  const p = v.name === "main" && v.project ? projectById(v.project) : undefined;
+  return `main:${p && p.space === state.space ? `${state.space}~${p.id}` : state.space}`;
+}
+
+/** the place a side message belongs to (older ones, kept per space, belong to its main chat) */
+export const sideScope = (m: Pick<SideMessage, "scope" | "space">) => m.scope ?? `main:${m.space}`;
+const sideAgent = (scope: string) => `side:${scope}`;
+const sideBusy = new Set<string>();
+const sideAttached = new Set<string>();
+const sideText = new Map<string, string>();
+const sideErr = new Map<string, string>();
+const sideSettled = new Map<string, () => void>();
+const sideRecap = new Map<string, boolean>();
 /** a btw the user carried over: sent with their next side message */
-const sideCarry = new Map<SpaceId, string>();
+const sideCarry = new Map<string, string>();
 /** when the side chat last got the overview of everything (it changes as work goes on) */
-const sideSeen = new Map<SpaceId, number>();
+const sideSeen = new Map<string, number>();
 const SIDE_FRESH_MS = 3 * 60_000;
 
-/** Carry a btw question and its answer into the side chat, to go on talking about it there. */
-export function continueInSide(space: SpaceId, question: string, answer: string) {
+/** Carry a btw question and its answer into the side chat of the same place, to go on talking about it there. */
+export function continueInSide(scope: string, question: string, answer: string) {
   const at = Date.now();
+  const space = spaceOfScope(scope);
   setState("side", (list) => [
-    ...(list ?? []).slice(-200),
-    { id: uid("s"), space, at, from: "me", text: question },
-    { id: uid("s"), space, at, from: "side", text: answer },
+    ...(list ?? []).slice(-400),
+    { id: uid("s"), space, scope, at, from: "me", text: question },
+    { id: uid("s"), space, scope, at, from: "side", text: answer },
   ]);
-  sideCarry.set(space, `# A btw the user carried over to this chat
+  sideCarry.set(scope, `# A btw the user carried over to this chat
 user: ${clip(question, 1000)}
 answer: ${clip(answer, 4000)}`);
 }
 
-export const sideOf = (space: SpaceId) => (state.side ?? []).filter((m) => m.space === space);
+export const sideOf = (scope: string) => (state.side ?? []).filter((m) => sideScope(m) === scope);
 
-async function ensureSide(space: SpaceId) {
-  const agent = sideAgent(space);
-  if (isAlive(agent) && sideAttached.has(space)) return;
+/** what the side chat sits beside, in a line for its prompt */
+function besideOf(scope: string): string {
+  if (scope.startsWith("task:")) {
+    const t = taskById(scope.slice(5));
+    return t ? `the job ${t.id} "${t.title}"` : "a job";
+  }
+  const project = scope.slice(5).split("~")[1];
+  return project ? `the main chat of the project "${projectById(project)?.name ?? project}"` : "the main chat";
+}
+
+async function ensureSide(scope: string) {
+  const agent = sideAgent(scope);
+  if (isAlive(agent) && sideAttached.has(scope)) return;
+  const space = spaceOfScope(scope);
   const acc = accountFor(space);
   listen(agent, {
     event(ev) {
-      if (ev.type === "message_start" && ev.message?.role === "assistant") sideText.set(space, "");
+      if (ev.type === "message_start" && ev.message?.role === "assistant") sideText.set(scope, "");
       if (ev.type === "message_update" && ev.assistantMessageEvent?.type === "text_delta") {
-        const t = (sideText.get(space) ?? "") + ev.assistantMessageEvent.delta;
-        sideText.set(space, t);
-        const last = sideOf(space).slice(-1)[0];
+        const t = (sideText.get(scope) ?? "") + ev.assistantMessageEvent.delta;
+        sideText.set(scope, t);
+        const last = sideOf(scope).slice(-1)[0];
         if (last?.pending) setState("side", (m) => m.id === last.id, "text", prose(t));
       }
-      if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") sideErr.set(space, String(ev.message.errorMessage ?? tr("모델 오류")));
-      if (ev.type === "agent_settled") sideSettled.get(space)?.();
+      if (ev.type === "message_end" && ev.message?.role === "assistant" && ev.message?.stopReason === "error") sideErr.set(scope, String(ev.message.errorMessage ?? tr("모델 오류")));
+      if (ev.type === "agent_settled") sideSettled.get(scope)?.();
     },
     exit() {
-      sideAttached.delete(space);
+      sideAttached.delete(scope);
       markDead(agent);
-      sideErr.set(space, stderrOf(agent).split("\n").filter(Boolean).pop() ?? tr("사이드 채팅이 끝났어요"));
-      sideSettled.get(space)?.();
+      sideErr.set(scope, stderrOf(agent).split("\n").filter(Boolean).pop() ?? tr("사이드 채팅이 끝났어요"));
+      sideSettled.get(scope)?.();
     },
   });
   const model = modelFor(acc.id);
+  const task = scope.startsWith("task:") ? taskById(scope.slice(5)) : undefined;
   await agentSpawn(
     agent,
-    expand(spaceById(space).folder || "~"),
+    expand(task?.cwd || spaceById(space).folder || "~"),
     [
       "--no-session",
       ...readTools(acc.id, model),
       "--thinking",
       "low",
       "--append-system-prompt",
-      `This is a Side Chat: a separate conversation next to the user's main work. You may read files but never change them. With the user's messages comes an overview of everything going on in this space (every main chat, job and sub-job); the user's other space is a separate workspace you don't see. Each job's full log is in ${(await logsOf(space)) || "(not available)"}/<job id>/*.jsonl, read it when the overview isn't enough; read nothing else of Ondra's data. Answer in Korean, short and plain.`,
+      `This is a Side Chat: a separate conversation next to the user's work, beside ${besideOf(scope)}; what is asked here is most likely about that. You may read files but never change them. With the user's messages comes an overview of everything going on in this space (every main chat, job and sub-job; the one this sits beside in most detail); the user's other space is a separate workspace you don't see. Each job's full log is in ${(await logsOf(space)) || "(not available)"}/<job id>/*.jsonl, read it when the overview isn't enough; read nothing else of Ondra's data. Answer in Korean, short and plain.`,
       ...(model ? ["--model", model] : []),
     ],
     await accountEnv(acc.id),
   );
   markAlive(agent);
-  sideAttached.add(space);
-  sideRecap.set(space, true);
+  sideAttached.add(scope);
+  sideRecap.set(scope, true);
 }
 
-/** Send a message to the side chat of a space. */
-export async function sendSide(space: SpaceId, text: string) {
+/** Send a message to the side chat of a place (a main chat or a job). */
+export async function sendSide(scope: string, text: string) {
   const t = text.trim();
-  if (!t || sideBusy.has(space)) return;
-  const before = sideOf(space).filter((m) => !m.pending && !m.error);
-  const me: SideMessage = { id: uid("s"), space, at: Date.now(), from: "me", text: t };
-  const reply: SideMessage = { id: uid("s"), space, at: Date.now(), from: "side", text: "", pending: true };
-  setState("side", (list) => [...(list ?? []).slice(-200), me, reply]);
-  sideBusy.add(space);
+  if (!t || sideBusy.has(scope)) return;
+  const space = spaceOfScope(scope);
+  const before = sideOf(scope).filter((m) => !m.pending && !m.error);
+  const me: SideMessage = { id: uid("s"), space, scope, at: Date.now(), from: "me", text: t };
+  const reply: SideMessage = { id: uid("s"), space, scope, at: Date.now(), from: "side", text: "", pending: true };
+  setState("side", (list) => [...(list ?? []).slice(-400), me, reply]);
+  sideBusy.add(scope);
   try {
     // new jobs and sessions since the side chat started show up in its log folder
     void logsOf(space);
-    await ensureSide(space);
-    const agent = sideAgent(space);
-    sideText.set(space, "");
-    sideErr.delete(space);
-    const done = new Promise<void>((r) => sideSettled.set(space, r));
+    await ensureSide(scope);
+    const agent = sideAgent(scope);
+    sideText.set(scope, "");
+    sideErr.delete(scope);
+    const done = new Promise<void>((r) => sideSettled.set(scope, r));
     const parts: string[] = [];
     // what's going on everywhere, again when it may have moved on
-    if (sideRecap.get(space) || Date.now() - (sideSeen.get(space) ?? 0) > SIDE_FRESH_MS) {
-      parts.push(`# Everything going on (as of ${new Date().toLocaleTimeString("ko-KR")})`, everything(`side:${space}`), "");
-      sideSeen.set(space, Date.now());
+    if (sideRecap.get(scope) || Date.now() - (sideSeen.get(scope) ?? 0) > SIDE_FRESH_MS) {
+      parts.push(`# Everything going on (as of ${new Date().toLocaleTimeString("ko-KR")})`, everything(scope), "");
+      sideSeen.set(scope, Date.now());
     }
-    if (sideRecap.get(space) && before.length) {
+    if (sideRecap.get(scope) && before.length) {
       const recap = before.slice(-12).map((m) => `${m.from === "me" ? "user" : "you"}: ${clip(m.text, 500)}`);
       parts.push("# Earlier in this side chat (oldest first)", recap.join("\n"), "");
-    } else if (sideCarry.get(space)) parts.push(sideCarry.get(space)!, "");
-    sideCarry.delete(space);
-    sideRecap.set(space, false);
+    } else if (sideCarry.get(scope)) parts.push(sideCarry.get(scope)!, "");
+    sideCarry.delete(scope);
+    sideRecap.set(scope, false);
     const message = parts.length ? [...parts, "# Message", t].join("\n") : t;
     await request(agent, { type: "prompt", message });
     await done;
-    const out = prose(sideText.get(space) ?? "") || (sideText.get(space) ?? "");
-    const err = sideErr.get(space);
+    const out = prose(sideText.get(scope) ?? "") || (sideText.get(scope) ?? "");
+    const err = sideErr.get(scope);
     setState("side", (m) => m.id === reply.id, { text: out, pending: false, error: !out.trim() ? explain(err || tr("응답이 비어 있어요")) : undefined, at: Date.now() });
   } catch (e) {
     setState("side", (m) => m.id === reply.id, { pending: false, error: explain(e instanceof Error ? e.message : String(e)) });
   } finally {
-    sideBusy.delete(space);
+    sideBusy.delete(scope);
   }
 }
 
-export const sideRunning = (space: SpaceId) => sideOf(space).some((m) => m.pending);
+export const sideRunning = (scope: string) => sideOf(scope).some((m) => m.pending);
 
-/** Start the side chat over (its text goes too). */
-export function clearSide(space: SpaceId) {
-  setState("side", (list) => (list ?? []).filter((m) => m.space !== space));
-  sideCarry.delete(space);
-  sideSeen.delete(space);
-  agentKill(sideAgent(space));
-  markDead(sideAgent(space));
-  sideAttached.delete(space);
+/** Start this place's side chat over (its text goes too). */
+export function clearSide(scope: string) {
+  setState("side", (list) => (list ?? []).filter((m) => sideScope(m) !== scope));
+  sideCarry.delete(scope);
+  sideSeen.delete(scope);
+  agentKill(sideAgent(scope));
+  markDead(sideAgent(scope));
+  sideAttached.delete(scope);
 }
 
 /** One question, one answer, no tools, nothing kept (for small helper asks). */

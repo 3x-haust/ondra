@@ -3,7 +3,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { state, taskById } from "../state/store";
 import { skillsIn } from "../engine/memory";
 import type { SpaceId } from "../state/types";
-import { askBtw, btw as btwOf, btwForward, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideOf, sideRunning } from "../engine/aside";
+import { askBtw, btw as btwOf, btwForward, btwIndex, btwList, clearSide, closeBtw, continueInSide, sendSide, showBtw, sideHere, sideOf, sideRunning } from "../engine/aside";
 import { agoIn, midTrim } from "./bits";
 import { throwThought } from "../engine/captain";
 import { NO_ACCOUNT, tell } from "../engine/tasks";
@@ -61,8 +61,7 @@ export function BtwCard(props: { scope: string }) {
   const toSide = () => {
     const x = btw();
     if (!x) return;
-    const space = (x.scope.startsWith("task:") ? taskById(x.scope.slice(5))?.space : x.scope.slice(5).split("~")[0]) ?? state.space;
-    continueInSide(space as SpaceId, withFiles(x.question, x.files ?? []), x.answer);
+    continueInSide(x.scope, withFiles(x.question, x.files ?? []), x.answer);
     close();
     openPanel("side");
     setTimeout(() => document.getElementById("side-input")?.focus(), 60);
@@ -224,15 +223,25 @@ export function plusFor(where: { main?: boolean }): PlusItem[] {
   return out;
 }
 
-/** A second conversation, separate from the main one. */
+/** A second conversation beside the one on screen (each main chat and each job has its own, as btw). */
 export function SideChat() {
-  const space = () => state.space;
+  const space = () => sideHere();
   const msgs = () => sideOf(space());
   const [text, setText] = createSignal("");
   let box!: HTMLDivElement;
   let input!: HTMLTextAreaElement;
   createEffect(on(() => [msgs().length, msgs().slice(-1)[0]?.text], () => queueMicrotask(() => box && (box.scrollTop = box.scrollHeight))));
-  const send = () => {
+  // what it worked out goes to where it sits beside: the job, or the main chat (of its project)
+  const send = (said: string) => {
+    const scope = space();
+    if (scope.startsWith("task:")) void tell(scope.slice(5), said).then(() => toast(t("작업에 보냈어요")));
+    else {
+      const [sp, project] = scope.slice(5).split("~");
+      throwThought(said, sp as SpaceId, { project });
+      toast(t("메인에 보냈어요"));
+    }
+  };
+  const ask = () => {
     const t = text().trim();
     if (!t || sideRunning(space())) return;
     setText("");
@@ -267,7 +276,7 @@ export function SideChat() {
                 <Show when={!m.pending && m.text}>
                   <div class="side-acts">
                     <button class="link-btn" onClick={() => (void navigator.clipboard.writeText(m.text), toast(t("복사했어요")))}>{t("복사")}</button>
-                    <button class="link-btn" onClick={() => (throwThought(`사이드챗에서 정리한 거예요. 이걸로 진행해 줘:\n\n${m.text}`, space()), toast(t("메인에 보냈어요")))}>{t("메인에 보내기")}</button>
+                    <button class="link-btn" onClick={() => send(`사이드챗에서 정리한 거예요. 이걸로 진행해 줘:\n\n${m.text}`)}>{space().startsWith("task:") ? t("작업에 보내기") : t("메인에 보내기")}</button>
                   </div>
                 </Show>
               </div>
@@ -279,7 +288,7 @@ export function SideChat() {
         class="side-input"
         onSubmit={(e) => {
           e.preventDefault();
-          send();
+          ask();
         }}
       >
         <textarea
@@ -298,7 +307,7 @@ export function SideChat() {
             if (ignoredKey(e) || !noModifiers(e) || shortcutOverlay()) return;
             if (e.key === "Enter") {
               e.preventDefault();
-              send();
+              ask();
             } else if (e.key === "Escape") {
               e.preventDefault();
               e.currentTarget.blur();
