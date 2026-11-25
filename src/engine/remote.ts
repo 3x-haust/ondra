@@ -32,6 +32,9 @@ import * as jobs from "./tasks";
 import { connectHosts, helperGone, onPeer, startHosts, wantsHelper } from "./hosts";
 import { checkCall, jobsFrom, mayReach, spaceAllowed, type JobCall, type Reach } from "./remoteRules";
 import { farCall, farClosed, farMsg, type FarPeer } from "./farHost";
+import { mirrorReplacer } from "./farMirror";
+import { mirrorPath, normPath } from "./farPaths";
+import { engine } from "./rpc";
 
 interface RemoteDevice { id: string; name: string; addedAt: number; lastSeen: number }
 interface PairAsk { conn: number; device: { id: string; name: string } }
@@ -98,6 +101,7 @@ const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
 function flush() {
   timer = undefined;
+  const paths = mirrorReplacer(engine.info.home);
   const live = state.tasks.filter((x) => x.status === "running" || x.status === "waiting");
   for (const [conn, c] of conns) {
     if (projectsDirty) void sendProjects(conn);
@@ -118,15 +122,15 @@ function flush() {
       seen.add(t.id);
       const raw = unwrap(t);
       const { entries, ...rest } = raw;
-      const head = JSON.stringify(rest);
-      const ents = entries.map((e) => JSON.stringify(e));
+      const head = JSON.stringify(rest, paths);
+      const ents = entries.map((e) => JSON.stringify(e, paths));
       const before = c.sent.get(t.id);
       let from = 0;
       if (before) while (from < ents.length && from < before.ents.length && ents[from] === before.ents[from]) from++;
       const sameHead = before?.head === head;
       if (before && sameHead && from === ents.length && before.ents.length === ents.length) continue;
       c.sent.set(t.id, { head, ents });
-      out.push({ id: t.id, ...(sameHead ? {} : { head: rest }), from, entries: entries.slice(from), n: ents.length });
+      out.push({ id: t.id, ...(sameHead ? {} : { head: paths ? JSON.parse(head) : rest }), from, entries: paths ? ents.slice(from).map((e) => JSON.parse(e)) : entries.slice(from), n: ents.length });
       size += head.length + ents.slice(from).reduce((n, s) => n + s.length, 0);
       if (size > 4 << 20) ship();
     }
@@ -190,7 +194,7 @@ function sendInfo(conn: number, c: Conn) {
 async function sendProjects(conn: number) {
   const may = spacesOf(conns.get(conn)?.device ?? "");
   // each with its workspace's name, so the other Mac shows it in the tab of that name
-  const list = (state.projects ?? []).filter((p) => spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: p.folder, space: state.spaces.find((s) => s.id === p.space)?.label }));
+  const list = (state.projects ?? []).filter((p) => spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: mirrorPath(p.folder, engine.info.home), space: state.spaces.find((s) => s.id === p.space)?.label }));
   await send(conn, { t: "projects", list });
 }
 
@@ -281,7 +285,9 @@ function addProjectFor(c: Conn, folder: unknown, label?: unknown) {
   const named = state.spaces.find((s) => s.label === label)?.id;
   const space = named && spaceAllowed(may, named) ? named : spaceAllowed(may, state.space) ? state.space : state.spaces.find((s) => spaceAllowed(may, s.id))?.id;
   if (!space) throw new Error("그 워크스페이스는 쓸 수 없어요");
-  return addProject(space, folder);
+  const path = normPath(folder, engine.info.home);
+  if (!path) throw new Error("bad request");
+  return addProject(space, path);
 }
 
 /** what another Mac may do with a job here: the same the user does (checked by checkCall first) */
