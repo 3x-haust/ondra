@@ -20,7 +20,7 @@ import { confirmAsk, ctxFor, onRename, openMenuAt, openTaskMenu, type MenuEntry 
 import type { Task } from "../state/types";
 import { goMain, hoverTask, openTask, hoverOn, setPaletteMode, setPaletteOpen, setSidebarHidden, setView, showSidebar, sidebarAway, toast, view } from "../state/ui";
 import { hideHostProject, showHostProject } from "../engine/hosts";
-import { ignoredKey, noModifiers, shortcutHint, type ShortcutId } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, primaryKey, shortcutHint, type ShortcutId } from "../lib/shortcuts";
 import { ago, compact, newTaskOpen, soon, taskTitle } from "../ui/bits";
 import { openInSplit, startTaskDrag } from "./PaneControls";
 import { bootedDevices, devices, usedBy } from "../state/devices";
@@ -201,7 +201,7 @@ function Row(props: { t: Task; kid?: boolean; follow?: boolean; index: number })
         style={{ "--i": props.index }}
         data-task={t().id}
         // ⌥ or ⌘ opens it in a pane to the right; dragged, it goes where it is dropped
-        onClick={(e) => (e.altKey || e.metaKey ? void openInSplit(face().id) : openTask(face().id))}
+        onClick={(e) => (e.altKey || primaryKey(e) ? void openInSplit(face().id) : openTask(face().id))}
         onPointerDown={(e) => startTaskDrag(e, t().id)}
         {...hoverOn(() => (props.kid ? t().parentId! : t().id))}
         onContextMenu={(e) => {

@@ -11,7 +11,7 @@ import { discarded } from "../state/progress";
 import { expand } from "../engine/rpc";
 import type { FileAt } from "../lib/native";
 import { editorOn, fileAtRev, mergedIn, revealOn } from "../engine/far";
-import { ignoredKey, matchesShortcut, withHint } from "../lib/shortcuts";
+import { ignoredKey, matchesShortcut, shortcutLabel, withHint } from "../lib/shortcuts";
 import { useChanges } from "../ui/Review";
 import {
   buildTree, capText, changedFiles, closeTab, cycleTab, fileOrder, folderKeys, foldersOf, listRows, MAX_LINES, openTab, pinTab, splitPath, stepAcross, stepFile,
@@ -608,7 +608,7 @@ function Body(props: { t: Task }) {
                       <dt>{t("다음 변경")}</dt>
                       <dd>F7</dd>
                       <dt>{t("다음 파일")}</dt>
-                      <dd>⌥F5</dd>
+                      <dd>{shortcutLabel("nextFileChange")}</dd>
                     </dl>
                   </div>
                 }

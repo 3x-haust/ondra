@@ -323,6 +323,7 @@ export default {
   "끌어서 크기 조절 · 두 번 눌러 같게": "Drag to resize · double-click to even out",
   "옆 창에 열기": "Open in split",
   "⌥ 클릭": "⌥ click",
+  "Alt 클릭": "Alt-click",
   // links
   "{name}에서 열기": "Open in {name}",
   "이 페이지를 기본 브라우저에서 열기": "Open this page in default browser",

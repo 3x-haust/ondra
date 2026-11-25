@@ -3,7 +3,7 @@
 // Pick several with ⌘/⇧-click; ⌫ removes them (with undo), ↑↓ move.
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { pinResult, removeResults, restoreResults, resultCopy, resultPreview, resultsIn, resultText } from "../engine/results";
-import { ignoredKey } from "../lib/shortcuts";
+import { ignoredKey, primaryKey } from "../lib/shortcuts";
 import { projectById, state, taskById } from "../state/store";
 import type { ResultEntry } from "../state/types";
 import { openTask, panelOpen, setJumpMsg, setView, toast } from "../state/ui";
@@ -136,7 +136,7 @@ export function ResultsView() {
   };
 
   const keys = (e: KeyboardEvent) => {
-    if (e.key === "f" && e.metaKey && !e.shiftKey) return e.preventDefault(), searchEl?.focus();
+    if (e.key === "f" && primaryKey(e) && !e.shiftKey) return e.preventDefault(), searchEl?.focus();
     if (ignoredKey(e) || menu()) return;
     const l = list();
     const i = l.findIndex((r) => r.id === sel()?.id);
@@ -154,7 +154,7 @@ export function ResultsView() {
     } else if ((e.key === "Backspace" || e.key === "Delete") && !e.altKey) {
       e.preventDefault();
       remove(targets());
-    } else if (e.key === "a" && e.metaKey) {
+    } else if (e.key === "a" && primaryKey(e)) {
       e.preventDefault();
       setPicked(l.map((r) => r.id));
     } else if (e.key === "Escape" && many()) {

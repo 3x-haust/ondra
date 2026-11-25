@@ -5,7 +5,7 @@ import { setZoom, zoom, ZOOMS } from "../state/zoom";
 import { accountName } from "../ui/AccountPicker";
 import { LimitCards } from "../ui/LimitBars";
 import { refreshModels } from "../engine/modelList";
-import { binding, chordLabel, shortcutHint, ignoredKey, isShortcutId, modifierHold, noModifiers, overrides, shortcuts, viewKey, type Shortcut, type ShortcutId } from "../lib/shortcuts";
+import { binding, chordLabel, defaultChord, shortcutHint, ignoredKey, isShortcutId, matchesShortcut, modifierHold, noModifiers, onWindows, overrides, primaryChord, shortcuts, viewKey, type Shortcut, type ShortcutId } from "../lib/shortcuts";
 import { assign, changed, chordOf, conflictOf, modifierOnly, moveTo, refusal, reset } from "../lib/keybindings";
 import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
@@ -213,7 +213,7 @@ function General() {
           </div>
         </Row>
         {/* web links: the panel's browser (signed in once, shared with the jobs) or the Mac's own */}
-        <Row title={t("링크 열기")} desc={t("⌘ 클릭하면 기본 브라우저에서 열려요")}>
+        <Row title={t("링크 열기")} desc={onWindows() ? t("Ctrl 클릭하면 기본 브라우저에서 열려요") : t("⌘ 클릭하면 기본 브라우저에서 열려요")}>
           <div class="seg">
             <button classList={{ on: (state.settings.links ?? "inside") === "inside" }} onClick={() => setState("settings", "links", "inside")}>{t("{name} 안에서", { name: appName() })}</button>
             <button classList={{ on: state.settings.links === "outside" }} onClick={() => setState("settings", "links", "outside")}>{t("기본 브라우저")}</button>
@@ -996,7 +996,7 @@ export { recording as recordingKeys };
 
 const writeBindings = (next: Record<string, string>) => setState("settings", { keybindings: next });
 const mods = (e: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "altKey" | "shiftKey">) =>
-  `${e.ctrlKey ? "⌃" : ""}${e.altKey ? "⌥" : ""}${e.shiftKey ? "⇧" : ""}${e.metaKey ? "⌘" : ""}`;
+  chordLabel({ code: "", meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey });
 
 const modCount = (s: Shortcut) => [s.meta, s.ctrl, s.alt, s.shift].filter(Boolean).length;
 
@@ -1107,7 +1107,7 @@ function Shortcuts() {
                           <span class="kb-help">{modifierHold(r.id) ? t("눌렀다 떼면 바뀌어요") : t("esc 취소 · ⌫ 지우기")}</span>
                         </Show>
                         <Show when={changed(overrides(), r.id) && rec() !== r.id}>
-                          <button class="btn ghost sm kb-reset" title={`${t("기본값으로")} (${keyText(r.id, shortcuts[r.id])})`} aria-label={t("{name} 기본값으로", { name: r.label })} onClick={() => done(r.id, reset(overrides(), r.id))}>
+                          <button class="btn ghost sm kb-reset" title={`${t("기본값으로")} (${keyText(r.id, defaultChord(r.id))})`} aria-label={t("{name} 기본값으로", { name: r.label })} onClick={() => done(r.id, reset(overrides(), r.id))}>
                             {t("기본값")}
                           </button>
                         </Show>
@@ -1215,7 +1215,7 @@ export function SettingsNav(props: { onBack: () => void }) {
   };
   // ⌘F finds in Settings
   const key = (e: KeyboardEvent) => {
-    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "KeyF") {
+    if (matchesShortcut(e, primaryChord("KeyF"))) {
       e.preventDefault();
       input.focus();
       input.select();
@@ -1252,7 +1252,7 @@ export function SettingsNav(props: { onBack: () => void }) {
               } else if (e.key === "Enter" && hits()[0]) go(hits()[0]);
             }}
           />
-          <Show when={!q()}><kbd>⌘F</kbd></Show>
+          <Show when={!q()}><kbd>{chordLabel(primaryChord("KeyF"))}</kbd></Show>
         </label>
         <Show
           when={q().trim()}

@@ -7,6 +7,7 @@ import { revealPath, saveDownload } from "../lib/native";
 import { toast } from "../state/ui";
 import { t } from "../i18n";
 import { linkMenuItems } from "./links";
+import { chordLabel, primaryChord } from "../lib/shortcuts";
 import { openMenuAt, type MenuEntry } from "./taskMenu";
 
 /** What the menu offers for a right-click on `target`, with `picked` the text selected then. */
@@ -102,7 +103,7 @@ export function menuItems(m: MenuTarget): MenuEntry[] {
       { id: "save-image", label: t("이미지 저장"), icon: "download", run: () => void saveImage(m.src, m.name) },
       ...(/^https?:\/\//.test(m.src) ? (["sep", { id: "copy-image-link", label: t("이미지 주소 복사"), icon: "link", run: () => copyText(m.src) }] as MenuEntry[]) : []),
     ];
-  if (m.kind === "text") return [{ id: "copy-text", label: t("복사"), icon: "copy", kbd: "⌘C", run: () => copyText(m.text) }];
+  if (m.kind === "text") return [{ id: "copy-text", label: t("복사"), icon: "copy", kbd: chordLabel(primaryChord("KeyC")), run: () => copyText(m.text) }];
   if (m.kind === "link") return linkMenuItems(m.url);
   return [];
 }

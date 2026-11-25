@@ -12,7 +12,7 @@ import { bucket, changes, Glyph } from "./Sidebar";
 import { discarded, endTime } from "../state/progress";
 import { DiscardGlyph } from "../ui/Review";
 import { t as tr } from "../i18n";
-import { withHint } from "../lib/shortcuts";
+import { shortcutLabel, withHint } from "../lib/shortcuts";
 
 const openId = () => {
   const v = view();
@@ -183,7 +183,7 @@ export function Flow() {
       <button class="g-main" data-shortcut="main" onClick={() => goMain()} title={withHint(tr("메인"), "main")} style={{ "--trunk": `${TRUNK}px` }}>
         <span class="g-main-node" style={{ left: `${TRUNK - 5}px` }} />
         <span class="g-name">{tr("메인")}</span>
-        <Show when={state.captain.some((m) => m.space === state.space && m.pending)} fallback={<kbd class="g-kbd">⌘0</kbd>}>
+        <Show when={state.captain.some((m) => m.space === state.space && m.pending)} fallback={<kbd class="g-kbd">{shortcutLabel("main")}</kbd>}>
           <span class="tk-run" />
         </Show>
       </button>

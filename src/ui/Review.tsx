@@ -17,7 +17,7 @@ import { Icon } from "./Icon";
 import { GlyphMark } from "../views/Sidebar";
 import { langOf, tokenize, type Tok } from "./highlight";
 import { t as tr } from "../i18n";
-import { withHint } from "../lib/shortcuts";
+import { chordLabel, primaryChord, withHint } from "../lib/shortcuts";
 import { discarded, rememberDiff } from "../state/progress";
 
 // ───────────── diff model (diffModel.ts) ─────────────
@@ -512,7 +512,7 @@ function Viewer(props: { root: string; path: string; host?: Where; changed?: Dif
             </>
           }
         >
-          <button class="btn sm primary" disabled={!dirty()} title="⌘S" onClick={() => editor?.save()}>{tr("저장")}</button>
+          <button class="btn sm primary" disabled={!dirty()} title={chordLabel(primaryChord("KeyS"))} onClick={() => editor?.save()}>{tr("저장")}</button>
           <button class="btn sm ghost" onClick={leave}>{tr("닫기")}</button>
         </Show>
         <button class="icon-btn sm" title={props.host ? tr("그 Mac의 편집기에서 열기") : tr("편집기에서 열기")} onClick={() => void editorOn(props.host, full())}><Icon name="external" size={14} /></button>

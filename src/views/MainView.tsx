@@ -49,7 +49,7 @@ const hostPick = (p: Place) => {
   const a = hostAccount(p, state.space);
   return p.model && a?.models.includes(p.model) ? { model: p.model, thinking: p.thinking } : p.thinking ? { thinking: p.thinking } : {};
 };
-import { noModifiers, shortcutHint } from "../lib/shortcuts";
+import { noModifiers, primaryKey, shortcutHint } from "../lib/shortcuts";
 import { refreshSuggestions, suggestionsFor, suggestLoading } from "../engine/suggest";
 import { Glyph, GlyphMark, SidebarToggle, stateMeta, type GlyphKind } from "./Sidebar";
 import { openAddAccount } from "./Settings";
@@ -157,7 +157,7 @@ function JobRow(props: { taskId: string; relayed: boolean; live: boolean; active
         const open = (e: MouseEvent) => {
           const r = result();
           const v: View = r ? { name: "results", id: r.id } : { name: "task", id: x().id };
-          if (e.altKey || e.metaKey) splitPane("right", { view: v });
+          if (e.altKey || primaryKey(e)) splitPane("right", { view: v });
           else setView(v);
         };
         const row = (

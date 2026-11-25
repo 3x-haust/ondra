@@ -10,7 +10,7 @@ import { expand } from "../engine/rpc";
 import { discarded } from "../state/progress";
 import { openInEditor, revealPath } from "../lib/native";
 import { editorOn, revealOn, setFarShell } from "../engine/far";
-import { ignoredKey, noModifiers } from "../lib/shortcuts";
+import { ignoredKey, noModifiers, onWindows } from "../lib/shortcuts";
 import { anyPop, closePops } from "./ModelPicker";
 import { Icon } from "./Icon";
 import { t } from "../i18n";
@@ -45,7 +45,7 @@ export function taskMenuItems(id: string): MenuEntry[] {
   const groups: MenuItem[][] = [
     [
       ...(isOpen(id) ? [] : [{ id: "open", label: t("열기"), icon: "arrow", run: () => openTask(id) }]),
-      ...(shownIn({ name: "task", id }, "") ? [] : [{ id: "split", label: t("옆 창에 열기"), icon: "splitRight", kbd: t("⌥ 클릭"), run: () => void splitPane("right", { view: { name: "task", id } }) }]),
+      ...(shownIn({ name: "task", id }, "") ? [] : [{ id: "split", label: t("옆 창에 열기"), icon: "splitRight", kbd: onWindows() ? t("Alt 클릭") : t("⌥ 클릭"), run: () => void splitPane("right", { view: { name: "task", id } }) }]),
       { id: "rename", label: t("이름 바꾸기"), icon: "pencil", kbd: "F2", run: () => (openTask(id), startRename(id)) },
       { id: "pin", label: x.pinned ? t("고정 해제") : t("고정"), icon: "pin", run: () => togglePin(id) },
     ],
