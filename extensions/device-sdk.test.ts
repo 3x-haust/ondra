@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 // the engine provides typebox at run time; the schemas don't matter here
 vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
@@ -6,6 +7,7 @@ vi.mock("typebox", () => ({ Type: new Proxy({}, { get: () => () => ({}) }) }));
 async function setup(status: Record<string, unknown>, after: Record<string, unknown> = {}) {
   vi.resetModules();
   vi.stubEnv("ANDROID_HOME", "/nowhere/sdk");
+  vi.stubEnv("PATH", "/usr/bin");
   vi.stubEnv("ONDRA_BRIDGE", "http://127.0.0.1:1/bridge");
   vi.stubEnv("ONDRA_BRIDGE_TOKEN", "t");
   const gets: string[] = [];
@@ -37,6 +39,7 @@ describe("an Android emulator for a computer without one", () => {
     expect(confirm.mock.calls[0][1]).toContain("Terms");
     expect(gets).toEqual(["emulator"]);
     expect(process.env.ANDROID_HOME).toBe("/data/android/sdk");
+    expect(process.env.PATH?.split(process.platform === "win32" ? ";" : ":").slice(0, 2)).toEqual([join("/data/android/sdk", "platform-tools"), join("/data/android/sdk", "emulator")]);
   });
 
   it("gets nothing when the user says no, and doesn't ask again in the job", async () => {

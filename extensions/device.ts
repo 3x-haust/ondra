@@ -52,13 +52,18 @@ const adbIn = (sdk: string) => join(sdk, `platform-tools/adb${EXE}`);
 let SDK = androidSdk();
 let ADB = existsSync(adbIn(SDK)) ? adbIn(SDK) : "adb";
 let EMULATOR = join(SDK, `emulator/emulator${EXE}`);
-/** Use `dir` as the Android SDK from now on, here and in what this starts (agent-device finds adb through ANDROID_HOME). */
+/** Use `dir` as the Android SDK from now on, here and in what this starts (agent-device finds adb
+ *  through ANDROID_HOME in one place and on PATH in another). */
 function useSdk(dir: string) {
   SDK = dir;
   ADB = existsSync(adbIn(dir)) ? adbIn(dir) : "adb";
   EMULATOR = join(dir, `emulator/emulator${EXE}`);
   process.env.ANDROID_HOME = dir;
   process.env.ANDROID_SDK_ROOT = dir;
+  const sep = process.platform === "win32" ? ";" : ":";
+  const tools = [join(dir, "platform-tools"), join(dir, "emulator")];
+  const rest = (process.env.PATH || "").split(sep).filter((p) => p && !tools.includes(p));
+  process.env.PATH = [...tools, ...rest].join(sep);
 }
 const AVD_HOME = process.env.ANDROID_AVD_HOME || join(homedir(), ".android/avd");
 const MAX_OUT = 14_000;
