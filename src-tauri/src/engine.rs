@@ -17,7 +17,12 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
+#[cfg(windows)]
+mod prompt_files;
+
 struct Proc {
+    #[cfg(windows)]
+    _prompt_files: Vec<tempfile::NamedTempFile>,
     child: Child,
     stdin: ChildStdin,
     /// Tells a process apart from the one it replaced under the same id.
@@ -455,6 +460,13 @@ fn spawn_engine(
     let cwd = if cwd.is_empty() { home().display().to_string() } else { cwd };
     std::fs::create_dir_all(&cwd).map_err(|e| format!("폴더를 만들 수 없습니다: {e}"))?;
 
+    #[cfg(windows)]
+    let (args, prompt_files) = {
+        let mut args = args;
+        let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+        let files = prompt_files::prepare(&mut args, &dir).map_err(|e| format!("엔진 지침 파일을 준비하지 못했습니다: {e}"))?;
+        (args, files)
+    };
     cmd.arg("--mode").arg("rpc").args(&args).current_dir(&cwd);
     // several parts may add to PATH (bundled tools, a space's CLI shims): all of them go first, in order
     for (k, v) in &env {
@@ -479,6 +491,8 @@ fn spawn_engine(
         return Err("엔진 입출력 파이프를 열지 못했습니다".into());
     };
     engine.procs.lock().unwrap().insert(id.clone(), Proc {
+        #[cfg(windows)]
+        _prompt_files: prompt_files,
         child, stdin, generation,
     });
 
