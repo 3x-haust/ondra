@@ -9,6 +9,7 @@
 //   job_read       → one of them in depth
 //   job_tell       → a message to one of them (queued, delivered, answered, resumed, carried on)
 //   settings_read / settings_write → the settings the user could switch themselves (engine/appSettings.ts)
+//   app            → what the user could press in Ondra, by name (engine/appActions.ts)
 //   discord        → the Discord agent's hands: servers, channels, make or remove one, the work channel (main only)
 // Calls arrive as `bridge:call` {id, call:{op, worker, args}} and are answered
 // with bridge_reply. The worker id is the job's id: a job only sees its own memory.
@@ -71,6 +72,8 @@ export async function handle(c: Call): Promise<unknown> {
   if (c.op?.startsWith("job")) return jobOp(c.op, c.worker, a);
   // the Discord agent's hands on the server (main only, engine/discordHands.ts)
   if (c.op === "discord") return (await import("./discordHands")).discordHands(c.worker, a);
+  // the app's buttons (connect link, projects, a job's pin or archive …): main or a job, in its space
+  if (c.op === "app") return (await import("./appActions")).appHands(c.worker, a);
   // the space's connected services (Settings › 서비스): main's space, or the job's
   if (c.op === "services") {
     const space = t?.space ?? (c.worker?.startsWith("captain:") ? c.worker.slice(8).replace(/^sim\d*:/, "").split("~")[0] : undefined);
