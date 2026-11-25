@@ -50,6 +50,19 @@ impl Daemon {
         }
     }
 
+    /// The field's page is on the site the credential was looked up for (or one of its subdomains).
+    fn same_site(&self, t: &Tab, field: &str, url: &str) -> Res<()> {
+        let r = self.call_on(t, field, "function(){ return this.ownerDocument.location.href; }", vec![], true)?;
+        let page = r.str("value").unwrap_or_default().to_string();
+        let (want, have) = (host_of(url), host_of(&page));
+        let related = !want.is_empty() && (have == want || have.ends_with(&format!(".{want}")) || want.ends_with(&format!(".{have}")) && have.contains('.'));
+        if related {
+            Ok(())
+        } else {
+            err(format!("the sign-in form is on {} but the password is for {}; open the login page for that site first", if have.is_empty() { "an unknown page" } else { &have }, want))
+        }
+    }
+
     fn fields(&self, t: &Tab, user_sel: Option<&str>, pass_sel: Option<&str>) -> Res<Fields> {
         let q = |s: Option<&str>| s.map(quote).unwrap_or_else(|| "null".into());
         let r = self.call("Runtime.evaluate", obj!({ "expression": format!("({FIND_FIELDS_JS})({}, {})", q(user_sel), q(pass_sel)) }), t)?;
@@ -109,6 +122,7 @@ impl Daemon {
         let mut filled_user = false;
         if let Some(u) = &user {
             if !account.is_empty() {
+                self.same_site(&t, u, &url)?;
                 self.fill(&t, u, &account)?;
                 filled_user = true;
             }
@@ -128,8 +142,17 @@ impl Daemon {
             }
         }
         let Some(pw) = pass else { return err("no password field on the page") };
+        // the page may have moved on (a redirect, the second step of a sign-in): fill only the site the password is for
+        self.same_site(&t, &pw, &url)?;
         self.focus(&t, &pw)?;
         self.call_on(&t, &pw, "function(){ if (typeof this.select === 'function') this.select(); }", vec![], true)?;
+        {
+            let mut st = t.s();
+            st.signed_in = true;
+            for r in st.requests.values_mut() {
+                r.post_data = None;
+            }
+        }
         self.call("Input.insertText", obj!({ "text": password }), &t)?;
         self.call_on(&t, &pw, SET_PASSWORD_JS, vec![json!(password)], true)?;
         self.submit(&t, &pw, submit_sel)?;
@@ -143,5 +166,24 @@ impl Daemon {
         let now = info.str("url").unwrap_or_default().to_string();
         let who = if account.is_empty() { String::new() } else { format!(" as {account}") };
         Ok(Outcome::new(json!({ "site": site, "account": account, "filledUsername": filled_user, "url": now }), format!("✓ Filled the sign-in form{who} from the keychain; now on {now}")))
+    }
+}
+
+/// `https://user@accounts.example.com:8443/login?x` → `accounts.example.com`.
+fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let host = if authority.starts_with('[') { authority.split(']').next().unwrap_or_default().trim_start_matches('[') } else { authority.split(':').next().unwrap_or_default() };
+    host.trim().trim_end_matches('.').to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn hosts() {
+        assert_eq!(super::host_of("https://me@Login.Example.com:8443/x?y"), "login.example.com");
+        assert_eq!(super::host_of("http://127.0.0.1:8765/login.html"), "127.0.0.1");
+        assert_eq!(super::host_of("about:blank"), "about");
     }
 }

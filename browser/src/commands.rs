@@ -1295,6 +1295,13 @@ impl Daemon {
         let _ = std::fs::create_dir_all(&dir);
         self.cdp.call("Browser.setDownloadBehavior", obj!({ "behavior": "allowAndName", "downloadPath": dir.display().to_string(), "eventsEnabled": true }), None, 30.0)?;
         self.st().downloads.clear();
+        let r = self.download_into(t, sel, path, timeout_ms, &dir);
+        // the browser is shared: its downloads go back where they were, whatever happened here
+        let _ = self.cdp.call("Browser.setDownloadBehavior", obj!({ "behavior": "default" }), None, 30.0);
+        r
+    }
+
+    fn download_into(&self, t: &Arc<Tab>, sel: &str, path: &str, timeout_ms: f64, dir: &std::path::Path) -> Res<Outcome> {
         let el = self.element(t, sel)?;
         let r = self.click(t, &el, 1);
         self.release(t, &el);
@@ -1314,7 +1321,6 @@ impl Daemon {
             std::fs::copy(&from, path).map_err(|e| e.to_string())?;
             let _ = std::fs::remove_file(&from);
         }
-        let _ = self.cdp.call("Browser.setDownloadBehavior", obj!({ "behavior": "default" }), None, 30.0);
         Ok(Outcome::new(json!({ "path": path }), format!("✓ Downloaded to {path}")))
     }
 }

@@ -53,6 +53,8 @@ pub struct TabState {
     pub mouse: (f64, f64),
     pub screencasting: bool,
     pub last_frame: Option<(String, Json)>,
+    /// a keychain sign-in filled a form here: request bodies may hold the password, so none are kept
+    pub signed_in: bool,
 }
 
 pub struct Tab {
@@ -160,7 +162,7 @@ impl Tab {
                     method: r.str("method").unwrap_or("GET").into(),
                     resource_type: kind.clone(),
                     headers: r.get("headers").cloned().unwrap_or(Value::Object(Json::new())),
-                    post_data: r.str("postData").map(String::from),
+                    post_data: if s.signed_in { None } else { r.str("postData").map(String::from) },
                     status: None,
                     mime_type: None,
                     response_headers: None,
