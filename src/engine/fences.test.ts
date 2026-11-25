@@ -33,6 +33,18 @@ describe("fences", () => {
     expect(readFences(raw, "blocks", first.end).items).toEqual([]);
   });
 
+  it("reads a block put in a fence named for its type, and keeps code that only looks alike", () => {
+    const list = '{"type":"checklist","label":"feat/x · 5/6","items":[{"label":"작업 폴더에 안 올린 변경 없음","done":true}]}';
+    const raw = `끝났어요.\n\`\`\`checklist\n${list}\n\`\`\`\n알아 둘 점이 세 가지 있어요.`;
+    expect(readFences(raw, "blocks").items).toEqual([JSON.parse(list)]);
+    expect(prose(raw)).toBe("끝났어요.\n\n알아 둘 점이 세 가지 있어요.");
+    // a json fence, or a fence whose object names another type, is for the reader
+    for (const code of ['```json\n{"type":"checklist"}\n```', '```checklist\n- [x] a\n```', '```table\n{"type":"checklist","items":[]}\n```']) {
+      expect(readFences(code, "blocks").items, code).toEqual([]);
+      expect(prose(code), code).toBe(code);
+    }
+  });
+
   it("leaves a half-written fence for later", () => {
     expect(readFences('```route\n{"routes":[{"text":"```bo', "route").items).toEqual([]);
   });
