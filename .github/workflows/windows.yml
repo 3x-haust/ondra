@@ -65,7 +65,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build unsigned installer
-        run: pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign -- --locked
+        run: pnpm tauri build --target $env:TARGET --bundles nsis --ci --no-sign '--' --locked
 
       - name: Verify installed payload
         run: |

@@ -34,7 +34,7 @@ $target = 'x86_64-pc-windows-msvc'   # aarch64-pc-windows-msvc on native ARM64
 $env:RUSTUP_TOOLCHAIN = "1.95.0-$target"
 rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
 pnpm install --frozen-lockfile --ignore-scripts
-pnpm tauri build --target $target --bundles nsis --ci --no-sign -- --locked
+pnpm tauri build --target $target --bundles nsis --ci --no-sign '--' --locked
 Get-ChildItem "src-tauri\target\$target\release\bundle\nsis\*-setup.exe"
 ```
 
