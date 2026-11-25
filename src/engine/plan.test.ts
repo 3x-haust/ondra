@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PlanStep } from "../state/types";
 import { closePlan, moveTo, nextPlan, openAsked, planText, stepAt, unexplained } from "./plan";
-import { unwrapSsh, waitsOnly } from "./commandKind";
+import { answeredNo, unwrapSsh, waitsOnly } from "./commandKind";
 
 const states = (plan: PlanStep[]) => plan.map((s) => [s.state, ...(s.sub ?? []).map((x) => x.state)].join(" "));
 
@@ -178,5 +178,17 @@ describe("waitsOnly", () => {
   it("unwraps the quoted remote command", () => {
     expect(unwrapSsh(`ssh -n h 'pgrep -f "docker build"'`)).toBe(`pgrep -f "docker build"`);
     expect(unwrapSsh(`x; ssh -p 22 h "tail -f log"`)).toBe("x; tail -f log");
+  });
+});
+
+describe("answeredNo", () => {
+  const no = "(no output)\n\nCommand exited with code 1";
+  it("reads a search, a test or a diff that ended with code 1 as its no", () => {
+    for (const c of [`rg -n 'foo' src`, `cd "/a b" && rg -n x | head -5`, "grep -c x a.txt", "test -f a.txt", "diff a b", `rg a src; rg b src`])
+      expect(answeredNo(c, no), c).toBe(true);
+  });
+  it("keeps real failures: other codes, or anything that runs work", () => {
+    expect(answeredNo("rg x missing.txt", "missing.txt: No such file\n\nCommand exited with code 2")).toBe(false);
+    for (const c of ["pnpm test", "rg x && pnpm build", "cargo check", "rg x | xargs rm"]) expect(answeredNo(c, no), c).toBe(false);
   });
 });
