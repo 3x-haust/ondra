@@ -802,15 +802,16 @@ dl.hk-doc dd {
   gap: var(--s-10);
   padding: var(--s-10) var(--s-14);
   border-bottom: 1px solid var(--line);
-  transition: opacity var(--dur) var(--ease);
 }
 .rt-row:last-child {
   border-bottom: 0;
 }
-.rt-row.off {
+/* off dims what it is, not what you can do with it (delete, cancel) */
+.rt-row.off .rt-main {
   opacity: 0.6;
 }
 .rt-main {
+  transition: opacity var(--dur) var(--ease);
   flex: 1;
   min-width: 0;
   display: flex;
