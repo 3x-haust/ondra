@@ -66,11 +66,14 @@ describe("Windows projects mirrored to a Mac", () => {
       hear({ ev: "msg", conn: 1, data: { t: "projects" } });
       const packets = () => sent.map((c) => c.data as { t?: string; list?: unknown[]; tasks?: { id: string; head?: Partial<Task>; entries: Task["entries"] }[] } | undefined);
       const projects = packets().find((m) => m?.t === "projects" && (m.list?.[0] as { name?: string })?.name === "그림")!;
-      expect(projects.list).toEqual([{ id: "app", name: "그림", space: "회사", folder: "/@drive/D/Work/그림" }]);
+      expect(projects.list).toEqual([{ id: "app", name: "그림", space: "회사", spaceId: "work", folder: "/@drive/D/Work/그림" }]);
       setState("settings", "hosts", [{ id: DEV, name: "PC" }]);
       onPeer({ ev: "peer", peer: DEV, state: "ok" });
       onPeer({ ev: "peer-msg", peer: DEV, data: projects });
-      expect(state.settings.hostProjects).toContainEqual({ host: DEV, id: "app", space: "work", name: "그림", folder: "/@drive/D/Work/그림" });
+      await vi.waitFor(() => expect(packets().some((m) => m?.t === "info")).toBe(true));
+      onPeer({ ev: "peer-msg", peer: DEV, data: packets().find((m) => m?.t === "info")! });
+      // in that device's own 회사 tab here, not this device's
+      expect(state.settings.hostProjects).toContainEqual({ host: DEV, id: "app", space: `h:${DEV}:work`, name: "그림", folder: "/@drive/D/Work/그림" });
       await vi.waitFor(() => expect(packets().some((m) => m?.t === "patch" && m.tasks?.some((j) => j.head?.cwd === "/@drive/D/Work/그림"))).toBe(true));
       for (const m of packets().filter((m) => m?.t === "patch")) onPeer({ ev: "peer-msg", peer: DEV, data: m });
       expect(mirror.hosts[DEV].tasks[0].entries).toMatchObject([{ block: { path: "/@drive/D/Work/그림/index.html" } }, { text: "![shot](/@drive/C/Shots/밖.png)" }]);

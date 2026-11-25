@@ -17,7 +17,7 @@ import { createSignal } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { ghWatch, inTauri, onRemote, remoteAwake, remoteCmd, remoteDevices, remoteForget, remoteHostName, remoteStop, secretDelete, secretList, secretSet, secretSync, spaceEnv, type SavedSecrets } from "../lib/native";
 import { forgetSecret, noteSecrets } from "./secretMemory";
-import { onWrite, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
+import { onWrite, ownSpaces, projectById, setState, spaceById, state, taskById, updateTask } from "../state/store";
 import { permissionOf } from "../state/persist";
 import type { Decision, Task } from "../state/types";
 import type { FarAsk, HostInfo } from "../state/mirror";
@@ -57,6 +57,8 @@ interface Conn {
   device: string;
   /** the projects (ids here) whose jobs it keeps */
   watch: Set<string>;
+  /** it keeps the work done in its workspaces too (newer devices ask for it) */
+  sessions?: boolean;
   /** each job as last sent: its fields' JSON and each entry's */
   sent: Map<string, { head: string; ents: string[] }>;
   /** send everything again (just asked) */
@@ -95,7 +97,7 @@ function spacesOf(device: string): Set<string> | undefined {
   const l = state.settings.deviceSpaces?.[device];
   return l ? new Set(l) : undefined;
 }
-const reach = (c: Pick<Conn, "device" | "watch">): Reach => ({ device: c.device, watch: c.watch, spaces: spacesOf(c.device) });
+const reach = (c: Pick<Conn, "device" | "watch" | "sessions">): Reach => ({ device: c.device, watch: c.watch, sessions: c.sessions, spaces: spacesOf(c.device) });
 /** what that device keeps: the jobs of the projects it added, and the jobs it asked for (where it may) */
 const wanted = (c: Conn, t: Task) => mayReach(reach(c), t, taskById);
 
@@ -105,7 +107,7 @@ function flush() {
   const live = state.tasks.filter((x) => x.status === "running" || x.status === "waiting");
   for (const [conn, c] of conns) {
     if (projectsDirty) void sendProjects(conn);
-    if (!c.watch.size && !c.sent.size && !c.all) continue;
+    if (!c.watch.size && !c.sessions && !c.sent.size && !c.all) continue;
     const pick = c.all || dirtyAll ? state.tasks : [...new Set([...[...dirty].map((id) => taskById(id)).filter((x): x is Task => !!x && !x.host), ...live])];
     const out: Record<string, unknown>[] = [];
     let size = 0;
@@ -145,15 +147,15 @@ function flush() {
 
 /** the questions the jobs that device keeps wait on (its cards, "내 차례"), sent when they change.
  *  A Mac too old to know {t:"decisions"} passes it by. */
-export function decisionsFor(device: string, watch: Set<string>): Decision[] {
-  const c = { device, watch } as Conn;
+export function decisionsFor(device: string, watch: Set<string>, sessions?: boolean): Decision[] {
+  const c = { device, watch, sessions } as Conn;
   return state.decisions.filter((d) => {
     const t = d.taskId.startsWith("main:") ? undefined : taskById(d.taskId);
     return !!t && !t.host && wanted(c, t);
   });
 }
 function sendDecisions(conn: number, c: Conn) {
-  const list = decisionsFor(c.device, c.watch);
+  const list = decisionsFor(c.device, c.watch, c.sessions);
   const json = JSON.stringify(list);
   if (json === c.decisions) return;
   c.decisions = json;
@@ -166,7 +168,7 @@ void import("@tauri-apps/api/app").then((m) => m.getVersion()).then((v) => (vers
 
 function info(device: string): HostInfo {
   const may = spacesOf(device);
-  const spaces = state.spaces.filter((s) => spaceAllowed(may, s.id));
+  const spaces = ownSpaces().filter((s) => spaceAllowed(may, s.id));
   return {
     version,
     spaces: spaces.map((s) => ({ id: s.id, label: s.label })),
@@ -193,8 +195,9 @@ function sendInfo(conn: number, c: Conn) {
 
 async function sendProjects(conn: number) {
   const may = spacesOf(conns.get(conn)?.device ?? "");
-  // each with its workspace's name, so the other Mac shows it in the tab of that name
-  const list = (state.projects ?? []).filter((p) => !p.host && spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: mirrorPath(p.folder, engine.info.home), space: state.spaces.find((s) => s.id === p.space)?.label }));
+  // each with its workspace (its id, and its name for a device too old to know the id), so the other
+  // device shows it in that workspace's tab
+  const list = (state.projects ?? []).filter((p) => !p.host && spaceAllowed(may, p.space)).map((p) => ({ id: p.id, name: p.name, folder: mirrorPath(p.folder, engine.info.home), space: state.spaces.find((s) => s.id === p.space)?.label, spaceId: p.space }));
   await send(conn, { t: "projects", list });
 }
 
@@ -202,12 +205,14 @@ async function sendProjects(conn: number) {
 
 /** a new job here, from another device (it chose the id): in one of this Mac's projects (its workspace),
  *  or in the workspace that device picked; on the account it picked there, else that workspace's choice */
-export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
+export function create(c: Pick<Conn, "device" | "watch" | "sessions">, f: FarAsk) {
   if (!f || typeof f !== "object" || typeof f.ask !== "string") throw new Error("bad request");
   // this Mac's own project only (never one shown here from a third Mac)
   const p = f.project && !f.project.startsWith("r:") ? projectById(f.project) : undefined;
   if (f.project && !p) throw new Error("그 프로젝트가 이 기기에 없어요");
-  const space = p?.space ?? state.spaces.find((s) => s.id === f.hostSpace)?.id ?? state.spaces.find((s) => s.label === f.spaceLabel)?.id ?? state.space;
+  const own = ownSpaces();
+  const space = p?.space ?? own.find((s) => s.id === f.hostSpace)?.id ?? own.find((s) => s.label === f.spaceLabel)?.id ?? (own.some((s) => s.id === state.space) ? state.space : own[0]?.id);
+  if (!space) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const access = reach(c);
   if (!spaceAllowed(access.spaces, space)) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const from = { device: c.device, space: f.space ?? "" };
@@ -218,7 +223,7 @@ export function create(c: Pick<Conn, "device" | "watch">, f: FarAsk) {
     return t && t.space === space && mayReach(access, t, taskById) ? t.id : undefined;
   };
   const after = (Array.isArray(f.after) ? f.after : []).map(mine).filter((x): x is string => !!x);
-  const extraSpaces = (Array.isArray(f.reach) ? f.reach : []).map((l) => state.spaces.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space && spaceAllowed(access.spaces, x));
+  const extraSpaces = (Array.isArray(f.reach) ? f.reach : []).map((l) => own.find((s) => s.label === l)?.id).filter((x): x is Task["space"] => !!x && x !== space && spaceAllowed(access.spaces, x));
   const id = jobs.createTask({
     id: f.id, space, title: f.title, topic: p?.name ?? "", ask: f.ask, display: f.display, cwd: p?.folder, project: p?.id,
     isolate: typeof f.isolate === "boolean" ? f.isolate : state.settings.isolate, accountId: account, accountPinned: account === f.account, from, model: f.model, thinking: f.thinking,
@@ -282,8 +287,9 @@ export const secretCalls = {
 function addProjectFor(c: Conn, folder: unknown, label?: unknown) {
   if (typeof folder !== "string" || !folder.trim()) throw new Error("bad request");
   const may = spacesOf(c.device);
-  const named = state.spaces.find((s) => s.label === label)?.id;
-  const space = named && spaceAllowed(may, named) ? named : spaceAllowed(may, state.space) ? state.space : state.spaces.find((s) => spaceAllowed(may, s.id))?.id;
+  const own = ownSpaces();
+  const named = own.find((s) => s.label === label)?.id;
+  const space = named && spaceAllowed(may, named) ? named : own.some((s) => s.id === state.space) && spaceAllowed(may, state.space) ? state.space : own.find((s) => spaceAllowed(may, s.id))?.id;
   if (!space) throw new Error("그 워크스페이스는 쓸 수 없어요");
   const path = normPath(folder, engine.info.home);
   const pr = path && state.projects?.find((p) => !p.host && p.space === space && normPath(p.folder, engine.info.home) === path);
@@ -362,6 +368,7 @@ async function handle(conn: number, msg: Record<string, unknown>) {
       break;
     case "watch":
       c.watch = new Set(Array.isArray(msg.projects) ? msg.projects.map(String) : []);
+      c.sessions = msg.sessions === true;
       c.all = true;
       soon();
       break;

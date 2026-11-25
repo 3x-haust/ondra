@@ -7,7 +7,7 @@ import { formAnswer, readFields, type FormValues } from "./form";
 import { answerRound, readClarity, readRound, roundDecision, roundText } from "./round";
 import { answerExtensionUi, clearExtensionUi, extensionUi } from "./extensionUi";
 import { far, farDecide, markFarRead, startFar } from "./hosts";
-import { hostOfTask, mirroredDecision, splitProjectId } from "../state/mirror";
+import { hostOfTask, mirroredDecision, splitProjectId, splitSpaceId } from "../state/mirror";
 import { logError, logInfo, logWarn } from "../lib/log";
 import { track } from "../lib/telemetry";
 import { isNetError, waitOnline } from "./net";
@@ -2850,13 +2850,15 @@ export function createTask(f: {
     ...((f.agent ?? prev?.agent) ? { agent: f.agent ?? prev!.agent } : {}),
   };
   // a project of another device: the job is made and run there; here it shows until that device's copy comes
+  // (or one asked in that device's workspace: everything there runs there)
   const far_ = splitProjectId(f.project);
-  const farHost = far_?.host ?? f.host;
+  const theirs = splitSpaceId(f.space);
+  const farHost = far_?.host ?? f.host ?? theirs?.host;
   if (farHost) {
     // the rest of what it was asked with goes too: the ids it follows or waits for are that device's own
     // (a job of it shows here under its id there); a Mac too old to know a field leaves it out
     startFar(farHost, { ...task, host: farHost, project: far_ ? f.project : undefined }, {
-      id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace, spaceLabel: state.spaces.find((x) => x.id === f.space)?.label,
+      id, title: task.title, ask: f.ask, project: far_?.id, space: f.space, hostSpace: f.hostSpace ?? (theirs?.host === farHost ? theirs?.id : undefined), spaceLabel: state.spaces.find((x) => x.id === f.space)?.label,
       account: f.hostAccount, model: f.model, thinking: f.thinking, display: f.display,
       branch: f.branch, priority: task.priority, weight: task.weight, origin: f.origin, isolate: f.isolate, after: task.after,
       // the other workspaces it may reach, by name (that device's workspaces of the same names)

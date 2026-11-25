@@ -9,7 +9,7 @@
 // AGENTS.md / CLAUDE.md are not absorbed: the engine reads them.
 import { createSignal } from "solid-js";
 import { memorySources } from "../lib/native";
-import { projectsIn, setState, state } from "../state/store";
+import { projectsIn, setState, state, ownSpaces } from "../state/store";
 import { memorySentence } from "../i18n";
 import type { MemoryKind, SpaceId } from "../state/types";
 import { oneShot } from "./aside";
@@ -56,8 +56,8 @@ export async function findNotes(): Promise<Note[]> {
     }
   };
   // projects first: a file inside a project folder belongs to that project
-  for (const s of state.spaces) for (const p of projectsIn(s.id)) await look(p.folder, s.id, p.folder);
-  for (const s of state.spaces) await look(s.folder, s.id);
+  for (const s of ownSpaces()) for (const p of projectsIn(s.id)) await look(p.folder, s.id, p.folder);
+  for (const s of ownSpaces()) await look(s.folder, s.id);
   setPending(out);
   return out;
 }

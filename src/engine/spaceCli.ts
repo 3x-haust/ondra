@@ -22,7 +22,7 @@ export function candidates(s: Space, taken: string[]): string[] {
   return [...new Set(list)].filter((c) => !taken.includes(c));
 }
 
-const owned = (s: Space) => s.id !== "home" && !s.only;
+const owned = (s: Space) => s.id !== "home" && !s.only && !s.host;
 
 /**
  * Make (or refresh) the space's command. Without a name yet, the first free one is taken; a name

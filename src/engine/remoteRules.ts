@@ -6,11 +6,13 @@ import type { Settings, Task } from "../state/types";
 
 // ───────── a Mac allowed in
 
-/** what one connected Mac may reach: the projects it keeps (asked with "watch") and the
- *  workspaces it may use here (missing = all) */
+/** what one connected Mac may reach: the projects it keeps (asked with "watch"), the work done in
+ *  the workspaces it may use here when it asked for that too (`sessions`), and those workspaces
+ *  (missing = all) */
 export interface Reach {
   device: string;
   watch: ReadonlySet<string>;
+  sessions?: boolean;
   spaces?: ReadonlySet<string>;
 }
 
@@ -27,14 +29,15 @@ export const spaceAllowed = (spaces: ReadonlySet<string> | undefined, space: str
 
 /**
  * A job that device may see and act on: one of this Mac's own (never one shown here from a third
- * Mac), in a workspace it may use, and in a project it keeps or asked for by it (subagents go
- * with their top job).
+ * Mac), in a workspace it may use, and in a project it keeps, asked for by it, or (`sessions`) any
+ * job of the list there: not a quick answer, archived or the Discord agent's (subagents go with
+ * their top job).
  */
 export function mayReach(r: Reach, t: Task | undefined, byId: ById): boolean {
   if (!t || t.host) return false;
   const root = rootOf(t, byId);
   if (root.host || !spaceAllowed(r.spaces, root.space) || !spaceAllowed(r.spaces, t.space)) return false;
-  return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device);
+  return (!!root.project && r.watch.has(root.project)) || (!!r.device && root.from?.device === r.device) || (!!r.sessions && !root.answer && !root.archived && !root.agent);
 }
 
 /** the calls another device may make on one job: the job's id comes first */
@@ -95,7 +98,7 @@ export function withoutHost(s: Hosts, id: string): Required<Hosts> {
   return {
     hosts: (s.hosts ?? []).filter((h) => h.id !== id),
     hostProjects: (s.hostProjects ?? []).filter((p) => p.host !== id),
-    computers: Object.fromEntries(Object.entries(s.computers ?? {}).filter(([, c]) => c.host !== id)),
+    computers: Object.fromEntries(Object.entries(s.computers ?? {}).filter(([space, c]) => c.host !== id && !space.startsWith(`h:${id}:`))),
   };
 }
 
@@ -103,15 +106,15 @@ export function withoutHost(s: Hosts, id: string): Required<Hosts> {
  * Which of that device's projects to take off the list here (gone there, or hidden here) and which
  * to add (new there, not hidden, and with a workspace tab here to go in).
  */
-export function linkPlan<P extends { id: string; space?: string }>(
+export function linkPlan<P extends { id: string }>(
   list: readonly P[],
   linked: readonly { id: string }[],
   hidden: readonly string[] | undefined,
-  spaceFor: (label?: string) => string | undefined,
+  spaceFor: (p: P) => string | undefined,
 ): { gone: string[]; add: P[] } {
   const off = new Set(hidden ?? []);
   const gone = linked.filter((l) => off.has(l.id) || !list.some((p) => p.id === l.id)).map((l) => l.id);
-  const add = list.filter((p) => !off.has(p.id) && !linked.some((l) => l.id === p.id) && !!spaceFor(p.space));
+  const add = list.filter((p) => !off.has(p.id) && !linked.some((l) => l.id === p.id) && !!spaceFor(p));
   return { gone, add };
 }
 

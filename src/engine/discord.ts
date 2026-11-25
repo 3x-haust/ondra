@@ -40,7 +40,7 @@ import { readWays, waysPath } from "./agentWays";
 import { jobChannel, workTick } from "./workLog";
 import { expand, isRefusal } from "./rpc";
 import { maybeScout, offerNote } from "./agentScout";
-import { AGENT_CHAT, setState, state, taskById } from "../state/store";
+import { AGENT_CHAT, setState, state, taskById, ownSpaces } from "../state/store";
 import type { AgentSettings, CaptainMessage, Decision, FormField, SpaceId, Task } from "../state/types";
 import { initial, missing, type FormValues } from "./form";
 
@@ -1495,7 +1495,7 @@ async function talk(m: DiscordMessage, a: AgentSettings, text: string, ways = ""
   const before = at >= 0 ? around.slice(Math.max(0, at - 15), at) : (await discordHistory(m.channel, m.id, 15).catch(() => [] as DiscordMessage[])).filter((x) => x.content.trim());
   const after = at >= 0 ? around.slice(at + 1) : [];
   const { oneShot } = await import("./aside");
-  const space = a.space ?? state.spaces[0]?.id ?? state.space;
+  const space = a.space ?? ownSpaces()[0]?.id ?? state.space;
   const memory = memoryLines({ speaker: m.author.id, people: before.filter((x) => x.author.id !== me!.id).map((x) => x.author.id), place: m.guild ?? undefined, dm: !m.guild });
   const say = (talkBefore: DiscordMessage[]) => oneShot(space, "~", talkPrompt(a, m.author.name, talkBefore, text, me!.id, memory, watching, ways, Date.now(), after, whereIs(m, true)));
   // the provider's policy check can trip on something earlier in the channel: once more, on their words alone
@@ -1572,9 +1572,9 @@ export async function digest(channel: string) {
 
 /** the workspace its work goes to: the one set for that channel, else the agent's, else the first */
 export const agentSpace = (a: AgentSettings, channel?: string): SpaceId => {
-  const known = (id?: string) => !!id && state.spaces.some((s) => s.id === id);
+  const known = (id?: string) => !!id && ownSpaces().some((s) => s.id === id);
   const place = channel ? a.places?.find((p) => p.channel === channel)?.space : undefined;
-  return known(place) ? place! : known(a.space) ? a.space! : (state.spaces[0]?.id ?? state.space);
+  return known(place) ? place! : known(a.space) ? a.space! : (ownSpaces()[0]?.id ?? state.space);
 };
 
 /** Settings › 에이전트 */

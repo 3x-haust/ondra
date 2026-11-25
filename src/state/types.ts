@@ -33,7 +33,10 @@ export interface Space {
   command?: string;
   /** The user's own simulators, emulators and phones that belong to this space (device ids). */
   devices?: string[];
-  /** made for another device's workspace of this name (Settings › 연결): its work runs there, none here */
+  /** another device's workspace (Settings › 연결): that device's id. Its projects and jobs are that
+   *  device's, shown here under it; nothing of this device goes in it. */
+  host?: string;
+  /** older state: a tab made for another device's workspace of the same name, merged with this device's */
   only?: boolean;
 }
 
@@ -764,7 +767,7 @@ export interface Settings {
   remoteAwake?: boolean;
   /** other Macs this one works on, and the projects of theirs added here. `hidden`: its projects
    *  taken off the list here (kept off when it sends them again); `off`: disconnected for now */
-  hosts?: { id: string; name: string; pair?: string; spaces?: string[]; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean }[];
+  hosts?: { id: string; name: string; pair?: string; seen?: number; icon?: string; emoji?: string; hue?: number; colors?: { h: number; c: number }[]; grain?: number; theme?: number; hidden?: string[]; off?: boolean }[];
   /** Macs removed here that haven't heard it yet: told the next time they're reachable */
   leaving?: { id: string; name: string; at: number }[];
   /** the workspaces (ids) each Mac allowed in may use here; missing = all of them */
