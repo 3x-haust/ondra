@@ -3480,6 +3480,7 @@ if CommandLine.arguments.contains("--reap") {
 // stdin or stops it. Another copy of the app already holding it: nothing to do.
 if CommandLine.arguments.contains("--hold-display") {
     guard Backdrop.shared.ensure(hold: true) else { exit(0) }
+    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.5)
     Thread.detachNewThread { while readLine() != nil {}; exit(0) }
     keepUserOffBackdrop()
 }
