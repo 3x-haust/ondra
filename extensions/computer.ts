@@ -319,8 +319,11 @@ export default function (pi: any) {
     catch (error) { try { await stopHost(); } catch { /* already gone */ } throw error; }
   }
 
-  const confirmOf = (ctx?: ComputerContext) => ctx?.hasUI === true && ctx.ui ? (summary: string, signal?: AbortSignal) =>
-    ctx.ui!.confirm("보안 동작을 허용할까요?", summary, { signal, timeout: 120_000 }) : undefined;
+  // full access: the user gave the job everything, so a confirmation card would only stop it.
+  // The helper still runs only the action it held for approval, and still hides the pixels.
+  const confirmOf = (ctx?: ComputerContext) => process.env.ONDRA_PERMISSION === "full" ? async () => true
+    : ctx?.hasUI === true && ctx.ui ? (summary: string, signal?: AbortSignal) =>
+      ctx.ui!.confirm("보안 동작을 허용할까요?", summary, { signal, timeout: 120_000 }) : undefined;
 
   /** Several actions in order on the open session: a line each, the screen once. */
   async function runSteps(steps: ComputerAction[], signal?: AbortSignal, ctx?: ComputerContext) {

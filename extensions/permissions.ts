@@ -355,7 +355,11 @@ export default function (pi: any) {
     description: "Ondra 권한 모드 바꾸기 (ask · auto · full)",
     handler: async (args: string) => {
       const next = args.trim();
-      if (next === "edits" || MODES.includes(next as Mode)) mode = modeOf(next);
+      if (next === "edits" || MODES.includes(next as Mode)) {
+        mode = modeOf(next);
+        // other tools of the job read it too: computer use's confirmations go through on full
+        process.env.ONDRA_PERMISSION = mode;
+      }
     },
   });
 
