@@ -75,11 +75,12 @@ fn exe_of(pid: u32) -> Option<std::path::PathBuf> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn exe_of(_pid: u32) -> Option<std::path::PathBuf> {
-    None
+fn called_by_browser() -> bool {
+    false // No approved native browser credential helper on this platform.
 }
 
 /// The parent process is the ondra-browser that ships next to this binary.
+#[cfg(target_os = "macos")]
 fn called_by_browser() -> bool {
     let Some(parent) = exe_of(std::os::unix::process::parent_id()).and_then(|p| p.canonicalize().ok()) else { return false };
     let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) else { return false };
