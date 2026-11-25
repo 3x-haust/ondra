@@ -101,7 +101,7 @@ describe("browserSearch (the engine turned us away: the job's own tab)", () => {
   });
 });
 
-describe("web_search on a computer without ondra-browser", () => {
+describe("web_lookup on a computer without ondra-browser", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -128,7 +128,7 @@ describe("web_search on a computer without ondra-browser", () => {
     const tools: Record<string, { execute: (id: string, p: { query: string }) => Promise<{ content: { text: string }[] }> }> = {};
     web({ registerTool: (t: { name: string }) => void (tools[t.name] = t as never) });
 
-    const got = tools.web_search.execute("1", { query: "tauri clipboard image windows" });
+    const got = tools.web_lookup.execute("1", { query: "tauri clipboard image windows" });
     await vi.advanceTimersByTimeAsync(120_000);
     const said = (await got).content[0].text;
 
