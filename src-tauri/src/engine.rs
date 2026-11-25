@@ -19,6 +19,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(windows)]
 mod prompt_files;
+#[cfg(windows)]
+mod windows_bash;
 
 struct Proc {
     #[cfg(windows)]
@@ -477,6 +479,8 @@ fn spawn_engine(
     cmd.env("PATH", scoped_path(&env, &with_sidecars(user_path())));
     // a job's engine: the saved secrets, read here and never sent to the page
     crate::secrets::inject(&app, &mut cmd, &env);
+    #[cfg(windows)]
+    windows_bash::check(&cmd, &args, std::path::Path::new(&cwd), &home())?;
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
