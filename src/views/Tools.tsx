@@ -1,6 +1,7 @@
 // Settings › 도구: everything an agent can use, read from a short-lived engine
 // started with what every job gets (built-in tools, Ondra's extensions, skills, MCP).
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
+import { kept } from "../state/viewState";
 import { setState, state } from "../state/store";
 import { tokens } from "../ui/bits";
 import { PageHead } from "./Settings";
@@ -67,7 +68,8 @@ export function ToolsTab() {
   const [force, setForce] = createSignal(0);
   const [data] = createResource(() => ({ n: force() }), ({ n }) => loadWorkerTools(n > 0));
   const [q, setQ] = createSignal("");
-  const [open, setOpen] = createSignal<string | null>(null);
+  // the row opened is still open when the tab is shown again
+  const [open, setOpen] = kept<string | null>("settings.tools.open", null);
   const groups = createMemo(() => {
     const c = data();
     if (!c) return [];
