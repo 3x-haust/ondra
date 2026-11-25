@@ -23,9 +23,9 @@ round), each from a different angle, not the same one reworded:
   two in the other language, in the words people there use.
 - A comparison: one query per item; "best X" lists alone miss items.
 
-## Searching when web_search can't
+## Searching when the web search can't
 
-`web_search` says the engine is busy, or finds nothing twice: search through
+The search (`web_search`, or `web_lookup`) says the engine is busy, or finds nothing twice: search through
 your own ondra-browser tab instead.
 
 ```bash

@@ -170,7 +170,7 @@ static MANIFEST: OnceLock<Manifest> = OnceLock::new();
 /// What this build needs. Development builds use the repo's resources and never download.
 pub fn manifest(app: &AppHandle) -> &'static Manifest {
     MANIFEST.get_or_init(|| {
-        if cfg!(any(debug_assertions, windows)) {
+        if cfg!(debug_assertions) {
             return Manifest::default();
         }
         let file = app.path().resource_dir().ok().map(|d| d.join("components.json"));
@@ -439,14 +439,24 @@ fn clone_tree(src: &Path, tmp: &Path) -> Result<(), String> {
     Err(format!("could not copy {}", src.display()))
 }
 
-/// The archive is a tar (xz) of the component folder's contents.
+/// The archive is a tar (xz) of the component folder's contents, or on Windows and Linux the
+/// zip Chrome for Testing publishes.
 fn unpack(archive: &Path, tmp: &Path) -> Result<(), String> {
     std::fs::create_dir_all(tmp).map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
+        // keeps each file's unix mode (the browser stays executable)
+        return zip::ZipArchive::new(file).and_then(|mut z| z.extract(tmp)).map_err(|e| format!("unpack: {e}"));
+    }
+    #[cfg(target_os = "macos")]
+    {
     let out = Command::new("/usr/bin/tar").arg("-xf").arg(archive).arg("-C").arg(tmp).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
     if !out.status.success() {
         return Err(format!("unpack: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
     Ok(())
+    }
 }
 
 /// Unfinished work an earlier run left (we hold the lock, so it's no one's now).
@@ -552,14 +562,47 @@ async fn fetch_part(http: &reqwest::Client, url: &str, size: u64, part: &Path, p
 
 // ───────────── old versions ─────────────
 
-/// Commands of every running process (a process runs from a folder when its command names it).
-fn running() -> Vec<String> {
-    Command::new("/bin/ps")
-        .args(["-axww", "-o", "command="])
-        .stderr(Stdio::null())
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(str::to_string).collect())
-        .unwrap_or_default()
+/// Commands of every running process (a process runs from a folder when its command names it);
+/// None where they can't be read, and then no installed version is removed.
+#[cfg(target_os = "macos")]
+fn running() -> Option<Vec<String>> {
+    let out = Command::new("/bin/ps").args(["-axww", "-o", "command="]).stderr(Stdio::null()).output().ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect())
+}
+
+#[cfg(target_os = "linux")]
+fn running() -> Option<Vec<String>> {
+    let procs = std::fs::read_dir("/proc").ok()?.flatten().filter(|e| e.file_name().to_string_lossy().chars().all(|c| c.is_ascii_digit()));
+    Some(procs.filter_map(|e| std::fs::read(e.path().join("cmdline")).ok()).map(|c| String::from_utf8_lossy(&c).replace('\0', " ")).collect())
+}
+
+/// Windows: the program path of every process (a command line can't be read without more rights).
+#[cfg(windows)]
+fn running() -> Option<Vec<String>> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
+    let mut pids = Vec::new();
+    // SAFETY: a snapshot handle we own, walked with a correctly sized entry.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut e: PROCESSENTRY32W = std::mem::zeroed();
+        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut more = Process32FirstW(snap, &mut e) != 0;
+        while more {
+            pids.push(e.th32ProcessID);
+            more = Process32NextW(snap, &mut e) != 0;
+        }
+        CloseHandle(snap);
+    }
+    Some(pids.into_iter().filter_map(crate::keychain::exe_of).map(|p| p.display().to_string()).collect())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+fn running() -> Option<Vec<String>> {
+    None
 }
 
 /// Which installed versions may go: everything but the wanted one and the newest other one,
@@ -572,11 +615,12 @@ pub fn removable(installed: &[String], want: &str, in_use: impl Fn(&str) -> bool
 
 fn clean(root: &Path, keep: &[Component]) {
     let procs = running();
-    for c in keep {
+    for c in keep.iter().filter(|_| procs.is_some()) {
+        let procs = procs.as_deref().unwrap_or_default();
         let home = root.join(&c.name);
         let list = installed(&home);
         for v in removable(&list, &c.version, |v| {
-            let dir = format!("{}/", home.join(v).display());
+            let dir = format!("{}{}", home.join(v).display(), std::path::MAIN_SEPARATOR);
             procs.iter().any(|p| p.contains(&dir))
         }) {
             let _ = std::fs::remove_dir_all(home.join(v));
@@ -622,6 +666,31 @@ mod tests {
     }
 
     const SHA: &str = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+
+    /// Chrome for Testing's zip unpacks into a folder the app finds the browser in, still executable.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn chrome_zip_unpacks_into_a_runnable_browser() {
+        use std::io::Write;
+        let dir = tmp("zip");
+        let archive = dir.join("chrome.zip");
+        let exe = format!("chrome-headless-shell{}", std::env::consts::EXE_SUFFIX);
+        let mut z = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+        let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
+        z.start_file(format!("chrome-headless-shell-x/{exe}"), opts).unwrap();
+        z.write_all(b"#!/bin/sh\n").unwrap();
+        z.finish().unwrap();
+        let out = dir.join("out");
+        unpack(&archive, &out).unwrap();
+        let bin = crate::tools::chrome_in(&out).expect("the browser in the unpacked folder");
+        assert!(complete("chrome", &out));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&bin).unwrap().permissions().mode() & 0o111, 0o111);
+        }
+        let _ = bin;
+    }
 
     fn entry(name: &str, version: &str) -> String {
         format!(r#"{{"name":"{name}","version":"{version}","sha256":"{SHA}","size":11,"url":"https://github.com/3x-haust/ondra/releases/download/v1.0.0/{name}-{version}.tar.xz"}}"#)

@@ -140,12 +140,22 @@ export function noticesText(title, sections) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-/** The app's notices: web view, the app's crates, ondra-remote's crates. */
-export function writeAppNotices(outDir = join(root, "src-tauri", "resources", "notices")) {
+/** The app's notices: web view, the app's crates, ondra-remote's crates; on Windows and Linux
+ *  also ondra-dictate's crates and the speech model it fetches. */
+export function writeAppNotices(outDir = join(root, "src-tauri", "resources", "notices"), { dictate = false } = {}) {
   const text = noticesText("Ondra — third-party notices", [
     { heading: "Ondra app: web view (npm)", pkgs: appNpm() },
     { heading: "Ondra app: native (Rust crates)", pkgs: cargoCrates(join(root, "src-tauri", "Cargo.toml")) },
     { heading: "ondra-remote (Rust crates)", pkgs: cargoCrates(join(root, "remote", "host", "Cargo.toml")) },
+    ...(dictate
+      ? [
+          { heading: "ondra-dictate (Rust crates)", pkgs: cargoCrates(join(root, "dictate", "Cargo.toml")) },
+          {
+            heading: "ondra-dictate: speech model, downloaded on first use",
+            pkgs: [{ name: "SenseVoiceSmall (FunAudioLLM, Alibaba Group), sherpa-onnx int8 export", version: "2024-07-17", license: "FunASR Model Open Source License 1.1", source: "https://huggingface.co/FunAudioLLM/SenseVoiceSmall" }],
+          },
+        ]
+      : []),
   ]);
   mkdirSync(outDir, { recursive: true });
   const file = join(outDir, "THIRD_PARTY_NOTICES.txt");

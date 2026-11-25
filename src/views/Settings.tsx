@@ -11,6 +11,7 @@ import { appCommands } from "../state/commands";
 import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { projectsShown, setState, state, tasksShown, uid, updateAccount } from "../state/store";
 import { mirror, setMirror } from "../state/mirror";
+import { scrollKept } from "../state/viewState";
 import type { Account, SpaceId } from "../state/types";
 import { creditsOf, emails, loadEmail, refreshLimits, usageOf } from "../state/limits";
 import { ctxFor, openMenuAt, type MenuEntry } from "../ui/taskMenu";
@@ -1321,8 +1322,7 @@ export function SettingsPage(props: { onBack: () => void }) {
   onMount(() => window.addEventListener("keydown", key, true));
   onCleanup(() => window.removeEventListener("keydown", key, true));
   let body!: HTMLDivElement;
-  // each tab opens at its top
-  createEffect(on(settingsTab, () => body && (body.scrollTop = 0), { defer: true }));
+  // each tab opens where it was left, at its top the first time; a row found by the search wins
   // a row found by the search: once its tab is drawn, bring it into view and light it for a moment
   createEffect(on(jump, (row) => {
     if (!row) return;
@@ -1340,7 +1340,7 @@ export function SettingsPage(props: { onBack: () => void }) {
   return (
     <div class="settings settings-page">
       <div class="head" data-tauri-drag-region />
-      <div class="settings-body" ref={body}>
+      <div class="settings-body" ref={(el) => ((body = el), scrollKept(() => `settings/${settingsTab()}`)(el))}>
         <div class="settings-inner">
           <Switch>
             <Match when={settingsTab() === "general"}><General /></Match>

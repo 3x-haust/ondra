@@ -1333,18 +1333,39 @@ func userInputSince(seconds: Double) -> Bool {
     return idle <= seconds + 0.05
 }
 
-/// Make `pid` frontmost again after `from` activated itself. Public activation only.
-func giveFrontBack(to pid: pid_t, from target: pid_t) -> Bool {
+/// The user's own switch to another app within the last `seconds`: a click, or ⌘ held (⌘-Tab).
+/// Typing is no switch: keys go to the app in front, they don't pick it. An app that came
+/// forward while the user typed was brought by the action, and goes back.
+func userSwitchedSince(seconds: Double) -> Bool {
+    let clicks: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+    let idle = clicks.map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }.min() ?? .infinity
+    return idle <= seconds + 0.05 || CGEventSource.flagsState(.hidSystemState).contains(.maskCommand)
+}
+
+/// Make `pid` frontmost again after `from` activated itself, and give `window` (the user's window
+/// that had the keys) its keys back: an app back in front with no key window shows its menu bar
+/// but its window dimmed, and what the user types goes nowhere until they click it.
+func giveFrontBack(to pid: pid_t, from target: pid_t, window: AXUIElement? = nil) -> Bool {
     guard let prev = NSRunningApplication(processIdentifier: pid) else { return false }
-    if #available(macOS 14.0, *), let source = NSRunningApplication(processIdentifier: target) {
+    // asked through AX, the user's app activates itself: macOS takes that from a helper in the background
+    _ = AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+    if #available(macOS 14.0, *), NSWorkspace.shared.frontmostApplication?.processIdentifier != pid,
+       let source = NSRunningApplication(processIdentifier: target) {
         _ = prev.activate(from: source, options: [])
     }
     if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid { _ = prev.activate(options: []) }
+    // the user's window, already on top of their screen, becomes the key one again
+    if let w = window { _ = AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue) }
+    let back = { () -> Bool in
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return false }
+        guard let w = window else { return true }
+        return appKeyWindow(pid).map { CFEqual($0, w) } ?? false
+    }
     for _ in 0..<25 {
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+        if back() { return true }
         CFRunLoopRunInMode(.defaultMode, 0.02, true)
     }
-    return NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+    return back()
 }
 
 // ───────────────────────── virtual cursor ─────────────────────────
@@ -2790,6 +2811,9 @@ func handle(_ req: [String: Any]) -> [String: Any] {
     if !["commit-approval", "prepare"].contains(op) { pendingApproval = nil }
     // release answers without it: reading the user's app over AX can be slow when it is busy
     let before: [String: Any] = op == "release" ? ["frontmostPid": NSWorkspace.shared.frontmostApplication.map { Int($0.processIdentifier) } ?? -1] : environment()
+    // the user's window that has the keys: if an app the job drives takes the front, they go back to it
+    let userWindow = ["act", "commit-approval", "launch"].contains(op)
+        ? (before["frontmostPid"] as? Int).flatMap { $0 > 0 ? appKeyWindow(pid_t($0)) : nil } : nil
 
     switch op {
     case "frontmost":
@@ -2873,7 +2897,7 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         rescueStrayWindows()
         // the app it started coming to the front (a stage switch under Stage Manager) is undone:
         // the user's app and its stage come back to the front
-        let stageRestored = restoreUserStage(before["frontmostPid"] as? Int, since: t0)
+        let stageRestored = restoreUserStage(before["frontmostPid"] as? Int, since: t0, window: userWindow)
         let after = environment()
         if let pid = pid {
             let preserved = backgroundPreserved(before, after)
@@ -3057,11 +3081,11 @@ func handle(_ req: [String: Any]) -> [String: Any] {
         // Some apps bring themselves forward when clicked. Hand the front back to what
         // the user had, right away, instead of failing an action that already happened.
         if let was = before["frontmostPid"] as? Int, was != pidN, (after["frontmostPid"] as? Int) == pidN,
-           !userInputSince(seconds: (nowMs() - t0) / 1000) {
+           !userSwitchedSince(seconds: (nowMs() - t0) / 1000) {
             extra["selfActivated"] = true
-            extra["restored"] = giveFrontBack(to: pid_t(was), from: pid_t(pidN))
+            extra["restored"] = giveFrontBack(to: pid_t(was), from: pid_t(pidN), window: userWindow)
             after = environment()
-        } else if let r = restoreUserStage(before["frontmostPid"] as? Int, since: t0) {
+        } else if let r = restoreUserStage(before["frontmostPid"] as? Int, since: t0, window: userWindow) {
             // another app came forward (a Stage Manager switch): the user's stage comes back
             extra["stageRestored"] = r
             after = environment()
@@ -3263,18 +3287,18 @@ func startWindowKeeper() {
 
 /// Stage Manager: an app the job runs coming to the front (the app starting, a window of it
 /// ordering itself in) switches stages, and the user's windows shrink into the side strip. If an
-/// app of this helper's took the front and the user's own mouse or keys did not do it, the user's
+/// app of this helper's took the front and the user did not switch to it (a click, ⌘-Tab), the user's
 /// app is brought back to the front, and with it their stage. Only then: a front change to any
 /// other app can't be told from the user's or another program's doing (other tools activate their
 /// own windows too), so it is left alone. nil: nothing to restore; else whether it came back.
-func restoreUserStage(_ wasFront: Int?, since t0: Double) -> Bool? {
+func restoreUserStage(_ wasFront: Int?, since t0: Double, window: AXUIElement? = nil) -> Bool? {
     guard let was = wasFront, was > 0,
           let now = NSWorkspace.shared.frontmostApplication?.processIdentifier, Int(now) != was,
           bgApp(now) != nil || isLaunchedReal(now),
-          !userInputSince(seconds: (nowMs() - t0) / 1000),
+          !userSwitchedSince(seconds: (nowMs() - t0) / 1000),
           let prev = NSRunningApplication(processIdentifier: pid_t(was)), !prev.isTerminated else { return nil }
     dbgLog("stage: front went \(was) → \(now), giving it back")
-    return giveFrontBack(to: pid_t(was), from: now)
+    return giveFrontBack(to: pid_t(was), from: now, window: window)
 }
 
 /// Apps with a normal window in front of the front app's front window, front to back.

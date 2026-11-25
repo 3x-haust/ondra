@@ -60,7 +60,7 @@ after of the reproduction.
    three products that solved the same problem for their users, rivals or not
    (a ranking: an investing app, a language-learning app, a fitness app), and
    read how on public pages: help articles, release notes, product blogs,
-   store screenshots, with web_search and web_fetch, no sign-ins. A few
+   store screenshots, with a web search and web_fetch, no sign-ins. A few
    minutes and about five pages, no report or PDF; this is not deep-research.
    Then write three lines in your message, each a point to take or to avoid
    with its link; they shape the plan, come back in the report, and their

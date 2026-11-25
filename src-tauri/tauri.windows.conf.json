@@ -3,11 +3,11 @@
   "bundle": {
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
-    "externalBin": ["binaries/ondra-remote"],
+    "externalBin": ["binaries/ondra-remote", "binaries/ondra-dictate", "binaries/ondra-browser", "binaries/browse"],
     "resources": {
       "binaries/ondra-bgguard.dylib": null,
       "dmg/background.tiff": null,
-      "resources/components.json": null,
+      "resources/components.json": "components.json",
       "resources/windows/engine/": "engine/"
     }
   }

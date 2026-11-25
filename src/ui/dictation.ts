@@ -1,11 +1,14 @@
 // Dictation's plain parts (VoiceButton.tsx is the button): the helper's lines
-// (src-tauri/helpers/dictate.swift), how the level meter moves, and where the words go.
+// (src-tauri/helpers/dictate.swift on the Mac, dictate/ on Windows and Linux), how the level
+// meter moves, and where the words go.
 import type { Lang } from "../i18n";
 
-export type DictateError = "mic-denied" | "speech-denied" | "no-mic" | "unavailable" | "no-on-device" | "failed";
-const ERRORS: DictateError[] = ["mic-denied", "speech-denied", "no-mic", "unavailable", "no-on-device", "failed"];
+export type DictateError = "mic-denied" | "speech-denied" | "no-mic" | "unavailable" | "no-on-device" | "no-model" | "failed";
+const ERRORS: DictateError[] = ["mic-denied", "speech-denied", "no-mic", "unavailable", "no-on-device", "no-model", "failed"];
 
 type DictateEvent =
+  /** fetching the speech model the first time (Windows, Linux), 0…1 */
+  | { kind: "download"; progress: number }
   | { kind: "ready" }
   | { kind: "level"; level: number }
   | { kind: "partial"; text: string }
@@ -25,6 +28,7 @@ export function readDictate(ev: Record<string, unknown>, run: number): DictateEv
   if (typeof ev.final === "string") return { kind: "final", text: ev.final };
   if (typeof ev.partial === "string") return { kind: "partial", text: ev.partial };
   if (typeof ev.level === "number" && Number.isFinite(ev.level)) return { kind: "level", level: Math.min(1, Math.max(0, ev.level)) };
+  if (typeof ev.download === "number" && Number.isFinite(ev.download)) return { kind: "download", progress: Math.min(1, Math.max(0, ev.download)) };
   if (ev.ready === true) return { kind: "ready" };
   if (ev.limit === true) return { kind: "limit" };
   if (ev.end === true) return { kind: "end" };

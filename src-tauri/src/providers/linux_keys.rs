@@ -28,6 +28,33 @@ pub(crate) fn lookup(service: &str, account: &str) -> Option<String> {
     out.status.success().then(|| String::from_utf8(out.stdout).ok()).flatten()
 }
 
+/// The attributes of the first unlocked item that has these. `secret-tool search` prints them
+/// on stderr (its secret goes to stdout, which is dropped here).
+pub(crate) fn first_attributes(attrs: &[(&str, &str)]) -> Option<std::collections::HashMap<String, String>> {
+    let mut args = vec!["search", "--unlock"];
+    for (k, v) in attrs {
+        args.extend([*k, *v]);
+    }
+    let out = tool(&args).stderr(Stdio::piped()).output().ok()?;
+    let found = parse_attributes(&String::from_utf8_lossy(&out.stderr));
+    (!found.is_empty()).then_some(found)
+}
+
+fn parse_attributes(stderr: &str) -> std::collections::HashMap<String, String> {
+    stderr.lines().filter_map(|l| l.strip_prefix("attribute.")?.split_once(" = ")).map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+/// The secret of the item with exactly these attributes, as stored (`secret-tool lookup` writes it
+/// to stdout unchanged).
+pub(crate) fn lookup_by(attrs: &[(&str, &str)]) -> Option<String> {
+    let mut args = vec!["lookup"];
+    for (k, v) in attrs {
+        args.extend([*k, *v]);
+    }
+    let out = tool(&args).stdout(Stdio::piped()).output().ok()?;
+    (out.status.success()).then(|| String::from_utf8(out.stdout).ok()).flatten()
+}
+
 pub(crate) fn clear(service: &str, account: &str) {
     let _ = tool(&["clear", "service", service, "account", account]).status();
 }
@@ -62,4 +89,14 @@ pub fn ref_account(service: &str, value: &str) -> Option<String> {
     let rest = value.strip_prefix(&format!("!{SECRET_TOOL} lookup service '{service}' account '"))?;
     let acct = rest.strip_suffix('\'')?;
     super::safe_name(acct).then(|| acct.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn search_attributes() {
+        let found = super::parse_attributes("attribute.user = me@x.io\nattribute.server = example.com\n");
+        assert_eq!(found.get("user").map(String::as_str), Some("me@x.io"));
+        assert_eq!(found.get("server").map(String::as_str), Some("example.com"));
+    }
 }

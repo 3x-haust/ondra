@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><title>Parity page</title></head><body>
+<main><h1>Sign in</h1>
+<nav><a href="#a">Docs</a> <a href="#b">Pricing</a></nav>
+<form id="f" onsubmit="event.preventDefault();document.getElementById('out').textContent='sent '+this.user.value+' '+this.pass.value.length">
+<label>Email <input name="user" id="user" type="email"></label>
+<label>Password <input name="pass" id="pass" type="password"></label>
+<select id="sel"><option value="a">Alpha</option><option value="b">Beta</option></select>
+<input type="checkbox" id="cb"> <label for="cb">Remember</label>
+<button type="submit">Log in</button>
+</form>
+<div id="clicky" style="cursor:pointer" onclick="this.textContent='clicked'">Click me</div>
+<p id="out"></p>
+<iframe srcdoc="<button>Inner</button>" title="inner"></iframe>
+<script>setTimeout(()=>{const d=document.createElement('div');d.id='late';d.textContent='Late text';document.body.appendChild(d)},800)</script>
+</main></body></html>
