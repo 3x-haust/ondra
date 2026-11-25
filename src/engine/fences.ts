@@ -76,12 +76,22 @@ function parseBody(body: string): any[] {
   return out;
 }
 
+/**
+ * A block put in a fence named for its type (```checklist with {"type":"checklist",…}) instead of
+ * ```blocks: what it holds is plain, so it is read as a block, not shown as code.
+ */
+function selfNamed(s: Span): boolean {
+  if (!s.closed || !/^[a-z][a-z-]*$/.test(s.lang)) return false;
+  const items = parseBody(s.body);
+  return items.length > 0 && items.every((x) => x && typeof x === "object" && x.type === s.lang);
+}
+
 /** Complete fences found in text[from..]; returns objects and where scanning stopped. */
 export function readFences(text: string, lang: string, from = 0): { items: any[]; end: number } {
   const items: any[] = [];
   let end = from;
   for (const s of spans(text, from)) {
-    if (!s.closed || !s.lang.startsWith(lang)) continue;
+    if (!s.closed || !(s.lang.startsWith(lang) || (lang === "blocks" && selfNamed(s)))) continue;
     items.push(...parseBody(s.body));
     end = s.end;
   }
@@ -135,7 +145,7 @@ export function prose(text: string): string {
   let at = 0;
   for (const s of spans(text)) {
     // a fence whose name is still coming in is hidden until it is known
-    const hide = JSON_FENCES.has(s.lang) || (!s.closed && !text.includes("\n", s.start));
+    const hide = JSON_FENCES.has(s.lang) || selfNamed(s) || (!s.closed && !text.includes("\n", s.start));
     if (!hide) continue;
     out += text.slice(at, s.start);
     at = s.end;
